@@ -228,16 +228,16 @@ internal static class Emitter
 		HashSet<string> seen = new(StringComparer.Ordinal);
 
 		// Explicit service registrations first, so a directly registered relationship type (e.g. a
-		// registered Lazy<T>) wins the dispatch slot over the synthetic relationship entry below.
+		// registered Lazy<T>) wins the dispatch slot over the synthetic relationship entry below. Service
+		// types are unique across instances (registrations are coalesced), so each is added exactly once.
+		// Seeding 'seen' here lets the synthetic pass skip any key an explicit registration already claimed.
 		for (int i = 0; i < instances.Length; i++)
 		{
 			string resolver = names.Resolver(i);
 			foreach (string service in instances[i].ServiceTypes.AsArray())
 			{
-				if (seen.Add(service))
-				{
-					entries.Add(new DispatchEntry(service, resolver + "()"));
-				}
+				seen.Add(service);
+				entries.Add(new DispatchEntry(service, resolver + "()"));
 			}
 		}
 
