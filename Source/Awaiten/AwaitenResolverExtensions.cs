@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Awaiten;
 
@@ -9,36 +10,42 @@ namespace Awaiten;
 /// </summary>
 public static class AwaitenResolverExtensions
 {
-	/// <summary>
-	///     Resolves a service of type <typeparamref name="T" />, throwing if it is not registered.
-	/// </summary>
-	public static T Resolve<T>(this IAwaitenResolver resolver)
+	private static void ThrowIfNull(IAwaitenResolver resolver)
 	{
 		if (resolver is null)
 		{
 			throw new ArgumentNullException(nameof(resolver));
 		}
-
-		return (T)resolver.Resolve(typeof(T));
 	}
 
-	/// <summary>
-	///     Attempts to resolve a service of type <typeparamref name="T" />.
-	/// </summary>
-	public static bool TryResolve<T>(this IAwaitenResolver resolver, out T? instance)
+	/// <inheritdoc cref="AwaitenResolverExtensions" />
+	extension(IAwaitenResolver resolver)
 	{
-		if (resolver is null)
+		/// <summary>
+		///     Resolves a service of type <typeparamref name="T" />, throwing if it is not registered.
+		/// </summary>
+		public T Resolve<T>()
 		{
-			throw new ArgumentNullException(nameof(resolver));
+			ThrowIfNull(resolver);
+
+			return (T)resolver.Resolve(typeof(T));
 		}
 
-		if (resolver.TryResolve(typeof(T), out object? resolved))
+		/// <summary>
+		///     Attempts to resolve a service of type <typeparamref name="T" />.
+		/// </summary>
+		public bool TryResolve<T>([NotNullWhen(true)] out T? instance)
 		{
-			instance = (T)resolved!;
-			return true;
-		}
+			ThrowIfNull(resolver);
 
-		instance = default;
-		return false;
+			if (resolver.TryResolve(typeof(T), out object? resolved))
+			{
+				instance = (T)resolved!;
+				return true;
+			}
+
+			instance = default;
+			return false;
+		}
 	}
 }

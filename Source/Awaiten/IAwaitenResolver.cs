@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Awaiten;
 
@@ -21,5 +22,5 @@ public interface IAwaitenResolver
 	/// <summary>
 	///     Attempts to resolve a service of the given <paramref name="serviceType" />.
 	/// </summary>
-	bool TryResolve(Type serviceType, out object? instance);
+	bool TryResolve(Type serviceType, [NotNullWhen(true)] out object? instance);
 }
