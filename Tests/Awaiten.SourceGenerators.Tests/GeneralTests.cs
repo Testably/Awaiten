@@ -46,7 +46,7 @@ public class GeneralTests
 		await That(result.Sources).HasCount(1);
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 		await That(source).Contains("partial class MyContainer : global::Awaiten.IAwaitenContainer");
-		await That(source).Contains("public T Get<T>() => (T)Resolve(typeof(T));");
+		await That(source).Contains("public object Resolve(global::System.Type serviceType)");
 		await That(source).Contains("public global::Awaiten.IAwaitenScope CreateScope() => new Scope(this);");
 		await That(source).Contains("private sealed class Scope : global::Awaiten.IAwaitenScope");
 	}

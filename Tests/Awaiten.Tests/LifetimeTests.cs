@@ -20,9 +20,9 @@ public partial class LifetimeTests
 		using IAwaitenScope scope1 = container.CreateScope();
 		using IAwaitenScope scope2 = container.CreateScope();
 
-		IScopedService a = scope1.Get<IScopedService>();
-		IScopedService b = scope1.Get<IScopedService>();
-		IScopedService c = scope2.Get<IScopedService>();
+		IScopedService a = scope1.Resolve<IScopedService>();
+		IScopedService b = scope1.Resolve<IScopedService>();
+		IScopedService c = scope2.Resolve<IScopedService>();
 
 		await That(a).IsSameAs(b);
 		await That(ReferenceEquals(a, c)).IsFalse();
@@ -35,10 +35,10 @@ public partial class LifetimeTests
 		using IAwaitenScope scope1 = container.CreateScope();
 		using IAwaitenScope scope2 = container.CreateScope();
 
-		ISingletonService fromContainer = container.Get<ISingletonService>();
+		ISingletonService fromContainer = container.Resolve<ISingletonService>();
 
-		await That(scope1.Get<ISingletonService>()).IsSameAs(fromContainer);
-		await That(scope2.Get<ISingletonService>()).IsSameAs(fromContainer);
+		await That(scope1.Resolve<ISingletonService>()).IsSameAs(fromContainer);
+		await That(scope2.Resolve<ISingletonService>()).IsSameAs(fromContainer);
 	}
 
 	[Fact]
@@ -48,7 +48,7 @@ public partial class LifetimeTests
 		ScopedService scoped;
 		using (IAwaitenScope scope = container.CreateScope())
 		{
-			scoped = (ScopedService)scope.Get<IScopedService>();
+			scoped = (ScopedService)scope.Resolve<IScopedService>();
 			await That(scoped.Disposed).IsFalse();
 		}
 
@@ -62,7 +62,7 @@ public partial class LifetimeTests
 		TransientService transient;
 		using (IAwaitenScope scope = container.CreateScope())
 		{
-			transient = scope.Get<TransientService>();
+			transient = scope.Resolve<TransientService>();
 		}
 
 		await That(transient.Disposed).IsTrue();
@@ -74,7 +74,7 @@ public partial class LifetimeTests
 		SingletonService singleton;
 		using (LifetimeContainer container = new())
 		{
-			singleton = (SingletonService)container.Get<ISingletonService>();
+			singleton = (SingletonService)container.Resolve<ISingletonService>();
 			await That(singleton.Disposed).IsFalse();
 		}
 
@@ -87,8 +87,8 @@ public partial class LifetimeTests
 		DisposalRecorder recorder;
 		using (DisposalOrderContainer container = new())
 		{
-			recorder = container.Get<DisposalRecorder>();
-			container.Get<Beta>();
+			recorder = container.Resolve<DisposalRecorder>();
+			container.Resolve<Beta>();
 		}
 
 		// Beta is built after Alpha, so it is disposed first.
@@ -102,8 +102,8 @@ public partial class LifetimeTests
 	{
 		using MultiServiceContainer container = new();
 
-		IReader reader = container.Get<IReader>();
-		IWriter writer = container.Get<IWriter>();
+		IReader reader = container.Resolve<IReader>();
+		IWriter writer = container.Resolve<IWriter>();
 
 		await That((object)reader).IsSameAs(writer);
 	}
@@ -123,7 +123,7 @@ public partial class LifetimeTests
 			workers[index] = Task.Run(() =>
 			{
 				start.Wait();
-				results[index] = container.Get<CountedSingleton>();
+				results[index] = container.Resolve<CountedSingleton>();
 			}, TestContext.Current.CancellationToken);
 		}
 
@@ -133,7 +133,7 @@ public partial class LifetimeTests
 		CountedSingleton first = results[0];
 		await That(results.All(r => ReferenceEquals(r, first))).IsTrue()
 			.Because("every thread observes the one cached singleton");
-		await That(container.Get<ConstructionCounter>().Count).IsEqualTo(1)
+		await That(container.Resolve<ConstructionCounter>().Count).IsEqualTo(1)
 			.Because("the singleton is constructed exactly once under the lock");
 	}
 
@@ -156,7 +156,7 @@ public partial class LifetimeTests
 					start.Wait();
 					for (int i = 0; i < perThread; i++)
 					{
-						produced.Add(container.Get<CountedTransient>());
+						produced.Add(container.Resolve<CountedTransient>());
 					}
 				}, TestContext.Current.CancellationToken);
 			}
@@ -183,7 +183,7 @@ public partial class LifetimeTests
 		LifetimeContainer container = new();
 		container.Dispose();
 
-		await That(() => container.Get<ISingletonService>()).Throws<ObjectDisposedException>();
+		await That(() => container.Resolve<ISingletonService>()).Throws<ObjectDisposedException>();
 	}
 
 	[Fact]
@@ -193,7 +193,7 @@ public partial class LifetimeTests
 		IAwaitenScope scope = container.CreateScope();
 		scope.Dispose();
 
-		await That(() => scope.Get<IScopedService>()).Throws<ObjectDisposedException>();
+		await That(() => scope.Resolve<IScopedService>()).Throws<ObjectDisposedException>();
 	}
 
 	public interface ISingletonService;

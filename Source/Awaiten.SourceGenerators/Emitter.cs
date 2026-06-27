@@ -166,8 +166,6 @@ internal static class Emitter
 
 	private static void EmitResolutionApi(StringBuilder builder, int depth, InstanceModel[] instances, Names names)
 	{
-		Indent(builder, depth).AppendLine("public T Get<T>() => (T)Resolve(typeof(T));");
-		builder.AppendLine();
 		Indent(builder, depth).AppendLine("public object Resolve(global::System.Type serviceType)");
 		Indent(builder, depth).AppendLine("{");
 		Indent(builder, depth + 1).AppendLine("if (TryResolve(serviceType, out object? instance))");
@@ -328,9 +326,6 @@ internal static class Emitter
 	{
 		string message =
 			$"\"Awaiten: container '{typeName}' has registration errors; see the build diagnostics (AWT1xx).\"";
-		Indent(builder, depth).Append("public T Get<T>() => throw new global::System.InvalidOperationException(")
-			.Append(message).AppendLine(");");
-		builder.AppendLine();
 		Indent(builder, depth).Append(
 				"public object Resolve(global::System.Type serviceType) => throw new global::System.InvalidOperationException(")
 			.Append(message).AppendLine(");");

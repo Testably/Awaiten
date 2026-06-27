@@ -2,25 +2,27 @@
 [assembly: System.Runtime.Versioning.TargetFramework(".NETStandard,Version=v2.0", FrameworkDisplayName=".NET Standard 2.0")]
 namespace Awaiten
 {
+    public static class AwaitenResolverExtensions
+    {
+        public static T Resolve<T>(this Awaiten.IAwaitenResolver resolver) { }
+        public static bool TryResolve<T>(this Awaiten.IAwaitenResolver resolver, out T? instance) { }
+    }
     [System.AttributeUsage(System.AttributeTargets.Class, Inherited=false)]
     public sealed class ContainerAttribute : System.Attribute
     {
         public ContainerAttribute() { }
         public bool SyncResolveAfterInit { get; set; }
     }
-    public interface IAwaitenContainer : System.IDisposable
+    public interface IAwaitenContainer : Awaiten.IAwaitenResolver, System.IDisposable
     {
         Awaiten.IAwaitenScope CreateScope();
-        T Get<T>();
-        object Resolve(System.Type serviceType);
-        bool TryResolve(System.Type serviceType, out object? instance);
     }
-    public interface IAwaitenScope : System.IDisposable
+    public interface IAwaitenResolver
     {
-        T Get<T>();
         object Resolve(System.Type serviceType);
         bool TryResolve(System.Type serviceType, out object? instance);
     }
+    public interface IAwaitenScope : Awaiten.IAwaitenResolver, System.IDisposable { }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
     public sealed class ScopedAttribute<TImplementation> : System.Attribute
         where TImplementation :  class

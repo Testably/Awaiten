@@ -13,7 +13,7 @@ public partial class ExampleTests
 	{
 		Container container = new();
 
-		IMyService myService = container.Get<IMyService>();
+		IMyService myService = container.Resolve<IMyService>();
 
 		await That(myService).Is<MyService>();
 	}
