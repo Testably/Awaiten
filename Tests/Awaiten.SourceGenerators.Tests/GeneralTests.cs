@@ -277,4 +277,118 @@ public class GeneralTests
 		await That(source).Contains("if (serviceType == typeof(global::MyCode.IWriter)) { instance = ResolveStore(); return true; }")
 			.Because("both service types dispatch to the one shared instance");
 	}
+
+	[Fact]
+	public async Task SameLifetimeMultiService_DoesNotReportAwt107()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace MyCode;
+
+			public interface IReader { }
+			public interface IWriter { }
+			public sealed class Store : IReader, IWriter { }
+
+			[Container]
+			[Singleton<Store, IReader>]
+			[Singleton<Store, IWriter>]
+			public partial class MyContainer
+			{
+			}
+			""");
+
+		await That(result.Diagnostics.Any(d => d.Contains("AWT107"))).IsFalse()
+			.Because("registering one implementation under several services with the same lifetime is valid");
+	}
+
+	[Fact]
+	public async Task ConflictingLifetime_ReportsAwt107()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace MyCode;
+
+			public interface IReader { }
+			public interface IWriter { }
+			public sealed class Store : IReader, IWriter { }
+
+			[Container]
+			[Singleton<Store, IReader>]
+			[Scoped<Store, IWriter>]
+			public partial class MyContainer
+			{
+			}
+			""");
+
+		await That(result.Diagnostics.Any(d => d.Contains("AWT107"))).IsTrue();
+	}
+
+	[Fact]
+	public async Task DisposableTransient_ReportsAwt106()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+			using System;
+
+			namespace MyCode;
+
+			public sealed class Resource : IDisposable { public void Dispose() { } }
+
+			[Container]
+			[Transient<Resource>]
+			public partial class MyContainer
+			{
+			}
+			""");
+
+		await That(result.Diagnostics.Any(d => d.Contains("AWT106"))).IsTrue();
+	}
+
+	[Fact]
+	public async Task SingletonCapturingScoped_ReportsAwt105()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace MyCode;
+
+			public sealed class ScopedDependency { }
+			public sealed class SingletonConsumer { public SingletonConsumer(ScopedDependency dependency) { } }
+
+			[Container]
+			[Singleton<SingletonConsumer>]
+			[Scoped<ScopedDependency>]
+			public partial class MyContainer
+			{
+			}
+			""");
+
+		await That(result.Diagnostics.Any(d => d.Contains("AWT105"))).IsTrue();
+	}
+
+	[Fact]
+	public async Task SingletonCapturingScopedThroughTransient_ReportsAwt105()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace MyCode;
+
+			public sealed class ScopedDependency { }
+			public sealed class TransientMiddle { public TransientMiddle(ScopedDependency dependency) { } }
+			public sealed class SingletonConsumer { public SingletonConsumer(TransientMiddle middle) { } }
+
+			[Container]
+			[Singleton<SingletonConsumer>]
+			[Transient<TransientMiddle>]
+			[Scoped<ScopedDependency>]
+			public partial class MyContainer
+			{
+			}
+			""");
+
+		await That(result.Diagnostics.Any(d => d.Contains("AWT105"))).IsTrue();
+	}
 }

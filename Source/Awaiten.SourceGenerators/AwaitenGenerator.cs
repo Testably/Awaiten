@@ -61,12 +61,15 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 		List<RawRegistration> raw = CollectRegistrations(containerSymbol);
 
-		// Coalesce registrations by implementation: the first registration per service type wins, and
-		// registrations of the same implementation share one instance.
-		(List<ImplInfo> implOrder, Dictionary<string, string> serviceToImpl) = CoalesceByImplementation(raw);
-
 		List<DiagnosticInfo> diagnostics = new();
+
+		// Coalesce registrations by implementation: the first registration per service type wins, and
+		// registrations of the same implementation share one instance. Declaring one implementation with
+		// two different lifetimes is reported as AWT107.
+		(List<ImplInfo> implOrder, Dictionary<string, string> serviceToImpl) = CoalesceByImplementation(raw, diagnostics);
+
 		List<InstanceModel> instances = new();
+		List<LocationInfo?> instanceLocations = new();
 		Dictionary<string, int> implToIndex = new(StringComparer.Ordinal);
 
 		// Validate each implementation, select its constructor and build the instance.
@@ -78,6 +81,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			{
 				implToIndex[info.ImplementationType] = instances.Count;
 				instances.Add(instance);
+				instanceLocations.Add(info.Location);
 			}
 		}
 
@@ -85,6 +89,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 		LocationInfo? containerLocation = LocationInfo.From(containerSymbol.Locations.FirstOrDefault());
 		DetectCycles(instances, dependencies, containerLocation, diagnostics);
+		DetectCaptiveDependencies(instances, dependencies, instanceLocations, diagnostics);
 
 		string? containerNamespace = containerSymbol.ContainingNamespace is { IsGlobalNamespace: false, } ns
 			? ns.ToDisplayString()
@@ -117,11 +122,13 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	}
 
 	private static (List<ImplInfo> Order, Dictionary<string, string> ServiceToImpl) CoalesceByImplementation(
-		List<RawRegistration> raw)
+		List<RawRegistration> raw,
+		List<DiagnosticInfo> diagnostics)
 	{
 		List<ImplInfo> implOrder = new();
 		Dictionary<string, ImplInfo> implInfos = new(StringComparer.Ordinal);
 		Dictionary<string, string> serviceToImpl = new(StringComparer.Ordinal);
+		HashSet<string> reportedConflicts = new(StringComparer.Ordinal);
 
 		foreach (RawRegistration registration in raw)
 		{
@@ -136,6 +143,20 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 					registration.ImplementationType, registration.Implementation, registration.Lifetime, registration.Location);
 				implInfos.Add(registration.ImplementationType, info);
 				implOrder.Add(info);
+			}
+			else if (info.Lifetime != registration.Lifetime &&
+			         reportedConflicts.Add(registration.ImplementationType))
+			{
+				// Same implementation registered under another service type but with a different lifetime;
+				// coalescing keeps the first lifetime, so the contradiction is reported rather than dropped.
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.ConflictingLifetime,
+					registration.Location,
+					new EquatableArray<string>([
+						Display(registration.ImplementationType),
+						info.Lifetime.ToString(),
+						registration.Lifetime.ToString(),
+					])));
 			}
 
 			serviceToImpl[registration.ServiceType] = registration.ImplementationType;
@@ -217,6 +238,17 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		}
 
 		bool disposable = disposableSymbol is not null && ImplementsInterface(info.Symbol, disposableSymbol);
+
+		// A disposable transient resolved from the container root is not released until the container is
+		// disposed, so such instances accumulate; resolving it from a scope releases it with the scope.
+		if (disposable && info.Lifetime == Lifetime.Transient)
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.DisposableTransient,
+				info.Location,
+				new EquatableArray<string>([Display(info.ImplementationType),])));
+		}
+
 		return new InstanceModel(
 			info.ImplementationType,
 			info.Symbol.Name,
@@ -321,6 +353,54 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 						constructor.ContainingAssembly, containerSymbol.ContainingAssembly),
 				_ => false,
 			};
+		}
+	}
+
+	private static void DetectCaptiveDependencies(
+		List<InstanceModel> instances,
+		Dictionary<int, List<int>> dependencies,
+		List<LocationInfo?> instanceLocations,
+		List<DiagnosticInfo> diagnostics)
+	{
+		for (int i = 0; i < instances.Count; i++)
+		{
+			if (instances[i].Lifetime != Lifetime.Singleton)
+			{
+				continue;
+			}
+
+			// Walk the singleton's graph through its transient dependencies (which are baked into it);
+			// reaching a scoped service means the singleton would capture it for the container's life.
+			HashSet<int> visited = new();
+			Stack<int> stack = new(dependencies[i]);
+			while (stack.Count > 0)
+			{
+				int node = stack.Pop();
+				if (!visited.Add(node))
+				{
+					continue;
+				}
+
+				switch (instances[node].Lifetime)
+				{
+					case Lifetime.Scoped:
+						diagnostics.Add(new DiagnosticInfo(
+							Diagnostics.CaptiveDependency,
+							instanceLocations[i],
+							new EquatableArray<string>([
+								Display(instances[i].ImplementationType),
+								Display(instances[node].ServiceTypes.AsArray()[0]),
+							])));
+						break;
+					case Lifetime.Transient:
+						foreach (int next in dependencies[node])
+						{
+							stack.Push(next);
+						}
+
+						break;
+				}
+			}
 		}
 	}
 
