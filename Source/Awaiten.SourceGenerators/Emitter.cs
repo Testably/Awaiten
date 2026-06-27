@@ -1,4 +1,5 @@
 using System.Text;
+using Awaiten.SourceGenerators.Internals;
 
 namespace Awaiten.SourceGenerators;
 

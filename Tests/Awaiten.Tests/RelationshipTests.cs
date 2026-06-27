@@ -8,15 +8,15 @@ namespace Awaiten.Tests;
 public partial class RelationshipTests
 {
 	[Fact]
-	public async Task Func_OfTransient_ResolvesAFreshInstanceEachCall()
+	public async Task Func_BoundToAScope_ResolvesScopedInstancesFromThatScope()
 	{
 		using RelationshipContainer container = new();
+		using IAwaitenScope scope = container.CreateScope();
 
-		Consumer consumer = container.Resolve<Consumer>();
+		ScopedConsumer consumer = scope.Resolve<ScopedConsumer>();
 
-		Widget first = consumer.MakeWidget();
-		Widget second = consumer.MakeWidget();
-		await That(ReferenceEquals(first, second)).IsFalse();
+		// The injected Func is bound to the scope, so it returns the scope's single scoped instance.
+		await That(consumer.GetSession()).IsSameAs(scope.Resolve<Session>());
 	}
 
 	[Fact]
@@ -31,6 +31,18 @@ public partial class RelationshipTests
 	}
 
 	[Fact]
+	public async Task Func_OfTransient_ResolvesAFreshInstanceEachCall()
+	{
+		using RelationshipContainer container = new();
+
+		Consumer consumer = container.Resolve<Consumer>();
+
+		Widget first = consumer.MakeWidget();
+		Widget second = consumer.MakeWidget();
+		await That(first).IsNotSameAs(second);
+	}
+
+	[Fact]
 	public async Task Lazy_MemoizesItsValue()
 	{
 		using RelationshipContainer container = new();
@@ -38,18 +50,6 @@ public partial class RelationshipTests
 		Lazy<Widget> lazy = container.Resolve<Lazy<Widget>>();
 
 		await That(lazy.Value).IsSameAs(lazy.Value);
-	}
-
-	[Fact]
-	public async Task Func_BoundToAScope_ResolvesScopedInstancesFromThatScope()
-	{
-		using RelationshipContainer container = new();
-		using IAwaitenScope scope = container.CreateScope();
-
-		ScopedConsumer consumer = scope.Resolve<ScopedConsumer>();
-
-		// The injected Func is bound to the scope, so it returns the scope's single scoped instance.
-		await That(consumer.GetSession()).IsSameAs(scope.Resolve<Session>());
 	}
 
 	public sealed class Widget;
@@ -62,7 +62,10 @@ public partial class RelationshipTests
 	{
 		private readonly Func<Widget> _widgets;
 
-		public Consumer(Func<Widget> widgets) => _widgets = widgets;
+		public Consumer(Func<Widget> widgets)
+		{
+			_widgets = widgets;
+		}
 
 		public Widget MakeWidget() => _widgets();
 	}
@@ -71,7 +74,10 @@ public partial class RelationshipTests
 	{
 		private readonly Func<Session> _sessions;
 
-		public ScopedConsumer(Func<Session> sessions) => _sessions = sessions;
+		public ScopedConsumer(Func<Session> sessions)
+		{
+			_sessions = sessions;
+		}
 
 		public Session GetSession() => _sessions();
 	}

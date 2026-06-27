@@ -25,7 +25,7 @@ public partial class LifetimeTests
 		IScopedService c = scope2.Resolve<IScopedService>();
 
 		await That(a).IsSameAs(b);
-		await That(ReferenceEquals(a, c)).IsFalse();
+		await That(a).IsNotSameAs(c);
 	}
 
 	[Fact]
@@ -131,7 +131,7 @@ public partial class LifetimeTests
 		await Task.WhenAll(workers);
 
 		CountedSingleton first = results[0];
-		await That(results.All(r => ReferenceEquals(r, first))).IsTrue()
+		await That(results).All().ComplyWith(r => r.IsSameAs(first))
 			.Because("every thread observes the one cached singleton");
 		await That(container.Resolve<ConstructionCounter>().Count).IsEqualTo(1)
 			.Because("the singleton is constructed exactly once under the lock");
