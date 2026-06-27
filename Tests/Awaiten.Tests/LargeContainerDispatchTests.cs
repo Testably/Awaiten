@@ -20,6 +20,16 @@ public partial class LargeContainerDispatchTests
 	}
 
 	[Fact]
+	public async Task Scope_ResolvesThroughTheSharedTable()
+	{
+		LargeContainer container = new();
+		using IAwaitenScope scope = container.CreateScope();
+
+		await That(scope.Resolve<S03>()).IsNotNull();
+		await That(scope.Resolve(typeof(S15))).Is<S15>();
+	}
+
+	[Fact]
 	public async Task Singleton_ReturnsTheSameInstanceThroughTheTable()
 	{
 		LargeContainer container = new();
@@ -30,22 +40,12 @@ public partial class LargeContainerDispatchTests
 	[Fact]
 	public async Task UnregisteredType_FallsThroughToFalse()
 	{
-		IAwaitenContainer container = new LargeContainer();
+		LargeContainer container = new();
 
 		bool resolved = container.TryResolve(typeof(string), out object? instance);
 
 		await That(resolved).IsFalse();
 		await That(instance).IsNull();
-	}
-
-	[Fact]
-	public async Task Scope_ResolvesThroughTheSharedTable()
-	{
-		LargeContainer container = new();
-		using IAwaitenScope scope = container.CreateScope();
-
-		await That(scope.Resolve<S03>()).IsNotNull();
-		await That(scope.Resolve(typeof(S15))).Is<S15>();
 	}
 
 	public sealed class S00;
