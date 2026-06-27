@@ -122,7 +122,7 @@ internal static class Emitter
 			builder.AppendLine();
 			if (registration.Lifetime == Lifetime.Scoped)
 			{
-				Indent(builder, depth).AppendLine("// TODO Phase 2: scoped lifetime is resolved as singleton for now.");
+				Indent(builder, depth).AppendLine("// TODO: scoped lifetime is resolved as singleton for now.");
 			}
 
 			string construction = EmitConstruction(registration, serviceToIndex, names);
@@ -156,6 +156,34 @@ internal static class Emitter
 		return $"new {registration.ImplementationType}({arguments})";
 	}
 
+	private static void EmitErrorBody(StringBuilder builder, int depth, string typeName)
+	{
+		string message =
+			$"\"Awaiten: container '{typeName}' has registration errors; see the build diagnostics (AWT1xx).\"";
+		Indent(builder, depth).Append("public T Get<T>() => throw new global::System.InvalidOperationException(")
+			.Append(message).AppendLine(");");
+		builder.AppendLine();
+		Indent(builder, depth).Append(
+				"public object Resolve(global::System.Type serviceType) => throw new global::System.InvalidOperationException(")
+			.Append(message).AppendLine(");");
+		builder.AppendLine();
+		Indent(builder, depth).AppendLine("public bool TryResolve(global::System.Type serviceType, out object? instance)");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).AppendLine("instance = null;");
+		Indent(builder, depth + 1).AppendLine("return false;");
+		Indent(builder, depth).AppendLine("}");
+	}
+
+	private static StringBuilder Indent(StringBuilder builder, int depth)
+	{
+		for (int i = 0; i < depth; i++)
+		{
+			builder.Append('\t');
+		}
+
+		return builder;
+	}
+
 	/// <summary>
 	///     Assigns each registration a readable resolver method name (<c>ResolveGreeter</c>) and cache
 	///     field name (<c>_greeter</c>) derived from the implementation's simple type name, appending a
@@ -163,8 +191,8 @@ internal static class Emitter
 	/// </summary>
 	private sealed class Names
 	{
-		private readonly string[] _resolvers;
 		private readonly string[] _fields;
+		private readonly string[] _resolvers;
 
 		private Names(string[] resolvers, string[] fields)
 		{
@@ -223,33 +251,5 @@ internal static class Emitter
 
 			return builder.ToString();
 		}
-	}
-
-	private static void EmitErrorBody(StringBuilder builder, int depth, string typeName)
-	{
-		string message =
-			$"\"Awaiten: container '{typeName}' has registration errors; see the build diagnostics (AWT1xx).\"";
-		Indent(builder, depth).Append("public T Get<T>() => throw new global::System.InvalidOperationException(")
-			.Append(message).AppendLine(");");
-		builder.AppendLine();
-		Indent(builder, depth).Append(
-				"public object Resolve(global::System.Type serviceType) => throw new global::System.InvalidOperationException(")
-			.Append(message).AppendLine(");");
-		builder.AppendLine();
-		Indent(builder, depth).AppendLine("public bool TryResolve(global::System.Type serviceType, out object? instance)");
-		Indent(builder, depth).AppendLine("{");
-		Indent(builder, depth + 1).AppendLine("instance = null;");
-		Indent(builder, depth + 1).AppendLine("return false;");
-		Indent(builder, depth).AppendLine("}");
-	}
-
-	private static StringBuilder Indent(StringBuilder builder, int depth)
-	{
-		for (int i = 0; i < depth; i++)
-		{
-			builder.Append('\t');
-		}
-
-		return builder;
 	}
 }

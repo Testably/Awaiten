@@ -5,26 +5,6 @@ namespace Awaiten.SourceGenerators.Tests;
 public class GeneralTests
 {
 	[Fact]
-	public async Task AbstractImplementation_ReportsAwt103()
-	{
-		GeneratorResult result = Generator.Run("""
-		                                       using Awaiten;
-
-		                                       namespace MyCode;
-
-		                                       public interface IFoo { }
-
-		                                       [Container]
-		                                       [Singleton<IFoo>]
-		                                       public partial class MyContainer
-		                                       {
-		                                       }
-		                                       """);
-
-		await That(result.Diagnostics.Any(d => d.Contains("AWT103"))).IsTrue();
-	}
-
-	[Fact]
 	public async Task DependencyCycle_ReportsAwt102WithThePath()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -198,6 +178,28 @@ public class GeneralTests
 		await That(result.Diagnostics.Any(d => d.Contains("AWT104"))).IsTrue();
 	}
 
+	[Theory]
+	[InlineData("public interface Foo { }")]
+	[InlineData("public abstract class Foo { }")]
+	public async Task NotInstantiableImplementation_ReportsAwt103(string implementationDeclaration)
+	{
+		GeneratorResult result = Generator.Run($$"""
+		                                         using Awaiten;
+
+		                                         namespace MyCode;
+
+		                                         {{implementationDeclaration}}
+
+		                                         [Container]
+		                                         [Singleton<Foo>]
+		                                         public partial class MyContainer
+		                                         {
+		                                         }
+		                                         """);
+
+		await That(result.Diagnostics.Any(d => d.Contains("AWT103"))).IsTrue();
+	}
+
 	[Fact]
 	public async Task SameSimpleName_InDifferentNamespaces_DoNotCollide()
 	{
@@ -233,7 +235,7 @@ public class GeneralTests
 
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-		await That(source).Contains("TODO Phase 2");
+		await That(source).Contains("TODO");
 		await That(source).Contains("_service ??= new global::MyCode.Service()");
 	}
 }
