@@ -24,13 +24,20 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Jun 27 19:53:13 2026 \u002B0200",
         "message": "feat: add \u0060Func\u003CT\u003E\u0060 and \u0060Lazy\u003CT\u003E\u0060 relationship types (#21)"
+      },
+      {
+        "sha": "940e8190b6ed14fd96d348a2f312472178fe965f",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Jun 27 21:05:55 2026 \u002B0200",
+        "message": "feat: add realistic end-to-end resolution benchmark across DI containers (#23)"
       }
     ],
     "labels": [
       "9e826c17",
       "c39ceed4",
       "3de2a7f9",
-      "d3d0f306"
+      "d3d0f306",
+      "940e8190"
     ],
     "datasets": [
       {
@@ -40,7 +47,8 @@ window.BENCHMARK_DATA = {
           6.042193595033425,
           9.984777721265951,
           9.885763876140118,
-          9.773150008458357
+          9.773150008458357,
+          13.648185913379375
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -52,6 +60,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -73,7 +82,8 @@ window.BENCHMARK_DATA = {
           7.011932362403188,
           7.165684852462548,
           7.0664904532688,
-          6.979647744160432
+          6.979647744160432,
+          7.822928451001644
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -85,6 +95,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -106,7 +117,8 @@ window.BENCHMARK_DATA = {
           106.18884980678558,
           105.09433993271419,
           113.55918945584979,
-          109.79177531829247
+          109.79177531829247,
+          119.50599819819132
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -118,6 +130,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -139,7 +152,8 @@ window.BENCHMARK_DATA = {
           2.861889192213615,
           2.864032766116517,
           2.60612515732646,
-          2.78809827967332
+          2.78809827967332,
+          2.6472268807036534
         ],
         "borderColor": "#4A6FA5",
         "backgroundColor": "#4A6FA5",
@@ -151,6 +165,7 @@ window.BENCHMARK_DATA = {
         "label": "Jab memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -172,7 +187,8 @@ window.BENCHMARK_DATA = {
           6.725859894355138,
           6.806414321064949,
           6.40836979661669,
-          6.734560783704122
+          6.734560783704122,
+          5.4428953776756925
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
@@ -187,10 +203,65 @@ window.BENCHMARK_DATA = {
           0,
           0,
           0,
+          0,
           0
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
+        "yAxisID": "y1",
+        "borderDash": [
+          5,
+          5
+        ],
+        "pointStyle": "triangle"
+      },
+      {
+        "label": "DryIoc time",
+        "unit": "ns",
+        "data": [
+          8.923961407194534
+        ],
+        "borderColor": "#1565C0",
+        "backgroundColor": "#1565C0",
+        "yAxisID": "y",
+        "borderDash": [],
+        "pointStyle": "circle"
+      },
+      {
+        "label": "DryIoc memory",
+        "unit": "b",
+        "data": [
+          0
+        ],
+        "borderColor": "#1565C0",
+        "backgroundColor": "#1565C0",
+        "yAxisID": "y1",
+        "borderDash": [
+          5,
+          5
+        ],
+        "pointStyle": "triangle"
+      },
+      {
+        "label": "SimpleInjector time",
+        "unit": "ns",
+        "data": [
+          10.943431161344051
+        ],
+        "borderColor": "#43A047",
+        "backgroundColor": "#43A047",
+        "yAxisID": "y",
+        "borderDash": [],
+        "pointStyle": "circle"
+      },
+      {
+        "label": "SimpleInjector memory",
+        "unit": "b",
+        "data": [
+          0
+        ],
+        "borderColor": "#43A047",
+        "backgroundColor": "#43A047",
         "yAxisID": "y1",
         "borderDash": [
           5,
@@ -392,13 +463,20 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Jun 27 19:53:13 2026 \u002B0200",
         "message": "feat: add \u0060Func\u003CT\u003E\u0060 and \u0060Lazy\u003CT\u003E\u0060 relationship types (#21)"
+      },
+      {
+        "sha": "940e8190b6ed14fd96d348a2f312472178fe965f",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Jun 27 21:05:55 2026 \u002B0200",
+        "message": "feat: add realistic end-to-end resolution benchmark across DI containers (#23)"
       }
     ],
     "labels": [
       "9e826c17",
       "c39ceed4",
       "3de2a7f9",
-      "d3d0f306"
+      "d3d0f306",
+      "940e8190"
     ],
     "datasets": [
       {
@@ -408,7 +486,8 @@ window.BENCHMARK_DATA = {
           45.455347631658825,
           11.401101275132252,
           10.104073643684387,
-          14.171938593188921
+          14.171938593188921,
+          14.193635863917214
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -420,6 +499,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -441,7 +521,8 @@ window.BENCHMARK_DATA = {
           7.005394069211824,
           7.192912148741575,
           7.101283203278269,
-          7.868850610085896
+          7.868850610085896,
+          8.285667914152146
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -453,6 +534,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -474,7 +556,8 @@ window.BENCHMARK_DATA = {
           109.87674596905708,
           105.27381155320576,
           112.35390312331063,
-          105.2306796948115
+          105.2306796948115,
+          126.16176304817199
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -486,6 +569,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -507,7 +591,8 @@ window.BENCHMARK_DATA = {
           42.81887869040171,
           42.793274948230156,
           42.812093526124954,
-          42.77725352559771
+          42.77725352559771,
+          42.65593960881233
         ],
         "borderColor": "#4A6FA5",
         "backgroundColor": "#4A6FA5",
@@ -519,6 +604,7 @@ window.BENCHMARK_DATA = {
         "label": "Jab memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -540,7 +626,8 @@ window.BENCHMARK_DATA = {
           8.274077805188986,
           8.261776864528656,
           7.603359976640115,
-          8.242683834754503
+          8.242683834754503,
+          7.6472257146468525
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
@@ -555,10 +642,65 @@ window.BENCHMARK_DATA = {
           0,
           0,
           0,
+          0,
           0
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
+        "yAxisID": "y1",
+        "borderDash": [
+          5,
+          5
+        ],
+        "pointStyle": "triangle"
+      },
+      {
+        "label": "DryIoc time",
+        "unit": "ns",
+        "data": [
+          8.721771665981837
+        ],
+        "borderColor": "#1565C0",
+        "backgroundColor": "#1565C0",
+        "yAxisID": "y",
+        "borderDash": [],
+        "pointStyle": "circle"
+      },
+      {
+        "label": "DryIoc memory",
+        "unit": "b",
+        "data": [
+          0
+        ],
+        "borderColor": "#1565C0",
+        "backgroundColor": "#1565C0",
+        "yAxisID": "y1",
+        "borderDash": [
+          5,
+          5
+        ],
+        "pointStyle": "triangle"
+      },
+      {
+        "label": "SimpleInjector time",
+        "unit": "ns",
+        "data": [
+          14.636519505509309
+        ],
+        "borderColor": "#43A047",
+        "backgroundColor": "#43A047",
+        "yAxisID": "y",
+        "borderDash": [],
+        "pointStyle": "circle"
+      },
+      {
+        "label": "SimpleInjector memory",
+        "unit": "b",
+        "data": [
+          0
+        ],
+        "borderColor": "#43A047",
+        "backgroundColor": "#43A047",
         "yAxisID": "y1",
         "borderDash": [
           5,
@@ -593,13 +735,20 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Jun 27 19:53:13 2026 \u002B0200",
         "message": "feat: add \u0060Func\u003CT\u003E\u0060 and \u0060Lazy\u003CT\u003E\u0060 relationship types (#21)"
+      },
+      {
+        "sha": "940e8190b6ed14fd96d348a2f312472178fe965f",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Jun 27 21:05:55 2026 \u002B0200",
+        "message": "feat: add realistic end-to-end resolution benchmark across DI containers (#23)"
       }
     ],
     "labels": [
       "9e826c17",
       "c39ceed4",
       "3de2a7f9",
-      "d3d0f306"
+      "d3d0f306",
+      "940e8190"
     ],
     "datasets": [
       {
@@ -609,7 +758,8 @@ window.BENCHMARK_DATA = {
           22.586610968907674,
           25.408868404229484,
           24.944836461544035,
-          22.270263612270355
+          22.270263612270355,
+          18.650352674722672
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -621,6 +771,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          160,
           160,
           160,
           160,
@@ -642,7 +793,8 @@ window.BENCHMARK_DATA = {
           1650.7135983784995,
           1556.666805903117,
           1475.3557790120442,
-          1515.808144124349
+          1515.808144124349,
+          1149.1580527169365
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -654,6 +806,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          5688,
           5688,
           5688,
           5688,
@@ -675,7 +828,8 @@ window.BENCHMARK_DATA = {
           24660.685026041665,
           28979.10302734375,
           28257.207649739583,
-          28856.750139508928
+          28856.750139508928,
+          22899.955212402343
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -690,7 +844,8 @@ window.BENCHMARK_DATA = {
           33092,
           33098,
           33098,
-          33098
+          33098,
+          33094
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -708,7 +863,8 @@ window.BENCHMARK_DATA = {
           10.445150269071261,
           9.20387484558991,
           9.388717264930408,
-          9.305480483174325
+          9.305480483174325,
+          6.439407130579154
         ],
         "borderColor": "#4A6FA5",
         "backgroundColor": "#4A6FA5",
@@ -720,6 +876,7 @@ window.BENCHMARK_DATA = {
         "label": "Jab memory",
         "unit": "b",
         "data": [
+          96,
           96,
           96,
           96,
@@ -741,7 +898,8 @@ window.BENCHMARK_DATA = {
           16.12693266669909,
           15.165443106339527,
           15.121575939655305,
-          15.329789812748249
+          15.329789812748249,
+          12.377571320533752
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
@@ -756,10 +914,65 @@ window.BENCHMARK_DATA = {
           128,
           128,
           128,
+          128,
           128
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
+        "yAxisID": "y1",
+        "borderDash": [
+          5,
+          5
+        ],
+        "pointStyle": "triangle"
+      },
+      {
+        "label": "DryIoc time",
+        "unit": "ns",
+        "data": [
+          553.2217806816101
+        ],
+        "borderColor": "#1565C0",
+        "backgroundColor": "#1565C0",
+        "yAxisID": "y",
+        "borderDash": [],
+        "pointStyle": "circle"
+      },
+      {
+        "label": "DryIoc memory",
+        "unit": "b",
+        "data": [
+          1472
+        ],
+        "borderColor": "#1565C0",
+        "backgroundColor": "#1565C0",
+        "yAxisID": "y1",
+        "borderDash": [
+          5,
+          5
+        ],
+        "pointStyle": "triangle"
+      },
+      {
+        "label": "SimpleInjector time",
+        "unit": "ns",
+        "data": [
+          8830.186895751953
+        ],
+        "borderColor": "#43A047",
+        "backgroundColor": "#43A047",
+        "yAxisID": "y",
+        "borderDash": [],
+        "pointStyle": "circle"
+      },
+      {
+        "label": "SimpleInjector memory",
+        "unit": "b",
+        "data": [
+          24761
+        ],
+        "borderColor": "#43A047",
+        "backgroundColor": "#43A047",
         "yAxisID": "y1",
         "borderDash": [
           5,
@@ -961,13 +1174,20 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Jun 27 19:53:13 2026 \u002B0200",
         "message": "feat: add \u0060Func\u003CT\u003E\u0060 and \u0060Lazy\u003CT\u003E\u0060 relationship types (#21)"
+      },
+      {
+        "sha": "940e8190b6ed14fd96d348a2f312472178fe965f",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Jun 27 21:05:55 2026 \u002B0200",
+        "message": "feat: add realistic end-to-end resolution benchmark across DI containers (#23)"
       }
     ],
     "labels": [
       "9e826c17",
       "c39ceed4",
       "3de2a7f9",
-      "d3d0f306"
+      "d3d0f306",
+      "940e8190"
     ],
     "datasets": [
       {
@@ -977,7 +1197,8 @@ window.BENCHMARK_DATA = {
           115.49085221971784,
           93.44233902863094,
           95.15006294617287,
-          103.8347438176473
+          103.8347438176473,
+          63.68630854572569
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -989,6 +1210,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          2144,
           2144,
           2144,
           2144,
@@ -1010,7 +1232,8 @@ window.BENCHMARK_DATA = {
           14105.811452229818,
           14303.591486249652,
           14221.36842549642,
-          14621.441815185546
+          14621.441815185546,
+          10451.63974202474
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -1022,6 +1245,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          61016,
           61016,
           61016,
           61016,
@@ -1043,7 +1267,8 @@ window.BENCHMARK_DATA = {
           555859.5663311298,
           683072.6413225447,
           671868.4560546875,
-          697260.7360677083
+          697260.7360677083,
+          538607.91796875
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -1058,7 +1283,8 @@ window.BENCHMARK_DATA = {
           739452,
           741789,
           740145,
-          739634
+          739634,
+          720534
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -1076,7 +1302,8 @@ window.BENCHMARK_DATA = {
           104.94684716860453,
           79.59447942574819,
           79.5539099295934,
-          73.27888635488657
+          73.27888635488657,
+          50.734790054957074
         ],
         "borderColor": "#4A6FA5",
         "backgroundColor": "#4A6FA5",
@@ -1088,6 +1315,7 @@ window.BENCHMARK_DATA = {
         "label": "Jab memory",
         "unit": "b",
         "data": [
+          2080,
           2080,
           2080,
           2080,
@@ -1109,7 +1337,8 @@ window.BENCHMARK_DATA = {
           115.83049867947896,
           89.94245272874832,
           81.5749951856477,
-          90.04482505321502
+          90.04482505321502,
+          56.831977537700105
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
@@ -1124,10 +1353,269 @@ window.BENCHMARK_DATA = {
           2112,
           2112,
           2112,
+          2112,
           2112
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
+        "yAxisID": "y1",
+        "borderDash": [
+          5,
+          5
+        ],
+        "pointStyle": "triangle"
+      },
+      {
+        "label": "DryIoc time",
+        "unit": "ns",
+        "data": [
+          35030.01636962891
+        ],
+        "borderColor": "#1565C0",
+        "backgroundColor": "#1565C0",
+        "yAxisID": "y",
+        "borderDash": [],
+        "pointStyle": "circle"
+      },
+      {
+        "label": "DryIoc memory",
+        "unit": "b",
+        "data": [
+          81806
+        ],
+        "borderColor": "#1565C0",
+        "backgroundColor": "#1565C0",
+        "yAxisID": "y1",
+        "borderDash": [
+          5,
+          5
+        ],
+        "pointStyle": "triangle"
+      },
+      {
+        "label": "SimpleInjector time",
+        "unit": "ns",
+        "data": [
+          263164.6458984375
+        ],
+        "borderColor": "#43A047",
+        "backgroundColor": "#43A047",
+        "yAxisID": "y",
+        "borderDash": [],
+        "pointStyle": "circle"
+      },
+      {
+        "label": "SimpleInjector memory",
+        "unit": "b",
+        "data": [
+          573040
+        ],
+        "borderColor": "#43A047",
+        "backgroundColor": "#43A047",
+        "yAxisID": "y1",
+        "borderDash": [
+          5,
+          5
+        ],
+        "pointStyle": "triangle"
+      }
+    ]
+  },
+  "Realistic": {
+    "commits": [
+      {
+        "sha": "940e8190b6ed14fd96d348a2f312472178fe965f",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Jun 27 21:05:55 2026 \u002B0200",
+        "message": "feat: add realistic end-to-end resolution benchmark across DI containers (#23)"
+      }
+    ],
+    "labels": [
+      "940e8190"
+    ],
+    "datasets": [
+      {
+        "label": "Awaiten time",
+        "unit": "ns",
+        "data": [
+          300.9296982969557
+        ],
+        "borderColor": "#3949AB",
+        "backgroundColor": "#3949AB",
+        "yAxisID": "y",
+        "borderDash": [],
+        "pointStyle": "circle"
+      },
+      {
+        "label": "Awaiten memory",
+        "unit": "b",
+        "data": [
+          632
+        ],
+        "borderColor": "#3949AB",
+        "backgroundColor": "#3949AB",
+        "yAxisID": "y1",
+        "borderDash": [
+          5,
+          5
+        ],
+        "pointStyle": "triangle"
+      },
+      {
+        "label": "MsDI time",
+        "unit": "ns",
+        "data": [
+          624.5027207692464
+        ],
+        "borderColor": "#512BD4",
+        "backgroundColor": "#512BD4",
+        "yAxisID": "y",
+        "borderDash": [],
+        "pointStyle": "circle"
+      },
+      {
+        "label": "MsDI memory",
+        "unit": "b",
+        "data": [
+          1104
+        ],
+        "borderColor": "#512BD4",
+        "backgroundColor": "#512BD4",
+        "yAxisID": "y1",
+        "borderDash": [
+          5,
+          5
+        ],
+        "pointStyle": "triangle"
+      },
+      {
+        "label": "Autofac time",
+        "unit": "ns",
+        "data": [
+          8328.710942949567
+        ],
+        "borderColor": "#5E2750",
+        "backgroundColor": "#5E2750",
+        "yAxisID": "y",
+        "borderDash": [],
+        "pointStyle": "circle"
+      },
+      {
+        "label": "Autofac memory",
+        "unit": "b",
+        "data": [
+          13696
+        ],
+        "borderColor": "#5E2750",
+        "backgroundColor": "#5E2750",
+        "yAxisID": "y1",
+        "borderDash": [
+          5,
+          5
+        ],
+        "pointStyle": "triangle"
+      },
+      {
+        "label": "Jab time",
+        "unit": "ns",
+        "data": [
+          182.09866827329
+        ],
+        "borderColor": "#D9534F",
+        "backgroundColor": "#D9534F",
+        "yAxisID": "y",
+        "borderDash": [],
+        "pointStyle": "circle"
+      },
+      {
+        "label": "Jab memory",
+        "unit": "b",
+        "data": [
+          432
+        ],
+        "borderColor": "#D9534F",
+        "backgroundColor": "#D9534F",
+        "yAxisID": "y1",
+        "borderDash": [
+          5,
+          5
+        ],
+        "pointStyle": "triangle"
+      },
+      {
+        "label": "DryIoc time",
+        "unit": "ns",
+        "data": [
+          405.80906445185343
+        ],
+        "borderColor": "#1565C0",
+        "backgroundColor": "#1565C0",
+        "yAxisID": "y",
+        "borderDash": [],
+        "pointStyle": "circle"
+      },
+      {
+        "label": "DryIoc memory",
+        "unit": "b",
+        "data": [
+          944
+        ],
+        "borderColor": "#1565C0",
+        "backgroundColor": "#1565C0",
+        "yAxisID": "y1",
+        "borderDash": [
+          5,
+          5
+        ],
+        "pointStyle": "triangle"
+      },
+      {
+        "label": "SimpleInjector time",
+        "unit": "ns",
+        "data": [
+          747.826828511556
+        ],
+        "borderColor": "#43A047",
+        "backgroundColor": "#43A047",
+        "yAxisID": "y",
+        "borderDash": [],
+        "pointStyle": "circle"
+      },
+      {
+        "label": "SimpleInjector memory",
+        "unit": "b",
+        "data": [
+          1096
+        ],
+        "borderColor": "#43A047",
+        "backgroundColor": "#43A047",
+        "yAxisID": "y1",
+        "borderDash": [
+          5,
+          5
+        ],
+        "pointStyle": "triangle"
+      },
+      {
+        "label": "PureDI time",
+        "unit": "ns",
+        "data": [
+          167.61310491959253
+        ],
+        "borderColor": "#F0AD4E",
+        "backgroundColor": "#F0AD4E",
+        "yAxisID": "y",
+        "borderDash": [],
+        "pointStyle": "circle"
+      },
+      {
+        "label": "PureDI memory",
+        "unit": "b",
+        "data": [
+          632
+        ],
+        "borderColor": "#F0AD4E",
+        "backgroundColor": "#F0AD4E",
         "yAxisID": "y1",
         "borderDash": [
           5,
