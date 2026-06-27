@@ -225,18 +225,41 @@ internal static class Emitter
 	private static List<DispatchEntry> BuildDispatchEntries(InstanceModel[] instances, Names names)
 	{
 		List<DispatchEntry> entries = new();
+		HashSet<string> seen = new(StringComparer.Ordinal);
+
+		// Explicit service registrations first, so a directly registered relationship type (e.g. a
+		// registered Lazy<T>) wins the dispatch slot over the synthetic relationship entry below.
 		for (int i = 0; i < instances.Length; i++)
 		{
 			string resolver = names.Resolver(i);
 			foreach (string service in instances[i].ServiceTypes.AsArray())
 			{
-				entries.Add(new DispatchEntry(service, resolver + "()"));
-				entries.Add(new DispatchEntry(
-					$"global::System.Func<{service}>",
-					$"new global::System.Func<{service}>(() => {resolver}())"));
-				entries.Add(new DispatchEntry(
-					$"global::System.Lazy<{service}>",
-					$"new global::System.Lazy<{service}>(() => {resolver}())"));
+				if (seen.Add(service))
+				{
+					entries.Add(new DispatchEntry(service, resolver + "()"));
+				}
+			}
+		}
+
+		// Synthetic Func<T>/Lazy<T> over each service, skipping any key an explicit registration already
+		// claimed so the static dispatch table never contains a duplicate key (which would otherwise throw
+		// from the dictionary initializer at runtime).
+		for (int i = 0; i < instances.Length; i++)
+		{
+			string resolver = names.Resolver(i);
+			foreach (string service in instances[i].ServiceTypes.AsArray())
+			{
+				string func = $"global::System.Func<{service}>";
+				if (seen.Add(func))
+				{
+					entries.Add(new DispatchEntry(func, $"new global::System.Func<{service}>(() => {resolver}())"));
+				}
+
+				string lazy = $"global::System.Lazy<{service}>";
+				if (seen.Add(lazy))
+				{
+					entries.Add(new DispatchEntry(lazy, $"new global::System.Lazy<{service}>(() => {resolver}())"));
+				}
 			}
 		}
 

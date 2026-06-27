@@ -2,7 +2,9 @@ namespace Awaiten.Tests;
 
 /// <summary>
 ///     Runtime behavior of the relationship types: <see cref="Func{T}" /> resolves fresh on each call
-///     (respecting the target's lifetime), and <see cref="Lazy{T}" /> memoizes per owner. The
+///     (respecting the target's lifetime), and each injected <see cref="Lazy{T}" /> memoizes its own
+///     value. A relationship is bound to the owner that constructs the consumer, so a singleton's
+///     <c>Func&lt;Scoped&gt;</c> resolves from the root container, not from a later child scope. The
 ///     containers and services are nested types, so the enclosing class is <c>partial</c>.
 /// </summary>
 public partial class RelationshipTests
@@ -17,6 +19,21 @@ public partial class RelationshipTests
 
 		// The injected Func is bound to the scope, so it returns the scope's single scoped instance.
 		await That(consumer.GetSession()).IsSameAs(scope.Resolve<Session>());
+	}
+
+	[Fact]
+	public async Task Func_OfScopedInASingleton_ResolvesFromTheRootNotTheRequestingScope()
+	{
+		using RelationshipContainer container = new();
+		using IAwaitenScope scope = container.CreateScope();
+
+		// The singleton is constructed once on the container, so its injected Func<Session> is bound to
+		// the container (the root scope) - not to whichever scope later asks for the singleton. Calling it
+		// therefore yields the root's scoped Session, never the requesting child scope's instance.
+		SingletonSessionConsumer consumer = scope.Resolve<SingletonSessionConsumer>();
+
+		await That(consumer.GetSession()).IsSameAs(container.Resolve<Session>());
+		await That(consumer.GetSession()).IsNotSameAs(scope.Resolve<Session>());
 	}
 
 	[Fact]
@@ -82,11 +99,24 @@ public partial class RelationshipTests
 		public Session GetSession() => _sessions();
 	}
 
+	public sealed class SingletonSessionConsumer
+	{
+		private readonly Func<Session> _sessions;
+
+		public SingletonSessionConsumer(Func<Session> sessions)
+		{
+			_sessions = sessions;
+		}
+
+		public Session GetSession() => _sessions();
+	}
+
 	[Container]
 	[Transient<Widget>]
 	[Singleton<Engine>]
 	[Scoped<Session>]
 	[Transient<Consumer>]
 	[Scoped<ScopedConsumer>]
+	[Singleton<SingletonSessionConsumer>]
 	public partial class RelationshipContainer;
 }

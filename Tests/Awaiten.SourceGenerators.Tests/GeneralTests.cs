@@ -287,4 +287,36 @@ public class GeneralTests
 		await That(source).Contains("instance = new global::System.Lazy<global::MyCode.Leaf>(() => ResolveLeaf()); return true;")
 			.Because("its dispatch case builds a fresh lazy over the target's resolver");
 	}
+
+	[Fact]
+	public async Task ExplicitlyRegisteredRelationshipType_WinsTheDispatchSlotWithoutADuplicateKey()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class Leaf { }
+
+		                                       [Container]
+		                                       [Transient<Leaf>]
+		                                       [Singleton<System.Lazy<Leaf>>]
+		                                       public partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// Registering Lazy<Leaf> directly and registering Leaf (which synthesizes a Lazy<Leaf> entry)
+		// would both claim typeof(Lazy<Leaf>); the synthetic entry must be dropped so the static
+		// dispatch dictionary has exactly one key for it (a duplicate would throw at runtime).
+		int keyCount = source.Split(new[] { "typeof(global::System.Lazy<global::MyCode.Leaf>)", }, System.StringSplitOptions.None).Length - 1;
+		await That(keyCount).IsEqualTo(1)
+			.Because("the explicit registration and the synthetic relationship must not produce a duplicate dispatch key");
+		await That(source.Contains("new global::System.Lazy<global::MyCode.Leaf>(() => ResolveLeaf())")).IsFalse()
+			.Because("the synthetic Lazy<Leaf> factory is dropped in favour of the explicit registration's resolver");
+	}
 }

@@ -303,11 +303,15 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	/// <summary>
 	///     Classifies a constructor parameter as a direct dependency or a deferred relationship type
 	///     (<c>Func&lt;T&gt;</c> / <c>Lazy&lt;T&gt;</c>), returning the underlying service type it resolves.
+	///     Only one level of nesting is supported: a relationship over another relationship
+	///     (e.g. <c>Func&lt;Func&lt;T&gt;&gt;</c>) is classified as a direct dependency so it surfaces as an
+	///     unregistered service type rather than a misleading diagnostic about the inner relationship.
 	/// </summary>
 	private static ParameterModel ClassifyParameter(ITypeSymbol parameterType)
 	{
 		if (parameterType is INamedTypeSymbol { IsGenericType: true, TypeArguments.Length: 1, } named
-		    && named.ContainingNamespace?.ToDisplayString() == "System")
+		    && named.ContainingNamespace?.ToDisplayString() == "System"
+		    && !IsRelationshipType(named.TypeArguments[0]))
 		{
 			DependencyKind? kind = named.Name switch
 			{
@@ -323,6 +327,10 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 		return new ParameterModel(parameterType.ToDisplayString(FullyQualified), DependencyKind.Direct);
 	}
+
+	private static bool IsRelationshipType(ITypeSymbol type)
+		=> type is INamedTypeSymbol { IsGenericType: true, TypeArguments.Length: 1, Name: "Func" or "Lazy", } named
+		   && named.ContainingNamespace?.ToDisplayString() == "System";
 
 	private static void DetectCaptiveDependencies(
 		List<InstanceModel> instances,
@@ -467,10 +475,10 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		return symbol.TypeKind == TypeKind.Struct ? "struct" : "class";
 	}
 
+	// Strip every 'global::' alias (the leading one and any nested in generic type arguments) so
+	// diagnostics read 'System.Func<MyCode.Leaf>' rather than 'System.Func<global::MyCode.Leaf>'.
 	private static string Display(string fullyQualified)
-		=> fullyQualified.StartsWith("global::", StringComparison.Ordinal)
-			? fullyQualified.Substring("global::".Length)
-			: fullyQualified;
+		=> fullyQualified.Replace("global::", string.Empty);
 
 	private sealed class ImplInfo
 	{
