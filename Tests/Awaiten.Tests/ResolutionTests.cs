@@ -16,11 +16,10 @@ public partial class ResolutionTests
 		IMiddle middle = container.Get<IMiddle>();
 		Top top = container.Get<Top>();
 
-		// The singleton Leaf is shared by every consumer.
-		await That(middle.Leaf).IsSameAs(leaf);
-		await That(top.Leaf).IsSameAs(leaf);
-		// The singleton Middle is the same instance injected into the transient Top.
-		await That(top.Middle).IsSameAs(middle);
+		await That(middle.Leaf).IsSameAs(leaf).Because("the singleton Leaf is shared by every consumer");
+		await That(top.Leaf).IsSameAs(leaf).Because("the singleton Leaf is shared by every consumer");
+		await That(top.Middle).IsSameAs(middle)
+			.Because("the singleton Middle is the same instance injected into the transient Top");
 	}
 
 	[Fact]
@@ -35,9 +34,8 @@ public partial class ResolutionTests
 	public async Task Resolve_OnIAwaitenContainer_ReturnsTheRegisteredInstance()
 	{
 		GraphContainer container = new();
-		IAwaitenContainer neutral = container;
 
-		object middle = neutral.Resolve(typeof(IMiddle));
+		object middle = container.Resolve(typeof(IMiddle));
 
 		await That(middle).IsSameAs(container.Get<IMiddle>());
 	}
