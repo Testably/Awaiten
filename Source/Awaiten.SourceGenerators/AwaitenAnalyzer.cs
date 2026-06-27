@@ -64,44 +64,8 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 				continue;
 			}
 
-			// A pre-built Instance is owned by the caller and never disposed by the container, so it cannot
-			// accumulate; skip it to match the container the generator emits (which does not register it).
-			if (registration.Production == ProductionKind.Instance)
-			{
-				continue;
-			}
-
-			// AWT106 is about the type the container actually owns and disposes: a factory's concrete return
-			// type (which may be disposable behind a non-disposable service interface), or the constructed
-			// implementation. This mirrors the generator so the warning and the disposal stay in lock-step.
-			ITypeSymbol? owned;
-			if (registration.Production == ProductionKind.Factory)
-			{
-				List<IMethodSymbol> candidates = ContainerRegistrations.FindFactoryCandidates(
-					type, registration.ProductionMember!, registration.Implementation, compilation);
-
-				// Zero or several candidates is an AWT108/AWT112 error the generator reports; don't pile on.
-				if (candidates.Count != 1)
-				{
-					continue;
-				}
-
-				owned = candidates[0].ReturnType;
-			}
-			else
-			{
-				// A transient that cannot be instantiated (an abstract type or interface) is rejected by the
-				// generator as AWT103 and never built, so it cannot accumulate. Skip it here to match the
-				// emitted container rather than stack a redundant AWT106 on the same already-erroring registration.
-				if (registration.Implementation.IsAbstract)
-				{
-					continue;
-				}
-
-				owned = registration.Implementation;
-			}
-
-			if (registration.Lifetime != Lifetime.Transient || !ImplementsDisposable(owned, disposable))
+			ITypeSymbol? owned = OwnedType(registration, type, compilation);
+			if (owned is null || registration.Lifetime != Lifetime.Transient || !ImplementsDisposable(owned, disposable))
 			{
 				continue;
 			}
@@ -110,6 +74,31 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 				Diagnostics.DisposableTransient,
 				registration.Location ?? Location.None,
 				Display(registration.ImplementationType)));
+		}
+	}
+
+	/// <summary>
+	///     The concrete type the container actually owns and disposes for a registration - a factory's
+	///     return type or the constructed implementation - or <c>null</c> when nothing accumulates here: a
+	///     caller-owned <c>Instance</c>, a not-instantiable implementation (rejected as AWT103) or a
+	///     factory the generator already rejects (AWT108/AWT112). Mirrors the generator so AWT106 and the
+	///     emitted disposal stay in lock-step.
+	/// </summary>
+	private static ITypeSymbol? OwnedType(RawRegistration registration, INamedTypeSymbol container, Compilation compilation)
+	{
+		switch (registration.Production)
+		{
+			case ProductionKind.Instance:
+				return null;
+			case ProductionKind.Factory:
+			{
+				List<IMethodSymbol> candidates = ContainerRegistrations.FindFactoryCandidates(
+					container, registration.ProductionMember!, registration.Implementation, compilation);
+				return candidates.Count == 1 ? candidates[0].ReturnType : null;
+			}
+
+			default:
+				return registration.Implementation.IsAbstract ? null : registration.Implementation;
 		}
 	}
 

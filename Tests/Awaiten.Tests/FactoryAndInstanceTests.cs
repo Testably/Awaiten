@@ -41,6 +41,8 @@ public partial class FactoryAndInstanceTests
 			.Because("a scoped factory result is cached once per scope");
 		await That(scope.Resolve<Session>()).IsNotSameAs(other.Resolve<Session>())
 			.Because("each scope produces its own scoped instance through the instance factory method");
+		await That(scope.Resolve<Session>().Origin).IsEqualTo("factory")
+			.Because("the scope reached the instance factory through the container, which read its own state");
 	}
 
 	[Fact]
@@ -102,7 +104,12 @@ public partial class FactoryAndInstanceTests
 
 	public sealed class Settings;
 
-	public sealed class Session;
+	public sealed class Session
+	{
+		public Session(string origin) => Origin = origin;
+
+		public string Origin { get; }
+	}
 
 	public sealed class Report
 	{
@@ -118,9 +125,13 @@ public partial class FactoryAndInstanceTests
 	[Scoped<Session>(Factory = nameof(MakeSession))]
 	public partial class FactoryContainer
 	{
-		private IWidget MakeWidget() => new Widget("factory");
+		private readonly string _origin = "factory";
 
-		private Session MakeSession() => new Session();
+		private static Widget MakeWidget() => new("factory");
+
+		// Deliberately an instance method that reads container state, so the scope must reach it through
+		// the '__container.' receiver - exercising that emitted path at runtime.
+		private Session MakeSession() => new(_origin);
 
 		private static Report MakeReport(Settings settings) => new(settings);
 	}
@@ -154,6 +165,6 @@ public partial class FactoryAndInstanceTests
 	[Singleton<IGadget>(Factory = nameof(MakeGadget))]
 	public partial class GadgetContainer
 	{
-		private DisposableGadget MakeGadget() => new();
+		private static DisposableGadget MakeGadget() => new();
 	}
 }

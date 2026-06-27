@@ -50,19 +50,8 @@ internal static class ContainerRegistrations
 
 			service ??= implementation;
 
-			// A 'Factory' names a container method that produces the instance; an 'Instance' names a
-			// pre-built container member to expose. Setting both is contradictory (reported as AWT110);
-			// when only one is set it selects the production, otherwise the instance is constructed. An
-			// explicit empty string is kept (not treated as absent) so it surfaces as AWT108/AWT109 rather
-			// than silently downgrading to a constructor.
-			string? factory = NamedArgument(attribute, "Factory");
-			string? instanceMember = NamedArgument(attribute, "Instance");
-			bool conflictingDirectives = factory is not null && instanceMember is not null;
-			(ProductionKind production, string? productionMember) = factory is not null
-				? (ProductionKind.Factory, factory)
-				: instanceMember is not null
-					? (ProductionKind.Instance, instanceMember)
-					: (ProductionKind.Constructor, (string?)null);
+			(ProductionKind production, string? productionMember, bool conflictingDirectives) =
+				ReadProduction(attribute);
 
 			Location? location = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation();
 			result.Add(new RawRegistration(
@@ -77,31 +66,61 @@ internal static class ContainerRegistrations
 		}
 
 		return result;
+	}
 
-		static string? NamedArgument(AttributeData attribute, string name)
+	/// <summary>
+	///     Resolves how a registration produces its instance. A <c>Factory</c> argument names a container
+	///     method that produces it; an <c>Instance</c> argument names a pre-built container member to
+	///     expose. Setting both is contradictory (the returned flag drives AWT110); when only one is set it
+	///     selects the production, otherwise the instance is constructed. An explicit empty string is kept
+	///     (not treated as absent) so it surfaces as AWT108/AWT109 rather than silently downgrading to a
+	///     constructor.
+	/// </summary>
+	private static (ProductionKind Production, string? Member, bool Conflicting) ReadProduction(AttributeData attribute)
+	{
+		string? factory = NamedArgument(attribute, "Factory");
+		string? instanceMember = NamedArgument(attribute, "Instance");
+		if (factory is not null && instanceMember is not null)
 		{
-			foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
-			{
-				if (argument.Key == name && argument.Value.Value is string value)
-				{
-					return value;
-				}
-			}
-
-			return null;
+			return (ProductionKind.Factory, factory, true);
 		}
 
-		static void ImmutableArrayGuard(
-			ImmutableArray<ITypeSymbol> typeArguments,
-			out ITypeSymbol? implementation,
-			out ITypeSymbol? service)
+		if (factory is not null)
 		{
-			implementation = typeArguments.Length > 0 ? typeArguments[0] : null;
-			service = typeArguments.Length > 1 ? typeArguments[1] : null;
-			if (implementation is not INamedTypeSymbol)
+			return (ProductionKind.Factory, factory, false);
+		}
+
+		if (instanceMember is not null)
+		{
+			return (ProductionKind.Instance, instanceMember, false);
+		}
+
+		return (ProductionKind.Constructor, null, false);
+	}
+
+	private static string? NamedArgument(AttributeData attribute, string name)
+	{
+		foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
+		{
+			if (argument.Key == name && argument.Value.Value is string value)
 			{
-				implementation = null;
+				return value;
 			}
+		}
+
+		return null;
+	}
+
+	private static void ImmutableArrayGuard(
+		ImmutableArray<ITypeSymbol> typeArguments,
+		out ITypeSymbol? implementation,
+		out ITypeSymbol? service)
+	{
+		implementation = typeArguments.Length > 0 ? typeArguments[0] : null;
+		service = typeArguments.Length > 1 ? typeArguments[1] : null;
+		if (implementation is not INamedTypeSymbol)
+		{
+			implementation = null;
 		}
 	}
 
@@ -120,12 +139,9 @@ internal static class ContainerRegistrations
 
 		for (INamedTypeSymbol? baseType = container.BaseType; baseType is not null; baseType = baseType.BaseType)
 		{
-			foreach (ISymbol member in baseType.GetMembers(name))
+			foreach (ISymbol member in baseType.GetMembers(name).Where(m => IsAccessibleFromDerived(m, container)))
 			{
-				if (IsAccessibleFromDerived(member, container))
-				{
-					yield return member;
-				}
+				yield return member;
 			}
 		}
 
