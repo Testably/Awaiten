@@ -3,6 +3,39 @@ namespace Awaiten.SourceGenerators.Tests;
 public class GeneralTests
 {
 	[Fact]
+	public async Task Container_DispatchesThroughAStaticTableSharedWithTheScope()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class A { }
+		                                       public sealed class B { }
+
+		                                       [Container]
+		                                       [Singleton<A>]
+		                                       [Singleton<B>]
+		                                       public partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source)
+			.Contains("private static readonly global::System.Collections.Generic.Dictionary<global::System.Type, int> __dispatch")
+			.Because("resolution is dispatched through a static type-to-case table");
+		await That(source).Contains("if (__dispatch.TryGetValue(serviceType, out int __case))")
+			.Because("the container dispatches through its own table");
+		await That(source).Contains("MyContainer.__dispatch.TryGetValue(serviceType, out int __case)")
+			.Because("the nested scope reuses the single table built on the container");
+		await That(source.Contains("if (serviceType == typeof(")).IsFalse()
+			.Because("the linear if-chain is no longer emitted");
+	}
+
+	[Fact]
 	public async Task EmptyContainer_EmitsAPartialImplementationWithoutDiagnostics()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -23,6 +56,69 @@ public class GeneralTests
 		await That(source).Contains("public object Resolve(global::System.Type serviceType)");
 		await That(source).Contains("public global::Awaiten.IAwaitenScope CreateScope() => new Scope(this);");
 		await That(source).Contains("private sealed class Scope : global::Awaiten.IAwaitenScope");
+	}
+
+	[Fact]
+	public async Task ExplicitlyRegisteredRelationshipType_WinsTheDispatchSlotWithoutADuplicateKey()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class Leaf { }
+
+		                                       [Container]
+		                                       [Transient<Leaf>]
+		                                       [Singleton<System.Lazy<Leaf>>]
+		                                       public partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		int keyCount = source.Split(new[]
+		{
+			"typeof(global::System.Lazy<global::MyCode.Leaf>)",
+		}, StringSplitOptions.None).Length - 1;
+		await That(keyCount).IsEqualTo(1)
+			.Because("the explicit registration and the synthetic relationship must not produce a duplicate dispatch key");
+		await That(source.Contains("new global::System.Lazy<global::MyCode.Leaf>(() => ResolveLeaf())")).IsFalse()
+			.Because("the synthetic Lazy<Leaf> factory is dropped in favour of the explicit registration's resolver");
+	}
+
+	[Fact]
+	public async Task FuncDependency_EmitsADeferredFactoryBoundToTheOwner()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class Leaf { }
+		                                       public sealed class Consumer { public Consumer(Func<Leaf> leaf) { } }
+
+		                                       [Container]
+		                                       [Transient<Leaf>]
+		                                       [Transient<Consumer>]
+		                                       public partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("new global::MyCode.Consumer(new global::System.Func<global::MyCode.Leaf>(() => ResolveLeaf()))")
+			.Because("the Func parameter is supplied as a factory bound to the owner's resolver");
+		await That(source).Contains("{ typeof(global::System.Func<global::MyCode.Leaf>),")
+			.Because("Func<T> is also resolvable directly through the dispatch table");
+		await That(source).Contains("instance = new global::System.Func<global::MyCode.Leaf>(() => ResolveLeaf()); return true;")
+			.Because("its dispatch case builds a fresh factory over the target's resolver");
 	}
 
 	[Fact]
@@ -87,6 +183,37 @@ public class GeneralTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 		await That(source).Contains("_foo = new global::MyCode.Foo();");
+	}
+
+	[Fact]
+	public async Task LazyDependency_EmitsADeferredLazyBoundToTheOwner()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class Leaf { }
+		                                       public sealed class Consumer { public Consumer(Lazy<Leaf> leaf) { } }
+
+		                                       [Container]
+		                                       [Singleton<Leaf>]
+		                                       [Singleton<Consumer>]
+		                                       public partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("new global::MyCode.Consumer(new global::System.Lazy<global::MyCode.Leaf>(() => ResolveLeaf()))")
+			.Because("the Lazy parameter is supplied as a lazy bound to the owner's resolver");
+		await That(source).Contains("{ typeof(global::System.Lazy<global::MyCode.Leaf>),")
+			.Because("Lazy<T> is also resolvable directly through the dispatch table");
+		await That(source).Contains("instance = new global::System.Lazy<global::MyCode.Leaf>(() => ResolveLeaf()); return true;")
+			.Because("its dispatch case builds a fresh lazy over the target's resolver");
 	}
 
 	[Fact]
@@ -191,132 +318,5 @@ public class GeneralTests
 			.Because("the container acts as the root scope");
 		await That(source).Contains("private sealed class Scope : global::Awaiten.IAwaitenScope")
 			.Because("scoped instances also live on each created scope");
-	}
-
-	[Fact]
-	public async Task Container_DispatchesThroughAStaticTableSharedWithTheScope()
-	{
-		GeneratorResult result = Generator.Run("""
-		                                       using Awaiten;
-
-		                                       namespace MyCode;
-
-		                                       public sealed class A { }
-		                                       public sealed class B { }
-
-		                                       [Container]
-		                                       [Singleton<A>]
-		                                       [Singleton<B>]
-		                                       public partial class MyContainer
-		                                       {
-		                                       }
-		                                       """);
-
-		await That(result.Diagnostics).IsEmpty();
-		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-
-		await That(source)
-			.Contains("private static readonly global::System.Collections.Generic.Dictionary<global::System.Type, int> __dispatch")
-			.Because("resolution is dispatched through a static type-to-case table");
-		await That(source).Contains("if (__dispatch.TryGetValue(serviceType, out int __case))")
-			.Because("the container dispatches through its own table");
-		await That(source).Contains("MyContainer.__dispatch.TryGetValue(serviceType, out int __case)")
-			.Because("the nested scope reuses the single table built on the container");
-		await That(source.Contains("if (serviceType == typeof(")).IsFalse()
-			.Because("the linear if-chain is no longer emitted");
-	}
-
-	[Fact]
-	public async Task FuncDependency_EmitsADeferredFactoryBoundToTheOwner()
-	{
-		GeneratorResult result = Generator.Run("""
-		                                       using Awaiten;
-		                                       using System;
-
-		                                       namespace MyCode;
-
-		                                       public sealed class Leaf { }
-		                                       public sealed class Consumer { public Consumer(Func<Leaf> leaf) { } }
-
-		                                       [Container]
-		                                       [Transient<Leaf>]
-		                                       [Transient<Consumer>]
-		                                       public partial class MyContainer
-		                                       {
-		                                       }
-		                                       """);
-
-		await That(result.Diagnostics).IsEmpty();
-		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-
-		await That(source).Contains("new global::MyCode.Consumer(new global::System.Func<global::MyCode.Leaf>(() => ResolveLeaf()))")
-			.Because("the Func parameter is supplied as a factory bound to the owner's resolver");
-		await That(source).Contains("{ typeof(global::System.Func<global::MyCode.Leaf>),")
-			.Because("Func<T> is also resolvable directly through the dispatch table");
-		await That(source).Contains("instance = new global::System.Func<global::MyCode.Leaf>(() => ResolveLeaf()); return true;")
-			.Because("its dispatch case builds a fresh factory over the target's resolver");
-	}
-
-	[Fact]
-	public async Task LazyDependency_EmitsADeferredLazyBoundToTheOwner()
-	{
-		GeneratorResult result = Generator.Run("""
-		                                       using Awaiten;
-		                                       using System;
-
-		                                       namespace MyCode;
-
-		                                       public sealed class Leaf { }
-		                                       public sealed class Consumer { public Consumer(Lazy<Leaf> leaf) { } }
-
-		                                       [Container]
-		                                       [Singleton<Leaf>]
-		                                       [Singleton<Consumer>]
-		                                       public partial class MyContainer
-		                                       {
-		                                       }
-		                                       """);
-
-		await That(result.Diagnostics).IsEmpty();
-		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-
-		await That(source).Contains("new global::MyCode.Consumer(new global::System.Lazy<global::MyCode.Leaf>(() => ResolveLeaf()))")
-			.Because("the Lazy parameter is supplied as a lazy bound to the owner's resolver");
-		await That(source).Contains("{ typeof(global::System.Lazy<global::MyCode.Leaf>),")
-			.Because("Lazy<T> is also resolvable directly through the dispatch table");
-		await That(source).Contains("instance = new global::System.Lazy<global::MyCode.Leaf>(() => ResolveLeaf()); return true;")
-			.Because("its dispatch case builds a fresh lazy over the target's resolver");
-	}
-
-	[Fact]
-	public async Task ExplicitlyRegisteredRelationshipType_WinsTheDispatchSlotWithoutADuplicateKey()
-	{
-		GeneratorResult result = Generator.Run("""
-		                                       using Awaiten;
-		                                       using System;
-
-		                                       namespace MyCode;
-
-		                                       public sealed class Leaf { }
-
-		                                       [Container]
-		                                       [Transient<Leaf>]
-		                                       [Singleton<System.Lazy<Leaf>>]
-		                                       public partial class MyContainer
-		                                       {
-		                                       }
-		                                       """);
-
-		await That(result.Diagnostics).IsEmpty();
-		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-
-		// Registering Lazy<Leaf> directly and registering Leaf (which synthesizes a Lazy<Leaf> entry)
-		// would both claim typeof(Lazy<Leaf>); the synthetic entry must be dropped so the static
-		// dispatch dictionary has exactly one key for it (a duplicate would throw at runtime).
-		int keyCount = source.Split(new[] { "typeof(global::System.Lazy<global::MyCode.Leaf>)", }, System.StringSplitOptions.None).Length - 1;
-		await That(keyCount).IsEqualTo(1)
-			.Because("the explicit registration and the synthetic relationship must not produce a duplicate dispatch key");
-		await That(source.Contains("new global::System.Lazy<global::MyCode.Leaf>(() => ResolveLeaf())")).IsFalse()
-			.Because("the synthetic Lazy<Leaf> factory is dropped in favour of the explicit registration's resolver");
 	}
 }

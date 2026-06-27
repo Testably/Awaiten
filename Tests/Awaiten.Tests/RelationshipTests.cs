@@ -17,8 +17,8 @@ public partial class RelationshipTests
 
 		ScopedConsumer consumer = scope.Resolve<ScopedConsumer>();
 
-		// The injected Func is bound to the scope, so it returns the scope's single scoped instance.
-		await That(consumer.GetSession()).IsSameAs(scope.Resolve<Session>());
+		await That(consumer.GetSession()).IsSameAs(scope.Resolve<Session>())
+			.Because("the injected Func is bound to the scope, so it returns the scope's single scoped instance");
 	}
 
 	[Fact]
@@ -27,13 +27,12 @@ public partial class RelationshipTests
 		using RelationshipContainer container = new();
 		using IAwaitenScope scope = container.CreateScope();
 
-		// The singleton is constructed once on the container, so its injected Func<Session> is bound to
-		// the container (the root scope) - not to whichever scope later asks for the singleton. Calling it
-		// therefore yields the root's scoped Session, never the requesting child scope's instance.
 		SingletonSessionConsumer consumer = scope.Resolve<SingletonSessionConsumer>();
 
-		await That(consumer.GetSession()).IsSameAs(container.Resolve<Session>());
-		await That(consumer.GetSession()).IsNotSameAs(scope.Resolve<Session>());
+		await That(consumer.GetSession()).IsSameAs(container.Resolve<Session>())
+			.Because("the singleton is constructed once on the container, so its injected Func<Session> is bound to the root scope and yields the root's scoped Session");
+		await That(consumer.GetSession()).IsNotSameAs(scope.Resolve<Session>())
+			.Because("the Func is never rebound to whichever scope later asks for the singleton, so it does not return the requesting child scope's instance");
 	}
 
 	[Fact]

@@ -53,6 +53,30 @@ public partial class DiagnosticTests
 		}
 
 		[Fact]
+		public async Task DoesNotReportWhenASingletonDependsOnScopedThroughAFunc()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+			                                       using System;
+
+			                                       namespace MyCode;
+
+			                                       public sealed class ScopedDependency { }
+			                                       public sealed class SingletonConsumer { public SingletonConsumer(Func<ScopedDependency> dependency) { } }
+
+			                                       [Container]
+			                                       [Singleton<SingletonConsumer>]
+			                                       [Scoped<ScopedDependency>]
+			                                       public partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics.Any(d => d.Contains("AWT105"))).IsFalse()
+				.Because("a deferred Func<T> does not capture the scoped instance for the singleton's lifetime");
+		}
+
+		[Fact]
 		public async Task DoesNotReportWhenATransientDependsOnScoped()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -150,30 +174,6 @@ public partial class DiagnosticTests
 			                                       """);
 
 			await That(result.Diagnostics.Any(d => d.Contains("AWT105"))).IsTrue();
-		}
-
-		[Fact]
-		public async Task DoesNotReportWhenASingletonDependsOnScopedThroughAFunc()
-		{
-			GeneratorResult result = Generator.Run("""
-			                                       using Awaiten;
-			                                       using System;
-
-			                                       namespace MyCode;
-
-			                                       public sealed class ScopedDependency { }
-			                                       public sealed class SingletonConsumer { public SingletonConsumer(Func<ScopedDependency> dependency) { } }
-
-			                                       [Container]
-			                                       [Singleton<SingletonConsumer>]
-			                                       [Scoped<ScopedDependency>]
-			                                       public partial class MyContainer
-			                                       {
-			                                       }
-			                                       """);
-
-			await That(result.Diagnostics.Any(d => d.Contains("AWT105"))).IsFalse()
-				.Because("a deferred Func<T> does not capture the scoped instance for the singleton's lifetime");
 		}
 	}
 }

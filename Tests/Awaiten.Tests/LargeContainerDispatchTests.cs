@@ -13,9 +13,10 @@ public partial class LargeContainerDispatchTests
 	{
 		LargeContainer container = new();
 
-		// The first and last registrations exercise both ends of the switch.
-		await That(container.Resolve<S00>()).IsNotNull();
-		await That(container.Resolve<S19>()).IsNotNull();
+		await That(container.Resolve<S00>()).IsNotNull()
+			.Because("the first registration exercises one end of the switch");
+		await That(container.Resolve<S19>()).IsNotNull()
+			.Because("the last registration exercises the other end of the switch");
 		await That(container.Resolve(typeof(S10))).Is<S10>();
 	}
 

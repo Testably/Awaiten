@@ -91,9 +91,9 @@ public partial class LifetimeTests
 			container.Resolve<Beta>();
 		}
 
-		// Beta is built after Alpha, so it is disposed first.
 		await That(recorder.Order).HasCount(2);
-		await That(recorder.Order[0]).IsEqualTo("Beta");
+		await That(recorder.Order[0]).IsEqualTo("Beta")
+			.Because("Beta is built after Alpha, so it is disposed first");
 		await That(recorder.Order[1]).IsEqualTo("Alpha");
 	}
 
@@ -171,10 +171,8 @@ public partial class LifetimeTests
 				.Because("tracked transients are not disposed until the owner is");
 		}
 
-		// If the unsynchronized tracking list raced, some instances would be lost (never disposed) or
-		// the resolution would have thrown; both surface here.
 		await That(captured.All(c => c.Disposed)).IsTrue()
-			.Because("every concurrently tracked transient is disposed with the container");
+			.Because("every concurrently tracked transient is disposed with the container; had the unsynchronized tracking list raced, some would be lost or resolution would have thrown");
 	}
 
 	[Fact]
