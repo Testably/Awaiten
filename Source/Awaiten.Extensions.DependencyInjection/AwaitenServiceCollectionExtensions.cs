@@ -22,6 +22,9 @@ public static class AwaitenServiceCollectionExtensions
 			throw new ArgumentNullException(nameof(services));
 		}
 
+		TContainer container = new();
+		services.AddSingleton<IAwaitenContainer>(container);
+
 		// TODO: project TContainer.Registrations into the service collection.
 		return services;
 	}

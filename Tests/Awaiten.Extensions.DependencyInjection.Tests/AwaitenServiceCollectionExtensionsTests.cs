@@ -1,7 +1,22 @@
+using Microsoft.Extensions.DependencyInjection;
+
 namespace Awaiten.Extensions.DependencyInjection.Tests;
 
 public sealed class AwaitenServiceCollectionExtensionsTests
 {
+	[Fact]
+	public async Task AddGeneratedContainer_ShouldRegisterContainerAsSingleton()
+	{
+		ServiceCollection services = new();
+
+		services.AddGeneratedContainer<DummyContainer>();
+
+		ServiceProvider provider = services.BuildServiceProvider();
+		IAwaitenContainer container = provider.GetRequiredService<IAwaitenContainer>();
+		await That(container).Is<DummyContainer>();
+		await That(provider.GetRequiredService<IAwaitenContainer>()).IsSameAs(container);
+	}
+
 	[Fact]
 	public async Task AddGeneratedContainer_WhenServicesIsNull_ShouldThrowArgumentNullException()
 	{
