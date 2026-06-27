@@ -105,6 +105,13 @@ public class PageBenchmarkReportGenerator
 				return true;
 			}
 
+			if (benchmark.Statistics == null)
+			{
+				// A benchmark that produced no measurements (reported as NA) has no mean to plot; skip it
+				// so the time and memory datasets stay aligned and publishing does not fail.
+				return true;
+			}
+
 			string chartKey = BuildChartKey(scenario, benchmark.Parameters);
 			if (!TryGetValue(chartKey, out PageReport pageReport))
 			{

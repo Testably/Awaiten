@@ -47,7 +47,7 @@ internal static class Fixtures
 		Type[] types = new Type[size];
 		for (int i = 0; i < types.Length; i++)
 		{
-			types[i] = Type.GetType($"Awaiten.Benchmarks.B{i}", true)!;
+			types[i] = Type.GetType($"Awaiten.Benchmarks.Helpers.B{i}", true)!;
 		}
 
 		return types;
