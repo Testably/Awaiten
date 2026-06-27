@@ -50,9 +50,10 @@ internal sealed record DiagnosticInfo(DiagnosticDescriptor Descriptor, LocationI
 /// <summary>
 ///     A single constructed instance on a container: one implementation, the implementation's simple
 ///     name (used to name generated members), its lifetime, the (one or more) service types it is
-///     exposed as, the service types of its selected constructor's parameters, and whether it needs
-///     disposing. Registrations of the same implementation are coalesced into one instance, so a
-///     multi-service registration shares a single object.
+///     exposed as, the service types of its selected constructor's parameters, whether it needs
+///     disposing, and whether it is a reference type (only reference-type cache fields can be marked
+///     <c>volatile</c> for the lock-free fast path). Registrations of the same implementation are
+///     coalesced into one instance, so a multi-service registration shares a single object.
 /// </summary>
 internal sealed record InstanceModel(
 	string ImplementationType,
@@ -60,7 +61,8 @@ internal sealed record InstanceModel(
 	Lifetime Lifetime,
 	EquatableArray<string> ServiceTypes,
 	EquatableArray<string> ConstructorParameterServiceTypes,
-	bool IsDisposable);
+	bool IsDisposable,
+	bool IsReferenceType);
 
 /// <summary>
 ///     A type declaration that encloses the container (outermost first), so the generator can

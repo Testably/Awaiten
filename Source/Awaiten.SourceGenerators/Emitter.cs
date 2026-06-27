@@ -132,7 +132,7 @@ internal static class Emitter
 	private static void EmitOwnerFields(StringBuilder builder, int depth, InstanceModel[] instances, Names names, bool isScope)
 	{
 		Indent(builder, depth).AppendLine("private readonly object __gate = new object();");
-		Indent(builder, depth).AppendLine("private bool __disposed;");
+		Indent(builder, depth).AppendLine("private volatile bool __disposed;");
 		Indent(builder, depth).AppendLine(
 			"private readonly global::System.Collections.Generic.List<object> __disposables = new global::System.Collections.Generic.List<object>();");
 
@@ -146,10 +146,22 @@ internal static class Emitter
 				|| (instance.Lifetime == Lifetime.Singleton && !isScope);
 			if (cachedHere)
 			{
-				Indent(builder, depth).Append("private ").Append(instance.ImplementationType)
+				// Reference-type cache fields are volatile so the lock-free fast path in the resolver
+				// cannot observe a non-null reference before the constructor's writes are visible (this
+				// matters on weak memory models such as arm64). Value types cannot be volatile.
+				string modifier = instance.IsReferenceType ? "private volatile " : "private ";
+				Indent(builder, depth).Append(modifier).Append(instance.ImplementationType)
 					.Append("? ").Append(names.Field(i)).AppendLine(";");
 			}
 		}
+	}
+
+	private static void EmitDisposedGuard(StringBuilder builder, int depth)
+	{
+		Indent(builder, depth).AppendLine("if (__disposed)");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).AppendLine("throw new global::System.ObjectDisposedException(GetType().FullName);");
+		Indent(builder, depth).AppendLine("}");
 	}
 
 	private static void EmitResolutionApi(StringBuilder builder, int depth, InstanceModel[] instances, Names names)
@@ -192,28 +204,43 @@ internal static class Emitter
 		// Singletons live on the container; a scope delegates to it.
 		if (instance.Lifetime == Lifetime.Singleton && isScope)
 		{
-			Indent(builder, depth).Append("private ").Append(type).Append(' ').Append(resolver)
-				.Append("() => __container.").Append(resolver).AppendLine("();");
+			Indent(builder, depth).Append("private ").Append(type).Append(' ').Append(resolver).AppendLine("()");
+			Indent(builder, depth).AppendLine("{");
+			EmitDisposedGuard(builder, depth + 1);
+			Indent(builder, depth + 1).Append("return __container.").Append(resolver).AppendLine("();");
+			Indent(builder, depth).AppendLine("}");
 			return;
 		}
 
 		if (instance.Lifetime == Lifetime.Transient)
 		{
+			Indent(builder, depth).Append("private ").Append(type).Append(' ').Append(resolver).AppendLine("()");
+			Indent(builder, depth).AppendLine("{");
+			EmitDisposedGuard(builder, depth + 1);
 			if (instance.IsDisposable)
 			{
-				Indent(builder, depth).Append("private ").Append(type).Append(' ').Append(resolver).AppendLine("()");
-				Indent(builder, depth).AppendLine("{");
 				Indent(builder, depth + 1).Append(type).Append(" created = ").Append(construction).AppendLine(";");
-				Indent(builder, depth + 1).AppendLine("__disposables.Add(created);");
+				Indent(builder, depth + 1).AppendLine("lock (__gate)");
+				Indent(builder, depth + 1).AppendLine("{");
+				// Re-check under the lock so an instance built during a concurrent Dispose is disposed
+				// here rather than leaked into a list that has already been drained.
+				Indent(builder, depth + 2).AppendLine("if (__disposed)");
+				Indent(builder, depth + 2).AppendLine("{");
+				Indent(builder, depth + 3).AppendLine("((global::System.IDisposable)created).Dispose();");
+				Indent(builder, depth + 3).AppendLine("throw new global::System.ObjectDisposedException(GetType().FullName);");
+				Indent(builder, depth + 2).AppendLine("}");
+				builder.AppendLine();
+				Indent(builder, depth + 2).AppendLine("__disposables.Add(created);");
+				Indent(builder, depth + 1).AppendLine("}");
+				builder.AppendLine();
 				Indent(builder, depth + 1).AppendLine("return created;");
-				Indent(builder, depth).AppendLine("}");
 			}
 			else
 			{
-				Indent(builder, depth).Append("private ").Append(type).Append(' ').Append(resolver)
-					.Append("() => ").Append(construction).AppendLine(";");
+				Indent(builder, depth + 1).Append("return ").Append(construction).AppendLine(";");
 			}
 
+			Indent(builder, depth).AppendLine("}");
 			return;
 		}
 
@@ -226,6 +253,7 @@ internal static class Emitter
 
 		Indent(builder, depth).Append("private ").Append(type).Append(' ').Append(resolver).AppendLine("()");
 		Indent(builder, depth).AppendLine("{");
+		EmitDisposedGuard(builder, depth + 1);
 		Indent(builder, depth + 1).Append("if (").Append(field).AppendLine(" is not null)");
 		Indent(builder, depth + 1).AppendLine("{");
 		Indent(builder, depth + 2).Append("return ").Append(field).AppendLine(";");
@@ -233,6 +261,7 @@ internal static class Emitter
 		builder.AppendLine();
 		Indent(builder, depth + 1).AppendLine("lock (__gate)");
 		Indent(builder, depth + 1).AppendLine("{");
+		EmitDisposedGuard(builder, depth + 2);
 		Indent(builder, depth + 2).Append("if (").Append(field).AppendLine(" is null)");
 		Indent(builder, depth + 2).AppendLine("{");
 		Indent(builder, depth + 3).Append(field).Append(" = ").Append(construction).AppendLine(";");
@@ -269,21 +298,29 @@ internal static class Emitter
 	{
 		Indent(builder, depth).AppendLine("public void Dispose()");
 		Indent(builder, depth).AppendLine("{");
-		Indent(builder, depth + 1).AppendLine("if (__disposed)");
+		Indent(builder, depth + 1).AppendLine(
+			"global::System.Collections.Generic.List<object> __toDispose;");
+		Indent(builder, depth + 1).AppendLine("lock (__gate)");
 		Indent(builder, depth + 1).AppendLine("{");
-		Indent(builder, depth + 2).AppendLine("return;");
+		Indent(builder, depth + 2).AppendLine("if (__disposed)");
+		Indent(builder, depth + 2).AppendLine("{");
+		Indent(builder, depth + 3).AppendLine("return;");
+		Indent(builder, depth + 2).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, depth + 2).AppendLine("__disposed = true;");
+		Indent(builder, depth + 2).AppendLine(
+			"__toDispose = new global::System.Collections.Generic.List<object>(__disposables);");
+		Indent(builder, depth + 2).AppendLine("__disposables.Clear();");
 		Indent(builder, depth + 1).AppendLine("}");
 		builder.AppendLine();
-		Indent(builder, depth + 1).AppendLine("__disposed = true;");
-		Indent(builder, depth + 1).AppendLine("for (int __index = __disposables.Count - 1; __index >= 0; __index--)");
+		// Dispose outside the lock so user code does not run under the gate.
+		Indent(builder, depth + 1).AppendLine("for (int __index = __toDispose.Count - 1; __index >= 0; __index--)");
 		Indent(builder, depth + 1).AppendLine("{");
-		Indent(builder, depth + 2).AppendLine("if (__disposables[__index] is global::System.IDisposable __disposable)");
+		Indent(builder, depth + 2).AppendLine("if (__toDispose[__index] is global::System.IDisposable __disposable)");
 		Indent(builder, depth + 2).AppendLine("{");
 		Indent(builder, depth + 3).AppendLine("__disposable.Dispose();");
 		Indent(builder, depth + 2).AppendLine("}");
 		Indent(builder, depth + 1).AppendLine("}");
-		builder.AppendLine();
-		Indent(builder, depth + 1).AppendLine("__disposables.Clear();");
 		Indent(builder, depth).AppendLine("}");
 	}
 

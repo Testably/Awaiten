@@ -204,7 +204,21 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			info.Lifetime,
 			new EquatableArray<string>(info.ServiceTypes.ToArray()),
 			new EquatableArray<string>(parameters.ToArray()),
-			disposable));
+			disposable,
+			info.Symbol.IsReferenceType));
+
+		static bool ImplementsInterface(INamedTypeSymbol type, INamedTypeSymbol @interface)
+		{
+			foreach (INamedTypeSymbol implemented in type.AllInterfaces)
+			{
+				if (SymbolEqualityComparer.Default.Equals(implemented, @interface))
+				{
+					return true;
+				}
+			}
+
+			return false;
+		}
 	}
 
 	private static List<RawRegistration> CollectRegistrations(INamedTypeSymbol containerSymbol)
@@ -299,19 +313,6 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 				_ => false,
 			};
 		}
-	}
-
-	private static bool ImplementsInterface(INamedTypeSymbol type, INamedTypeSymbol @interface)
-	{
-		foreach (INamedTypeSymbol implemented in type.AllInterfaces)
-		{
-			if (SymbolEqualityComparer.Default.Equals(implemented, @interface))
-			{
-				return true;
-			}
-		}
-
-		return false;
 	}
 
 	private static void DetectCycles(

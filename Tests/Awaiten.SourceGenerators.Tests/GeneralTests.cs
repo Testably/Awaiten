@@ -76,15 +76,15 @@ public class GeneralTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		await That(source).Contains("private global::MyCode.Leaf? _leaf;")
-			.Because("singletons are cached in a backing field");
-		await That(source).Contains("private global::MyCode.Middle? _middle;")
-			.Because("singletons are cached in a backing field");
+		await That(source).Contains("private volatile global::MyCode.Leaf? _leaf;")
+			.Because("reference-type singletons are cached in a volatile backing field");
+		await That(source).Contains("private volatile global::MyCode.Middle? _middle;")
+			.Because("reference-type singletons are cached in a volatile backing field");
 		await That(source).Contains("lock (__gate)")
 			.Because("singletons are created once under a lock");
 		await That(source).Contains("_middle = new global::MyCode.Middle(ResolveLeaf());")
 			.Because("singletons are memoized into their backing field");
-		await That(source).Contains("private global::MyCode.Top ResolveTop() => new global::MyCode.Top(ResolveMiddle(), ResolveLeaf());")
+		await That(source).Contains("return new global::MyCode.Top(ResolveMiddle(), ResolveLeaf());")
 			.Because("transients are constructed on each request, not cached");
 
 		await That(source).Contains("if (serviceType == typeof(global::MyCode.IMiddle)) { instance = ResolveMiddle(); return true; }")
@@ -239,7 +239,7 @@ public class GeneralTests
 
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-		await That(source).Contains("private global::MyCode.Service? _service;")
+		await That(source).Contains("private volatile global::MyCode.Service? _service;")
 			.Because("a scoped registration is cached per owner");
 		await That(source).Contains("Scoped: one instance per owner")
 			.Because("the container acts as the root scope");
@@ -270,7 +270,7 @@ public class GeneralTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		await That(source).Contains("private global::MyCode.Store? _store;")
+		await That(source).Contains("private volatile global::MyCode.Store? _store;")
 			.Because("the implementation is coalesced into one backing field");
 		await That(source).Contains("if (serviceType == typeof(global::MyCode.IReader)) { instance = ResolveStore(); return true; }")
 			.Because("both service types dispatch to the one shared instance");
