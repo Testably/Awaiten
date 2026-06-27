@@ -8,8 +8,16 @@ namespace Awaiten
         public ContainerAttribute() { }
         public bool SyncResolveAfterInit { get; set; }
     }
-    public interface IAwaitenContainer
+    public interface IAwaitenContainer : System.IDisposable
     {
+        Awaiten.IAwaitenScope CreateScope();
+        T Get<T>();
+        object Resolve(System.Type serviceType);
+        bool TryResolve(System.Type serviceType, out object? instance);
+    }
+    public interface IAwaitenScope : System.IDisposable
+    {
+        T Get<T>();
         object Resolve(System.Type serviceType);
         bool TryResolve(System.Type serviceType, out object? instance);
     }

@@ -47,10 +47,12 @@ public class GeneralTests
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 		await That(source).Contains("partial class MyContainer : global::Awaiten.IAwaitenContainer");
 		await That(source).Contains("public T Get<T>() => (T)Resolve(typeof(T));");
+		await That(source).Contains("public global::Awaiten.IAwaitenScope CreateScope() => new Scope(this);");
+		await That(source).Contains("private sealed class Scope : global::Awaiten.IAwaitenScope");
 	}
 
 	[Fact]
-	public async Task Graph_EmitsSingletonCachingAndTransientConstruction()
+	public async Task Graph_EmitsThreadSafeSingletonCachingAndTransientConstruction()
 	{
 		GeneratorResult result = Generator.Run("""
 		                                       using Awaiten;
@@ -78,8 +80,10 @@ public class GeneralTests
 			.Because("singletons are cached in a backing field");
 		await That(source).Contains("private global::MyCode.Middle? _middle;")
 			.Because("singletons are cached in a backing field");
-		await That(source).Contains("_leaf ??= new global::MyCode.Leaf()")
-			.Because("singletons are memoized on first resolution");
+		await That(source).Contains("lock (__gate)")
+			.Because("singletons are created once under a lock");
+		await That(source).Contains("_middle = new global::MyCode.Middle(ResolveLeaf());")
+			.Because("singletons are memoized into their backing field");
 		await That(source).Contains("private global::MyCode.Top ResolveTop() => new global::MyCode.Top(ResolveMiddle(), ResolveLeaf());")
 			.Because("transients are constructed on each request, not cached");
 
@@ -106,7 +110,7 @@ public class GeneralTests
 
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-		await That(source).Contains("_foo ??= new global::MyCode.Foo()");
+		await That(source).Contains("_foo = new global::MyCode.Foo();");
 	}
 
 	[Fact]
@@ -155,7 +159,7 @@ public class GeneralTests
 		string source = result.Sources["Awaiten.MyCode.Outer+Inner.g.cs"];
 		await That(source).Contains("partial class Outer");
 		await That(source).Contains("partial class Inner : global::Awaiten.IAwaitenContainer");
-		await That(source).Contains("_service ??= new global::MyCode.Outer.Service()");
+		await That(source).Contains("_service = new global::MyCode.Outer.Service();");
 	}
 
 	[Fact]
@@ -217,7 +221,7 @@ public class GeneralTests
 	}
 
 	[Fact]
-	public async Task ScopedRegistration_IsResolvedAsSingletonForNow()
+	public async Task ScopedRegistration_EmitsPerScopeStorageOnTheContainerAndTheScope()
 	{
 		GeneratorResult result = Generator.Run("""
 		                                       using Awaiten;
@@ -235,7 +239,42 @@ public class GeneralTests
 
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-		await That(source).Contains("TODO");
-		await That(source).Contains("_service ??= new global::MyCode.Service()");
+		await That(source).Contains("private global::MyCode.Service? _service;")
+			.Because("a scoped registration is cached per owner");
+		await That(source).Contains("Scoped: one instance per owner")
+			.Because("the container acts as the root scope");
+		await That(source).Contains("private sealed class Scope : global::Awaiten.IAwaitenScope")
+			.Because("scoped instances also live on each created scope");
+	}
+
+	[Fact]
+	public async Task MultiServiceRegistration_CoalescesIntoASingleSharedInstance()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace MyCode;
+
+			public interface IReader { }
+			public interface IWriter { }
+			public sealed class Store : IReader, IWriter { }
+
+			[Container]
+			[Singleton<Store, IReader>]
+			[Singleton<Store, IWriter>]
+			public partial class MyContainer
+			{
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("private global::MyCode.Store? _store;")
+			.Because("the implementation is coalesced into one backing field");
+		await That(source).Contains("if (serviceType == typeof(global::MyCode.IReader)) { instance = ResolveStore(); return true; }")
+			.Because("both service types dispatch to the one shared instance");
+		await That(source).Contains("if (serviceType == typeof(global::MyCode.IWriter)) { instance = ResolveStore(); return true; }")
+			.Because("both service types dispatch to the one shared instance");
 	}
 }

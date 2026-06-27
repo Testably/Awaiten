@@ -10,14 +10,15 @@ namespace Awaiten.SourceGenerators;
 /// <summary>
 ///     The Awaiten incremental source generator. Discovers <c>[Container]</c> partial classes,
 ///     collects their registration attributes, resolves the object graph at compile time and emits
-///     the container implementation. Invalid wiring (missing dependencies, cycles) is reported as a
-///     build error.
+///     the container implementation (resolution, scopes and disposal). Invalid wiring is reported as
+///     a diagnostic.
 /// </summary>
 /// <remarks>
-///     Phase 1 assumptions: a container is a non-generic <c>partial class</c> (it may be nested, in
-///     which case every enclosing type must be declared <c>partial</c>); enclosing types are
-///     non-generic; each constructed type has a single public constructor (when several exist, the
-///     one with the most resolvable parameters is chosen).
+///     Assumptions: a container is a non-generic <c>partial class</c> (it may be nested, in which
+///     case every enclosing type must be declared <c>partial</c>); enclosing types are non-generic;
+///     each constructed type has a single accessible constructor (when several exist, the one with the
+///     most resolvable parameters is chosen). Registrations of the same implementation are coalesced
+///     into a single instance, so a multi-service registration shares one object.
 /// </remarks>
 [Generator]
 public sealed class AwaitenGenerator : IIncrementalGenerator
@@ -56,28 +57,65 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			return null;
 		}
 
+		INamedTypeSymbol? disposableSymbol = context.SemanticModel.Compilation.GetTypeByMetadataName("System.IDisposable");
+
 		List<RawRegistration> raw = CollectRegistrations(containerSymbol);
 
-		// service type -> (implementation, lifetime), first registration wins.
-		Dictionary<string, RawRegistration> byService = new(StringComparer.Ordinal);
-		foreach (RawRegistration registration in raw.Where(registration => !byService.ContainsKey(registration.ServiceType)))
+		// Pass 1: coalesce registrations by implementation. The first registration per service type
+		// wins, and registrations of the same implementation share one instance.
+		List<string> implOrder = new();
+		Dictionary<string, ImplInfo> implInfos = new(StringComparer.Ordinal);
+		Dictionary<string, string> serviceToImpl = new(StringComparer.Ordinal);
+
+		foreach (RawRegistration registration in raw)
 		{
-			byService.Add(registration.ServiceType, registration);
+			if (serviceToImpl.ContainsKey(registration.ServiceType))
+			{
+				continue;
+			}
+
+			if (!implInfos.TryGetValue(registration.ImplementationType, out ImplInfo? info))
+			{
+				info = new ImplInfo(registration.Implementation, registration.Lifetime, registration.Location);
+				implInfos.Add(registration.ImplementationType, info);
+				implOrder.Add(registration.ImplementationType);
+			}
+
+			serviceToImpl[registration.ServiceType] = registration.ImplementationType;
+			info.ServiceTypes.Add(registration.ServiceType);
 		}
 
 		List<DiagnosticInfo> diagnostics = new();
-		List<RegistrationModel> registrations = new();
-		Dictionary<string, List<string>> dependencies = new(StringComparer.Ordinal);
+		List<InstanceModel> instances = new();
+		Dictionary<string, int> implToIndex = new(StringComparer.Ordinal);
 
-		// Honor the first registration per service type only.
-		foreach (RawRegistration registration in raw.Where(registration =>
-			         ReferenceEquals(byService[registration.ServiceType], registration)))
+		// Pass 2: validate each implementation, select its constructor and build the instance.
+		foreach (string impl in implOrder)
 		{
 			cancellationToken.ThrowIfCancellationRequested();
-			BuildRegistration(registration, containerSymbol, byService, registrations, dependencies, diagnostics);
+			BuildInstance(impl, implInfos[impl], containerSymbol, serviceToImpl, disposableSymbol,
+				instances, implToIndex, diagnostics);
 		}
 
-		DetectCycles(dependencies, containerSymbol, diagnostics);
+		// Dependency graph over instance indices (resolvable edges to built instances only).
+		Dictionary<int, List<int>> dependencies = new();
+		for (int i = 0; i < instances.Count; i++)
+		{
+			List<int> edges = new();
+			foreach (string paramService in instances[i].ConstructorParameterServiceTypes.AsArray())
+			{
+				if (serviceToImpl.TryGetValue(paramService, out string? depImpl) &&
+				    implToIndex.TryGetValue(depImpl, out int depIndex))
+				{
+					edges.Add(depIndex);
+				}
+			}
+
+			dependencies[i] = edges;
+		}
+
+		LocationInfo? containerLocation = LocationInfo.From(containerSymbol.Locations.FirstOrDefault());
+		DetectCycles(instances, dependencies, containerLocation, diagnostics);
 
 		string? containerNamespace = containerSymbol.ContainingNamespace is { IsGlobalNamespace: false, } ns
 			? ns.ToDisplayString()
@@ -105,79 +143,68 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			new EquatableArray<TypeDeclaration>(containingTypes.ToArray()),
 			containerSymbol.Name,
 			hintName,
-			new EquatableArray<RegistrationModel>(registrations.ToArray()),
+			new EquatableArray<InstanceModel>(instances.ToArray()),
 			new EquatableArray<DiagnosticInfo>(diagnostics.ToArray()));
-
-		static string KeywordOf(INamedTypeSymbol symbol)
-		{
-			if (symbol.IsRecord)
-			{
-				return symbol.TypeKind == TypeKind.Struct ? "record struct" : "record";
-			}
-
-			return symbol.TypeKind == TypeKind.Struct ? "struct" : "class";
-		}
 	}
 
-	private static void BuildRegistration(
-		RawRegistration registration,
+	private static void BuildInstance(
+		string impl,
+		ImplInfo info,
 		INamedTypeSymbol containerSymbol,
-		Dictionary<string, RawRegistration> byService,
-		List<RegistrationModel> registrations,
-		Dictionary<string, List<string>> dependencies,
+		Dictionary<string, string> serviceToImpl,
+		INamedTypeSymbol? disposableSymbol,
+		List<InstanceModel> instances,
+		Dictionary<string, int> implToIndex,
 		List<DiagnosticInfo> diagnostics)
 	{
 		// An abstract type or interface cannot be constructed; reject it instead of emitting a 'new'
 		// against it (which would fail to compile in the generated source).
-		if (registration.Implementation.IsAbstract || registration.Implementation.TypeKind == TypeKind.Interface)
+		if (info.Symbol.IsAbstract || info.Symbol.TypeKind == TypeKind.Interface)
 		{
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.NotInstantiable,
-				registration.Location,
-				new EquatableArray<string>([Display(registration.ImplementationType),])));
+				info.Location,
+				new EquatableArray<string>([Display(impl),])));
 			return;
 		}
 
-		IMethodSymbol? constructor = SelectConstructor(registration.Implementation, containerSymbol, byService.Keys);
+		IMethodSymbol? constructor = SelectConstructor(info.Symbol, containerSymbol, serviceToImpl.Keys);
 		if (constructor is null)
 		{
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.NoAccessibleConstructor,
-				registration.Location,
-				new EquatableArray<string>([Display(registration.ImplementationType),])));
+				info.Location,
+				new EquatableArray<string>([Display(impl),])));
 			return;
 		}
 
 		List<string> parameters = new();
-		List<string> resolvedDependencies = new();
 		foreach (IParameterSymbol parameter in constructor.Parameters)
 		{
 			string parameterType = parameter.Type.ToDisplayString(FullyQualified);
 			parameters.Add(parameterType);
-			if (byService.ContainsKey(parameterType))
-			{
-				resolvedDependencies.Add(parameterType);
-			}
-			else
+			if (!serviceToImpl.ContainsKey(parameterType))
 			{
 				diagnostics.Add(new DiagnosticInfo(
 					Diagnostics.MissingDependency,
-					registration.Location,
+					info.Location,
 					new EquatableArray<string>([
-						Display(registration.ServiceType),
-						Display(registration.ImplementationType),
+						Display(info.ServiceTypes[0]),
+						Display(impl),
 						Display(parameterType),
 					])));
 			}
 		}
 
-		dependencies[registration.ServiceType] = resolvedDependencies;
-		registrations.Add(new RegistrationModel(
-			registration.ServiceType,
-			registration.ImplementationType,
-			registration.Implementation.Name,
-			registration.Lifetime,
-			new EquatableArray<string>(parameters.ToArray())));
+		bool disposable = disposableSymbol is not null && ImplementsInterface(info.Symbol, disposableSymbol);
+		implToIndex[impl] = instances.Count;
+		instances.Add(new InstanceModel(
+			impl,
+			info.Symbol.Name,
+			info.Lifetime,
+			new EquatableArray<string>(info.ServiceTypes.ToArray()),
+			new EquatableArray<string>(parameters.ToArray()),
+			disposable));
 	}
 
 	private static List<RawRegistration> CollectRegistrations(INamedTypeSymbol containerSymbol)
@@ -274,40 +301,50 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		}
 	}
 
-	private static void DetectCycles(
-		Dictionary<string, List<string>> dependencies,
-		INamedTypeSymbol containerSymbol,
-		List<DiagnosticInfo> diagnostics)
+	private static bool ImplementsInterface(INamedTypeSymbol type, INamedTypeSymbol @interface)
 	{
-		LocationInfo? containerLocation = LocationInfo.From(containerSymbol.Locations.FirstOrDefault());
-		HashSet<string> visited = new(StringComparer.Ordinal);
-		HashSet<string> onStack = new(StringComparer.Ordinal);
-		List<string> path = new();
-		HashSet<string> reportedCycles = new(StringComparer.Ordinal);
-
-		foreach (string node in dependencies.Keys)
+		foreach (INamedTypeSymbol implemented in type.AllInterfaces)
 		{
-			Visit(node);
+			if (SymbolEqualityComparer.Default.Equals(implemented, @interface))
+			{
+				return true;
+			}
 		}
 
-		void Visit(string node)
+		return false;
+	}
+
+	private static void DetectCycles(
+		List<InstanceModel> instances,
+		Dictionary<int, List<int>> dependencies,
+		LocationInfo? containerLocation,
+		List<DiagnosticInfo> diagnostics)
+	{
+		HashSet<int> visited = new();
+		HashSet<int> onStack = new();
+		List<int> path = new();
+		HashSet<string> reportedCycles = new(StringComparer.Ordinal);
+
+		for (int i = 0; i < instances.Count; i++)
+		{
+			Visit(i);
+		}
+
+		void Visit(int node)
 		{
 			visited.Add(node);
 			onStack.Add(node);
 			path.Add(node);
 
-			if (dependencies.TryGetValue(node, out List<string>? edges))
+			foreach (int next in dependencies[node])
 			{
-				foreach (string next in edges)
+				if (onStack.Contains(next))
 				{
-					if (onStack.Contains(next))
-					{
-						ReportCycle(next);
-					}
-					else if (!visited.Contains(next))
-					{
-						Visit(next);
-					}
+					ReportCycle(next);
+				}
+				else if (!visited.Contains(next))
+				{
+					Visit(next);
 				}
 			}
 
@@ -315,25 +352,35 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			path.RemoveAt(path.Count - 1);
 		}
 
-		void ReportCycle(string cycleStart)
+		void ReportCycle(int cycleStart)
 		{
 			int startIndex = path.LastIndexOf(cycleStart);
-			List<string> cycle = path.GetRange(startIndex, path.Count - startIndex);
+			List<int> cycle = path.GetRange(startIndex, path.Count - startIndex);
 			cycle.Add(cycleStart);
 
 			// Dedupe on the set of nodes so the same cycle is not reported once per back-edge.
-			string signature = string.Join("|", cycle.Take(cycle.Count - 1).OrderBy(x => x, StringComparer.Ordinal));
+			string signature = string.Join("|", cycle.Take(cycle.Count - 1).OrderBy(x => x));
 			if (!reportedCycles.Add(signature))
 			{
 				return;
 			}
 
-			string rendered = string.Join(" -> ", cycle.Select(Display));
+			string rendered = string.Join(" -> ", cycle.Select(index => Display(instances[index].ImplementationType)));
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.DependencyCycle,
 				containerLocation,
 				new EquatableArray<string>([rendered,])));
 		}
+	}
+
+	private static string KeywordOf(INamedTypeSymbol symbol)
+	{
+		if (symbol.IsRecord)
+		{
+			return symbol.TypeKind == TypeKind.Struct ? "record struct" : "record";
+		}
+
+		return symbol.TypeKind == TypeKind.Struct ? "struct" : "class";
 	}
 
 	private static string Display(string fullyQualified)
@@ -347,4 +394,20 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		Lifetime Lifetime,
 		INamedTypeSymbol Implementation,
 		LocationInfo? Location);
+
+	private sealed class ImplInfo
+	{
+		public ImplInfo(INamedTypeSymbol symbol, Lifetime lifetime, LocationInfo? location)
+		{
+			Symbol = symbol;
+			Lifetime = lifetime;
+			Location = location;
+			ServiceTypes = new List<string>();
+		}
+
+		public INamedTypeSymbol Symbol { get; }
+		public Lifetime Lifetime { get; }
+		public LocationInfo? Location { get; }
+		public List<string> ServiceTypes { get; }
+	}
 }

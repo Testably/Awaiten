@@ -5,8 +5,9 @@ using Microsoft.CodeAnalysis.Text;
 namespace Awaiten.SourceGenerators;
 
 /// <summary>
-///     The lifetime of a registration. <see cref="Scoped" /> is declarable but resolved as
-///     <see cref="Singleton" /> until real scope semantics arrive in a later phase.
+///     The lifetime of a registration. A <see cref="Singleton" /> is created once and shared for the
+///     container's life; a <see cref="Transient" /> is created per request; a <see cref="Scoped" />
+///     instance is created once per scope (the container acts as the root scope).
 /// </summary>
 internal enum Lifetime
 {
@@ -47,16 +48,19 @@ internal sealed record DiagnosticInfo(DiagnosticDescriptor Descriptor, LocationI
 }
 
 /// <summary>
-///     A single registration on a container: an implementation, the service type it is resolved as,
-///     the implementation's simple name (used to name generated members), its lifetime, and the
-///     service types of its selected constructor's parameters.
+///     A single constructed instance on a container: one implementation, the implementation's simple
+///     name (used to name generated members), its lifetime, the (one or more) service types it is
+///     exposed as, the service types of its selected constructor's parameters, and whether it needs
+///     disposing. Registrations of the same implementation are coalesced into one instance, so a
+///     multi-service registration shares a single object.
 /// </summary>
-internal sealed record RegistrationModel(
-	string ServiceType,
+internal sealed record InstanceModel(
 	string ImplementationType,
 	string Name,
 	Lifetime Lifetime,
-	EquatableArray<string> ConstructorParameterServiceTypes);
+	EquatableArray<string> ServiceTypes,
+	EquatableArray<string> ConstructorParameterServiceTypes,
+	bool IsDisposable);
 
 /// <summary>
 ///     A type declaration that encloses the container (outermost first), so the generator can
@@ -73,7 +77,7 @@ internal sealed record ContainerModel(
 	EquatableArray<TypeDeclaration> ContainingTypes,
 	string TypeName,
 	string HintName,
-	EquatableArray<RegistrationModel> Registrations,
+	EquatableArray<InstanceModel> Instances,
 	EquatableArray<DiagnosticInfo> Diagnostics)
 {
 	public bool HasErrors

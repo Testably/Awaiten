@@ -4,8 +4,11 @@ namespace Awaiten.SourceGenerators;
 
 /// <summary>
 ///     Emits the <c>partial class</c> implementation of a container from its
-///     <see cref="ContainerModel" />, re-opening any enclosing types as <c>partial</c> so the
-///     container can be a nested type.
+///     <see cref="ContainerModel" />: thread-safe singletons, a nested <c>Scope</c> type for scoped
+///     instances, transient construction, and synchronous disposal. Enclosing types are re-opened as
+///     <c>partial</c> so the container can be a nested type. Per-instance members are named after the
+///     implementation type (e.g. <c>ResolveGreeter</c>, <c>_greeter</c>), with a numeric suffix added
+///     only when two implementations would otherwise collide.
 /// </summary>
 internal static class Emitter
 {
@@ -42,7 +45,9 @@ internal static class Emitter
 		}
 		else
 		{
-			EmitBody(builder, depth + 1, model);
+			Names names = Names.Build(model.Instances.AsArray());
+			Dictionary<string, int> serviceToIndex = BuildServiceMap(model);
+			EmitContainerBody(builder, depth + 1, model, names, serviceToIndex);
 		}
 
 		Indent(builder, depth).AppendLine("}");
@@ -61,36 +66,94 @@ internal static class Emitter
 		return builder.ToString();
 	}
 
-	private static void EmitBody(StringBuilder builder, int depth, ContainerModel model)
+	private static Dictionary<string, int> BuildServiceMap(ContainerModel model)
 	{
-		RegistrationModel[] registrations = model.Registrations.AsArray();
-
-		// service type -> registration index, for wiring constructor parameters.
 		Dictionary<string, int> serviceToIndex = new(StringComparer.Ordinal);
-		for (int i = 0; i < registrations.Length; i++)
+		InstanceModel[] instances = model.Instances.AsArray();
+		for (int i = 0; i < instances.Length; i++)
 		{
-			serviceToIndex[registrations[i].ServiceType] = i;
-		}
-
-		// Per-service member names derived from the implementation type, so the emitted code reads well.
-		Names names = Names.Build(registrations);
-
-		// Singleton/Scoped backing fields.
-		for (int i = 0; i < registrations.Length; i++)
-		{
-			RegistrationModel registration = registrations[i];
-			if (registration.Lifetime != Lifetime.Transient)
+			foreach (string service in instances[i].ServiceTypes.AsArray())
 			{
-				Indent(builder, depth).Append("private ").Append(registration.ImplementationType)
-					.Append("? ").Append(names.Field(i)).AppendLine(";");
+				serviceToIndex[service] = i;
 			}
 		}
 
-		if (registrations.Length > 0)
+		return serviceToIndex;
+	}
+
+	private static void EmitContainerBody(StringBuilder builder, int depth, ContainerModel model, Names names, Dictionary<string, int> serviceToIndex)
+	{
+		InstanceModel[] instances = model.Instances.AsArray();
+
+		EmitOwnerFields(builder, depth, instances, names, isScope: false);
+		builder.AppendLine();
+		EmitResolutionApi(builder, depth, instances, names);
+		builder.AppendLine();
+		Indent(builder, depth).AppendLine("public global::Awaiten.IAwaitenScope CreateScope() => new Scope(this);");
+
+		for (int i = 0; i < instances.Length; i++)
 		{
 			builder.AppendLine();
+			EmitInstanceResolver(builder, depth, i, instances[i], names, serviceToIndex, isScope: false);
 		}
 
+		builder.AppendLine();
+		EmitDispose(builder, depth);
+
+		builder.AppendLine();
+		EmitScopeClass(builder, depth, model, instances, names, serviceToIndex);
+	}
+
+	private static void EmitScopeClass(StringBuilder builder, int depth, ContainerModel model, InstanceModel[] instances, Names names, Dictionary<string, int> serviceToIndex)
+	{
+		Indent(builder, depth).AppendLine("private sealed class Scope : global::Awaiten.IAwaitenScope");
+		Indent(builder, depth).AppendLine("{");
+		int body = depth + 1;
+
+		Indent(builder, body).Append("private readonly ").Append(model.TypeName).AppendLine(" __container;");
+		EmitOwnerFields(builder, body, instances, names, isScope: true);
+		builder.AppendLine();
+		Indent(builder, body).Append("public Scope(").Append(model.TypeName).AppendLine(" container) => __container = container;");
+		builder.AppendLine();
+		EmitResolutionApi(builder, body, instances, names);
+
+		for (int i = 0; i < instances.Length; i++)
+		{
+			builder.AppendLine();
+			EmitInstanceResolver(builder, body, i, instances[i], names, serviceToIndex, isScope: true);
+		}
+
+		builder.AppendLine();
+		EmitDispose(builder, body);
+
+		Indent(builder, depth).AppendLine("}");
+	}
+
+	private static void EmitOwnerFields(StringBuilder builder, int depth, InstanceModel[] instances, Names names, bool isScope)
+	{
+		Indent(builder, depth).AppendLine("private readonly object __gate = new object();");
+		Indent(builder, depth).AppendLine("private bool __disposed;");
+		Indent(builder, depth).AppendLine(
+			"private readonly global::System.Collections.Generic.List<object> __disposables = new global::System.Collections.Generic.List<object>();");
+
+		for (int i = 0; i < instances.Length; i++)
+		{
+			InstanceModel instance = instances[i];
+
+			// Singletons are owned by the container; scoped instances live on whichever owner created
+			// them (the container acts as the root scope).
+			bool cachedHere = instance.Lifetime == Lifetime.Scoped
+				|| (instance.Lifetime == Lifetime.Singleton && !isScope);
+			if (cachedHere)
+			{
+				Indent(builder, depth).Append("private ").Append(instance.ImplementationType)
+					.Append("? ").Append(names.Field(i)).AppendLine(";");
+			}
+		}
+	}
+
+	private static void EmitResolutionApi(StringBuilder builder, int depth, InstanceModel[] instances, Names names)
+	{
 		Indent(builder, depth).AppendLine("public T Get<T>() => (T)Resolve(typeof(T));");
 		builder.AppendLine();
 		Indent(builder, depth).AppendLine("public object Resolve(global::System.Type serviceType)");
@@ -106,42 +169,88 @@ internal static class Emitter
 		builder.AppendLine();
 		Indent(builder, depth).AppendLine("public bool TryResolve(global::System.Type serviceType, out object? instance)");
 		Indent(builder, depth).AppendLine("{");
-		for (int i = 0; i < registrations.Length; i++)
+		for (int i = 0; i < instances.Length; i++)
 		{
-			Indent(builder, depth + 1).Append("if (serviceType == typeof(").Append(registrations[i].ServiceType)
-				.Append(")) { instance = ").Append(names.Resolver(i)).AppendLine("(); return true; }");
+			foreach (string service in instances[i].ServiceTypes.AsArray())
+			{
+				Indent(builder, depth + 1).Append("if (serviceType == typeof(").Append(service)
+					.Append(")) { instance = ").Append(names.Resolver(i)).AppendLine("(); return true; }");
+			}
 		}
 
 		Indent(builder, depth + 1).AppendLine("instance = null;");
 		Indent(builder, depth + 1).AppendLine("return false;");
 		Indent(builder, depth).AppendLine("}");
+	}
 
-		for (int i = 0; i < registrations.Length; i++)
+	private static void EmitInstanceResolver(StringBuilder builder, int depth, int index, InstanceModel instance, Names names, Dictionary<string, int> serviceToIndex, bool isScope)
+	{
+		string type = instance.ImplementationType;
+		string resolver = names.Resolver(index);
+		string construction = EmitConstruction(instance, names, serviceToIndex);
+
+		// Singletons live on the container; a scope delegates to it.
+		if (instance.Lifetime == Lifetime.Singleton && isScope)
 		{
-			RegistrationModel registration = registrations[i];
-			builder.AppendLine();
-			if (registration.Lifetime == Lifetime.Scoped)
-			{
-				Indent(builder, depth).AppendLine("// TODO: scoped lifetime is resolved as singleton for now.");
-			}
+			Indent(builder, depth).Append("private ").Append(type).Append(' ').Append(resolver)
+				.Append("() => __container.").Append(resolver).AppendLine("();");
+			return;
+		}
 
-			string construction = EmitConstruction(registration, serviceToIndex, names);
-			Indent(builder, depth).Append("private ").Append(registration.ImplementationType)
-				.Append(' ').Append(names.Resolver(i)).Append("() => ");
-			if (registration.Lifetime == Lifetime.Transient)
+		if (instance.Lifetime == Lifetime.Transient)
+		{
+			if (instance.IsDisposable)
 			{
-				builder.Append(construction).AppendLine(";");
+				Indent(builder, depth).Append("private ").Append(type).Append(' ').Append(resolver).AppendLine("()");
+				Indent(builder, depth).AppendLine("{");
+				Indent(builder, depth + 1).Append(type).Append(" created = ").Append(construction).AppendLine(";");
+				Indent(builder, depth + 1).AppendLine("__disposables.Add(created);");
+				Indent(builder, depth + 1).AppendLine("return created;");
+				Indent(builder, depth).AppendLine("}");
 			}
 			else
 			{
-				builder.Append(names.Field(i)).Append(" ??= ").Append(construction).AppendLine(";");
+				Indent(builder, depth).Append("private ").Append(type).Append(' ').Append(resolver)
+					.Append("() => ").Append(construction).AppendLine(";");
 			}
+
+			return;
 		}
+
+		// Singleton (on the container) or Scoped (on either owner): created once under a lock, cached.
+		string field = names.Field(index);
+		if (instance.Lifetime == Lifetime.Scoped)
+		{
+			Indent(builder, depth).AppendLine("// Scoped: one instance per owner (the container acts as the root scope).");
+		}
+
+		Indent(builder, depth).Append("private ").Append(type).Append(' ').Append(resolver).AppendLine("()");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).Append("if (").Append(field).AppendLine(" is not null)");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).Append("return ").Append(field).AppendLine(";");
+		Indent(builder, depth + 1).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("lock (__gate)");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).Append("if (").Append(field).AppendLine(" is null)");
+		Indent(builder, depth + 2).AppendLine("{");
+		Indent(builder, depth + 3).Append(field).Append(" = ").Append(construction).AppendLine(";");
+		if (instance.IsDisposable)
+		{
+			Indent(builder, depth + 3).Append("__disposables.Add(").Append(field).AppendLine(");");
+		}
+
+		Indent(builder, depth + 2).AppendLine("}");
+		Indent(builder, depth + 1).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, depth + 1).Append("return ").Append(field).AppendLine(";");
+		Indent(builder, depth).AppendLine("}");
 	}
 
-	private static string EmitConstruction(RegistrationModel registration, Dictionary<string, int> serviceToIndex, Names names)
+	private static string EmitConstruction(InstanceModel instance, Names names, Dictionary<string, int> serviceToIndex)
 	{
-		string[] parameters = registration.ConstructorParameterServiceTypes.AsArray();
+		string[] parameters = instance.ConstructorParameterServiceTypes.AsArray();
 		StringBuilder arguments = new();
 		for (int p = 0; p < parameters.Length; p++)
 		{
@@ -153,7 +262,29 @@ internal static class Emitter
 			arguments.Append(names.Resolver(serviceToIndex[parameters[p]])).Append("()");
 		}
 
-		return $"new {registration.ImplementationType}({arguments})";
+		return $"new {instance.ImplementationType}({arguments})";
+	}
+
+	private static void EmitDispose(StringBuilder builder, int depth)
+	{
+		Indent(builder, depth).AppendLine("public void Dispose()");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).AppendLine("if (__disposed)");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).AppendLine("return;");
+		Indent(builder, depth + 1).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("__disposed = true;");
+		Indent(builder, depth + 1).AppendLine("for (int __index = __disposables.Count - 1; __index >= 0; __index--)");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).AppendLine("if (__disposables[__index] is global::System.IDisposable __disposable)");
+		Indent(builder, depth + 2).AppendLine("{");
+		Indent(builder, depth + 3).AppendLine("__disposable.Dispose();");
+		Indent(builder, depth + 2).AppendLine("}");
+		Indent(builder, depth + 1).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("__disposables.Clear();");
+		Indent(builder, depth).AppendLine("}");
 	}
 
 	private static void EmitErrorBody(StringBuilder builder, int depth, string typeName)
@@ -172,6 +303,12 @@ internal static class Emitter
 		Indent(builder, depth + 1).AppendLine("instance = null;");
 		Indent(builder, depth + 1).AppendLine("return false;");
 		Indent(builder, depth).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, depth).Append(
+				"public global::Awaiten.IAwaitenScope CreateScope() => throw new global::System.InvalidOperationException(")
+			.Append(message).AppendLine(");");
+		builder.AppendLine();
+		Indent(builder, depth).AppendLine("public void Dispose() { }");
 	}
 
 	private static StringBuilder Indent(StringBuilder builder, int depth)
@@ -185,14 +322,14 @@ internal static class Emitter
 	}
 
 	/// <summary>
-	///     Assigns each registration a readable resolver method name (<c>ResolveGreeter</c>) and cache
+	///     Assigns each instance a readable resolver method name (<c>ResolveGreeter</c>) and cache
 	///     field name (<c>_greeter</c>) derived from the implementation's simple type name, appending a
 	///     numeric suffix only when two implementations would otherwise collide (case-insensitively).
 	/// </summary>
 	private sealed class Names
 	{
-		private readonly string[] _fields;
 		private readonly string[] _resolvers;
+		private readonly string[] _fields;
 
 		private Names(string[] resolvers, string[] fields)
 		{
@@ -204,15 +341,15 @@ internal static class Emitter
 
 		public string Field(int index) => _fields[index];
 
-		public static Names Build(RegistrationModel[] registrations)
+		public static Names Build(InstanceModel[] instances)
 		{
-			string[] resolvers = new string[registrations.Length];
-			string[] fields = new string[registrations.Length];
+			string[] resolvers = new string[instances.Length];
+			string[] fields = new string[instances.Length];
 			HashSet<string> used = new(StringComparer.OrdinalIgnoreCase);
 
-			for (int i = 0; i < registrations.Length; i++)
+			for (int i = 0; i < instances.Length; i++)
 			{
-				string baseName = Sanitize(registrations[i].Name);
+				string baseName = Sanitize(instances[i].Name);
 				string name = baseName;
 				int suffix = 2;
 				while (!used.Add(name))
@@ -236,9 +373,12 @@ internal static class Emitter
 			}
 
 			StringBuilder builder = new(name.Length);
-			foreach (char c in name.Where(c => char.IsLetterOrDigit(c) || c == '_'))
+			foreach (char c in name)
 			{
-				builder.Append(c);
+				if (char.IsLetterOrDigit(c) || c == '_')
+				{
+					builder.Append(c);
+				}
 			}
 
 			if (builder.Length == 0 || (!char.IsLetter(builder[0]) && builder[0] != '_'))

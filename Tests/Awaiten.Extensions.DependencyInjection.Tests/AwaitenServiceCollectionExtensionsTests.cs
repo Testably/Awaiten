@@ -38,12 +38,20 @@ public sealed class AwaitenServiceCollectionExtensionsTests
 
 	private sealed class DummyContainer : IAwaitenContainer
 	{
+		public T Get<T>() => throw new NotSupportedException();
+
 		public object Resolve(Type serviceType) => throw new NotSupportedException();
 
 		public bool TryResolve(Type serviceType, out object? instance)
 		{
 			instance = null;
 			return false;
+		}
+
+		public IAwaitenScope CreateScope() => throw new NotSupportedException();
+
+		public void Dispose()
+		{
 		}
 	}
 }

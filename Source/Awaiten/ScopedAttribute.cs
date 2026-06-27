@@ -12,8 +12,8 @@ namespace Awaiten;
 ///     <see cref="ContainerAttribute">container</see>. The service type is the implementation itself.
 /// </summary>
 /// <remarks>
-///     Real scope semantics (a single instance per <c>CreateScope</c>) arrive in a later phase; for
-///     now a scoped registration is resolved as a singleton.
+///     A scoped registration resolves to a single instance per scope created via
+///     <c>CreateScope</c>; the container itself acts as the root scope.
 /// </remarks>
 /// <typeparam name="TImplementation">The concrete type to construct and resolve.</typeparam>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
@@ -25,8 +25,8 @@ public sealed class ScopedAttribute<TImplementation> : Attribute
 ///     <typeparamref name="TService" />.
 /// </summary>
 /// <remarks>
-///     Real scope semantics (a single instance per <c>CreateScope</c>) arrive in a later phase; for
-///     now a scoped registration is resolved as a singleton.
+///     A scoped registration resolves to a single instance per scope created via
+///     <c>CreateScope</c>; the container itself acts as the root scope.
 /// </remarks>
 /// <typeparam name="TImplementation">The concrete type to construct.</typeparam>
 /// <typeparam name="TService">The service type under which the instance is resolved.</typeparam>
