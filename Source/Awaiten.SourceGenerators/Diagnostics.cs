@@ -69,6 +69,13 @@ internal static class Diagnostics
 	///     A disposable transient resolved from the container root is not released until the container
 	///     is disposed, so such instances accumulate; resolving it from a scope releases it with the scope.
 	/// </summary>
+	/// <remarks>
+	///     Limitation: this is reported per registration, not per resolution site - the generator does not
+	///     track where a transient is resolved. It therefore fires for every disposable transient, even one
+	///     only ever consumed as a dependency of a scoped service (where it is released with that scope). It
+	///     is a warning precisely because the advice is advisory: the root is always a possible resolution
+	///     site, so accumulation is possible, but it only actually happens if the root resolves it.
+	/// </remarks>
 	public static readonly DiagnosticDescriptor DisposableTransient = new(
 		"AWT106",
 		"Disposable transient",

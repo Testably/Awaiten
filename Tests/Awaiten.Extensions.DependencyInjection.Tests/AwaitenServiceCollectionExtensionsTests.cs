@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Awaiten.Extensions.DependencyInjection.Tests;
@@ -40,7 +41,7 @@ public sealed class AwaitenServiceCollectionExtensionsTests
 	{
 		public object Resolve(Type serviceType) => throw new NotSupportedException();
 
-		public bool TryResolve(Type serviceType, out object? instance)
+		public bool TryResolve(Type serviceType, [NotNullWhen(true)] out object? instance)
 		{
 			instance = null;
 			return false;
