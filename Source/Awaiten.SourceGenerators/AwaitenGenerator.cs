@@ -61,58 +61,27 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 		List<RawRegistration> raw = CollectRegistrations(containerSymbol);
 
-		// Pass 1: coalesce registrations by implementation. The first registration per service type
-		// wins, and registrations of the same implementation share one instance.
-		List<string> implOrder = new();
-		Dictionary<string, ImplInfo> implInfos = new(StringComparer.Ordinal);
-		Dictionary<string, string> serviceToImpl = new(StringComparer.Ordinal);
-
-		foreach (RawRegistration registration in raw)
-		{
-			if (serviceToImpl.ContainsKey(registration.ServiceType))
-			{
-				continue;
-			}
-
-			if (!implInfos.TryGetValue(registration.ImplementationType, out ImplInfo? info))
-			{
-				info = new ImplInfo(registration.Implementation, registration.Lifetime, registration.Location);
-				implInfos.Add(registration.ImplementationType, info);
-				implOrder.Add(registration.ImplementationType);
-			}
-
-			serviceToImpl[registration.ServiceType] = registration.ImplementationType;
-			info.ServiceTypes.Add(registration.ServiceType);
-		}
+		// Coalesce registrations by implementation: the first registration per service type wins, and
+		// registrations of the same implementation share one instance.
+		(List<ImplInfo> implOrder, Dictionary<string, string> serviceToImpl) = CoalesceByImplementation(raw);
 
 		List<DiagnosticInfo> diagnostics = new();
 		List<InstanceModel> instances = new();
 		Dictionary<string, int> implToIndex = new(StringComparer.Ordinal);
 
-		// Pass 2: validate each implementation, select its constructor and build the instance.
-		foreach (string impl in implOrder)
+		// Validate each implementation, select its constructor and build the instance.
+		foreach (ImplInfo info in implOrder)
 		{
 			cancellationToken.ThrowIfCancellationRequested();
-			BuildInstance(impl, implInfos[impl], containerSymbol, serviceToImpl, disposableSymbol,
-				instances, implToIndex, diagnostics);
-		}
-
-		// Dependency graph over instance indices (resolvable edges to built instances only).
-		Dictionary<int, List<int>> dependencies = new();
-		for (int i = 0; i < instances.Count; i++)
-		{
-			List<int> edges = new();
-			foreach (string paramService in instances[i].ConstructorParameterServiceTypes.AsArray())
+			InstanceModel? instance = BuildInstance(info, containerSymbol, serviceToImpl, disposableSymbol, diagnostics);
+			if (instance is not null)
 			{
-				if (serviceToImpl.TryGetValue(paramService, out string? depImpl) &&
-				    implToIndex.TryGetValue(depImpl, out int depIndex))
-				{
-					edges.Add(depIndex);
-				}
+				implToIndex[info.ImplementationType] = instances.Count;
+				instances.Add(instance);
 			}
-
-			dependencies[i] = edges;
 		}
+
+		Dictionary<int, List<int>> dependencies = BuildDependencyGraph(instances, serviceToImpl, implToIndex);
 
 		LocationInfo? containerLocation = LocationInfo.From(containerSymbol.Locations.FirstOrDefault());
 		DetectCycles(instances, dependencies, containerLocation, diagnostics);
@@ -147,14 +116,65 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			new EquatableArray<DiagnosticInfo>(diagnostics.ToArray()));
 	}
 
-	private static void BuildInstance(
-		string impl,
+	private static (List<ImplInfo> Order, Dictionary<string, string> ServiceToImpl) CoalesceByImplementation(
+		List<RawRegistration> raw)
+	{
+		List<ImplInfo> implOrder = new();
+		Dictionary<string, ImplInfo> implInfos = new(StringComparer.Ordinal);
+		Dictionary<string, string> serviceToImpl = new(StringComparer.Ordinal);
+
+		foreach (RawRegistration registration in raw)
+		{
+			if (serviceToImpl.ContainsKey(registration.ServiceType))
+			{
+				continue;
+			}
+
+			if (!implInfos.TryGetValue(registration.ImplementationType, out ImplInfo? info))
+			{
+				info = new ImplInfo(
+					registration.ImplementationType, registration.Implementation, registration.Lifetime, registration.Location);
+				implInfos.Add(registration.ImplementationType, info);
+				implOrder.Add(info);
+			}
+
+			serviceToImpl[registration.ServiceType] = registration.ImplementationType;
+			info.ServiceTypes.Add(registration.ServiceType);
+		}
+
+		return (implOrder, serviceToImpl);
+	}
+
+	// Dependency graph over instance indices, keeping only resolvable edges to built instances.
+	private static Dictionary<int, List<int>> BuildDependencyGraph(
+		List<InstanceModel> instances,
+		Dictionary<string, string> serviceToImpl,
+		Dictionary<string, int> implToIndex)
+	{
+		Dictionary<int, List<int>> dependencies = new();
+		for (int i = 0; i < instances.Count; i++)
+		{
+			List<int> edges = new();
+			foreach (string paramService in instances[i].ConstructorParameterServiceTypes.AsArray())
+			{
+				if (serviceToImpl.TryGetValue(paramService, out string? depImpl) &&
+				    implToIndex.TryGetValue(depImpl, out int depIndex))
+				{
+					edges.Add(depIndex);
+				}
+			}
+
+			dependencies[i] = edges;
+		}
+
+		return dependencies;
+	}
+
+	private static InstanceModel? BuildInstance(
 		ImplInfo info,
 		INamedTypeSymbol containerSymbol,
 		Dictionary<string, string> serviceToImpl,
 		INamedTypeSymbol? disposableSymbol,
-		List<InstanceModel> instances,
-		Dictionary<string, int> implToIndex,
 		List<DiagnosticInfo> diagnostics)
 	{
 		// An abstract type or interface cannot be constructed; reject it instead of emitting a 'new'
@@ -164,8 +184,8 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.NotInstantiable,
 				info.Location,
-				new EquatableArray<string>([Display(impl),])));
-			return;
+				new EquatableArray<string>([Display(info.ImplementationType),])));
+			return null;
 		}
 
 		IMethodSymbol? constructor = SelectConstructor(info.Symbol, containerSymbol, serviceToImpl.Keys);
@@ -174,8 +194,8 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.NoAccessibleConstructor,
 				info.Location,
-				new EquatableArray<string>([Display(impl),])));
-			return;
+				new EquatableArray<string>([Display(info.ImplementationType),])));
+			return null;
 		}
 
 		List<string> parameters = new();
@@ -190,35 +210,24 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 					info.Location,
 					new EquatableArray<string>([
 						Display(info.ServiceTypes[0]),
-						Display(impl),
+						Display(info.ImplementationType),
 						Display(parameterType),
 					])));
 			}
 		}
 
 		bool disposable = disposableSymbol is not null && ImplementsInterface(info.Symbol, disposableSymbol);
-		implToIndex[impl] = instances.Count;
-		instances.Add(new InstanceModel(
-			impl,
+		return new InstanceModel(
+			info.ImplementationType,
 			info.Symbol.Name,
 			info.Lifetime,
 			new EquatableArray<string>(info.ServiceTypes.ToArray()),
 			new EquatableArray<string>(parameters.ToArray()),
 			disposable,
-			info.Symbol.IsReferenceType));
+			info.Symbol.IsReferenceType);
 
 		static bool ImplementsInterface(INamedTypeSymbol type, INamedTypeSymbol @interface)
-		{
-			foreach (INamedTypeSymbol implemented in type.AllInterfaces)
-			{
-				if (SymbolEqualityComparer.Default.Equals(implemented, @interface))
-				{
-					return true;
-				}
-			}
-
-			return false;
-		}
+			=> type.AllInterfaces.Any(implemented => SymbolEqualityComparer.Default.Equals(implemented, @interface));
 	}
 
 	private static List<RawRegistration> CollectRegistrations(INamedTypeSymbol containerSymbol)
@@ -398,14 +407,16 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 	private sealed class ImplInfo
 	{
-		public ImplInfo(INamedTypeSymbol symbol, Lifetime lifetime, LocationInfo? location)
+		public ImplInfo(string implementationType, INamedTypeSymbol symbol, Lifetime lifetime, LocationInfo? location)
 		{
+			ImplementationType = implementationType;
 			Symbol = symbol;
 			Lifetime = lifetime;
 			Location = location;
 			ServiceTypes = new List<string>();
 		}
 
+		public string ImplementationType { get; }
 		public INamedTypeSymbol Symbol { get; }
 		public Lifetime Lifetime { get; }
 		public LocationInfo? Location { get; }

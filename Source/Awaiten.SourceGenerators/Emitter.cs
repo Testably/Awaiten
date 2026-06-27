@@ -410,12 +410,9 @@ internal static class Emitter
 			}
 
 			StringBuilder builder = new(name.Length);
-			foreach (char c in name)
+			foreach (char c in name.Where(c => char.IsLetterOrDigit(c) || c == '_'))
 			{
-				if (char.IsLetterOrDigit(c) || c == '_')
-				{
-					builder.Append(c);
-				}
+				builder.Append(c);
 			}
 
 			if (builder.Length == 0 || (!char.IsLetter(builder[0]) && builder[0] != '_'))
