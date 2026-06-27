@@ -224,7 +224,11 @@ public partial class LifetimeTests
 	[Container]
 	[Singleton<SingletonService, ISingletonService>]
 	[Scoped<ScopedService, IScopedService>]
+	// AWT106: the disposable transient is registered deliberately so the tests can assert it is
+	// tracked and disposed when its owning scope or the container is disposed.
+#pragma warning disable AWT106
 	[Transient<TransientService>]
+#pragma warning restore AWT106
 	public partial class LifetimeContainer;
 
 	public interface IReader;
@@ -292,6 +296,10 @@ public partial class LifetimeTests
 	[Container]
 	[Singleton<ConstructionCounter>]
 	[Singleton<CountedSingleton>]
+	// AWT106: the disposable transient is registered deliberately so the tests can assert every
+	// concurrently tracked instance is disposed with the container.
+#pragma warning disable AWT106
 	[Transient<CountedTransient>]
+#pragma warning restore AWT106
 	public partial class ConcurrencyContainer;
 }
