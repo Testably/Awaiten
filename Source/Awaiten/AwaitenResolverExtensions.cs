@@ -28,6 +28,16 @@ public static class AwaitenResolverExtensions
 		{
 			ThrowIfNull(resolver);
 
+			// Typed fast path: a generated container/scope implements IAwaitenResolver<T> for each
+			// registered service type, so resolving a compile-time type dispatches through a
+			// JIT-specialized generic check instead of the runtime Type-keyed lookup. Relationship types
+			// (Func<T>/Lazy<T>) and unregistered services are not implemented as IAwaitenResolver<T> and
+			// fall through to the Type-based path below.
+			if (resolver is IAwaitenResolver<T> typed)
+			{
+				return typed.Resolve();
+			}
+
 			return (T)resolver.Resolve(typeof(T));
 		}
 

@@ -27,10 +27,10 @@ public class GeneralTests
 		await That(source)
 			.Contains("private static readonly global::System.Collections.Generic.Dictionary<global::System.Type, int> __dispatch")
 			.Because("resolution is dispatched through a static type-to-case table");
-		await That(source).Contains("if (__dispatch.TryGetValue(serviceType, out int __case))")
-			.Because("the container dispatches through its own table");
+		await That(source).Contains("public object Resolve(global::System.Type serviceType) => Root.Resolve(serviceType);")
+			.Because("the container forwards resolution to its root scope");
 		await That(source).Contains("MyContainer.__dispatch.TryGetValue(serviceType, out int __case)")
-			.Because("the nested scope reuses the single table built on the container");
+			.Because("the scope dispatches through the single table built on the container");
 		await That(source.Contains("if (serviceType == typeof(")).IsFalse()
 			.Because("the linear if-chain is no longer emitted");
 	}
@@ -54,8 +54,8 @@ public class GeneralTests
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 		await That(source).Contains("partial class MyContainer : global::Awaiten.IAwaitenContainer");
 		await That(source).Contains("public object Resolve(global::System.Type serviceType)");
-		await That(source).Contains("public global::Awaiten.IAwaitenScope CreateScope() => new Scope(this);");
-		await That(source).Contains("private sealed class Scope : global::Awaiten.IAwaitenScope");
+		await That(source).Contains("public Scope CreateScope() => Root.CreateScope();");
+		await That(source).Contains("public class Scope : global::Awaiten.IAwaitenScope");
 	}
 
 	[Fact]
@@ -150,7 +150,7 @@ public class GeneralTests
 			.Because("reference-type singletons are cached in a volatile backing field");
 		await That(source).Contains("private volatile global::MyCode.Middle? _middle;")
 			.Because("reference-type singletons are cached in a volatile backing field");
-		await That(source).Contains("lock (__gate)")
+		await That(source).Contains("lock (this)")
 			.Because("singletons are created once under a lock");
 		await That(source).Contains("_middle = new global::MyCode.Middle(ResolveLeaf());")
 			.Because("singletons are memoized into their backing field");
@@ -313,11 +313,11 @@ public class GeneralTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 		await That(source).Contains("private volatile global::MyCode.Service? _service;")
-			.Because("a scoped registration is cached per owner");
-		await That(source).Contains("Scoped: one instance per owner")
-			.Because("the container acts as the root scope");
-		await That(source).Contains("private sealed class Scope : global::Awaiten.IAwaitenScope")
-			.Because("scoped instances also live on each created scope");
+			.Because("a scoped registration is cached per scope");
+		await That(source).Contains("Scoped: one instance per scope")
+			.Because("scoped instances live on the scope, not the container");
+		await That(source).Contains("public class Scope : global::Awaiten.IAwaitenScope")
+			.Because("the scope is the single resolver and is publicly accessible");
 	}
 
 	[Fact]
@@ -341,10 +341,10 @@ public class GeneralTests
 
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-		await That(source).Contains("return MakeClock();")
-			.Because("the container calls its own factory method instead of constructing the type");
 		await That(source).Contains("return __container.MakeClock();")
-			.Because("the nested scope reaches the instance factory method through the container");
+			.Because("the scope reaches the instance factory method through the container instead of constructing the type");
+		await That(source).DoesNotContain("new global::MyCode.SystemClock(")
+			.Because("a factory registration is produced by its method, never constructed directly");
 	}
 
 	[Fact]
@@ -396,9 +396,9 @@ public class GeneralTests
 
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-		await That(source).Contains("return Clock;")
+		await That(source).Contains("return __container.Clock;")
 			.Because("the container hands back its own pre-built member rather than constructing the type");
-		await That(source).Contains("return __container.ResolveIClock();")
+		await That(source).Contains("return __container.Root.ResolveIClock();")
 			.Because("the nested scope delegates to the container like any other singleton");
 		await That(source).DoesNotContain("new global::MyCode.FixedClock")
 			.Because("an Instance registration is never constructed by the container");
@@ -462,7 +462,7 @@ public class GeneralTests
 		await That(result.Diagnostics).IsEmpty()
 			.Because("a protected instance field inherited from a base class is accessible to the generated partial");
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-		await That(source).Contains("return Clock;")
+		await That(source).Contains("return __container.Clock;")
 			.Because("the inherited member is exposed as the service");
 	}
 }
