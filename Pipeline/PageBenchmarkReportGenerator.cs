@@ -184,17 +184,19 @@ public class PageBenchmarkReportGenerator
 		}
 
 		private static bool IsIncluded(string library)
-			=> library is "Awaiten" or "MsDI" or "Autofac" or "Jab" or "PureDI";
+			=> library is "Awaiten" or "MsDI" or "Autofac" or "Jab" or "PureDI" or "DryIoc" or "SimpleInjector";
 
 		private static string GetColor(string library)
 			=> library switch
 			{
-				"Awaiten" => "#63A2AC",
-				"MsDI" => "#A052B0",
-				"Autofac" => "#5E2750",
-				"Jab" => "#4A6FA5",
-				"PureDI" => "#FF8C00",
-				_ => "#B0B0B0",
+				"Awaiten"        => "#3949AB",
+				"MsDI"           => "#512BD4",
+				"Autofac"        => "#5E2750",
+				"Jab"            => "#D9534F",
+				"PureDI"         => "#F0AD4E",
+				"DryIoc"         => "#1565C0",
+				"SimpleInjector" => "#43A047",
+				_                => "#B0B0B0",
 			};
 
 		private static bool ParseMethod(string method, out string scenario, out string library)

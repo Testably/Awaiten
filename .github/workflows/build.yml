@@ -91,6 +91,7 @@ jobs:
                 benchmark:
                     - ResolveBenchmarks
                     - BuildBenchmarks
+                    - RealisticResolveBenchmarks
         runs-on: ubuntu-latest
         permissions:
             contents: write

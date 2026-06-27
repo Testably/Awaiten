@@ -96,6 +96,7 @@ jobs:
                 benchmark:
                     - ResolveBenchmarks
                     - BuildBenchmarks
+                    - RealisticResolveBenchmarks
         runs-on: ubuntu-latest
         env:
             DOTNET_NOLOGO: true
