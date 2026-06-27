@@ -71,6 +71,7 @@ partial class Build
 			foreach (Project project in new[]
 			         {
 				         Solution.Awaiten,
+				         Solution.Awaiten_Extensions_DependencyInjection,
 			         })
 			{
 				foreach (string package in
