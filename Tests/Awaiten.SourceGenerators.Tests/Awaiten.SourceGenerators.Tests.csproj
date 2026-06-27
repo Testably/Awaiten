@@ -5,10 +5,10 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\..\Source\Awaiten.SourceGenerators\Awaiten.SourceGenerators.csproj" />
-		<ProjectReference Include="..\..\Source\Awaiten\Awaiten.csproj" />
-		<PackageReference Include="Microsoft.CodeAnalysis.Analyzers" PrivateAssets="all" />
-		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
+		<ProjectReference Include="..\..\Source\Awaiten.SourceGenerators\Awaiten.SourceGenerators.csproj"/>
+		<ProjectReference Include="..\..\Source\Awaiten\Awaiten.csproj"/>
+		<PackageReference Include="Microsoft.CodeAnalysis.Analyzers" PrivateAssets="all"/>
+		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all"/>
 	</ItemGroup>
 
 </Project>

@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
@@ -57,7 +56,7 @@ public static class Generator
 			.Where(x => !x.IsDynamic && !string.IsNullOrWhiteSpace(x.Location))
 			.Select(x => x.Location)
 			.Concat([
-				typeof(global::Awaiten.ContainerAttribute).Assembly.Location,
+				typeof(ContainerAttribute).Assembly.Location,
 				..types.Select(t => t.Assembly.Location),
 			])
 			.Distinct()

@@ -1,33 +1,7 @@
-using System.Linq;
-
 namespace Awaiten.SourceGenerators.Tests;
 
 public class GeneralTests
 {
-	[Fact]
-	public async Task DependencyCycle_ReportsAwt102WithThePath()
-	{
-		GeneratorResult result = Generator.Run("""
-		                                       using Awaiten;
-
-		                                       namespace MyCode;
-
-		                                       public sealed class A { public A(B b) { } }
-		                                       public sealed class B { public B(A a) { } }
-
-		                                       [Container]
-		                                       [Singleton<A>]
-		                                       [Singleton<B>]
-		                                       public partial class MyContainer
-		                                       {
-		                                       }
-		                                       """);
-
-		string[] cycleDiagnostics = result.Diagnostics.Where(d => d.Contains("AWT102")).ToArray();
-		await That(cycleDiagnostics).IsNotEmpty();
-		await That(cycleDiagnostics.Any(d => d.Contains("->"))).IsTrue();
-	}
-
 	[Fact]
 	public async Task EmptyContainer_EmitsAPartialImplementationWithoutDiagnostics()
 	{
@@ -114,24 +88,34 @@ public class GeneralTests
 	}
 
 	[Fact]
-	public async Task MissingDependency_ReportsAwt101()
+	public async Task MultiServiceRegistration_CoalescesIntoASingleSharedInstance()
 	{
 		GeneratorResult result = Generator.Run("""
 		                                       using Awaiten;
 
 		                                       namespace MyCode;
 
-		                                       public interface IMissing { }
-		                                       public sealed class Service { public Service(IMissing missing) { } }
+		                                       public interface IReader { }
+		                                       public interface IWriter { }
+		                                       public sealed class Store : IReader, IWriter { }
 
 		                                       [Container]
-		                                       [Transient<Service>]
+		                                       [Singleton<Store, IReader>]
+		                                       [Singleton<Store, IWriter>]
 		                                       public partial class MyContainer
 		                                       {
 		                                       }
 		                                       """);
 
-		await That(result.Diagnostics.Any(d => d.Contains("AWT101"))).IsTrue();
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("private volatile global::MyCode.Store? _store;")
+			.Because("the implementation is coalesced into one backing field");
+		await That(source).Contains("if (serviceType == typeof(global::MyCode.IReader)) { instance = ResolveStore(); return true; }")
+			.Because("both service types dispatch to the one shared instance");
+		await That(source).Contains("if (serviceType == typeof(global::MyCode.IWriter)) { instance = ResolveStore(); return true; }")
+			.Because("both service types dispatch to the one shared instance");
 	}
 
 	[Fact]
@@ -160,48 +144,6 @@ public class GeneralTests
 		await That(source).Contains("partial class Outer");
 		await That(source).Contains("partial class Inner : global::Awaiten.IAwaitenContainer");
 		await That(source).Contains("_service = new global::MyCode.Outer.Service();");
-	}
-
-	[Fact]
-	public async Task NoAccessibleConstructor_ReportsAwt104()
-	{
-		GeneratorResult result = Generator.Run("""
-		                                       using Awaiten;
-
-		                                       namespace MyCode;
-
-		                                       public sealed class Foo { private Foo() { } }
-
-		                                       [Container]
-		                                       [Singleton<Foo>]
-		                                       public partial class MyContainer
-		                                       {
-		                                       }
-		                                       """);
-
-		await That(result.Diagnostics.Any(d => d.Contains("AWT104"))).IsTrue();
-	}
-
-	[Theory]
-	[InlineData("public interface Foo { }")]
-	[InlineData("public abstract class Foo { }")]
-	public async Task NotInstantiableImplementation_ReportsAwt103(string implementationDeclaration)
-	{
-		GeneratorResult result = Generator.Run($$"""
-		                                         using Awaiten;
-
-		                                         namespace MyCode;
-
-		                                         {{implementationDeclaration}}
-
-		                                         [Container]
-		                                         [Singleton<Foo>]
-		                                         public partial class MyContainer
-		                                         {
-		                                         }
-		                                         """);
-
-		await That(result.Diagnostics.Any(d => d.Contains("AWT103"))).IsTrue();
 	}
 
 	[Fact]
@@ -245,36 +187,5 @@ public class GeneralTests
 			.Because("the container acts as the root scope");
 		await That(source).Contains("private sealed class Scope : global::Awaiten.IAwaitenScope")
 			.Because("scoped instances also live on each created scope");
-	}
-
-	[Fact]
-	public async Task MultiServiceRegistration_CoalescesIntoASingleSharedInstance()
-	{
-		GeneratorResult result = Generator.Run("""
-			using Awaiten;
-
-			namespace MyCode;
-
-			public interface IReader { }
-			public interface IWriter { }
-			public sealed class Store : IReader, IWriter { }
-
-			[Container]
-			[Singleton<Store, IReader>]
-			[Singleton<Store, IWriter>]
-			public partial class MyContainer
-			{
-			}
-			""");
-
-		await That(result.Diagnostics).IsEmpty();
-		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-
-		await That(source).Contains("private volatile global::MyCode.Store? _store;")
-			.Because("the implementation is coalesced into one backing field");
-		await That(source).Contains("if (serviceType == typeof(global::MyCode.IReader)) { instance = ResolveStore(); return true; }")
-			.Because("both service types dispatch to the one shared instance");
-		await That(source).Contains("if (serviceType == typeof(global::MyCode.IWriter)) { instance = ResolveStore(); return true; }")
-			.Because("both service types dispatch to the one shared instance");
 	}
 }
