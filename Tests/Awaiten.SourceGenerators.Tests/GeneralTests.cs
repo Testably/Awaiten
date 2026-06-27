@@ -61,8 +61,10 @@ public class GeneralTests
 		await That(source).Contains("return new global::MyCode.Top(ResolveMiddle(), ResolveLeaf());")
 			.Because("transients are constructed on each request, not cached");
 
-		await That(source).Contains("if (serviceType == typeof(global::MyCode.IMiddle)) { instance = ResolveMiddle(); return true; }")
-			.Because("services are dispatched by their service type");
+		await That(source).Contains("{ typeof(global::MyCode.IMiddle),")
+			.Because("each service type is a key in the static dispatch table");
+		await That(source).Contains("instance = ResolveMiddle(); return true;")
+			.Because("its dispatch case resolves the registered service");
 	}
 
 	[Fact]
@@ -112,9 +114,11 @@ public class GeneralTests
 
 		await That(source).Contains("private volatile global::MyCode.Store? _store;")
 			.Because("the implementation is coalesced into one backing field");
-		await That(source).Contains("if (serviceType == typeof(global::MyCode.IReader)) { instance = ResolveStore(); return true; }")
-			.Because("both service types dispatch to the one shared instance");
-		await That(source).Contains("if (serviceType == typeof(global::MyCode.IWriter)) { instance = ResolveStore(); return true; }")
+		await That(source).Contains("{ typeof(global::MyCode.IReader),")
+			.Because("each service type is a key in the static dispatch table");
+		await That(source).Contains("{ typeof(global::MyCode.IWriter),")
+			.Because("each service type is a key in the static dispatch table");
+		await That(source).Contains("instance = ResolveStore(); return true;")
 			.Because("both service types dispatch to the one shared instance");
 	}
 
@@ -187,5 +191,38 @@ public class GeneralTests
 			.Because("the container acts as the root scope");
 		await That(source).Contains("private sealed class Scope : global::Awaiten.IAwaitenScope")
 			.Because("scoped instances also live on each created scope");
+	}
+
+	[Fact]
+	public async Task Container_DispatchesThroughAStaticTableSharedWithTheScope()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class A { }
+		                                       public sealed class B { }
+
+		                                       [Container]
+		                                       [Singleton<A>]
+		                                       [Singleton<B>]
+		                                       public partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source)
+			.Contains("private static readonly global::System.Collections.Generic.Dictionary<global::System.Type, int> __dispatch")
+			.Because("resolution is dispatched through a static type-to-case table");
+		await That(source).Contains("if (__dispatch.TryGetValue(serviceType, out int __case))")
+			.Because("the container dispatches through its own table");
+		await That(source).Contains("MyContainer.__dispatch.TryGetValue(serviceType, out int __case)")
+			.Because("the nested scope reuses the single table built on the container");
+		await That(source.Contains("if (serviceType == typeof(")).IsFalse()
+			.Because("the linear if-chain is no longer emitted");
 	}
 }

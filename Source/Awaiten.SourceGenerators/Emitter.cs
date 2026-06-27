@@ -87,7 +87,7 @@ internal static class Emitter
 
 		EmitOwnerFields(builder, depth, instances, names, isScope: false);
 		builder.AppendLine();
-		EmitResolutionApi(builder, depth, instances, names);
+		EmitResolutionApi(builder, depth, instances, names, isScope: false, model.TypeName);
 		builder.AppendLine();
 		Indent(builder, depth).AppendLine("public global::Awaiten.IAwaitenScope CreateScope() => new Scope(this);");
 
@@ -115,7 +115,7 @@ internal static class Emitter
 		builder.AppendLine();
 		Indent(builder, body).Append("public Scope(").Append(model.TypeName).AppendLine(" container) => __container = container;");
 		builder.AppendLine();
-		EmitResolutionApi(builder, body, instances, names);
+		EmitResolutionApi(builder, body, instances, names, isScope: true, model.TypeName);
 
 		for (int i = 0; i < instances.Length; i++)
 		{
@@ -164,7 +164,7 @@ internal static class Emitter
 		Indent(builder, depth).AppendLine("}");
 	}
 
-	private static void EmitResolutionApi(StringBuilder builder, int depth, InstanceModel[] instances, Names names)
+	private static void EmitResolutionApi(StringBuilder builder, int depth, InstanceModel[] instances, Names names, bool isScope, string containerTypeName)
 	{
 		Indent(builder, depth).AppendLine("public object Resolve(global::System.Type serviceType)");
 		Indent(builder, depth).AppendLine("{");
@@ -177,20 +177,104 @@ internal static class Emitter
 			"throw new global::System.InvalidOperationException($\"No registration for type '{serviceType}' on this container.\");");
 		Indent(builder, depth).AppendLine("}");
 		builder.AppendLine();
-		Indent(builder, depth).AppendLine("public bool TryResolve(global::System.Type serviceType, [global::System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? instance)");
-		Indent(builder, depth).AppendLine("{");
-		for (int i = 0; i < instances.Length; i++)
+
+		List<DispatchEntry> entries = BuildDispatchEntries(instances, names);
+
+		// A container with no registrations has nothing to dispatch: emit the trivial fall-through and skip
+		// the table, so no empty dictionary or empty switch (CS1522) is generated.
+		if (entries.Count == 0)
 		{
-			foreach (string service in instances[i].ServiceTypes.AsArray())
-			{
-				Indent(builder, depth + 1).Append("if (serviceType == typeof(").Append(service)
-					.Append(")) { instance = ").Append(names.Resolver(i)).AppendLine("(); return true; }");
-			}
+			Indent(builder, depth).AppendLine("public bool TryResolve(global::System.Type serviceType, [global::System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? instance)");
+			Indent(builder, depth).AppendLine("{");
+			Indent(builder, depth + 1).AppendLine("instance = null;");
+			Indent(builder, depth + 1).AppendLine("return false;");
+			Indent(builder, depth).AppendLine("}");
+			return;
 		}
 
+		// The case->resolver mapping is identical for the container and its nested Scope (both own a
+		// resolver method per registration), so the table is built once on the container and the Scope
+		// references it through the container type.
+		if (!isScope)
+		{
+			EmitDispatchTable(builder, depth, entries);
+			builder.AppendLine();
+		}
+
+		string table = isScope ? containerTypeName + ".__dispatch" : "__dispatch";
+		Indent(builder, depth).AppendLine("public bool TryResolve(global::System.Type serviceType, [global::System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? instance)");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).Append("if (").Append(table).AppendLine(".TryGetValue(serviceType, out int __case))");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).AppendLine("switch (__case)");
+		Indent(builder, depth + 2).AppendLine("{");
+		for (int i = 0; i < entries.Count; i++)
+		{
+			Indent(builder, depth + 3).Append("case ").Append(i).Append(": instance = ")
+				.Append(entries[i].Value).AppendLine("; return true;");
+		}
+
+		Indent(builder, depth + 2).AppendLine("}");
+		Indent(builder, depth + 1).AppendLine("}");
+		builder.AppendLine();
 		Indent(builder, depth + 1).AppendLine("instance = null;");
 		Indent(builder, depth + 1).AppendLine("return false;");
 		Indent(builder, depth).AppendLine("}");
+	}
+
+	/// <summary>
+	///     A single dispatch case: the service <see cref="Type" /> requested and the <see cref="Value" />
+	///     assigned to <c>instance</c> (the resolver call).
+	/// </summary>
+	private readonly struct DispatchEntry
+	{
+		public DispatchEntry(string type, string value)
+		{
+			Type = type;
+			Value = value;
+		}
+
+		public string Type { get; }
+
+		public string Value { get; }
+	}
+
+	/// <summary>
+	///     The ordered dispatch cases for an owner: each registered service type mapped to its resolver
+	///     call. The order is identical on the container and its scope, so a single static table built on the
+	///     container is valid for both.
+	/// </summary>
+	private static List<DispatchEntry> BuildDispatchEntries(InstanceModel[] instances, Names names)
+	{
+		List<DispatchEntry> entries = new();
+		for (int i = 0; i < instances.Length; i++)
+		{
+			string resolver = names.Resolver(i);
+			foreach (string service in instances[i].ServiceTypes.AsArray())
+			{
+				entries.Add(new DispatchEntry(service, resolver + "()"));
+			}
+		}
+
+		return entries;
+	}
+
+	/// <summary>
+	///     Emits the static <c>__dispatch</c> table mapping each service type to its case number. It is
+	///     <c>static</c> so it is built once per container type, and emitted only on the container; the nested
+	///     Scope reuses it through the container type.
+	/// </summary>
+	private static void EmitDispatchTable(StringBuilder builder, int depth, List<DispatchEntry> entries)
+	{
+		Indent(builder, depth).AppendLine(
+			"private static readonly global::System.Collections.Generic.Dictionary<global::System.Type, int> __dispatch = new global::System.Collections.Generic.Dictionary<global::System.Type, int>");
+		Indent(builder, depth).AppendLine("{");
+		for (int i = 0; i < entries.Count; i++)
+		{
+			Indent(builder, depth + 1).Append("{ typeof(").Append(entries[i].Type).Append("), ").Append(i).AppendLine(" },");
+		}
+
+		Indent(builder, depth).AppendLine("};");
 	}
 
 	private static void EmitInstanceResolver(StringBuilder builder, int depth, int index, InstanceModel instance, Names names, Dictionary<string, int> serviceToIndex, bool isScope)
