@@ -30,3 +30,25 @@ jobs:
                 env:
                     GithubToken: ${{ secrets.GITHUB_TOKEN }}
                     WorkflowRunId: ${{ github.event.workflow_run.id }}
+
+    benchmarks:
+        name: "Benchmarks"
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+            pull-requests: write
+        steps:
+            -   uses: actions/checkout@v5
+                with:
+                    fetch-depth: 0
+            -   name: Setup .NET SDKs
+                uses: actions/setup-dotnet@v5
+                with:
+                    dotnet-version: |
+                        8.0.x
+                        10.0.x
+            -   name: Create benchmark comment
+                run: ./build.sh BenchmarkComment
+                env:
+                    GithubToken: ${{ secrets.GITHUB_TOKEN }}
+                    WorkflowRunId: ${{ github.event.workflow_run.id }}

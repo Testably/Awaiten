@@ -1,0 +1,693 @@
+using Jab;
+using Pure.DI;
+
+namespace Awaiten.Benchmarks.Helpers;
+
+[ServiceProvider]
+[Singleton(typeof(B0))]
+[Singleton(typeof(B1))]
+[Singleton(typeof(B2))]
+[Singleton(typeof(B3))]
+[Singleton(typeof(B4))]
+[Singleton(typeof(B5))]
+[Singleton(typeof(B6))]
+[Singleton(typeof(B7))]
+public sealed partial class JabContainer8;
+
+[ServiceProvider]
+[Singleton(typeof(B0))]
+[Singleton(typeof(B1))]
+[Singleton(typeof(B2))]
+[Singleton(typeof(B3))]
+[Singleton(typeof(B4))]
+[Singleton(typeof(B5))]
+[Singleton(typeof(B6))]
+[Singleton(typeof(B7))]
+[Singleton(typeof(B8))]
+[Singleton(typeof(B9))]
+[Singleton(typeof(B10))]
+[Singleton(typeof(B11))]
+[Singleton(typeof(B12))]
+[Singleton(typeof(B13))]
+[Singleton(typeof(B14))]
+[Singleton(typeof(B15))]
+[Singleton(typeof(B16))]
+[Singleton(typeof(B17))]
+[Singleton(typeof(B18))]
+[Singleton(typeof(B19))]
+[Singleton(typeof(B20))]
+[Singleton(typeof(B21))]
+[Singleton(typeof(B22))]
+[Singleton(typeof(B23))]
+[Singleton(typeof(B24))]
+[Singleton(typeof(B25))]
+[Singleton(typeof(B26))]
+[Singleton(typeof(B27))]
+[Singleton(typeof(B28))]
+[Singleton(typeof(B29))]
+[Singleton(typeof(B30))]
+[Singleton(typeof(B31))]
+[Singleton(typeof(B32))]
+[Singleton(typeof(B33))]
+[Singleton(typeof(B34))]
+[Singleton(typeof(B35))]
+[Singleton(typeof(B36))]
+[Singleton(typeof(B37))]
+[Singleton(typeof(B38))]
+[Singleton(typeof(B39))]
+[Singleton(typeof(B40))]
+[Singleton(typeof(B41))]
+[Singleton(typeof(B42))]
+[Singleton(typeof(B43))]
+[Singleton(typeof(B44))]
+[Singleton(typeof(B45))]
+[Singleton(typeof(B46))]
+[Singleton(typeof(B47))]
+[Singleton(typeof(B48))]
+[Singleton(typeof(B49))]
+[Singleton(typeof(B50))]
+[Singleton(typeof(B51))]
+[Singleton(typeof(B52))]
+[Singleton(typeof(B53))]
+[Singleton(typeof(B54))]
+[Singleton(typeof(B55))]
+[Singleton(typeof(B56))]
+[Singleton(typeof(B57))]
+[Singleton(typeof(B58))]
+[Singleton(typeof(B59))]
+[Singleton(typeof(B60))]
+[Singleton(typeof(B61))]
+[Singleton(typeof(B62))]
+[Singleton(typeof(B63))]
+public sealed partial class JabContainer64;
+
+[ServiceProvider]
+[Singleton(typeof(B0))]
+[Singleton(typeof(B1))]
+[Singleton(typeof(B2))]
+[Singleton(typeof(B3))]
+[Singleton(typeof(B4))]
+[Singleton(typeof(B5))]
+[Singleton(typeof(B6))]
+[Singleton(typeof(B7))]
+[Singleton(typeof(B8))]
+[Singleton(typeof(B9))]
+[Singleton(typeof(B10))]
+[Singleton(typeof(B11))]
+[Singleton(typeof(B12))]
+[Singleton(typeof(B13))]
+[Singleton(typeof(B14))]
+[Singleton(typeof(B15))]
+[Singleton(typeof(B16))]
+[Singleton(typeof(B17))]
+[Singleton(typeof(B18))]
+[Singleton(typeof(B19))]
+[Singleton(typeof(B20))]
+[Singleton(typeof(B21))]
+[Singleton(typeof(B22))]
+[Singleton(typeof(B23))]
+[Singleton(typeof(B24))]
+[Singleton(typeof(B25))]
+[Singleton(typeof(B26))]
+[Singleton(typeof(B27))]
+[Singleton(typeof(B28))]
+[Singleton(typeof(B29))]
+[Singleton(typeof(B30))]
+[Singleton(typeof(B31))]
+[Singleton(typeof(B32))]
+[Singleton(typeof(B33))]
+[Singleton(typeof(B34))]
+[Singleton(typeof(B35))]
+[Singleton(typeof(B36))]
+[Singleton(typeof(B37))]
+[Singleton(typeof(B38))]
+[Singleton(typeof(B39))]
+[Singleton(typeof(B40))]
+[Singleton(typeof(B41))]
+[Singleton(typeof(B42))]
+[Singleton(typeof(B43))]
+[Singleton(typeof(B44))]
+[Singleton(typeof(B45))]
+[Singleton(typeof(B46))]
+[Singleton(typeof(B47))]
+[Singleton(typeof(B48))]
+[Singleton(typeof(B49))]
+[Singleton(typeof(B50))]
+[Singleton(typeof(B51))]
+[Singleton(typeof(B52))]
+[Singleton(typeof(B53))]
+[Singleton(typeof(B54))]
+[Singleton(typeof(B55))]
+[Singleton(typeof(B56))]
+[Singleton(typeof(B57))]
+[Singleton(typeof(B58))]
+[Singleton(typeof(B59))]
+[Singleton(typeof(B60))]
+[Singleton(typeof(B61))]
+[Singleton(typeof(B62))]
+[Singleton(typeof(B63))]
+[Singleton(typeof(B64))]
+[Singleton(typeof(B65))]
+[Singleton(typeof(B66))]
+[Singleton(typeof(B67))]
+[Singleton(typeof(B68))]
+[Singleton(typeof(B69))]
+[Singleton(typeof(B70))]
+[Singleton(typeof(B71))]
+[Singleton(typeof(B72))]
+[Singleton(typeof(B73))]
+[Singleton(typeof(B74))]
+[Singleton(typeof(B75))]
+[Singleton(typeof(B76))]
+[Singleton(typeof(B77))]
+[Singleton(typeof(B78))]
+[Singleton(typeof(B79))]
+[Singleton(typeof(B80))]
+[Singleton(typeof(B81))]
+[Singleton(typeof(B82))]
+[Singleton(typeof(B83))]
+[Singleton(typeof(B84))]
+[Singleton(typeof(B85))]
+[Singleton(typeof(B86))]
+[Singleton(typeof(B87))]
+[Singleton(typeof(B88))]
+[Singleton(typeof(B89))]
+[Singleton(typeof(B90))]
+[Singleton(typeof(B91))]
+[Singleton(typeof(B92))]
+[Singleton(typeof(B93))]
+[Singleton(typeof(B94))]
+[Singleton(typeof(B95))]
+[Singleton(typeof(B96))]
+[Singleton(typeof(B97))]
+[Singleton(typeof(B98))]
+[Singleton(typeof(B99))]
+[Singleton(typeof(B100))]
+[Singleton(typeof(B101))]
+[Singleton(typeof(B102))]
+[Singleton(typeof(B103))]
+[Singleton(typeof(B104))]
+[Singleton(typeof(B105))]
+[Singleton(typeof(B106))]
+[Singleton(typeof(B107))]
+[Singleton(typeof(B108))]
+[Singleton(typeof(B109))]
+[Singleton(typeof(B110))]
+[Singleton(typeof(B111))]
+[Singleton(typeof(B112))]
+[Singleton(typeof(B113))]
+[Singleton(typeof(B114))]
+[Singleton(typeof(B115))]
+[Singleton(typeof(B116))]
+[Singleton(typeof(B117))]
+[Singleton(typeof(B118))]
+[Singleton(typeof(B119))]
+[Singleton(typeof(B120))]
+[Singleton(typeof(B121))]
+[Singleton(typeof(B122))]
+[Singleton(typeof(B123))]
+[Singleton(typeof(B124))]
+[Singleton(typeof(B125))]
+[Singleton(typeof(B126))]
+[Singleton(typeof(B127))]
+[Singleton(typeof(B128))]
+[Singleton(typeof(B129))]
+[Singleton(typeof(B130))]
+[Singleton(typeof(B131))]
+[Singleton(typeof(B132))]
+[Singleton(typeof(B133))]
+[Singleton(typeof(B134))]
+[Singleton(typeof(B135))]
+[Singleton(typeof(B136))]
+[Singleton(typeof(B137))]
+[Singleton(typeof(B138))]
+[Singleton(typeof(B139))]
+[Singleton(typeof(B140))]
+[Singleton(typeof(B141))]
+[Singleton(typeof(B142))]
+[Singleton(typeof(B143))]
+[Singleton(typeof(B144))]
+[Singleton(typeof(B145))]
+[Singleton(typeof(B146))]
+[Singleton(typeof(B147))]
+[Singleton(typeof(B148))]
+[Singleton(typeof(B149))]
+[Singleton(typeof(B150))]
+[Singleton(typeof(B151))]
+[Singleton(typeof(B152))]
+[Singleton(typeof(B153))]
+[Singleton(typeof(B154))]
+[Singleton(typeof(B155))]
+[Singleton(typeof(B156))]
+[Singleton(typeof(B157))]
+[Singleton(typeof(B158))]
+[Singleton(typeof(B159))]
+[Singleton(typeof(B160))]
+[Singleton(typeof(B161))]
+[Singleton(typeof(B162))]
+[Singleton(typeof(B163))]
+[Singleton(typeof(B164))]
+[Singleton(typeof(B165))]
+[Singleton(typeof(B166))]
+[Singleton(typeof(B167))]
+[Singleton(typeof(B168))]
+[Singleton(typeof(B169))]
+[Singleton(typeof(B170))]
+[Singleton(typeof(B171))]
+[Singleton(typeof(B172))]
+[Singleton(typeof(B173))]
+[Singleton(typeof(B174))]
+[Singleton(typeof(B175))]
+[Singleton(typeof(B176))]
+[Singleton(typeof(B177))]
+[Singleton(typeof(B178))]
+[Singleton(typeof(B179))]
+[Singleton(typeof(B180))]
+[Singleton(typeof(B181))]
+[Singleton(typeof(B182))]
+[Singleton(typeof(B183))]
+[Singleton(typeof(B184))]
+[Singleton(typeof(B185))]
+[Singleton(typeof(B186))]
+[Singleton(typeof(B187))]
+[Singleton(typeof(B188))]
+[Singleton(typeof(B189))]
+[Singleton(typeof(B190))]
+[Singleton(typeof(B191))]
+[Singleton(typeof(B192))]
+[Singleton(typeof(B193))]
+[Singleton(typeof(B194))]
+[Singleton(typeof(B195))]
+[Singleton(typeof(B196))]
+[Singleton(typeof(B197))]
+[Singleton(typeof(B198))]
+[Singleton(typeof(B199))]
+[Singleton(typeof(B200))]
+[Singleton(typeof(B201))]
+[Singleton(typeof(B202))]
+[Singleton(typeof(B203))]
+[Singleton(typeof(B204))]
+[Singleton(typeof(B205))]
+[Singleton(typeof(B206))]
+[Singleton(typeof(B207))]
+[Singleton(typeof(B208))]
+[Singleton(typeof(B209))]
+[Singleton(typeof(B210))]
+[Singleton(typeof(B211))]
+[Singleton(typeof(B212))]
+[Singleton(typeof(B213))]
+[Singleton(typeof(B214))]
+[Singleton(typeof(B215))]
+[Singleton(typeof(B216))]
+[Singleton(typeof(B217))]
+[Singleton(typeof(B218))]
+[Singleton(typeof(B219))]
+[Singleton(typeof(B220))]
+[Singleton(typeof(B221))]
+[Singleton(typeof(B222))]
+[Singleton(typeof(B223))]
+[Singleton(typeof(B224))]
+[Singleton(typeof(B225))]
+[Singleton(typeof(B226))]
+[Singleton(typeof(B227))]
+[Singleton(typeof(B228))]
+[Singleton(typeof(B229))]
+[Singleton(typeof(B230))]
+[Singleton(typeof(B231))]
+[Singleton(typeof(B232))]
+[Singleton(typeof(B233))]
+[Singleton(typeof(B234))]
+[Singleton(typeof(B235))]
+[Singleton(typeof(B236))]
+[Singleton(typeof(B237))]
+[Singleton(typeof(B238))]
+[Singleton(typeof(B239))]
+[Singleton(typeof(B240))]
+[Singleton(typeof(B241))]
+[Singleton(typeof(B242))]
+[Singleton(typeof(B243))]
+[Singleton(typeof(B244))]
+[Singleton(typeof(B245))]
+[Singleton(typeof(B246))]
+[Singleton(typeof(B247))]
+[Singleton(typeof(B248))]
+[Singleton(typeof(B249))]
+[Singleton(typeof(B250))]
+[Singleton(typeof(B251))]
+[Singleton(typeof(B252))]
+[Singleton(typeof(B253))]
+[Singleton(typeof(B254))]
+[Singleton(typeof(B255))]
+public sealed partial class JabContainer256;
+
+// Pure.DI consumes the Setup() methods at compile time to generate the container; they are never
+// invoked at runtime, so the unused-private-member rule does not apply here.
+#pragma warning disable S1144
+internal partial class PureContainer8
+{
+	private static void Setup() => DI.Setup(nameof(PureContainer8))
+		.DefaultLifetime(Lifetime.Singleton)
+		.Bind<B0>().To<B0>().Root<B0>("R0")
+		.Bind<B1>().To<B1>().Root<B1>("R1")
+		.Bind<B2>().To<B2>().Root<B2>("R2")
+		.Bind<B3>().To<B3>().Root<B3>("R3")
+		.Bind<B4>().To<B4>().Root<B4>("R4")
+		.Bind<B5>().To<B5>().Root<B5>("R5")
+		.Bind<B6>().To<B6>().Root<B6>("R6")
+		.Bind<B7>().To<B7>().Root<B7>("R7")
+	;
+}
+
+internal partial class PureContainer64
+{
+	private static void Setup() => DI.Setup(nameof(PureContainer64))
+		.DefaultLifetime(Lifetime.Singleton)
+		.Bind<B0>().To<B0>().Root<B0>("R0")
+		.Bind<B1>().To<B1>().Root<B1>("R1")
+		.Bind<B2>().To<B2>().Root<B2>("R2")
+		.Bind<B3>().To<B3>().Root<B3>("R3")
+		.Bind<B4>().To<B4>().Root<B4>("R4")
+		.Bind<B5>().To<B5>().Root<B5>("R5")
+		.Bind<B6>().To<B6>().Root<B6>("R6")
+		.Bind<B7>().To<B7>().Root<B7>("R7")
+		.Bind<B8>().To<B8>().Root<B8>("R8")
+		.Bind<B9>().To<B9>().Root<B9>("R9")
+		.Bind<B10>().To<B10>().Root<B10>("R10")
+		.Bind<B11>().To<B11>().Root<B11>("R11")
+		.Bind<B12>().To<B12>().Root<B12>("R12")
+		.Bind<B13>().To<B13>().Root<B13>("R13")
+		.Bind<B14>().To<B14>().Root<B14>("R14")
+		.Bind<B15>().To<B15>().Root<B15>("R15")
+		.Bind<B16>().To<B16>().Root<B16>("R16")
+		.Bind<B17>().To<B17>().Root<B17>("R17")
+		.Bind<B18>().To<B18>().Root<B18>("R18")
+		.Bind<B19>().To<B19>().Root<B19>("R19")
+		.Bind<B20>().To<B20>().Root<B20>("R20")
+		.Bind<B21>().To<B21>().Root<B21>("R21")
+		.Bind<B22>().To<B22>().Root<B22>("R22")
+		.Bind<B23>().To<B23>().Root<B23>("R23")
+		.Bind<B24>().To<B24>().Root<B24>("R24")
+		.Bind<B25>().To<B25>().Root<B25>("R25")
+		.Bind<B26>().To<B26>().Root<B26>("R26")
+		.Bind<B27>().To<B27>().Root<B27>("R27")
+		.Bind<B28>().To<B28>().Root<B28>("R28")
+		.Bind<B29>().To<B29>().Root<B29>("R29")
+		.Bind<B30>().To<B30>().Root<B30>("R30")
+		.Bind<B31>().To<B31>().Root<B31>("R31")
+		.Bind<B32>().To<B32>().Root<B32>("R32")
+		.Bind<B33>().To<B33>().Root<B33>("R33")
+		.Bind<B34>().To<B34>().Root<B34>("R34")
+		.Bind<B35>().To<B35>().Root<B35>("R35")
+		.Bind<B36>().To<B36>().Root<B36>("R36")
+		.Bind<B37>().To<B37>().Root<B37>("R37")
+		.Bind<B38>().To<B38>().Root<B38>("R38")
+		.Bind<B39>().To<B39>().Root<B39>("R39")
+		.Bind<B40>().To<B40>().Root<B40>("R40")
+		.Bind<B41>().To<B41>().Root<B41>("R41")
+		.Bind<B42>().To<B42>().Root<B42>("R42")
+		.Bind<B43>().To<B43>().Root<B43>("R43")
+		.Bind<B44>().To<B44>().Root<B44>("R44")
+		.Bind<B45>().To<B45>().Root<B45>("R45")
+		.Bind<B46>().To<B46>().Root<B46>("R46")
+		.Bind<B47>().To<B47>().Root<B47>("R47")
+		.Bind<B48>().To<B48>().Root<B48>("R48")
+		.Bind<B49>().To<B49>().Root<B49>("R49")
+		.Bind<B50>().To<B50>().Root<B50>("R50")
+		.Bind<B51>().To<B51>().Root<B51>("R51")
+		.Bind<B52>().To<B52>().Root<B52>("R52")
+		.Bind<B53>().To<B53>().Root<B53>("R53")
+		.Bind<B54>().To<B54>().Root<B54>("R54")
+		.Bind<B55>().To<B55>().Root<B55>("R55")
+		.Bind<B56>().To<B56>().Root<B56>("R56")
+		.Bind<B57>().To<B57>().Root<B57>("R57")
+		.Bind<B58>().To<B58>().Root<B58>("R58")
+		.Bind<B59>().To<B59>().Root<B59>("R59")
+		.Bind<B60>().To<B60>().Root<B60>("R60")
+		.Bind<B61>().To<B61>().Root<B61>("R61")
+		.Bind<B62>().To<B62>().Root<B62>("R62")
+		.Bind<B63>().To<B63>().Root<B63>("R63")
+	;
+}
+
+internal partial class PureContainer256
+{
+	private static void Setup() => DI.Setup(nameof(PureContainer256))
+		.DefaultLifetime(Lifetime.Singleton)
+		.Bind<B0>().To<B0>().Root<B0>("R0")
+		.Bind<B1>().To<B1>().Root<B1>("R1")
+		.Bind<B2>().To<B2>().Root<B2>("R2")
+		.Bind<B3>().To<B3>().Root<B3>("R3")
+		.Bind<B4>().To<B4>().Root<B4>("R4")
+		.Bind<B5>().To<B5>().Root<B5>("R5")
+		.Bind<B6>().To<B6>().Root<B6>("R6")
+		.Bind<B7>().To<B7>().Root<B7>("R7")
+		.Bind<B8>().To<B8>().Root<B8>("R8")
+		.Bind<B9>().To<B9>().Root<B9>("R9")
+		.Bind<B10>().To<B10>().Root<B10>("R10")
+		.Bind<B11>().To<B11>().Root<B11>("R11")
+		.Bind<B12>().To<B12>().Root<B12>("R12")
+		.Bind<B13>().To<B13>().Root<B13>("R13")
+		.Bind<B14>().To<B14>().Root<B14>("R14")
+		.Bind<B15>().To<B15>().Root<B15>("R15")
+		.Bind<B16>().To<B16>().Root<B16>("R16")
+		.Bind<B17>().To<B17>().Root<B17>("R17")
+		.Bind<B18>().To<B18>().Root<B18>("R18")
+		.Bind<B19>().To<B19>().Root<B19>("R19")
+		.Bind<B20>().To<B20>().Root<B20>("R20")
+		.Bind<B21>().To<B21>().Root<B21>("R21")
+		.Bind<B22>().To<B22>().Root<B22>("R22")
+		.Bind<B23>().To<B23>().Root<B23>("R23")
+		.Bind<B24>().To<B24>().Root<B24>("R24")
+		.Bind<B25>().To<B25>().Root<B25>("R25")
+		.Bind<B26>().To<B26>().Root<B26>("R26")
+		.Bind<B27>().To<B27>().Root<B27>("R27")
+		.Bind<B28>().To<B28>().Root<B28>("R28")
+		.Bind<B29>().To<B29>().Root<B29>("R29")
+		.Bind<B30>().To<B30>().Root<B30>("R30")
+		.Bind<B31>().To<B31>().Root<B31>("R31")
+		.Bind<B32>().To<B32>().Root<B32>("R32")
+		.Bind<B33>().To<B33>().Root<B33>("R33")
+		.Bind<B34>().To<B34>().Root<B34>("R34")
+		.Bind<B35>().To<B35>().Root<B35>("R35")
+		.Bind<B36>().To<B36>().Root<B36>("R36")
+		.Bind<B37>().To<B37>().Root<B37>("R37")
+		.Bind<B38>().To<B38>().Root<B38>("R38")
+		.Bind<B39>().To<B39>().Root<B39>("R39")
+		.Bind<B40>().To<B40>().Root<B40>("R40")
+		.Bind<B41>().To<B41>().Root<B41>("R41")
+		.Bind<B42>().To<B42>().Root<B42>("R42")
+		.Bind<B43>().To<B43>().Root<B43>("R43")
+		.Bind<B44>().To<B44>().Root<B44>("R44")
+		.Bind<B45>().To<B45>().Root<B45>("R45")
+		.Bind<B46>().To<B46>().Root<B46>("R46")
+		.Bind<B47>().To<B47>().Root<B47>("R47")
+		.Bind<B48>().To<B48>().Root<B48>("R48")
+		.Bind<B49>().To<B49>().Root<B49>("R49")
+		.Bind<B50>().To<B50>().Root<B50>("R50")
+		.Bind<B51>().To<B51>().Root<B51>("R51")
+		.Bind<B52>().To<B52>().Root<B52>("R52")
+		.Bind<B53>().To<B53>().Root<B53>("R53")
+		.Bind<B54>().To<B54>().Root<B54>("R54")
+		.Bind<B55>().To<B55>().Root<B55>("R55")
+		.Bind<B56>().To<B56>().Root<B56>("R56")
+		.Bind<B57>().To<B57>().Root<B57>("R57")
+		.Bind<B58>().To<B58>().Root<B58>("R58")
+		.Bind<B59>().To<B59>().Root<B59>("R59")
+		.Bind<B60>().To<B60>().Root<B60>("R60")
+		.Bind<B61>().To<B61>().Root<B61>("R61")
+		.Bind<B62>().To<B62>().Root<B62>("R62")
+		.Bind<B63>().To<B63>().Root<B63>("R63")
+		.Bind<B64>().To<B64>().Root<B64>("R64")
+		.Bind<B65>().To<B65>().Root<B65>("R65")
+		.Bind<B66>().To<B66>().Root<B66>("R66")
+		.Bind<B67>().To<B67>().Root<B67>("R67")
+		.Bind<B68>().To<B68>().Root<B68>("R68")
+		.Bind<B69>().To<B69>().Root<B69>("R69")
+		.Bind<B70>().To<B70>().Root<B70>("R70")
+		.Bind<B71>().To<B71>().Root<B71>("R71")
+		.Bind<B72>().To<B72>().Root<B72>("R72")
+		.Bind<B73>().To<B73>().Root<B73>("R73")
+		.Bind<B74>().To<B74>().Root<B74>("R74")
+		.Bind<B75>().To<B75>().Root<B75>("R75")
+		.Bind<B76>().To<B76>().Root<B76>("R76")
+		.Bind<B77>().To<B77>().Root<B77>("R77")
+		.Bind<B78>().To<B78>().Root<B78>("R78")
+		.Bind<B79>().To<B79>().Root<B79>("R79")
+		.Bind<B80>().To<B80>().Root<B80>("R80")
+		.Bind<B81>().To<B81>().Root<B81>("R81")
+		.Bind<B82>().To<B82>().Root<B82>("R82")
+		.Bind<B83>().To<B83>().Root<B83>("R83")
+		.Bind<B84>().To<B84>().Root<B84>("R84")
+		.Bind<B85>().To<B85>().Root<B85>("R85")
+		.Bind<B86>().To<B86>().Root<B86>("R86")
+		.Bind<B87>().To<B87>().Root<B87>("R87")
+		.Bind<B88>().To<B88>().Root<B88>("R88")
+		.Bind<B89>().To<B89>().Root<B89>("R89")
+		.Bind<B90>().To<B90>().Root<B90>("R90")
+		.Bind<B91>().To<B91>().Root<B91>("R91")
+		.Bind<B92>().To<B92>().Root<B92>("R92")
+		.Bind<B93>().To<B93>().Root<B93>("R93")
+		.Bind<B94>().To<B94>().Root<B94>("R94")
+		.Bind<B95>().To<B95>().Root<B95>("R95")
+		.Bind<B96>().To<B96>().Root<B96>("R96")
+		.Bind<B97>().To<B97>().Root<B97>("R97")
+		.Bind<B98>().To<B98>().Root<B98>("R98")
+		.Bind<B99>().To<B99>().Root<B99>("R99")
+		.Bind<B100>().To<B100>().Root<B100>("R100")
+		.Bind<B101>().To<B101>().Root<B101>("R101")
+		.Bind<B102>().To<B102>().Root<B102>("R102")
+		.Bind<B103>().To<B103>().Root<B103>("R103")
+		.Bind<B104>().To<B104>().Root<B104>("R104")
+		.Bind<B105>().To<B105>().Root<B105>("R105")
+		.Bind<B106>().To<B106>().Root<B106>("R106")
+		.Bind<B107>().To<B107>().Root<B107>("R107")
+		.Bind<B108>().To<B108>().Root<B108>("R108")
+		.Bind<B109>().To<B109>().Root<B109>("R109")
+		.Bind<B110>().To<B110>().Root<B110>("R110")
+		.Bind<B111>().To<B111>().Root<B111>("R111")
+		.Bind<B112>().To<B112>().Root<B112>("R112")
+		.Bind<B113>().To<B113>().Root<B113>("R113")
+		.Bind<B114>().To<B114>().Root<B114>("R114")
+		.Bind<B115>().To<B115>().Root<B115>("R115")
+		.Bind<B116>().To<B116>().Root<B116>("R116")
+		.Bind<B117>().To<B117>().Root<B117>("R117")
+		.Bind<B118>().To<B118>().Root<B118>("R118")
+		.Bind<B119>().To<B119>().Root<B119>("R119")
+		.Bind<B120>().To<B120>().Root<B120>("R120")
+		.Bind<B121>().To<B121>().Root<B121>("R121")
+		.Bind<B122>().To<B122>().Root<B122>("R122")
+		.Bind<B123>().To<B123>().Root<B123>("R123")
+		.Bind<B124>().To<B124>().Root<B124>("R124")
+		.Bind<B125>().To<B125>().Root<B125>("R125")
+		.Bind<B126>().To<B126>().Root<B126>("R126")
+		.Bind<B127>().To<B127>().Root<B127>("R127")
+		.Bind<B128>().To<B128>().Root<B128>("R128")
+		.Bind<B129>().To<B129>().Root<B129>("R129")
+		.Bind<B130>().To<B130>().Root<B130>("R130")
+		.Bind<B131>().To<B131>().Root<B131>("R131")
+		.Bind<B132>().To<B132>().Root<B132>("R132")
+		.Bind<B133>().To<B133>().Root<B133>("R133")
+		.Bind<B134>().To<B134>().Root<B134>("R134")
+		.Bind<B135>().To<B135>().Root<B135>("R135")
+		.Bind<B136>().To<B136>().Root<B136>("R136")
+		.Bind<B137>().To<B137>().Root<B137>("R137")
+		.Bind<B138>().To<B138>().Root<B138>("R138")
+		.Bind<B139>().To<B139>().Root<B139>("R139")
+		.Bind<B140>().To<B140>().Root<B140>("R140")
+		.Bind<B141>().To<B141>().Root<B141>("R141")
+		.Bind<B142>().To<B142>().Root<B142>("R142")
+		.Bind<B143>().To<B143>().Root<B143>("R143")
+		.Bind<B144>().To<B144>().Root<B144>("R144")
+		.Bind<B145>().To<B145>().Root<B145>("R145")
+		.Bind<B146>().To<B146>().Root<B146>("R146")
+		.Bind<B147>().To<B147>().Root<B147>("R147")
+		.Bind<B148>().To<B148>().Root<B148>("R148")
+		.Bind<B149>().To<B149>().Root<B149>("R149")
+		.Bind<B150>().To<B150>().Root<B150>("R150")
+		.Bind<B151>().To<B151>().Root<B151>("R151")
+		.Bind<B152>().To<B152>().Root<B152>("R152")
+		.Bind<B153>().To<B153>().Root<B153>("R153")
+		.Bind<B154>().To<B154>().Root<B154>("R154")
+		.Bind<B155>().To<B155>().Root<B155>("R155")
+		.Bind<B156>().To<B156>().Root<B156>("R156")
+		.Bind<B157>().To<B157>().Root<B157>("R157")
+		.Bind<B158>().To<B158>().Root<B158>("R158")
+		.Bind<B159>().To<B159>().Root<B159>("R159")
+		.Bind<B160>().To<B160>().Root<B160>("R160")
+		.Bind<B161>().To<B161>().Root<B161>("R161")
+		.Bind<B162>().To<B162>().Root<B162>("R162")
+		.Bind<B163>().To<B163>().Root<B163>("R163")
+		.Bind<B164>().To<B164>().Root<B164>("R164")
+		.Bind<B165>().To<B165>().Root<B165>("R165")
+		.Bind<B166>().To<B166>().Root<B166>("R166")
+		.Bind<B167>().To<B167>().Root<B167>("R167")
+		.Bind<B168>().To<B168>().Root<B168>("R168")
+		.Bind<B169>().To<B169>().Root<B169>("R169")
+		.Bind<B170>().To<B170>().Root<B170>("R170")
+		.Bind<B171>().To<B171>().Root<B171>("R171")
+		.Bind<B172>().To<B172>().Root<B172>("R172")
+		.Bind<B173>().To<B173>().Root<B173>("R173")
+		.Bind<B174>().To<B174>().Root<B174>("R174")
+		.Bind<B175>().To<B175>().Root<B175>("R175")
+		.Bind<B176>().To<B176>().Root<B176>("R176")
+		.Bind<B177>().To<B177>().Root<B177>("R177")
+		.Bind<B178>().To<B178>().Root<B178>("R178")
+		.Bind<B179>().To<B179>().Root<B179>("R179")
+		.Bind<B180>().To<B180>().Root<B180>("R180")
+		.Bind<B181>().To<B181>().Root<B181>("R181")
+		.Bind<B182>().To<B182>().Root<B182>("R182")
+		.Bind<B183>().To<B183>().Root<B183>("R183")
+		.Bind<B184>().To<B184>().Root<B184>("R184")
+		.Bind<B185>().To<B185>().Root<B185>("R185")
+		.Bind<B186>().To<B186>().Root<B186>("R186")
+		.Bind<B187>().To<B187>().Root<B187>("R187")
+		.Bind<B188>().To<B188>().Root<B188>("R188")
+		.Bind<B189>().To<B189>().Root<B189>("R189")
+		.Bind<B190>().To<B190>().Root<B190>("R190")
+		.Bind<B191>().To<B191>().Root<B191>("R191")
+		.Bind<B192>().To<B192>().Root<B192>("R192")
+		.Bind<B193>().To<B193>().Root<B193>("R193")
+		.Bind<B194>().To<B194>().Root<B194>("R194")
+		.Bind<B195>().To<B195>().Root<B195>("R195")
+		.Bind<B196>().To<B196>().Root<B196>("R196")
+		.Bind<B197>().To<B197>().Root<B197>("R197")
+		.Bind<B198>().To<B198>().Root<B198>("R198")
+		.Bind<B199>().To<B199>().Root<B199>("R199")
+		.Bind<B200>().To<B200>().Root<B200>("R200")
+		.Bind<B201>().To<B201>().Root<B201>("R201")
+		.Bind<B202>().To<B202>().Root<B202>("R202")
+		.Bind<B203>().To<B203>().Root<B203>("R203")
+		.Bind<B204>().To<B204>().Root<B204>("R204")
+		.Bind<B205>().To<B205>().Root<B205>("R205")
+		.Bind<B206>().To<B206>().Root<B206>("R206")
+		.Bind<B207>().To<B207>().Root<B207>("R207")
+		.Bind<B208>().To<B208>().Root<B208>("R208")
+		.Bind<B209>().To<B209>().Root<B209>("R209")
+		.Bind<B210>().To<B210>().Root<B210>("R210")
+		.Bind<B211>().To<B211>().Root<B211>("R211")
+		.Bind<B212>().To<B212>().Root<B212>("R212")
+		.Bind<B213>().To<B213>().Root<B213>("R213")
+		.Bind<B214>().To<B214>().Root<B214>("R214")
+		.Bind<B215>().To<B215>().Root<B215>("R215")
+		.Bind<B216>().To<B216>().Root<B216>("R216")
+		.Bind<B217>().To<B217>().Root<B217>("R217")
+		.Bind<B218>().To<B218>().Root<B218>("R218")
+		.Bind<B219>().To<B219>().Root<B219>("R219")
+		.Bind<B220>().To<B220>().Root<B220>("R220")
+		.Bind<B221>().To<B221>().Root<B221>("R221")
+		.Bind<B222>().To<B222>().Root<B222>("R222")
+		.Bind<B223>().To<B223>().Root<B223>("R223")
+		.Bind<B224>().To<B224>().Root<B224>("R224")
+		.Bind<B225>().To<B225>().Root<B225>("R225")
+		.Bind<B226>().To<B226>().Root<B226>("R226")
+		.Bind<B227>().To<B227>().Root<B227>("R227")
+		.Bind<B228>().To<B228>().Root<B228>("R228")
+		.Bind<B229>().To<B229>().Root<B229>("R229")
+		.Bind<B230>().To<B230>().Root<B230>("R230")
+		.Bind<B231>().To<B231>().Root<B231>("R231")
+		.Bind<B232>().To<B232>().Root<B232>("R232")
+		.Bind<B233>().To<B233>().Root<B233>("R233")
+		.Bind<B234>().To<B234>().Root<B234>("R234")
+		.Bind<B235>().To<B235>().Root<B235>("R235")
+		.Bind<B236>().To<B236>().Root<B236>("R236")
+		.Bind<B237>().To<B237>().Root<B237>("R237")
+		.Bind<B238>().To<B238>().Root<B238>("R238")
+		.Bind<B239>().To<B239>().Root<B239>("R239")
+		.Bind<B240>().To<B240>().Root<B240>("R240")
+		.Bind<B241>().To<B241>().Root<B241>("R241")
+		.Bind<B242>().To<B242>().Root<B242>("R242")
+		.Bind<B243>().To<B243>().Root<B243>("R243")
+		.Bind<B244>().To<B244>().Root<B244>("R244")
+		.Bind<B245>().To<B245>().Root<B245>("R245")
+		.Bind<B246>().To<B246>().Root<B246>("R246")
+		.Bind<B247>().To<B247>().Root<B247>("R247")
+		.Bind<B248>().To<B248>().Root<B248>("R248")
+		.Bind<B249>().To<B249>().Root<B249>("R249")
+		.Bind<B250>().To<B250>().Root<B250>("R250")
+		.Bind<B251>().To<B251>().Root<B251>("R251")
+		.Bind<B252>().To<B252>().Root<B252>("R252")
+		.Bind<B253>().To<B253>().Root<B253>("R253")
+		.Bind<B254>().To<B254>().Root<B254>("R254")
+		.Bind<B255>().To<B255>().Root<B255>("R255");
+}
+#pragma warning restore S1144

@@ -25,6 +25,10 @@
       "type": "string",
       "enum": [
         "ApiChecks",
+        "BenchmarkComment",
+        "BenchmarkDotNet",
+        "BenchmarkResult",
+        "Benchmarks",
         "CalculateNugetVersion",
         "Clean",
         "CodeAnalysis",
@@ -38,6 +42,7 @@
         "MutationTestExecution",
         "MutationTests",
         "Pack",
+        "PublishBenchmarkReport",
         "Restore",
         "UnitTests",
         "UpdateReadme"
@@ -114,6 +119,10 @@
   "allOf": [
     {
       "properties": {
+        "BenchmarkFilter": {
+          "type": "string",
+          "description": "Filter for BenchmarkDotNet - Default is '*'"
+        },
         "Configuration": {
           "type": "string",
           "description": "Configuration to build - Default is 'Debug' (local) or 'Release' (server)",

@@ -20,6 +20,7 @@ partial class Build
 				.SetProjectKey("Testably_Awaiten")
 				.AddVSTestReports(TestResultsDirectory / "*.trx")
 				.AddOpenCoverPaths(TestResultsDirectory / "reports" / "OpenCover.xml")
+				.SetCoverageExclusions("Benchmarks/**")
 				.SetPullRequestOrBranchName(GitHubActions, GitVersion)
 				.SetVersion(GitVersion.SemVer)
 				.SetToken(SonarToken));
