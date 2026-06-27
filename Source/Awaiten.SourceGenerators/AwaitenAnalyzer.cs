@@ -62,6 +62,13 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 				continue;
 			}
 
+			// A pre-built Instance is owned by the caller and never disposed by the container, so it cannot
+			// accumulate; skip it to match the container the generator emits (which does not register it).
+			if (registration.Production == ProductionKind.Instance)
+			{
+				continue;
+			}
+
 			if (registration.Lifetime != Lifetime.Transient || !ImplementsDisposable(registration.Implementation, disposable))
 			{
 				continue;

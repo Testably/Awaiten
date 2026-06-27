@@ -7,7 +7,10 @@ namespace Awaiten.SourceGenerators.Internals;
 ///     whether it needs disposing, and whether it is a reference type (only reference-type cache fields
 ///     can be marked <c>volatile</c> for the lock-free fast path). Registrations of the same
 ///     implementation are coalesced into one instance, so a multi-service registration shares a single
-///     object.
+///     object. <see cref="Production" /> records how the instance is produced: a constructor (the
+///     default), a container <see cref="ProductionMember">method</see> (Factory), or a pre-built
+///     container <see cref="ProductionMember">member</see> (Instance); <see cref="FactoryIsStatic" />
+///     captures whether a factory method is static (so a nested scope can call it without the container).
 /// </summary>
 internal sealed record InstanceModel(
 	string ImplementationType,
@@ -16,4 +19,7 @@ internal sealed record InstanceModel(
 	EquatableArray<string> ServiceTypes,
 	EquatableArray<ParameterModel> ConstructorParameters,
 	bool IsDisposable,
-	bool IsReferenceType);
+	bool IsReferenceType,
+	ProductionKind Production = ProductionKind.Constructor,
+	string? ProductionMember = null,
+	bool FactoryIsStatic = false);

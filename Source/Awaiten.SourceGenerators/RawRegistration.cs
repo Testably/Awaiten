@@ -6,7 +6,9 @@ namespace Awaiten.SourceGenerators;
 /// <summary>
 ///     A single lifetime registration read from a <c>[Singleton]</c>/<c>[Transient]</c>/<c>[Scoped]</c>
 ///     attribute on a container: the service and implementation type names, the lifetime, the
-///     implementation symbol, and the attribute's source location.
+///     implementation symbol, the attribute's source location, and how the instance is produced (a
+///     constructor by default, or the container member named by the attribute's <c>Factory</c>/
+///     <c>Instance</c> argument).
 /// </summary>
 /// <remarks>
 ///     <see cref="Location" /> is the live Roslyn location (with its syntax tree), not an equatable
@@ -19,4 +21,6 @@ internal sealed record RawRegistration(
 	string ImplementationType,
 	Lifetime Lifetime,
 	INamedTypeSymbol Implementation,
-	Location? Location);
+	Location? Location,
+	ProductionKind Production = ProductionKind.Constructor,
+	string? ProductionMember = null);

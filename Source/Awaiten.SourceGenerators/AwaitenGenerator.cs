@@ -55,7 +55,8 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			return null;
 		}
 
-		INamedTypeSymbol? disposableSymbol = context.SemanticModel.Compilation.GetTypeByMetadataName("System.IDisposable");
+		Compilation compilation = context.SemanticModel.Compilation;
+		INamedTypeSymbol? disposableSymbol = compilation.GetTypeByMetadataName("System.IDisposable");
 
 		List<RawRegistration> raw = ContainerRegistrations.Collect(containerSymbol);
 
@@ -74,7 +75,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		foreach (ImplInfo info in implOrder)
 		{
 			cancellationToken.ThrowIfCancellationRequested();
-			InstanceModel? instance = BuildInstance(info, containerSymbol, serviceToImpl, disposableSymbol, diagnostics);
+			InstanceModel? instance = BuildInstance(info, containerSymbol, compilation, serviceToImpl, disposableSymbol, diagnostics);
 			if (instance is not null)
 			{
 				implToIndex[info.ImplementationType] = instances.Count;
@@ -158,7 +159,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			{
 				info = new ImplInfo(
 					registration.ImplementationType, registration.Implementation, registration.Lifetime,
-					LocationInfo.From(registration.Location));
+					LocationInfo.From(registration.Location), registration.Production, registration.ProductionMember);
 				implInfos.Add(registration.ImplementationType, info);
 				implOrder.Add(info);
 			}
@@ -205,33 +206,68 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	private static InstanceModel? BuildInstance(
 		ImplInfo info,
 		INamedTypeSymbol containerSymbol,
+		Compilation compilation,
 		Dictionary<string, string> serviceToImpl,
 		INamedTypeSymbol? disposableSymbol,
 		List<DiagnosticInfo> diagnostics)
 	{
-		// An abstract type or interface cannot be constructed; reject it instead of emitting a 'new'
-		// against it (which would fail to compile in the generated source).
-		if (info.Symbol.IsAbstract || info.Symbol.TypeKind == TypeKind.Interface)
+		// A pre-built Instance is handed back from a container member, never constructed here. The
+		// container does not own it, so it is not disposed; the registered type may legitimately be an
+		// interface (so the not-instantiable check is skipped) and it contributes no graph edges.
+		if (info.Production == ProductionKind.Instance)
 		{
-			diagnostics.Add(new DiagnosticInfo(
-				Diagnostics.NotInstantiable,
-				info.Location,
-				new EquatableArray<string>([Display(info.ImplementationType),])));
-			return null;
+			ValidateInstanceMember(containerSymbol, info, compilation, diagnostics);
+			return new InstanceModel(
+				info.ImplementationType,
+				info.Symbol.Name,
+				info.Lifetime,
+				new EquatableArray<string>(info.ServiceTypes.ToArray()),
+				new EquatableArray<ParameterModel>([]),
+				false,
+				info.Symbol.IsReferenceType,
+				ProductionKind.Instance,
+				info.ProductionMember);
 		}
 
-		IMethodSymbol? constructor = SelectConstructor(info.Symbol, containerSymbol, serviceToImpl.Keys);
-		if (constructor is null)
+		// Select the producer: a container method (Factory) or the implementation's constructor (the
+		// default). A factory produces the instance, so the registered type may be an interface and is
+		// not subject to the not-instantiable check that a constructed type is.
+		IMethodSymbol? producer;
+		if (info.Production == ProductionKind.Factory)
 		{
-			diagnostics.Add(new DiagnosticInfo(
-				Diagnostics.NoAccessibleConstructor,
-				info.Location,
-				new EquatableArray<string>([Display(info.ImplementationType),])));
-			return null;
+			producer = ResolveFactory(containerSymbol, info, compilation, diagnostics);
+			if (producer is null)
+			{
+				return null;
+			}
+		}
+		else
+		{
+			// An abstract type or interface cannot be constructed; reject it instead of emitting a 'new'
+			// against it (which would fail to compile in the generated source).
+			if (info.Symbol.IsAbstract || info.Symbol.TypeKind == TypeKind.Interface)
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.NotInstantiable,
+					info.Location,
+					new EquatableArray<string>([Display(info.ImplementationType),])));
+				return null;
+			}
+
+			producer = SelectConstructor(info.Symbol, containerSymbol, serviceToImpl.Keys);
+			if (producer is null)
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.NoAccessibleConstructor,
+					info.Location,
+					new EquatableArray<string>([Display(info.ImplementationType),])));
+				return null;
+			}
 		}
 
+		// A factory's parameters resolve from the graph exactly like a constructor's.
 		List<ParameterModel> parameters = new();
-		foreach (IParameterSymbol parameter in constructor.Parameters)
+		foreach (IParameterSymbol parameter in producer.Parameters)
 		{
 			ParameterModel parameterModel = ClassifyParameter(parameter.Type);
 			parameters.Add(parameterModel);
@@ -257,12 +293,73 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			new EquatableArray<string>(info.ServiceTypes.ToArray()),
 			new EquatableArray<ParameterModel>(parameters.ToArray()),
 			disposable,
-			info.Symbol.IsReferenceType);
+			info.Symbol.IsReferenceType,
+			info.Production,
+			info.ProductionMember,
+			producer is { IsStatic: true, });
 
 		static bool ImplementsInterface(INamedTypeSymbol type, INamedTypeSymbol @interface)
 		{
 			return type.AllInterfaces.Any(implemented => SymbolEqualityComparer.Default.Equals(implemented, @interface));
 		}
+	}
+
+	/// <summary>
+	///     Resolves a <c>Factory</c> registration to the container method that produces it, reporting
+	///     <see cref="Diagnostics.InvalidFactory">AWT108</see> when no accessible method of that name
+	///     returns the registered implementation type.
+	/// </summary>
+	private static IMethodSymbol? ResolveFactory(
+		INamedTypeSymbol containerSymbol,
+		ImplInfo info,
+		Compilation compilation,
+		List<DiagnosticInfo> diagnostics)
+	{
+		foreach (ISymbol member in containerSymbol.GetMembers(info.ProductionMember!))
+		{
+			if (member is IMethodSymbol { MethodKind: MethodKind.Ordinary, } method
+			    && compilation.HasImplicitConversion(method.ReturnType, info.Symbol))
+			{
+				return method;
+			}
+		}
+
+		diagnostics.Add(new DiagnosticInfo(
+			Diagnostics.InvalidFactory,
+			info.Location,
+			new EquatableArray<string>([Display(info.ServiceTypes[0]), info.ProductionMember!,])));
+		return null;
+	}
+
+	/// <summary>
+	///     Validates an <c>Instance</c> registration against the named container member, reporting
+	///     <see cref="Diagnostics.InvalidInstance">AWT109</see> when no accessible field or property of
+	///     that name holds the registered implementation type.
+	/// </summary>
+	private static void ValidateInstanceMember(
+		INamedTypeSymbol containerSymbol,
+		ImplInfo info,
+		Compilation compilation,
+		List<DiagnosticInfo> diagnostics)
+	{
+		foreach (ISymbol member in containerSymbol.GetMembers(info.ProductionMember!))
+		{
+			ITypeSymbol? memberType = member switch
+			{
+				IFieldSymbol field => field.Type,
+				IPropertySymbol property => property.Type,
+				_ => null,
+			};
+			if (memberType is not null && compilation.HasImplicitConversion(memberType, info.Symbol))
+			{
+				return;
+			}
+		}
+
+		diagnostics.Add(new DiagnosticInfo(
+			Diagnostics.InvalidInstance,
+			info.Location,
+			new EquatableArray<string>([Display(info.ServiceTypes[0]), info.ProductionMember!,])));
 	}
 
 	private static IMethodSymbol? SelectConstructor(
@@ -482,12 +579,20 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 	private sealed class ImplInfo
 	{
-		public ImplInfo(string implementationType, INamedTypeSymbol symbol, Lifetime lifetime, LocationInfo? location)
+		public ImplInfo(
+			string implementationType,
+			INamedTypeSymbol symbol,
+			Lifetime lifetime,
+			LocationInfo? location,
+			ProductionKind production,
+			string? productionMember)
 		{
 			ImplementationType = implementationType;
 			Symbol = symbol;
 			Lifetime = lifetime;
 			Location = location;
+			Production = production;
+			ProductionMember = productionMember;
 			ServiceTypes = new List<string>();
 		}
 
@@ -495,6 +600,8 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		public INamedTypeSymbol Symbol { get; }
 		public Lifetime Lifetime { get; }
 		public LocationInfo? Location { get; }
+		public ProductionKind Production { get; }
+		public string? ProductionMember { get; }
 		public List<string> ServiceTypes { get; }
 	}
 }

@@ -15,7 +15,21 @@ namespace Awaiten;
 /// <typeparam name="TImplementation">The concrete type to construct and resolve.</typeparam>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
 public sealed class TransientAttribute<TImplementation> : Attribute
-	where TImplementation : class;
+	where TImplementation : class
+{
+	/// <summary>
+	///     The name of a method on the container that produces the instance instead of a constructor
+	///     (an abstract factory). The method may be static or instance, must return a
+	///     <typeparamref name="TImplementation" />, and its parameters are resolved from the graph.
+	/// </summary>
+	public string? Factory { get; set; }
+
+	/// <summary>
+	///     The name of a field or property on the container that holds a pre-built instance to expose.
+	///     The container neither constructs nor disposes it - the caller owns it.
+	/// </summary>
+	public string? Instance { get; set; }
+}
 
 /// <summary>
 ///     Registers <typeparamref name="TImplementation" /> as transient exposed through the service

@@ -95,4 +95,28 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A <c>Factory</c> registration names a member that is not a usable factory method on the
+	///     container (it is missing, is not a method, or does not return the registered service type).
+	/// </summary>
+	public static readonly DiagnosticDescriptor InvalidFactory = new(
+		"AWT108",
+		"Invalid factory",
+		"'{0}' cannot be produced: the container has no accessible method '{1}' returning '{0}'",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     An <c>Instance</c> registration names a member that is not a usable instance member on the
+	///     container (it is missing, is not a field or property, or is not assignable to the service type).
+	/// </summary>
+	public static readonly DiagnosticDescriptor InvalidInstance = new(
+		"AWT109",
+		"Invalid instance member",
+		"'{0}' cannot be exposed: the container has no accessible field or property '{1}' of type '{0}'",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

@@ -319,4 +319,93 @@ public class GeneralTests
 		await That(source).Contains("private sealed class Scope : global::Awaiten.IAwaitenScope")
 			.Because("scoped instances also live on each created scope");
 	}
+
+	[Fact]
+	public async Task FactoryRegistration_CallsTheContainerMethodInsteadOfAConstructor()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface IClock { }
+		                                       public sealed class SystemClock : IClock { }
+
+		                                       [Container]
+		                                       [Transient<IClock>(Factory = nameof(MakeClock))]
+		                                       public partial class MyContainer
+		                                       {
+		                                       	private IClock MakeClock() => new SystemClock();
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+		// The container calls its own factory; the scope reaches the instance method through the container.
+		await That(source).Contains("return MakeClock();")
+			.Because("the container calls its own factory method");
+		await That(source).Contains("return __container.MakeClock();")
+			.Because("the nested scope reaches the instance factory through the container");
+	}
+
+	[Fact]
+	public async Task FactoryRegistration_ResolvesTheMethodParametersFromTheGraph()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class Settings { }
+		                                       public sealed class Service { public Service(Settings settings) { } }
+
+		                                       [Container]
+		                                       [Singleton<Settings>]
+		                                       [Transient<Service>(Factory = nameof(MakeService))]
+		                                       public partial class MyContainer
+		                                       {
+		                                       	private static Service MakeService(Settings settings) => new Service(settings);
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+		// A static factory is called unqualified; its parameters resolve from the owner.
+		await That(source).Contains("MakeService(ResolveSettings())")
+			.Because("the factory's parameters are resolved from the graph");
+		await That(source).DoesNotContain("__container.MakeService")
+			.Because("a static factory needs no container receiver");
+	}
+
+	[Fact]
+	public async Task InstanceRegistration_ReturnsTheContainerMemberWithoutConstructingOrDisposing()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface IClock { }
+		                                       public sealed class FixedClock : IClock { }
+
+		                                       [Container]
+		                                       [Singleton<IClock>(Instance = nameof(Clock))]
+		                                       public partial class MyContainer
+		                                       {
+		                                       	private readonly IClock Clock = new FixedClock();
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+		await That(source).Contains("private global::MyCode.IClock ResolveIClock() => Clock;")
+			.Because("the container hands back its own pre-built member");
+		await That(source).Contains("private global::MyCode.IClock ResolveIClock() => __container.Clock;")
+			.Because("the nested scope reaches the member through the container");
+		// The pre-built instance is never constructed or registered for disposal.
+		await That(source).DoesNotContain("new global::MyCode.FixedClock")
+			.Because("an Instance registration is not constructed by the container");
+		await That(source).DoesNotContain("__disposables.Add")
+			.Because("the container does not own a pre-built Instance, so it never disposes it");
+	}
 }
