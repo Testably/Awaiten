@@ -39,4 +39,10 @@
 		<PackageVersion Include="coverlet.collector" Version="10.0.1"/>
 		<PackageVersion Include="PublicApiGenerator" Version="11.5.4"/>
 	</ItemGroup>
+	<ItemGroup>
+		<!-- Reference DI containers compared against Awaiten in the resolution benchmarks. -->
+		<PackageVersion Include="Autofac" Version="9.3.0"/>
+		<PackageVersion Include="Jab" Version="0.12.0"/>
+		<PackageVersion Include="Pure.DI" Version="2.4.3"/>
+	</ItemGroup>
 </Project>
