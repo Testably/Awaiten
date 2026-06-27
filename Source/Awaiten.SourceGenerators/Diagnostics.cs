@@ -133,13 +133,14 @@ internal static class Diagnostics
 		isEnabledByDefault: true);
 
 	/// <summary>
-	///     The same implementation is registered with more than one production kind (constructor, factory
-	///     or instance); coalescing into a single instance would silently drop one of them.
+	///     The same implementation is registered with more than one production (a different kind -
+	///     constructor, factory or instance - or the same kind naming a different member); coalescing into
+	///     a single instance would silently drop one of them.
 	/// </summary>
 	public static readonly DiagnosticDescriptor ConflictingProduction = new(
 		"AWT111",
 		"Conflicting production",
-		"'{0}' is registered with conflicting production strategies: {1} and {2}. Register the implementation with a single production strategy.",
+		"'{0}' is registered with conflicting production strategies ({1} and {2}). Register the implementation with a single production strategy.",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);

@@ -40,6 +40,24 @@ public sealed class SingletonAttribute<TImplementation> : Attribute
 /// <typeparam name="TService">The service type under which the instance is resolved.</typeparam>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
 public sealed class SingletonAttribute<TImplementation, TService> : Attribute
-	where TImplementation : class, TService;
+	where TImplementation : class, TService
+{
+	/// <summary>
+	///     The name of a method on the container that produces the instance instead of a constructor
+	///     (an abstract factory). The method may be static or instance, must return a
+	///     <typeparamref name="TImplementation" />, and its parameters are resolved from the graph.
+	///     Registering the same <typeparamref name="TImplementation" /> under several service types with
+	///     the same factory shares a single instance across them.
+	/// </summary>
+	public string? Factory { get; set; }
+
+	/// <summary>
+	///     The name of a field or property on the container of type <typeparamref name="TImplementation" />
+	///     that holds a pre-built instance to expose. The container neither constructs nor disposes it -
+	///     the caller owns it. Registering the same <typeparamref name="TImplementation" /> under several
+	///     service types with the same member exposes one instance through all of them.
+	/// </summary>
+	public string? Instance { get; set; }
+}
 
 #pragma warning restore S2326

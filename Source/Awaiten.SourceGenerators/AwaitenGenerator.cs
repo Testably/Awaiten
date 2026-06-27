@@ -133,13 +133,15 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		foreach (RawRegistration registration in raw)
 		{
 			// Setting both Factory and Instance on one attribute is contradictory; the directives are
-			// mutually exclusive, so report AWT110 against the offending registration.
+			// mutually exclusive, so report AWT110 against the offending registration. Like AWT108/109/112,
+			// this is a fault in a single registration's directives, so it names the service type (the
+			// AWT107/AWT111 coalescing conflicts name the implementation instead).
 			if (registration.ConflictingDirectives)
 			{
 				diagnostics.Add(new DiagnosticInfo(
 					Diagnostics.ConflictingProductionDirectives,
 					LocationInfo.From(registration.Location),
-					new EquatableArray<string>([Display(registration.ImplementationType),])));
+					new EquatableArray<string>([Display(registration.ServiceType),])));
 			}
 
 			implInfos.TryGetValue(registration.ImplementationType, out ImplInfo? info);
@@ -161,10 +163,11 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 					])));
 			}
 
-			// Likewise the production strategy: coalescing keeps the first, so a same-implementation
-			// re-registration that constructs, factories or exposes it differently is reported as AWT111
-			// rather than silently dropped. Checked before the dedup for the same reason as the lifetime.
-			if (info is not null && info.Production != registration.Production &&
+			// Likewise the production: coalescing keeps the first, so a same-implementation re-registration
+			// that constructs, factories or exposes it differently - or names a different factory/instance
+			// member of the same kind - is reported as AWT111 rather than silently dropped. Checked before
+			// the dedup for the same reason as the lifetime.
+			if (info is not null && ConflictsWith(info, registration) &&
 			    reportedProductionConflicts.Add(registration.ImplementationType))
 			{
 				diagnostics.Add(new DiagnosticInfo(
@@ -172,8 +175,8 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 					LocationInfo.From(registration.Location),
 					new EquatableArray<string>([
 						Display(registration.ImplementationType),
-						info.Production.ToString(),
-						registration.Production.ToString(),
+						DescribeProduction(info.Production, info.ProductionMember),
+						DescribeProduction(registration.Production, registration.ProductionMember),
 					])));
 			}
 
@@ -197,6 +200,21 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 		return (implOrder, serviceToImpl);
 	}
+
+	// Two registrations of the same implementation conflict when they produce it differently: a different
+	// kind (constructor vs factory vs instance), or the same kind naming a different container member.
+	// Coalescing keeps the first, so the second would otherwise be dropped without a trace.
+	private static bool ConflictsWith(ImplInfo info, RawRegistration registration)
+		=> info.Production != registration.Production
+		   || !string.Equals(info.ProductionMember, registration.ProductionMember, StringComparison.Ordinal);
+
+	private static string DescribeProduction(ProductionKind production, string? member)
+		=> production switch
+		{
+			ProductionKind.Factory => $"factory '{member}'",
+			ProductionKind.Instance => $"instance '{member}'",
+			_ => "a constructor",
+		};
 
 	// Dependency graph over instance indices, keeping only resolvable edges to built instances.
 	private static Dictionary<int, List<int>> BuildDependencyGraph(

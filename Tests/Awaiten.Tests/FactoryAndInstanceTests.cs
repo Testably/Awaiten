@@ -81,6 +81,27 @@ public partial class FactoryAndInstanceTests
 	}
 
 	[Fact]
+	public async Task Factory_RegisteredUnderSeveralServices_SharesOneInstance()
+	{
+		using SharedFactoryContainer container = new();
+
+		await That((object)container.Resolve<IRead>()).IsSameAs(container.Resolve<IWrite>())
+			.Because("the same implementation behind two services with the same factory is coalesced into one instance");
+	}
+
+	[Fact]
+	public async Task Instance_RegisteredUnderSeveralServices_ExposesOneMember()
+	{
+		Store store = new();
+		using SharedInstanceContainer container = new(store);
+
+		await That((object)container.Resolve<IRead>()).IsSameAs(store)
+			.Because("the pre-built member is exposed as the first service");
+		await That((object)container.Resolve<IWrite>()).IsSameAs(store)
+			.Because("the same pre-built member is exposed as every service it is registered under");
+	}
+
+	[Fact]
 	public async Task Factory_DisposableBehindANonDisposableInterface_IsDisposedWithTheContainer()
 	{
 		DisposableGadget gadget;
@@ -166,5 +187,29 @@ public partial class FactoryAndInstanceTests
 	public partial class GadgetContainer
 	{
 		private static DisposableGadget MakeGadget() => new();
+	}
+
+	public interface IRead;
+
+	public interface IWrite;
+
+	public sealed class Store : IRead, IWrite;
+
+	[Container]
+	[Singleton<Store, IRead>(Factory = nameof(MakeStore))]
+	[Singleton<Store, IWrite>(Factory = nameof(MakeStore))]
+	public partial class SharedFactoryContainer
+	{
+		private static Store MakeStore() => new();
+	}
+
+	[Container]
+	[Singleton<Store, IRead>(Instance = nameof(_store))]
+	[Singleton<Store, IWrite>(Instance = nameof(_store))]
+	public partial class SharedInstanceContainer
+	{
+		private readonly Store _store;
+
+		public SharedInstanceContainer(Store store) => _store = store;
 	}
 }

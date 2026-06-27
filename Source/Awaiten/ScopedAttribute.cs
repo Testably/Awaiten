@@ -41,6 +41,17 @@ public sealed class ScopedAttribute<TImplementation> : Attribute
 /// <typeparam name="TService">The service type under which the instance is resolved.</typeparam>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
 public sealed class ScopedAttribute<TImplementation, TService> : Attribute
-	where TImplementation : class, TService;
+	where TImplementation : class, TService
+{
+	/// <summary>
+	///     The name of a method on the container that produces the instance instead of a constructor
+	///     (an abstract factory). The method may be static or instance, must return a
+	///     <typeparamref name="TImplementation" />, and its parameters are resolved from the graph; the
+	///     result is cached once per scope, like any other scoped registration. Registering the same
+	///     <typeparamref name="TImplementation" /> under several service types with the same factory
+	///     shares a single instance.
+	/// </summary>
+	public string? Factory { get; set; }
+}
 
 #pragma warning restore S2326
