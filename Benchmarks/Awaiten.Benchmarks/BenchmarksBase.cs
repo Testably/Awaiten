@@ -22,10 +22,12 @@ public abstract class BenchmarksBase
 	private sealed class Config : ManualConfig
 	{
 		public Config()
-			=> AddJob(Job.MediumRun
+		{
+			AddJob(Job.MediumRun
 				.WithLaunchCount(1)
 				.WithToolchain(InProcessEmitToolchain.Instance)
 				.WithId("InProcess"));
+		}
 	}
 #pragma warning restore S1144
 }

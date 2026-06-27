@@ -160,6 +160,14 @@ partial class Build
 			BuildExtensions.GithubFile limitedFile =
 				await BuildExtensions.ReadBranchFileAsync(BenchmarkLimitedDataPath, BenchmarkBranch, GithubToken);
 
+			if (dataFile == null || limitedFile == null)
+			{
+				throw new InvalidOperationException(
+					$"The '{BenchmarkBranch}' branch must be seeded with '{BenchmarkDataPath}' and " +
+					$"'{BenchmarkLimitedDataPath}' before benchmark data can be published, but " +
+					$"'{(dataFile == null ? BenchmarkDataPath : BenchmarkLimitedDataPath)}' was not found.");
+			}
+
 			(string updated, string limited) = PageBenchmarkReportGenerator.Append(
 				commitInfo,
 				dataFile.Content,

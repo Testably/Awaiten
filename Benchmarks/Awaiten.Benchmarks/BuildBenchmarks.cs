@@ -1,3 +1,4 @@
+using Awaiten.Benchmarks.Helpers;
 using BenchmarkDotNet.Attributes;
 
 namespace Awaiten.Benchmarks;
@@ -10,9 +11,8 @@ namespace Awaiten.Benchmarks;
 /// </summary>
 public class BuildBenchmarks : BenchmarksBase
 {
-	[Params(8, 64, 256)] public int Size { get; set; }
-
 	private Type[] _types = null!;
+	[Params(8, 64, 256)] public int Size { get; set; }
 
 	[GlobalSetup]
 	public void Setup() => _types = Fixtures.ServiceTypes(Size);

@@ -1,13 +1,14 @@
 using Autofac;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Awaiten.Benchmarks;
+namespace Awaiten.Benchmarks.Helpers;
 
 /// <summary>
 ///     Builds the per-size containers the benchmarks resolve from, over the same B0..B255 marker services.
 ///     The Awaiten, Jab and Pure.DI containers are compile-time generated (see Containers.cs /
 ///     CompetitorContainers.cs); the MS.DI and Autofac ones are built at runtime from the same service
-///     types so every framework registers the same graph.
+///     types so every framework registers the same graph. All six register their services as singletons,
+///     so the resolution benchmark measures dispatch latency rather than per-resolve construction cost.
 /// </summary>
 internal static class Fixtures
 {
@@ -46,7 +47,7 @@ internal static class Fixtures
 		Type[] types = new Type[size];
 		for (int i = 0; i < types.Length; i++)
 		{
-			types[i] = Type.GetType($"Awaiten.Benchmarks.B{i}", throwOnError: true)!;
+			types[i] = Type.GetType($"Awaiten.Benchmarks.B{i}", true)!;
 		}
 
 		return types;

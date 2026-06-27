@@ -1,4 +1,5 @@
 using Autofac;
+using Awaiten.Benchmarks.Helpers;
 using BenchmarkDotNet.Attributes;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -13,15 +14,14 @@ namespace Awaiten.Benchmarks;
 /// </summary>
 public class ResolveBenchmarks : BenchmarksBase
 {
-	[Params(8, 64, 256)] public int Size { get; set; }
+	private IContainer _autofac = null!;
 
 	private IAwaitenContainer _awaiten = null!;
-	private LinearContainer _linear = null!;
-	private ServiceProvider _msdi = null!;
-	private IContainer _autofac = null!;
 	private IServiceProvider _jab = null!;
-	private Func<Type, object> _pure = null!;
 	private Type _lastType = null!;
+	private ServiceProvider _msdi = null!;
+	private Func<Type, object> _pure = null!;
+	[Params(8, 64, 256)] public int Size { get; set; }
 
 	[GlobalSetup]
 	public void Setup()
@@ -29,7 +29,6 @@ public class ResolveBenchmarks : BenchmarksBase
 		_awaiten = Fixtures.Awaiten(Size);
 		Type[] types = Fixtures.ServiceTypes(Size);
 		_lastType = types[types.Length - 1];
-		_linear = new LinearContainer(types);
 		_msdi = Fixtures.BuildMsDI(types);
 		_autofac = Fixtures.BuildAutofac(types);
 		_jab = Fixtures.Jab(Size);
@@ -47,9 +46,6 @@ public class ResolveBenchmarks : BenchmarksBase
 
 	[Benchmark(Baseline = true)]
 	public object Resolve_Awaiten() => _awaiten.Resolve(_lastType);
-
-	[Benchmark]
-	public object Resolve_Linear() => _linear.Resolve(_lastType);
 
 	[Benchmark]
 	public object? Resolve_MsDI() => _msdi.GetService(_lastType);

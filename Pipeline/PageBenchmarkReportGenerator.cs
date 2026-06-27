@@ -177,13 +177,12 @@ public class PageBenchmarkReportGenerator
 		}
 
 		private static bool IsIncluded(string library)
-			=> library is "Awaiten" or "Linear" or "MsDI" or "Autofac" or "Jab" or "PureDI";
+			=> library is "Awaiten" or "MsDI" or "Autofac" or "Jab" or "PureDI";
 
 		private static string GetColor(string library)
 			=> library switch
 			{
 				"Awaiten" => "#63A2AC",
-				"Linear" => "#888888",
 				"MsDI" => "#A052B0",
 				"Autofac" => "#5E2750",
 				"Jab" => "#4A6FA5",
