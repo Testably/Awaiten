@@ -25,7 +25,7 @@ namespace Awaiten.Benchmarks;
 public class RealisticResolveBenchmarks : BenchmarksBase
 {
 	private IContainer _autofac = null!;
-	private IAwaitenContainer _awaiten = null!;
+	private AwaitenRealisticContainer _awaiten = null!;
 	private DryIoc.Container _dryioc = null!;
 	private JabRealisticContainer _jab = null!;
 	private ServiceProvider _msdi = null!;

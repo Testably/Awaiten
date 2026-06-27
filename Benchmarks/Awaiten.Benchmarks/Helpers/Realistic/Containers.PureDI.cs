@@ -7,7 +7,7 @@ namespace Awaiten.Benchmarks.Helpers;
 // runtime, so the unused-private-member rule does not apply here.
 #pragma warning disable S1144
 
-internal partial class PureRealisticContainer
+internal sealed partial class PureRealisticContainer
 {
 	private static void Setup() => DI.Setup(nameof(PureRealisticContainer))
 		.Hint(Hint.ScopeMethodName, "CreateScope")
