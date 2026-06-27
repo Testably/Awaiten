@@ -15,7 +15,7 @@ namespace Awaiten.Benchmarks;
 [Transient(typeof(B5))]
 [Transient(typeof(B6))]
 [Transient(typeof(B7))]
-public partial class JabContainer8;
+public sealed partial class JabContainer8;
 
 [ServiceProvider]
 [Transient(typeof(B0))]
@@ -82,7 +82,7 @@ public partial class JabContainer8;
 [Transient(typeof(B61))]
 [Transient(typeof(B62))]
 [Transient(typeof(B63))]
-public partial class JabContainer64;
+public sealed partial class JabContainer64;
 
 [ServiceProvider]
 [Transient(typeof(B0))]
@@ -341,8 +341,11 @@ public partial class JabContainer64;
 [Transient(typeof(B253))]
 [Transient(typeof(B254))]
 [Transient(typeof(B255))]
-public partial class JabContainer256;
+public sealed partial class JabContainer256;
 
+// Pure.DI consumes the Setup() methods at compile time to generate the container; they are never
+// invoked at runtime, so the unused-private-member rule does not apply here.
+#pragma warning disable S1144
 internal partial class PureContainer8
 {
 	private static void Setup() => DI.Setup(nameof(PureContainer8))
@@ -689,3 +692,4 @@ internal partial class PureContainer256
 		;
 }
 
+#pragma warning restore S1144

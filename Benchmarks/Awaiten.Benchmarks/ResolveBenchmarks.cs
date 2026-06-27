@@ -1,5 +1,6 @@
 using Autofac;
 using BenchmarkDotNet.Attributes;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Awaiten.Benchmarks;
 
@@ -16,7 +17,7 @@ public class ResolveBenchmarks : BenchmarksBase
 
 	private IAwaitenContainer _awaiten = null!;
 	private LinearContainer _linear = null!;
-	private IServiceProvider _msdi = null!;
+	private ServiceProvider _msdi = null!;
 	private IContainer _autofac = null!;
 	private IServiceProvider _jab = null!;
 	private Func<Type, object> _pure = null!;
@@ -39,7 +40,7 @@ public class ResolveBenchmarks : BenchmarksBase
 	public void Cleanup()
 	{
 		_awaiten.Dispose();
-		(_msdi as IDisposable)?.Dispose();
+		_msdi.Dispose();
 		_autofac.Dispose();
 		(_jab as IDisposable)?.Dispose();
 	}

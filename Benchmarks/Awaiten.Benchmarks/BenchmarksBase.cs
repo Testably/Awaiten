@@ -17,6 +17,8 @@ namespace Awaiten.Benchmarks;
 [MemoryDiagnoser]
 public abstract class BenchmarksBase
 {
+	// The constructor is invoked by BenchmarkDotNet via [Config(typeof(Config))], not from code.
+#pragma warning disable S1144
 	private sealed class Config : ManualConfig
 	{
 		public Config()
@@ -25,4 +27,5 @@ public abstract class BenchmarksBase
 				.WithToolchain(InProcessEmitToolchain.Instance)
 				.WithId("InProcess"));
 	}
+#pragma warning restore S1144
 }

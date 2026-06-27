@@ -271,7 +271,7 @@ public sealed class B255;
 [Singleton<B5>]
 [Singleton<B6>]
 [Singleton<B7>]
-public partial class GenContainer8;
+public sealed partial class GenContainer8;
 
 [Container]
 [Singleton<B0>]
@@ -338,7 +338,7 @@ public partial class GenContainer8;
 [Singleton<B61>]
 [Singleton<B62>]
 [Singleton<B63>]
-public partial class GenContainer64;
+public sealed partial class GenContainer64;
 
 [Container]
 [Singleton<B0>]
@@ -597,5 +597,5 @@ public partial class GenContainer64;
 [Singleton<B253>]
 [Singleton<B254>]
 [Singleton<B255>]
-public partial class GenContainer256;
+public sealed partial class GenContainer256;
 
