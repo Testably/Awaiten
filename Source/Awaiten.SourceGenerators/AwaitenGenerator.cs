@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using System.Text;
 using Awaiten.SourceGenerators.Internals;
 using Microsoft.CodeAnalysis;
@@ -24,7 +23,6 @@ namespace Awaiten.SourceGenerators;
 public sealed class AwaitenGenerator : IIncrementalGenerator
 {
 	private const string ContainerAttributeName = "Awaiten.ContainerAttribute";
-	private const string AttributeNamespace = "Awaiten";
 
 	private static readonly SymbolDisplayFormat FullyQualified = SymbolDisplayFormat.FullyQualifiedFormat;
 
@@ -59,7 +57,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 		INamedTypeSymbol? disposableSymbol = context.SemanticModel.Compilation.GetTypeByMetadataName("System.IDisposable");
 
-		List<RawRegistration> raw = CollectRegistrations(containerSymbol);
+		List<RawRegistration> raw = ContainerRegistrations.Collect(containerSymbol);
 
 		List<DiagnosticInfo> diagnostics = new();
 
@@ -143,7 +141,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			{
 				diagnostics.Add(new DiagnosticInfo(
 					Diagnostics.ConflictingLifetime,
-					registration.Location,
+					LocationInfo.From(registration.Location),
 					new EquatableArray<string>([
 						Display(registration.ImplementationType),
 						info.Lifetime.ToString(),
@@ -159,7 +157,8 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			if (info is null)
 			{
 				info = new ImplInfo(
-					registration.ImplementationType, registration.Implementation, registration.Lifetime, registration.Location);
+					registration.ImplementationType, registration.Implementation, registration.Lifetime,
+					LocationInfo.From(registration.Location));
 				implInfos.Add(registration.ImplementationType, info);
 				implOrder.Add(info);
 			}
@@ -244,18 +243,6 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 		bool disposable = disposableSymbol is not null && ImplementsInterface(info.Symbol, disposableSymbol);
 
-		// A disposable transient resolved from the container root is not released until the container is
-		// disposed, so such instances accumulate; resolving it from a scope releases it with the scope.
-		// Reported per registration, not per resolution site (see Diagnostics.DisposableTransient): it is a
-		// warning because the root resolving it - and so accumulating - is possible but not certain.
-		if (disposable && info.Lifetime == Lifetime.Transient)
-		{
-			diagnostics.Add(new DiagnosticInfo(
-				Diagnostics.DisposableTransient,
-				info.Location,
-				new EquatableArray<string>([Display(info.ImplementationType),])));
-		}
-
 		return new InstanceModel(
 			info.ImplementationType,
 			info.Symbol.Name,
@@ -268,65 +255,6 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		static bool ImplementsInterface(INamedTypeSymbol type, INamedTypeSymbol @interface)
 		{
 			return type.AllInterfaces.Any(implemented => SymbolEqualityComparer.Default.Equals(implemented, @interface));
-		}
-	}
-
-	private static List<RawRegistration> CollectRegistrations(INamedTypeSymbol containerSymbol)
-	{
-		List<RawRegistration> result = new();
-		foreach (AttributeData attribute in containerSymbol.GetAttributes())
-		{
-			if (attribute.AttributeClass is not { IsGenericType: true, } attributeClass)
-			{
-				continue;
-			}
-
-			if (attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace)
-			{
-				continue;
-			}
-
-			Lifetime? lifetime = attributeClass.Name switch
-			{
-				"SingletonAttribute" => Lifetime.Singleton,
-				"TransientAttribute" => Lifetime.Transient,
-				"ScopedAttribute" => Lifetime.Scoped,
-				_ => null,
-			};
-			if (lifetime is null)
-			{
-				continue;
-			}
-
-			ImmutableArrayGuard(attributeClass.TypeArguments, out ITypeSymbol? implementation, out ITypeSymbol? service);
-			if (implementation is null)
-			{
-				continue;
-			}
-
-			service ??= implementation;
-			Location? location = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation();
-			result.Add(new RawRegistration(
-				service.ToDisplayString(FullyQualified),
-				implementation.ToDisplayString(FullyQualified),
-				lifetime.Value,
-				(INamedTypeSymbol)implementation,
-				LocationInfo.From(location)));
-		}
-
-		return result;
-
-		static void ImmutableArrayGuard(
-			ImmutableArray<ITypeSymbol> typeArguments,
-			out ITypeSymbol? implementation,
-			out ITypeSymbol? service)
-		{
-			implementation = typeArguments.Length > 0 ? typeArguments[0] : null;
-			service = typeArguments.Length > 1 ? typeArguments[1] : null;
-			if (implementation is not INamedTypeSymbol)
-			{
-				implementation = null;
-			}
 		}
 	}
 
@@ -511,13 +439,6 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		=> fullyQualified.StartsWith("global::", StringComparison.Ordinal)
 			? fullyQualified.Substring("global::".Length)
 			: fullyQualified;
-
-	private sealed record RawRegistration(
-		string ServiceType,
-		string ImplementationType,
-		Lifetime Lifetime,
-		INamedTypeSymbol Implementation,
-		LocationInfo? Location);
 
 	private sealed class ImplInfo
 	{

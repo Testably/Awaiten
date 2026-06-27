@@ -27,7 +27,7 @@ public static class Generator
 		CSharpCompilation compilation = CSharpCompilation.Create(
 			"TestAssembly",
 			syntaxTrees,
-			GetReferences(assemblyTypes),
+			References.For(assemblyTypes),
 			new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 
 		GeneratorDriver driver = CSharpGeneratorDriver.Create(
@@ -50,16 +50,4 @@ public static class Generator
 		];
 		return new GeneratorResult(generatedSources, diagnosticMessages);
 	}
-
-	private static List<PortableExecutableReference> GetReferences(Type[] types) =>
-		AppDomain.CurrentDomain.GetAssemblies()
-			.Where(x => !x.IsDynamic && !string.IsNullOrWhiteSpace(x.Location))
-			.Select(x => x.Location)
-			.Concat([
-				typeof(ContainerAttribute).Assembly.Location,
-				..types.Select(t => t.Assembly.Location),
-			])
-			.Distinct()
-			.Select(loc => MetadataReference.CreateFromFile(loc))
-			.ToList();
 }
