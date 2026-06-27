@@ -17,6 +17,8 @@ partial class Build
 	Project[] UnitTestProjects =>
 	[
 		Solution.Tests.Awaiten_Tests,
+		Solution.Tests.Awaiten_Extensions_DependencyInjection_Tests,
+		Solution.Tests.Awaiten_SourceGenerators_Tests,
 	];
 
 	Target DotNetUnitTests => _ => _
