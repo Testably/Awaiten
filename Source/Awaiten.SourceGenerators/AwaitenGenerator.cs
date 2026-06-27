@@ -149,8 +149,24 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 					])));
 			}
 
-			if (serviceToImpl.ContainsKey(registration.ServiceType))
+			// The service is already mapped. Coalescing keeps the first implementation, so a second
+			// registration of the same service to a *different* implementation would be silently dropped -
+			// report it as AWT108 rather than ignore it. Re-registering the same implementation (an exact
+			// duplicate, possibly under another service) is idempotent and stays silent.
+			if (serviceToImpl.TryGetValue(registration.ServiceType, out string? mappedImpl))
 			{
+				if (mappedImpl != registration.ImplementationType)
+				{
+					diagnostics.Add(new DiagnosticInfo(
+						Diagnostics.AmbiguousServiceRegistration,
+						LocationInfo.From(registration.Location),
+						new EquatableArray<string>([
+							Display(registration.ServiceType),
+							Display(mappedImpl),
+							Display(registration.ImplementationType),
+						])));
+				}
+
 				continue;
 			}
 

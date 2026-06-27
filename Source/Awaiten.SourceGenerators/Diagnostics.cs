@@ -95,4 +95,16 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     The same service type is registered to more than one implementation. Coalescing keeps the
+	///     first and silently drops the rest, so the later registration would never be resolved.
+	/// </summary>
+	public static readonly DiagnosticDescriptor AmbiguousServiceRegistration = new(
+		"AWT108",
+		"Ambiguous service registration",
+		"'{0}' is registered to more than one implementation: '{1}' is used and '{2}' is ignored. Register the service type to a single implementation.",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }
