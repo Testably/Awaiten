@@ -261,7 +261,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		// interface (so the not-instantiable check is skipped) and it contributes no graph edges.
 		if (info.Production == ProductionKind.Instance)
 		{
-			ValidateInstanceMember(containerSymbol, info, compilation, diagnostics);
+			bool memberIsStatic = ValidateInstanceMember(containerSymbol, info, compilation, diagnostics);
 			return new InstanceModel(
 				info.ImplementationType,
 				info.Symbol.Name,
@@ -271,7 +271,8 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 				false,
 				info.Symbol.IsReferenceType,
 				ProductionKind.Instance,
-				info.ProductionMember);
+				info.ProductionMember,
+				memberIsStatic);
 		}
 
 		// Select the producer: a container method (Factory) or the implementation's constructor (the
@@ -385,7 +386,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	///     <see cref="Diagnostics.InvalidInstance">AWT109</see> when no accessible field or property of
 	///     that name (on the container or an accessible base type) holds the registered type.
 	/// </summary>
-	private static void ValidateInstanceMember(
+	private static bool ValidateInstanceMember(
 		INamedTypeSymbol containerSymbol,
 		ImplInfo info,
 		Compilation compilation,
@@ -401,7 +402,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			};
 			if (memberType is not null && compilation.HasImplicitConversion(memberType, info.Symbol))
 			{
-				return;
+				return member.IsStatic;
 			}
 		}
 
@@ -409,6 +410,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			Diagnostics.InvalidInstance,
 			info.Location,
 			new EquatableArray<string>([Display(info.ServiceTypes[0]), info.ProductionMember!,])));
+		return false;
 	}
 
 	private static IMethodSymbol? SelectConstructor(

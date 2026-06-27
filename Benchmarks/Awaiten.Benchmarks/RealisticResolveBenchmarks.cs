@@ -1,5 +1,4 @@
 using Autofac;
-using Awaiten;
 using Awaiten.Benchmarks.Helpers;
 using BenchmarkDotNet.Attributes;
 using DryIoc;
@@ -115,7 +114,7 @@ public class RealisticResolveBenchmarks : BenchmarksBase
 	[Benchmark(Baseline = true)]
 	public object Realistic_Awaiten()
 	{
-		using IAwaitenScope scope = _awaiten.CreateScope();
+		using AwaitenRealisticContainer.Scope scope = _awaiten.CreateScope();
 		return scope.Resolve<RequestHandler>();
 	}
 
@@ -160,6 +159,6 @@ public class RealisticResolveBenchmarks : BenchmarksBase
 	public object Realistic_PureDI()
 	{
 		using PureRealisticContainer scope = PureRealisticContainer.CreateScope(_pure, new PureRealisticContainer());
-		return scope.Root;
+		return scope.Resolve<RequestHandler>();
 	}
 }
