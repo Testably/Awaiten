@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<Description>Compile-time dependency injection for .NET.</Description>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<None Include="$(MSBuildProjectDirectory)\..\Awaiten.SourceGenerators\bin\$(Configuration)\netstandard2.0\Awaiten.SourceGenerators.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="IsExternalInit">
+			<PrivateAssets>all</PrivateAssets>
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		</PackageReference>
+	</ItemGroup>
+
+</Project>

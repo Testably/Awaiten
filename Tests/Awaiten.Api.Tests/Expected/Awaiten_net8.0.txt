@@ -1,0 +1,16 @@
+[assembly: System.Reflection.AssemblyMetadata("RepositoryUrl", "https://github.com/Testably/Awaiten.git")]
+[assembly: System.Runtime.Versioning.TargetFramework(".NETCoreApp,Version=v8.0", FrameworkDisplayName=".NET 8.0")]
+namespace Awaiten
+{
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=false, Inherited=false)]
+    public sealed class ContainerAttribute : System.Attribute
+    {
+        public ContainerAttribute() { }
+        public bool SyncResolveAfterInit { get; set; }
+    }
+    public interface IAwaitenContainer
+    {
+        object Resolve(System.Type serviceType);
+        bool TryResolve(System.Type serviceType, out object? instance);
+    }
+}
