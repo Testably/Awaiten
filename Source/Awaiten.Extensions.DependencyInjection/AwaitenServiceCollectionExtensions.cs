@@ -22,7 +22,7 @@ public static class AwaitenServiceCollectionExtensions
 			throw new ArgumentNullException(nameof(services));
 		}
 
-		// TODO: project TContainer.Registrations into the service collection (see RFC §6.3).
+		// TODO: project TContainer.Registrations into the service collection.
 		return services;
 	}
 }
