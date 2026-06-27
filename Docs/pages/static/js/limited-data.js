@@ -6,17 +6,25 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Jun 27 17:52:00 2026 \u002B0200",
         "message": "fix: resolve benchmark marker types and guard report publishing (#19)"
+      },
+      {
+        "sha": "c39ceed4c71ce6d5ed1d6000eab48eaa5e4d49ee",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Jun 27 18:42:24 2026 \u002B0200",
+        "message": "perf: dispatch resolution through a static Type table instead of a linear if-chain (#20)"
       }
     ],
     "labels": [
-      "9e826c17"
+      "9e826c17",
+      "c39ceed4"
     ],
     "datasets": [
       {
         "label": "Awaiten time",
         "unit": "ns",
         "data": [
-          6.042193595033425
+          6.042193595033425,
+          9.984777721265951
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -28,6 +36,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0
         ],
         "borderColor": "#63A2AC",
@@ -43,7 +52,8 @@ window.BENCHMARK_DATA = {
         "label": "MsDI time",
         "unit": "ns",
         "data": [
-          7.011932362403188
+          7.011932362403188,
+          7.165684852462548
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -55,6 +65,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0
         ],
         "borderColor": "#A052B0",
@@ -70,7 +81,8 @@ window.BENCHMARK_DATA = {
         "label": "Autofac time",
         "unit": "ns",
         "data": [
-          106.18884980678558
+          106.18884980678558,
+          105.09433993271419
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -82,6 +94,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656
         ],
         "borderColor": "#5E2750",
@@ -97,7 +110,8 @@ window.BENCHMARK_DATA = {
         "label": "Jab time",
         "unit": "ns",
         "data": [
-          2.861889192213615
+          2.861889192213615,
+          2.864032766116517
         ],
         "borderColor": "#4A6FA5",
         "backgroundColor": "#4A6FA5",
@@ -109,6 +123,7 @@ window.BENCHMARK_DATA = {
         "label": "Jab memory",
         "unit": "b",
         "data": [
+          0,
           0
         ],
         "borderColor": "#4A6FA5",
@@ -124,7 +139,8 @@ window.BENCHMARK_DATA = {
         "label": "PureDI time",
         "unit": "ns",
         "data": [
-          6.725859894355138
+          6.725859894355138,
+          6.806414321064949
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
@@ -136,6 +152,7 @@ window.BENCHMARK_DATA = {
         "label": "PureDI memory",
         "unit": "b",
         "data": [
+          0,
           0
         ],
         "borderColor": "#FF8C00",
@@ -156,17 +173,25 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Jun 27 17:52:00 2026 \u002B0200",
         "message": "fix: resolve benchmark marker types and guard report publishing (#19)"
+      },
+      {
+        "sha": "c39ceed4c71ce6d5ed1d6000eab48eaa5e4d49ee",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Jun 27 18:42:24 2026 \u002B0200",
+        "message": "perf: dispatch resolution through a static Type table instead of a linear if-chain (#20)"
       }
     ],
     "labels": [
-      "9e826c17"
+      "9e826c17",
+      "c39ceed4"
     ],
     "datasets": [
       {
         "label": "Awaiten time",
         "unit": "ns",
         "data": [
-          15.387899508078894
+          15.387899508078894,
+          10.55480164984862
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -178,6 +203,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0
         ],
         "borderColor": "#63A2AC",
@@ -193,7 +219,8 @@ window.BENCHMARK_DATA = {
         "label": "MsDI time",
         "unit": "ns",
         "data": [
-          6.978684454091957
+          6.978684454091957,
+          7.740073883533478
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -205,6 +232,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0
         ],
         "borderColor": "#A052B0",
@@ -220,7 +248,8 @@ window.BENCHMARK_DATA = {
         "label": "Autofac time",
         "unit": "ns",
         "data": [
-          110.4415994148988
+          110.4415994148988,
+          109.30096944478842
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -232,6 +261,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656
         ],
         "borderColor": "#5E2750",
@@ -247,7 +277,8 @@ window.BENCHMARK_DATA = {
         "label": "Jab time",
         "unit": "ns",
         "data": [
-          12.780041709542274
+          12.780041709542274,
+          12.78639352780122
         ],
         "borderColor": "#4A6FA5",
         "backgroundColor": "#4A6FA5",
@@ -259,6 +290,7 @@ window.BENCHMARK_DATA = {
         "label": "Jab memory",
         "unit": "b",
         "data": [
+          0,
           0
         ],
         "borderColor": "#4A6FA5",
@@ -274,7 +306,8 @@ window.BENCHMARK_DATA = {
         "label": "PureDI time",
         "unit": "ns",
         "data": [
-          7.416174832444924
+          7.416174832444924,
+          7.728808966966776
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
@@ -286,6 +319,7 @@ window.BENCHMARK_DATA = {
         "label": "PureDI memory",
         "unit": "b",
         "data": [
+          0,
           0
         ],
         "borderColor": "#FF8C00",
@@ -306,17 +340,25 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Jun 27 17:52:00 2026 \u002B0200",
         "message": "fix: resolve benchmark marker types and guard report publishing (#19)"
+      },
+      {
+        "sha": "c39ceed4c71ce6d5ed1d6000eab48eaa5e4d49ee",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Jun 27 18:42:24 2026 \u002B0200",
+        "message": "perf: dispatch resolution through a static Type table instead of a linear if-chain (#20)"
       }
     ],
     "labels": [
-      "9e826c17"
+      "9e826c17",
+      "c39ceed4"
     ],
     "datasets": [
       {
         "label": "Awaiten time",
         "unit": "ns",
         "data": [
-          45.455347631658825
+          45.455347631658825,
+          11.401101275132252
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -328,6 +370,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0
         ],
         "borderColor": "#63A2AC",
@@ -343,7 +386,8 @@ window.BENCHMARK_DATA = {
         "label": "MsDI time",
         "unit": "ns",
         "data": [
-          7.005394069211824
+          7.005394069211824,
+          7.192912148741575
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -355,6 +399,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0
         ],
         "borderColor": "#A052B0",
@@ -370,7 +415,8 @@ window.BENCHMARK_DATA = {
         "label": "Autofac time",
         "unit": "ns",
         "data": [
-          109.87674596905708
+          109.87674596905708,
+          105.27381155320576
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -382,6 +428,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656
         ],
         "borderColor": "#5E2750",
@@ -397,7 +444,8 @@ window.BENCHMARK_DATA = {
         "label": "Jab time",
         "unit": "ns",
         "data": [
-          42.81887869040171
+          42.81887869040171,
+          42.793274948230156
         ],
         "borderColor": "#4A6FA5",
         "backgroundColor": "#4A6FA5",
@@ -409,6 +457,7 @@ window.BENCHMARK_DATA = {
         "label": "Jab memory",
         "unit": "b",
         "data": [
+          0,
           0
         ],
         "borderColor": "#4A6FA5",
@@ -424,7 +473,8 @@ window.BENCHMARK_DATA = {
         "label": "PureDI time",
         "unit": "ns",
         "data": [
-          8.274077805188986
+          8.274077805188986,
+          8.261776864528656
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
@@ -436,6 +486,7 @@ window.BENCHMARK_DATA = {
         "label": "PureDI memory",
         "unit": "b",
         "data": [
+          0,
           0
         ],
         "borderColor": "#FF8C00",
@@ -456,17 +507,25 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Jun 27 17:52:00 2026 \u002B0200",
         "message": "fix: resolve benchmark marker types and guard report publishing (#19)"
+      },
+      {
+        "sha": "c39ceed4c71ce6d5ed1d6000eab48eaa5e4d49ee",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Jun 27 18:42:24 2026 \u002B0200",
+        "message": "perf: dispatch resolution through a static Type table instead of a linear if-chain (#20)"
       }
     ],
     "labels": [
-      "9e826c17"
+      "9e826c17",
+      "c39ceed4"
     ],
     "datasets": [
       {
         "label": "Awaiten time",
         "unit": "ns",
         "data": [
-          22.586610968907674
+          22.586610968907674,
+          25.408868404229484
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -478,6 +537,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          160,
           160
         ],
         "borderColor": "#63A2AC",
@@ -493,7 +553,8 @@ window.BENCHMARK_DATA = {
         "label": "MsDI time",
         "unit": "ns",
         "data": [
-          1650.7135983784995
+          1650.7135983784995,
+          1556.666805903117
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -505,6 +566,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          5688,
           5688
         ],
         "borderColor": "#A052B0",
@@ -520,7 +582,8 @@ window.BENCHMARK_DATA = {
         "label": "Autofac time",
         "unit": "ns",
         "data": [
-          24660.685026041665
+          24660.685026041665,
+          28979.10302734375
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -532,7 +595,8 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
-          33092
+          33092,
+          33098
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -547,7 +611,8 @@ window.BENCHMARK_DATA = {
         "label": "Jab time",
         "unit": "ns",
         "data": [
-          10.445150269071261
+          10.445150269071261,
+          9.20387484558991
         ],
         "borderColor": "#4A6FA5",
         "backgroundColor": "#4A6FA5",
@@ -559,6 +624,7 @@ window.BENCHMARK_DATA = {
         "label": "Jab memory",
         "unit": "b",
         "data": [
+          96,
           96
         ],
         "borderColor": "#4A6FA5",
@@ -574,7 +640,8 @@ window.BENCHMARK_DATA = {
         "label": "PureDI time",
         "unit": "ns",
         "data": [
-          16.12693266669909
+          16.12693266669909,
+          15.165443106339527
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
@@ -586,6 +653,7 @@ window.BENCHMARK_DATA = {
         "label": "PureDI memory",
         "unit": "b",
         "data": [
+          128,
           128
         ],
         "borderColor": "#FF8C00",
@@ -606,17 +674,25 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Jun 27 17:52:00 2026 \u002B0200",
         "message": "fix: resolve benchmark marker types and guard report publishing (#19)"
+      },
+      {
+        "sha": "c39ceed4c71ce6d5ed1d6000eab48eaa5e4d49ee",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Jun 27 18:42:24 2026 \u002B0200",
+        "message": "perf: dispatch resolution through a static Type table instead of a linear if-chain (#20)"
       }
     ],
     "labels": [
-      "9e826c17"
+      "9e826c17",
+      "c39ceed4"
     ],
     "datasets": [
       {
         "label": "Awaiten time",
         "unit": "ns",
         "data": [
-          45.63413532574972
+          45.63413532574972,
+          42.71426098163311
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -628,6 +704,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          608,
           608
         ],
         "borderColor": "#63A2AC",
@@ -643,7 +720,8 @@ window.BENCHMARK_DATA = {
         "label": "MsDI time",
         "unit": "ns",
         "data": [
-          4279.234137471517
+          4279.234137471517,
+          4191.629210408529
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -655,6 +733,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          16336,
           16336
         ],
         "borderColor": "#A052B0",
@@ -670,7 +749,8 @@ window.BENCHMARK_DATA = {
         "label": "Autofac time",
         "unit": "ns",
         "data": [
-          135563.01016671318
+          135563.01016671318,
+          167634.58933803014
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -682,7 +762,8 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
-          189845
+          189845,
+          190574
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -697,7 +778,8 @@ window.BENCHMARK_DATA = {
         "label": "Jab time",
         "unit": "ns",
         "data": [
-          31.761847615242004
+          31.761847615242004,
+          25.509863802364894
         ],
         "borderColor": "#4A6FA5",
         "backgroundColor": "#4A6FA5",
@@ -709,6 +791,7 @@ window.BENCHMARK_DATA = {
         "label": "Jab memory",
         "unit": "b",
         "data": [
+          544,
           544
         ],
         "borderColor": "#4A6FA5",
@@ -724,7 +807,8 @@ window.BENCHMARK_DATA = {
         "label": "PureDI time",
         "unit": "ns",
         "data": [
-          38.221518198649086
+          38.221518198649086,
+          34.240006282925606
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
@@ -736,6 +820,7 @@ window.BENCHMARK_DATA = {
         "label": "PureDI memory",
         "unit": "b",
         "data": [
+          576,
           576
         ],
         "borderColor": "#FF8C00",
@@ -756,17 +841,25 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Jun 27 17:52:00 2026 \u002B0200",
         "message": "fix: resolve benchmark marker types and guard report publishing (#19)"
+      },
+      {
+        "sha": "c39ceed4c71ce6d5ed1d6000eab48eaa5e4d49ee",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Jun 27 18:42:24 2026 \u002B0200",
+        "message": "perf: dispatch resolution through a static Type table instead of a linear if-chain (#20)"
       }
     ],
     "labels": [
-      "9e826c17"
+      "9e826c17",
+      "c39ceed4"
     ],
     "datasets": [
       {
         "label": "Awaiten time",
         "unit": "ns",
         "data": [
-          115.49085221971784
+          115.49085221971784,
+          93.44233902863094
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -778,6 +871,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          2144,
           2144
         ],
         "borderColor": "#63A2AC",
@@ -793,7 +887,8 @@ window.BENCHMARK_DATA = {
         "label": "MsDI time",
         "unit": "ns",
         "data": [
-          14105.811452229818
+          14105.811452229818,
+          14303.591486249652
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -805,6 +900,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          61016,
           61016
         ],
         "borderColor": "#A052B0",
@@ -820,7 +916,8 @@ window.BENCHMARK_DATA = {
         "label": "Autofac time",
         "unit": "ns",
         "data": [
-          555859.5663311298
+          555859.5663311298,
+          683072.6413225447
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -832,7 +929,8 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
-          739452
+          739452,
+          741789
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -847,7 +945,8 @@ window.BENCHMARK_DATA = {
         "label": "Jab time",
         "unit": "ns",
         "data": [
-          104.94684716860453
+          104.94684716860453,
+          79.59447942574819
         ],
         "borderColor": "#4A6FA5",
         "backgroundColor": "#4A6FA5",
@@ -859,6 +958,7 @@ window.BENCHMARK_DATA = {
         "label": "Jab memory",
         "unit": "b",
         "data": [
+          2080,
           2080
         ],
         "borderColor": "#4A6FA5",
@@ -874,7 +974,8 @@ window.BENCHMARK_DATA = {
         "label": "PureDI time",
         "unit": "ns",
         "data": [
-          115.83049867947896
+          115.83049867947896,
+          89.94245272874832
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
@@ -886,6 +987,7 @@ window.BENCHMARK_DATA = {
         "label": "PureDI memory",
         "unit": "b",
         "data": [
+          2112,
           2112
         ],
         "borderColor": "#FF8C00",
