@@ -12,9 +12,9 @@ public partial class ResolutionTests
 	{
 		GraphContainer container = new();
 
-		Leaf leaf = container.Get<Leaf>();
-		IMiddle middle = container.Get<IMiddle>();
-		Top top = container.Get<Top>();
+		Leaf leaf = container.Resolve<Leaf>();
+		IMiddle middle = container.Resolve<IMiddle>();
+		Top top = container.Resolve<Top>();
 
 		await That(middle.Leaf).IsSameAs(leaf).Because("the singleton Leaf is shared by every consumer");
 		await That(top.Leaf).IsSameAs(leaf).Because("the singleton Leaf is shared by every consumer");
@@ -37,7 +37,7 @@ public partial class ResolutionTests
 
 		object middle = container.Resolve(typeof(IMiddle));
 
-		await That(middle).IsSameAs(container.Get<IMiddle>());
+		await That(middle).IsSameAs(container.Resolve<IMiddle>());
 	}
 
 	[Fact]
@@ -45,8 +45,8 @@ public partial class ResolutionTests
 	{
 		GraphContainer container = new();
 
-		Leaf first = container.Get<Leaf>();
-		Leaf second = container.Get<Leaf>();
+		Leaf first = container.Resolve<Leaf>();
+		Leaf second = container.Resolve<Leaf>();
 
 		await That(first).IsSameAs(second);
 	}
@@ -56,8 +56,8 @@ public partial class ResolutionTests
 	{
 		GraphContainer container = new();
 
-		IMiddle first = container.Get<IMiddle>();
-		IMiddle second = container.Get<IMiddle>();
+		IMiddle first = container.Resolve<IMiddle>();
+		IMiddle second = container.Resolve<IMiddle>();
 
 		await That(first).IsSameAs(second);
 		await That(first).Is<Middle>();
@@ -68,8 +68,8 @@ public partial class ResolutionTests
 	{
 		GraphContainer container = new();
 
-		Top first = container.Get<Top>();
-		Top second = container.Get<Top>();
+		Top first = container.Resolve<Top>();
+		Top second = container.Resolve<Top>();
 
 		await That(ReferenceEquals(first, second)).IsFalse();
 	}

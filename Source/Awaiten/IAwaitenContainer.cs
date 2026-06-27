@@ -3,21 +3,18 @@ using System;
 namespace Awaiten;
 
 /// <summary>
-///     The neutral resolution surface implemented by every generated container.
-///     This is the dependency-free seam that the
-///     <c>Awaiten.Extensions.DependencyInjection</c> companion package adapts to
-///     <see cref="IServiceProvider" />.
+///     A generated container: the root <see cref="IAwaitenResolver" /> that owns the singletons and
+///     hands out scopes.
 /// </summary>
-public interface IAwaitenContainer
+/// <remarks>
+///     Disposing the container disposes the singletons it owns (and any disposables created while
+///     building them), in reverse order of creation.
+/// </remarks>
+public interface IAwaitenContainer : IAwaitenResolver, IDisposable
 {
 	/// <summary>
-	///     Resolves a service of the given <paramref name="serviceType" />,
-	///     throwing if it is not registered.
+	///     Creates a new <see cref="IAwaitenScope" />. Scoped registrations resolve to a single
+	///     instance per scope; disposing the scope disposes the instances it owns.
 	/// </summary>
-	object Resolve(Type serviceType);
-
-	/// <summary>
-	///     Attempts to resolve a service of the given <paramref name="serviceType" />.
-	/// </summary>
-	bool TryResolve(Type serviceType, out object? instance);
+	IAwaitenScope CreateScope();
 }

@@ -45,5 +45,11 @@ public sealed class AwaitenServiceCollectionExtensionsTests
 			instance = null;
 			return false;
 		}
+
+		public IAwaitenScope CreateScope() => throw new NotSupportedException();
+
+		public void Dispose()
+		{
+		}
 	}
 }
