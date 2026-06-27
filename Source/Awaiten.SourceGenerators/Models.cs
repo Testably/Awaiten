@@ -45,11 +45,13 @@ internal sealed record DiagnosticInfo(DiagnosticDescriptor Descriptor, LocationI
 
 /// <summary>
 ///     A single registration on a container: an implementation, the service type it is resolved as,
-///     its lifetime, and the service types of its selected constructor's parameters.
+///     the implementation's simple name (used to name generated members), its lifetime, and the
+///     service types of its selected constructor's parameters.
 /// </summary>
 internal sealed record RegistrationModel(
 	string ServiceType,
 	string ImplementationType,
+	string Name,
 	Lifetime Lifetime,
 	EquatableArray<string> ConstructorParameterServiceTypes);
 

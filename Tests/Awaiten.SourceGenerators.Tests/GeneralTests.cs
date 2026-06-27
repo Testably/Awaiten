@@ -94,16 +94,16 @@ public class GeneralTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		await That(source).Contains("private global::MyCode.Leaf? __instance_0;")
+		await That(source).Contains("private global::MyCode.Leaf? _leaf;")
 			.Because("singletons are cached in a backing field");
-		await That(source).Contains("private global::MyCode.Middle? __instance_1;")
+		await That(source).Contains("private global::MyCode.Middle? _middle;")
 			.Because("singletons are cached in a backing field");
-		await That(source).Contains("__instance_0 ??= new global::MyCode.Leaf()")
+		await That(source).Contains("_leaf ??= new global::MyCode.Leaf()")
 			.Because("singletons are memoized on first resolution");
-		await That(source).Contains("private global::MyCode.Top Resolve_2() => new global::MyCode.Top(Resolve_1(), Resolve_0());")
+		await That(source).Contains("private global::MyCode.Top ResolveTop() => new global::MyCode.Top(ResolveMiddle(), ResolveLeaf());")
 			.Because("transients are constructed on each request, not cached");
 
-		await That(source).Contains("if (serviceType == typeof(global::MyCode.IMiddle)) { instance = Resolve_1(); return true; }")
+		await That(source).Contains("if (serviceType == typeof(global::MyCode.IMiddle)) { instance = ResolveMiddle(); return true; }")
 			.Because("services are dispatched by their service type");
 	}
 
@@ -126,7 +126,7 @@ public class GeneralTests
 
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-		await That(source).Contains("__instance_0 ??= new global::MyCode.Foo()");
+		await That(source).Contains("_foo ??= new global::MyCode.Foo()");
 	}
 
 	[Fact]
@@ -175,7 +175,7 @@ public class GeneralTests
 		string source = result.Sources["Awaiten.MyCode.Outer+Inner.g.cs"];
 		await That(source).Contains("partial class Outer");
 		await That(source).Contains("partial class Inner : global::Awaiten.IAwaitenContainer");
-		await That(source).Contains("__instance_0 ??= new global::MyCode.Outer.Service()");
+		await That(source).Contains("_service ??= new global::MyCode.Outer.Service()");
 	}
 
 	[Fact]
@@ -234,6 +234,6 @@ public class GeneralTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 		await That(source).Contains("TODO Phase 2");
-		await That(source).Contains("__instance_0 ??= new global::MyCode.Service()");
+		await That(source).Contains("_service ??= new global::MyCode.Service()");
 	}
 }

@@ -72,6 +72,9 @@ internal static class Emitter
 			serviceToIndex[registrations[i].ServiceType] = i;
 		}
 
+		// Per-service member names derived from the implementation type, so the emitted code reads well.
+		Names names = Names.Build(registrations);
+
 		// Singleton/Scoped backing fields.
 		for (int i = 0; i < registrations.Length; i++)
 		{
@@ -79,7 +82,7 @@ internal static class Emitter
 			if (registration.Lifetime != Lifetime.Transient)
 			{
 				Indent(builder, depth).Append("private ").Append(registration.ImplementationType)
-					.Append("? __instance_").Append(i).AppendLine(";");
+					.Append("? ").Append(names.Field(i)).AppendLine(";");
 			}
 		}
 
@@ -106,7 +109,7 @@ internal static class Emitter
 		for (int i = 0; i < registrations.Length; i++)
 		{
 			Indent(builder, depth + 1).Append("if (serviceType == typeof(").Append(registrations[i].ServiceType)
-				.Append(")) { instance = Resolve_").Append(i).AppendLine("(); return true; }");
+				.Append(")) { instance = ").Append(names.Resolver(i)).AppendLine("(); return true; }");
 		}
 
 		Indent(builder, depth + 1).AppendLine("instance = null;");
@@ -122,21 +125,21 @@ internal static class Emitter
 				Indent(builder, depth).AppendLine("// TODO Phase 2: scoped lifetime is resolved as singleton for now.");
 			}
 
-			string construction = EmitConstruction(registration, serviceToIndex);
+			string construction = EmitConstruction(registration, serviceToIndex, names);
 			Indent(builder, depth).Append("private ").Append(registration.ImplementationType)
-				.Append(" Resolve_").Append(i).Append("() => ");
+				.Append(' ').Append(names.Resolver(i)).Append("() => ");
 			if (registration.Lifetime == Lifetime.Transient)
 			{
 				builder.Append(construction).AppendLine(";");
 			}
 			else
 			{
-				builder.Append("__instance_").Append(i).Append(" ??= ").Append(construction).AppendLine(";");
+				builder.Append(names.Field(i)).Append(" ??= ").Append(construction).AppendLine(";");
 			}
 		}
 	}
 
-	private static string EmitConstruction(RegistrationModel registration, Dictionary<string, int> serviceToIndex)
+	private static string EmitConstruction(RegistrationModel registration, Dictionary<string, int> serviceToIndex, Names names)
 	{
 		string[] parameters = registration.ConstructorParameterServiceTypes.AsArray();
 		StringBuilder arguments = new();
@@ -147,10 +150,79 @@ internal static class Emitter
 				arguments.Append(", ");
 			}
 
-			arguments.Append("Resolve_").Append(serviceToIndex[parameters[p]]).Append("()");
+			arguments.Append(names.Resolver(serviceToIndex[parameters[p]])).Append("()");
 		}
 
 		return $"new {registration.ImplementationType}({arguments})";
+	}
+
+	/// <summary>
+	///     Assigns each registration a readable resolver method name (<c>ResolveGreeter</c>) and cache
+	///     field name (<c>_greeter</c>) derived from the implementation's simple type name, appending a
+	///     numeric suffix only when two implementations would otherwise collide (case-insensitively).
+	/// </summary>
+	private sealed class Names
+	{
+		private readonly string[] _resolvers;
+		private readonly string[] _fields;
+
+		private Names(string[] resolvers, string[] fields)
+		{
+			_resolvers = resolvers;
+			_fields = fields;
+		}
+
+		public string Resolver(int index) => _resolvers[index];
+
+		public string Field(int index) => _fields[index];
+
+		public static Names Build(RegistrationModel[] registrations)
+		{
+			string[] resolvers = new string[registrations.Length];
+			string[] fields = new string[registrations.Length];
+			HashSet<string> used = new(StringComparer.OrdinalIgnoreCase);
+
+			for (int i = 0; i < registrations.Length; i++)
+			{
+				string baseName = Sanitize(registrations[i].Name);
+				string name = baseName;
+				int suffix = 2;
+				while (!used.Add(name))
+				{
+					name = baseName + suffix;
+					suffix++;
+				}
+
+				resolvers[i] = "Resolve" + name;
+				fields[i] = "_" + char.ToLowerInvariant(name[0]) + name.Substring(1);
+			}
+
+			return new Names(resolvers, fields);
+		}
+
+		private static string Sanitize(string name)
+		{
+			if (string.IsNullOrEmpty(name))
+			{
+				return "Service";
+			}
+
+			StringBuilder builder = new(name.Length);
+			foreach (char c in name)
+			{
+				if (char.IsLetterOrDigit(c) || c == '_')
+				{
+					builder.Append(c);
+				}
+			}
+
+			if (builder.Length == 0 || (!char.IsLetter(builder[0]) && builder[0] != '_'))
+			{
+				builder.Insert(0, '_');
+			}
+
+			return builder.ToString();
+		}
 	}
 
 	private static void EmitErrorBody(StringBuilder builder, int depth, string typeName)

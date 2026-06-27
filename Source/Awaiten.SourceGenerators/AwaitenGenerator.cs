@@ -164,6 +164,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		registrations.Add(new RegistrationModel(
 			registration.ServiceType,
 			registration.ImplementationType,
+			registration.Implementation.Name,
 			registration.Lifetime,
 			new EquatableArray<string>(parameters.ToArray())));
 	}
