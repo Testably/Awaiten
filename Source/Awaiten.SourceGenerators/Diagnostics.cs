@@ -119,4 +119,40 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A single registration sets both <c>Factory</c> and <c>Instance</c>; the two directives are
+	///     mutually exclusive and the generator cannot tell which production to use.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ConflictingProductionDirectives = new(
+		"AWT110",
+		"Conflicting production directives",
+		"'{0}' sets both Factory and Instance. Specify exactly one of them.",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     The same implementation is registered with more than one production kind (constructor, factory
+	///     or instance); coalescing into a single instance would silently drop one of them.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ConflictingProduction = new(
+		"AWT111",
+		"Conflicting production",
+		"'{0}' is registered with conflicting production strategies: {1} and {2}. Register the implementation with a single production strategy.",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A <c>Factory</c> registration names a method that is overloaded: more than one accessible
+	///     method of that name returns the registered service type, so the choice would be order-dependent.
+	/// </summary>
+	public static readonly DiagnosticDescriptor AmbiguousFactory = new(
+		"AWT112",
+		"Ambiguous factory",
+		"'{0}' has an ambiguous factory: the container has more than one accessible method '{1}' returning '{0}'. Give the factory method a unique name.",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

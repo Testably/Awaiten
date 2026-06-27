@@ -27,15 +27,16 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 		context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
 		context.RegisterCompilationStartAction(static start =>
 		{
-			INamedTypeSymbol? containerAttribute = start.Compilation.GetTypeByMetadataName(ContainerAttributeName);
-			INamedTypeSymbol? disposable = start.Compilation.GetTypeByMetadataName("System.IDisposable");
+			Compilation compilation = start.Compilation;
+			INamedTypeSymbol? containerAttribute = compilation.GetTypeByMetadataName(ContainerAttributeName);
+			INamedTypeSymbol? disposable = compilation.GetTypeByMetadataName("System.IDisposable");
 			if (containerAttribute is null || disposable is null)
 			{
 				return;
 			}
 
 			start.RegisterSymbolAction(
-				ctx => Analyze((INamedTypeSymbol)ctx.Symbol, containerAttribute, disposable, ctx.ReportDiagnostic),
+				ctx => Analyze((INamedTypeSymbol)ctx.Symbol, containerAttribute, disposable, compilation, ctx.ReportDiagnostic),
 				SymbolKind.NamedType);
 		});
 	}
@@ -44,6 +45,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 		INamedTypeSymbol type,
 		INamedTypeSymbol containerAttribute,
 		INamedTypeSymbol disposable,
+		Compilation compilation,
 		Action<Diagnostic> report)
 	{
 		if (!type.GetAttributes().Any(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass, containerAttribute)))
@@ -69,15 +71,37 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 				continue;
 			}
 
-			if (registration.Lifetime != Lifetime.Transient || !ImplementsDisposable(registration.Implementation, disposable))
+			// AWT106 is about the type the container actually owns and disposes: a factory's concrete return
+			// type (which may be disposable behind a non-disposable service interface), or the constructed
+			// implementation. This mirrors the generator so the warning and the disposal stay in lock-step.
+			ITypeSymbol? owned;
+			if (registration.Production == ProductionKind.Factory)
 			{
-				continue;
+				List<IMethodSymbol> candidates = ContainerRegistrations.FindFactoryCandidates(
+					type, registration.ProductionMember!, registration.Implementation, compilation);
+
+				// Zero or several candidates is an AWT108/AWT112 error the generator reports; don't pile on.
+				if (candidates.Count != 1)
+				{
+					continue;
+				}
+
+				owned = candidates[0].ReturnType;
+			}
+			else
+			{
+				// A transient that cannot be instantiated (an abstract type or interface) is rejected by the
+				// generator as AWT103 and never built, so it cannot accumulate. Skip it here to match the
+				// emitted container rather than stack a redundant AWT106 on the same already-erroring registration.
+				if (registration.Implementation.IsAbstract)
+				{
+					continue;
+				}
+
+				owned = registration.Implementation;
 			}
 
-			// A transient that cannot be instantiated (an abstract type or interface) is rejected by the
-			// generator as AWT103 and never built, so it cannot accumulate. Skip it here to match the
-			// emitted container rather than stack a redundant AWT106 on the same already-erroring registration.
-			if (registration.Implementation.IsAbstract)
+			if (registration.Lifetime != Lifetime.Transient || !ImplementsDisposable(owned, disposable))
 			{
 				continue;
 			}
@@ -89,8 +113,9 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 		}
 	}
 
-	private static bool ImplementsDisposable(INamedTypeSymbol type, INamedTypeSymbol disposable)
-		=> type.AllInterfaces.Any(implemented => SymbolEqualityComparer.Default.Equals(implemented, disposable));
+	private static bool ImplementsDisposable(ITypeSymbol type, INamedTypeSymbol disposable)
+		=> SymbolEqualityComparer.Default.Equals(type, disposable)
+		   || type.AllInterfaces.Any(implemented => SymbolEqualityComparer.Default.Equals(implemented, disposable));
 
 	private static string Display(string fullyQualified)
 		=> fullyQualified.StartsWith("global::", StringComparison.Ordinal)

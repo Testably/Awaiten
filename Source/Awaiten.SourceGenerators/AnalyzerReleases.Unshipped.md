@@ -11,3 +11,6 @@
  AWT107  | Awaiten   | Error    | An implementation is registered with conflicting lifetimes
  AWT108  | Awaiten   | Error    | A Factory registration names a member that is not a usable factory method
  AWT109  | Awaiten   | Error    | An Instance registration names a member that is not a usable instance member
+ AWT110  | Awaiten   | Error    | A registration sets both Factory and Instance
+ AWT111  | Awaiten   | Error    | An implementation is registered with conflicting production strategies
+ AWT112  | Awaiten   | Error    | A Factory registration names an overloaded method

@@ -291,13 +291,24 @@ internal static class Emitter
 		string type = instance.ImplementationType;
 		string resolver = names.Resolver(index);
 
-		// A pre-built Instance is handed straight back from its container member (the container owns it,
-		// never caching or disposing it here); a scope reaches the member through the container.
+		// A pre-built Instance (Singleton-only) is handed straight back from its container member - the
+		// container owns it, never constructing, caching or disposing it. A scope delegates to the
+		// container like any other singleton; both guard against use after disposal, as every resolver does.
 		if (instance.Production == ProductionKind.Instance)
 		{
-			string receiver = isScope ? "__container." : string.Empty;
-			Indent(builder, depth).Append("private ").Append(type).Append(' ').Append(resolver)
-				.Append("() => ").Append(receiver).Append(instance.ProductionMember).AppendLine(";");
+			Indent(builder, depth).Append("private ").Append(type).Append(' ').Append(resolver).AppendLine("()");
+			Indent(builder, depth).AppendLine("{");
+			EmitDisposedGuard(builder, depth + 1);
+			if (isScope)
+			{
+				Indent(builder, depth + 1).Append("return __container.").Append(resolver).AppendLine("();");
+			}
+			else
+			{
+				Indent(builder, depth + 1).Append("return ").Append(instance.ProductionMember).AppendLine(";");
+			}
+
+			Indent(builder, depth).AppendLine("}");
 			return;
 		}
 

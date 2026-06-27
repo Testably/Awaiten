@@ -13,10 +13,10 @@ public partial class FactoryAndInstanceTests
 	{
 		using FactoryContainer container = new();
 
-		// The singleton factory result is cached.
-		await That(container.Resolve<IWidget>()).IsSameAs(container.Resolve<IWidget>());
-		// The factory was actually used (it stamps a marker the constructor would not).
-		await That(((Widget)container.Resolve<IWidget>()).Origin).IsEqualTo("factory");
+		await That(container.Resolve<IWidget>()).IsSameAs(container.Resolve<IWidget>())
+			.Because("the singleton factory result is cached");
+		await That(((Widget)container.Resolve<IWidget>()).Origin).IsEqualTo("factory")
+			.Because("the factory method produced the instance, which a constructor would not have marked");
 	}
 
 	[Fact]
@@ -26,7 +26,21 @@ public partial class FactoryAndInstanceTests
 
 		Report report = container.Resolve<Report>();
 
-		await That(report.Settings).IsSameAs(container.Resolve<Settings>());
+		await That(report.Settings).IsSameAs(container.Resolve<Settings>())
+			.Because("the factory method's Settings parameter is resolved from the graph");
+	}
+
+	[Fact]
+	public async Task Factory_Scoped_IsCachedPerScopeAndReachedThroughTheContainer()
+	{
+		using FactoryContainer container = new();
+		using IAwaitenScope scope = container.CreateScope();
+		using IAwaitenScope other = container.CreateScope();
+
+		await That(scope.Resolve<Session>()).IsSameAs(scope.Resolve<Session>())
+			.Because("a scoped factory result is cached once per scope");
+		await That(scope.Resolve<Session>()).IsNotSameAs(other.Resolve<Session>())
+			.Because("each scope produces its own scoped instance through the instance factory method");
 	}
 
 	[Fact]
@@ -35,11 +49,46 @@ public partial class FactoryAndInstanceTests
 		Probe probe = new();
 		using (InstanceContainer container = new(probe))
 		{
-			await That(container.Resolve<Probe>()).IsSameAs(probe);
+			await That(container.Resolve<Probe>()).IsSameAs(probe)
+				.Because("the container exposes the pre-built member it was given");
 		}
 
-		// The container did not construct the probe, so it must not dispose it.
-		await That(probe.Disposed).IsFalse();
+		await That(probe.Disposed).IsFalse()
+			.Because("the container did not construct the probe, so it must not dispose it");
+	}
+
+	[Fact]
+	public async Task Instance_ResolvedFromAScope_ReturnsTheSameMember()
+	{
+		Probe probe = new();
+		using InstanceContainer container = new(probe);
+		using IAwaitenScope scope = container.CreateScope();
+
+		await That(scope.Resolve<Probe>()).IsSameAs(probe)
+			.Because("a scope reaches the pre-built member through the container");
+	}
+
+	[Fact]
+	public async Task Instance_ResolvedFromADisposedContainer_Throws()
+	{
+		InstanceContainer container = new(new Probe());
+		container.Dispose();
+
+		await That(() => container.Resolve<Probe>()).Throws<ObjectDisposedException>()
+			.Because("a disposed container rejects all resolution, including pre-built instances");
+	}
+
+	[Fact]
+	public async Task Factory_DisposableBehindANonDisposableInterface_IsDisposedWithTheContainer()
+	{
+		DisposableGadget gadget;
+		using (GadgetContainer container = new())
+		{
+			gadget = (DisposableGadget)container.Resolve<IGadget>();
+		}
+
+		await That(gadget.Disposed).IsTrue()
+			.Because("disposability follows the factory's concrete return type, even when the service interface is not disposable");
 	}
 
 	public interface IWidget;
@@ -53,6 +102,8 @@ public partial class FactoryAndInstanceTests
 
 	public sealed class Settings;
 
+	public sealed class Session;
+
 	public sealed class Report
 	{
 		public Report(Settings settings) => Settings = settings;
@@ -64,9 +115,12 @@ public partial class FactoryAndInstanceTests
 	[Singleton<Settings>]
 	[Singleton<IWidget>(Factory = nameof(MakeWidget))]
 	[Transient<Report>(Factory = nameof(MakeReport))]
+	[Scoped<Session>(Factory = nameof(MakeSession))]
 	public partial class FactoryContainer
 	{
 		private IWidget MakeWidget() => new Widget("factory");
+
+		private Session MakeSession() => new Session();
 
 		private static Report MakeReport(Settings settings) => new(settings);
 	}
@@ -85,5 +139,21 @@ public partial class FactoryAndInstanceTests
 		private readonly Probe _probe;
 
 		public InstanceContainer(Probe probe) => _probe = probe;
+	}
+
+	public interface IGadget;
+
+	public sealed class DisposableGadget : IGadget, IDisposable
+	{
+		public bool Disposed { get; private set; }
+
+		public void Dispose() => Disposed = true;
+	}
+
+	[Container]
+	[Singleton<IGadget>(Factory = nameof(MakeGadget))]
+	public partial class GadgetContainer
+	{
+		private DisposableGadget MakeGadget() => new();
 	}
 }

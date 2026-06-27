@@ -20,15 +20,10 @@ public sealed class TransientAttribute<TImplementation> : Attribute
 	/// <summary>
 	///     The name of a method on the container that produces the instance instead of a constructor
 	///     (an abstract factory). The method may be static or instance, must return a
-	///     <typeparamref name="TImplementation" />, and its parameters are resolved from the graph.
+	///     <typeparamref name="TImplementation" />, and its parameters are resolved from the graph; it is
+	///     invoked anew on every request, like any other transient registration.
 	/// </summary>
 	public string? Factory { get; set; }
-
-	/// <summary>
-	///     The name of a field or property on the container that holds a pre-built instance to expose.
-	///     The container neither constructs nor disposes it - the caller owns it.
-	/// </summary>
-	public string? Instance { get; set; }
 }
 
 /// <summary>

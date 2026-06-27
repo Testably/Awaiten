@@ -128,9 +128,20 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		Dictionary<string, ImplInfo> implInfos = new(StringComparer.Ordinal);
 		Dictionary<string, string> serviceToImpl = new(StringComparer.Ordinal);
 		HashSet<string> reportedConflicts = new(StringComparer.Ordinal);
+		HashSet<string> reportedProductionConflicts = new(StringComparer.Ordinal);
 
 		foreach (RawRegistration registration in raw)
 		{
+			// Setting both Factory and Instance on one attribute is contradictory; the directives are
+			// mutually exclusive, so report AWT110 against the offending registration.
+			if (registration.ConflictingDirectives)
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.ConflictingProductionDirectives,
+					LocationInfo.From(registration.Location),
+					new EquatableArray<string>([Display(registration.ImplementationType),])));
+			}
+
 			implInfos.TryGetValue(registration.ImplementationType, out ImplInfo? info);
 
 			// A lifetime conflict is a property of the implementation, not of any single service type, so it
@@ -147,6 +158,22 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 						Display(registration.ImplementationType),
 						info.Lifetime.ToString(),
 						registration.Lifetime.ToString(),
+					])));
+			}
+
+			// Likewise the production strategy: coalescing keeps the first, so a same-implementation
+			// re-registration that constructs, factories or exposes it differently is reported as AWT111
+			// rather than silently dropped. Checked before the dedup for the same reason as the lifetime.
+			if (info is not null && info.Production != registration.Production &&
+			    reportedProductionConflicts.Add(registration.ImplementationType))
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.ConflictingProduction,
+					LocationInfo.From(registration.Location),
+					new EquatableArray<string>([
+						Display(registration.ImplementationType),
+						info.Production.ToString(),
+						registration.Production.ToString(),
 					])));
 			}
 
@@ -284,7 +311,12 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			}
 		}
 
-		bool disposable = disposableSymbol is not null && ImplementsInterface(info.Symbol, disposableSymbol);
+		// Disposability follows the type the container actually owns: a factory's concrete return type
+		// (which may implement IDisposable behind a non-disposable service interface), or the constructed
+		// implementation type. Using info.Symbol for a factory would miss a DisposableX behind an IX and
+		// leak it.
+		ITypeSymbol disposalType = info.Production == ProductionKind.Factory ? producer.ReturnType : info.Symbol;
+		bool disposable = disposableSymbol is not null && ImplementsInterface(disposalType, disposableSymbol);
 
 		return new InstanceModel(
 			info.ImplementationType,
@@ -298,16 +330,17 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			info.ProductionMember,
 			producer is { IsStatic: true, });
 
-		static bool ImplementsInterface(INamedTypeSymbol type, INamedTypeSymbol @interface)
+		static bool ImplementsInterface(ITypeSymbol type, INamedTypeSymbol @interface)
 		{
-			return type.AllInterfaces.Any(implemented => SymbolEqualityComparer.Default.Equals(implemented, @interface));
+			return SymbolEqualityComparer.Default.Equals(type, @interface)
+			       || type.AllInterfaces.Any(implemented => SymbolEqualityComparer.Default.Equals(implemented, @interface));
 		}
 	}
 
 	/// <summary>
-	///     Resolves a <c>Factory</c> registration to the container method that produces it, reporting
-	///     <see cref="Diagnostics.InvalidFactory">AWT108</see> when no accessible method of that name
-	///     returns the registered implementation type.
+	///     Resolves a <c>Factory</c> registration to the container method that produces it. No accessible
+	///     method of that name returns the registered type → <see cref="Diagnostics.InvalidFactory">AWT108</see>;
+	///     more than one (an overload) → <see cref="Diagnostics.AmbiguousFactory">AWT112</see>.
 	/// </summary>
 	private static IMethodSymbol? ResolveFactory(
 		INamedTypeSymbol containerSymbol,
@@ -315,17 +348,15 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		Compilation compilation,
 		List<DiagnosticInfo> diagnostics)
 	{
-		foreach (ISymbol member in containerSymbol.GetMembers(info.ProductionMember!))
+		List<IMethodSymbol> candidates = ContainerRegistrations.FindFactoryCandidates(
+			containerSymbol, info.ProductionMember!, info.Symbol, compilation);
+		if (candidates.Count == 1)
 		{
-			if (member is IMethodSymbol { MethodKind: MethodKind.Ordinary, } method
-			    && compilation.HasImplicitConversion(method.ReturnType, info.Symbol))
-			{
-				return method;
-			}
+			return candidates[0];
 		}
 
 		diagnostics.Add(new DiagnosticInfo(
-			Diagnostics.InvalidFactory,
+			candidates.Count == 0 ? Diagnostics.InvalidFactory : Diagnostics.AmbiguousFactory,
 			info.Location,
 			new EquatableArray<string>([Display(info.ServiceTypes[0]), info.ProductionMember!,])));
 		return null;
@@ -334,7 +365,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	/// <summary>
 	///     Validates an <c>Instance</c> registration against the named container member, reporting
 	///     <see cref="Diagnostics.InvalidInstance">AWT109</see> when no accessible field or property of
-	///     that name holds the registered implementation type.
+	///     that name (on the container or an accessible base type) holds the registered type.
 	/// </summary>
 	private static void ValidateInstanceMember(
 		INamedTypeSymbol containerSymbol,
@@ -342,7 +373,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		Compilation compilation,
 		List<DiagnosticInfo> diagnostics)
 	{
-		foreach (ISymbol member in containerSymbol.GetMembers(info.ProductionMember!))
+		foreach (ISymbol member in ContainerRegistrations.AccessibleMembers(containerSymbol, info.ProductionMember!))
 		{
 			ITypeSymbol? memberType = member switch
 			{

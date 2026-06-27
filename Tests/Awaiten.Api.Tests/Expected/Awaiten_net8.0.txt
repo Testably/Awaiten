@@ -32,7 +32,6 @@ namespace Awaiten
     {
         public ScopedAttribute() { }
         public string? Factory { get; set; }
-        public string? Instance { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
     public sealed class ScopedAttribute<TImplementation, TService> : System.Attribute
@@ -60,7 +59,6 @@ namespace Awaiten
     {
         public TransientAttribute() { }
         public string? Factory { get; set; }
-        public string? Instance { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
     public sealed class TransientAttribute<TImplementation, TService> : System.Attribute
