@@ -177,7 +177,7 @@ internal static class Emitter
 			"throw new global::System.InvalidOperationException($\"No registration for type '{serviceType}' on this container.\");");
 		Indent(builder, depth).AppendLine("}");
 		builder.AppendLine();
-		Indent(builder, depth).AppendLine("public bool TryResolve(global::System.Type serviceType, out object? instance)");
+		Indent(builder, depth).AppendLine("public bool TryResolve(global::System.Type serviceType, [global::System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? instance)");
 		Indent(builder, depth).AppendLine("{");
 		for (int i = 0; i < instances.Length; i++)
 		{
@@ -330,7 +330,7 @@ internal static class Emitter
 				"public object Resolve(global::System.Type serviceType) => throw new global::System.InvalidOperationException(")
 			.Append(message).AppendLine(");");
 		builder.AppendLine();
-		Indent(builder, depth).AppendLine("public bool TryResolve(global::System.Type serviceType, out object? instance)");
+		Indent(builder, depth).AppendLine("public bool TryResolve(global::System.Type serviceType, [global::System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? instance)");
 		Indent(builder, depth).AppendLine("{");
 		Indent(builder, depth + 1).AppendLine("instance = null;");
 		Indent(builder, depth + 1).AppendLine("return false;");
