@@ -9,7 +9,9 @@ namespace Awaiten;
 ///     <see cref="System.Type" />-based path for relationship types and unregistered services.
 /// </summary>
 /// <typeparam name="T">The exact service type this resolver can produce.</typeparam>
+#pragma warning disable S3246 // Generic type parameters should be co/contravariant when possible - invariance is required.
 public interface IAwaitenResolver<T>
+#pragma warning restore S3246
 {
 	/// <summary>Resolves the service of type <typeparamref name="T" />.</summary>
 	T Resolve();

@@ -93,12 +93,9 @@ internal static class Emitter
 		HashSet<string> seen = new(StringComparer.Ordinal);
 		foreach (InstanceModel instance in model.Instances.AsArray())
 		{
-			foreach (string service in instance.ServiceTypes.AsArray())
+			foreach (string service in instance.ServiceTypes.AsArray().Where(seen.Add))
 			{
-				if (seen.Add(service))
-				{
-					builder.Append(", global::Awaiten.IAwaitenResolver<").Append(service).Append('>');
-				}
+				builder.Append(", global::Awaiten.IAwaitenResolver<").Append(service).Append('>');
 			}
 		}
 	}
@@ -501,7 +498,7 @@ internal static class Emitter
 			return;
 		}
 
-		string construction = EmitConstruction(instance, instances, names, serviceToIndex, ownerIsRoot: false);
+		string construction = EmitConstruction(instance, instances, names, serviceToIndex, false);
 
 		if (instance.Lifetime == Lifetime.Transient)
 		{
@@ -535,7 +532,7 @@ internal static class Emitter
 			return;
 		}
 
-		EmitCachingResolver(builder, depth, "private", type, resolver, names.Field(index), construction, instance.IsDisposable, "// Scoped: one instance per scope.");
+		EmitCachingResolver(builder, depth, new CachingResolver("private", type, resolver, names.Field(index), construction, instance.IsDisposable, "// Scoped: one instance per scope."));
 	}
 
 	/// <summary>
@@ -559,44 +556,44 @@ internal static class Emitter
 			return;
 		}
 
-		string construction = EmitConstruction(instance, instances, names, serviceToIndex, ownerIsRoot: true);
-		EmitCachingResolver(builder, depth, "protected override", type, resolver, names.Field(index), construction, instance.IsDisposable, comment: null);
+		string construction = EmitConstruction(instance, instances, names, serviceToIndex, true);
+		EmitCachingResolver(builder, depth, new CachingResolver("protected override", type, resolver, names.Field(index), construction, instance.IsDisposable, null));
 	}
 
 	/// <summary>
 	///     Emits a lock-free-read, lock-on-write cached resolver: return the cached field if set, otherwise
 	///     construct once under <c>lock (this)</c>, registering a disposable instance for teardown.
 	/// </summary>
-	private static void EmitCachingResolver(StringBuilder builder, int depth, string modifiers, string type, string resolver, string field, string construction, bool disposable, string? comment)
+	private static void EmitCachingResolver(StringBuilder builder, int depth, in CachingResolver resolver)
 	{
-		if (comment is not null)
+		if (resolver.Comment is not null)
 		{
-			Indent(builder, depth).AppendLine(comment);
+			Indent(builder, depth).AppendLine(resolver.Comment);
 		}
 
-		Indent(builder, depth).Append(modifiers).Append(' ').Append(type).Append(' ').Append(resolver).AppendLine("()");
+		Indent(builder, depth).Append(resolver.Modifiers).Append(' ').Append(resolver.Type).Append(' ').Append(resolver.Method).AppendLine("()");
 		Indent(builder, depth).AppendLine("{");
 		EmitDisposedGuard(builder, depth + 1);
-		Indent(builder, depth + 1).Append("if (").Append(field).AppendLine(" is not null)");
+		Indent(builder, depth + 1).Append("if (").Append(resolver.Field).AppendLine(" is not null)");
 		Indent(builder, depth + 1).AppendLine("{");
-		Indent(builder, depth + 2).Append("return ").Append(field).AppendLine(";");
+		Indent(builder, depth + 2).Append("return ").Append(resolver.Field).AppendLine(";");
 		Indent(builder, depth + 1).AppendLine("}");
 		builder.AppendLine();
 		Indent(builder, depth + 1).AppendLine("lock (this)");
 		Indent(builder, depth + 1).AppendLine("{");
 		EmitDisposedGuard(builder, depth + 2);
-		Indent(builder, depth + 2).Append("if (").Append(field).AppendLine(" is null)");
+		Indent(builder, depth + 2).Append("if (").Append(resolver.Field).AppendLine(" is null)");
 		Indent(builder, depth + 2).AppendLine("{");
-		Indent(builder, depth + 3).Append(field).Append(" = ").Append(construction).AppendLine(";");
-		if (disposable)
+		Indent(builder, depth + 3).Append(resolver.Field).Append(" = ").Append(resolver.Construction).AppendLine(";");
+		if (resolver.Disposable)
 		{
-			Indent(builder, depth + 3).Append("(__disposables ??= new global::System.Collections.Generic.List<object>()).Add(").Append(field).AppendLine(");");
+			Indent(builder, depth + 3).Append("(__disposables ??= new global::System.Collections.Generic.List<object>()).Add(").Append(resolver.Field).AppendLine(");");
 		}
 
 		Indent(builder, depth + 2).AppendLine("}");
 		Indent(builder, depth + 1).AppendLine("}");
 		builder.AppendLine();
-		Indent(builder, depth + 1).Append("return ").Append(field).AppendLine(";");
+		Indent(builder, depth + 1).Append("return ").Append(resolver.Field).AppendLine(";");
 		Indent(builder, depth).AppendLine("}");
 	}
 
@@ -701,6 +698,29 @@ internal static class Emitter
 		}
 
 		return builder;
+	}
+
+	/// <summary>
+	///     The inputs to <see cref="EmitCachingResolver" />: the method <see cref="Modifiers" /> and return
+	///     <see cref="Type" />, the resolver <see cref="Method" /> name and backing <see cref="Field" />, the
+	///     <see cref="Construction" /> expression, whether the instance <see cref="Disposable">needs disposal</see>,
+	///     and an optional leading <see cref="Comment" />.
+	/// </summary>
+	private readonly struct CachingResolver(string modifiers, string type, string method, string field, string construction, bool disposable, string? comment)
+	{
+		public string Modifiers { get; } = modifiers;
+
+		public string Type { get; } = type;
+
+		public string Method { get; } = method;
+
+		public string Field { get; } = field;
+
+		public string Construction { get; } = construction;
+
+		public bool Disposable { get; } = disposable;
+
+		public string? Comment { get; } = comment;
 	}
 
 	/// <summary>
