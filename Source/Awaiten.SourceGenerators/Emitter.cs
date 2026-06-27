@@ -1,4 +1,5 @@
 using System.Text;
+using Awaiten.SourceGenerators.Internals;
 
 namespace Awaiten.SourceGenerators;
 
@@ -217,18 +218,48 @@ internal static class Emitter
 
 	/// <summary>
 	///     The ordered dispatch cases for an owner: each registered service type mapped to its resolver
-	///     call. The order is identical on the container and its scope, so a single static table built on the
-	///     container is valid for both.
+	///     call, plus the relationship types <c>Func&lt;T&gt;</c> and <c>Lazy&lt;T&gt;</c> over it (a fresh
+	///     factory/lazy bound to this owner's resolver). The order is identical on the container and its
+	///     scope, so a single static table built on the container is valid for both.
 	/// </summary>
 	private static List<DispatchEntry> BuildDispatchEntries(InstanceModel[] instances, Names names)
 	{
 		List<DispatchEntry> entries = new();
+		HashSet<string> seen = new(StringComparer.Ordinal);
+
+		// Explicit service registrations first, so a directly registered relationship type (e.g. a
+		// registered Lazy<T>) wins the dispatch slot over the synthetic relationship entry below. Service
+		// types are unique across instances (registrations are coalesced), so each is added exactly once.
+		// Seeding 'seen' here lets the synthetic pass skip any key an explicit registration already claimed.
 		for (int i = 0; i < instances.Length; i++)
 		{
 			string resolver = names.Resolver(i);
 			foreach (string service in instances[i].ServiceTypes.AsArray())
 			{
+				seen.Add(service);
 				entries.Add(new DispatchEntry(service, resolver + "()"));
+			}
+		}
+
+		// Synthetic Func<T>/Lazy<T> over each service, skipping any key an explicit registration already
+		// claimed so the static dispatch table never contains a duplicate key (which would otherwise throw
+		// from the dictionary initializer at runtime).
+		for (int i = 0; i < instances.Length; i++)
+		{
+			string resolver = names.Resolver(i);
+			foreach (string service in instances[i].ServiceTypes.AsArray())
+			{
+				string func = $"global::System.Func<{service}>";
+				if (seen.Add(func))
+				{
+					entries.Add(new DispatchEntry(func, $"new global::System.Func<{service}>(() => {resolver}())"));
+				}
+
+				string lazy = $"global::System.Lazy<{service}>";
+				if (seen.Add(lazy))
+				{
+					entries.Add(new DispatchEntry(lazy, $"new global::System.Lazy<{service}>(() => {resolver}())"));
+				}
 			}
 		}
 
@@ -337,7 +368,7 @@ internal static class Emitter
 
 	private static string EmitConstruction(InstanceModel instance, Names names, Dictionary<string, int> serviceToIndex)
 	{
-		string[] parameters = instance.ConstructorParameterServiceTypes.AsArray();
+		ParameterModel[] parameters = instance.ConstructorParameters.AsArray();
 		StringBuilder arguments = new();
 		for (int p = 0; p < parameters.Length; p++)
 		{
@@ -346,10 +377,26 @@ internal static class Emitter
 				arguments.Append(", ");
 			}
 
-			arguments.Append(names.Resolver(serviceToIndex[parameters[p]])).Append("()");
+			arguments.Append(ResolveExpression(parameters[p], names, serviceToIndex));
 		}
 
 		return $"new {instance.ImplementationType}({arguments})";
+	}
+
+	/// <summary>
+	///     The expression that supplies a single constructor argument. A direct dependency calls its
+	///     resolver; a relationship type wraps the resolver in a <c>Func&lt;T&gt;</c> / <c>Lazy&lt;T&gt;</c>
+	///     bound to the owning container or scope (so it respects the target's lifetime and owner).
+	/// </summary>
+	private static string ResolveExpression(ParameterModel parameter, Names names, Dictionary<string, int> serviceToIndex)
+	{
+		string resolver = names.Resolver(serviceToIndex[parameter.ServiceType]);
+		return parameter.Kind switch
+		{
+			DependencyKind.Func => $"new global::System.Func<{parameter.ServiceType}>(() => {resolver}())",
+			DependencyKind.Lazy => $"new global::System.Lazy<{parameter.ServiceType}>(() => {resolver}())",
+			_ => $"{resolver}()",
+		};
 	}
 
 	private static void EmitDispose(StringBuilder builder, int depth)

@@ -7,6 +7,30 @@ public partial class DiagnosticTests
 	public class Awt102DependencyCycle
 	{
 		[Fact]
+		public async Task IsBrokenByAFuncDependency()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+			                                       using System;
+
+			                                       namespace MyCode;
+
+			                                       public sealed class A { public A(Func<B> b) { } }
+			                                       public sealed class B { public B(A a) { } }
+
+			                                       [Container]
+			                                       [Singleton<A>]
+			                                       [Singleton<B>]
+			                                       public partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics.Any(d => d.Contains("AWT102"))).IsFalse()
+				.Because("the Func<B> defers resolution, so the A -> B -> A edge is not a hard cycle");
+		}
+
+		[Fact]
 		public async Task ReportsWithThePath()
 		{
 			GeneratorResult result = Generator.Run("""

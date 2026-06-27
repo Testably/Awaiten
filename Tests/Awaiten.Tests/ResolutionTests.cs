@@ -71,7 +71,7 @@ public partial class ResolutionTests
 		Top first = container.Resolve<Top>();
 		Top second = container.Resolve<Top>();
 
-		await That(ReferenceEquals(first, second)).IsFalse();
+		await That(first).IsNotSameAs(second);
 	}
 
 	[Fact]

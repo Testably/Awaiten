@@ -25,7 +25,7 @@ public partial class LifetimeTests
 		IScopedService c = scope2.Resolve<IScopedService>();
 
 		await That(a).IsSameAs(b);
-		await That(ReferenceEquals(a, c)).IsFalse();
+		await That(a).IsNotSameAs(c);
 	}
 
 	[Fact]
@@ -91,9 +91,9 @@ public partial class LifetimeTests
 			container.Resolve<Beta>();
 		}
 
-		// Beta is built after Alpha, so it is disposed first.
 		await That(recorder.Order).HasCount(2);
-		await That(recorder.Order[0]).IsEqualTo("Beta");
+		await That(recorder.Order[0]).IsEqualTo("Beta")
+			.Because("Beta is built after Alpha, so it is disposed first");
 		await That(recorder.Order[1]).IsEqualTo("Alpha");
 	}
 
@@ -131,7 +131,7 @@ public partial class LifetimeTests
 		await Task.WhenAll(workers);
 
 		CountedSingleton first = results[0];
-		await That(results.All(r => ReferenceEquals(r, first))).IsTrue()
+		await That(results).All().ComplyWith(r => r.IsSameAs(first))
 			.Because("every thread observes the one cached singleton");
 		await That(container.Resolve<ConstructionCounter>().Count).IsEqualTo(1)
 			.Because("the singleton is constructed exactly once under the lock");
@@ -171,10 +171,8 @@ public partial class LifetimeTests
 				.Because("tracked transients are not disposed until the owner is");
 		}
 
-		// If the unsynchronized tracking list raced, some instances would be lost (never disposed) or
-		// the resolution would have thrown; both surface here.
 		await That(captured.All(c => c.Disposed)).IsTrue()
-			.Because("every concurrently tracked transient is disposed with the container");
+			.Because("every concurrently tracked transient is disposed with the container; had the unsynchronized tracking list raced, some would be lost or resolution would have thrown");
 	}
 
 	[Fact]

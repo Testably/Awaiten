@@ -1,3 +1,4 @@
+using Awaiten.SourceGenerators.Internals;
 using Microsoft.CodeAnalysis;
 
 namespace Awaiten.SourceGenerators;
