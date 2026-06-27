@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Text;
 using Awaiten.SourceGenerators.Internals;
 using Microsoft.CodeAnalysis;
@@ -78,7 +79,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 		DetectCycles(dependencies, containerSymbol, diagnostics);
 
-		string? containerNamespace = containerSymbol.ContainingNamespace is { IsGlobalNamespace: false } ns
+		string? containerNamespace = containerSymbol.ContainingNamespace is { IsGlobalNamespace: false, } ns
 			? ns.ToDisplayString()
 			: null;
 
@@ -106,6 +107,16 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			hintName,
 			new EquatableArray<RegistrationModel>(registrations.ToArray()),
 			new EquatableArray<DiagnosticInfo>(diagnostics.ToArray()));
+
+		static string KeywordOf(INamedTypeSymbol symbol)
+		{
+			if (symbol.IsRecord)
+			{
+				return symbol.TypeKind == TypeKind.Struct ? "record struct" : "record";
+			}
+
+			return symbol.TypeKind == TypeKind.Struct ? "struct" : "class";
+		}
 	}
 
 	private static void BuildRegistration(
@@ -213,18 +224,18 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		}
 
 		return result;
-	}
 
-	private static void ImmutableArrayGuard(
-		System.Collections.Immutable.ImmutableArray<ITypeSymbol> typeArguments,
-		out ITypeSymbol? implementation,
-		out ITypeSymbol? service)
-	{
-		implementation = typeArguments.Length > 0 ? typeArguments[0] : null;
-		service = typeArguments.Length > 1 ? typeArguments[1] : null;
-		if (implementation is not INamedTypeSymbol)
+		static void ImmutableArrayGuard(
+			ImmutableArray<ITypeSymbol> typeArguments,
+			out ITypeSymbol? implementation,
+			out ITypeSymbol? service)
 		{
-			implementation = null;
+			implementation = typeArguments.Length > 0 ? typeArguments[0] : null;
+			service = typeArguments.Length > 1 ? typeArguments[1] : null;
+			if (implementation is not INamedTypeSymbol)
+			{
+				implementation = null;
+			}
 		}
 	}
 
@@ -249,20 +260,19 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 		// Fall back to the greediest constructor so its unresolved parameters surface as AWT101.
 		return resolvable ?? constructors.OrderByDescending(c => c.Parameters.Length).First();
-	}
 
-	// The generated code is a partial of the container, so it can call any constructor accessible from
-	// the container: public always, and internal/protected-internal when the implementation lives in
-	// the same assembly.
-	private static bool IsAccessibleConstructor(IMethodSymbol constructor, INamedTypeSymbol containerSymbol)
-		=> constructor.DeclaredAccessibility switch
+		static bool IsAccessibleConstructor(IMethodSymbol constructor, INamedTypeSymbol containerSymbol)
 		{
-			Accessibility.Public => true,
-			Accessibility.Internal or Accessibility.ProtectedOrInternal =>
-				SymbolEqualityComparer.Default.Equals(
-					constructor.ContainingAssembly, containerSymbol.ContainingAssembly),
-			_ => false,
-		};
+			return constructor.DeclaredAccessibility switch
+			{
+				Accessibility.Public => true,
+				Accessibility.Internal or Accessibility.ProtectedOrInternal =>
+					SymbolEqualityComparer.Default.Equals(
+						constructor.ContainingAssembly, containerSymbol.ContainingAssembly),
+				_ => false,
+			};
+		}
+	}
 
 	private static void DetectCycles(
 		Dictionary<string, List<string>> dependencies,
@@ -324,16 +334,6 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 				containerLocation,
 				new EquatableArray<string>([rendered,])));
 		}
-	}
-
-	private static string KeywordOf(INamedTypeSymbol symbol)
-	{
-		if (symbol.IsRecord)
-		{
-			return symbol.TypeKind == TypeKind.Struct ? "record struct" : "record";
-		}
-
-		return symbol.TypeKind == TypeKind.Struct ? "struct" : "class";
 	}
 
 	private static string Display(string fullyQualified)

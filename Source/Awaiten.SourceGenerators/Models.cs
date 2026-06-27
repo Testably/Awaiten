@@ -40,7 +40,10 @@ internal sealed record LocationInfo(string FilePath, TextSpan TextSpan, LinePosi
 internal sealed record DiagnosticInfo(DiagnosticDescriptor Descriptor, LocationInfo? Location, EquatableArray<string> MessageArgs)
 {
 	public Diagnostic ToDiagnostic()
-		=> Diagnostic.Create(Descriptor, Location?.ToLocation() ?? Microsoft.CodeAnalysis.Location.None, MessageArgs.AsArray());
+		=> Diagnostic.Create(
+			Descriptor,
+			Location?.ToLocation() ?? Microsoft.CodeAnalysis.Location.None,
+			MessageArgs.AsArray().Cast<object?>().ToArray());
 }
 
 /// <summary>
