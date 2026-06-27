@@ -11,6 +11,8 @@
 		<File Path="Tests/Directory.Build.props" />
 		<Project Path="Tests/Awaiten.Api.Tests/Awaiten.Api.Tests.csproj" />
 		<Project Path="Tests/Awaiten.ExampleTests/Awaiten.ExampleTests.csproj" />
+		<Project Path="Tests/Awaiten.Extensions.DependencyInjection.Tests/Awaiten.Extensions.DependencyInjection.Tests.csproj" />
+		<Project Path="Tests/Awaiten.SourceGenerators.Tests/Awaiten.SourceGenerators.Tests.csproj" />
 		<Project Path="Tests/Awaiten.Tests/Awaiten.Tests.csproj" />
 	</Folder>
 	<Folder Name="/_/">
@@ -39,6 +41,7 @@
 	<Folder Name="/_/Source/">
 		<File Path="Source/Directory.Build.props" />
 	</Folder>
+	<Project Path="Source/Awaiten.Extensions.DependencyInjection/Awaiten.Extensions.DependencyInjection.csproj" />
 	<Project Path="Source/Awaiten.SourceGenerators/Awaiten.SourceGenerators.csproj" />
 	<Project Path="Source/Awaiten/Awaiten.csproj" />
 </Solution>

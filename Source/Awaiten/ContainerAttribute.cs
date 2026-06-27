@@ -7,7 +7,7 @@ namespace Awaiten;
 ///     The source generator emits the container implementation (resolution,
 ///     scopes and async initialization) for the registrations declared on it.
 /// </summary>
-[AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
+[AttributeUsage(AttributeTargets.Class, Inherited = false)]
 public sealed class ContainerAttribute : Attribute
 {
 	/// <summary>

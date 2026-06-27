@@ -2,7 +2,7 @@
 [assembly: System.Runtime.Versioning.TargetFramework(".NETCoreApp,Version=v10.0", FrameworkDisplayName=".NET 10.0")]
 namespace Awaiten
 {
-    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=false, Inherited=false)]
+    [System.AttributeUsage(System.AttributeTargets.Class, Inherited=false)]
     public sealed class ContainerAttribute : System.Attribute
     {
         public ContainerAttribute() { }
