@@ -102,6 +102,19 @@ public partial class FactoryAndInstanceTests
 	}
 
 	[Fact]
+	public async Task Factory_Scoped_RegisteredUnderSeveralServices_SharesOnePerScope()
+	{
+		using SharedScopedFactoryContainer container = new();
+		using IAwaitenScope scope = container.CreateScope();
+		using IAwaitenScope other = container.CreateScope();
+
+		await That((object)scope.Resolve<IRead>()).IsSameAs(scope.Resolve<IWrite>())
+			.Because("the same scoped implementation behind two services with one factory is coalesced per scope");
+		await That((object)scope.Resolve<IRead>()).IsNotSameAs(other.Resolve<IRead>())
+			.Because("each scope produces its own shared instance");
+	}
+
+	[Fact]
 	public async Task Factory_DisposableBehindANonDisposableInterface_IsDisposedWithTheContainer()
 	{
 		DisposableGadget gadget;
@@ -199,6 +212,14 @@ public partial class FactoryAndInstanceTests
 	[Singleton<Store, IRead>(Factory = nameof(MakeStore))]
 	[Singleton<Store, IWrite>(Factory = nameof(MakeStore))]
 	public partial class SharedFactoryContainer
+	{
+		private static Store MakeStore() => new();
+	}
+
+	[Container]
+	[Scoped<Store, IRead>(Factory = nameof(MakeStore))]
+	[Scoped<Store, IWrite>(Factory = nameof(MakeStore))]
+	public partial class SharedScopedFactoryContainer
 	{
 		private static Store MakeStore() => new();
 	}

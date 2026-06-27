@@ -52,5 +52,31 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics.Any(d => d.Contains("AWT111"))).IsTrue()
 				.Because("coalescing keeps the first factory, so naming a different one for the same implementation must not be silently dropped");
 		}
+
+		[Fact]
+		public async Task ReportsWhenTheSameImplementationUnderDifferentServicesNamesDifferentFactoryMembers()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IRead { }
+			                                       public interface IWrite { }
+			                                       public sealed class Store : IRead, IWrite { }
+
+			                                       [Container]
+			                                       [Singleton<Store, IRead>(Factory = nameof(MakeA))]
+			                                       [Singleton<Store, IWrite>(Factory = nameof(MakeB))]
+			                                       public partial class MyContainer
+			                                       {
+			                                       	private Store MakeA() => new Store();
+			                                       	private Store MakeB() => new Store();
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics.Any(d => d.Contains("AWT111"))).IsTrue()
+				.Because("coalescing one implementation across services keeps the first factory, so a second, different one must not be silently dropped");
+		}
 	}
 }
