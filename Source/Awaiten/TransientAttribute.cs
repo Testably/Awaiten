@@ -15,7 +15,16 @@ namespace Awaiten;
 /// <typeparam name="TImplementation">The concrete type to construct and resolve.</typeparam>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
 public sealed class TransientAttribute<TImplementation> : Attribute
-	where TImplementation : class;
+	where TImplementation : class
+{
+	/// <summary>
+	///     The name of a method on the container that produces the instance instead of a constructor
+	///     (an abstract factory). The method may be static or instance, must return a
+	///     <typeparamref name="TImplementation" />, and its parameters are resolved from the graph; it is
+	///     invoked anew on every request, like any other transient registration.
+	/// </summary>
+	public string? Factory { get; set; }
+}
 
 /// <summary>
 ///     Registers <typeparamref name="TImplementation" /> as transient exposed through the service
@@ -25,6 +34,17 @@ public sealed class TransientAttribute<TImplementation> : Attribute
 /// <typeparam name="TService">The service type under which an instance is resolved.</typeparam>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
 public sealed class TransientAttribute<TImplementation, TService> : Attribute
-	where TImplementation : class, TService;
+	where TImplementation : class, TService
+{
+	/// <summary>
+	///     The name of a method on the container that produces the instance instead of a constructor
+	///     (an abstract factory). The method may be static or instance, must return a
+	///     <typeparamref name="TImplementation" />, and its parameters are resolved from the graph; it is
+	///     invoked anew on every request, like any other transient registration. Registering the same
+	///     <typeparamref name="TImplementation" /> under several service types with the same factory uses
+	///     the one factory for all of them.
+	/// </summary>
+	public string? Factory { get; set; }
+}
 
 #pragma warning restore S2326

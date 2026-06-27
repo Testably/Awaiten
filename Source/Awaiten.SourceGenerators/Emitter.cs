@@ -142,9 +142,11 @@ internal static class Emitter
 			InstanceModel instance = instances[i];
 
 			// Singletons are owned by the container; scoped instances live on whichever owner created
-			// them (the container acts as the root scope).
-			bool cachedHere = instance.Lifetime == Lifetime.Scoped
-			                  || (instance.Lifetime == Lifetime.Singleton && !isScope);
+			// them (the container acts as the root scope). A pre-built Instance is returned directly from
+			// its container member, so it is never cached here regardless of its declared lifetime.
+			bool cachedHere = instance.Production != ProductionKind.Instance
+			                  && (instance.Lifetime == Lifetime.Scoped
+			                      || (instance.Lifetime == Lifetime.Singleton && !isScope));
 			if (cachedHere)
 			{
 				// Reference-type cache fields are volatile so the lock-free fast path in the resolver
@@ -288,7 +290,29 @@ internal static class Emitter
 	{
 		string type = instance.ImplementationType;
 		string resolver = names.Resolver(index);
-		string construction = EmitConstruction(instance, names, serviceToIndex);
+
+		// A pre-built Instance (Singleton-only) is handed straight back from its container member - the
+		// container owns it, never constructing, caching or disposing it. A scope delegates to the
+		// container like any other singleton; both guard against use after disposal, as every resolver does.
+		if (instance.Production == ProductionKind.Instance)
+		{
+			Indent(builder, depth).Append("private ").Append(type).Append(' ').Append(resolver).AppendLine("()");
+			Indent(builder, depth).AppendLine("{");
+			EmitDisposedGuard(builder, depth + 1);
+			if (isScope)
+			{
+				Indent(builder, depth + 1).Append("return __container.").Append(resolver).AppendLine("();");
+			}
+			else
+			{
+				Indent(builder, depth + 1).Append("return ").Append(instance.ProductionMember).AppendLine(";");
+			}
+
+			Indent(builder, depth).AppendLine("}");
+			return;
+		}
+
+		string construction = EmitConstruction(instance, names, serviceToIndex, isScope);
 
 		// Singletons live on the container; a scope delegates to it.
 		if (instance.Lifetime == Lifetime.Singleton && isScope)
@@ -366,7 +390,7 @@ internal static class Emitter
 		Indent(builder, depth).AppendLine("}");
 	}
 
-	private static string EmitConstruction(InstanceModel instance, Names names, Dictionary<string, int> serviceToIndex)
+	private static string EmitConstruction(InstanceModel instance, Names names, Dictionary<string, int> serviceToIndex, bool isScope)
 	{
 		ParameterModel[] parameters = instance.ConstructorParameters.AsArray();
 		StringBuilder arguments = new();
@@ -378,6 +402,15 @@ internal static class Emitter
 			}
 
 			arguments.Append(ResolveExpression(parameters[p], names, serviceToIndex));
+		}
+
+		if (instance.Production == ProductionKind.Factory)
+		{
+			// The factory method lives on the container; an instance method is reached through it from a
+			// scope, while its arguments still resolve from the owning scope. A static method is in scope
+			// of the nested type directly.
+			string receiver = isScope && !instance.FactoryIsStatic ? "__container." : string.Empty;
+			return $"{receiver}{instance.ProductionMember}({arguments})";
 		}
 
 		return $"new {instance.ImplementationType}({arguments})";

@@ -31,35 +31,43 @@ namespace Awaiten
         where TImplementation :  class
     {
         public ScopedAttribute() { }
+        public string? Factory { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
     public sealed class ScopedAttribute<TImplementation, TService> : System.Attribute
         where TImplementation :  class, TService
     {
         public ScopedAttribute() { }
+        public string? Factory { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
     public sealed class SingletonAttribute<TImplementation> : System.Attribute
         where TImplementation :  class
     {
         public SingletonAttribute() { }
+        public string? Factory { get; set; }
+        public string? Instance { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
     public sealed class SingletonAttribute<TImplementation, TService> : System.Attribute
         where TImplementation :  class, TService
     {
         public SingletonAttribute() { }
+        public string? Factory { get; set; }
+        public string? Instance { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
     public sealed class TransientAttribute<TImplementation> : System.Attribute
         where TImplementation :  class
     {
         public TransientAttribute() { }
+        public string? Factory { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
     public sealed class TransientAttribute<TImplementation, TService> : System.Attribute
         where TImplementation :  class, TService
     {
         public TransientAttribute() { }
+        public string? Factory { get; set; }
     }
 }
