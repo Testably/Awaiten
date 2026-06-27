@@ -1,15 +1,29 @@
+using Awaiten.ExampleTests.TestHelpers;
+
 namespace Awaiten.ExampleTests;
 
 /// <summary>
-///     End-to-end usage examples that double as documentation. Real examples
-///     (declaring a <c>[Container]</c>, resolving services, async init) are added
-///     once the generator lands.
+///     End-to-end usage examples that double as documentation: declaring a <c>[Container]</c>
+///     (see <see cref="Container" />) and resolving a registered service from it.
 /// </summary>
-public sealed class ExampleTests
+public partial class ExampleTests
 {
 	[Fact]
-	public async Task Placeholder_ShouldPass()
+	public async Task Container_ResolvesTheRegisteredService()
 	{
-		await That(true).IsTrue();
+		Container container = new();
+
+		IMyService myService = container.Get<IMyService>();
+
+		await That(myService).Is<MyService>();
 	}
+
+	/// <summary>
+	///     A minimal composition root: <see cref="MyService" /> is registered as a singleton exposed
+	///     through <see cref="IMyService" />. The source generator emits the resolution logic on this
+	///     <see langword="partial" /> class.
+	/// </summary>
+	[Container]
+	[Singleton<MyService, IMyService>]
+	public partial class Container;
 }

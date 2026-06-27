@@ -1,9 +1,11 @@
+using System.Linq;
+
 namespace Awaiten.SourceGenerators.Tests;
 
 public class GeneralTests
 {
 	[Fact]
-	public async Task Generator_OnEmptyContainer_RunsWithoutDiagnostics()
+	public async Task EmptyContainer_EmitsAPartialImplementationWithoutDiagnostics()
 	{
 		GeneratorResult result = Generator.Run("""
 			using Awaiten;
@@ -16,8 +18,141 @@ public class GeneralTests
 			}
 			""");
 
-		// The generator is currently a no-op skeleton: it must run cleanly and emit nothing yet.
-		await That(result.Diagnostics.Length).IsEqualTo(0);
-		await That(result.Sources.Count).IsEqualTo(0);
+		await That(result.Diagnostics).IsEmpty();
+		await That(result.Sources).HasCount(1);
+		string source = result.Sources["Awaiten.MyContainer.g.cs"];
+		await That(source).Contains("partial class MyContainer : global::Awaiten.IAwaitenContainer");
+		await That(source).Contains("public T Get<T>() => (T)Resolve(typeof(T));");
+	}
+
+	[Fact]
+	public async Task Graph_EmitsSingletonCachingAndTransientConstruction()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace MyCode;
+
+			public sealed class Leaf { }
+			public interface IMiddle { }
+			public sealed class Middle : IMiddle { public Middle(Leaf leaf) { } }
+			public sealed class Top { public Top(IMiddle middle, Leaf leaf) { } }
+
+			[Container]
+			[Singleton<Leaf>]
+			[Singleton<Middle, IMiddle>]
+			[Transient<Top>]
+			public partial class MyContainer
+			{
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyContainer.g.cs"];
+
+		// Singletons are cached in fields and memoized; transients are not.
+		await That(source).Contains("private global::MyCode.Leaf? __instance_0;");
+		await That(source).Contains("private global::MyCode.Middle? __instance_1;");
+		await That(source).Contains("__instance_0 ??= new global::MyCode.Leaf()");
+		await That(source).Contains("private global::MyCode.Top Resolve_2() => new global::MyCode.Top(Resolve_1(), Resolve_0());");
+
+		// Service types are dispatched by type.
+		await That(source).Contains("if (serviceType == typeof(global::MyCode.IMiddle)) { instance = Resolve_1(); return true; }");
+	}
+
+	[Fact]
+	public async Task ScopedRegistration_IsResolvedAsSingletonForNow()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace MyCode;
+
+			public sealed class Service { }
+
+			[Container]
+			[Scoped<Service>]
+			public partial class MyContainer
+			{
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyContainer.g.cs"];
+		await That(source).Contains("TODO Phase 2");
+		await That(source).Contains("__instance_0 ??= new global::MyCode.Service()");
+	}
+
+	[Fact]
+	public async Task NestedContainer_ReopensTheEnclosingTypesAsPartial()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace MyCode;
+
+			public partial class Outer
+			{
+				public sealed class Service { }
+
+				[Container]
+				[Singleton<Service>]
+				public partial class Inner
+				{
+				}
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty();
+		await That(result.Sources).HasCount(1);
+		string source = result.Sources["Awaiten.Outer.Inner.g.cs"];
+		await That(source).Contains("partial class Outer");
+		await That(source).Contains("partial class Inner : global::Awaiten.IAwaitenContainer");
+		await That(source).Contains("__instance_0 ??= new global::MyCode.Outer.Service()");
+	}
+
+	[Fact]
+	public async Task MissingDependency_ReportsAwk101()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace MyCode;
+
+			public interface IMissing { }
+			public sealed class Service { public Service(IMissing missing) { } }
+
+			[Container]
+			[Transient<Service>]
+			public partial class MyContainer
+			{
+			}
+			""");
+
+		await That(result.Diagnostics.Any(d => d.Contains("AWT101"))).IsTrue();
+	}
+
+	[Fact]
+	public async Task DependencyCycle_ReportsAwk102WithThePath()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace MyCode;
+
+			public sealed class A { public A(B b) { } }
+			public sealed class B { public B(A a) { } }
+
+			[Container]
+			[Singleton<A>]
+			[Singleton<B>]
+			public partial class MyContainer
+			{
+			}
+			""");
+
+		string[] cycleDiagnostics = result.Diagnostics.Where(d => d.Contains("AWT102")).ToArray();
+		await That(cycleDiagnostics).IsNotEmpty();
+		await That(cycleDiagnostics.Any(d => d.Contains("->"))).IsTrue();
 	}
 }

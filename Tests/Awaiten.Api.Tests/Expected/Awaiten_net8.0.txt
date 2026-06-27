@@ -13,4 +13,40 @@ namespace Awaiten
         object Resolve(System.Type serviceType);
         bool TryResolve(System.Type serviceType, out object? instance);
     }
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
+    public sealed class ScopedAttribute<TImplementation> : System.Attribute
+        where TImplementation :  class
+    {
+        public ScopedAttribute() { }
+    }
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
+    public sealed class ScopedAttribute<TImplementation, TService> : System.Attribute
+        where TImplementation :  class, TService
+    {
+        public ScopedAttribute() { }
+    }
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
+    public sealed class SingletonAttribute<TImplementation> : System.Attribute
+        where TImplementation :  class
+    {
+        public SingletonAttribute() { }
+    }
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
+    public sealed class SingletonAttribute<TImplementation, TService> : System.Attribute
+        where TImplementation :  class, TService
+    {
+        public SingletonAttribute() { }
+    }
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
+    public sealed class TransientAttribute<TImplementation> : System.Attribute
+        where TImplementation :  class
+    {
+        public TransientAttribute() { }
+    }
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
+    public sealed class TransientAttribute<TImplementation, TService> : System.Attribute
+        where TImplementation :  class, TService
+    {
+        public TransientAttribute() { }
+    }
 }
