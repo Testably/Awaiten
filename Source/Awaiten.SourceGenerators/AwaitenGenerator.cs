@@ -180,9 +180,16 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		for (int i = 0; i < instances.Count; i++)
 		{
 			List<int> edges = new();
-			foreach (string paramService in instances[i].ConstructorParameterServiceTypes.AsArray())
+			foreach (ParameterModel parameter in instances[i].ConstructorParameters.AsArray())
 			{
-				if (serviceToImpl.TryGetValue(paramService, out string? depImpl) &&
+				// Relationship types (Func<T>/Lazy<T>) defer resolution, so they break cycles and do not
+				// capture their target; only direct dependencies contribute graph edges.
+				if (parameter.Kind != DependencyKind.Direct)
+				{
+					continue;
+				}
+
+				if (serviceToImpl.TryGetValue(parameter.ServiceType, out string? depImpl) &&
 				    implToIndex.TryGetValue(depImpl, out int depIndex))
 				{
 					edges.Add(depIndex);
@@ -223,12 +230,12 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			return null;
 		}
 
-		List<string> parameters = new();
+		List<ParameterModel> parameters = new();
 		foreach (IParameterSymbol parameter in constructor.Parameters)
 		{
-			string parameterType = parameter.Type.ToDisplayString(FullyQualified);
-			parameters.Add(parameterType);
-			if (!serviceToImpl.ContainsKey(parameterType))
+			ParameterModel parameterModel = ClassifyParameter(parameter.Type);
+			parameters.Add(parameterModel);
+			if (!serviceToImpl.ContainsKey(parameterModel.ServiceType))
 			{
 				diagnostics.Add(new DiagnosticInfo(
 					Diagnostics.MissingDependency,
@@ -236,7 +243,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 					new EquatableArray<string>([
 						Display(info.ServiceTypes[0]),
 						Display(info.ImplementationType),
-						Display(parameterType),
+						Display(parameterModel.ServiceType),
 					])));
 			}
 		}
@@ -248,7 +255,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			info.Symbol.Name,
 			info.Lifetime,
 			new EquatableArray<string>(info.ServiceTypes.ToArray()),
-			new EquatableArray<string>(parameters.ToArray()),
+			new EquatableArray<ParameterModel>(parameters.ToArray()),
 			disposable,
 			info.Symbol.IsReferenceType);
 
@@ -273,7 +280,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 		HashSet<string> registered = new(registeredServices, StringComparer.Ordinal);
 		IMethodSymbol? resolvable = constructors
-			.Where(c => c.Parameters.All(p => registered.Contains(p.Type.ToDisplayString(FullyQualified))))
+			.Where(c => c.Parameters.All(p => registered.Contains(ClassifyParameter(p.Type).ServiceType)))
 			.OrderByDescending(c => c.Parameters.Length)
 			.FirstOrDefault();
 
@@ -291,6 +298,30 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 				_ => false,
 			};
 		}
+	}
+
+	/// <summary>
+	///     Classifies a constructor parameter as a direct dependency or a deferred relationship type
+	///     (<c>Func&lt;T&gt;</c> / <c>Lazy&lt;T&gt;</c>), returning the underlying service type it resolves.
+	/// </summary>
+	private static ParameterModel ClassifyParameter(ITypeSymbol parameterType)
+	{
+		if (parameterType is INamedTypeSymbol { IsGenericType: true, TypeArguments.Length: 1, } named
+		    && named.ContainingNamespace?.ToDisplayString() == "System")
+		{
+			DependencyKind? kind = named.Name switch
+			{
+				"Func" => DependencyKind.Func,
+				"Lazy" => DependencyKind.Lazy,
+				_ => null,
+			};
+			if (kind is not null)
+			{
+				return new ParameterModel(named.TypeArguments[0].ToDisplayString(FullyQualified), kind.Value);
+			}
+		}
+
+		return new ParameterModel(parameterType.ToDisplayString(FullyQualified), DependencyKind.Direct);
 	}
 
 	private static void DetectCaptiveDependencies(
@@ -361,7 +392,8 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		static string ReferencedService(InstanceModel parent, InstanceModel dependency)
 		{
 			string[] dependencyServices = dependency.ServiceTypes.AsArray();
-			return parent.ConstructorParameterServiceTypes.AsArray()
+			return parent.ConstructorParameters.AsArray()
+				.Select(p => p.ServiceType)
 				.FirstOrDefault(dependencyServices.Contains) ?? dependencyServices[0];
 		}
 	}

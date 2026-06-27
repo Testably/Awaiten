@@ -26,5 +26,28 @@ public partial class DiagnosticTests
 
 			await That(result.Diagnostics.Any(d => d.Contains("AWT101"))).IsTrue();
 		}
+
+		[Fact]
+		public async Task ReportsWhenAFuncTargetIsNotRegistered()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+			                                       using System;
+
+			                                       namespace MyCode;
+
+			                                       public interface IMissing { }
+			                                       public sealed class Service { public Service(Func<IMissing> missing) { } }
+
+			                                       [Container]
+			                                       [Transient<Service>]
+			                                       public partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics.Any(d => d.Contains("AWT101"))).IsTrue()
+				.Because("a Func<T> still requires its target T to be registered");
+		}
 	}
 }

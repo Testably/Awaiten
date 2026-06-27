@@ -217,8 +217,9 @@ internal static class Emitter
 
 	/// <summary>
 	///     The ordered dispatch cases for an owner: each registered service type mapped to its resolver
-	///     call. The order is identical on the container and its scope, so a single static table built on the
-	///     container is valid for both.
+	///     call, plus the relationship types <c>Func&lt;T&gt;</c> and <c>Lazy&lt;T&gt;</c> over it (a fresh
+	///     factory/lazy bound to this owner's resolver). The order is identical on the container and its
+	///     scope, so a single static table built on the container is valid for both.
 	/// </summary>
 	private static List<DispatchEntry> BuildDispatchEntries(InstanceModel[] instances, Names names)
 	{
@@ -229,6 +230,12 @@ internal static class Emitter
 			foreach (string service in instances[i].ServiceTypes.AsArray())
 			{
 				entries.Add(new DispatchEntry(service, resolver + "()"));
+				entries.Add(new DispatchEntry(
+					$"global::System.Func<{service}>",
+					$"new global::System.Func<{service}>(() => {resolver}())"));
+				entries.Add(new DispatchEntry(
+					$"global::System.Lazy<{service}>",
+					$"new global::System.Lazy<{service}>(() => {resolver}())"));
 			}
 		}
 
@@ -337,7 +344,7 @@ internal static class Emitter
 
 	private static string EmitConstruction(InstanceModel instance, Names names, Dictionary<string, int> serviceToIndex)
 	{
-		string[] parameters = instance.ConstructorParameterServiceTypes.AsArray();
+		ParameterModel[] parameters = instance.ConstructorParameters.AsArray();
 		StringBuilder arguments = new();
 		for (int p = 0; p < parameters.Length; p++)
 		{
@@ -346,10 +353,26 @@ internal static class Emitter
 				arguments.Append(", ");
 			}
 
-			arguments.Append(names.Resolver(serviceToIndex[parameters[p]])).Append("()");
+			arguments.Append(ResolveExpression(parameters[p], names, serviceToIndex));
 		}
 
 		return $"new {instance.ImplementationType}({arguments})";
+	}
+
+	/// <summary>
+	///     The expression that supplies a single constructor argument. A direct dependency calls its
+	///     resolver; a relationship type wraps the resolver in a <c>Func&lt;T&gt;</c> / <c>Lazy&lt;T&gt;</c>
+	///     bound to the owning container or scope (so it respects the target's lifetime and owner).
+	/// </summary>
+	private static string ResolveExpression(ParameterModel parameter, Names names, Dictionary<string, int> serviceToIndex)
+	{
+		string resolver = names.Resolver(serviceToIndex[parameter.ServiceType]);
+		return parameter.Kind switch
+		{
+			DependencyKind.Func => $"new global::System.Func<{parameter.ServiceType}>(() => {resolver}())",
+			DependencyKind.Lazy => $"new global::System.Lazy<{parameter.ServiceType}>(() => {resolver}())",
+			_ => $"{resolver}()",
+		};
 	}
 
 	private static void EmitDispose(StringBuilder builder, int depth)

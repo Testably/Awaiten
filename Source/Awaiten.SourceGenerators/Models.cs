@@ -17,6 +17,26 @@ internal enum Lifetime
 }
 
 /// <summary>
+///     How a constructor parameter is satisfied from the graph. <see cref="Direct" /> resolves the
+///     service itself; <see cref="Func" /> and <see cref="Lazy" /> are relationship types that defer
+///     resolution behind a <c>Func&lt;T&gt;</c> / <c>Lazy&lt;T&gt;</c> over the owning container or scope.
+/// </summary>
+internal enum DependencyKind
+{
+	Direct,
+	Func,
+	Lazy,
+}
+
+/// <summary>
+///     A single constructor parameter: the underlying service type it resolves (the <c>T</c> inside a
+///     <c>Func&lt;T&gt;</c> / <c>Lazy&lt;T&gt;</c>, or the parameter type itself for a direct dependency)
+///     and how it is delivered. Relationship-typed parameters are deferred, so they do not contribute
+///     graph edges for cycle or captive-dependency analysis.
+/// </summary>
+internal sealed record ParameterModel(string ServiceType, DependencyKind Kind);
+
+/// <summary>
 ///     An equatable snapshot of a <see cref="Location" /> that does not capture any Roslyn symbol or
 ///     syntax instance, so it can flow through the incremental pipeline without breaking caching.
 /// </summary>
@@ -50,17 +70,18 @@ internal sealed record DiagnosticInfo(DiagnosticDescriptor Descriptor, LocationI
 /// <summary>
 ///     A single constructed instance on a container: one implementation, the implementation's simple
 ///     name (used to name generated members), its lifetime, the (one or more) service types it is
-///     exposed as, the service types of its selected constructor's parameters, whether it needs
-///     disposing, and whether it is a reference type (only reference-type cache fields can be marked
-///     <c>volatile</c> for the lock-free fast path). Registrations of the same implementation are
-///     coalesced into one instance, so a multi-service registration shares a single object.
+///     exposed as, its selected constructor's parameters (each a service type plus how it is delivered),
+///     whether it needs disposing, and whether it is a reference type (only reference-type cache fields
+///     can be marked <c>volatile</c> for the lock-free fast path). Registrations of the same
+///     implementation are coalesced into one instance, so a multi-service registration shares a single
+///     object.
 /// </summary>
 internal sealed record InstanceModel(
 	string ImplementationType,
 	string Name,
 	Lifetime Lifetime,
 	EquatableArray<string> ServiceTypes,
-	EquatableArray<string> ConstructorParameterServiceTypes,
+	EquatableArray<ParameterModel> ConstructorParameters,
 	bool IsDisposable,
 	bool IsReferenceType);
 
