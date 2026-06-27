@@ -4,8 +4,10 @@ namespace Awaiten.Benchmarks.Helpers;
 // handler at the root, layered over services, repositories, a unit of work and infrastructure. Lifetimes
 // are mixed deliberately - singletons live for the container, scoped instances for one request, transients
 // are built fresh on every resolution - so the measured per-request resolve exercises singleton sharing,
-// per-scope caching and transient construction in one pass. Every type is a concrete class wired by
-// constructor injection; each holds its collaborators so the parameters are genuinely used.
+// per-scope caching and transient construction in one pass. The scoped resources (DbConnection, UnitOfWork)
+// are IDisposable, as real scope-owned resources are, so disposing the scope also exercises each container's
+// disposal tracking and reverse-order teardown. Every type is a concrete class wired by constructor
+// injection; each holds its collaborators so the parameters are genuinely used.
 
 // Singletons - one instance for the lifetime of the container.
 
@@ -20,15 +22,19 @@ public sealed class Cache(Config config)
 
 // Scoped - one instance per request scope.
 
-public sealed class DbConnection(Config config)
+public sealed class DbConnection(Config config) : IDisposable
 {
 	public Config Config { get; } = config;
+	public bool Disposed { get; private set; }
+	public void Dispose() => Disposed = true;
 }
 
-public sealed class UnitOfWork(DbConnection connection, Logger logger)
+public sealed class UnitOfWork(DbConnection connection, Logger logger) : IDisposable
 {
 	public DbConnection Connection { get; } = connection;
 	public Logger Logger { get; } = logger;
+	public bool Disposed { get; private set; }
+	public void Dispose() => Disposed = true;
 }
 
 public sealed class UserRepository(UnitOfWork unitOfWork, Cache cache)

@@ -158,5 +158,8 @@ public class RealisticResolveBenchmarks : BenchmarksBase
 
 	[Benchmark]
 	public object Realistic_PureDI()
-		=> PureRealisticContainer.CreateScope(_pure, new PureRealisticContainer()).Root;
+	{
+		using PureRealisticContainer scope = PureRealisticContainer.CreateScope(_pure, new PureRealisticContainer());
+		return scope.Root;
+	}
 }

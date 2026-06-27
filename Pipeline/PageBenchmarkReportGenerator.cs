@@ -189,13 +189,13 @@ public class PageBenchmarkReportGenerator
 		private static string GetColor(string library)
 			=> library switch
 			{
-				"Awaiten"        => "#63A2AC",
+				"Awaiten"        => "#3949AB",
 				"MsDI"           => "#512BD4",
 				"Autofac"        => "#5E2750",
 				"Jab"            => "#D9534F",
 				"PureDI"         => "#F0AD4E",
-				"DryIoc"         => "#2F80ED",
-				"SimpleInjector" => "#5CB85C",
+				"DryIoc"         => "#1565C0",
+				"SimpleInjector" => "#43A047",
 				_                => "#B0B0B0",
 			};
 
