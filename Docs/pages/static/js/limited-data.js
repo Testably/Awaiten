@@ -12,11 +12,18 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Jun 27 18:42:24 2026 \u002B0200",
         "message": "perf: dispatch resolution through a static Type table instead of a linear if-chain (#20)"
+      },
+      {
+        "sha": "3de2a7f96c56c3ea423fc6ac5f66b1494b53deb9",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Jun 27 19:51:15 2026 \u002B0200",
+        "message": "refactor: make benchmark classes self-contained and add DryIoc \u002B Simple Injector (#22)"
       }
     ],
     "labels": [
       "9e826c17",
-      "c39ceed4"
+      "c39ceed4",
+      "3de2a7f9"
     ],
     "datasets": [
       {
@@ -24,7 +31,8 @@ window.BENCHMARK_DATA = {
         "unit": "ns",
         "data": [
           6.042193595033425,
-          9.984777721265951
+          9.984777721265951,
+          9.885763876140118
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -36,6 +44,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0
         ],
@@ -53,7 +62,8 @@ window.BENCHMARK_DATA = {
         "unit": "ns",
         "data": [
           7.011932362403188,
-          7.165684852462548
+          7.165684852462548,
+          7.0664904532688
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -65,6 +75,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0
         ],
@@ -82,7 +93,8 @@ window.BENCHMARK_DATA = {
         "unit": "ns",
         "data": [
           106.18884980678558,
-          105.09433993271419
+          105.09433993271419,
+          113.55918945584979
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -94,6 +106,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656
         ],
@@ -111,7 +124,8 @@ window.BENCHMARK_DATA = {
         "unit": "ns",
         "data": [
           2.861889192213615,
-          2.864032766116517
+          2.864032766116517,
+          2.60612515732646
         ],
         "borderColor": "#4A6FA5",
         "backgroundColor": "#4A6FA5",
@@ -123,6 +137,7 @@ window.BENCHMARK_DATA = {
         "label": "Jab memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0
         ],
@@ -140,7 +155,8 @@ window.BENCHMARK_DATA = {
         "unit": "ns",
         "data": [
           6.725859894355138,
-          6.806414321064949
+          6.806414321064949,
+          6.40836979661669
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
@@ -152,6 +168,7 @@ window.BENCHMARK_DATA = {
         "label": "PureDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0
         ],
@@ -346,11 +363,18 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Jun 27 18:42:24 2026 \u002B0200",
         "message": "perf: dispatch resolution through a static Type table instead of a linear if-chain (#20)"
+      },
+      {
+        "sha": "3de2a7f96c56c3ea423fc6ac5f66b1494b53deb9",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Jun 27 19:51:15 2026 \u002B0200",
+        "message": "refactor: make benchmark classes self-contained and add DryIoc \u002B Simple Injector (#22)"
       }
     ],
     "labels": [
       "9e826c17",
-      "c39ceed4"
+      "c39ceed4",
+      "3de2a7f9"
     ],
     "datasets": [
       {
@@ -358,7 +382,8 @@ window.BENCHMARK_DATA = {
         "unit": "ns",
         "data": [
           45.455347631658825,
-          11.401101275132252
+          11.401101275132252,
+          10.104073643684387
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -370,6 +395,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0
         ],
@@ -387,7 +413,8 @@ window.BENCHMARK_DATA = {
         "unit": "ns",
         "data": [
           7.005394069211824,
-          7.192912148741575
+          7.192912148741575,
+          7.101283203278269
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -399,6 +426,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0
         ],
@@ -416,7 +444,8 @@ window.BENCHMARK_DATA = {
         "unit": "ns",
         "data": [
           109.87674596905708,
-          105.27381155320576
+          105.27381155320576,
+          112.35390312331063
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -428,6 +457,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656
         ],
@@ -445,7 +475,8 @@ window.BENCHMARK_DATA = {
         "unit": "ns",
         "data": [
           42.81887869040171,
-          42.793274948230156
+          42.793274948230156,
+          42.812093526124954
         ],
         "borderColor": "#4A6FA5",
         "backgroundColor": "#4A6FA5",
@@ -457,6 +488,7 @@ window.BENCHMARK_DATA = {
         "label": "Jab memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0
         ],
@@ -474,7 +506,8 @@ window.BENCHMARK_DATA = {
         "unit": "ns",
         "data": [
           8.274077805188986,
-          8.261776864528656
+          8.261776864528656,
+          7.603359976640115
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
@@ -486,6 +519,7 @@ window.BENCHMARK_DATA = {
         "label": "PureDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0
         ],
@@ -513,11 +547,18 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Jun 27 18:42:24 2026 \u002B0200",
         "message": "perf: dispatch resolution through a static Type table instead of a linear if-chain (#20)"
+      },
+      {
+        "sha": "3de2a7f96c56c3ea423fc6ac5f66b1494b53deb9",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Jun 27 19:51:15 2026 \u002B0200",
+        "message": "refactor: make benchmark classes self-contained and add DryIoc \u002B Simple Injector (#22)"
       }
     ],
     "labels": [
       "9e826c17",
-      "c39ceed4"
+      "c39ceed4",
+      "3de2a7f9"
     ],
     "datasets": [
       {
@@ -525,7 +566,8 @@ window.BENCHMARK_DATA = {
         "unit": "ns",
         "data": [
           22.586610968907674,
-          25.408868404229484
+          25.408868404229484,
+          24.944836461544035
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -537,6 +579,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          160,
           160,
           160
         ],
@@ -554,7 +597,8 @@ window.BENCHMARK_DATA = {
         "unit": "ns",
         "data": [
           1650.7135983784995,
-          1556.666805903117
+          1556.666805903117,
+          1475.3557790120442
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -566,6 +610,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          5688,
           5688,
           5688
         ],
@@ -583,7 +628,8 @@ window.BENCHMARK_DATA = {
         "unit": "ns",
         "data": [
           24660.685026041665,
-          28979.10302734375
+          28979.10302734375,
+          28257.207649739583
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -596,6 +642,7 @@ window.BENCHMARK_DATA = {
         "unit": "b",
         "data": [
           33092,
+          33098,
           33098
         ],
         "borderColor": "#5E2750",
@@ -612,7 +659,8 @@ window.BENCHMARK_DATA = {
         "unit": "ns",
         "data": [
           10.445150269071261,
-          9.20387484558991
+          9.20387484558991,
+          9.388717264930408
         ],
         "borderColor": "#4A6FA5",
         "backgroundColor": "#4A6FA5",
@@ -624,6 +672,7 @@ window.BENCHMARK_DATA = {
         "label": "Jab memory",
         "unit": "b",
         "data": [
+          96,
           96,
           96
         ],
@@ -641,7 +690,8 @@ window.BENCHMARK_DATA = {
         "unit": "ns",
         "data": [
           16.12693266669909,
-          15.165443106339527
+          15.165443106339527,
+          15.121575939655305
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
@@ -653,6 +703,7 @@ window.BENCHMARK_DATA = {
         "label": "PureDI memory",
         "unit": "b",
         "data": [
+          128,
           128,
           128
         ],
@@ -847,11 +898,18 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Jun 27 18:42:24 2026 \u002B0200",
         "message": "perf: dispatch resolution through a static Type table instead of a linear if-chain (#20)"
+      },
+      {
+        "sha": "3de2a7f96c56c3ea423fc6ac5f66b1494b53deb9",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Jun 27 19:51:15 2026 \u002B0200",
+        "message": "refactor: make benchmark classes self-contained and add DryIoc \u002B Simple Injector (#22)"
       }
     ],
     "labels": [
       "9e826c17",
-      "c39ceed4"
+      "c39ceed4",
+      "3de2a7f9"
     ],
     "datasets": [
       {
@@ -859,7 +917,8 @@ window.BENCHMARK_DATA = {
         "unit": "ns",
         "data": [
           115.49085221971784,
-          93.44233902863094
+          93.44233902863094,
+          95.15006294617287
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -871,6 +930,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          2144,
           2144,
           2144
         ],
@@ -888,7 +948,8 @@ window.BENCHMARK_DATA = {
         "unit": "ns",
         "data": [
           14105.811452229818,
-          14303.591486249652
+          14303.591486249652,
+          14221.36842549642
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -900,6 +961,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          61016,
           61016,
           61016
         ],
@@ -917,7 +979,8 @@ window.BENCHMARK_DATA = {
         "unit": "ns",
         "data": [
           555859.5663311298,
-          683072.6413225447
+          683072.6413225447,
+          671868.4560546875
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -930,7 +993,8 @@ window.BENCHMARK_DATA = {
         "unit": "b",
         "data": [
           739452,
-          741789
+          741789,
+          740145
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -946,7 +1010,8 @@ window.BENCHMARK_DATA = {
         "unit": "ns",
         "data": [
           104.94684716860453,
-          79.59447942574819
+          79.59447942574819,
+          79.5539099295934
         ],
         "borderColor": "#4A6FA5",
         "backgroundColor": "#4A6FA5",
@@ -958,6 +1023,7 @@ window.BENCHMARK_DATA = {
         "label": "Jab memory",
         "unit": "b",
         "data": [
+          2080,
           2080,
           2080
         ],
@@ -975,7 +1041,8 @@ window.BENCHMARK_DATA = {
         "unit": "ns",
         "data": [
           115.83049867947896,
-          89.94245272874832
+          89.94245272874832,
+          81.5749951856477
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
@@ -987,6 +1054,7 @@ window.BENCHMARK_DATA = {
         "label": "PureDI memory",
         "unit": "b",
         "data": [
+          2112,
           2112,
           2112
         ],
