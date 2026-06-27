@@ -8,6 +8,41 @@ namespace Awaiten.Tests;
 public partial class ResolutionTests
 {
 	[Fact]
+	public async Task ConstructorDependencies_AreWiredFromTheGraph()
+	{
+		GraphContainer container = new();
+
+		Leaf leaf = container.Get<Leaf>();
+		IMiddle middle = container.Get<IMiddle>();
+		Top top = container.Get<Top>();
+
+		// The singleton Leaf is shared by every consumer.
+		await That(middle.Leaf).IsSameAs(leaf);
+		await That(top.Leaf).IsSameAs(leaf);
+		// The singleton Middle is the same instance injected into the transient Top.
+		await That(top.Middle).IsSameAs(middle);
+	}
+
+	[Fact]
+	public async Task Resolve_ForAnUnregisteredType_Throws()
+	{
+		GraphContainer container = new();
+
+		await That(() => container.Resolve(typeof(string))).Throws<InvalidOperationException>();
+	}
+
+	[Fact]
+	public async Task Resolve_OnIAwaitenContainer_ReturnsTheRegisteredInstance()
+	{
+		GraphContainer container = new();
+		IAwaitenContainer neutral = container;
+
+		object middle = neutral.Resolve(typeof(IMiddle));
+
+		await That(middle).IsSameAs(container.Get<IMiddle>());
+	}
+
+	[Fact]
 	public async Task Singleton_ReturnsTheSameInstanceEachTime()
 	{
 		GraphContainer container = new();
@@ -42,33 +77,6 @@ public partial class ResolutionTests
 	}
 
 	[Fact]
-	public async Task ConstructorDependencies_AreWiredFromTheGraph()
-	{
-		GraphContainer container = new();
-
-		Leaf leaf = container.Get<Leaf>();
-		IMiddle middle = container.Get<IMiddle>();
-		Top top = container.Get<Top>();
-
-		// The singleton Leaf is shared by every consumer.
-		await That(middle.Leaf).IsSameAs(leaf);
-		await That(top.Leaf).IsSameAs(leaf);
-		// The singleton Middle is the same instance injected into the transient Top.
-		await That(top.Middle).IsSameAs(middle);
-	}
-
-	[Fact]
-	public async Task Resolve_OnIAwaitenContainer_ReturnsTheRegisteredInstance()
-	{
-		GraphContainer container = new();
-		IAwaitenContainer neutral = container;
-
-		object middle = neutral.Resolve(typeof(IMiddle));
-
-		await That(middle).IsSameAs(container.Get<IMiddle>());
-	}
-
-	[Fact]
 	public async Task TryResolve_ForAnUnregisteredType_ReturnsFalse()
 	{
 		GraphContainer container = new();
@@ -77,14 +85,6 @@ public partial class ResolutionTests
 
 		await That(resolved).IsFalse();
 		await That(instance).IsNull();
-	}
-
-	[Fact]
-	public async Task Resolve_ForAnUnregisteredType_Throws()
-	{
-		GraphContainer container = new();
-
-		await That(() => container.Resolve(typeof(string))).Throws<InvalidOperationException>();
 	}
 
 	public sealed class Leaf;

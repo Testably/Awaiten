@@ -73,7 +73,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			         ReferenceEquals(byService[registration.ServiceType], registration)))
 		{
 			cancellationToken.ThrowIfCancellationRequested();
-			BuildRegistration(registration, byService, registrations, dependencies, diagnostics);
+			BuildRegistration(registration, containerSymbol, byService, registrations, dependencies, diagnostics);
 		}
 
 		DetectCycles(dependencies, containerSymbol, diagnostics);
@@ -89,9 +89,15 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			containingTypes.Insert(0, new TypeDeclaration(KeywordOf(outer), outer.Name));
 		}
 
-		string hintName = containingTypes.Count > 0
-			? $"Awaiten.{string.Join(".", containingTypes.Select(t => t.Name))}.{containerSymbol.Name}.g.cs"
-			: $"Awaiten.{containerSymbol.Name}.g.cs";
+		// Qualify the hint name with namespace and enclosing types so containers that share a simple
+		// name in different namespaces (or nesting) do not collide. Nested types use '+' (the metadata
+		// separator) so a nested 'Outer+Inner' cannot collide with a namespace-qualified 'Outer.Inner'.
+		string typePath = containingTypes.Count > 0
+			? $"{string.Join("+", containingTypes.Select(t => t.Name))}+{containerSymbol.Name}"
+			: containerSymbol.Name;
+		string hintName = containerNamespace is null
+			? $"Awaiten.{typePath}.g.cs"
+			: $"Awaiten.{containerNamespace}.{typePath}.g.cs";
 
 		return new ContainerModel(
 			containerNamespace,
@@ -104,35 +110,53 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 	private static void BuildRegistration(
 		RawRegistration registration,
+		INamedTypeSymbol containerSymbol,
 		Dictionary<string, RawRegistration> byService,
 		List<RegistrationModel> registrations,
 		Dictionary<string, List<string>> dependencies,
 		List<DiagnosticInfo> diagnostics)
 	{
-		IMethodSymbol? constructor = SelectConstructor(registration.Implementation, byService.Keys);
+		// An abstract type or interface cannot be constructed; reject it instead of emitting a 'new'
+		// against it (which would fail to compile in the generated source).
+		if (registration.Implementation.IsAbstract || registration.Implementation.TypeKind == TypeKind.Interface)
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.NotInstantiable,
+				registration.Location,
+				new EquatableArray<string>([Display(registration.ImplementationType),])));
+			return;
+		}
+
+		IMethodSymbol? constructor = SelectConstructor(registration.Implementation, containerSymbol, byService.Keys);
+		if (constructor is null)
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.NoAccessibleConstructor,
+				registration.Location,
+				new EquatableArray<string>([Display(registration.ImplementationType),])));
+			return;
+		}
+
 		List<string> parameters = new();
 		List<string> resolvedDependencies = new();
-		if (constructor is not null)
+		foreach (IParameterSymbol parameter in constructor.Parameters)
 		{
-			foreach (IParameterSymbol parameter in constructor.Parameters)
+			string parameterType = parameter.Type.ToDisplayString(FullyQualified);
+			parameters.Add(parameterType);
+			if (byService.ContainsKey(parameterType))
 			{
-				string parameterType = parameter.Type.ToDisplayString(FullyQualified);
-				parameters.Add(parameterType);
-				if (byService.ContainsKey(parameterType))
-				{
-					resolvedDependencies.Add(parameterType);
-				}
-				else
-				{
-					diagnostics.Add(new DiagnosticInfo(
-						Diagnostics.MissingDependency,
-						registration.Location,
-						new EquatableArray<string>([
-							Display(registration.ServiceType),
-							Display(registration.ImplementationType),
-							Display(parameterType),
-						])));
-				}
+				resolvedDependencies.Add(parameterType);
+			}
+			else
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.MissingDependency,
+					registration.Location,
+					new EquatableArray<string>([
+						Display(registration.ServiceType),
+						Display(registration.ImplementationType),
+						Display(parameterType),
+					])));
 			}
 		}
 
@@ -203,10 +227,13 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		}
 	}
 
-	private static IMethodSymbol? SelectConstructor(INamedTypeSymbol implementation, IEnumerable<string> registeredServices)
+	private static IMethodSymbol? SelectConstructor(
+		INamedTypeSymbol implementation,
+		INamedTypeSymbol containerSymbol,
+		IEnumerable<string> registeredServices)
 	{
 		List<IMethodSymbol> constructors = implementation.InstanceConstructors
-			.Where(c => c.DeclaredAccessibility == Accessibility.Public)
+			.Where(c => IsAccessibleConstructor(c, containerSymbol))
 			.ToList();
 		if (constructors.Count <= 1)
 		{
@@ -222,6 +249,19 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		// Fall back to the greediest constructor so its unresolved parameters surface as AWT101.
 		return resolvable ?? constructors.OrderByDescending(c => c.Parameters.Length).First();
 	}
+
+	// The generated code is a partial of the container, so it can call any constructor accessible from
+	// the container: public always, and internal/protected-internal when the implementation lives in
+	// the same assembly.
+	private static bool IsAccessibleConstructor(IMethodSymbol constructor, INamedTypeSymbol containerSymbol)
+		=> constructor.DeclaredAccessibility switch
+		{
+			Accessibility.Public => true,
+			Accessibility.Internal or Accessibility.ProtectedOrInternal =>
+				SymbolEqualityComparer.Default.Equals(
+					constructor.ContainingAssembly, containerSymbol.ContainingAssembly),
+			_ => false,
+		};
 
 	private static void DetectCycles(
 		Dictionary<string, List<string>> dependencies,

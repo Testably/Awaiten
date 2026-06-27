@@ -20,7 +20,7 @@ public class GeneralTests
 
 		await That(result.Diagnostics).IsEmpty();
 		await That(result.Sources).HasCount(1);
-		string source = result.Sources["Awaiten.MyContainer.g.cs"];
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 		await That(source).Contains("partial class MyContainer : global::Awaiten.IAwaitenContainer");
 		await That(source).Contains("public T Get<T>() => (T)Resolve(typeof(T));");
 	}
@@ -48,7 +48,7 @@ public class GeneralTests
 			""");
 
 		await That(result.Diagnostics).IsEmpty();
-		string source = result.Sources["Awaiten.MyContainer.g.cs"];
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
 		// Singletons are cached in fields and memoized; transients are not.
 		await That(source).Contains("private global::MyCode.Leaf? __instance_0;");
@@ -78,7 +78,7 @@ public class GeneralTests
 			""");
 
 		await That(result.Diagnostics).IsEmpty();
-		string source = result.Sources["Awaiten.MyContainer.g.cs"];
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 		await That(source).Contains("TODO Phase 2");
 		await That(source).Contains("__instance_0 ??= new global::MyCode.Service()");
 	}
@@ -105,14 +105,14 @@ public class GeneralTests
 
 		await That(result.Diagnostics).IsEmpty();
 		await That(result.Sources).HasCount(1);
-		string source = result.Sources["Awaiten.Outer.Inner.g.cs"];
+		string source = result.Sources["Awaiten.MyCode.Outer+Inner.g.cs"];
 		await That(source).Contains("partial class Outer");
 		await That(source).Contains("partial class Inner : global::Awaiten.IAwaitenContainer");
 		await That(source).Contains("__instance_0 ??= new global::MyCode.Outer.Service()");
 	}
 
 	[Fact]
-	public async Task MissingDependency_ReportsAwk101()
+	public async Task MissingDependency_ReportsAwt101()
 	{
 		GeneratorResult result = Generator.Run("""
 			using Awaiten;
@@ -133,7 +133,7 @@ public class GeneralTests
 	}
 
 	[Fact]
-	public async Task DependencyCycle_ReportsAwk102WithThePath()
+	public async Task DependencyCycle_ReportsAwt102WithThePath()
 	{
 		GeneratorResult result = Generator.Run("""
 			using Awaiten;
@@ -154,5 +154,83 @@ public class GeneralTests
 		string[] cycleDiagnostics = result.Diagnostics.Where(d => d.Contains("AWT102")).ToArray();
 		await That(cycleDiagnostics).IsNotEmpty();
 		await That(cycleDiagnostics.Any(d => d.Contains("->"))).IsTrue();
+	}
+
+	[Fact]
+	public async Task AbstractImplementation_ReportsAwt103()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace MyCode;
+
+			public interface IFoo { }
+
+			[Container]
+			[Singleton<IFoo>]
+			public partial class MyContainer
+			{
+			}
+			""");
+
+		await That(result.Diagnostics.Any(d => d.Contains("AWT103"))).IsTrue();
+	}
+
+	[Fact]
+	public async Task NoAccessibleConstructor_ReportsAwt104()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace MyCode;
+
+			public sealed class Foo { private Foo() { } }
+
+			[Container]
+			[Singleton<Foo>]
+			public partial class MyContainer
+			{
+			}
+			""");
+
+		await That(result.Diagnostics.Any(d => d.Contains("AWT104"))).IsTrue();
+	}
+
+	[Fact]
+	public async Task InternalConstructor_InTheSameAssembly_IsUsable()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace MyCode;
+
+			public sealed class Foo { internal Foo() { } }
+
+			[Container]
+			[Singleton<Foo>]
+			public partial class MyContainer
+			{
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+		await That(source).Contains("__instance_0 ??= new global::MyCode.Foo()");
+	}
+
+	[Fact]
+	public async Task SameSimpleName_InDifferentNamespaces_DoNotCollide()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace A { public sealed class S1 { } [Container][Singleton<S1>] public partial class MyContainer { } }
+			namespace B { public sealed class S2 { } [Container][Singleton<S2>] public partial class MyContainer { } }
+			""");
+
+		await That(result.Diagnostics).IsEmpty();
+		await That(result.Sources).HasCount(2);
+		await That(result.Sources.ContainsKey("Awaiten.A.MyContainer.g.cs")).IsTrue();
+		await That(result.Sources.ContainsKey("Awaiten.B.MyContainer.g.cs")).IsTrue();
 	}
 }
