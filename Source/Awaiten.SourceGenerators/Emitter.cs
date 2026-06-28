@@ -95,7 +95,7 @@ internal static class Emitter
 		{
 			// A parameterized service is not directly resolvable (only through its Func<TArg…, T> factory),
 			// so it gets no typed resolution fast path.
-			if (IsParameterized(instance))
+			if (instance.IsParameterized)
 			{
 				continue;
 			}
@@ -119,7 +119,7 @@ internal static class Emitter
 		{
 			// A parameterized service has no typed resolver: its resolver takes the runtime arguments, so it
 			// is reached only through its Func<TArg…, T> factory in the Type-based dispatch table.
-			if (IsParameterized(instances[i]))
+			if (instances[i].IsParameterized)
 			{
 				continue;
 			}
@@ -334,7 +334,7 @@ internal static class Emitter
 		{
 			// A parameterized service is never cached on the root; its single fresh-per-call resolver lives
 			// on the base Scope (protected) and the RootScope inherits it.
-			if (IsParameterized(instances[i])
+			if (instances[i].IsParameterized
 			    || (instances[i].Lifetime != Lifetime.Singleton && instances[i].Production != ProductionKind.Instance))
 			{
 				continue;
@@ -359,7 +359,7 @@ internal static class Emitter
 			InstanceModel instance = instances[i];
 			// A pre-built Instance has no field, and a parameterized service is rebuilt per call from its
 			// runtime arguments and so is never cached.
-			if (instance.Production == ProductionKind.Instance || IsParameterized(instance) || instance.Lifetime != lifetime)
+			if (instance.Production == ProductionKind.Instance || instance.IsParameterized || instance.Lifetime != lifetime)
 			{
 				continue;
 			}
@@ -455,7 +455,7 @@ internal static class Emitter
 		// the Func<TArg…, T> added above.
 		for (int i = 0; i < instances.Length; i++)
 		{
-			if (!IsParameterized(instances[i]))
+			if (!instances[i].IsParameterized)
 			{
 				AddRelationshipEntries(instances[i], names.Resolver(i), entries, seen);
 			}
@@ -471,7 +471,7 @@ internal static class Emitter
 	/// </summary>
 	private static void AddServiceEntries(InstanceModel instance, string resolver, List<DispatchEntry> entries, HashSet<string> seen)
 	{
-		string[] argTypes = ArgTypes(instance);
+		string[] argTypes = instance.ArgTypes();
 		foreach (string service in instance.ServiceTypes.AsArray())
 		{
 			if (argTypes.Length > 0)
@@ -541,9 +541,9 @@ internal static class Emitter
 		string type = instance.ImplementationType;
 		string resolver = names.Resolver(index);
 
-		if (IsParameterized(instance))
+		if (instance.IsParameterized)
 		{
-			string[] argTypes = ArgTypes(instance);
+			string[] argTypes = instance.ArgTypes();
 			string signature = string.Join(", ", argTypes.Select((t, i) => $"{t} a{i}"));
 			string parameterizedConstruction = EmitConstruction(instance, instances, names, serviceToIndex, false);
 			// Reachable from the RootScope (a singleton's Func<TArg…, T> binds it there), so it is protected.
@@ -746,18 +746,6 @@ internal static class Emitter
 		string lambdaArgs = string.Join(", ", argTypes.Select((_, i) => "a" + i));
 		return $"new global::System.Func<{generics}>(({lambdaArgs}) => {resolver}({lambdaArgs}))";
 	}
-
-	private static bool IsParameterized(InstanceModel instance) => ArgTypes(instance).Length > 0;
-
-	/// <summary>
-	///     The ordered runtime-argument types of an instance: the service types of its <c>[Arg]</c>-marked
-	///     constructor parameters, in declaration order.
-	/// </summary>
-	private static string[] ArgTypes(InstanceModel instance)
-		=> instance.ConstructorParameters.AsArray()
-			.Where(p => p.Kind == DependencyKind.Arg)
-			.Select(p => p.ServiceType)
-			.ToArray();
 
 	private static void EmitDispose(StringBuilder builder, int depth)
 	{

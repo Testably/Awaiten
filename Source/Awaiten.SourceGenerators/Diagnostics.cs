@@ -164,7 +164,7 @@ internal static class Diagnostics
 	public static readonly DiagnosticDescriptor RuntimeArgumentMismatch = new(
 		"AWT113",
 		"Runtime argument mismatch",
-		"'{0}' cannot be produced from this factory: its runtime arguments ({1}) do not match the [Arg] parameters ({2}) of '{0}'",
+		"The Func<…, {0}> relationship supplies runtime arguments ({1}) that do not match the [Arg] parameters ({2}) of '{0}'",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);

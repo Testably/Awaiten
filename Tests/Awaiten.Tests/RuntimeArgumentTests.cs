@@ -59,6 +59,69 @@ public partial class RuntimeArgumentTests
 			.Because("a disposable parameterized service is tracked by the owner its factory is bound to");
 	}
 
+	[Fact]
+	public async Task Func_OverAParameterizedServiceThatItselfTakesRuntimeArguments_Composes()
+	{
+		using RuntimeArgumentContainer container = new();
+
+		Func<string, Crate> crates = container.Resolve<Func<string, Crate>>();
+		Crate crate = crates("export");
+		Widget first = crate.Pack(5);
+		Widget second = crate.Pack(9);
+
+		await That(crate.Label).IsEqualTo("export")
+			.Because("the outer runtime argument flows into the outer [Arg] parameter");
+		await That(first.Size).IsEqualTo(5)
+			.Because("the inner runtime argument flows through the nested Func into the inner [Arg] parameter");
+		await That(second.Size).IsEqualTo(9);
+		await That(first).IsNotSameAs(second)
+			.Because("each call to the nested factory builds a fresh widget");
+		await That(first.Engine).IsSameAs(second.Engine)
+			.Because("the nested graph dependency is still the shared singleton");
+	}
+
+	[Fact]
+	public async Task Factory_WithRuntimeArgument_ForwardsItToTheFactoryMethod()
+	{
+		using FactoryArgContainer container = new();
+
+		Func<string, Badge> badges = container.Resolve<Func<string, Badge>>();
+
+		await That(badges("A1").Code).IsEqualTo("A1")
+			.Because("a [Arg] on a factory-method parameter is supplied at resolve time, like a constructor's");
+		await That(badges("B2").Code).IsEqualTo("B2");
+	}
+
+	[Fact]
+	public async Task Arg_WhoseTypeIsAlsoRegistered_IsSuppliedAtRuntimeRatherThanFromTheGraph()
+	{
+		using RuntimeArgumentContainer container = new();
+
+		Engine supplied = new();
+		Func<Engine, Stamp> stamps = container.Resolve<Func<Engine, Stamp>>();
+		Stamp stamp = stamps(supplied);
+
+		await That(stamp.Engine).IsSameAs(supplied)
+			.Because("a [Arg] parameter is supplied at runtime, bypassing the registered Engine even though its type is registered");
+	}
+
+	[Fact]
+	public async Task Func_BoundToASingleton_ReleasesTheBuiltDisposablesWithTheContainer()
+	{
+		RuntimeArgumentContainer container = new();
+
+		Depot depot = container.Resolve<Depot>();
+		Tool tool = depot.Make(1);
+
+		await That(tool.Disposed).IsFalse()
+			.Because("the container that owns the singleton's factory is still alive");
+
+		container.Dispose();
+
+		await That(tool.Disposed).IsTrue()
+			.Because("a tool built through a singleton's root-bound Func accumulates on the root and is disposed with the container");
+	}
+
 	public sealed class Engine;
 
 	public sealed class Robot
@@ -107,15 +170,83 @@ public partial class RuntimeArgumentTests
 		public Robot Build(string name) => _robots(name);
 	}
 
+	// A parameterized service whose own runtime argument is supplied through a nested parameterized Func.
+	public sealed class Widget
+	{
+		public Widget(Engine engine, [Arg] int size)
+		{
+			Engine = engine;
+			Size = size;
+		}
+
+		public Engine Engine { get; }
+
+		public int Size { get; }
+	}
+
+	public sealed class Crate
+	{
+		private readonly Func<int, Widget> _widgets;
+
+		public Crate([Arg] string label, Func<int, Widget> widgets)
+		{
+			Label = label;
+			_widgets = widgets;
+		}
+
+		public string Label { get; }
+
+		public Widget Pack(int size) => _widgets(size);
+	}
+
+	// A [Arg] whose type is itself a registered service: the value comes from the call, not the graph.
+	public sealed class Stamp
+	{
+		public Stamp([Arg] Engine engine) => Engine = engine;
+
+		public Engine Engine { get; }
+	}
+
+	// A singleton holding a Func over a disposable parameterized service: the built tools bind to the root.
+	public sealed class Depot
+	{
+		private readonly Func<int, Tool> _tools;
+
+		public Depot(Func<int, Tool> tools) => _tools = tools;
+
+		public Tool Make(int id) => _tools(id);
+	}
+
 	// AWT106 (disposable transient accumulates from the root) is suppressed: Func_BoundToAScope... resolves
-	// Tool only from a scope, which releases it on scope disposal, so it does not accumulate on the root.
+	// Tool only from a scope, which releases it on scope disposal; Func_BoundToASingleton... deliberately
+	// accumulates it on the root and disposes it with the container.
 #pragma warning disable AWT106
 	[Container]
 	[Singleton<Engine>]
 	[Transient<Robot>]
 	[Transient<Gadget>]
 	[Transient<Tool>]
+	[Transient<Widget>]
+	[Transient<Crate>]
+	[Transient<Stamp>]
+	[Singleton<Depot>]
 	[Singleton<Workshop>]
 	public partial class RuntimeArgumentContainer;
 #pragma warning restore AWT106
+
+	public sealed class Badge
+	{
+		public Badge(string code) => Code = code;
+
+		public string Code { get; }
+	}
+
+	// A factory method with a [Arg] parameter: the runtime argument is forwarded to the factory, not the
+	// constructor, so the produced type need not declare [Arg] itself.
+	[Container]
+	[Transient<Badge>(Factory = nameof(MakeBadge))]
+	public partial class FactoryArgContainer
+	{
+		private static Badge MakeBadge([Arg] string code) => new(code);
+	}
 }

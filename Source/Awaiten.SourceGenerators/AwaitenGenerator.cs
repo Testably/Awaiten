@@ -483,9 +483,11 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	/// </summary>
 	private static ParameterModel ClassifyParameter(IParameterSymbol parameter)
 	{
+		LocationInfo? location = LocationInfo.From(parameter.Locations.FirstOrDefault());
+
 		if (HasArgAttribute(parameter))
 		{
-			return new ParameterModel(parameter.Type.ToDisplayString(FullyQualified), DependencyKind.Arg);
+			return new ParameterModel(parameter.Type.ToDisplayString(FullyQualified), DependencyKind.Arg, Location: location);
 		}
 
 		if (parameter.Type is INamedTypeSymbol { IsGenericType: true, } named
@@ -493,7 +495,8 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		{
 			if (named is { Name: "Lazy", TypeArguments.Length: 1, } && !IsRelationshipType(named.TypeArguments[0]))
 			{
-				return new ParameterModel(named.TypeArguments[0].ToDisplayString(FullyQualified), DependencyKind.Lazy);
+				return new ParameterModel(
+					named.TypeArguments[0].ToDisplayString(FullyQualified), DependencyKind.Lazy, Location: location);
 			}
 
 			if (named is { Name: "Func", TypeArguments.Length: >= 1, })
@@ -508,12 +511,12 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 						.Select(t => t.ToDisplayString(FullyQualified))
 						.ToArray();
 					return new ParameterModel(
-						service.ToDisplayString(FullyQualified), DependencyKind.Func, new EquatableArray<string>(argTypes));
+						service.ToDisplayString(FullyQualified), DependencyKind.Func, new EquatableArray<string>(argTypes), location);
 				}
 			}
 		}
 
-		return new ParameterModel(parameter.Type.ToDisplayString(FullyQualified), DependencyKind.Direct);
+		return new ParameterModel(parameter.Type.ToDisplayString(FullyQualified), DependencyKind.Direct, Location: location);
 	}
 
 	private static bool HasArgAttribute(IParameterSymbol parameter)
@@ -533,16 +536,6 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	private static bool IsRelationshipType(ITypeSymbol type)
 		=> type is INamedTypeSymbol { IsGenericType: true, TypeArguments.Length: 1, Name: "Func" or "Lazy", } named
 		   && named.ContainingNamespace?.ToDisplayString() == "System";
-
-	/// <summary>
-	///     The ordered runtime-argument types of an instance: the service types of its <c>[Arg]</c>-marked
-	///     constructor parameters, in declaration order.
-	/// </summary>
-	private static string[] ArgTypesOf(InstanceModel instance)
-		=> instance.ConstructorParameters.AsArray()
-			.Where(p => p.Kind == DependencyKind.Arg)
-			.Select(p => p.ServiceType)
-			.ToArray();
 
 	/// <summary>
 	///     Validates how parameterized services (those with <c>[Arg]</c>-marked parameters) are registered
@@ -576,7 +569,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			InstanceModel instance = instances[i];
 			LocationInfo? location = instanceLocations[i];
 
-			if (ArgTypesOf(instance).Length > 0 && instance.Lifetime != Lifetime.Transient)
+			if (instance.IsParameterized && instance.Lifetime != Lifetime.Transient)
 			{
 				diagnostics.Add(new DiagnosticInfo(
 					Diagnostics.ParameterizedLifetime,
@@ -593,7 +586,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 				}
 
 				ValidateDependency(
-					instance, parameter, ArgTypesOf(instances[implToIndex[targetImpl]]), location, diagnostics);
+					instance, parameter, instances[implToIndex[targetImpl]].ArgTypes(), location, diagnostics);
 			}
 		}
 	}
@@ -608,9 +601,13 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		InstanceModel consumer,
 		ParameterModel parameter,
 		string[] expected,
-		LocationInfo? location,
+		LocationInfo? consumerLocation,
 		List<DiagnosticInfo> diagnostics)
 	{
+		// Point the diagnostic at the offending parameter; fall back to the consumer's registration when the
+		// parameter has no usable location.
+		LocationInfo? location = parameter.Location ?? consumerLocation;
+
 		if (parameter.Kind == DependencyKind.Func)
 		{
 			string[] requested = parameter.FuncArgTypes.AsArray();
@@ -621,8 +618,8 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 					location,
 					new EquatableArray<string>([
 						Display(parameter.ServiceType),
-						string.Join(", ", requested.Select(Display)),
-						string.Join(", ", expected.Select(Display)),
+						FormatTypeList(requested),
+						FormatTypeList(expected),
 					])));
 			}
 		}
@@ -634,6 +631,11 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 				new EquatableArray<string>([Display(parameter.ServiceType), Display(consumer.ImplementationType),])));
 		}
 	}
+
+	// Renders a runtime-argument type list for a diagnostic message, reading as "none" when empty so a
+	// mismatch against a service with no [Arg] parameters (or a Func that supplies none) is not an empty "()".
+	private static string FormatTypeList(string[] types)
+		=> types.Length == 0 ? "none" : string.Join(", ", types.Select(Display));
 
 	private static void DetectCaptiveDependencies(
 		List<InstanceModel> instances,
