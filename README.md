@@ -17,9 +17,9 @@ Its headline differentiator is **async initialization**: services that need asyn
 [Singleton<RealTimeSystem, ITimeSystem>]
 [Scoped<StorageService, IStorageService>]
 [Transient<OrderService, IOrderService>]
-public partial class AppContainer { }
+public static partial class AppContainer { }
 
-await using var app = new AppContainer();
+await using var app = new AppContainer.Root();
 await app.InitializeAsync();          // async-initialized services are warmed up
 var service = app.Get<IOrderService>();
 ```

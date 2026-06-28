@@ -64,7 +64,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 		// The container must be a static class: it is a pure definition (registrations plus static factory
 		// and instance members) and the usable instance is the generated Root. A non-static class is an
-		// error; the emitter still emits a throwing Root so consumers fail on this AWT113 rather than on a
+		// error; the emitter still emits a throwing Root so consumers fail on this AWT116 rather than on a
 		// cascade of missing-member errors.
 		if (!containerSymbol.IsStatic)
 		{

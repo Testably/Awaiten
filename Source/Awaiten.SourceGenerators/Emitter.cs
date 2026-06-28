@@ -100,12 +100,9 @@ internal static class Emitter
 				continue;
 			}
 
-			foreach (string service in instances[i].ServiceTypes.AsArray())
+			foreach (string service in instances[i].ServiceTypes.AsArray().Where(seen.Add))
 			{
-				if (seen.Add(service))
-				{
-					yield return (service, i);
-				}
+				yield return (service, i);
 			}
 		}
 	}
@@ -164,7 +161,7 @@ internal static class Emitter
 		// generated lives on it directly. All state and resolution live on those types: the base Scope holds
 		// the static dispatch table plus scoped/transient logic and delegates singletons to the root, while
 		// the sealed Root subclass owns the singletons and is the usable instance (new MyContainer.Root()).
-		EmitRootScopeClass(builder, depth, instances, names, serviceToIndex);
+		EmitRootClass(builder, depth, instances, names, serviceToIndex);
 		builder.AppendLine();
 		EmitScopeBaseClass(builder, depth, instances, names, serviceToIndex);
 	}
@@ -190,7 +187,7 @@ internal static class Emitter
 	/// <summary>
 	///     Emits the base <c>Scope</c>: the single home of resolution logic. It caches scoped instances on
 	///     itself, constructs transients, and resolves singletons through <c>protected virtual</c> delegators
-	///     that the <c>RootScope</c> subclass overrides. Child (request) scopes are instances of this type.
+	///     that the <c>Root</c> subclass overrides. Child (request) scopes are instances of this type.
 	/// </summary>
 	private static void EmitScopeBaseClass(StringBuilder builder, int depth, InstanceModel[] instances, Names names, Dictionary<string, int> serviceToIndex)
 	{
@@ -266,7 +263,7 @@ internal static class Emitter
 	///     singleton delegators with the real caching/member access, so a child scope delegating through
 	///     <c>__root</c> lands here.
 	/// </summary>
-	private static void EmitRootScopeClass(StringBuilder builder, int depth, InstanceModel[] instances, Names names, Dictionary<string, int> serviceToIndex)
+	private static void EmitRootClass(StringBuilder builder, int depth, InstanceModel[] instances, Names names, Dictionary<string, int> serviceToIndex)
 	{
 		Indent(builder, depth).AppendLine("public sealed class Root : Scope");
 		Indent(builder, depth).AppendLine("{");
@@ -281,7 +278,7 @@ internal static class Emitter
 		for (int i = 0; i < instances.Length; i++)
 		{
 			// A parameterized service is never cached on the root; its single fresh-per-call resolver lives
-			// on the base Scope (protected) and the RootScope inherits it.
+			// on the base Scope (protected) and the Root inherits it.
 			if (instances[i].IsParameterized
 			    || (instances[i].Lifetime != Lifetime.Singleton && instances[i].Production != ProductionKind.Instance))
 			{
@@ -487,7 +484,7 @@ internal static class Emitter
 			string[] argTypes = instance.ArgTypes();
 			string signature = string.Join(", ", argTypes.Select((t, i) => $"{t} a{i}"));
 			string parameterizedConstruction = EmitConstruction(instance, instances, names, serviceToIndex, false);
-			// Reachable from the RootScope (a singleton's Func<TArg…, T> binds it there), so it is protected.
+			// Reachable from the Root (a singleton's Func<TArg…, T> binds it there), so it is protected.
 			EmitFreshResolver(builder, depth, new FreshResolver("protected", type, resolver, signature, parameterizedConstruction, instance.IsDisposable));
 			return;
 		}
@@ -660,7 +657,7 @@ internal static class Emitter
 		{
 			// A Func<TArg…, T> over a parameterized service binds the owner's parameterized resolver, which
 			// takes the runtime arguments and is never cached - so the root routing below does not apply (the
-			// protected resolver is reachable from the RootScope directly).
+			// protected resolver is reachable from the Root directly).
 			return FuncFactory(funcArgTypes, parameter.ServiceType, resolver);
 		}
 
