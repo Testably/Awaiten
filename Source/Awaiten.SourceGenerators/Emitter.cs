@@ -177,17 +177,19 @@ internal static class Emitter
 	}
 
 	// A disposable build-on-demand service (a disposable transient or parameterized service) is withheld from
-	// the public by-type resolution surface under strict lifetime safety: its bare type and plain Func factory
-	// are no longer dispatchable (they throw a guidance exception) and it gets no typed resolver, so the only
-	// ways to reach it are constructor injection and Owned<T> / Func<…, Owned<T>>.
+	// by-type resolution on the container Root under strict lifetime safety: off the Root its bare type and
+	// plain Func factory throw a guidance exception, and it gets no typed resolver, so the leak-prone ways to
+	// reach it from the Root are constructor injection and Owned<T> / Func<…, Owned<T>>. It stays resolvable
+	// from a child scope, where its lifetime is bounded by the scope (the Root mask, not the table, gates it).
 	private static bool IsWithheld(InstanceModel instance, bool strict)
 		=> strict && instance.IsDisposable && (instance.Lifetime == Lifetime.Transient || instance.IsParameterized);
 
-	// Whether a plain Func<…> over this service is withheld from by-type resolution under strict lifetime
-	// safety: the service is built on demand (transient or parameterized) and building it tracks a fresh
-	// disposable on the root - the service itself is disposable, or its construction transitively rebuilds one.
-	// Such a Func re-invoked off a root binding accumulates those disposables for the container's lifetime, so
-	// only the Func<…, Owned<T>> form (which drains into a throwaway scope) is offered.
+	// Whether a plain Func<…> over this service is withheld from by-type resolution on the Root under strict
+	// lifetime safety: the service is built on demand (transient or parameterized) and building it tracks a
+	// fresh disposable on its owner - the service itself is disposable, or its construction transitively rebuilds
+	// one. Such a Func re-invoked off a root binding accumulates those disposables for the container's lifetime,
+	// so off the Root only the Func<…, Owned<T>> form (which drains into a throwaway scope) is offered; the plain
+	// Func stays resolvable from a child scope, which bounds the disposables it builds.
 	private static bool IsFuncWithheld(InstanceModel[] instances, int index, Dictionary<ServiceKey, int> serviceToIndex, bool strict)
 		=> strict
 		   && (instances[index].Lifetime == Lifetime.Transient || instances[index].IsParameterized)
@@ -196,22 +198,24 @@ internal static class Emitter
 	private static bool IsRootOwned(InstanceModel instance)
 		=> instance.Lifetime == Lifetime.Singleton || instance.Production == ProductionKind.Instance;
 
-	// The guidance message (a quoted string literal) thrown by Resolve(Type) when a service withheld from
-	// by-type resolution under strict lifetime safety is requested by its bare type: it is itself a disposable
-	// build-on-demand service, reachable only by injection or through an Owned<T> handle.
+	// The guidance message (a quoted string literal) thrown by Resolve(Type) on the Root when a service
+	// withheld there under strict lifetime safety is requested by its bare type: it is itself a disposable
+	// build-on-demand service, reachable from the Root only by injection or through an Owned<T> handle - but
+	// still resolvable from a child scope, which bounds its lifetime.
 	private static string BareWithheldMessage(string service)
 	{
 		string display = service.Replace("global::", string.Empty);
-		return $"\"Awaiten: '{display}' is withheld from by-type resolution under strict lifetime safety; obtain it through Owned<{display}> or Func<…, Owned<{display}>>, inject it directly, or set LifetimeSafety.Loose on the [Container].\"";
+		return $"\"Awaiten: '{display}' is withheld from by-type resolution on the container root under strict lifetime safety; obtain it through Owned<{display}> or Func<…, Owned<{display}>>, resolve it from a child scope, inject it directly, or set LifetimeSafety.Loose on the [Container].\"";
 	}
 
-	// The guidance message (a quoted string literal) thrown by Resolve(Type) when a plain Func over the service
-	// is requested: that factory accumulates disposables on the root, so the leak-free Func<…, Owned<T>> form
-	// is offered instead. The bare type may still be resolvable (its single resolution is bounded).
+	// The guidance message (a quoted string literal) thrown by Resolve(Type) on the Root when a plain Func over
+	// the service is requested: that factory accumulates disposables on the root, so the leak-free Func<…,
+	// Owned<T>> form is offered instead. The Func stays resolvable from a child scope, which bounds the
+	// disposables it builds; the bare type may also be resolvable (its single resolution is bounded).
 	private static string FuncWithheldMessage(string service)
 	{
 		string display = service.Replace("global::", string.Empty);
-		return $"\"Awaiten: a plain Func over '{display}' is withheld from by-type resolution under strict lifetime safety because building it on demand accumulates disposables on the container root; resolve it as Func<…, Owned<{display}>> for per-use disposal, or set LifetimeSafety.Loose on the [Container].\"";
+		return $"\"Awaiten: a plain Func over '{display}' is withheld from by-type resolution on the container root under strict lifetime safety because building it on demand accumulates disposables on the container root; resolve it as Func<…, Owned<{display}>> for per-use disposal, resolve it from a child scope, or set LifetimeSafety.Loose on the [Container].\"";
 	}
 
 	/// <summary>
@@ -247,20 +251,22 @@ internal static class Emitter
 
 		// The dispatch table lives on the Scope (the only reader, through TryResolve); it is static, so it is
 		// built once for the whole container, and reached by simple name from this type and its Root subclass.
-		// Withheld entries go to a separate __withheld table consulted only by Resolve (for guidance), so
-		// TryResolve stays a non-throwing probe that simply returns false for them.
+		// Every entry is dispatchable; a root-withheld entry additionally appears in the __withheld table (its
+		// guidance, thrown by Resolve on the Root) and is flagged in the __rootWithheld mask (which TryResolve
+		// consults only on the Root), so a child scope resolves it while the Root withholds it.
 		List<DispatchEntry> entries = BuildDispatchEntries(instances, names, serviceToIndex, strict);
-		List<DispatchEntry> resolvable = Resolvable(entries);
 		List<DispatchEntry> withheld = Withheld(entries);
-		if (resolvable.Count > 0)
+		if (entries.Count > 0)
 		{
-			EmitDispatchTable(builder, body, resolvable);
+			EmitDispatchTable(builder, body, entries);
 			builder.AppendLine();
 		}
 
 		if (withheld.Count > 0)
 		{
 			EmitWithheldTable(builder, body, withheld);
+			builder.AppendLine();
+			EmitRootWithheldMask(builder, body, entries);
 			builder.AppendLine();
 		}
 
@@ -391,7 +397,6 @@ internal static class Emitter
 	private static void EmitResolutionApi(StringBuilder builder, int depth, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool strict)
 	{
 		List<DispatchEntry> entries = BuildDispatchEntries(instances, names, serviceToIndex, strict);
-		List<DispatchEntry> resolvable = Resolvable(entries);
 		bool hasWithheld = Withheld(entries).Count > 0;
 
 		Indent(builder, depth).AppendLine("public object Resolve(global::System.Type serviceType)");
@@ -403,8 +408,9 @@ internal static class Emitter
 		builder.AppendLine();
 		if (hasWithheld)
 		{
-			// A withheld service is known but not resolvable by type; surface the guidance (pointing at Owned<T>)
-			// instead of the generic "no registration" message. TryResolve stays non-throwing - it returned false.
+			// Only reached on the Root (a child scope resolved the type through TryResolve and returned above): the
+			// type is root-withheld, so surface the guidance (pointing at Owned<T>) instead of the generic "no
+			// registration" message. TryResolve stays non-throwing - on the Root it returned false via the mask.
 			Indent(builder, depth + 1).AppendLine("if (__withheld.TryGetValue(serviceType, out string? __guidance))");
 			Indent(builder, depth + 1).AppendLine("{");
 			Indent(builder, depth + 2).AppendLine("throw new global::System.InvalidOperationException(__guidance);");
@@ -419,7 +425,7 @@ internal static class Emitter
 
 		Indent(builder, depth).AppendLine("public bool TryResolve(global::System.Type serviceType, [global::System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? instance)");
 		Indent(builder, depth).AppendLine("{");
-		if (resolvable.Count == 0)
+		if (entries.Count == 0)
 		{
 			Indent(builder, depth + 1).AppendLine("instance = null;");
 			Indent(builder, depth + 1).AppendLine("return false;");
@@ -429,12 +435,25 @@ internal static class Emitter
 
 		Indent(builder, depth + 1).AppendLine("if (__dispatch.TryGetValue(serviceType, out int __case))");
 		Indent(builder, depth + 1).AppendLine("{");
+		if (hasWithheld)
+		{
+			// Root-only withholding: a child scope resolves the case (its lifetime bounded by the scope), but the
+			// Root returns false (and Resolve then throws the guidance), so the root-accumulation leak stays
+			// impossible. The mask is keyed by case number, so it is a bare array index after the dispatch hit.
+			Indent(builder, depth + 2).AppendLine("if (this is Root && __rootWithheld[__case])");
+			Indent(builder, depth + 2).AppendLine("{");
+			Indent(builder, depth + 3).AppendLine("instance = null;");
+			Indent(builder, depth + 3).AppendLine("return false;");
+			Indent(builder, depth + 2).AppendLine("}");
+			builder.AppendLine();
+		}
+
 		Indent(builder, depth + 2).AppendLine("switch (__case)");
 		Indent(builder, depth + 2).AppendLine("{");
-		for (int i = 0; i < resolvable.Count; i++)
+		for (int i = 0; i < entries.Count; i++)
 		{
 			Indent(builder, depth + 3).Append("case ").Append(i).Append(": instance = ")
-				.Append(resolvable[i].Value).AppendLine("; return true;");
+				.Append(entries[i].Value).AppendLine("; return true;");
 		}
 
 		Indent(builder, depth + 2).AppendLine("}");
@@ -500,13 +519,13 @@ internal static class Emitter
 			string service = serviceKey.Service;
 			if (argTypes.Length > 0)
 			{
-				// The plain Func<TArg…, T> factory accumulates on the owner; under strict safety it is withheld
-				// (resolving it by type throws guidance) so only the Owned form below can build the disposable
-				// parameterized service - or one whose construction transitively tracks a disposable on the root.
+				// The plain Func<TArg…, T> factory accumulates on its owner; under strict safety it is root-withheld
+				// (resolving it by type off the Root throws guidance, steering to the Owned form), but it stays
+				// resolvable from a child scope, where the disposables it builds are bounded by the scope.
 				string parameterizedFunc = $"global::System.Func<{string.Join(", ", argTypes)}, {service}>";
 				seen.Add(parameterizedFunc);
 				entries.Add(funcWithheld
-					? new DispatchEntry(parameterizedFunc, FuncWithheldMessage(service), true)
+					? new DispatchEntry(parameterizedFunc, FuncFactory(argTypes, service, resolver), FuncWithheldMessage(service))
 					: new DispatchEntry(parameterizedFunc, FuncFactory(argTypes, service, resolver)));
 
 				// The leak-free factory for a parameterized service: Func<TArg…, Owned<T>> hands each built
@@ -518,11 +537,12 @@ internal static class Emitter
 			}
 
 			seen.Add(service);
-			// A strictly-withheld disposable transient's bare type is no longer dispatchable; resolving it by
-			// type throws guidance (reachable only by injection or Owned<T>). A non-disposable service is not
-			// withheld at the bare type even when its Func is (its single bare resolution is bounded).
+			// A strictly-withheld disposable transient's bare type is root-withheld: resolving it by type off the
+			// Root throws guidance (steering to injection or Owned<T>), but it stays resolvable from a child scope,
+			// which bounds its lifetime. A non-disposable service is not withheld at the bare type even when its
+			// Func is (its single bare resolution is bounded).
 			entries.Add(bareWithheld
-				? new DispatchEntry(service, BareWithheldMessage(service), true)
+				? new DispatchEntry(service, resolver + "()", BareWithheldMessage(service))
 				: new DispatchEntry(service, resolver + "()"));
 		}
 	}
@@ -546,14 +566,14 @@ internal static class Emitter
 
 			string service = serviceKey.Service;
 
-			// The plain Func<T> factory accumulates on its owner; under strict safety it is withheld (resolving
-			// it by type throws guidance), leaving Func<Owned<T>> as the leak-free way to build on demand a
-			// disposable - or a service whose construction transitively tracks a disposable on the root.
+			// The plain Func<T> factory accumulates on its owner; under strict safety it is root-withheld
+			// (resolving it by type off the Root throws guidance, steering to Func<Owned<T>>), but it stays
+			// resolvable from a child scope, where the disposables it builds are bounded by the scope.
 			string func = $"global::System.Func<{service}>";
 			if (seen.Add(func))
 			{
 				entries.Add(funcWithheld
-					? new DispatchEntry(func, FuncWithheldMessage(service), true)
+					? new DispatchEntry(func, $"new global::System.Func<{service}>(() => {resolver}())", FuncWithheldMessage(service))
 					: new DispatchEntry(func, $"new global::System.Func<{service}>(() => {resolver}())"));
 			}
 
@@ -582,29 +602,15 @@ internal static class Emitter
 		}
 	}
 
-	// The resolvable (directly dispatchable) entries, in order - their position is their dispatch case number.
-	private static List<DispatchEntry> Resolvable(List<DispatchEntry> entries)
-	{
-		List<DispatchEntry> resolvable = new();
-		foreach (DispatchEntry entry in entries)
-		{
-			if (!entry.Throws)
-			{
-				resolvable.Add(entry);
-			}
-		}
-
-		return resolvable;
-	}
-
-	// The withheld entries (a known service type with guidance instead of a resolver) - kept out of the
-	// dispatch switch so TryResolve returns false for them; Resolve consults them to throw the guidance.
+	// The root-withheld entries (dispatchable, but carrying guidance) - their types and messages populate the
+	// __withheld table that Resolve throws from on the Root, while the parallel __rootWithheld mask (keyed by
+	// dispatch case) is what TryResolve consults to return false for them on the Root only.
 	private static List<DispatchEntry> Withheld(List<DispatchEntry> entries)
 	{
 		List<DispatchEntry> withheld = new();
 		foreach (DispatchEntry entry in entries)
 		{
-			if (entry.Throws)
+			if (entry.RootWithheld)
 			{
 				withheld.Add(entry);
 			}
@@ -632,10 +638,10 @@ internal static class Emitter
 	}
 
 	/// <summary>
-	///     Emits the static <c>__withheld</c> table mapping each service type withheld from by-type resolution
-	///     under strict lifetime safety to its guidance message. It is consulted only by <c>Resolve</c>, which
-	///     throws the guidance; <c>TryResolve</c> never reads it and so returns <see langword="false" /> for a
-	///     withheld type rather than throwing.
+	///     Emits the static <c>__withheld</c> table mapping each root-withheld service type to its guidance
+	///     message. It is consulted only by <c>Resolve</c> on the Root (where the parallel <c>__rootWithheld</c>
+	///     mask made <c>TryResolve</c> return <see langword="false" />), to throw the guidance instead of the
+	///     generic "no registration" message; a child scope resolves the type and never reaches it.
 	/// </summary>
 	private static void EmitWithheldTable(StringBuilder builder, int depth, List<DispatchEntry> entries)
 	{
@@ -644,10 +650,33 @@ internal static class Emitter
 		Indent(builder, depth).AppendLine("{");
 		foreach (DispatchEntry entry in entries)
 		{
-			Indent(builder, depth + 1).Append("{ typeof(").Append(entry.Type).Append("), ").Append(entry.Value).AppendLine(" },");
+			Indent(builder, depth + 1).Append("{ typeof(").Append(entry.Type).Append("), ").Append(entry.Guidance).AppendLine(" },");
 		}
 
 		Indent(builder, depth).AppendLine("};");
+	}
+
+	/// <summary>
+	///     Emits the static <c>__rootWithheld</c> mask: a <c>bool[]</c> indexed by dispatch case number,
+	///     <see langword="true" /> for the cases that leak when bound to the Root (a disposable build-on-demand
+	///     service's bare type, or its plain accumulating <c>Func&lt;…&gt;</c>). <c>TryResolve</c> reads it only
+	///     when <c>this is Root</c>, so the Root withholds those cases while a child scope resolves them (their
+	///     lifetime bounded by the scope). A bare array index is far cheaper than a second Type-keyed lookup.
+	/// </summary>
+	private static void EmitRootWithheldMask(StringBuilder builder, int depth, List<DispatchEntry> entries)
+	{
+		Indent(builder, depth).Append("private static readonly bool[] __rootWithheld = { ");
+		for (int i = 0; i < entries.Count; i++)
+		{
+			if (i > 0)
+			{
+				builder.Append(", ");
+			}
+
+			builder.Append(entries[i].RootWithheld ? "true" : "false");
+		}
+
+		builder.AppendLine(" };");
 	}
 
 	/// <summary>
@@ -1060,18 +1089,23 @@ internal static class Emitter
 
 	/// <summary>
 	///     A single dispatch case: the service <see cref="Type" /> requested and the <see cref="Value" />
-	///     assigned to <c>instance</c> (the resolver call). When <see cref="Throws" /> is set, the entry is
-	///     instead withheld from by-type resolution under strict lifetime safety: <see cref="Value" /> is a
-	///     guidance message literal placed in the <c>__withheld</c> table (which <c>Resolve</c> throws), and the
-	///     entry is kept out of the dispatch switch so <c>TryResolve</c> returns <see langword="false" /> for it.
+	///     assigned to <c>instance</c> (the resolver call). Every entry is dispatchable - it always carries a
+	///     real resolver. When <see cref="Guidance" /> is set the entry is additionally <em>root-withheld</em>
+	///     under strict lifetime safety: it resolves normally from a child scope (where its lifetime is bounded
+	///     by the scope), but the <c>__rootWithheld</c> mask makes <c>TryResolve</c> return
+	///     <see langword="false" /> for it on the Root and <c>Resolve</c> throw the <see cref="Guidance" />
+	///     message (placed in the <c>__withheld</c> table) - so the root-accumulation leak stays impossible
+	///     while the safe scope-bound resolution is allowed.
 	/// </summary>
-	private readonly struct DispatchEntry(string type, string value, bool throws = false)
+	private readonly struct DispatchEntry(string type, string value, string? guidance = null)
 	{
 		public string Type { get; } = type;
 
 		public string Value { get; } = value;
 
-		public bool Throws { get; } = throws;
+		public string? Guidance { get; } = guidance;
+
+		public bool RootWithheld => Guidance is not null;
 	}
 
 	/// <summary>

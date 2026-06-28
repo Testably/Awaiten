@@ -139,10 +139,14 @@ public class LifetimeSafetyTests
 
 		await That(source).DoesNotContain("global::Awaiten.IAwaitenResolver<global::MyCode.Widget>")
 			.Because("a withheld disposable transient gets no typed resolver");
-		await That(source).Contains("withheld from by-type resolution under strict lifetime safety")
-			.Because("resolving the withheld type by type throws a guidance exception");
+		await That(source).Contains("withheld from by-type resolution on the container root under strict lifetime safety")
+			.Because("resolving the withheld type by type off the root throws a guidance exception");
 		await That(source).Contains("typeof(global::Awaiten.Owned<global::MyCode.Widget>)")
 			.Because("Owned<Widget> stays resolvable as the leak-free alternative");
+		await That(source).Contains("instance = ResolveWidget(); return true;")
+			.Because("under variant C the bare type is still dispatchable - so a child scope can resolve it");
+		await That(source).Contains("this is Root && __rootWithheld[__case]")
+			.Because("the Root withholds the case through the per-case mask, while a child scope resolves it");
 	}
 
 	[Fact]
@@ -169,9 +173,11 @@ public class LifetimeSafetyTests
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
 		await That(source).Contains("a plain Func over 'MyCode.Tool' is withheld")
-			.Because("building the non-disposable Tool on demand transitively rebuilds its disposable Spark, so its plain Func accumulates on the root and is withheld");
+			.Because("building the non-disposable Tool on demand transitively rebuilds its disposable Spark, so its plain Func accumulates on the root and is withheld there");
 		await That(source).Contains("instance = ResolveTool(); return true;")
 			.Because("the bare non-disposable Tool stays resolvable by type - a single resolution is bounded");
+		await That(source).Contains("instance = new global::System.Func<global::MyCode.Tool>(() => ResolveTool()); return true;")
+			.Because("under variant C the plain Func is dispatchable too - the Root mask withholds it, but a child scope resolves it");
 		await That(source).Contains("typeof(global::System.Func<global::Awaiten.Owned<global::MyCode.Tool>>)")
 			.Because("Func<Owned<Tool>> remains the leak-free factory that drains the transitive Spark with the handle");
 	}

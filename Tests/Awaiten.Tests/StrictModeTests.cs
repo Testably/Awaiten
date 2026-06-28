@@ -60,6 +60,66 @@ public partial class StrictModeTests
 	}
 
 	[Fact]
+	public async Task Strict_ResolvingAWithheldDisposableTransientFromAScope_Works()
+	{
+		using StrictContainer.Root container = new();
+		using IAwaitenScope scope = container.CreateScope();
+
+		Widget widget = scope.Resolve<Widget>();
+
+		await That(widget).IsNotNull()
+			.Because("strict withholds the disposable transient on the container root, but a child scope can still resolve it by type - its lifetime is bounded by the scope, so there is no root accumulation");
+	}
+
+	[Fact]
+	public async Task Strict_ADisposableTransientResolvedFromAScope_IsDisposedWithTheScope()
+	{
+		using StrictContainer.Root container = new();
+
+		Widget widget;
+		using (IAwaitenScope scope = container.CreateScope())
+		{
+			widget = scope.Resolve<Widget>();
+			await That(widget.Disposed).IsFalse()
+				.Because("the scope is still alive");
+		}
+
+		await That(widget.Disposed).IsTrue()
+			.Because("the scope tracks the transient it built and disposes it when the scope is disposed - the leak the root would suffer is bounded here");
+	}
+
+	[Fact]
+	public async Task Strict_ResolvingTheWithheldPlainFuncFromAScope_BuildsFreshInstancesBoundToTheScope()
+	{
+		using StrictContainer.Root container = new();
+
+		Widget first, second;
+		using (IAwaitenScope scope = container.CreateScope())
+		{
+			Func<Widget> factory = scope.Resolve<Func<Widget>>();
+			first = factory();
+			second = factory();
+
+			await That(second).IsNotSameAs(first)
+				.Because("the plain Func is resolvable from a scope under strict safety and builds a fresh instance per call");
+			await That(first.Disposed).IsFalse();
+		}
+
+		await That(first.Disposed).IsTrue()
+			.Because("every widget the scope-bound Func built is tracked on that scope and disposed with it");
+		await That(second.Disposed).IsTrue();
+	}
+
+	[Fact]
+	public async Task Strict_TheScopeBoundFunc_StillThrowsWhenResolvedFromTheRoot()
+	{
+		using StrictContainer.Root container = new();
+
+		await That(() => container.Resolve<Func<Widget>>()).Throws<InvalidOperationException>()
+			.Because("the plain Func remains withheld on the root - only the scope path is opened up, so the leak stays impossible");
+	}
+
+	[Fact]
 	public async Task Strict_InjectingADisposableTransientDirectly_IsAllowed()
 	{
 		using StrictContainer.Root container = new();
@@ -109,9 +169,9 @@ public partial class StrictModeTests
 
 	public sealed class Widget : IDisposable
 	{
-		public void Dispose()
-		{
-		}
+		public bool Disposed { get; private set; }
+
+		public void Dispose() => Disposed = true;
 	}
 
 	public sealed class Consumer
