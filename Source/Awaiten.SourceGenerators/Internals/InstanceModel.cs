@@ -1,3 +1,5 @@
+using System.Linq;
+
 namespace Awaiten.SourceGenerators.Internals;
 
 /// <summary>
@@ -23,4 +25,22 @@ internal sealed record InstanceModel(
 	bool IsReferenceType,
 	ProductionKind Production = ProductionKind.Constructor,
 	string? ProductionMember = null,
-	bool ProductionMemberIsStatic = false);
+	bool ProductionMemberIsStatic = false)
+{
+	/// <summary>
+	///     The ordered runtime-argument types of this instance: the service types of its <c>[Arg]</c>-marked
+	///     constructor parameters, in declaration order. These are supplied at resolve time through a
+	///     <c>Func&lt;TArg…, T&gt;</c> rather than from the object graph.
+	/// </summary>
+	public string[] ArgTypes() => ConstructorParameters.AsArray()
+		.Where(p => p.Kind == DependencyKind.Arg)
+		.Select(p => p.ServiceType)
+		.ToArray();
+
+	/// <summary>
+	///     Whether this instance has any <c>[Arg]</c>-marked parameters and so is parameterized: built fresh
+	///     from its runtime arguments on every request and reachable only through its
+	///     <c>Func&lt;TArg…, T&gt;</c> factory.
+	/// </summary>
+	public bool IsParameterized => ArgTypes().Length > 0;
+}

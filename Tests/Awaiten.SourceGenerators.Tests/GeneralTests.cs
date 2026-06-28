@@ -465,4 +465,46 @@ public class GeneralTests
 		await That(source).Contains("return __container.Clock;")
 			.Because("the inherited member is exposed as the service");
 	}
+
+	[Fact]
+	public async Task RuntimeArguments_EmitAParameterizedResolverReachedOnlyThroughItsFuncFactory()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class Engine { }
+		                                       public sealed class Robot
+		                                       {
+		                                       	public Robot(Engine engine, [Arg] string name) { }
+		                                       }
+		                                       public sealed class Plant { public Plant(Func<string, Robot> robots) { } }
+
+		                                       [Container]
+		                                       [Singleton<Engine>]
+		                                       [Transient<Robot>]
+		                                       [Singleton<Plant>]
+		                                       public partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// The resolver takes the runtime argument and is protected so a root-owned singleton's Func can bind
+		// it; its graph dependency is still resolved.
+		await That(source).Contains("protected global::MyCode.Robot ResolveRobot(string a0)");
+		await That(source).Contains("new global::MyCode.Robot(ResolveEngine(), a0)");
+		// The consumer receives a Func that forwards the runtime argument to that resolver.
+		await That(source).Contains("new global::System.Func<string, global::MyCode.Robot>((a0) => ResolveRobot(a0))");
+		// A parameterized service is reachable only through its Func factory, never directly.
+		await That(source).Contains("typeof(global::System.Func<string, global::MyCode.Robot>)");
+		await That(source.Contains("typeof(global::MyCode.Robot)")).IsFalse()
+			.Because("the bare parameterized service type is not dispatchable");
+		await That(source.Contains("global::Awaiten.IAwaitenResolver<global::MyCode.Robot>")).IsFalse()
+			.Because("a parameterized service has no typed resolution fast path");
+	}
 }

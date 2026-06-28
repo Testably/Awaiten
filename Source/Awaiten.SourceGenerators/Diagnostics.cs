@@ -156,4 +156,41 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A <c>Func&lt;TArg…, T&gt;</c> relationship's runtime arguments do not match the
+	///     <c>[Arg]</c>-marked constructor parameters of the service it produces, in order.
+	/// </summary>
+	public static readonly DiagnosticDescriptor RuntimeArgumentMismatch = new(
+		"AWT113",
+		"Runtime argument mismatch",
+		"The Func<…, {0}> relationship supplies runtime arguments ({1}) that do not match the [Arg] parameters ({2}) of '{0}'",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A service with <c>[Arg]</c>-marked parameters is built fresh from its runtime arguments on every
+	///     request, so its declared lifetime (other than <c>Transient</c>) cannot be honored.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ParameterizedLifetime = new(
+		"AWT114",
+		"Parameterized service must be transient",
+		"'{0}' has [Arg] parameters and is built fresh from its runtime arguments on every request, so its '{1}' lifetime cannot be honored; register it as Transient",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A parameterized service (one with <c>[Arg]</c>-marked parameters) is requested as a plain
+	///     dependency or a <c>Lazy&lt;T&gt;</c>, neither of which can supply its runtime arguments. It is
+	///     resolvable only through a <c>Func&lt;TArg…, T&gt;</c> relationship.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ParameterizedRequiresFunc = new(
+		"AWT115",
+		"Parameterized service requires a Func factory",
+		"'{1}' cannot depend on '{0}' directly: '{0}' has [Arg] parameters and can only be obtained through a Func<…, {0}> relationship that supplies them",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

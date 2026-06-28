@@ -93,6 +93,13 @@ internal static class Emitter
 		HashSet<string> seen = new(StringComparer.Ordinal);
 		foreach (InstanceModel instance in model.Instances.AsArray())
 		{
+			// A parameterized service is not directly resolvable (only through its Func<TArg…, T> factory),
+			// so it gets no typed resolution fast path.
+			if (instance.IsParameterized)
+			{
+				continue;
+			}
+
 			foreach (string service in instance.ServiceTypes.AsArray().Where(seen.Add))
 			{
 				builder.Append(", global::Awaiten.IAwaitenResolver<").Append(service).Append('>');
@@ -110,6 +117,13 @@ internal static class Emitter
 	{
 		for (int i = 0; i < instances.Length; i++)
 		{
+			// A parameterized service has no typed resolver: its resolver takes the runtime arguments, so it
+			// is reached only through its Func<TArg…, T> factory in the Type-based dispatch table.
+			if (instances[i].IsParameterized)
+			{
+				continue;
+			}
+
 			string resolver = names.Resolver(i);
 			foreach (string service in instances[i].ServiceTypes.AsArray())
 			{
@@ -318,7 +332,10 @@ internal static class Emitter
 
 		for (int i = 0; i < instances.Length; i++)
 		{
-			if (instances[i].Lifetime != Lifetime.Singleton && instances[i].Production != ProductionKind.Instance)
+			// A parameterized service is never cached on the root; its single fresh-per-call resolver lives
+			// on the base Scope (protected) and the RootScope inherits it.
+			if (instances[i].IsParameterized
+			    || (instances[i].Lifetime != Lifetime.Singleton && instances[i].Production != ProductionKind.Instance))
 			{
 				continue;
 			}
@@ -340,7 +357,9 @@ internal static class Emitter
 		for (int i = 0; i < instances.Length; i++)
 		{
 			InstanceModel instance = instances[i];
-			if (instance.Production == ProductionKind.Instance || instance.Lifetime != lifetime)
+			// A pre-built Instance has no field, and a parameterized service is rebuilt per call from its
+			// runtime arguments and so is never cached.
+			if (instance.Production == ProductionKind.Instance || instance.IsParameterized || instance.Lifetime != lifetime)
 			{
 				continue;
 			}
@@ -427,37 +446,68 @@ internal static class Emitter
 		// Seeding 'seen' here lets the synthetic pass skip any key an explicit registration already claimed.
 		for (int i = 0; i < instances.Length; i++)
 		{
-			string resolver = names.Resolver(i);
-			foreach (string service in instances[i].ServiceTypes.AsArray())
-			{
-				seen.Add(service);
-				entries.Add(new DispatchEntry(service, resolver + "()"));
-			}
+			AddServiceEntries(instances[i], names.Resolver(i), entries, seen);
 		}
 
 		// Synthetic Func<T>/Lazy<T> over each service, skipping any key an explicit registration already
 		// claimed so the static dispatch table never contains a duplicate key (which would otherwise throw
-		// from the dictionary initializer at runtime).
+		// from the dictionary initializer at runtime). A parameterized service is skipped: its only entry is
+		// the Func<TArg…, T> added above.
 		for (int i = 0; i < instances.Length; i++)
 		{
-			string resolver = names.Resolver(i);
-			foreach (string service in instances[i].ServiceTypes.AsArray())
+			if (!instances[i].IsParameterized)
 			{
-				string func = $"global::System.Func<{service}>";
-				if (seen.Add(func))
-				{
-					entries.Add(new DispatchEntry(func, $"new global::System.Func<{service}>(() => {resolver}())"));
-				}
-
-				string lazy = $"global::System.Lazy<{service}>";
-				if (seen.Add(lazy))
-				{
-					entries.Add(new DispatchEntry(lazy, $"new global::System.Lazy<{service}>(() => {resolver}())"));
-				}
+				AddRelationshipEntries(instances[i], names.Resolver(i), entries, seen);
 			}
 		}
 
 		return entries;
+	}
+
+	/// <summary>
+	///     Adds the directly-dispatchable entry for each of an instance's service types: a parameterized
+	///     service contributes only its <c>Func&lt;TArg…, T&gt;</c> factory (its bare type cannot be built
+	///     without the runtime arguments); any other service maps to its resolver call.
+	/// </summary>
+	private static void AddServiceEntries(InstanceModel instance, string resolver, List<DispatchEntry> entries, HashSet<string> seen)
+	{
+		string[] argTypes = instance.ArgTypes();
+		foreach (string service in instance.ServiceTypes.AsArray())
+		{
+			if (argTypes.Length > 0)
+			{
+				string parameterizedFunc = $"global::System.Func<{string.Join(", ", argTypes)}, {service}>";
+				seen.Add(parameterizedFunc);
+				entries.Add(new DispatchEntry(parameterizedFunc, FuncFactory(argTypes, service, resolver)));
+				continue;
+			}
+
+			seen.Add(service);
+			entries.Add(new DispatchEntry(service, resolver + "()"));
+		}
+	}
+
+	/// <summary>
+	///     Adds the synthetic <c>Func&lt;T&gt;</c> and <c>Lazy&lt;T&gt;</c> entries over each of an instance's
+	///     service types, skipping any key an explicit registration already claimed (tracked in
+	///     <paramref name="seen" />) so the dispatch table never contains a duplicate key.
+	/// </summary>
+	private static void AddRelationshipEntries(InstanceModel instance, string resolver, List<DispatchEntry> entries, HashSet<string> seen)
+	{
+		foreach (string service in instance.ServiceTypes.AsArray())
+		{
+			string func = $"global::System.Func<{service}>";
+			if (seen.Add(func))
+			{
+				entries.Add(new DispatchEntry(func, $"new global::System.Func<{service}>(() => {resolver}())"));
+			}
+
+			string lazy = $"global::System.Lazy<{service}>";
+			if (seen.Add(lazy))
+			{
+				entries.Add(new DispatchEntry(lazy, $"new global::System.Lazy<{service}>(() => {resolver}())"));
+			}
+		}
 	}
 
 	/// <summary>
@@ -479,14 +529,27 @@ internal static class Emitter
 	}
 
 	/// <summary>
-	///     Emits a resolver on the base <c>Scope</c>. Singleton-owned services (singletons and pre-built
-	///     Instances) become a <c>protected virtual</c> delegator to <c>__container.Root</c> (overridden by
-	///     the RootScope); scoped services cache on the scope; transients construct fresh.
+	///     Emits a resolver on the base <c>Scope</c>. A parameterized service (with <c>[Arg]</c> parameters)
+	///     takes those runtime arguments and is built fresh per call (regardless of its declared lifetime),
+	///     so it lives here as a <c>protected</c> method the RootScope can also call. Otherwise
+	///     singleton-owned services (singletons and pre-built Instances) become a <c>protected virtual</c>
+	///     delegator to <c>__container.Root</c> (overridden by the RootScope); scoped services cache on the
+	///     scope; transients construct fresh.
 	/// </summary>
 	private static void EmitScopeResolver(StringBuilder builder, int depth, int index, InstanceModel instance, InstanceModel[] instances, Names names, Dictionary<string, int> serviceToIndex)
 	{
 		string type = instance.ImplementationType;
 		string resolver = names.Resolver(index);
+
+		if (instance.IsParameterized)
+		{
+			string[] argTypes = instance.ArgTypes();
+			string signature = string.Join(", ", argTypes.Select((t, i) => $"{t} a{i}"));
+			string parameterizedConstruction = EmitConstruction(instance, instances, names, serviceToIndex, false);
+			// Reachable from the RootScope (a singleton's Func<TArg…, T> binds it there), so it is protected.
+			EmitFreshResolver(builder, depth, new FreshResolver("protected", type, resolver, signature, parameterizedConstruction, instance.IsDisposable));
+			return;
+		}
 
 		if (instance.Lifetime == Lifetime.Singleton || instance.Production == ProductionKind.Instance)
 		{
@@ -502,37 +565,49 @@ internal static class Emitter
 
 		if (instance.Lifetime == Lifetime.Transient)
 		{
-			Indent(builder, depth).Append("private ").Append(type).Append(' ').Append(resolver).AppendLine("()");
-			Indent(builder, depth).AppendLine("{");
-			EmitDisposedGuard(builder, depth + 1);
-			if (instance.IsDisposable)
-			{
-				Indent(builder, depth + 1).Append(type).Append(" created = ").Append(construction).AppendLine(";");
-				Indent(builder, depth + 1).AppendLine("lock (this)");
-				Indent(builder, depth + 1).AppendLine("{");
-				// Re-check under the lock so an instance built during a concurrent Dispose is disposed
-				// here rather than leaked into a list that has already been drained.
-				Indent(builder, depth + 2).AppendLine("if (__disposed)");
-				Indent(builder, depth + 2).AppendLine("{");
-				Indent(builder, depth + 3).AppendLine("((global::System.IDisposable)created).Dispose();");
-				Indent(builder, depth + 3).AppendLine("throw new global::System.ObjectDisposedException(GetType().FullName);");
-				Indent(builder, depth + 2).AppendLine("}");
-				builder.AppendLine();
-				Indent(builder, depth + 2).AppendLine("(__disposables ??= new global::System.Collections.Generic.List<object>()).Add(created);");
-				Indent(builder, depth + 1).AppendLine("}");
-				builder.AppendLine();
-				Indent(builder, depth + 1).AppendLine("return created;");
-			}
-			else
-			{
-				Indent(builder, depth + 1).Append("return ").Append(construction).AppendLine(";");
-			}
-
-			Indent(builder, depth).AppendLine("}");
+			EmitFreshResolver(builder, depth, new FreshResolver("private", type, resolver, string.Empty, construction, instance.IsDisposable));
 			return;
 		}
 
 		EmitCachingResolver(builder, depth, new CachingResolver("private", type, resolver, names.Field(index), construction, instance.IsDisposable, "// Scoped: one instance per scope."));
+	}
+
+	/// <summary>
+	///     Emits a resolver that constructs a fresh instance on every call (a transient, or a parameterized
+	///     service that also takes the runtime arguments named in its signature). A disposable instance is
+	///     registered for teardown on the owner under the lock, re-checking <c>__disposed</c> so one built
+	///     during a concurrent dispose is disposed here rather than leaked.
+	/// </summary>
+	private static void EmitFreshResolver(StringBuilder builder, int depth, in FreshResolver resolver)
+	{
+		string type = resolver.Type;
+		string construction = resolver.Construction;
+		Indent(builder, depth).Append(resolver.Modifiers).Append(' ').Append(type).Append(' ').Append(resolver.Method)
+			.Append('(').Append(resolver.Signature).AppendLine(")");
+		Indent(builder, depth).AppendLine("{");
+		EmitDisposedGuard(builder, depth + 1);
+		if (resolver.Disposable)
+		{
+			Indent(builder, depth + 1).Append(type).Append(" created = ").Append(construction).AppendLine(";");
+			Indent(builder, depth + 1).AppendLine("lock (this)");
+			Indent(builder, depth + 1).AppendLine("{");
+			Indent(builder, depth + 2).AppendLine("if (__disposed)");
+			Indent(builder, depth + 2).AppendLine("{");
+			Indent(builder, depth + 3).AppendLine("((global::System.IDisposable)created).Dispose();");
+			Indent(builder, depth + 3).AppendLine("throw new global::System.ObjectDisposedException(GetType().FullName);");
+			Indent(builder, depth + 2).AppendLine("}");
+			builder.AppendLine();
+			Indent(builder, depth + 2).AppendLine("(__disposables ??= new global::System.Collections.Generic.List<object>()).Add(created);");
+			Indent(builder, depth + 1).AppendLine("}");
+			builder.AppendLine();
+			Indent(builder, depth + 1).AppendLine("return created;");
+		}
+		else
+		{
+			Indent(builder, depth + 1).Append("return ").Append(construction).AppendLine(";");
+		}
+
+		Indent(builder, depth).AppendLine("}");
 	}
 
 	/// <summary>
@@ -601,6 +676,7 @@ internal static class Emitter
 	{
 		ParameterModel[] parameters = instance.ConstructorParameters.AsArray();
 		StringBuilder arguments = new();
+		int argIndex = 0;
 		for (int p = 0; p < parameters.Length; p++)
 		{
 			if (p > 0)
@@ -608,7 +684,11 @@ internal static class Emitter
 				arguments.Append(", ");
 			}
 
-			arguments.Append(ResolveExpression(parameters[p], instances, names, serviceToIndex, ownerIsRoot));
+			// Runtime arguments are passed in as a0, a1, … by the parameterized resolver; the rest resolve
+			// from the graph.
+			arguments.Append(parameters[p].Kind == DependencyKind.Arg
+				? "a" + argIndex++
+				: ResolveExpression(parameters[p], instances, names, serviceToIndex, ownerIsRoot));
 		}
 
 		if (instance.Production == ProductionKind.Factory)
@@ -635,6 +715,15 @@ internal static class Emitter
 		string resolver = names.Resolver(targetIndex);
 		InstanceModel target = instances[targetIndex];
 
+		string[] funcArgTypes = parameter.FuncArgTypes.AsArray();
+		if (parameter.Kind == DependencyKind.Func && funcArgTypes.Length > 0)
+		{
+			// A Func<TArg…, T> over a parameterized service binds the owner's parameterized resolver, which
+			// takes the runtime arguments and is never cached - so the root routing below does not apply (the
+			// protected resolver is reachable from the RootScope directly).
+			return FuncFactory(funcArgTypes, parameter.ServiceType, resolver);
+		}
+
 		bool rootOwned = target.Lifetime == Lifetime.Singleton || target.Production == ProductionKind.Instance;
 		string value = ownerIsRoot && !rootOwned ? $"Resolve<{parameter.ServiceType}>()" : $"{resolver}()";
 
@@ -644,6 +733,18 @@ internal static class Emitter
 			DependencyKind.Lazy => $"new global::System.Lazy<{parameter.ServiceType}>(() => {value})",
 			_ => value,
 		};
+	}
+
+	/// <summary>
+	///     A <c>new Func&lt;TArg…, T&gt;((a0, …) =&gt; resolver(a0, …))</c> expression that forwards the
+	///     runtime arguments to a parameterized service's resolver. With no argument types this is the plain
+	///     deferred <c>Func&lt;T&gt;</c>.
+	/// </summary>
+	private static string FuncFactory(string[] argTypes, string service, string resolver)
+	{
+		string generics = argTypes.Length == 0 ? service : string.Join(", ", argTypes) + ", " + service;
+		string lambdaArgs = string.Join(", ", argTypes.Select((_, i) => "a" + i));
+		return $"new global::System.Func<{generics}>(({lambdaArgs}) => {resolver}({lambdaArgs}))";
 	}
 
 	private static void EmitDispose(StringBuilder builder, int depth)
@@ -721,6 +822,28 @@ internal static class Emitter
 		public bool Disposable { get; } = disposable;
 
 		public string? Comment { get; } = comment;
+	}
+
+	/// <summary>
+	///     The inputs to <see cref="EmitFreshResolver" />: the method <see cref="Modifiers" /> and return
+	///     <see cref="Type" />, the resolver <see cref="Method" /> name, its parameter <see cref="Signature" />
+	///     (empty for a transient, the runtime arguments for a parameterized service), the
+	///     <see cref="Construction" /> expression and whether the instance <see cref="Disposable">needs
+	///     disposal</see>.
+	/// </summary>
+	private readonly struct FreshResolver(string modifiers, string type, string method, string signature, string construction, bool disposable)
+	{
+		public string Modifiers { get; } = modifiers;
+
+		public string Type { get; } = type;
+
+		public string Method { get; } = method;
+
+		public string Signature { get; } = signature;
+
+		public string Construction { get; } = construction;
+
+		public bool Disposable { get; } = disposable;
 	}
 
 	/// <summary>
