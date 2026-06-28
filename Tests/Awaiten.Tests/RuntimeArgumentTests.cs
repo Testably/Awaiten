@@ -217,10 +217,10 @@ public partial class RuntimeArgumentTests
 		public Tool Make(int id) => _tools(id);
 	}
 
-	// AWT106 (disposable transient accumulates from the root) is suppressed: Func_BoundToAScope... resolves
-	// Tool only from a scope, which releases it on scope disposal; Func_BoundToASingleton... deliberately
-	// accumulates it on the root and disposes it with the container.
-#pragma warning disable AWT106
+	// The singleton Depot holds a Func<int, Tool> over the disposable parameterized Tool, so it draws an
+	// AWT117 warning: tools built through it accumulate on the root until the container is disposed. That is
+	// exactly what Func_BoundToASingleton... asserts (deliberate loose-mode accumulation); the leak-free
+	// alternative is Func<int, Owned<Tool>>, exercised in OwnedTests.
 	[Container]
 	[Singleton<Engine>]
 	[Transient<Robot>]
@@ -232,7 +232,6 @@ public partial class RuntimeArgumentTests
 	[Singleton<Depot>]
 	[Singleton<Workshop>]
 	public static partial class RuntimeArgumentContainer;
-#pragma warning restore AWT106
 
 	public sealed class Badge
 	{

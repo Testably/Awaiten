@@ -103,6 +103,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		LocationInfo? containerLocation = LocationInfo.From(containerSymbol.Locations.FirstOrDefault());
 		DetectCycles(instances, dependencies, containerLocation, diagnostics);
 		DetectCaptiveDependencies(instances, dependencies, instanceLocations, diagnostics);
+		DetectRootAccumulatingFactories(instances, dependencies, serviceToImpl, implToIndex, instanceLocations, diagnostics);
 
 		string? containerNamespace = containerSymbol.ContainingNamespace is { IsGlobalNamespace: false, } ns
 			? ns.ToDisplayString()
@@ -746,6 +747,91 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			return parent.ConstructorParameters.AsArray()
 				.Select(p => p.ServiceType)
 				.FirstOrDefault(dependencyServices.Contains) ?? dependencyServices[0];
+		}
+	}
+
+	/// <summary>
+	///     Reports <see cref="Diagnostics.RootAccumulatingFactory">AWT117</see> for a root-owned instance (a
+	///     singleton or pre-built instance) that, directly or through its transitive transient dependencies,
+	///     holds a plain <c>Func&lt;…&gt;</c> over a disposable build-on-demand service (a disposable transient
+	///     or parameterized service). Such a factory is bound to the root, so every instance it builds is
+	///     tracked on the root and accumulates for the container's lifetime. A <c>Func&lt;…, Owned&lt;T&gt;&gt;</c>
+	///     hands each instance back as a disposal handle and is not reported.
+	/// </summary>
+	private static void DetectRootAccumulatingFactories(
+		List<InstanceModel> instances,
+		Dictionary<int, List<int>> dependencies,
+		Dictionary<string, string> serviceToImpl,
+		Dictionary<string, int> implToIndex,
+		List<LocationInfo?> instanceLocations,
+		List<DiagnosticInfo> diagnostics)
+	{
+		// One report per holder+service, even when several root-owned owners reach the same factory.
+		HashSet<string> reported = new(StringComparer.Ordinal);
+		for (int i = 0; i < instances.Count; i++)
+		{
+			if (instances[i].Lifetime == Lifetime.Singleton || instances[i].Production == ProductionKind.Instance)
+			{
+				ReportRootAccumulation(i, instances, dependencies, serviceToImpl, implToIndex, instanceLocations, reported, diagnostics);
+			}
+		}
+	}
+
+	private static void ReportRootAccumulation(
+		int owner,
+		List<InstanceModel> instances,
+		Dictionary<int, List<int>> dependencies,
+		Dictionary<string, string> serviceToImpl,
+		Dictionary<string, int> implToIndex,
+		List<LocationInfo?> instanceLocations,
+		HashSet<string> reported,
+		List<DiagnosticInfo> diagnostics)
+	{
+		// Walk the owner's graph through its transient dependencies (which are baked into it); a Func held by
+		// any of them is equally root-bound. The walk mirrors the captive-dependency walk, keyed on a Func over
+		// a disposable build-on-demand service instead of a scoped lifetime.
+		HashSet<int> visited = new();
+		Stack<int> stack = new();
+		stack.Push(owner);
+
+		while (stack.Count > 0)
+		{
+			int node = stack.Pop();
+			if (!visited.Add(node))
+			{
+				continue;
+			}
+
+			foreach (ParameterModel parameter in instances[node].ConstructorParameters.AsArray())
+			{
+				if (parameter.Kind != DependencyKind.Func || parameter.ProducesOwned
+				    || !serviceToImpl.TryGetValue(parameter.ServiceType, out string? targetImpl)
+				    || !implToIndex.TryGetValue(targetImpl, out int targetIndex))
+				{
+					continue;
+				}
+
+				InstanceModel target = instances[targetIndex];
+				bool buildOnDemand = target.Lifetime == Lifetime.Transient || target.IsParameterized;
+				if (target.IsDisposable && buildOnDemand && reported.Add($"{node}|{parameter.ServiceType}"))
+				{
+					diagnostics.Add(new DiagnosticInfo(
+						Diagnostics.RootAccumulatingFactory,
+						parameter.Location ?? instanceLocations[node],
+						new EquatableArray<string>([
+							Display(parameter.ServiceType),
+							Display(instances[node].ImplementationType),
+						])));
+				}
+			}
+
+			foreach (int next in dependencies[node])
+			{
+				if (instances[next].Lifetime == Lifetime.Transient)
+				{
+					stack.Push(next);
+				}
+			}
 		}
 	}
 

@@ -66,25 +66,6 @@ internal static class Diagnostics
 		isEnabledByDefault: true);
 
 	/// <summary>
-	///     A disposable transient resolved from the container root is not released until the container
-	///     is disposed, so such instances accumulate; resolving it from a scope releases it with the scope.
-	/// </summary>
-	/// <remarks>
-	///     Limitation: this is reported per registration, not per resolution site - the generator does not
-	///     track where a transient is resolved. It therefore fires for every disposable transient, even one
-	///     only ever consumed as a dependency of a scoped service (where it is released with that scope). It
-	///     is a warning precisely because the advice is advisory: the root is always a possible resolution
-	///     site, so accumulation is possible, but it only actually happens if the root resolves it.
-	/// </remarks>
-	public static readonly DiagnosticDescriptor DisposableTransient = new(
-		"AWT106",
-		"Disposable transient",
-		"The transient '{0}' is disposable; instances resolved from the container root are not released until the container is disposed and so accumulate - resolve it from a scope instead",
-		"Awaiten",
-		DiagnosticSeverity.Warning,
-		isEnabledByDefault: true);
-
-	/// <summary>
 	///     The same implementation is registered with more than one lifetime; coalescing into a single
 	///     instance would silently drop one of the declared lifetimes.
 	/// </summary>
@@ -204,5 +185,27 @@ internal static class Diagnostics
 		"'{0}' must be a static class. The [Container] class is a definition whose factory and instance members are static; create the container with 'new {0}.Root()'.",
 		"Awaiten",
 		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A root-owned instance (a singleton or pre-built instance), directly or through its transitive
+	///     transient dependencies, holds a <c>Func&lt;…&gt;</c> over a disposable build-on-demand service (a
+	///     disposable transient or parameterized service). Each call to that factory builds a fresh instance
+	///     the container tracks on its root, so they accumulate for the container's entire lifetime - an
+	///     unbounded leak. Resolving through <c>Func&lt;…, Owned&lt;T&gt;&gt;</c> instead hands each instance
+	///     back as a disposal handle, so nothing accumulates.
+	/// </summary>
+	/// <remarks>
+	///     Unlike the retired per-registration check, this is flow-based: it fires only for the statically
+	///     visible root-accumulating pattern, not for every disposable transient. A disposable transient
+	///     reached only from a scope (or through <c>Owned&lt;T&gt;</c>) is bounded and is not reported. It is a
+	///     warning by default and escalates to an error under strict lifetime safety.
+	/// </remarks>
+	public static readonly DiagnosticDescriptor RootAccumulatingFactory = new(
+		"AWT117",
+		"Factory accumulates disposables on the container root",
+		"'{1}' holds a Func over the disposable '{0}', which is built on demand and tracked on the container root, so instances accumulate for the container's lifetime; resolve it as Func<…, Owned<{0}>> for per-use disposal",
+		"Awaiten",
+		DiagnosticSeverity.Warning,
 		isEnabledByDefault: true);
 }
