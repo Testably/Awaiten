@@ -152,9 +152,9 @@ public class GeneralTests
 			.Because("reference-type singletons are cached in a volatile backing field");
 		await That(source).Contains("lock (this)")
 			.Because("singletons are created once under a lock");
-		await That(source).Contains("_middle = new global::MyCode.Middle(ResolveLeaf());")
-			.Because("singletons are memoized into their backing field");
-		await That(source).Contains("return new global::MyCode.Top(ResolveMiddle(), ResolveLeaf());")
+		await That(source).Contains("_middle = new global::MyCode.Middle(__rootScope.ResolveLeaf());")
+			.Because("singletons are memoized into their backing field and read straight off the root scope");
+		await That(source).Contains("return new global::MyCode.Top(__rootScope.ResolveMiddle(), __rootScope.ResolveLeaf());")
 			.Because("transients are constructed on each request, not cached");
 
 		await That(source).Contains("{ typeof(global::MyCode.IMiddle),")
@@ -208,7 +208,7 @@ public class GeneralTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		await That(source).Contains("new global::MyCode.Consumer(new global::System.Lazy<global::MyCode.Leaf>(() => ResolveLeaf()))")
+		await That(source).Contains("new global::MyCode.Consumer(new global::System.Lazy<global::MyCode.Leaf>(() => __rootScope.ResolveLeaf()))")
 			.Because("the Lazy parameter is supplied as a lazy bound to the owner's resolver");
 		await That(source).Contains("{ typeof(global::System.Lazy<global::MyCode.Leaf>),")
 			.Because("Lazy<T> is also resolvable directly through the dispatch table");
@@ -341,8 +341,8 @@ public class GeneralTests
 
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-		await That(source).Contains("return __container.MakeClock();")
-			.Because("the scope reaches the instance factory method through the container instead of constructing the type");
+		await That(source).Contains("return __rootScope.__container.MakeClock();")
+			.Because("the scope reaches the instance factory method through the root's container instead of constructing the type");
 		await That(source).DoesNotContain("new global::MyCode.SystemClock(")
 			.Because("a factory registration is produced by its method, never constructed directly");
 	}
@@ -369,7 +369,7 @@ public class GeneralTests
 
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-		await That(source).Contains("MakeService(ResolveSettings())")
+		await That(source).Contains("MakeService(__rootScope.ResolveSettings())")
 			.Because("the factory method's parameters are resolved from the graph");
 		await That(source).DoesNotContain("__container.MakeService")
 			.Because("a static factory is in scope of the nested type directly and needs no container receiver");
@@ -398,8 +398,8 @@ public class GeneralTests
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 		await That(source).Contains("return __container.Clock;")
 			.Because("the container hands back its own pre-built member rather than constructing the type");
-		await That(source).Contains("return __container.Root.ResolveIClock();")
-			.Because("the nested scope delegates to the container like any other singleton");
+		await That(source).Contains("return __rootScope.ResolveIClock();")
+			.Because("the nested scope delegates to the root scope like any other singleton");
 		await That(source).DoesNotContain("new global::MyCode.FixedClock")
 			.Because("an Instance registration is never constructed by the container");
 		await That(source).DoesNotContain("__disposables.Add")

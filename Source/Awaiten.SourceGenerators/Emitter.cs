@@ -267,7 +267,11 @@ internal static class Emitter
 		Indent(builder, depth).AppendLine("{");
 		int body = depth + 1;
 
-		Indent(builder, body).Append("protected readonly ").Append(model.TypeName).AppendLine(" __container;");
+		// The (sealed) root scope this scope resolves singletons through, and its sole link back to the
+		// container (reached as __rootScope.__container on the cold paths). Holding the root directly lets a
+		// child scope reach a singleton with a devirtualized call instead of a Root-property hop plus a virtual
+		// override dispatch; it is the root itself on the RootScope, and shared down every child scope.
+		Indent(builder, body).AppendLine("protected readonly RootScope __rootScope;");
 		// Synchronization is on the owner instance itself (no separate gate object to allocate); the
 		// disposables list is created lazily on first use. These are protected so the RootScope subclass's
 		// singleton overrides share them.
@@ -275,15 +279,25 @@ internal static class Emitter
 		Indent(builder, body).AppendLine("protected global::System.Collections.Generic.List<object>? __disposables;");
 		EmitCacheFields(builder, body, instances, names, Lifetime.Scoped);
 		builder.AppendLine();
-		Indent(builder, body).Append("public Scope(").Append(model.TypeName).AppendLine(" container) => __container = container;");
+		// The root is its own __rootScope (this parameterless ctor is only ever reached through RootScope's
+		// base call, so the cast always holds); child scopes are handed the shared root.
+		Indent(builder, body).AppendLine("protected Scope()");
+		Indent(builder, body).AppendLine("{");
+		Indent(builder, body + 1).AppendLine("__rootScope = (RootScope)this;");
+		Indent(builder, body).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, body).AppendLine("public Scope(RootScope rootScope)");
+		Indent(builder, body).AppendLine("{");
+		Indent(builder, body + 1).AppendLine("__rootScope = rootScope;");
+		Indent(builder, body).AppendLine("}");
 		builder.AppendLine();
 		EmitResolutionApi(builder, body, instances, names, true, model.TypeName);
 		builder.AppendLine();
 		EmitGenericResolveMethod(builder, body);
 		builder.AppendLine();
-		// A scope is the single source of scopes: nesting shares the same container (and therefore the same
-		// root singletons). A child scope's lifetime is owned by its caller; the parent does not track it.
-		Indent(builder, body).AppendLine("public Scope CreateScope() => new Scope(__container);");
+		// A scope is the single source of scopes: nesting shares the same root (and therefore the same
+		// singletons). A child scope's lifetime is owned by its caller; the parent does not track it.
+		Indent(builder, body).AppendLine("public Scope CreateScope() => new Scope(__rootScope);");
 		builder.AppendLine();
 		EmitGenericResolverImpls(builder, body, instances, names);
 
@@ -302,7 +316,7 @@ internal static class Emitter
 	/// <summary>
 	///     Emits the <c>RootScope</c>: the root scope where singletons (and pre-built Instances) physically
 	///     live. It overrides the base's virtual singleton delegators with the real caching/member access, so
-	///     a child scope delegating to <c>__container.Root</c> lands here.
+	///     a child scope delegating through <c>__rootScope</c> lands here.
 	/// </summary>
 	private static void EmitRootScopeClass(StringBuilder builder, int depth, ContainerModel model, InstanceModel[] instances, Names names, Dictionary<string, int> serviceToIndex)
 	{
@@ -310,10 +324,14 @@ internal static class Emitter
 		Indent(builder, depth).AppendLine("{");
 		int body = depth + 1;
 
+		// The root owns the container reference; child scopes reach it through __rootScope. Internal (not
+		// private) so the base Scope can read it as __rootScope.__container on its cold paths.
+		Indent(builder, body).Append("internal readonly ").Append(model.TypeName).AppendLine(" __container;");
 		EmitCacheFields(builder, body, instances, names, Lifetime.Singleton);
 		builder.AppendLine();
-		Indent(builder, body).Append("public RootScope(").Append(model.TypeName).AppendLine(" container) : base(container)");
+		Indent(builder, body).Append("public RootScope(").Append(model.TypeName).AppendLine(" container) : base()");
 		Indent(builder, body).AppendLine("{");
+		Indent(builder, body + 1).AppendLine("__container = container;");
 		Indent(builder, body).AppendLine("}");
 
 		for (int i = 0; i < instances.Length; i++)
@@ -480,7 +498,7 @@ internal static class Emitter
 
 	/// <summary>
 	///     Emits a resolver on the base <c>Scope</c>. Singleton-owned services (singletons and pre-built
-	///     Instances) become a <c>protected virtual</c> delegator to <c>__container.Root</c> (overridden by
+	///     Instances) become a <c>protected virtual</c> delegator to <c>__rootScope</c> (overridden by
 	///     the RootScope); scoped services cache on the scope; transients construct fresh.
 	/// </summary>
 	private static void EmitScopeResolver(StringBuilder builder, int depth, int index, InstanceModel instance, InstanceModel[] instances, Names names, Dictionary<string, int> serviceToIndex)
@@ -493,7 +511,7 @@ internal static class Emitter
 			Indent(builder, depth).Append("protected virtual ").Append(type).Append(' ').Append(resolver).AppendLine("()");
 			Indent(builder, depth).AppendLine("{");
 			EmitDisposedGuard(builder, depth + 1);
-			Indent(builder, depth + 1).Append("return __container.Root.").Append(resolver).AppendLine("();");
+			Indent(builder, depth + 1).Append("return __rootScope.").Append(resolver).AppendLine("();");
 			Indent(builder, depth).AppendLine("}");
 			return;
 		}
@@ -613,9 +631,12 @@ internal static class Emitter
 
 		if (instance.Production == ProductionKind.Factory)
 		{
-			// Both Scope and RootScope are nested in the container, so a static factory method is in scope
-			// by simple name; an instance method is reached through the container.
-			string receiver = instance.ProductionMemberIsStatic ? string.Empty : "__container.";
+			// Both Scope and RootScope are nested in the container, so a static factory method is in scope by
+			// simple name; an instance method is reached through the container, which the root holds directly
+			// and a child scope reaches through the root.
+			string receiver = instance.ProductionMemberIsStatic
+				? string.Empty
+				: ownerIsRoot ? "__container." : "__rootScope.__container.";
 			return $"{receiver}{instance.ProductionMember}({arguments})";
 		}
 
@@ -636,7 +657,19 @@ internal static class Emitter
 		InstanceModel target = instances[targetIndex];
 
 		bool rootOwned = target.Lifetime == Lifetime.Singleton || target.Production == ProductionKind.Instance;
-		string value = ownerIsRoot && !rootOwned ? $"Resolve<{parameter.ServiceType}>()" : $"{resolver}()";
+		string value;
+		if (rootOwned)
+		{
+			// Read singletons straight off the (sealed) root scope so the dependency call devirtualizes,
+			// rather than dispatching through this scope's virtual delegator. On the root, __rootScope is itself.
+			value = $"__rootScope.{resolver}()";
+		}
+		else
+		{
+			// A singleton built on the root can only capture a non-singleton through a relationship; the root's
+			// scoped/transient resolvers are private to the base, so route that target through its generic entry.
+			value = ownerIsRoot ? $"Resolve<{parameter.ServiceType}>()" : $"{resolver}()";
+		}
 
 		return parameter.Kind switch
 		{
