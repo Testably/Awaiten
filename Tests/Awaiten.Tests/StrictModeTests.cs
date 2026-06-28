@@ -120,6 +120,39 @@ public partial class StrictModeTests
 	}
 
 	[Fact]
+	public async Task Strict_ResolvingTheWithheldParameterizedFuncFromAScope_BuildsFreshInstancesBoundToTheScope()
+	{
+		using StrictContainer.Root container = new();
+
+		Gizmo first, second;
+		using (IAwaitenScope scope = container.CreateScope())
+		{
+			Func<int, Gizmo> factory = scope.Resolve<Func<int, Gizmo>>();
+			first = factory(1);
+			second = factory(2);
+
+			await That(second).IsNotSameAs(first)
+				.Because("the parameterized Func is resolvable from a scope under strict safety and builds a fresh instance per call");
+			await That(first.Id).IsEqualTo(1)
+				.Because("the runtime argument flows through the scope-bound Func into the [Arg] parameter");
+			await That(first.Disposed).IsFalse();
+		}
+
+		await That(first.Disposed).IsTrue()
+			.Because("every gizmo the scope-bound parameterized Func built is tracked on that scope and disposed with it");
+		await That(second.Disposed).IsTrue();
+	}
+
+	[Fact]
+	public async Task Strict_TheScopeBoundParameterizedFunc_StillThrowsWhenResolvedFromTheRoot()
+	{
+		using StrictContainer.Root container = new();
+
+		await That(() => container.Resolve<Func<int, Gizmo>>()).Throws<InvalidOperationException>()
+			.Because("the parameterized Func over a disposable service remains withheld on the root - only the scope path is opened up, so the leak stays impossible");
+	}
+
+	[Fact]
 	public async Task Strict_InjectingADisposableTransientDirectly_IsAllowed()
 	{
 		using StrictContainer.Root container = new();
@@ -174,6 +207,19 @@ public partial class StrictModeTests
 		public void Dispose() => Disposed = true;
 	}
 
+	// A disposable parameterized service: built fresh from its [Arg] on every call, so under strict safety its
+	// only entry - the Func<int, Gizmo> factory - is withheld on the root but resolvable from a child scope.
+	public sealed class Gizmo : IDisposable
+	{
+		public Gizmo([Arg] int id) => Id = id;
+
+		public int Id { get; }
+
+		public bool Disposed { get; private set; }
+
+		public void Dispose() => Disposed = true;
+	}
+
 	public sealed class Consumer
 	{
 		public Consumer(Widget widget) => Widget = widget;
@@ -184,6 +230,7 @@ public partial class StrictModeTests
 	[Container]
 	[Transient<Widget>]
 	[Transient<Consumer>]
+	[Transient<Gizmo>]
 	public static partial class StrictContainer;
 
 	[Container(LifetimeSafety = LifetimeSafety.Loose)]
