@@ -25,7 +25,7 @@ public class KeyedRegistrationTests
 		                                       [Singleton<FastClock, IClock>(Key = "fast")]
 		                                       [Singleton<SlowClock, IClock>(Key = "slow")]
 		                                       [Singleton<Consumer>]
-		                                       public partial class MyContainer
+		                                       public static partial class MyContainer
 		                                       {
 		                                       }
 		                                       """);
@@ -33,7 +33,7 @@ public class KeyedRegistrationTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		await That(source).Contains("new global::MyCode.Consumer(ResolveSlowClock())")
+		await That(source).Contains("new global::MyCode.Consumer(__root.ResolveSlowClock())")
 			.Because("the keyed dependency is wired to the implementation registered under its key");
 	}
 
@@ -54,7 +54,7 @@ public class KeyedRegistrationTests
 		                                       [Singleton<FastClock, IClock>(Key = "fast")]
 		                                       [Singleton<SlowClock, IClock>(Key = "slow")]
 		                                       [Singleton<Consumer>]
-		                                       public partial class MyContainer
+		                                       public static partial class MyContainer
 		                                       {
 		                                       }
 		                                       """);
@@ -96,7 +96,7 @@ public class KeyedRegistrationTests
 		                                       [Singleton<FastClock, IClock>(Key = "fast")]
 		                                       [Singleton<SlowClock, IClock>(Key = "slow")]
 		                                       [Singleton<Consumer>]
-		                                       public partial class MyContainer
+		                                       public static partial class MyContainer
 		                                       {
 		                                       }
 		                                       """);
@@ -104,9 +104,9 @@ public class KeyedRegistrationTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		await That(source).Contains("new global::System.Func<global::MyCode.IClock>(() => ResolveSlowClock())")
+		await That(source).Contains("new global::System.Func<global::MyCode.IClock>(() => __root.ResolveSlowClock())")
 			.Because("a [FromKey] Func<T> defers to the implementation registered under its key");
-		await That(source).Contains("new global::System.Lazy<global::MyCode.IClock>(() => ResolveFastClock())")
+		await That(source).Contains("new global::System.Lazy<global::MyCode.IClock>(() => __root.ResolveFastClock())")
 			.Because("a [FromKey] Lazy<T> defers to the implementation registered under its key");
 	}
 
@@ -125,7 +125,7 @@ public class KeyedRegistrationTests
 		                                       [Container]
 		                                       [Singleton<DefaultClock, IClock>]
 		                                       [Singleton<FastClock, IClock>(Key = "fast")]
-		                                       public partial class MyContainer
+		                                       public static partial class MyContainer
 		                                       {
 		                                       }
 		                                       """);

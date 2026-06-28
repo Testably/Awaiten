@@ -11,7 +11,7 @@ public partial class KeyedTests
 	[Fact]
 	public async Task FromKey_SelectsTheImplementationRegisteredUnderThatKey()
 	{
-		using KeyedContainer container = new();
+		using KeyedContainer.Root container = new();
 
 		Router router = container.Resolve<Router>();
 
@@ -24,7 +24,7 @@ public partial class KeyedTests
 	[Fact]
 	public async Task KeyedRegistrations_ShareOneServiceTypeWithoutColliding()
 	{
-		using KeyedContainer container = new();
+		using KeyedContainer.Root container = new();
 
 		Router router = container.Resolve<Router>();
 
@@ -35,7 +35,7 @@ public partial class KeyedTests
 	[Fact]
 	public async Task UnkeyedResolution_ReturnsTheUnkeyedRegistration()
 	{
-		using MixedContainer container = new();
+		using MixedContainer.Root container = new();
 
 		IClock clock = container.Resolve<IClock>();
 		Consumer consumer = container.Resolve<Consumer>();
@@ -49,7 +49,7 @@ public partial class KeyedTests
 	[Fact]
 	public async Task FromKey_SelectsTheKeyedImplementationThroughFuncAndLazyRelationships()
 	{
-		using KeyedContainer container = new();
+		using KeyedContainer.Root container = new();
 
 		DeferredRouter router = container.Resolve<DeferredRouter>();
 
@@ -96,7 +96,7 @@ public partial class KeyedTests
 	[Singleton<SlowChannel, IChannel>(Key = "slow")]
 	[Singleton<Router>]
 	[Singleton<DeferredRouter>]
-	public partial class KeyedContainer;
+	public static partial class KeyedContainer;
 
 	public interface IClock;
 
@@ -117,5 +117,5 @@ public partial class KeyedTests
 	[Singleton<DefaultClock, IClock>]
 	[Singleton<FastChannelClock, IClock>(Key = "fast")]
 	[Singleton<Consumer>]
-	public partial class MixedContainer;
+	public static partial class MixedContainer;
 }

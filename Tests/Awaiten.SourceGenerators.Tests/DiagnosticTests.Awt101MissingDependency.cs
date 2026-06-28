@@ -69,7 +69,7 @@ public partial class DiagnosticTests
 			                                       [Container]
 			                                       [Singleton<FastClock, IClock>(Key = "fast")]
 			                                       [Singleton<Consumer>]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
 			                                       }
 			                                       """);

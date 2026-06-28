@@ -4,7 +4,7 @@ namespace Awaiten.SourceGenerators.Tests;
 
 public partial class DiagnosticTests
 {
-	public class Awt116DuplicateKey
+	public class Awt117DuplicateKey
 	{
 		[Fact]
 		public async Task ReportsWhenTwoImplementationsShareOneServiceTypeAndKey()
@@ -21,12 +21,12 @@ public partial class DiagnosticTests
 			                                       [Container]
 			                                       [Singleton<FastClock, IClock>(Key = "fast")]
 			                                       [Singleton<OtherClock, IClock>(Key = "fast")]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT116"))).IsTrue()
+			await That(result.Diagnostics.Any(d => d.Contains("AWT117"))).IsTrue()
 				.Because("two different implementations claim the same service type and key");
 		}
 
@@ -45,12 +45,12 @@ public partial class DiagnosticTests
 			                                       [Container]
 			                                       [Singleton<FastClock, IClock>(Key = "fast")]
 			                                       [Singleton<SlowClock, IClock>(Key = "slow")]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT116"))).IsFalse()
+			await That(result.Diagnostics.Any(d => d.Contains("AWT117"))).IsFalse()
 				.Because("several implementations may share one service type under different keys");
 		}
 
@@ -69,12 +69,12 @@ public partial class DiagnosticTests
 			                                       [Container]
 			                                       [Singleton<Store, IReader>(Key = "main")]
 			                                       [Singleton<Store, IWriter>(Key = "main")]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT116"))).IsFalse()
+			await That(result.Diagnostics.Any(d => d.Contains("AWT117"))).IsFalse()
 				.Because("registering one implementation under several service types with one key is a coalesce, not a conflict");
 		}
 	}
