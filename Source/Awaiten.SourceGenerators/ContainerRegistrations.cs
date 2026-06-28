@@ -5,9 +5,8 @@ using Microsoft.CodeAnalysis;
 namespace Awaiten.SourceGenerators;
 
 /// <summary>
-///     Reads the lifetime registrations declared by the Awaiten lifetime attributes on a container.
-///     Shared by the <see cref="AwaitenGenerator" /> (which emits the container) and the analyzers
-///     (which report suppressible lifetime diagnostics in-source), so both see the same registrations.
+///     Reads the lifetime registrations declared by the Awaiten lifetime attributes on a container, used by
+///     the <see cref="AwaitenGenerator" /> to build and emit the container.
 /// </summary>
 internal static class ContainerRegistrations
 {
@@ -160,7 +159,7 @@ internal static class ContainerRegistrations
 	///     The ordinary methods named <paramref name="name" /> on the container (or an accessible base
 	///     type) whose return type is implicitly convertible to <paramref name="serviceType" /> - the
 	///     candidate factory methods for a <c>Factory</c> registration. None means AWT108; more than one
-	///     means an ambiguous factory (AWT112). Shared with the analyzer so AWT106 sees the same producer.
+	///     means an ambiguous factory (AWT112).
 	/// </summary>
 	public static List<IMethodSymbol> FindFactoryCandidates(
 		INamedTypeSymbol container, string name, ITypeSymbol serviceType, Compilation compilation)

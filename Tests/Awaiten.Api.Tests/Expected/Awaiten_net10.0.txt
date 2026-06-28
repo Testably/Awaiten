@@ -19,6 +19,7 @@ namespace Awaiten
     public sealed class ContainerAttribute : System.Attribute
     {
         public ContainerAttribute() { }
+        public Awaiten.LifetimeSafety LifetimeSafety { get; set; }
         public bool SyncResolveAfterInit { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Parameter, AllowMultiple=false, Inherited=false)]
@@ -39,6 +40,17 @@ namespace Awaiten
     public interface IAwaitenScope : Awaiten.IAwaitenResolver, System.IDisposable
     {
         Awaiten.IAwaitenScope CreateScope();
+    }
+    public enum LifetimeSafety
+    {
+        Strict = 0,
+        Loose = 1,
+    }
+    public readonly struct Owned<T> : System.IDisposable
+    {
+        public Owned(Awaiten.IAwaitenScope scope, T value) { }
+        public T Value { get; }
+        public void Dispose() { }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
     public sealed class ScopedAttribute<TImplementation> : System.Attribute

@@ -208,6 +208,10 @@ public partial class RuntimeArgumentTests
 	}
 
 	// A singleton holding a Func over a disposable parameterized service: the built tools bind to the root.
+	// This deliberate root accumulation is exactly what Func_BoundToASingleton... asserts, so AWT118 is
+	// suppressed here (the container opts into Loose, where AWT118 is a warning); the leak-free alternative
+	// Func<int, Owned<Tool>> is exercised in OwnedTests.
+#pragma warning disable AWT118 // Root-accumulating factory: intentional here, see above.
 	public sealed class Depot
 	{
 		private readonly Func<int, Tool> _tools;
@@ -216,12 +220,13 @@ public partial class RuntimeArgumentTests
 
 		public Tool Make(int id) => _tools(id);
 	}
+#pragma warning restore AWT118
 
-	// AWT106 (disposable transient accumulates from the root) is suppressed: Func_BoundToAScope... resolves
-	// Tool only from a scope, which releases it on scope disposal; Func_BoundToASingleton... deliberately
-	// accumulates it on the root and disposes it with the container.
-#pragma warning disable AWT106
-	[Container]
+	// The singleton Depot holds a Func<int, Tool> over the disposable parameterized Tool: tools built through
+	// it accumulate on the root until the container is disposed, which is exactly what Func_BoundToASingleton...
+	// asserts. That deliberate accumulation is an AWT118 error under strict lifetime safety, so this container
+	// opts into Loose; the leak-free alternative (Func<int, Owned<Tool>>) is exercised in OwnedTests.
+	[Container(LifetimeSafety = LifetimeSafety.Loose)]
 	[Singleton<Engine>]
 	[Transient<Robot>]
 	[Transient<Gadget>]
@@ -232,7 +237,6 @@ public partial class RuntimeArgumentTests
 	[Singleton<Depot>]
 	[Singleton<Workshop>]
 	public static partial class RuntimeArgumentContainer;
-#pragma warning restore AWT106
 
 	public sealed class Badge
 	{

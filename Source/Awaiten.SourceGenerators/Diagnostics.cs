@@ -66,25 +66,6 @@ internal static class Diagnostics
 		isEnabledByDefault: true);
 
 	/// <summary>
-	///     A disposable transient resolved from the container root is not released until the container
-	///     is disposed, so such instances accumulate; resolving it from a scope releases it with the scope.
-	/// </summary>
-	/// <remarks>
-	///     Limitation: this is reported per registration, not per resolution site - the generator does not
-	///     track where a transient is resolved. It therefore fires for every disposable transient, even one
-	///     only ever consumed as a dependency of a scoped service (where it is released with that scope). It
-	///     is a warning precisely because the advice is advisory: the root is always a possible resolution
-	///     site, so accumulation is possible, but it only actually happens if the root resolves it.
-	/// </remarks>
-	public static readonly DiagnosticDescriptor DisposableTransient = new(
-		"AWT106",
-		"Disposable transient",
-		"The transient '{0}' is disposable; instances resolved from the container root are not released until the container is disposed and so accumulate - resolve it from a scope instead",
-		"Awaiten",
-		DiagnosticSeverity.Warning,
-		isEnabledByDefault: true);
-
-	/// <summary>
 	///     The same implementation is registered with more than one lifetime; coalescing into a single
 	///     instance would silently drop one of the declared lifetimes.
 	/// </summary>
@@ -217,4 +198,54 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A root-owned instance (a singleton or pre-built instance), directly or through its transitive
+	///     transient dependencies, holds a <c>Func&lt;…&gt;</c> over a build-on-demand service (a transient or
+	///     parameterized service) whose construction tracks a fresh disposable on the root - the produced
+	///     service is itself disposable, or it transitively rebuilds a disposable transient. Each call to that
+	///     factory builds and re-tracks those disposables on the container's root, so they accumulate for its
+	///     entire lifetime - an unbounded leak. Resolving through <c>Func&lt;…, Owned&lt;T&gt;&gt;</c> instead
+	///     hands each instance back as a disposal handle (draining into a throwaway scope), so nothing accumulates.
+	/// </summary>
+	/// <remarks>
+	///     Unlike the retired per-registration check, this is flow-based: it fires only for the statically
+	///     visible root-accumulating pattern, not for every disposable transient. A disposable transient
+	///     reached only from a scope (or through <c>Owned&lt;T&gt;</c>) is bounded and is not reported. This
+	///     descriptor is the loose-lifetime-safety form: a warning that can be suppressed in source; strict
+	///     lifetime safety reports <see cref="RootAccumulatingFactoryStrict" /> instead.
+	/// </remarks>
+	public static readonly DiagnosticDescriptor RootAccumulatingFactory = new(
+		"AWT118",
+		"Factory accumulates disposables on the container root",
+		"'{1}' holds a Func over '{0}', which is built on demand; the instances it builds - and the disposables created while constructing them - are tracked on the container root and accumulate for its lifetime; resolve it as Func<…, Owned<{0}>> for per-use disposal",
+		"Awaiten",
+		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     The strict-lifetime-safety form of <see cref="RootAccumulatingFactory">AWT118</see>: the same
+	///     diagnostic, reported at error severity (by the analyzer) and carrying
+	///     <see cref="WellKnownDiagnosticTags.NotConfigurable" /> so it cannot be silenced by
+	///     <c>#pragma warning disable</c>, <c>&lt;NoWarn&gt;</c> or an editorconfig severity override - the only
+	///     way to opt out is to set <c>LifetimeSafety.Loose</c> on the <c>[Container]</c>, which switches back
+	///     to the suppressible <see cref="RootAccumulatingFactory" />. This is what makes the root-accumulation
+	///     leak structurally impossible under strict lifetime safety rather than merely warned-about.
+	/// </summary>
+	/// <remarks>
+	///     Its declared default severity is <see cref="DiagnosticSeverity.Warning" /> - identical to
+	///     <see cref="RootAccumulatingFactory" /> - so that release tracking sees a single, consistent AWT118;
+	///     the analyzer raises it to an error per report. <see cref="WellKnownDiagnosticTags.NotConfigurable" />,
+	///     not the severity, is what makes it non-suppressible.
+	/// </remarks>
+	public static readonly DiagnosticDescriptor RootAccumulatingFactoryStrict = new(
+		"AWT118",
+		RootAccumulatingFactory.Title,
+		RootAccumulatingFactory.MessageFormat,
+		RootAccumulatingFactory.Category,
+		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true,
+		description: RootAccumulatingFactory.Description,
+		helpLinkUri: RootAccumulatingFactory.HelpLinkUri,
+		WellKnownDiagnosticTags.NotConfigurable);
 }

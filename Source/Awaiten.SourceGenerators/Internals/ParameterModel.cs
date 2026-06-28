@@ -6,14 +6,18 @@ namespace Awaiten.SourceGenerators.Internals;
 ///     and how it is delivered. <c>FuncArgTypes</c> holds the leading runtime-argument types of a
 ///     <c>Func&lt;TArg…, T&gt;</c> relationship (empty otherwise). <c>Key</c> is the resolution key
 ///     requested by a <c>[FromKey]</c> on the parameter (null for the unkeyed registration), so the
-///     dependency is wired to the matching keyed registration. <c>Location</c> is the parameter's own
-///     source location, so a diagnostic about how it consumes its dependency can point at the parameter
-///     rather than the registration. Relationship-typed and runtime-argument parameters are deferred, so
-///     they do not contribute graph edges for cycle or captive-dependency analysis.
+///     dependency is wired to the matching keyed registration. <c>ProducesOwned</c> marks a
+///     <c>Func&lt;…, Owned&lt;T&gt;&gt;</c> relationship whose produced value is wrapped in an
+///     <c>Owned&lt;T&gt;</c> disposal handle (a bare <c>Owned&lt;T&gt;</c> uses <see cref="DependencyKind.Owned" />
+///     instead). <c>Location</c> is the parameter's own source location, so a diagnostic about how it
+///     consumes its dependency can point at the parameter rather than the registration. Relationship-typed,
+///     runtime-argument and owned parameters are deferred, so they do not contribute graph edges for cycle
+///     or captive-dependency analysis.
 /// </summary>
 internal sealed record ParameterModel(
 	string ServiceType,
 	DependencyKind Kind,
 	EquatableArray<string> FuncArgTypes = default,
 	string? Key = null,
-	LocationInfo? Location = null);
+	LocationInfo? Location = null,
+	bool ProducesOwned = false);

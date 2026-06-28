@@ -91,12 +91,14 @@ internal static class Emitter
 	///     <c>Func&lt;TArg…, T&gt;</c> factory), so it gets no typed resolution fast path. A keyed registration
 	///     is likewise excluded: it is reached only by <c>[FromKey]</c> injection, never the typed path.
 	/// </summary>
-	private static IEnumerable<(string Service, int Index)> UniqueServices(InstanceModel[] instances)
+	private static IEnumerable<(string Service, int Index)> UniqueServices(InstanceModel[] instances, bool strict)
 	{
 		HashSet<string> seen = new(StringComparer.Ordinal);
 		for (int i = 0; i < instances.Length; i++)
 		{
-			if (instances[i].IsParameterized)
+			// A parameterized service has no typed fast path; a strictly-withheld disposable service is reached
+			// only through Owned<T>, so it gets none either.
+			if (instances[i].IsParameterized || IsWithheld(instances[i], strict))
 			{
 				continue;
 			}
@@ -119,9 +121,9 @@ internal static class Emitter
 	///     Appends <c>, global::Awaiten.IAwaitenResolver&lt;S&gt;</c> for each registered service type to a
 	///     just-written base list, so the scope (and its root) exposes a typed resolution fast path.
 	/// </summary>
-	private static void EmitGenericResolverBases(StringBuilder builder, InstanceModel[] instances)
+	private static void EmitGenericResolverBases(StringBuilder builder, InstanceModel[] instances, bool strict)
 	{
-		foreach ((string service, int _) in UniqueServices(instances))
+		foreach ((string service, int _) in UniqueServices(instances, strict))
 		{
 			builder.Append(", global::Awaiten.IAwaitenResolver<").Append(service).Append('>');
 		}
@@ -133,9 +135,9 @@ internal static class Emitter
 	///     types get a typed path; the synthetic <c>Func&lt;T&gt;</c>/<c>Lazy&lt;T&gt;</c> relationship entries
 	///     remain reachable through the Type-based dispatch table.
 	/// </summary>
-	private static void EmitGenericResolverImpls(StringBuilder builder, int depth, InstanceModel[] instances, Names names)
+	private static void EmitGenericResolverImpls(StringBuilder builder, int depth, InstanceModel[] instances, Names names, bool strict)
 	{
-		foreach ((string service, int index) in UniqueServices(instances))
+		foreach ((string service, int index) in UniqueServices(instances, strict))
 		{
 			Indent(builder, depth).Append(service).Append(" global::Awaiten.IAwaitenResolver<")
 				.Append(service).Append(">.Resolve() => ").Append(names.Resolver(index)).AppendLine("();");
@@ -171,7 +173,45 @@ internal static class Emitter
 		// the sealed Root subclass owns the singletons and is the usable instance (new MyContainer.Root()).
 		EmitRootClass(builder, depth, instances, names, serviceToIndex);
 		builder.AppendLine();
-		EmitScopeBaseClass(builder, depth, instances, names, serviceToIndex);
+		EmitScopeBaseClass(builder, depth, instances, names, serviceToIndex, model.Strict);
+	}
+
+	// A disposable build-on-demand service (a disposable transient or parameterized service) is withheld from
+	// the public by-type resolution surface under strict lifetime safety: its bare type and plain Func factory
+	// are no longer dispatchable (they throw a guidance exception) and it gets no typed resolver, so the only
+	// ways to reach it are constructor injection and Owned<T> / Func<…, Owned<T>>.
+	private static bool IsWithheld(InstanceModel instance, bool strict)
+		=> strict && instance.IsDisposable && (instance.Lifetime == Lifetime.Transient || instance.IsParameterized);
+
+	// Whether a plain Func<…> over this service is withheld from by-type resolution under strict lifetime
+	// safety: the service is built on demand (transient or parameterized) and building it tracks a fresh
+	// disposable on the root - the service itself is disposable, or its construction transitively rebuilds one.
+	// Such a Func re-invoked off a root binding accumulates those disposables for the container's lifetime, so
+	// only the Func<…, Owned<T>> form (which drains into a throwaway scope) is offered.
+	private static bool IsFuncWithheld(InstanceModel[] instances, int index, Dictionary<ServiceKey, int> serviceToIndex, bool strict)
+		=> strict
+		   && (instances[index].Lifetime == Lifetime.Transient || instances[index].IsParameterized)
+		   && AwaitenGenerator.BuildsFreshDisposable(instances, serviceToIndex, index);
+
+	private static bool IsRootOwned(InstanceModel instance)
+		=> instance.Lifetime == Lifetime.Singleton || instance.Production == ProductionKind.Instance;
+
+	// The guidance message (a quoted string literal) thrown by Resolve(Type) when a service withheld from
+	// by-type resolution under strict lifetime safety is requested by its bare type: it is itself a disposable
+	// build-on-demand service, reachable only by injection or through an Owned<T> handle.
+	private static string BareWithheldMessage(string service)
+	{
+		string display = service.Replace("global::", string.Empty);
+		return $"\"Awaiten: '{display}' is withheld from by-type resolution under strict lifetime safety; obtain it through Owned<{display}> or Func<…, Owned<{display}>>, inject it directly, or set LifetimeSafety.Loose on the [Container].\"";
+	}
+
+	// The guidance message (a quoted string literal) thrown by Resolve(Type) when a plain Func over the service
+	// is requested: that factory accumulates disposables on the root, so the leak-free Func<…, Owned<T>> form
+	// is offered instead. The bare type may still be resolvable (its single resolution is bounded).
+	private static string FuncWithheldMessage(string service)
+	{
+		string display = service.Replace("global::", string.Empty);
+		return $"\"Awaiten: a plain Func over '{display}' is withheld from by-type resolution under strict lifetime safety because building it on demand accumulates disposables on the container root; resolve it as Func<…, Owned<{display}>> for per-use disposal, or set LifetimeSafety.Loose on the [Container].\"";
 	}
 
 	/// <summary>
@@ -197,20 +237,30 @@ internal static class Emitter
 	///     itself, constructs transients, and resolves singletons through <c>protected virtual</c> delegators
 	///     that the <c>Root</c> subclass overrides. Child (request) scopes are instances of this type.
 	/// </summary>
-	private static void EmitScopeBaseClass(StringBuilder builder, int depth, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex)
+	private static void EmitScopeBaseClass(StringBuilder builder, int depth, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool strict)
 	{
 		Indent(builder, depth).Append("public class Scope : global::Awaiten.IAwaitenScope");
-		EmitGenericResolverBases(builder, instances);
+		EmitGenericResolverBases(builder, instances, strict);
 		builder.AppendLine();
 		Indent(builder, depth).AppendLine("{");
 		int body = depth + 1;
 
 		// The dispatch table lives on the Scope (the only reader, through TryResolve); it is static, so it is
 		// built once for the whole container, and reached by simple name from this type and its Root subclass.
-		List<DispatchEntry> entries = BuildDispatchEntries(instances, names);
-		if (entries.Count > 0)
+		// Withheld entries go to a separate __withheld table consulted only by Resolve (for guidance), so
+		// TryResolve stays a non-throwing probe that simply returns false for them.
+		List<DispatchEntry> entries = BuildDispatchEntries(instances, names, serviceToIndex, strict);
+		List<DispatchEntry> resolvable = Resolvable(entries);
+		List<DispatchEntry> withheld = Withheld(entries);
+		if (resolvable.Count > 0)
 		{
-			EmitDispatchTable(builder, body, entries);
+			EmitDispatchTable(builder, body, resolvable);
+			builder.AppendLine();
+		}
+
+		if (withheld.Count > 0)
+		{
+			EmitWithheldTable(builder, body, withheld);
 			builder.AppendLine();
 		}
 
@@ -240,7 +290,7 @@ internal static class Emitter
 		Indent(builder, body + 1).AppendLine("__root = root;");
 		Indent(builder, body).AppendLine("}");
 		builder.AppendLine();
-		EmitResolutionApi(builder, body, instances, names);
+		EmitResolutionApi(builder, body, instances, names, serviceToIndex, strict);
 		builder.AppendLine();
 		EmitGenericResolveMethod(builder, body);
 		builder.AppendLine();
@@ -250,8 +300,15 @@ internal static class Emitter
 		// type spares callers holding a Scope an interface hop; the interface contract is met explicitly.
 		Indent(builder, body).AppendLine("public Scope CreateScope() => new Scope(__root);");
 		Indent(builder, body).AppendLine("global::Awaiten.IAwaitenScope global::Awaiten.IAwaitenScope.CreateScope() => CreateScope();");
+
+		if (instances.Length > 0)
+		{
+			builder.AppendLine();
+			EmitOwnedHelper(builder, body);
+		}
+
 		builder.AppendLine();
-		EmitGenericResolverImpls(builder, body, instances, names);
+		EmitGenericResolverImpls(builder, body, instances, names, strict);
 
 		for (int i = 0; i < instances.Length; i++)
 		{
@@ -331,9 +388,11 @@ internal static class Emitter
 		Indent(builder, depth).AppendLine("}");
 	}
 
-	private static void EmitResolutionApi(StringBuilder builder, int depth, InstanceModel[] instances, Names names)
+	private static void EmitResolutionApi(StringBuilder builder, int depth, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool strict)
 	{
-		List<DispatchEntry> entries = BuildDispatchEntries(instances, names);
+		List<DispatchEntry> entries = BuildDispatchEntries(instances, names, serviceToIndex, strict);
+		List<DispatchEntry> resolvable = Resolvable(entries);
+		bool hasWithheld = Withheld(entries).Count > 0;
 
 		Indent(builder, depth).AppendLine("public object Resolve(global::System.Type serviceType)");
 		Indent(builder, depth).AppendLine("{");
@@ -342,6 +401,17 @@ internal static class Emitter
 		Indent(builder, depth + 2).AppendLine("return instance!;");
 		Indent(builder, depth + 1).AppendLine("}");
 		builder.AppendLine();
+		if (hasWithheld)
+		{
+			// A withheld service is known but not resolvable by type; surface the guidance (pointing at Owned<T>)
+			// instead of the generic "no registration" message. TryResolve stays non-throwing - it returned false.
+			Indent(builder, depth + 1).AppendLine("if (__withheld.TryGetValue(serviceType, out string? __guidance))");
+			Indent(builder, depth + 1).AppendLine("{");
+			Indent(builder, depth + 2).AppendLine("throw new global::System.InvalidOperationException(__guidance);");
+			Indent(builder, depth + 1).AppendLine("}");
+			builder.AppendLine();
+		}
+
 		Indent(builder, depth + 1).AppendLine(
 			"throw new global::System.InvalidOperationException($\"No registration for type '{serviceType}' on this container.\");");
 		Indent(builder, depth).AppendLine("}");
@@ -349,7 +419,7 @@ internal static class Emitter
 
 		Indent(builder, depth).AppendLine("public bool TryResolve(global::System.Type serviceType, [global::System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? instance)");
 		Indent(builder, depth).AppendLine("{");
-		if (entries.Count == 0)
+		if (resolvable.Count == 0)
 		{
 			Indent(builder, depth + 1).AppendLine("instance = null;");
 			Indent(builder, depth + 1).AppendLine("return false;");
@@ -361,10 +431,10 @@ internal static class Emitter
 		Indent(builder, depth + 1).AppendLine("{");
 		Indent(builder, depth + 2).AppendLine("switch (__case)");
 		Indent(builder, depth + 2).AppendLine("{");
-		for (int i = 0; i < entries.Count; i++)
+		for (int i = 0; i < resolvable.Count; i++)
 		{
 			Indent(builder, depth + 3).Append("case ").Append(i).Append(": instance = ")
-				.Append(entries[i].Value).AppendLine("; return true;");
+				.Append(resolvable[i].Value).AppendLine("; return true;");
 		}
 
 		Indent(builder, depth + 2).AppendLine("}");
@@ -381,7 +451,7 @@ internal static class Emitter
 	///     factory/lazy bound to this owner's resolver). The order is identical on the container and its
 	///     scope, so a single static table built on the container is valid for both.
 	/// </summary>
-	private static List<DispatchEntry> BuildDispatchEntries(InstanceModel[] instances, Names names)
+	private static List<DispatchEntry> BuildDispatchEntries(InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool strict)
 	{
 		List<DispatchEntry> entries = new();
 		HashSet<string> seen = new(StringComparer.Ordinal);
@@ -392,7 +462,7 @@ internal static class Emitter
 		// Seeding 'seen' here lets the synthetic pass skip any key an explicit registration already claimed.
 		for (int i = 0; i < instances.Length; i++)
 		{
-			AddServiceEntries(instances[i], names.Resolver(i), entries, seen);
+			AddServiceEntries(instances[i], names.Resolver(i), entries, seen, IsWithheld(instances[i], strict), IsFuncWithheld(instances, i, serviceToIndex, strict));
 		}
 
 		// Synthetic Func<T>/Lazy<T> over each service, skipping any key an explicit registration already
@@ -403,7 +473,7 @@ internal static class Emitter
 		{
 			if (!instances[i].IsParameterized)
 			{
-				AddRelationshipEntries(instances[i], names.Resolver(i), entries, seen);
+				AddRelationshipEntries(instances[i], names.Resolver(i), entries, seen, IsFuncWithheld(instances, i, serviceToIndex, strict));
 			}
 		}
 
@@ -415,8 +485,9 @@ internal static class Emitter
 	///     service contributes only its <c>Func&lt;TArg…, T&gt;</c> factory (its bare type cannot be built
 	///     without the runtime arguments); any other service maps to its resolver call.
 	/// </summary>
-	private static void AddServiceEntries(InstanceModel instance, string resolver, List<DispatchEntry> entries, HashSet<string> seen)
+	private static void AddServiceEntries(InstanceModel instance, string resolver, List<DispatchEntry> entries, HashSet<string> seen, bool bareWithheld, bool funcWithheld)
 	{
+		bool rootOwned = IsRootOwned(instance);
 		string[] argTypes = instance.ArgTypes();
 		foreach (ServiceKey serviceKey in instance.Services.AsArray())
 		{
@@ -429,14 +500,30 @@ internal static class Emitter
 			string service = serviceKey.Service;
 			if (argTypes.Length > 0)
 			{
+				// The plain Func<TArg…, T> factory accumulates on the owner; under strict safety it is withheld
+				// (resolving it by type throws guidance) so only the Owned form below can build the disposable
+				// parameterized service - or one whose construction transitively tracks a disposable on the root.
 				string parameterizedFunc = $"global::System.Func<{string.Join(", ", argTypes)}, {service}>";
 				seen.Add(parameterizedFunc);
-				entries.Add(new DispatchEntry(parameterizedFunc, FuncFactory(argTypes, service, resolver)));
+				entries.Add(funcWithheld
+					? new DispatchEntry(parameterizedFunc, FuncWithheldMessage(service), true)
+					: new DispatchEntry(parameterizedFunc, FuncFactory(argTypes, service, resolver)));
+
+				// The leak-free factory for a parameterized service: Func<TArg…, Owned<T>> hands each built
+				// instance back as a disposal handle instead of accumulating it on the owner.
+				string parameterizedOwnedFunc = $"global::System.Func<{string.Join(", ", argTypes)}, global::Awaiten.Owned<{service}>>";
+				seen.Add(parameterizedOwnedFunc);
+				entries.Add(new DispatchEntry(parameterizedOwnedFunc, OwnedFuncFactory(argTypes, service, resolver, rootOwned)));
 				continue;
 			}
 
 			seen.Add(service);
-			entries.Add(new DispatchEntry(service, resolver + "()"));
+			// A strictly-withheld disposable transient's bare type is no longer dispatchable; resolving it by
+			// type throws guidance (reachable only by injection or Owned<T>). A non-disposable service is not
+			// withheld at the bare type even when its Func is (its single bare resolution is bounded).
+			entries.Add(bareWithheld
+				? new DispatchEntry(service, BareWithheldMessage(service), true)
+				: new DispatchEntry(service, resolver + "()"));
 		}
 	}
 
@@ -445,8 +532,9 @@ internal static class Emitter
 	///     service types, skipping any key an explicit registration already claimed (tracked in
 	///     <paramref name="seen" />) so the dispatch table never contains a duplicate key.
 	/// </summary>
-	private static void AddRelationshipEntries(InstanceModel instance, string resolver, List<DispatchEntry> entries, HashSet<string> seen)
+	private static void AddRelationshipEntries(InstanceModel instance, string resolver, List<DispatchEntry> entries, HashSet<string> seen, bool funcWithheld)
 	{
+		bool rootOwned = IsRootOwned(instance);
 		foreach (ServiceKey serviceKey in instance.Services.AsArray())
 		{
 			// Keyed registrations are reached only by [FromKey] injection, so they get no synthetic
@@ -457,24 +545,78 @@ internal static class Emitter
 			}
 
 			string service = serviceKey.Service;
+
+			// The plain Func<T> factory accumulates on its owner; under strict safety it is withheld (resolving
+			// it by type throws guidance), leaving Func<Owned<T>> as the leak-free way to build on demand a
+			// disposable - or a service whose construction transitively tracks a disposable on the root.
 			string func = $"global::System.Func<{service}>";
 			if (seen.Add(func))
 			{
-				entries.Add(new DispatchEntry(func, $"new global::System.Func<{service}>(() => {resolver}())"));
+				entries.Add(funcWithheld
+					? new DispatchEntry(func, FuncWithheldMessage(service), true)
+					: new DispatchEntry(func, $"new global::System.Func<{service}>(() => {resolver}())"));
 			}
 
+			// Lazy<T> is memoized - it builds at most once and never accumulates - so it stays resolvable even
+			// for a withheld disposable service.
 			string lazy = $"global::System.Lazy<{service}>";
 			if (seen.Add(lazy))
 			{
 				entries.Add(new DispatchEntry(lazy, $"new global::System.Lazy<{service}>(() => {resolver}())"));
 			}
+
+			// Owned<T> hands the caller a disposal handle over a single resolution; Func<Owned<T>> is the
+			// leak-free factory that produces one per call. Both build into a throwaway child scope, and both
+			// stay resolvable under strict safety - they are the sanctioned way to reach a withheld service.
+			string owned = $"global::Awaiten.Owned<{service}>";
+			if (seen.Add(owned))
+			{
+				entries.Add(new DispatchEntry(owned, OwnedBare(service, resolver, rootOwned)));
+			}
+
+			string ownedFunc = $"global::System.Func<{owned}>";
+			if (seen.Add(ownedFunc))
+			{
+				entries.Add(new DispatchEntry(ownedFunc, OwnedFuncFactory([], service, resolver, rootOwned)));
+			}
 		}
 	}
 
+	// The resolvable (directly dispatchable) entries, in order - their position is their dispatch case number.
+	private static List<DispatchEntry> Resolvable(List<DispatchEntry> entries)
+	{
+		List<DispatchEntry> resolvable = new();
+		foreach (DispatchEntry entry in entries)
+		{
+			if (!entry.Throws)
+			{
+				resolvable.Add(entry);
+			}
+		}
+
+		return resolvable;
+	}
+
+	// The withheld entries (a known service type with guidance instead of a resolver) - kept out of the
+	// dispatch switch so TryResolve returns false for them; Resolve consults them to throw the guidance.
+	private static List<DispatchEntry> Withheld(List<DispatchEntry> entries)
+	{
+		List<DispatchEntry> withheld = new();
+		foreach (DispatchEntry entry in entries)
+		{
+			if (entry.Throws)
+			{
+				withheld.Add(entry);
+			}
+		}
+
+		return withheld;
+	}
+
 	/// <summary>
-	///     Emits the static <c>__dispatch</c> table mapping each service type to its case number. It lives on
-	///     the base <c>Scope</c> and is <c>static</c>, so it is built once and shared by every scope and the
-	///     <c>Root</c> subclass that inherits it.
+	///     Emits the static <c>__dispatch</c> table mapping each resolvable service type to its case number. It
+	///     lives on the base <c>Scope</c> and is <c>static</c>, so it is built once and shared by every scope and
+	///     the <c>Root</c> subclass that inherits it.
 	/// </summary>
 	private static void EmitDispatchTable(StringBuilder builder, int depth, List<DispatchEntry> entries)
 	{
@@ -484,6 +626,25 @@ internal static class Emitter
 		for (int i = 0; i < entries.Count; i++)
 		{
 			Indent(builder, depth + 1).Append("{ typeof(").Append(entries[i].Type).Append("), ").Append(i).AppendLine(" },");
+		}
+
+		Indent(builder, depth).AppendLine("};");
+	}
+
+	/// <summary>
+	///     Emits the static <c>__withheld</c> table mapping each service type withheld from by-type resolution
+	///     under strict lifetime safety to its guidance message. It is consulted only by <c>Resolve</c>, which
+	///     throws the guidance; <c>TryResolve</c> never reads it and so returns <see langword="false" /> for a
+	///     withheld type rather than throwing.
+	/// </summary>
+	private static void EmitWithheldTable(StringBuilder builder, int depth, List<DispatchEntry> entries)
+	{
+		Indent(builder, depth).AppendLine(
+			"private static readonly global::System.Collections.Generic.Dictionary<global::System.Type, string> __withheld = new global::System.Collections.Generic.Dictionary<global::System.Type, string>");
+		Indent(builder, depth).AppendLine("{");
+		foreach (DispatchEntry entry in entries)
+		{
+			Indent(builder, depth + 1).Append("{ typeof(").Append(entry.Type).Append("), ").Append(entry.Value).AppendLine(" },");
 		}
 
 		Indent(builder, depth).AppendLine("};");
@@ -507,8 +668,10 @@ internal static class Emitter
 			string[] argTypes = instance.ArgTypes();
 			string signature = string.Join(", ", argTypes.Select((t, i) => $"{t} a{i}"));
 			string parameterizedConstruction = EmitConstruction(instance, instances, names, serviceToIndex);
-			// Reachable from the Root (a singleton's Func<TArg…, T> binds it there), so it is protected.
-			EmitFreshResolver(builder, depth, new FreshResolver("protected", type, resolver, signature, parameterizedConstruction, instance.IsDisposable));
+			// Reachable from the Root (a singleton's Func<TArg…, T> binds it there) and from a throwaway
+			// Owned<T> scope built off any owner (__s.ResolveX(args)), so it is internal rather than protected -
+			// protected would not be callable through a base-typed scope reference from the derived Root (CS1540).
+			EmitFreshResolver(builder, depth, new FreshResolver("internal", type, resolver, signature, parameterizedConstruction, instance.IsDisposable));
 			return;
 		}
 
@@ -524,15 +687,17 @@ internal static class Emitter
 
 		string construction = EmitConstruction(instance, instances, names, serviceToIndex);
 
-		// Protected, not private: a root-owned instance (a singleton) can capture a scoped/transient through a
-		// relationship, and the Root - a subclass - reaches the target's resolver directly only if it inherits it.
+		// Transient and scoped resolvers are internal (not private/protected) so a throwaway Owned<T> scope can
+		// call them directly through a base-typed scope reference (__s.ResolveX()) - this bypasses the strict
+		// by-type withholding, which only blocks the public dispatch/typed surface, not these resolver methods.
+		// Internal also covers the case the Root (a subclass) reaches a captured scoped/transient's resolver.
 		if (instance.Lifetime == Lifetime.Transient)
 		{
-			EmitFreshResolver(builder, depth, new FreshResolver("protected", type, resolver, string.Empty, construction, instance.IsDisposable));
+			EmitFreshResolver(builder, depth, new FreshResolver("internal", type, resolver, string.Empty, construction, instance.IsDisposable));
 			return;
 		}
 
-		EmitCachingResolver(builder, depth, new CachingResolver("protected", type, resolver, names.Field(index), construction, instance.IsDisposable, "// Scoped: one instance per scope."));
+		EmitCachingResolver(builder, depth, new CachingResolver("internal", type, resolver, names.Field(index), construction, instance.IsDisposable, "// Scoped: one instance per scope."));
 	}
 
 	/// <summary>
@@ -668,9 +833,10 @@ internal static class Emitter
 	///     The expression that supplies a single constructor argument, resolving the target named by the
 	///     parameter's service type and (optional) <c>[FromKey]</c>. A root-owned target (a singleton or
 	///     pre-built Instance) is read straight off the sealed root so the call devirtualizes; a
-	///     scoped/transient target resolves through its own resolver - <c>protected</c>, so the Root reaches
-	///     it directly when a singleton captures it through a relationship. A relationship type wraps the
-	///     target in a deferred <c>Func&lt;T&gt;</c> / <c>Lazy&lt;T&gt;</c>.
+	///     scoped/transient target resolves through its own resolver - <c>internal</c> on the base
+	///     <c>Scope</c>, so the Root reaches it directly when a singleton captures it through a relationship,
+	///     and a throwaway <c>Owned&lt;T&gt;</c> scope can call it too. A relationship type wraps the target in
+	///     a deferred <c>Func&lt;T&gt;</c> / <c>Lazy&lt;T&gt;</c>.
 	/// </summary>
 	private static string ResolveExpression(ParameterModel parameter, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex)
 	{
@@ -679,6 +845,20 @@ internal static class Emitter
 		InstanceModel target = instances[targetIndex];
 
 		string[] funcArgTypes = parameter.FuncArgTypes.AsArray();
+		bool rootOwned = IsRootOwned(target);
+
+		// Owned relationships build into a throwaway child scope, independent of this owner, so they need none
+		// of the root-routing below: a Func<…, Owned<T>> factory, or a bare Owned<T> resolved once.
+		if (parameter.ProducesOwned)
+		{
+			return OwnedFuncFactory(funcArgTypes, parameter.ServiceType, resolver, rootOwned);
+		}
+
+		if (parameter.Kind == DependencyKind.Owned)
+		{
+			return OwnedBare(parameter.ServiceType, resolver, rootOwned);
+		}
+
 		if (parameter.Kind == DependencyKind.Func && funcArgTypes.Length > 0)
 		{
 			// A Func<TArg…, T> over a parameterized service binds the owner's parameterized resolver, which
@@ -686,12 +866,23 @@ internal static class Emitter
 			return FuncFactory(funcArgTypes, parameter.ServiceType, resolver);
 		}
 
-		// Read singletons (and pre-built Instances) straight off the (sealed) root scope so the dependency
-		// call devirtualizes rather than dispatching through this scope's virtual delegator; on the root,
-		// __root is itself. Scoped/transient targets go through their own protected resolver, which the
-		// target index has already selected for the requested [FromKey] (if any).
-		bool rootOwned = target.Lifetime == Lifetime.Singleton || target.Production == ProductionKind.Instance;
-		string value = rootOwned ? $"__root.{resolver}()" : $"{resolver}()";
+		string value;
+		if (rootOwned)
+		{
+			// Read singletons straight off the (sealed) root scope so the dependency call devirtualizes,
+			// rather than dispatching through this scope's virtual delegator. On the root, __root is itself.
+			value = $"__root.{resolver}()";
+		}
+		else
+		{
+			// A root-owned owner can only capture a non-singleton through a relationship (a direct capture
+			// would be a captive dependency). The target's scoped/transient resolver is internal on the base
+			// Scope, so it is reachable by simple name from the Root too - call it directly (the target index
+			// has already selected the resolver for the requested [FromKey], if any). Routing through the generic
+			// Resolve<T>() instead would hit the by-type withholding under strict lifetime safety and throw when
+			// a Lazy<DisposableTransient> held by a singleton is forced.
+			value = $"{resolver}()";
+		}
 
 		return parameter.Kind switch
 		{
@@ -711,6 +902,55 @@ internal static class Emitter
 		string generics = argTypes.Length == 0 ? service : string.Join(", ", argTypes) + ", " + service;
 		string lambdaArgs = string.Join(", ", argTypes.Select((_, i) => "a" + i));
 		return $"new global::System.Func<{generics}>(({lambdaArgs}) => {resolver}({lambdaArgs}))";
+	}
+
+	/// <summary>
+	///     Emits the <c>__Owned&lt;T&gt;</c> helper on the base <c>Scope</c>: it opens a throwaway child scope
+	///     (sharing the root's singletons), resolves a single <c>T</c> into it through the supplied delegate and
+	///     returns an <c>Owned&lt;T&gt;</c> over that scope. Disposing the handle disposes only that scope,
+	///     draining what was built for this one resolution while shared singletons live on.
+	/// </summary>
+	private static void EmitOwnedHelper(StringBuilder builder, int depth)
+	{
+		Indent(builder, depth).AppendLine("protected global::Awaiten.Owned<T> __Owned<T>(global::System.Func<Scope, T> __resolve)");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).AppendLine("Scope __owned = CreateScope();");
+		Indent(builder, depth + 1).AppendLine("return new global::Awaiten.Owned<T>(__owned, __resolve(__owned));");
+		Indent(builder, depth).AppendLine("}");
+	}
+
+	// A bare Owned<T>: resolve T once into a throwaway child scope and wrap it as a disposal handle.
+	private static string OwnedBare(string service, string resolver, bool rootOwned)
+		=> $"__Owned<{service}>({OwnedInner(service, resolver, [], rootOwned)})";
+
+	/// <summary>
+	///     A <c>new Func&lt;TArg…, Owned&lt;T&gt;&gt;((a0, …) =&gt; __Owned&lt;T&gt;(…))</c> expression: each call
+	///     builds <c>T</c> in a throwaway child scope and hands back the disposal handle.
+	/// </summary>
+	private static string OwnedFuncFactory(string[] argTypes, string service, string resolver, bool rootOwned)
+	{
+		string owned = $"global::Awaiten.Owned<{service}>";
+		string generics = argTypes.Length == 0 ? owned : string.Join(", ", argTypes) + ", " + owned;
+		string lambdaArgs = string.Join(", ", argTypes.Select((_, i) => "a" + i));
+		return $"new global::System.Func<{generics}>(({lambdaArgs}) => __Owned<{service}>({OwnedInner(service, resolver, argTypes, rootOwned)}))";
+	}
+
+	/// <summary>
+	///     The delegate passed to <c>__Owned&lt;T&gt;</c> that resolves the single value into the throwaway
+	///     scope <c>__s</c>. A root-owned target (a singleton or pre-built instance) goes through the public
+	///     typed surface (it is never withheld, and shares off the root); any other target calls its resolver
+	///     directly - which is internal so it stays reachable even when the type is withheld from by-type
+	///     resolution under strict lifetime safety.
+	/// </summary>
+	private static string OwnedInner(string service, string resolver, string[] argTypes, bool rootOwned)
+	{
+		if (rootOwned)
+		{
+			return $"__s => __s.Resolve<{service}>()";
+		}
+
+		string lambdaArgs = string.Join(", ", argTypes.Select((_, i) => "a" + i));
+		return $"__s => __s.{resolver}({lambdaArgs})";
 	}
 
 	private static void EmitDispose(StringBuilder builder, int depth)
@@ -820,13 +1060,18 @@ internal static class Emitter
 
 	/// <summary>
 	///     A single dispatch case: the service <see cref="Type" /> requested and the <see cref="Value" />
-	///     assigned to <c>instance</c> (the resolver call).
+	///     assigned to <c>instance</c> (the resolver call). When <see cref="Throws" /> is set, the entry is
+	///     instead withheld from by-type resolution under strict lifetime safety: <see cref="Value" /> is a
+	///     guidance message literal placed in the <c>__withheld</c> table (which <c>Resolve</c> throws), and the
+	///     entry is kept out of the dispatch switch so <c>TryResolve</c> returns <see langword="false" /> for it.
 	/// </summary>
-	private readonly struct DispatchEntry(string type, string value)
+	private readonly struct DispatchEntry(string type, string value, bool throws = false)
 	{
 		public string Type { get; } = type;
 
 		public string Value { get; } = value;
+
+		public bool Throws { get; } = throws;
 	}
 
 	/// <summary>

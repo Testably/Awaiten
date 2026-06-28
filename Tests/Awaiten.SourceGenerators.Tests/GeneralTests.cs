@@ -434,9 +434,9 @@ public class GeneralTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// The resolver takes the runtime argument and is protected so a root-owned singleton's Func can bind
-		// it; its graph dependency is still read straight off the root scope.
-		await That(source).Contains("protected global::MyCode.Robot ResolveRobot(string a0)");
+		// The resolver takes the runtime argument and is internal so a root-owned singleton's Func - and a
+		// throwaway Owned<T> scope - can bind it; its graph dependency is still read straight off the root scope.
+		await That(source).Contains("internal global::MyCode.Robot ResolveRobot(string a0)");
 		await That(source).Contains("new global::MyCode.Robot(__root.ResolveEngine(), a0)");
 		// The consumer receives a Func that forwards the runtime argument to that resolver.
 		await That(source).Contains("new global::System.Func<string, global::MyCode.Robot>((a0) => ResolveRobot(a0))");

@@ -18,4 +18,13 @@ public sealed class ContainerAttribute : Attribute
 	///     (strict: async-tainted services must be resolved through <c>GetAsync</c>).
 	/// </summary>
 	public bool SyncResolveAfterInit { get; set; }
+
+	/// <summary>
+	///     How strictly the container guards against unbounded disposal leaks. Defaults to
+	///     <see cref="Awaiten.LifetimeSafety.Strict" />, which makes a root-accumulating
+	///     <c>Func&lt;…&gt;</c> over a disposable service a compile-time error and withholds such services
+	///     from by-type resolution; set <see cref="Awaiten.LifetimeSafety.Loose" /> for full
+	///     Microsoft.Extensions.DependencyInjection interoperability.
+	/// </summary>
+	public LifetimeSafety LifetimeSafety { get; set; }
 }

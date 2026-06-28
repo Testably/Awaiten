@@ -247,14 +247,13 @@ public partial class LifetimeTests
 		public void Dispose() => Disposed = true;
 	}
 
-	[Container]
+	// Loose: these tests resolve the disposable transient directly by type and assert it is tracked and
+	// disposed with its owning scope - the permissive path that strict lifetime safety withholds in favor of
+	// Owned<T>.
+	[Container(LifetimeSafety = LifetimeSafety.Loose)]
 	[Singleton<SingletonService, ISingletonService>]
 	[Scoped<ScopedService, IScopedService>]
-	// AWT106: the disposable transient is registered deliberately so the tests can assert it is
-	// tracked and disposed when its owning scope or the container is disposed.
-#pragma warning disable AWT106
 	[Transient<TransientService>]
-#pragma warning restore AWT106
 	public static partial class LifetimeContainer;
 
 	public interface IReader;
@@ -319,13 +318,11 @@ public partial class LifetimeTests
 		public void Dispose() => Disposed = true;
 	}
 
-	[Container]
+	// Loose: this test resolves the disposable transient directly by type and asserts every concurrently
+	// tracked instance is disposed with the container - the permissive path that strict withholds.
+	[Container(LifetimeSafety = LifetimeSafety.Loose)]
 	[Singleton<ConstructionCounter>]
 	[Singleton<CountedSingleton>]
-	// AWT106: the disposable transient is registered deliberately so the tests can assert every
-	// concurrently tracked instance is disposed with the container.
-#pragma warning disable AWT106
 	[Transient<CountedTransient>]
-#pragma warning restore AWT106
 	public static partial class ConcurrencyContainer;
 }

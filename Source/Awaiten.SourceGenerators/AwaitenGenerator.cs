@@ -56,9 +56,12 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		}
 
 		Compilation compilation = context.SemanticModel.Compilation;
-		INamedTypeSymbol? disposableSymbol = compilation.GetTypeByMetadataName("System.IDisposable");
 
-		List<RawRegistration> raw = ContainerRegistrations.Collect(containerSymbol);
+		// Strict lifetime safety (the default) withholds a disposable build-on-demand service from by-type
+		// resolution; Loose relaxes that for MS.DI interop. The root-accumulating Func diagnostic (AWT118) is
+		// reported by AwaitenAnalyzer rather than here, so it can be suppressed in source with
+		// #pragma warning disable AWT118 / [SuppressMessage] (a generator-reported diagnostic cannot be).
+		bool strict = ReadStrict(containerSymbol);
 
 		List<DiagnosticInfo> diagnostics = new();
 
@@ -74,36 +77,13 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 				new EquatableArray<string>([Display(containerSymbol.ToDisplayString(FullyQualified)),])));
 		}
 
-		// Coalesce registrations by (service type, key): the first registration per key wins, and
-		// registrations of the same implementation share one instance. Declaring one implementation with
-		// two different lifetimes is reported as AWT107; two implementations under the same service type and
-		// key as AWT117.
-		(List<ImplInfo> implOrder, Dictionary<ServiceKey, string> serviceToImpl) = CoalesceByImplementation(raw, diagnostics);
+		GraphModel graph = BuildGraph(containerSymbol, compilation, diagnostics, cancellationToken);
 
-		List<InstanceModel> instances = new();
-		List<LocationInfo?> instanceLocations = new();
-		Dictionary<string, int> implToIndex = new(StringComparer.Ordinal);
-
-		// Validate each implementation, select its constructor and build the instance.
-		foreach (ImplInfo info in implOrder)
-		{
-			cancellationToken.ThrowIfCancellationRequested();
-			InstanceModel? instance = BuildInstance(info, containerSymbol, compilation, serviceToImpl, disposableSymbol, diagnostics);
-			if (instance is not null)
-			{
-				implToIndex[info.ImplementationType] = instances.Count;
-				instances.Add(instance);
-				instanceLocations.Add(info.Location);
-			}
-		}
-
-		ValidateRuntimeArguments(instances, instanceLocations, serviceToImpl, implToIndex, diagnostics);
-
-		Dictionary<int, List<int>> dependencies = BuildDependencyGraph(instances, serviceToImpl, implToIndex);
+		ValidateRuntimeArguments(graph.Instances, graph.InstanceLocations, graph.ServiceToImpl, graph.ImplToIndex, diagnostics);
 
 		LocationInfo? containerLocation = LocationInfo.From(containerSymbol.Locations.FirstOrDefault());
-		DetectCycles(instances, dependencies, containerLocation, diagnostics);
-		DetectCaptiveDependencies(instances, dependencies, instanceLocations, diagnostics);
+		DetectCycles(graph.Instances, graph.Dependencies, containerLocation, diagnostics);
+		DetectCaptiveDependencies(graph.Instances, graph.Dependencies, graph.InstanceLocations, diagnostics);
 
 		string? containerNamespace = containerSymbol.ContainingNamespace is { IsGlobalNamespace: false, } ns
 			? ns.ToDisplayString()
@@ -131,8 +111,103 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			new EquatableArray<TypeDeclaration>(containingTypes.ToArray()),
 			containerSymbol.Name,
 			hintName,
-			new EquatableArray<InstanceModel>(instances.ToArray()),
-			new EquatableArray<DiagnosticInfo>(diagnostics.ToArray()));
+			new EquatableArray<InstanceModel>(graph.Instances.ToArray()),
+			new EquatableArray<DiagnosticInfo>(diagnostics.ToArray()),
+			strict);
+	}
+
+	/// <summary>
+	///     Resolves the container's object graph: coalesces its registrations, builds an
+	///     <see cref="InstanceModel" /> per implementation (selecting constructors / factories / instance
+	///     members) and computes the direct-dependency edges between them. Registration faults discovered on
+	///     the way (AWT101/103/104/107-112) are appended to <paramref name="diagnostics" />. Shared by the
+	///     generator (which emits from the graph) and <see cref="AwaitenAnalyzer" /> (which walks it for AWT118).
+	/// </summary>
+	internal static GraphModel BuildGraph(
+		INamedTypeSymbol containerSymbol,
+		Compilation compilation,
+		List<DiagnosticInfo> diagnostics,
+		CancellationToken cancellationToken)
+	{
+		INamedTypeSymbol? disposableSymbol = compilation.GetTypeByMetadataName("System.IDisposable");
+
+		List<RawRegistration> raw = ContainerRegistrations.Collect(containerSymbol);
+
+		// Coalesce registrations by (service type, key): the first registration per key wins, and
+		// registrations of the same implementation share one instance. Declaring one implementation with
+		// two different lifetimes is reported as AWT107; two implementations under the same service type and
+		// key as AWT117.
+		(List<ImplInfo> implOrder, Dictionary<ServiceKey, string> serviceToImpl) = CoalesceByImplementation(raw, diagnostics);
+
+		List<InstanceModel> instances = new();
+		List<LocationInfo?> instanceLocations = new();
+		Dictionary<string, int> implToIndex = new(StringComparer.Ordinal);
+
+		// Validate each implementation, select its constructor and build the instance.
+		foreach (ImplInfo info in implOrder)
+		{
+			cancellationToken.ThrowIfCancellationRequested();
+			InstanceModel? instance = BuildInstance(info, containerSymbol, compilation, serviceToImpl, disposableSymbol, diagnostics);
+			if (instance is not null)
+			{
+				implToIndex[info.ImplementationType] = instances.Count;
+				instances.Add(instance);
+				instanceLocations.Add(info.Location);
+			}
+		}
+
+		Dictionary<int, List<int>> dependencies = BuildDependencyGraph(instances, serviceToImpl, implToIndex);
+
+		return new GraphModel(instances, dependencies, serviceToImpl, implToIndex, instanceLocations);
+	}
+
+	/// <summary>
+	///     Whether building the service at <paramref name="start" /> on its owner tracks a fresh disposable
+	///     there: the service itself is disposable, or its construction transitively rebuilds one. The walk
+	///     follows only direct <em>transient</em> dependency edges, because a scoped or singleton dependency is
+	///     cached/shared (built at most once on the owner) and so is bounded, whereas a transient dependency is
+	///     rebuilt - and, if disposable, re-tracked - on every construction. Used to decide whether a plain
+	///     <c>Func&lt;…&gt;</c> over the service accumulates on the container root (AWT118 / strict withholding):
+	///     a non-disposable transient that injects a disposable transient leaks just the same when built
+	///     repeatedly through a root-bound factory.
+	/// </summary>
+	internal static bool BuildsFreshDisposable(
+		IReadOnlyList<InstanceModel> instances,
+		Dictionary<ServiceKey, int> serviceToIndex,
+		int start)
+	{
+		HashSet<int> visited = new();
+		Stack<int> stack = new();
+		stack.Push(start);
+
+		while (stack.Count > 0)
+		{
+			int node = stack.Pop();
+			if (!visited.Add(node))
+			{
+				continue;
+			}
+
+			InstanceModel instance = instances[node];
+			if (instance.IsDisposable)
+			{
+				return true;
+			}
+
+			foreach (ParameterModel parameter in instance.ConstructorParameters.AsArray())
+			{
+				// Only a direct (non-deferred) transient dependency is rebuilt as part of constructing this node;
+				// a relationship/Owned/Arg parameter defers, and a scoped/singleton dependency is cached/shared.
+				if (parameter.Kind == DependencyKind.Direct
+				    && serviceToIndex.TryGetValue(KeyOf(parameter), out int dependency)
+				    && instances[dependency].Lifetime == Lifetime.Transient)
+				{
+					stack.Push(dependency);
+				}
+			}
+		}
+
+		return false;
 	}
 
 	private static (List<ImplInfo> Order, Dictionary<ServiceKey, string> ServiceToImpl) CoalesceByImplementation(
@@ -519,8 +594,15 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		}
 
 		// A [FromKey] selects the keyed registration of the dependency's service type, whether it is required
-		// directly or deferred behind a Func<T>/Lazy<T> - the service type is the same, only the delivery differs.
+		// directly, deferred behind a Func<T>/Lazy<T>, or wrapped in an Owned<T> handle - the service type is
+		// the same, only the delivery differs.
 		string? key = FromKey(parameter);
+
+		// A bare Owned<T> dependency: resolve T into a throwaway scope and hand the caller the disposal handle.
+		if (IsOwned(parameter.Type, out ITypeSymbol ownedInner))
+		{
+			return new ParameterModel(ownedInner.ToDisplayString(FullyQualified), DependencyKind.Owned, Key: key, Location: location);
+		}
 
 		if (parameter.Type is INamedTypeSymbol { IsGenericType: true, } named
 		    && named.ContainingNamespace?.ToDisplayString() == "System")
@@ -537,11 +619,20 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 				// leading type arguments) to the produced service's [Arg]-marked parameters.
 				ITypeSymbol[] typeArgs = named.TypeArguments.ToArray();
 				ITypeSymbol service = typeArgs[typeArgs.Length - 1];
+				string[] argTypes = typeArgs.Take(typeArgs.Length - 1)
+					.Select(t => t.ToDisplayString(FullyQualified))
+					.ToArray();
+
+				// Func<…, Owned<T>> is the leak-free factory: its produced value is an Owned<T> disposal handle.
+				if (IsOwned(service, out ITypeSymbol funcOwnedInner))
+				{
+					return new ParameterModel(
+						funcOwnedInner.ToDisplayString(FullyQualified), DependencyKind.Func,
+						new EquatableArray<string>(argTypes), Key: key, Location: location, ProducesOwned: true);
+				}
+
 				if (!IsRelationshipType(service))
 				{
-					string[] argTypes = typeArgs.Take(typeArgs.Length - 1)
-						.Select(t => t.ToDisplayString(FullyQualified))
-						.ToArray();
 					return new ParameterModel(
 						service.ToDisplayString(FullyQualified), DependencyKind.Func, new EquatableArray<string>(argTypes), Key: key, Location: location);
 				}
@@ -572,6 +663,44 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		}
 
 		return null;
+	}
+
+	// Reads the container's LifetimeSafety from its [Container] attribute. Strict (the default, enum value 0)
+	// unless the attribute explicitly sets Loose.
+	internal static bool ReadStrict(INamedTypeSymbol containerSymbol)
+	{
+		foreach (AttributeData attribute in containerSymbol.GetAttributes())
+		{
+			if (attribute.AttributeClass?.ToDisplayString() != ContainerAttributeName)
+			{
+				continue;
+			}
+
+			foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
+			{
+				// LifetimeSafety is an enum; its TypedConstant value is the underlying int (Strict = 0, Loose = 1).
+				if (argument.Key == "LifetimeSafety" && argument.Value.Value is int value)
+				{
+					return value == 0;
+				}
+			}
+		}
+
+		return true;
+	}
+
+	// Whether a type is an Awaiten.Owned<T> disposal handle, yielding the owned service type T.
+	private static bool IsOwned(ITypeSymbol type, out ITypeSymbol inner)
+	{
+		if (type is INamedTypeSymbol { Name: "Owned", TypeArguments.Length: 1, } named
+		    && named.ContainingNamespace?.ToDisplayString() == ContainerRegistrations.AttributeNamespace)
+		{
+			inner = named.TypeArguments[0];
+			return true;
+		}
+
+		inner = type;
+		return false;
 	}
 
 	private static bool HasArgAttribute(IParameterSymbol parameter)
@@ -845,7 +974,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 	// Strip every 'global::' alias (the leading one and any nested in generic type arguments) so
 	// diagnostics read 'System.Func<MyCode.Leaf>' rather than 'System.Func<global::MyCode.Leaf>'.
-	private static string Display(string fullyQualified)
+	internal static string Display(string fullyQualified)
 		=> fullyQualified.Replace("global::", string.Empty);
 
 	private sealed class ImplInfo
