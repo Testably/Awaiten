@@ -27,23 +27,66 @@ public class LifetimeSafetyTests
 	                                              }}
 	                                              """;
 
+	// AWT117 is reported by AwaitenAnalyzer (so a loose warning can be #pragma-suppressed), so its severity is
+	// asserted through the analyzer harness rather than the generator's diagnostics.
 	[Fact]
 	public async Task Strict_EscalatesTheRootAccumulatingFactoryToAnError()
 	{
-		GeneratorResult result = Generator.Run(string.Format(RootAccumulatingSource, string.Empty));
+		string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>(string.Format(RootAccumulatingSource, string.Empty));
 
-		await That(result.Diagnostics.Any(d => d.Contains("error") && d.Contains("AWT117"))).IsTrue()
+		await That(diagnostics.Any(d => d.Contains("error") && d.Contains("AWT117"))).IsTrue()
 			.Because("strict lifetime safety (the default) makes the root-accumulating Func a compile-time error");
 	}
 
 	[Fact]
 	public async Task Loose_ReportsTheRootAccumulatingFactoryAsAWarning()
 	{
-		GeneratorResult result = Generator.Run(string.Format(RootAccumulatingSource, "(LifetimeSafety = LifetimeSafety.Loose)"));
+		string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>(
+			string.Format(RootAccumulatingSource, "(LifetimeSafety = LifetimeSafety.Loose)"));
 
-		await That(result.Diagnostics.Any(d => d.Contains("warning") && d.Contains("AWT117"))).IsTrue()
+		await That(diagnostics.Any(d => d.Contains("warning") && d.Contains("AWT117"))).IsTrue()
 			.Because("loose lifetime safety downgrades the root-accumulating Func to a warning");
-		await That(result.Diagnostics.Any(d => d.Contains("error") && d.Contains("AWT117"))).IsFalse();
+		await That(diagnostics.Any(d => d.Contains("error") && d.Contains("AWT117"))).IsFalse();
+	}
+
+	[Fact]
+	public async Task Loose_TheRootAccumulatingFactoryWarning_CanBeSuppressedInSource()
+	{
+		string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>("""
+		                                       using Awaiten;
+		                                       using System;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class Tool : IDisposable { public void Dispose() { } }
+
+		                                       #pragma warning disable AWT117
+		                                       public sealed class Depot { public Depot(Func<Tool> tools) { } }
+		                                       #pragma warning restore AWT117
+
+		                                       [Container(LifetimeSafety = LifetimeSafety.Loose)]
+		                                       [Transient<Tool>]
+		                                       [Singleton<Depot>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(diagnostics.Any(d => d.Contains("AWT117"))).IsFalse()
+			.Because("a loose AWT117 warning is reported by an analyzer, so #pragma warning disable suppresses it in source");
+	}
+
+	[Fact]
+	public async Task Strict_RootAccumulatingContainer_StillGeneratesCompilableCode()
+	{
+		// AWT117 is now an analyzer (not generator) error, so the generator no longer replaces the container
+		// with a throwing error-body for this pattern - it emits the real (withholding) container. The build
+		// still fails on the analyzer error, but the generated code itself must compile.
+		GeneratorResult result = Generator.Run(string.Format(RootAccumulatingSource, string.Empty));
+
+		await That(result.Diagnostics.Where(d => d.Contains("error"))).IsEmpty()
+			.Because("the generated withholding container is valid C#; AWT117 is reported by the analyzer, not as a codegen error");
+		await That(result.Sources.Keys.Any(k => k.Contains("MyContainer"))).IsTrue();
 	}
 
 	[Fact]

@@ -208,6 +208,10 @@ public partial class RuntimeArgumentTests
 	}
 
 	// A singleton holding a Func over a disposable parameterized service: the built tools bind to the root.
+	// This deliberate root accumulation is exactly what Func_BoundToASingleton... asserts, so AWT117 is
+	// suppressed here (the container opts into Loose, where AWT117 is a warning); the leak-free alternative
+	// Func<int, Owned<Tool>> is exercised in OwnedTests.
+#pragma warning disable AWT117 // Root-accumulating factory: intentional here, see above.
 	public sealed class Depot
 	{
 		private readonly Func<int, Tool> _tools;
@@ -216,6 +220,7 @@ public partial class RuntimeArgumentTests
 
 		public Tool Make(int id) => _tools(id);
 	}
+#pragma warning restore AWT117
 
 	// The singleton Depot holds a Func<int, Tool> over the disposable parameterized Tool: tools built through
 	// it accumulate on the root until the container is disposed, which is exactly what Func_BoundToASingleton...
