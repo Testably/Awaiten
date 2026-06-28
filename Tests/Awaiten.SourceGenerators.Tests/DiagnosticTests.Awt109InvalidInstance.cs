@@ -1,5 +1,3 @@
-using System.Linq;
-
 namespace Awaiten.SourceGenerators.Tests;
 
 public partial class DiagnosticTests
@@ -24,7 +22,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT109"))).IsTrue();
+			await That(result.Diagnostics).Contains("*AWT109*").AsWildcard();
 		}
 
 		[Fact]
@@ -45,7 +43,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT109"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT109*").AsWildcard()
 				.Because("a method is not a usable pre-built instance member even when its type matches");
 		}
 
@@ -66,7 +64,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT109"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT109*").AsWildcard()
 				.Because("an empty instance name is a mistake, not a silent fall back to the constructor");
 		}
 	}

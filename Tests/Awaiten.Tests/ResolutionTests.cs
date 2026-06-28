@@ -27,16 +27,15 @@ public partial class ResolutionTests
 	{
 		GraphContainer.Root container = new();
 
-		await That(() => container.Resolve(typeof(string))).Throws<InvalidOperationException>();
+		await That(() => container.Resolve<string>()).Throws<InvalidOperationException>();
 	}
 
 	[Fact]
-	public async Task Resolve_ByServiceType_ReturnsTheRegisteredInstance()
+	public async Task TryResolve_ByServiceType_ReturnsTheRegisteredInstance()
 	{
 		GraphContainer.Root container = new();
 
-		object middle = container.Resolve(typeof(IMiddle));
-
+		await That(container.TryResolve(typeof(IMiddle), out object? middle)).IsTrue();
 		await That(middle).IsSameAs(container.Resolve<IMiddle>());
 	}
 

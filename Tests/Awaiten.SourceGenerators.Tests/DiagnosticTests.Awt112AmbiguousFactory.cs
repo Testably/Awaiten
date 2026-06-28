@@ -1,5 +1,3 @@
-using System.Linq;
-
 namespace Awaiten.SourceGenerators.Tests;
 
 public partial class DiagnosticTests
@@ -25,7 +23,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT112"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT112*").AsWildcard()
 				.Because("an overloaded factory name makes the producer choice order-dependent");
 		}
 	}

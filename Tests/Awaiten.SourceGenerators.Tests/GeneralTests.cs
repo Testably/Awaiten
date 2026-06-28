@@ -31,7 +31,7 @@ public class GeneralTests
 			.Because("the root scope is the usable container instance, created with new MyContainer.Root()");
 		await That(source).Contains("__dispatch.TryGetValue(serviceType, out int __case)")
 			.Because("the scope dispatches through the static table that lives on it");
-		await That(source.Contains("if (serviceType == typeof(")).IsFalse()
+		await That(source).DoesNotContain("if (serviceType == typeof(")
 			.Because("the linear if-chain is no longer emitted");
 	}
 
@@ -86,7 +86,7 @@ public class GeneralTests
 		}, StringSplitOptions.None).Length - 1;
 		await That(keyCount).IsEqualTo(1)
 			.Because("the explicit registration and the synthetic relationship must not produce a duplicate dispatch key");
-		await That(source.Contains("new global::System.Lazy<global::MyCode.Leaf>(() => ResolveLeaf())")).IsFalse()
+		await That(source).DoesNotContain("new global::System.Lazy<global::MyCode.Leaf>(() => ResolveLeaf())")
 			.Because("the synthetic Lazy<Leaf> factory is dropped in favour of the explicit registration's resolver");
 	}
 

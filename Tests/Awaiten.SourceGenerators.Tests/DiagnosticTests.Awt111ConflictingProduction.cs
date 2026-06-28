@@ -1,5 +1,3 @@
-using System.Linq;
-
 namespace Awaiten.SourceGenerators.Tests;
 
 public partial class DiagnosticTests
@@ -25,7 +23,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT111"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT111*").AsWildcard()
 				.Because("coalescing keeps the first production strategy, so the contradicting one must not be silently dropped");
 		}
 
@@ -49,7 +47,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT111"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT111*").AsWildcard()
 				.Because("coalescing keeps the first factory, so naming a different one for the same implementation must not be silently dropped");
 		}
 
@@ -75,7 +73,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT111"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT111*").AsWildcard()
 				.Because("coalescing one implementation across services keeps the first factory, so a second, different one must not be silently dropped");
 		}
 	}

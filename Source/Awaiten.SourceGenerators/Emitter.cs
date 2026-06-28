@@ -145,7 +145,7 @@ internal static class Emitter
 		// generated lives on it directly. All state and resolution live on those types: the base Scope holds
 		// the static dispatch table plus scoped/transient logic and delegates singletons to the root, while
 		// the sealed Root subclass owns the singletons and is the usable instance (new MyContainer.Root()).
-		EmitRootScopeClass(builder, depth, model, instances, names, serviceToIndex);
+		EmitRootScopeClass(builder, depth, instances, names, serviceToIndex);
 		builder.AppendLine();
 		EmitScopeBaseClass(builder, depth, model, instances, names, serviceToIndex);
 	}
@@ -245,7 +245,7 @@ internal static class Emitter
 	///     singleton delegators with the real caching/member access, so a child scope delegating through
 	///     <c>__root</c> lands here.
 	/// </summary>
-	private static void EmitRootScopeClass(StringBuilder builder, int depth, ContainerModel model, InstanceModel[] instances, Names names, Dictionary<string, int> serviceToIndex)
+	private static void EmitRootScopeClass(StringBuilder builder, int depth, InstanceModel[] instances, Names names, Dictionary<string, int> serviceToIndex)
 	{
 		Indent(builder, depth).AppendLine("public sealed class Root : Scope");
 		Indent(builder, depth).AppendLine("{");

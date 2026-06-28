@@ -1,5 +1,3 @@
-using System.Linq;
-
 namespace Awaiten.SourceGenerators.Tests;
 
 public partial class DiagnosticTests
@@ -26,7 +24,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT107"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT107*").AsWildcard()
 				.Because("registering one implementation under several services with the same lifetime is valid");
 		}
 
@@ -50,7 +48,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT107"))).IsTrue();
+			await That(result.Diagnostics).Contains("*AWT107*").AsWildcard();
 		}
 
 		[Fact]
@@ -72,7 +70,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT107"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT107*").AsWildcard()
 				.Because("re-registering the same service with a different lifetime is still a conflict, not a silent drop");
 		}
 	}

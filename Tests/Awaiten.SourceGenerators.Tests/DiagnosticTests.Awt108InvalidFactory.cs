@@ -1,5 +1,3 @@
-using System.Linq;
-
 namespace Awaiten.SourceGenerators.Tests;
 
 public partial class DiagnosticTests
@@ -24,7 +22,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT108"))).IsTrue();
+			await That(result.Diagnostics).Contains("*AWT108*").AsWildcard();
 		}
 
 		[Fact]
@@ -45,7 +43,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT108"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT108*").AsWildcard()
 				.Because("a field is not a usable factory method even when its type matches");
 		}
 
@@ -66,7 +64,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT108"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT108*").AsWildcard()
 				.Because("an empty factory name is a mistake, not a silent fall back to the constructor");
 		}
 	}

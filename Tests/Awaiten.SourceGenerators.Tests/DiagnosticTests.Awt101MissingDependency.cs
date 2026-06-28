@@ -28,7 +28,7 @@ public partial class DiagnosticTests
 
 			await That(result.Diagnostics.Any(d => d.Contains("AWT101") && d.Contains("System.Func<System.Func<MyCode.Leaf>>"))).IsTrue()
 				.Because("a relationship over another relationship is reported as the unregistered service type it is");
-			await That(result.Diagnostics.Any(d => d.Contains("global::"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*global::*").AsWildcard()
 				.Because("diagnostics strip the global:: alias, including nested generic arguments");
 		}
 
@@ -50,7 +50,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT101"))).IsTrue();
+			await That(result.Diagnostics).Contains("*AWT101*").AsWildcard();
 		}
 
 		[Fact]
@@ -72,7 +72,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT101"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT101*").AsWildcard()
 				.Because("a Func<T> still requires its target T to be registered");
 		}
 	}

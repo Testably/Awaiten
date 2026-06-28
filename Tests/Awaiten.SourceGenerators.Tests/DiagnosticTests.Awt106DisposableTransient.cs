@@ -1,5 +1,3 @@
-using System.Linq;
-
 namespace Awaiten.SourceGenerators.Tests;
 
 public partial class DiagnosticTests
@@ -24,7 +22,7 @@ public partial class DiagnosticTests
 			                                                           }
 			                                                           """);
 
-			await That(diagnostics.Any(d => d.Contains("AWT106"))).IsFalse()
+			await That(diagnostics).DoesNotContain("*AWT106*").AsWildcard()
 				.Because("a scoped instance is released with its scope, it does not accumulate");
 		}
 
@@ -46,7 +44,7 @@ public partial class DiagnosticTests
 			                                                           }
 			                                                           """);
 
-			await That(diagnostics.Any(d => d.Contains("AWT106"))).IsFalse()
+			await That(diagnostics).DoesNotContain("*AWT106*").AsWildcard()
 				.Because("a singleton is released once with the container, it does not accumulate");
 		}
 
@@ -68,7 +66,7 @@ public partial class DiagnosticTests
 			                                                           }
 			                                                           """);
 
-			await That(diagnostics.Any(d => d.Contains("AWT106"))).IsFalse()
+			await That(diagnostics).DoesNotContain("*AWT106*").AsWildcard()
 				.Because("an abstract type cannot be instantiated, so it is rejected as AWT103 and never accumulates");
 		}
 
@@ -89,7 +87,7 @@ public partial class DiagnosticTests
 			                                                           }
 			                                                           """);
 
-			await That(diagnostics.Any(d => d.Contains("AWT106"))).IsFalse()
+			await That(diagnostics).DoesNotContain("*AWT106*").AsWildcard()
 				.Because("a transient with nothing to dispose cannot leak");
 		}
 
@@ -113,7 +111,7 @@ public partial class DiagnosticTests
 			                                                           }
 			                                                           """);
 
-			await That(diagnostics.Any(d => d.Contains("AWT106"))).IsFalse()
+			await That(diagnostics).DoesNotContain("*AWT106*").AsWildcard()
 				.Because("an analyzer diagnostic can be suppressed in-source at the registration");
 		}
 
@@ -135,7 +133,7 @@ public partial class DiagnosticTests
 			                                                           }
 			                                                           """);
 
-			await That(diagnostics.Any(d => d.Contains("AWT106"))).IsTrue();
+			await That(diagnostics).Contains("*AWT106*").AsWildcard();
 		}
 	}
 }

@@ -1,5 +1,3 @@
-using System.Linq;
-
 namespace Awaiten.SourceGenerators.Tests;
 
 public partial class DiagnosticTests
@@ -26,7 +24,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT110"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT110*").AsWildcard()
 				.Because("Factory and Instance are mutually exclusive directives");
 		}
 	}

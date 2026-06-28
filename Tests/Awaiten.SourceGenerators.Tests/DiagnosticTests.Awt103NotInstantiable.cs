@@ -1,5 +1,3 @@
-using System.Linq;
-
 namespace Awaiten.SourceGenerators.Tests;
 
 public partial class DiagnosticTests
@@ -25,7 +23,7 @@ public partial class DiagnosticTests
 			                                         }
 			                                         """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT103"))).IsTrue();
+			await That(result.Diagnostics).Contains("*AWT103*").AsWildcard();
 		}
 	}
 }
