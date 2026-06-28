@@ -218,7 +218,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		return (implOrder, serviceToImpl);
 	}
 
-	// AWT116: two different implementations claim the same service type and key, so a keyed resolution of
+	// AWT117: two different implementations claim the same service type and key, so a keyed resolution of
 	// that key would be ambiguous. The same implementation re-registered under one key is just a coalesce
 	// (first wins), and an unkeyed duplicate keeps the existing first-wins behavior, so neither is reported.
 	private static void ReportDuplicateKey(RawRegistration registration, string existingImpl, List<DiagnosticInfo> diagnostics)

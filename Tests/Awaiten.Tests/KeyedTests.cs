@@ -59,6 +59,19 @@ public partial class KeyedTests
 			.Because("a [FromKey(\"slow\")] Lazy<IChannel> defers to the implementation keyed 'slow'");
 	}
 
+	[Fact]
+	public async Task Singleton_CapturesKeyedNonSingletonDependency_ThroughFuncAndLazy()
+	{
+		using CapturingContainer.Root container = new();
+
+		Capturer capturer = container.Resolve<Capturer>();
+
+		await That(capturer.Scoped()).Is<ScopedFast>()
+			.Because("the singleton's [FromKey(\"fast\")] Func<IWork> selects the keyed scoped registration");
+		await That(capturer.Transient.Value).Is<TransientSlow>()
+			.Because("the singleton's [FromKey(\"slow\")] Lazy<IWork> selects the keyed transient registration");
+	}
+
 	public interface IChannel;
 
 	public sealed class FastChannel : IChannel;
@@ -118,4 +131,31 @@ public partial class KeyedTests
 	[Singleton<FastChannelClock, IClock>(Key = "fast")]
 	[Singleton<Consumer>]
 	public static partial class MixedContainer;
+
+	public interface IWork;
+
+	public sealed class ScopedFast : IWork;
+
+	public sealed class TransientSlow : IWork;
+
+	// A singleton may only capture a shorter-lived dependency through a relationship (a direct capture is
+	// AWT105), so the keyed scoped/transient targets are reached via Func<T>/Lazy<T>.
+	public sealed class Capturer
+	{
+		public Capturer([FromKey("fast")] Func<IWork> scoped, [FromKey("slow")] Lazy<IWork> transient)
+		{
+			Scoped = scoped;
+			Transient = transient;
+		}
+
+		public Func<IWork> Scoped { get; }
+
+		public Lazy<IWork> Transient { get; }
+	}
+
+	[Container]
+	[Singleton<Capturer>]
+	[Scoped<ScopedFast, IWork>(Key = "fast")]
+	[Transient<TransientSlow, IWork>(Key = "slow")]
+	public static partial class CapturingContainer;
 }
