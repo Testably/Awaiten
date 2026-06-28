@@ -14,3 +14,4 @@
  AWT110  | Awaiten   | Error    | A registration sets both Factory and Instance
  AWT111  | Awaiten   | Error    | An implementation is registered with conflicting production strategies
  AWT112  | Awaiten   | Error    | A Factory registration names an overloaded method
+ AWT113  | Awaiten   | Error    | A Func<TArg...,T> relationship's runtime arguments do not match the service's [Arg] parameters

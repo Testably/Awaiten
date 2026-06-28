@@ -156,4 +156,16 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A <c>Func&lt;TArg…, T&gt;</c> relationship's runtime arguments do not match the
+	///     <c>[Arg]</c>-marked constructor parameters of the service it produces, in order.
+	/// </summary>
+	public static readonly DiagnosticDescriptor RuntimeArgumentMismatch = new(
+		"AWT113",
+		"Runtime argument mismatch",
+		"'{0}' cannot be produced from this factory: its runtime arguments ({1}) do not match the [Arg] parameters ({2}) of '{0}'",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }
