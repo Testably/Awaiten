@@ -8,7 +8,9 @@ namespace Awaiten.SourceGenerators;
 ///     attribute on a container: the service and implementation type names, the lifetime, the
 ///     implementation symbol, the attribute's source location, how the instance is produced (a
 ///     constructor by default, or the container member named by the attribute's <c>Factory</c>/
-///     <c>Instance</c> argument), and whether the attribute set both directives at once (an error).
+///     <c>Instance</c> argument), the attribute's optional resolution <c>Key</c> (so several
+///     implementations can share one service type), and whether the attribute set both directives at
+///     once (an error).
 /// </summary>
 /// <remarks>
 ///     <see cref="Location" /> is the live Roslyn location (with its syntax tree), not an equatable
@@ -24,4 +26,5 @@ internal sealed record RawRegistration(
 	Location? Location,
 	ProductionKind Production = ProductionKind.Constructor,
 	string? ProductionMember = null,
-	bool ConflictingDirectives = false);
+	bool ConflictingDirectives = false,
+	string? Key = null);

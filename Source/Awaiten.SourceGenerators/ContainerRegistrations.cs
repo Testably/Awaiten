@@ -62,7 +62,8 @@ internal static class ContainerRegistrations
 				location,
 				production,
 				productionMember,
-				conflictingDirectives));
+				conflictingDirectives,
+				NamedArgument(attribute, "Key")));
 		}
 
 		return result;

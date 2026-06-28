@@ -27,6 +27,12 @@ public sealed class ScopedAttribute<TImplementation> : Attribute
 	///     result is cached once per scope, like any other scoped registration.
 	/// </summary>
 	public string? Factory { get; set; }
+
+	/// <summary>
+	///     An optional resolution key. Several implementations may share one service type under
+	///     different keys; consumers select one with <c>[FromKey]</c>.
+	/// </summary>
+	public string? Key { get; set; }
 }
 
 /// <summary>
@@ -52,6 +58,12 @@ public sealed class ScopedAttribute<TImplementation, TService> : Attribute
 	///     shares a single instance.
 	/// </summary>
 	public string? Factory { get; set; }
+
+	/// <summary>
+	///     An optional resolution key. Several implementations may share one service type under
+	///     different keys; consumers select one with <c>[FromKey]</c>.
+	/// </summary>
+	public string? Key { get; set; }
 }
 
 #pragma warning restore S2326

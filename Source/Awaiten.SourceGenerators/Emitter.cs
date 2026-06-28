@@ -47,7 +47,7 @@ internal static class Emitter
 		else
 		{
 			Names names = Names.Build(model.Instances.AsArray());
-			Dictionary<string, int> serviceToIndex = BuildServiceMap(model);
+			Dictionary<ServiceKey, int> serviceToIndex = BuildServiceMap(model);
 			EmitContainerBody(builder, depth + 1, model, names, serviceToIndex);
 		}
 
@@ -67,13 +67,13 @@ internal static class Emitter
 		return builder.ToString();
 	}
 
-	private static Dictionary<string, int> BuildServiceMap(ContainerModel model)
+	private static Dictionary<ServiceKey, int> BuildServiceMap(ContainerModel model)
 	{
-		Dictionary<string, int> serviceToIndex = new(StringComparer.Ordinal);
+		Dictionary<ServiceKey, int> serviceToIndex = new();
 		InstanceModel[] instances = model.Instances.AsArray();
 		for (int i = 0; i < instances.Length; i++)
 		{
-			foreach (string service in instances[i].ServiceTypes.AsArray())
+			foreach (ServiceKey service in instances[i].Services.AsArray())
 			{
 				serviceToIndex[service] = i;
 			}
@@ -88,7 +88,8 @@ internal static class Emitter
 	///     keeps the typed base list and its explicit implementations in lockstep: a duplicate base or a
 	///     duplicate explicit implementation would each fail to compile, so neither must be emitted twice.
 	///     A parameterized service is excluded: it is not directly resolvable (only through its
-	///     <c>Func&lt;TArg…, T&gt;</c> factory), so it gets no typed resolution fast path.
+	///     <c>Func&lt;TArg…, T&gt;</c> factory), so it gets no typed resolution fast path. A keyed registration
+	///     is likewise excluded: it is reached only by <c>[FromKey]</c> injection, never the typed path.
 	/// </summary>
 	private static IEnumerable<(string Service, int Index)> UniqueServices(InstanceModel[] instances)
 	{
@@ -100,9 +101,16 @@ internal static class Emitter
 				continue;
 			}
 
-			foreach (string service in instances[i].ServiceTypes.AsArray().Where(seen.Add))
+			foreach (ServiceKey service in instances[i].Services.AsArray())
 			{
-				yield return (service, i);
+				// Keyed registrations are reached only by [FromKey] injection, never the typed resolver fast
+				// path, so they get no IAwaitenResolver<T> base or explicit typed resolution.
+				if (service.Key is not null || !seen.Add(service.Service))
+				{
+					continue;
+				}
+
+				yield return (service.Service, i);
 			}
 		}
 	}
@@ -152,7 +160,7 @@ internal static class Emitter
 		Indent(builder, depth).AppendLine("}");
 	}
 
-	private static void EmitContainerBody(StringBuilder builder, int depth, ContainerModel model, Names names, Dictionary<string, int> serviceToIndex)
+	private static void EmitContainerBody(StringBuilder builder, int depth, ContainerModel model, Names names, Dictionary<ServiceKey, int> serviceToIndex)
 	{
 		InstanceModel[] instances = model.Instances.AsArray();
 
@@ -189,7 +197,7 @@ internal static class Emitter
 	///     itself, constructs transients, and resolves singletons through <c>protected virtual</c> delegators
 	///     that the <c>Root</c> subclass overrides. Child (request) scopes are instances of this type.
 	/// </summary>
-	private static void EmitScopeBaseClass(StringBuilder builder, int depth, InstanceModel[] instances, Names names, Dictionary<string, int> serviceToIndex)
+	private static void EmitScopeBaseClass(StringBuilder builder, int depth, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex)
 	{
 		Indent(builder, depth).Append("public class Scope : global::Awaiten.IAwaitenScope");
 		EmitGenericResolverBases(builder, instances);
@@ -263,7 +271,7 @@ internal static class Emitter
 	///     singleton delegators with the real caching/member access, so a child scope delegating through
 	///     <c>__root</c> lands here.
 	/// </summary>
-	private static void EmitRootClass(StringBuilder builder, int depth, InstanceModel[] instances, Names names, Dictionary<string, int> serviceToIndex)
+	private static void EmitRootClass(StringBuilder builder, int depth, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex)
 	{
 		Indent(builder, depth).AppendLine("public sealed class Root : Scope");
 		Indent(builder, depth).AppendLine("{");
@@ -410,8 +418,15 @@ internal static class Emitter
 	private static void AddServiceEntries(InstanceModel instance, string resolver, List<DispatchEntry> entries, HashSet<string> seen)
 	{
 		string[] argTypes = instance.ArgTypes();
-		foreach (string service in instance.ServiceTypes.AsArray())
+		foreach (ServiceKey serviceKey in instance.Services.AsArray())
 		{
+			// Keyed registrations are reached only by [FromKey] injection, never the public dispatch table.
+			if (serviceKey.Key is not null)
+			{
+				continue;
+			}
+
+			string service = serviceKey.Service;
 			if (argTypes.Length > 0)
 			{
 				string parameterizedFunc = $"global::System.Func<{string.Join(", ", argTypes)}, {service}>";
@@ -432,8 +447,16 @@ internal static class Emitter
 	/// </summary>
 	private static void AddRelationshipEntries(InstanceModel instance, string resolver, List<DispatchEntry> entries, HashSet<string> seen)
 	{
-		foreach (string service in instance.ServiceTypes.AsArray())
+		foreach (ServiceKey serviceKey in instance.Services.AsArray())
 		{
+			// Keyed registrations are reached only by [FromKey] injection, so they get no synthetic
+			// relationship entries either.
+			if (serviceKey.Key is not null)
+			{
+				continue;
+			}
+
+			string service = serviceKey.Service;
 			string func = $"global::System.Func<{service}>";
 			if (seen.Add(func))
 			{
@@ -474,7 +497,7 @@ internal static class Emitter
 	///     delegator to <c>__root</c> (overridden by the <c>Root</c>); scoped services cache on the scope;
 	///     transients construct fresh.
 	/// </summary>
-	private static void EmitScopeResolver(StringBuilder builder, int depth, int index, InstanceModel instance, InstanceModel[] instances, Names names, Dictionary<string, int> serviceToIndex)
+	private static void EmitScopeResolver(StringBuilder builder, int depth, int index, InstanceModel instance, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex)
 	{
 		string type = instance.ImplementationType;
 		string resolver = names.Resolver(index);
@@ -483,7 +506,7 @@ internal static class Emitter
 		{
 			string[] argTypes = instance.ArgTypes();
 			string signature = string.Join(", ", argTypes.Select((t, i) => $"{t} a{i}"));
-			string parameterizedConstruction = EmitConstruction(instance, instances, names, serviceToIndex, false);
+			string parameterizedConstruction = EmitConstruction(instance, instances, names, serviceToIndex);
 			// Reachable from the Root (a singleton's Func<TArg…, T> binds it there), so it is protected.
 			EmitFreshResolver(builder, depth, new FreshResolver("protected", type, resolver, signature, parameterizedConstruction, instance.IsDisposable));
 			return;
@@ -499,15 +522,17 @@ internal static class Emitter
 			return;
 		}
 
-		string construction = EmitConstruction(instance, instances, names, serviceToIndex, false);
+		string construction = EmitConstruction(instance, instances, names, serviceToIndex);
 
+		// Protected, not private: a root-owned instance (a singleton) can capture a scoped/transient through a
+		// relationship, and the Root - a subclass - reaches the target's resolver directly only if it inherits it.
 		if (instance.Lifetime == Lifetime.Transient)
 		{
-			EmitFreshResolver(builder, depth, new FreshResolver("private", type, resolver, string.Empty, construction, instance.IsDisposable));
+			EmitFreshResolver(builder, depth, new FreshResolver("protected", type, resolver, string.Empty, construction, instance.IsDisposable));
 			return;
 		}
 
-		EmitCachingResolver(builder, depth, new CachingResolver("private", type, resolver, names.Field(index), construction, instance.IsDisposable, "// Scoped: one instance per scope."));
+		EmitCachingResolver(builder, depth, new CachingResolver("protected", type, resolver, names.Field(index), construction, instance.IsDisposable, "// Scoped: one instance per scope."));
 	}
 
 	/// <summary>
@@ -553,7 +578,7 @@ internal static class Emitter
 	///     returns the static container member by simple name; a constructed/factory singleton is cached once
 	///     under the lock.
 	/// </summary>
-	private static void EmitRootResolver(StringBuilder builder, int depth, int index, InstanceModel instance, InstanceModel[] instances, Names names, Dictionary<string, int> serviceToIndex)
+	private static void EmitRootResolver(StringBuilder builder, int depth, int index, InstanceModel instance, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex)
 	{
 		string type = instance.ImplementationType;
 		string resolver = names.Resolver(index);
@@ -569,7 +594,7 @@ internal static class Emitter
 			return;
 		}
 
-		string construction = EmitConstruction(instance, instances, names, serviceToIndex, true);
+		string construction = EmitConstruction(instance, instances, names, serviceToIndex);
 		EmitCachingResolver(builder, depth, new CachingResolver("protected override", type, resolver, names.Field(index), construction, instance.IsDisposable, null));
 	}
 
@@ -610,7 +635,7 @@ internal static class Emitter
 		Indent(builder, depth).AppendLine("}");
 	}
 
-	private static string EmitConstruction(InstanceModel instance, InstanceModel[] instances, Names names, Dictionary<string, int> serviceToIndex, bool ownerIsRoot)
+	private static string EmitConstruction(InstanceModel instance, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex)
 	{
 		ParameterModel[] parameters = instance.ConstructorParameters.AsArray();
 		StringBuilder arguments = new();
@@ -626,7 +651,7 @@ internal static class Emitter
 			// from the graph.
 			arguments.Append(parameters[p].Kind == DependencyKind.Arg
 				? "a" + argIndex++
-				: ResolveExpression(parameters[p], instances, names, serviceToIndex, ownerIsRoot));
+				: ResolveExpression(parameters[p], instances, names, serviceToIndex));
 		}
 
 		if (instance.Production == ProductionKind.Factory)
@@ -640,15 +665,16 @@ internal static class Emitter
 	}
 
 	/// <summary>
-	///     The expression that supplies a single constructor argument. The target resolves through the
-	///     owner's own resolver, except when a singleton being built on the root captures a non-singleton
-	///     (only ever through a relationship): the root's scoped/transient resolvers are private to the base,
-	///     so it routes that target through the root's generic <c>Resolve&lt;T&gt;</c> entry. A relationship
-	///     type wraps the target in a deferred <c>Func&lt;T&gt;</c> / <c>Lazy&lt;T&gt;</c>.
+	///     The expression that supplies a single constructor argument, resolving the target named by the
+	///     parameter's service type and (optional) <c>[FromKey]</c>. A root-owned target (a singleton or
+	///     pre-built Instance) is read straight off the sealed root so the call devirtualizes; a
+	///     scoped/transient target resolves through its own resolver - <c>protected</c>, so the Root reaches
+	///     it directly when a singleton captures it through a relationship. A relationship type wraps the
+	///     target in a deferred <c>Func&lt;T&gt;</c> / <c>Lazy&lt;T&gt;</c>.
 	/// </summary>
-	private static string ResolveExpression(ParameterModel parameter, InstanceModel[] instances, Names names, Dictionary<string, int> serviceToIndex, bool ownerIsRoot)
+	private static string ResolveExpression(ParameterModel parameter, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex)
 	{
-		int targetIndex = serviceToIndex[parameter.ServiceType];
+		int targetIndex = serviceToIndex[new ServiceKey(parameter.ServiceType, parameter.Key)];
 		string resolver = names.Resolver(targetIndex);
 		InstanceModel target = instances[targetIndex];
 
@@ -656,25 +682,16 @@ internal static class Emitter
 		if (parameter.Kind == DependencyKind.Func && funcArgTypes.Length > 0)
 		{
 			// A Func<TArg…, T> over a parameterized service binds the owner's parameterized resolver, which
-			// takes the runtime arguments and is never cached - so the root routing below does not apply (the
-			// protected resolver is reachable from the Root directly).
+			// takes the runtime arguments and is never cached.
 			return FuncFactory(funcArgTypes, parameter.ServiceType, resolver);
 		}
 
+		// Read singletons (and pre-built Instances) straight off the (sealed) root scope so the dependency
+		// call devirtualizes rather than dispatching through this scope's virtual delegator; on the root,
+		// __root is itself. Scoped/transient targets go through their own protected resolver, which the
+		// target index has already selected for the requested [FromKey] (if any).
 		bool rootOwned = target.Lifetime == Lifetime.Singleton || target.Production == ProductionKind.Instance;
-		string value;
-		if (rootOwned)
-		{
-			// Read singletons straight off the (sealed) root scope so the dependency call devirtualizes,
-			// rather than dispatching through this scope's virtual delegator. On the root, __root is itself.
-			value = $"__root.{resolver}()";
-		}
-		else
-		{
-			// A singleton built on the root can only capture a non-singleton through a relationship; the root's
-			// scoped/transient resolvers are private to the base, so route that target through its generic entry.
-			value = ownerIsRoot ? $"Resolve<{parameter.ServiceType}>()" : $"{resolver}()";
-		}
+		string value = rootOwned ? $"__root.{resolver}()" : $"{resolver}()";
 
 		return parameter.Kind switch
 		{

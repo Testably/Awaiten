@@ -4,8 +4,9 @@ namespace Awaiten.SourceGenerators.Internals;
 
 /// <summary>
 ///     A single constructed instance on a container: one implementation, the implementation's simple
-///     name (used to name generated members), its lifetime, the (one or more) service types it is
-///     exposed as, its selected constructor's parameters (each a service type plus how it is delivered),
+///     name (used to name generated members), its lifetime, the (one or more) service keys it is
+///     exposed as (a service type plus an optional resolution key), its selected constructor's
+///     parameters (each a service type plus how it is delivered),
 ///     whether it needs disposing, and whether it is a reference type (only reference-type cache fields
 ///     can be marked <c>volatile</c> for the lock-free fast path). Registrations of the same
 ///     implementation are coalesced into one instance, so a multi-service registration shares a single
@@ -18,7 +19,7 @@ internal sealed record InstanceModel(
 	string ImplementationType,
 	string Name,
 	Lifetime Lifetime,
-	EquatableArray<string> ServiceTypes,
+	EquatableArray<ServiceKey> Services,
 	EquatableArray<ParameterModel> ConstructorParameters,
 	bool IsDisposable,
 	bool IsReferenceType,
