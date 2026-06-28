@@ -242,6 +242,13 @@ internal static class Emitter
 		// type spares callers holding a Scope an interface hop; the interface contract is met explicitly.
 		Indent(builder, body).AppendLine("public Scope CreateScope() => new Scope(__root);");
 		Indent(builder, body).AppendLine("global::Awaiten.IAwaitenScope global::Awaiten.IAwaitenScope.CreateScope() => CreateScope();");
+
+		if (instances.Length > 0)
+		{
+			builder.AppendLine();
+			EmitOwnedHelper(builder, body);
+		}
+
 		builder.AppendLine();
 		EmitGenericResolverImpls(builder, body, instances, names);
 
@@ -417,6 +424,12 @@ internal static class Emitter
 				string parameterizedFunc = $"global::System.Func<{string.Join(", ", argTypes)}, {service}>";
 				seen.Add(parameterizedFunc);
 				entries.Add(new DispatchEntry(parameterizedFunc, FuncFactory(argTypes, service, resolver)));
+
+				// The leak-free factory for a parameterized service: Func<TArg…, Owned<T>> hands each built
+				// instance back as a disposal handle instead of accumulating it on the owner.
+				string parameterizedOwnedFunc = $"global::System.Func<{string.Join(", ", argTypes)}, global::Awaiten.Owned<{service}>>";
+				seen.Add(parameterizedOwnedFunc);
+				entries.Add(new DispatchEntry(parameterizedOwnedFunc, OwnedFuncFactory(argTypes, service, resolver)));
 				continue;
 			}
 
@@ -444,6 +457,20 @@ internal static class Emitter
 			if (seen.Add(lazy))
 			{
 				entries.Add(new DispatchEntry(lazy, $"new global::System.Lazy<{service}>(() => {resolver}())"));
+			}
+
+			// Owned<T> hands the caller a disposal handle over a single resolution; Func<Owned<T>> is the
+			// leak-free factory that produces one per call. Both build into a throwaway child scope.
+			string owned = $"global::Awaiten.Owned<{service}>";
+			if (seen.Add(owned))
+			{
+				entries.Add(new DispatchEntry(owned, OwnedBare(service)));
+			}
+
+			string ownedFunc = $"global::System.Func<{owned}>";
+			if (seen.Add(ownedFunc))
+			{
+				entries.Add(new DispatchEntry(ownedFunc, OwnedFuncFactory([], service, resolver)));
 			}
 		}
 	}
@@ -484,8 +511,10 @@ internal static class Emitter
 			string[] argTypes = instance.ArgTypes();
 			string signature = string.Join(", ", argTypes.Select((t, i) => $"{t} a{i}"));
 			string parameterizedConstruction = EmitConstruction(instance, instances, names, serviceToIndex, false);
-			// Reachable from the Root (a singleton's Func<TArg…, T> binds it there), so it is protected.
-			EmitFreshResolver(builder, depth, new FreshResolver("protected", type, resolver, signature, parameterizedConstruction, instance.IsDisposable));
+			// Reachable from the Root (a singleton's Func<TArg…, T> binds it there) and from a throwaway
+			// Owned<T> scope built off any owner (__s.ResolveX(args)), so it is internal rather than protected -
+			// protected would not be callable through a base-typed scope reference from the derived Root (CS1540).
+			EmitFreshResolver(builder, depth, new FreshResolver("internal", type, resolver, signature, parameterizedConstruction, instance.IsDisposable));
 			return;
 		}
 
@@ -653,6 +682,19 @@ internal static class Emitter
 		InstanceModel target = instances[targetIndex];
 
 		string[] funcArgTypes = parameter.FuncArgTypes.AsArray();
+
+		// Owned relationships build into a throwaway child scope, independent of this owner, so they need none
+		// of the root-routing below: a Func<…, Owned<T>> factory, or a bare Owned<T> resolved once.
+		if (parameter.ProducesOwned)
+		{
+			return OwnedFuncFactory(funcArgTypes, parameter.ServiceType, resolver);
+		}
+
+		if (parameter.Kind == DependencyKind.Owned)
+		{
+			return OwnedBare(parameter.ServiceType);
+		}
+
 		if (parameter.Kind == DependencyKind.Func && funcArgTypes.Length > 0)
 		{
 			// A Func<TArg…, T> over a parameterized service binds the owner's parameterized resolver, which
@@ -694,6 +736,42 @@ internal static class Emitter
 		string generics = argTypes.Length == 0 ? service : string.Join(", ", argTypes) + ", " + service;
 		string lambdaArgs = string.Join(", ", argTypes.Select((_, i) => "a" + i));
 		return $"new global::System.Func<{generics}>(({lambdaArgs}) => {resolver}({lambdaArgs}))";
+	}
+
+	/// <summary>
+	///     Emits the <c>__Owned&lt;T&gt;</c> helper on the base <c>Scope</c>: it opens a throwaway child scope
+	///     (sharing the root's singletons), resolves a single <c>T</c> into it through the supplied delegate and
+	///     returns an <c>Owned&lt;T&gt;</c> over that scope. Disposing the handle disposes only that scope,
+	///     draining what was built for this one resolution while shared singletons live on.
+	/// </summary>
+	private static void EmitOwnedHelper(StringBuilder builder, int depth)
+	{
+		Indent(builder, depth).AppendLine("protected global::Awaiten.Owned<T> __Owned<T>(global::System.Func<Scope, T> __resolve)");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).AppendLine("Scope __owned = CreateScope();");
+		Indent(builder, depth + 1).AppendLine("return new global::Awaiten.Owned<T>(__owned, __resolve(__owned));");
+		Indent(builder, depth).AppendLine("}");
+	}
+
+	// A bare Owned<T>: resolve T once into a throwaway child scope (through the public typed surface) and wrap it.
+	private static string OwnedBare(string service)
+		=> $"__Owned<{service}>(__s => __s.Resolve<{service}>())";
+
+	/// <summary>
+	///     A <c>new Func&lt;TArg…, Owned&lt;T&gt;&gt;((a0, …) =&gt; __Owned&lt;T&gt;(…))</c> expression: each call
+	///     builds <c>T</c> in a throwaway child scope and hands back the disposal handle. A non-parameterized
+	///     service resolves through the public typed surface; a parameterized one calls its (internal) resolver
+	///     with the runtime arguments so they reach its <c>[Arg]</c> parameters.
+	/// </summary>
+	private static string OwnedFuncFactory(string[] argTypes, string service, string resolver)
+	{
+		string owned = $"global::Awaiten.Owned<{service}>";
+		string generics = argTypes.Length == 0 ? owned : string.Join(", ", argTypes) + ", " + owned;
+		string lambdaArgs = string.Join(", ", argTypes.Select((_, i) => "a" + i));
+		string inner = argTypes.Length == 0
+			? $"__s => __s.Resolve<{service}>()"
+			: $"__s => __s.{resolver}({lambdaArgs})";
+		return $"new global::System.Func<{generics}>(({lambdaArgs}) => __Owned<{service}>({inner}))";
 	}
 
 	private static void EmitDispose(StringBuilder builder, int depth)

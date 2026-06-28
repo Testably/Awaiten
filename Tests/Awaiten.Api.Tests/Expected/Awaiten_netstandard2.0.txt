@@ -34,6 +34,12 @@ namespace Awaiten
     {
         Awaiten.IAwaitenScope CreateScope();
     }
+    public readonly struct Owned<T> : System.IDisposable
+    {
+        public Owned(Awaiten.IAwaitenScope scope, T value) { }
+        public T Value { get; }
+        public void Dispose() { }
+    }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
     public sealed class ScopedAttribute<TImplementation> : System.Attribute
         where TImplementation :  class

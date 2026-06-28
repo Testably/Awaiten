@@ -499,6 +499,12 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			return new ParameterModel(parameter.Type.ToDisplayString(FullyQualified), DependencyKind.Arg, Location: location);
 		}
 
+		// A bare Owned<T> dependency: resolve T into a throwaway scope and hand the caller the disposal handle.
+		if (IsOwned(parameter.Type, out ITypeSymbol ownedInner))
+		{
+			return new ParameterModel(ownedInner.ToDisplayString(FullyQualified), DependencyKind.Owned, Location: location);
+		}
+
 		if (parameter.Type is INamedTypeSymbol { IsGenericType: true, } named
 		    && named.ContainingNamespace?.ToDisplayString() == "System")
 		{
@@ -514,11 +520,20 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 				// leading type arguments) to the produced service's [Arg]-marked parameters.
 				ITypeSymbol[] typeArgs = named.TypeArguments.ToArray();
 				ITypeSymbol service = typeArgs[typeArgs.Length - 1];
+				string[] argTypes = typeArgs.Take(typeArgs.Length - 1)
+					.Select(t => t.ToDisplayString(FullyQualified))
+					.ToArray();
+
+				// Func<…, Owned<T>> is the leak-free factory: its produced value is an Owned<T> disposal handle.
+				if (IsOwned(service, out ITypeSymbol funcOwnedInner))
+				{
+					return new ParameterModel(
+						funcOwnedInner.ToDisplayString(FullyQualified), DependencyKind.Func,
+						new EquatableArray<string>(argTypes), location, ProducesOwned: true);
+				}
+
 				if (!IsRelationshipType(service))
 				{
-					string[] argTypes = typeArgs.Take(typeArgs.Length - 1)
-						.Select(t => t.ToDisplayString(FullyQualified))
-						.ToArray();
 					return new ParameterModel(
 						service.ToDisplayString(FullyQualified), DependencyKind.Func, new EquatableArray<string>(argTypes), location);
 				}
@@ -526,6 +541,20 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		}
 
 		return new ParameterModel(parameter.Type.ToDisplayString(FullyQualified), DependencyKind.Direct, Location: location);
+	}
+
+	// Whether a type is an Awaiten.Owned<T> disposal handle, yielding the owned service type T.
+	private static bool IsOwned(ITypeSymbol type, out ITypeSymbol inner)
+	{
+		if (type is INamedTypeSymbol { Name: "Owned", TypeArguments.Length: 1, } named
+		    && named.ContainingNamespace?.ToDisplayString() == ContainerRegistrations.AttributeNamespace)
+		{
+			inner = named.TypeArguments[0];
+			return true;
+		}
+
+		inner = type;
+		return false;
 	}
 
 	private static bool HasArgAttribute(IParameterSymbol parameter)
