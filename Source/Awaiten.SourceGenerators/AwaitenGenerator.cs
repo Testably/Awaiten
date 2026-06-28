@@ -96,6 +96,8 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			}
 		}
 
+		ValidateRuntimeArguments(instances, instanceLocations, serviceToImpl, implToIndex, diagnostics);
+
 		Dictionary<int, List<int>> dependencies = BuildDependencyGraph(instances, serviceToImpl, implToIndex);
 
 		LocationInfo? containerLocation = LocationInfo.From(containerSymbol.Locations.FirstOrDefault());
@@ -323,23 +325,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		}
 
 		// A factory's parameters resolve from the graph exactly like a constructor's.
-		List<ParameterModel> parameters = new();
-		foreach (IParameterSymbol parameter in producer.Parameters)
-		{
-			ParameterModel parameterModel = ClassifyParameter(parameter.Type);
-			parameters.Add(parameterModel);
-			if (!serviceToImpl.ContainsKey(parameterModel.ServiceType))
-			{
-				diagnostics.Add(new DiagnosticInfo(
-					Diagnostics.MissingDependency,
-					info.Location,
-					new EquatableArray<string>([
-						Display(info.ServiceTypes[0]),
-						Display(info.ImplementationType),
-						Display(parameterModel.ServiceType),
-					])));
-			}
-		}
+		List<ParameterModel> parameters = ClassifyParameters(producer, info, serviceToImpl, diagnostics);
 
 		// Disposability follows the type the container actually owns: a factory's concrete return type
 		// (which may implement IDisposable behind a non-disposable service interface), or the constructed
@@ -364,6 +350,40 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			return SymbolEqualityComparer.Default.Equals(type, @interface)
 			       || type.AllInterfaces.Any(implemented => SymbolEqualityComparer.Default.Equals(implemented, @interface));
 		}
+	}
+
+	/// <summary>
+	///     Classifies the producer's parameters (a constructor's or a factory method's) and reports
+	///     <see cref="Diagnostics.MissingDependency">AWT101</see> for any non-<c>[Arg]</c> parameter whose
+	///     service type is not registered. A runtime argument (<c>[Arg]</c>) is supplied at resolve time, so
+	///     it is never a missing dependency.
+	/// </summary>
+	private static List<ParameterModel> ClassifyParameters(
+		IMethodSymbol producer,
+		ImplInfo info,
+		Dictionary<string, string> serviceToImpl,
+		List<DiagnosticInfo> diagnostics)
+	{
+		List<ParameterModel> parameters = new();
+		foreach (IParameterSymbol parameter in producer.Parameters)
+		{
+			ParameterModel parameterModel = ClassifyParameter(parameter);
+			parameters.Add(parameterModel);
+
+			if (parameterModel.Kind != DependencyKind.Arg && !serviceToImpl.ContainsKey(parameterModel.ServiceType))
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.MissingDependency,
+					info.Location,
+					new EquatableArray<string>([
+						Display(info.ServiceTypes[0]),
+						Display(info.ImplementationType),
+						Display(parameterModel.ServiceType),
+					])));
+			}
+		}
+
+		return parameters;
 	}
 
 	/// <summary>
@@ -437,7 +457,11 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 		HashSet<string> registered = new(registeredServices, StringComparer.Ordinal);
 		IMethodSymbol? resolvable = constructors
-			.Where(c => c.Parameters.All(p => registered.Contains(ClassifyParameter(p.Type).ServiceType)))
+			.Where(c => c.Parameters.All(p =>
+			{
+				ParameterModel parameter = ClassifyParameter(p);
+				return parameter.Kind == DependencyKind.Arg || registered.Contains(parameter.ServiceType);
+			}))
 			.OrderByDescending(c => c.Parameters.Length)
 			.FirstOrDefault();
 
@@ -458,36 +482,169 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	}
 
 	/// <summary>
-	///     Classifies a constructor parameter as a direct dependency or a deferred relationship type
-	///     (<c>Func&lt;T&gt;</c> / <c>Lazy&lt;T&gt;</c>), returning the underlying service type it resolves.
-	///     Only one level of nesting is supported: a relationship over another relationship
+	///     Classifies a constructor parameter as a runtime argument (<c>[Arg]</c>), a deferred relationship
+	///     type (<c>Func&lt;T&gt;</c>, <c>Lazy&lt;T&gt;</c> or <c>Func&lt;TArg…, T&gt;</c>) or a direct
+	///     dependency, returning the underlying service type it resolves. A <c>Func&lt;TArg…, T&gt;</c> also
+	///     carries the leading runtime-argument types it supplies to the produced service's <c>[Arg]</c>
+	///     parameters. Only one level of nesting is supported: a relationship over another relationship
 	///     (e.g. <c>Func&lt;Func&lt;T&gt;&gt;</c>) is classified as a direct dependency so it surfaces as an
 	///     unregistered service type rather than a misleading diagnostic about the inner relationship.
 	/// </summary>
-	private static ParameterModel ClassifyParameter(ITypeSymbol parameterType)
+	private static ParameterModel ClassifyParameter(IParameterSymbol parameter)
 	{
-		if (parameterType is INamedTypeSymbol { IsGenericType: true, TypeArguments.Length: 1, } named
-		    && named.ContainingNamespace?.ToDisplayString() == "System"
-		    && !IsRelationshipType(named.TypeArguments[0]))
+		LocationInfo? location = LocationInfo.From(parameter.Locations.FirstOrDefault());
+
+		if (HasArgAttribute(parameter))
 		{
-			DependencyKind? kind = named.Name switch
+			return new ParameterModel(parameter.Type.ToDisplayString(FullyQualified), DependencyKind.Arg, Location: location);
+		}
+
+		if (parameter.Type is INamedTypeSymbol { IsGenericType: true, } named
+		    && named.ContainingNamespace?.ToDisplayString() == "System")
+		{
+			if (named is { Name: "Lazy", TypeArguments.Length: 1, } && !IsRelationshipType(named.TypeArguments[0]))
 			{
-				"Func" => DependencyKind.Func,
-				"Lazy" => DependencyKind.Lazy,
-				_ => null,
-			};
-			if (kind is not null)
+				return new ParameterModel(
+					named.TypeArguments[0].ToDisplayString(FullyQualified), DependencyKind.Lazy, Location: location);
+			}
+
+			if (named is { Name: "Func", TypeArguments.Length: >= 1, })
 			{
-				return new ParameterModel(named.TypeArguments[0].ToDisplayString(FullyQualified), kind.Value);
+				// Func<T> defers resolution; Func<TArg…, T> additionally supplies runtime arguments (the
+				// leading type arguments) to the produced service's [Arg]-marked parameters.
+				ITypeSymbol[] typeArgs = named.TypeArguments.ToArray();
+				ITypeSymbol service = typeArgs[typeArgs.Length - 1];
+				if (!IsRelationshipType(service))
+				{
+					string[] argTypes = typeArgs.Take(typeArgs.Length - 1)
+						.Select(t => t.ToDisplayString(FullyQualified))
+						.ToArray();
+					return new ParameterModel(
+						service.ToDisplayString(FullyQualified), DependencyKind.Func, new EquatableArray<string>(argTypes), location);
+				}
 			}
 		}
 
-		return new ParameterModel(parameterType.ToDisplayString(FullyQualified), DependencyKind.Direct);
+		return new ParameterModel(parameter.Type.ToDisplayString(FullyQualified), DependencyKind.Direct, Location: location);
+	}
+
+	private static bool HasArgAttribute(IParameterSymbol parameter)
+	{
+		foreach (AttributeData attribute in parameter.GetAttributes())
+		{
+			if (attribute.AttributeClass is { Name: "ArgAttribute", } attributeClass
+			    && attributeClass.ContainingNamespace?.ToDisplayString() == ContainerRegistrations.AttributeNamespace)
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	private static bool IsRelationshipType(ITypeSymbol type)
 		=> type is INamedTypeSymbol { IsGenericType: true, TypeArguments.Length: 1, Name: "Func" or "Lazy", } named
 		   && named.ContainingNamespace?.ToDisplayString() == "System";
+
+	/// <summary>
+	///     Validates how parameterized services (those with <c>[Arg]</c>-marked parameters) are registered
+	///     and consumed:
+	///     <list type="bullet">
+	///         <item>
+	///             AWT114: a parameterized service is built fresh from its runtime arguments on every
+	///             request, so a non-<c>Transient</c> lifetime cannot be honored.
+	///         </item>
+	///         <item>
+	///             AWT113: a <c>Func&lt;TArg…, T&gt;</c> relationship must request exactly the runtime
+	///             arguments that <c>T</c>'s <c>[Arg]</c> parameters expect, in order (a plain
+	///             <c>Func&lt;T&gt;</c> over a parameterized service requests none, so it mismatches).
+	///         </item>
+	///         <item>
+	///             AWT115: a parameterized service requested as a plain dependency or a <c>Lazy&lt;T&gt;</c>
+	///             cannot be supplied its runtime arguments, so it is reachable only through a
+	///             <c>Func&lt;TArg…, T&gt;</c>.
+	///         </item>
+	///     </list>
+	/// </summary>
+	private static void ValidateRuntimeArguments(
+		List<InstanceModel> instances,
+		List<LocationInfo?> instanceLocations,
+		Dictionary<string, string> serviceToImpl,
+		Dictionary<string, int> implToIndex,
+		List<DiagnosticInfo> diagnostics)
+	{
+		for (int i = 0; i < instances.Count; i++)
+		{
+			InstanceModel instance = instances[i];
+			LocationInfo? location = instanceLocations[i];
+
+			if (instance.IsParameterized && instance.Lifetime != Lifetime.Transient)
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.ParameterizedLifetime,
+					location,
+					new EquatableArray<string>([Display(instance.ImplementationType), instance.Lifetime.ToString(),])));
+			}
+
+			foreach (ParameterModel parameter in instance.ConstructorParameters.AsArray())
+			{
+				if (parameter.Kind == DependencyKind.Arg
+				    || !serviceToImpl.TryGetValue(parameter.ServiceType, out string? targetImpl))
+				{
+					continue;
+				}
+
+				ValidateDependency(
+					instance, parameter, instances[implToIndex[targetImpl]].ArgTypes(), location, diagnostics);
+			}
+		}
+	}
+
+	/// <summary>
+	///     Validates a single (non-<c>[Arg]</c>) dependency against its target's runtime arguments
+	///     (<paramref name="expected" />): a <c>Func&lt;TArg…, T&gt;</c> must request exactly them (AWT113);
+	///     a plain or <c>Lazy&lt;T&gt;</c> dependency cannot supply them at all, so it must instead be a
+	///     <c>Func</c> when the target is parameterized (AWT115).
+	/// </summary>
+	private static void ValidateDependency(
+		InstanceModel consumer,
+		ParameterModel parameter,
+		string[] expected,
+		LocationInfo? consumerLocation,
+		List<DiagnosticInfo> diagnostics)
+	{
+		// Point the diagnostic at the offending parameter; fall back to the consumer's registration when the
+		// parameter has no usable location.
+		LocationInfo? location = parameter.Location ?? consumerLocation;
+
+		if (parameter.Kind == DependencyKind.Func)
+		{
+			string[] requested = parameter.FuncArgTypes.AsArray();
+			if (!requested.SequenceEqual(expected))
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.RuntimeArgumentMismatch,
+					location,
+					new EquatableArray<string>([
+						Display(parameter.ServiceType),
+						FormatTypeList(requested),
+						FormatTypeList(expected),
+					])));
+			}
+		}
+		else if (expected.Length > 0)
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.ParameterizedRequiresFunc,
+				location,
+				new EquatableArray<string>([Display(parameter.ServiceType), Display(consumer.ImplementationType),])));
+		}
+	}
+
+	// Renders a runtime-argument type list for a diagnostic message, reading as "none" when empty so a
+	// mismatch against a service with no [Arg] parameters (or a Func that supplies none) is not an empty "()".
+	private static string FormatTypeList(string[] types)
+		=> types.Length == 0 ? "none" : string.Join(", ", types.Select(Display));
 
 	private static void DetectCaptiveDependencies(
 		List<InstanceModel> instances,

@@ -2,7 +2,7 @@ namespace Awaiten.SourceGenerators.Tests;
 
 public partial class DiagnosticTests
 {
-	public class Awt113NonStaticContainer
+	public class Awt116NonStaticContainer
 	{
 		[Fact]
 		public async Task ReportsForANonStaticContainerClass()
@@ -21,7 +21,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics).Contains("*AWT113*").AsWildcard();
+			await That(result.Diagnostics).Contains("*AWT116*").AsWildcard();
 		}
 
 		[Fact]
@@ -41,7 +41,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics).DoesNotContain("*AWT113*").AsWildcard();
+			await That(result.Diagnostics).DoesNotContain("*AWT116*").AsWildcard();
 		}
 	}
 }
