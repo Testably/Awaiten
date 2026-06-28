@@ -9,7 +9,7 @@ namespace Awaiten.Benchmarks.Helpers;
 [Singleton<B5>]
 [Singleton<B6>]
 [Singleton<B7>]
-public sealed partial class AwaitenContainer8;
+public static partial class AwaitenContainer8;
 
 [Container]
 [Singleton<B0>]
@@ -268,4 +268,4 @@ public sealed partial class AwaitenContainer8;
 [Singleton<B253>]
 [Singleton<B254>]
 [Singleton<B255>]
-public sealed partial class AwaitenContainer256;
+public static partial class AwaitenContainer256;

@@ -13,4 +13,4 @@ namespace Awaiten.Benchmarks.Helpers;
 [Scoped<RequestHandler>]
 [Transient<Mapper>]
 [Transient<RequestValidator>]
-public sealed partial class AwaitenRealisticContainer;
+public static partial class AwaitenRealisticContainer;

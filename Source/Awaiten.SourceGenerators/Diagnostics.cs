@@ -156,4 +156,16 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A <c>[Container]</c> class is not declared <c>static</c>. The container is a pure definition and
+	///     its factory/instance members must be static; the usable instance is the generated <c>Root</c>.
+	/// </summary>
+	public static readonly DiagnosticDescriptor NonStaticContainer = new(
+		"AWT113",
+		"Container must be static",
+		"'{0}' must be a static class. The [Container] class is a definition whose factory and instance members are static; create the container with 'new {0}.Root()'.",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

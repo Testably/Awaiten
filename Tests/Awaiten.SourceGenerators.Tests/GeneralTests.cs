@@ -16,7 +16,7 @@ public class GeneralTests
 		                                       [Container]
 		                                       [Singleton<A>]
 		                                       [Singleton<B>]
-		                                       public partial class MyContainer
+		                                       public static partial class MyContainer
 		                                       {
 		                                       }
 		                                       """);
@@ -27,10 +27,10 @@ public class GeneralTests
 		await That(source)
 			.Contains("private static readonly global::System.Collections.Generic.Dictionary<global::System.Type, int> __dispatch")
 			.Because("resolution is dispatched through a static type-to-case table");
-		await That(source).Contains("public object Resolve(global::System.Type serviceType) => Root.Resolve(serviceType);")
-			.Because("the container forwards resolution to its root scope");
-		await That(source).Contains("MyContainer.__dispatch.TryGetValue(serviceType, out int __case)")
-			.Because("the scope dispatches through the single table built on the container");
+		await That(source).Contains("public sealed class Root : Scope")
+			.Because("the root scope is the usable container instance, created with new MyContainer.Root()");
+		await That(source).Contains("__dispatch.TryGetValue(serviceType, out int __case)")
+			.Because("the scope dispatches through the static table that lives on it");
 		await That(source.Contains("if (serviceType == typeof(")).IsFalse()
 			.Because("the linear if-chain is no longer emitted");
 	}
@@ -44,7 +44,7 @@ public class GeneralTests
 		                                       namespace MyCode;
 
 		                                       [Container]
-		                                       public partial class MyContainer
+		                                       public static partial class MyContainer
 		                                       {
 		                                       }
 		                                       """);
@@ -52,9 +52,9 @@ public class GeneralTests
 		await That(result.Diagnostics).IsEmpty();
 		await That(result.Sources).HasCount(1);
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-		await That(source).Contains("partial class MyContainer : global::Awaiten.IAwaitenContainer");
+		await That(source).Contains("static partial class MyContainer");
 		await That(source).Contains("public object Resolve(global::System.Type serviceType)");
-		await That(source).Contains("public Scope CreateScope() => Root.CreateScope();");
+		await That(source).Contains("public Scope CreateScope() => new Scope(__root);");
 		await That(source).Contains("public class Scope : global::Awaiten.IAwaitenScope");
 	}
 
@@ -72,7 +72,7 @@ public class GeneralTests
 		                                       [Container]
 		                                       [Transient<Leaf>]
 		                                       [Singleton<System.Lazy<Leaf>>]
-		                                       public partial class MyContainer
+		                                       public static partial class MyContainer
 		                                       {
 		                                       }
 		                                       """);
@@ -105,7 +105,7 @@ public class GeneralTests
 		                                       [Container]
 		                                       [Transient<Leaf>]
 		                                       [Transient<Consumer>]
-		                                       public partial class MyContainer
+		                                       public static partial class MyContainer
 		                                       {
 		                                       }
 		                                       """);
@@ -138,7 +138,7 @@ public class GeneralTests
 		                                       [Singleton<Leaf>]
 		                                       [Singleton<Middle, IMiddle>]
 		                                       [Transient<Top>]
-		                                       public partial class MyContainer
+		                                       public static partial class MyContainer
 		                                       {
 		                                       }
 		                                       """);
@@ -152,9 +152,9 @@ public class GeneralTests
 			.Because("reference-type singletons are cached in a volatile backing field");
 		await That(source).Contains("lock (this)")
 			.Because("singletons are created once under a lock");
-		await That(source).Contains("_middle = new global::MyCode.Middle(__rootScope.ResolveLeaf());")
+		await That(source).Contains("_middle = new global::MyCode.Middle(__root.ResolveLeaf());")
 			.Because("singletons are memoized into their backing field and read straight off the root scope");
-		await That(source).Contains("return new global::MyCode.Top(__rootScope.ResolveMiddle(), __rootScope.ResolveLeaf());")
+		await That(source).Contains("return new global::MyCode.Top(__root.ResolveMiddle(), __root.ResolveLeaf());")
 			.Because("transients are constructed on each request, not cached");
 
 		await That(source).Contains("{ typeof(global::MyCode.IMiddle),")
@@ -175,7 +175,7 @@ public class GeneralTests
 
 		                                       [Container]
 		                                       [Singleton<Foo>]
-		                                       public partial class MyContainer
+		                                       public static partial class MyContainer
 		                                       {
 		                                       }
 		                                       """);
@@ -200,7 +200,7 @@ public class GeneralTests
 		                                       [Container]
 		                                       [Singleton<Leaf>]
 		                                       [Singleton<Consumer>]
-		                                       public partial class MyContainer
+		                                       public static partial class MyContainer
 		                                       {
 		                                       }
 		                                       """);
@@ -208,7 +208,7 @@ public class GeneralTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		await That(source).Contains("new global::MyCode.Consumer(new global::System.Lazy<global::MyCode.Leaf>(() => __rootScope.ResolveLeaf()))")
+		await That(source).Contains("new global::MyCode.Consumer(new global::System.Lazy<global::MyCode.Leaf>(() => __root.ResolveLeaf()))")
 			.Because("the Lazy parameter is supplied as a lazy bound to the owner's resolver");
 		await That(source).Contains("{ typeof(global::System.Lazy<global::MyCode.Leaf>),")
 			.Because("Lazy<T> is also resolvable directly through the dispatch table");
@@ -231,7 +231,7 @@ public class GeneralTests
 		                                       [Container]
 		                                       [Singleton<Store, IReader>]
 		                                       [Singleton<Store, IWriter>]
-		                                       public partial class MyContainer
+		                                       public static partial class MyContainer
 		                                       {
 		                                       }
 		                                       """);
@@ -263,7 +263,7 @@ public class GeneralTests
 
 		                                       	[Container]
 		                                       	[Singleton<Service>]
-		                                       	public partial class Inner
+		                                       	public static partial class Inner
 		                                       	{
 		                                       	}
 		                                       }
@@ -273,7 +273,7 @@ public class GeneralTests
 		await That(result.Sources).HasCount(1);
 		string source = result.Sources["Awaiten.MyCode.Outer+Inner.g.cs"];
 		await That(source).Contains("partial class Outer");
-		await That(source).Contains("partial class Inner : global::Awaiten.IAwaitenContainer");
+		await That(source).Contains("static partial class Inner");
 		await That(source).Contains("_service = new global::MyCode.Outer.Service();");
 	}
 
@@ -283,8 +283,8 @@ public class GeneralTests
 		GeneratorResult result = Generator.Run("""
 		                                       using Awaiten;
 
-		                                       namespace A { public sealed class S1 { } [Container][Singleton<S1>] public partial class MyContainer { } }
-		                                       namespace B { public sealed class S2 { } [Container][Singleton<S2>] public partial class MyContainer { } }
+		                                       namespace A { public sealed class S1 { } [Container][Singleton<S1>] public static partial class MyContainer { } }
+		                                       namespace B { public sealed class S2 { } [Container][Singleton<S2>] public static partial class MyContainer { } }
 		                                       """);
 
 		await That(result.Diagnostics).IsEmpty();
@@ -305,7 +305,7 @@ public class GeneralTests
 
 		                                       [Container]
 		                                       [Scoped<Service>]
-		                                       public partial class MyContainer
+		                                       public static partial class MyContainer
 		                                       {
 		                                       }
 		                                       """);
@@ -333,16 +333,16 @@ public class GeneralTests
 
 		                                       [Container]
 		                                       [Transient<IClock>(Factory = nameof(MakeClock))]
-		                                       public partial class MyContainer
+		                                       public static partial class MyContainer
 		                                       {
-		                                       	private IClock MakeClock() => new SystemClock();
+		                                       	private static IClock MakeClock() => new SystemClock();
 		                                       }
 		                                       """);
 
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-		await That(source).Contains("return __rootScope.__container.MakeClock();")
-			.Because("the scope reaches the instance factory method through the root's container instead of constructing the type");
+		await That(source).Contains("return MakeClock();")
+			.Because("the scope calls the static factory method by simple name instead of constructing the type");
 		await That(source).DoesNotContain("new global::MyCode.SystemClock(")
 			.Because("a factory registration is produced by its method, never constructed directly");
 	}
@@ -361,7 +361,7 @@ public class GeneralTests
 		                                       [Container]
 		                                       [Singleton<Settings>]
 		                                       [Transient<Service>(Factory = nameof(MakeService))]
-		                                       public partial class MyContainer
+		                                       public static partial class MyContainer
 		                                       {
 		                                       	private static Service MakeService(Settings settings) => new Service(settings);
 		                                       }
@@ -369,7 +369,7 @@ public class GeneralTests
 
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-		await That(source).Contains("MakeService(__rootScope.ResolveSettings())")
+		await That(source).Contains("MakeService(__root.ResolveSettings())")
 			.Because("the factory method's parameters are resolved from the graph");
 		await That(source).DoesNotContain("__container.MakeService")
 			.Because("a static factory is in scope of the nested type directly and needs no container receiver");
@@ -388,81 +388,21 @@ public class GeneralTests
 
 		                                       [Container]
 		                                       [Singleton<IClock>(Instance = nameof(Clock))]
-		                                       public partial class MyContainer
+		                                       public static partial class MyContainer
 		                                       {
-		                                       	private readonly IClock Clock = new FixedClock();
+		                                       	private static readonly IClock Clock = new FixedClock();
 		                                       }
 		                                       """);
 
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-		await That(source).Contains("return __container.Clock;")
-			.Because("the container hands back its own pre-built member rather than constructing the type");
-		await That(source).Contains("return __rootScope.ResolveIClock();")
+		await That(source).Contains("return Clock;")
+			.Because("the container hands back its own pre-built static member rather than constructing the type");
+		await That(source).Contains("return __root.ResolveIClock();")
 			.Because("the nested scope delegates to the root scope like any other singleton");
 		await That(source).DoesNotContain("new global::MyCode.FixedClock")
 			.Because("an Instance registration is never constructed by the container");
 		await That(source).DoesNotContain("__disposables.Add")
 			.Because("the container does not own a pre-built Instance, so it never registers it for disposal");
-	}
-
-	[Fact]
-	public async Task FactoryRegistration_OnABaseClassMethod_IsResolved()
-	{
-		GeneratorResult result = Generator.Run("""
-		                                       using Awaiten;
-
-		                                       namespace MyCode;
-
-		                                       public interface IClock { }
-		                                       public sealed class SystemClock : IClock { }
-
-		                                       public abstract class ContainerBase
-		                                       {
-		                                       	protected IClock MakeClock() => new SystemClock();
-		                                       }
-
-		                                       [Container]
-		                                       [Singleton<IClock>(Factory = nameof(MakeClock))]
-		                                       public partial class MyContainer : ContainerBase
-		                                       {
-		                                       }
-		                                       """);
-
-		await That(result.Diagnostics).IsEmpty()
-			.Because("a protected factory method inherited from a base class is accessible to the generated partial");
-		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-		await That(source).Contains("MakeClock()")
-			.Because("the inherited factory method produces the service");
-	}
-
-	[Fact]
-	public async Task InstanceRegistration_OnABaseClassField_IsResolved()
-	{
-		GeneratorResult result = Generator.Run("""
-		                                       using Awaiten;
-
-		                                       namespace MyCode;
-
-		                                       public interface IClock { }
-		                                       public sealed class FixedClock : IClock { }
-
-		                                       public abstract class ContainerBase
-		                                       {
-		                                       	protected readonly IClock Clock = new FixedClock();
-		                                       }
-
-		                                       [Container]
-		                                       [Singleton<IClock>(Instance = nameof(Clock))]
-		                                       public partial class MyContainer : ContainerBase
-		                                       {
-		                                       }
-		                                       """);
-
-		await That(result.Diagnostics).IsEmpty()
-			.Because("a protected instance field inherited from a base class is accessible to the generated partial");
-		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-		await That(source).Contains("return __container.Clock;")
-			.Because("the inherited member is exposed as the service");
 	}
 }

@@ -62,6 +62,18 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 		List<DiagnosticInfo> diagnostics = new();
 
+		// The container must be a static class: it is a pure definition (registrations plus static factory
+		// and instance members) and the usable instance is the generated Root. A non-static class is an
+		// error; the emitter still emits a throwing Root so consumers fail on this AWT113 rather than on a
+		// cascade of missing-member errors.
+		if (!containerSymbol.IsStatic)
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.NonStaticContainer,
+				LocationInfo.From(containerSymbol.Locations.FirstOrDefault()),
+				new EquatableArray<string>([Display(containerSymbol.ToDisplayString(FullyQualified)),])));
+		}
+
 		// Coalesce registrations by implementation: the first registration per service type wins, and
 		// registrations of the same implementation share one instance. Declaring one implementation with
 		// two different lifetimes is reported as AWT107.

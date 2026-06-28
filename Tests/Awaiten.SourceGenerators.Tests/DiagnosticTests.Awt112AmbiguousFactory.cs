@@ -18,10 +18,10 @@ public partial class DiagnosticTests
 
 			                                       [Container]
 			                                       [Singleton<Service>(Factory = nameof(Make))]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
-			                                       	private Service Make() => new Service();
-			                                       	private Service Make(int x) => new Service();
+			                                       	private static Service Make() => new Service();
+			                                       	private static Service Make(int x) => new Service();
 			                                       }
 			                                       """);
 

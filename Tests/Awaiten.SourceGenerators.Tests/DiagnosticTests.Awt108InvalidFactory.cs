@@ -18,9 +18,9 @@ public partial class DiagnosticTests
 
 			                                       [Container]
 			                                       [Singleton<Service>(Factory = nameof(Missing))]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
-			                                       	private int Missing() => 0;
+			                                       	private static int Missing() => 0;
 			                                       }
 			                                       """);
 
@@ -39,9 +39,9 @@ public partial class DiagnosticTests
 
 			                                       [Container]
 			                                       [Singleton<Service>(Factory = nameof(NotAMethod))]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
-			                                       	private Service NotAMethod = new Service();
+			                                       	private static Service NotAMethod = new Service();
 			                                       }
 			                                       """);
 
@@ -61,7 +61,7 @@ public partial class DiagnosticTests
 
 			                                       [Container]
 			                                       [Singleton<Service>(Factory = "")]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
 			                                       }
 			                                       """);

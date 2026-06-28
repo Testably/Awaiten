@@ -21,7 +21,7 @@ public partial class DiagnosticTests
 			                                       [Container]
 			                                       [Singleton<A>]
 			                                       [Singleton<B>]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
 			                                       }
 			                                       """);
@@ -44,7 +44,7 @@ public partial class DiagnosticTests
 			                                       [Container]
 			                                       [Singleton<A>]
 			                                       [Singleton<B>]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
 			                                       }
 			                                       """);

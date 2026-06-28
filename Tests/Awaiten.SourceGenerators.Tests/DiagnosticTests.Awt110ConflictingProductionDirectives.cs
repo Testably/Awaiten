@@ -19,10 +19,10 @@ public partial class DiagnosticTests
 
 			                                       [Container]
 			                                       [Singleton<IService>(Factory = nameof(Make), Instance = nameof(_field))]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
-			                                       	private IService Make() => new Service();
-			                                       	private readonly IService _field = new Service();
+			                                       	private static IService Make() => new Service();
+			                                       	private static readonly IService _field = new Service();
 			                                       }
 			                                       """);
 

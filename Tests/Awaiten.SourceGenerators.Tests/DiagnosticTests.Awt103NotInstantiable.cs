@@ -20,7 +20,7 @@ public partial class DiagnosticTests
 
 			                                         [Container]
 			                                         [Singleton<Foo>]
-			                                         public partial class MyContainer
+			                                         public static partial class MyContainer
 			                                         {
 			                                         }
 			                                         """);

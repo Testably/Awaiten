@@ -12,7 +12,7 @@ public partial class RelationshipTests
 	[Fact]
 	public async Task Func_BoundToAScope_ResolvesScopedInstancesFromThatScope()
 	{
-		using RelationshipContainer container = new();
+		using RelationshipContainer.Root container = new();
 		using IAwaitenScope scope = container.CreateScope();
 
 		ScopedConsumer consumer = scope.Resolve<ScopedConsumer>();
@@ -24,7 +24,7 @@ public partial class RelationshipTests
 	[Fact]
 	public async Task Func_OfScopedInASingleton_ResolvesFromTheRootNotTheRequestingScope()
 	{
-		using RelationshipContainer container = new();
+		using RelationshipContainer.Root container = new();
 		using IAwaitenScope scope = container.CreateScope();
 
 		SingletonSessionConsumer consumer = scope.Resolve<SingletonSessionConsumer>();
@@ -38,7 +38,7 @@ public partial class RelationshipTests
 	[Fact]
 	public async Task Func_OfSingleton_ResolvesTheSameInstanceEachCall()
 	{
-		using RelationshipContainer container = new();
+		using RelationshipContainer.Root container = new();
 
 		Func<Engine> factory = container.Resolve<Func<Engine>>();
 
@@ -49,7 +49,7 @@ public partial class RelationshipTests
 	[Fact]
 	public async Task Func_OfTransient_ResolvesAFreshInstanceEachCall()
 	{
-		using RelationshipContainer container = new();
+		using RelationshipContainer.Root container = new();
 
 		Consumer consumer = container.Resolve<Consumer>();
 
@@ -61,7 +61,7 @@ public partial class RelationshipTests
 	[Fact]
 	public async Task Lazy_MemoizesItsValue()
 	{
-		using RelationshipContainer container = new();
+		using RelationshipContainer.Root container = new();
 
 		Lazy<Widget> lazy = container.Resolve<Lazy<Widget>>();
 
@@ -117,5 +117,5 @@ public partial class RelationshipTests
 	[Transient<Consumer>]
 	[Scoped<ScopedConsumer>]
 	[Singleton<SingletonSessionConsumer>]
-	public partial class RelationshipContainer;
+	public static partial class RelationshipContainer;
 }

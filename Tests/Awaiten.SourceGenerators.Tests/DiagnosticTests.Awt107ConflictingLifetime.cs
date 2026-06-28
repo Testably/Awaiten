@@ -21,7 +21,7 @@ public partial class DiagnosticTests
 			                                       [Container]
 			                                       [Singleton<Store, IReader>]
 			                                       [Singleton<Store, IWriter>]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
 			                                       }
 			                                       """);
@@ -45,7 +45,7 @@ public partial class DiagnosticTests
 			                                       [Container]
 			                                       [Singleton<Store, IReader>]
 			                                       [Scoped<Store, IWriter>]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
 			                                       }
 			                                       """);
@@ -67,7 +67,7 @@ public partial class DiagnosticTests
 			                                       [Container]
 			                                       [Singleton<Store, IReader>]
 			                                       [Scoped<Store, IReader>]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
 			                                       }
 			                                       """);

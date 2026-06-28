@@ -10,7 +10,7 @@ public partial class ResolutionTests
 	[Fact]
 	public async Task ConstructorDependencies_AreWiredFromTheGraph()
 	{
-		GraphContainer container = new();
+		GraphContainer.Root container = new();
 
 		Leaf leaf = container.Resolve<Leaf>();
 		IMiddle middle = container.Resolve<IMiddle>();
@@ -25,15 +25,15 @@ public partial class ResolutionTests
 	[Fact]
 	public async Task Resolve_ForAnUnregisteredType_Throws()
 	{
-		GraphContainer container = new();
+		GraphContainer.Root container = new();
 
 		await That(() => container.Resolve(typeof(string))).Throws<InvalidOperationException>();
 	}
 
 	[Fact]
-	public async Task Resolve_OnIAwaitenContainer_ReturnsTheRegisteredInstance()
+	public async Task Resolve_ByServiceType_ReturnsTheRegisteredInstance()
 	{
-		GraphContainer container = new();
+		GraphContainer.Root container = new();
 
 		object middle = container.Resolve(typeof(IMiddle));
 
@@ -43,7 +43,7 @@ public partial class ResolutionTests
 	[Fact]
 	public async Task Singleton_ReturnsTheSameInstanceEachTime()
 	{
-		GraphContainer container = new();
+		GraphContainer.Root container = new();
 
 		Leaf first = container.Resolve<Leaf>();
 		Leaf second = container.Resolve<Leaf>();
@@ -54,7 +54,7 @@ public partial class ResolutionTests
 	[Fact]
 	public async Task Singleton_ViaServiceType_ReturnsTheSameInstanceEachTime()
 	{
-		GraphContainer container = new();
+		GraphContainer.Root container = new();
 
 		IMiddle first = container.Resolve<IMiddle>();
 		IMiddle second = container.Resolve<IMiddle>();
@@ -66,7 +66,7 @@ public partial class ResolutionTests
 	[Fact]
 	public async Task Transient_ReturnsANewInstanceEachTime()
 	{
-		GraphContainer container = new();
+		GraphContainer.Root container = new();
 
 		Top first = container.Resolve<Top>();
 		Top second = container.Resolve<Top>();
@@ -77,7 +77,7 @@ public partial class ResolutionTests
 	[Fact]
 	public async Task TryResolve_ForAnUnregisteredType_ReturnsFalse()
 	{
-		GraphContainer container = new();
+		GraphContainer.Root container = new();
 
 		bool resolved = container.TryResolve(typeof(string), out object? instance);
 
@@ -107,5 +107,5 @@ public partial class ResolutionTests
 	[Singleton<Leaf>]
 	[Singleton<Middle, IMiddle>]
 	[Transient<Top>]
-	public partial class GraphContainer;
+	public static partial class GraphContainer;
 }

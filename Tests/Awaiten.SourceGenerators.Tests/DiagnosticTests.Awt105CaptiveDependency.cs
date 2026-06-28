@@ -20,7 +20,7 @@ public partial class DiagnosticTests
 			                                       [Container]
 			                                       [Scoped<ScopedConsumer>]
 			                                       [Scoped<ScopedDependency>]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
 			                                       }
 			                                       """);
@@ -43,7 +43,7 @@ public partial class DiagnosticTests
 			                                       [Container]
 			                                       [Singleton<Consumer>]
 			                                       [Singleton<Dependency>]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
 			                                       }
 			                                       """);
@@ -67,7 +67,7 @@ public partial class DiagnosticTests
 			                                       [Container]
 			                                       [Singleton<SingletonConsumer>]
 			                                       [Scoped<ScopedDependency>]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
 			                                       }
 			                                       """);
@@ -90,7 +90,7 @@ public partial class DiagnosticTests
 			                                       [Container]
 			                                       [Transient<TransientConsumer>]
 			                                       [Scoped<ScopedDependency>]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
 			                                       }
 			                                       """);
@@ -118,7 +118,7 @@ public partial class DiagnosticTests
 			                                       [Singleton<Consumer>]
 			                                       [Scoped<Store, IReader>]
 			                                       [Scoped<Store, IWriter>]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
 			                                       }
 			                                       """);
@@ -144,7 +144,7 @@ public partial class DiagnosticTests
 			                                       [Container]
 			                                       [Singleton<SingletonConsumer>]
 			                                       [Scoped<ScopedDependency>]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
 			                                       }
 			                                       """);
@@ -168,7 +168,7 @@ public partial class DiagnosticTests
 			                                       [Singleton<SingletonConsumer>]
 			                                       [Transient<TransientMiddle>]
 			                                       [Scoped<ScopedDependency>]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
 			                                       }
 			                                       """);

@@ -21,7 +21,7 @@ public partial class DiagnosticTests
 			                                       [Container]
 			                                       [Transient<Leaf>]
 			                                       [Transient<Service>]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
 			                                       }
 			                                       """);
@@ -45,7 +45,7 @@ public partial class DiagnosticTests
 
 			                                       [Container]
 			                                       [Transient<Service>]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
 			                                       }
 			                                       """);
@@ -67,7 +67,7 @@ public partial class DiagnosticTests
 
 			                                       [Container]
 			                                       [Transient<Service>]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
 			                                       }
 			                                       """);

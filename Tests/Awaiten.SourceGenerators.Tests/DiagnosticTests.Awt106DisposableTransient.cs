@@ -19,7 +19,7 @@ public partial class DiagnosticTests
 
 			                                                           [Container]
 			                                                           [Scoped<Resource>]
-			                                                           public partial class MyContainer
+			                                                           public static partial class MyContainer
 			                                                           {
 			                                                           }
 			                                                           """);
@@ -41,7 +41,7 @@ public partial class DiagnosticTests
 
 			                                                           [Container]
 			                                                           [Singleton<Resource>]
-			                                                           public partial class MyContainer
+			                                                           public static partial class MyContainer
 			                                                           {
 			                                                           }
 			                                                           """);
@@ -63,7 +63,7 @@ public partial class DiagnosticTests
 
 			                                                           [Container]
 			                                                           [Transient<Resource>]
-			                                                           public partial class MyContainer
+			                                                           public static partial class MyContainer
 			                                                           {
 			                                                           }
 			                                                           """);
@@ -84,7 +84,7 @@ public partial class DiagnosticTests
 
 			                                                           [Container]
 			                                                           [Transient<Resource>]
-			                                                           public partial class MyContainer
+			                                                           public static partial class MyContainer
 			                                                           {
 			                                                           }
 			                                                           """);
@@ -108,7 +108,7 @@ public partial class DiagnosticTests
 			                                                           #pragma warning disable AWT106
 			                                                           [Transient<Resource>]
 			                                                           #pragma warning restore AWT106
-			                                                           public partial class MyContainer
+			                                                           public static partial class MyContainer
 			                                                           {
 			                                                           }
 			                                                           """);
@@ -130,7 +130,7 @@ public partial class DiagnosticTests
 
 			                                                           [Container]
 			                                                           [Transient<Resource>]
-			                                                           public partial class MyContainer
+			                                                           public static partial class MyContainer
 			                                                           {
 			                                                           }
 			                                                           """);

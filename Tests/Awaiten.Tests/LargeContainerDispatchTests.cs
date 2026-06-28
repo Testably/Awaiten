@@ -11,7 +11,7 @@ public partial class LargeContainerDispatchTests
 	[Fact]
 	public async Task DirectServices_ResolveAcrossTheWholeTable()
 	{
-		LargeContainer container = new();
+		LargeContainer.Root container = new();
 
 		await That(container.Resolve<S00>()).IsNotNull()
 			.Because("the first registration exercises one end of the switch");
@@ -23,7 +23,7 @@ public partial class LargeContainerDispatchTests
 	[Fact]
 	public async Task Scope_ResolvesThroughTheSharedTable()
 	{
-		LargeContainer container = new();
+		LargeContainer.Root container = new();
 		using IAwaitenScope scope = container.CreateScope();
 
 		await That(scope.Resolve<S03>()).IsNotNull();
@@ -33,7 +33,7 @@ public partial class LargeContainerDispatchTests
 	[Fact]
 	public async Task Singleton_ReturnsTheSameInstanceThroughTheTable()
 	{
-		LargeContainer container = new();
+		LargeContainer.Root container = new();
 
 		await That(container.Resolve<S07>()).IsSameAs(container.Resolve<S07>());
 	}
@@ -41,7 +41,7 @@ public partial class LargeContainerDispatchTests
 	[Fact]
 	public async Task UnregisteredType_FallsThroughToFalse()
 	{
-		LargeContainer container = new();
+		LargeContainer.Root container = new();
 
 		bool resolved = container.TryResolve(typeof(string), out object? instance);
 
@@ -112,5 +112,5 @@ public partial class LargeContainerDispatchTests
 	[Singleton<S17>]
 	[Singleton<S18>]
 	[Singleton<S19>]
-	public partial class LargeContainer;
+	public static partial class LargeContainer;
 }
