@@ -74,10 +74,11 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 				new EquatableArray<string>([Display(containerSymbol.ToDisplayString(FullyQualified)),])));
 		}
 
-		// Coalesce registrations by implementation: the first registration per service type wins, and
+		// Coalesce registrations by (service type, key): the first registration per key wins, and
 		// registrations of the same implementation share one instance. Declaring one implementation with
-		// two different lifetimes is reported as AWT107.
-		(List<ImplInfo> implOrder, Dictionary<string, string> serviceToImpl) = CoalesceByImplementation(raw, diagnostics);
+		// two different lifetimes is reported as AWT107; two implementations under the same service type and
+		// key as AWT117.
+		(List<ImplInfo> implOrder, Dictionary<ServiceKey, string> serviceToImpl) = CoalesceByImplementation(raw, diagnostics);
 
 		List<InstanceModel> instances = new();
 		List<LocationInfo?> instanceLocations = new();
@@ -134,13 +135,13 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			new EquatableArray<DiagnosticInfo>(diagnostics.ToArray()));
 	}
 
-	private static (List<ImplInfo> Order, Dictionary<string, string> ServiceToImpl) CoalesceByImplementation(
+	private static (List<ImplInfo> Order, Dictionary<ServiceKey, string> ServiceToImpl) CoalesceByImplementation(
 		List<RawRegistration> raw,
 		List<DiagnosticInfo> diagnostics)
 	{
 		List<ImplInfo> implOrder = new();
 		Dictionary<string, ImplInfo> implInfos = new(StringComparer.Ordinal);
-		Dictionary<string, string> serviceToImpl = new(StringComparer.Ordinal);
+		Dictionary<ServiceKey, string> serviceToImpl = new();
 		HashSet<string> reportedConflicts = new(StringComparer.Ordinal);
 		HashSet<string> reportedProductionConflicts = new(StringComparer.Ordinal);
 
@@ -194,8 +195,21 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 					])));
 			}
 
-			if (serviceToImpl.ContainsKey(registration.ServiceType))
+			ServiceKey serviceKey = new(registration.ServiceType, registration.Key);
+			if (serviceToImpl.TryGetValue(serviceKey, out string? existingImpl))
 			{
+				// AWT116: two different implementations claim the same service type and key, so a keyed
+				// resolution of that key would be ambiguous. The same implementation re-registered under one
+				// key is just a coalesce (first wins), and an unkeyed duplicate keeps the existing first-wins
+				// behavior, so neither is reported.
+				if (registration.Key is not null && existingImpl != registration.ImplementationType)
+				{
+					diagnostics.Add(new DiagnosticInfo(
+						Diagnostics.DuplicateKey,
+						LocationInfo.From(registration.Location),
+						new EquatableArray<string>([Display(registration.ServiceType), registration.Key,])));
+				}
+
 				continue;
 			}
 
@@ -208,8 +222,8 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 				implOrder.Add(info);
 			}
 
-			serviceToImpl[registration.ServiceType] = registration.ImplementationType;
-			info.ServiceTypes.Add(registration.ServiceType);
+			serviceToImpl[serviceKey] = registration.ImplementationType;
+			info.Services.Add(serviceKey);
 		}
 
 		return (implOrder, serviceToImpl);
@@ -233,7 +247,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	// Dependency graph over instance indices, keeping only resolvable edges to built instances.
 	private static Dictionary<int, List<int>> BuildDependencyGraph(
 		List<InstanceModel> instances,
-		Dictionary<string, string> serviceToImpl,
+		Dictionary<ServiceKey, string> serviceToImpl,
 		Dictionary<string, int> implToIndex)
 	{
 		Dictionary<int, List<int>> dependencies = new();
@@ -249,7 +263,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 					continue;
 				}
 
-				if (serviceToImpl.TryGetValue(parameter.ServiceType, out string? depImpl) &&
+				if (serviceToImpl.TryGetValue(KeyOf(parameter), out string? depImpl) &&
 				    implToIndex.TryGetValue(depImpl, out int depIndex))
 				{
 					edges.Add(depIndex);
@@ -266,7 +280,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		ImplInfo info,
 		INamedTypeSymbol containerSymbol,
 		Compilation compilation,
-		Dictionary<string, string> serviceToImpl,
+		Dictionary<ServiceKey, string> serviceToImpl,
 		INamedTypeSymbol? disposableSymbol,
 		List<DiagnosticInfo> diagnostics)
 	{
@@ -280,7 +294,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 				info.ImplementationType,
 				info.Symbol.Name,
 				info.Lifetime,
-				new EquatableArray<string>(info.ServiceTypes.ToArray()),
+				new EquatableArray<ServiceKey>(info.Services.ToArray()),
 				new EquatableArray<ParameterModel>([]),
 				false,
 				info.Symbol.IsReferenceType,
@@ -313,7 +327,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 				return null;
 			}
 
-			producer = SelectConstructor(info.Symbol, containerSymbol, serviceToImpl.Keys);
+			producer = SelectConstructor(info.Symbol, containerSymbol, serviceToImpl.Keys.Select(k => k.Service));
 			if (producer is null)
 			{
 				diagnostics.Add(new DiagnosticInfo(
@@ -338,7 +352,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			info.ImplementationType,
 			info.Symbol.Name,
 			info.Lifetime,
-			new EquatableArray<string>(info.ServiceTypes.ToArray()),
+			new EquatableArray<ServiceKey>(info.Services.ToArray()),
 			new EquatableArray<ParameterModel>(parameters.ToArray()),
 			disposable,
 			info.Symbol.IsReferenceType,
@@ -361,7 +375,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	private static List<ParameterModel> ClassifyParameters(
 		IMethodSymbol producer,
 		ImplInfo info,
-		Dictionary<string, string> serviceToImpl,
+		Dictionary<ServiceKey, string> serviceToImpl,
 		List<DiagnosticInfo> diagnostics)
 	{
 		List<ParameterModel> parameters = new();
@@ -370,15 +384,15 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			ParameterModel parameterModel = ClassifyParameter(parameter);
 			parameters.Add(parameterModel);
 
-			if (parameterModel.Kind != DependencyKind.Arg && !serviceToImpl.ContainsKey(parameterModel.ServiceType))
+			if (parameterModel.Kind != DependencyKind.Arg && !serviceToImpl.ContainsKey(KeyOf(parameterModel)))
 			{
 				diagnostics.Add(new DiagnosticInfo(
 					Diagnostics.MissingDependency,
 					info.Location,
 					new EquatableArray<string>([
-						Display(info.ServiceTypes[0]),
+						Display(info.Services[0].Service),
 						Display(info.ImplementationType),
-						Display(parameterModel.ServiceType),
+						DisplayKeyed(parameterModel.ServiceType, parameterModel.Key),
 					])));
 			}
 		}
@@ -407,7 +421,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		diagnostics.Add(new DiagnosticInfo(
 			candidates.Count == 0 ? Diagnostics.InvalidFactory : Diagnostics.AmbiguousFactory,
 			info.Location,
-			new EquatableArray<string>([Display(info.ServiceTypes[0]), info.ProductionMember!,])));
+			new EquatableArray<string>([Display(info.Services[0].Service), info.ProductionMember!,])));
 		return null;
 	}
 
@@ -439,7 +453,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		diagnostics.Add(new DiagnosticInfo(
 			Diagnostics.InvalidInstance,
 			info.Location,
-			new EquatableArray<string>([Display(info.ServiceTypes[0]), info.ProductionMember!,])));
+			new EquatableArray<string>([Display(info.Services[0].Service), info.ProductionMember!,])));
 	}
 
 	private static IMethodSymbol? SelectConstructor(
@@ -520,12 +534,35 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 						.Select(t => t.ToDisplayString(FullyQualified))
 						.ToArray();
 					return new ParameterModel(
-						service.ToDisplayString(FullyQualified), DependencyKind.Func, new EquatableArray<string>(argTypes), location);
+						service.ToDisplayString(FullyQualified), DependencyKind.Func, new EquatableArray<string>(argTypes), Location: location);
 				}
 			}
 		}
 
-		return new ParameterModel(parameter.Type.ToDisplayString(FullyQualified), DependencyKind.Direct, Location: location);
+		// A direct dependency, optionally selecting a keyed registration with [FromKey].
+		return new ParameterModel(
+			parameter.Type.ToDisplayString(FullyQualified), DependencyKind.Direct, Key: FromKey(parameter), Location: location);
+	}
+
+	private static ServiceKey KeyOf(ParameterModel parameter) => new(parameter.ServiceType, parameter.Key);
+
+	private static string DisplayKeyed(string serviceType, string? key)
+		=> key is null ? Display(serviceType) : $"{Display(serviceType)} (key: {key})";
+
+	private static string? FromKey(IParameterSymbol parameter)
+	{
+		foreach (AttributeData attribute in parameter.GetAttributes())
+		{
+			if (attribute.AttributeClass is { Name: "FromKeyAttribute", } attributeClass
+			    && attributeClass.ContainingNamespace?.ToDisplayString() == ContainerRegistrations.AttributeNamespace
+			    && attribute.ConstructorArguments.Length == 1
+			    && attribute.ConstructorArguments[0].Value is string key)
+			{
+				return key;
+			}
+		}
+
+		return null;
 	}
 
 	private static bool HasArgAttribute(IParameterSymbol parameter)
@@ -569,7 +606,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	private static void ValidateRuntimeArguments(
 		List<InstanceModel> instances,
 		List<LocationInfo?> instanceLocations,
-		Dictionary<string, string> serviceToImpl,
+		Dictionary<ServiceKey, string> serviceToImpl,
 		Dictionary<string, int> implToIndex,
 		List<DiagnosticInfo> diagnostics)
 	{
@@ -589,7 +626,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			foreach (ParameterModel parameter in instance.ConstructorParameters.AsArray())
 			{
 				if (parameter.Kind == DependencyKind.Arg
-				    || !serviceToImpl.TryGetValue(parameter.ServiceType, out string? targetImpl))
+				    || !serviceToImpl.TryGetValue(KeyOf(parameter), out string? targetImpl))
 				{
 					continue;
 				}
@@ -690,12 +727,13 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			switch (instances[node].Lifetime)
 			{
 				case Lifetime.Scoped:
+					ServiceKey referenced = ReferencedService(instances[parent], instances[node]);
 					diagnostics.Add(new DiagnosticInfo(
 						Diagnostics.CaptiveDependency,
 						instanceLocations[singleton],
 						new EquatableArray<string>([
 							Display(instances[singleton].ImplementationType),
-							Display(ReferencedService(instances[parent], instances[node])),
+							DisplayKeyed(referenced.Service, referenced.Key),
 						])));
 					break;
 				case Lifetime.Transient:
@@ -708,15 +746,22 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			}
 		}
 
-		// The service type the parent's constructor used to reach this dependency - the alias the developer
-		// wrote - which is the one of the dependency's service types that appears among the parent's
-		// parameters. Falls back to the first service type if no parameter matches (it always should).
-		static string ReferencedService(InstanceModel parent, InstanceModel dependency)
+		// The service key the parent's constructor used to reach this dependency - the alias the developer
+		// wrote, including any [FromKey] - which is the one of the dependency's service keys that a parent
+		// parameter selects. Falls back to the first service key if no parameter matches (it always should).
+		static ServiceKey ReferencedService(InstanceModel parent, InstanceModel dependency)
 		{
-			string[] dependencyServices = dependency.ServiceTypes.AsArray();
-			return parent.ConstructorParameters.AsArray()
-				.Select(p => p.ServiceType)
-				.FirstOrDefault(dependencyServices.Contains) ?? dependencyServices[0];
+			ServiceKey[] dependencyServices = dependency.Services.AsArray();
+			foreach (ParameterModel parameter in parent.ConstructorParameters.AsArray())
+			{
+				ServiceKey key = KeyOf(parameter);
+				if (dependencyServices.Contains(key))
+				{
+					return key;
+				}
+			}
+
+			return dependencyServices[0];
 		}
 	}
 
@@ -810,7 +855,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			Location = location;
 			Production = production;
 			ProductionMember = productionMember;
-			ServiceTypes = new List<string>();
+			Services = new List<ServiceKey>();
 		}
 
 		public string ImplementationType { get; }
@@ -819,6 +864,6 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		public LocationInfo? Location { get; }
 		public ProductionKind Production { get; }
 		public string? ProductionMember { get; }
-		public List<string> ServiceTypes { get; }
+		public List<ServiceKey> Services { get; }
 	}
 }

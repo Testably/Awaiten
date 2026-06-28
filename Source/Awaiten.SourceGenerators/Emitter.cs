@@ -47,7 +47,7 @@ internal static class Emitter
 		else
 		{
 			Names names = Names.Build(model.Instances.AsArray());
-			Dictionary<string, int> serviceToIndex = BuildServiceMap(model);
+			Dictionary<ServiceKey, int> serviceToIndex = BuildServiceMap(model);
 			EmitContainerBody(builder, depth + 1, model, names, serviceToIndex);
 		}
 
@@ -67,13 +67,13 @@ internal static class Emitter
 		return builder.ToString();
 	}
 
-	private static Dictionary<string, int> BuildServiceMap(ContainerModel model)
+	private static Dictionary<ServiceKey, int> BuildServiceMap(ContainerModel model)
 	{
-		Dictionary<string, int> serviceToIndex = new(StringComparer.Ordinal);
+		Dictionary<ServiceKey, int> serviceToIndex = new();
 		InstanceModel[] instances = model.Instances.AsArray();
 		for (int i = 0; i < instances.Length; i++)
 		{
-			foreach (string service in instances[i].ServiceTypes.AsArray())
+			foreach (ServiceKey service in instances[i].Services.AsArray())
 			{
 				serviceToIndex[service] = i;
 			}
@@ -88,7 +88,8 @@ internal static class Emitter
 	///     keeps the typed base list and its explicit implementations in lockstep: a duplicate base or a
 	///     duplicate explicit implementation would each fail to compile, so neither must be emitted twice.
 	///     A parameterized service is excluded: it is not directly resolvable (only through its
-	///     <c>Func&lt;TArg…, T&gt;</c> factory), so it gets no typed resolution fast path.
+	///     <c>Func&lt;TArg…, T&gt;</c> factory), so it gets no typed resolution fast path. A keyed registration
+	///     is likewise excluded: it is reached only by <c>[FromKey]</c> injection, never the typed path.
 	/// </summary>
 	private static IEnumerable<(string Service, int Index)> UniqueServices(InstanceModel[] instances)
 	{
@@ -100,9 +101,16 @@ internal static class Emitter
 				continue;
 			}
 
-			foreach (string service in instances[i].ServiceTypes.AsArray().Where(seen.Add))
+			foreach (ServiceKey service in instances[i].Services.AsArray())
 			{
-				yield return (service, i);
+				// Keyed registrations are reached only by [FromKey] injection, never the typed resolver fast
+				// path, so they get no IAwaitenResolver<T> base or explicit typed resolution.
+				if (service.Key is not null || !seen.Add(service.Service))
+				{
+					continue;
+				}
+
+				yield return (service.Service, i);
 			}
 		}
 	}
@@ -152,7 +160,7 @@ internal static class Emitter
 		Indent(builder, depth).AppendLine("}");
 	}
 
-	private static void EmitContainerBody(StringBuilder builder, int depth, ContainerModel model, Names names, Dictionary<string, int> serviceToIndex)
+	private static void EmitContainerBody(StringBuilder builder, int depth, ContainerModel model, Names names, Dictionary<ServiceKey, int> serviceToIndex)
 	{
 		InstanceModel[] instances = model.Instances.AsArray();
 
@@ -189,7 +197,7 @@ internal static class Emitter
 	///     itself, constructs transients, and resolves singletons through <c>protected virtual</c> delegators
 	///     that the <c>Root</c> subclass overrides. Child (request) scopes are instances of this type.
 	/// </summary>
-	private static void EmitScopeBaseClass(StringBuilder builder, int depth, InstanceModel[] instances, Names names, Dictionary<string, int> serviceToIndex)
+	private static void EmitScopeBaseClass(StringBuilder builder, int depth, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex)
 	{
 		Indent(builder, depth).Append("public class Scope : global::Awaiten.IAwaitenScope");
 		EmitGenericResolverBases(builder, instances);
@@ -263,7 +271,7 @@ internal static class Emitter
 	///     singleton delegators with the real caching/member access, so a child scope delegating through
 	///     <c>__root</c> lands here.
 	/// </summary>
-	private static void EmitRootClass(StringBuilder builder, int depth, InstanceModel[] instances, Names names, Dictionary<string, int> serviceToIndex)
+	private static void EmitRootClass(StringBuilder builder, int depth, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex)
 	{
 		Indent(builder, depth).AppendLine("public sealed class Root : Scope");
 		Indent(builder, depth).AppendLine("{");
@@ -410,8 +418,15 @@ internal static class Emitter
 	private static void AddServiceEntries(InstanceModel instance, string resolver, List<DispatchEntry> entries, HashSet<string> seen)
 	{
 		string[] argTypes = instance.ArgTypes();
-		foreach (string service in instance.ServiceTypes.AsArray())
+		foreach (ServiceKey serviceKey in instance.Services.AsArray())
 		{
+			// Keyed registrations are reached only by [FromKey] injection, never the public dispatch table.
+			if (serviceKey.Key is not null)
+			{
+				continue;
+			}
+
+			string service = serviceKey.Service;
 			if (argTypes.Length > 0)
 			{
 				string parameterizedFunc = $"global::System.Func<{string.Join(", ", argTypes)}, {service}>";
@@ -432,8 +447,16 @@ internal static class Emitter
 	/// </summary>
 	private static void AddRelationshipEntries(InstanceModel instance, string resolver, List<DispatchEntry> entries, HashSet<string> seen)
 	{
-		foreach (string service in instance.ServiceTypes.AsArray())
+		foreach (ServiceKey serviceKey in instance.Services.AsArray())
 		{
+			// Keyed registrations are reached only by [FromKey] injection, so they get no synthetic
+			// relationship entries either.
+			if (serviceKey.Key is not null)
+			{
+				continue;
+			}
+
+			string service = serviceKey.Service;
 			string func = $"global::System.Func<{service}>";
 			if (seen.Add(func))
 			{
@@ -474,7 +497,7 @@ internal static class Emitter
 	///     delegator to <c>__root</c> (overridden by the <c>Root</c>); scoped services cache on the scope;
 	///     transients construct fresh.
 	/// </summary>
-	private static void EmitScopeResolver(StringBuilder builder, int depth, int index, InstanceModel instance, InstanceModel[] instances, Names names, Dictionary<string, int> serviceToIndex)
+	private static void EmitScopeResolver(StringBuilder builder, int depth, int index, InstanceModel instance, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex)
 	{
 		string type = instance.ImplementationType;
 		string resolver = names.Resolver(index);
@@ -553,7 +576,7 @@ internal static class Emitter
 	///     returns the static container member by simple name; a constructed/factory singleton is cached once
 	///     under the lock.
 	/// </summary>
-	private static void EmitRootResolver(StringBuilder builder, int depth, int index, InstanceModel instance, InstanceModel[] instances, Names names, Dictionary<string, int> serviceToIndex)
+	private static void EmitRootResolver(StringBuilder builder, int depth, int index, InstanceModel instance, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex)
 	{
 		string type = instance.ImplementationType;
 		string resolver = names.Resolver(index);
@@ -610,7 +633,7 @@ internal static class Emitter
 		Indent(builder, depth).AppendLine("}");
 	}
 
-	private static string EmitConstruction(InstanceModel instance, InstanceModel[] instances, Names names, Dictionary<string, int> serviceToIndex, bool ownerIsRoot)
+	private static string EmitConstruction(InstanceModel instance, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool ownerIsRoot)
 	{
 		ParameterModel[] parameters = instance.ConstructorParameters.AsArray();
 		StringBuilder arguments = new();
@@ -646,9 +669,9 @@ internal static class Emitter
 	///     so it routes that target through the root's generic <c>Resolve&lt;T&gt;</c> entry. A relationship
 	///     type wraps the target in a deferred <c>Func&lt;T&gt;</c> / <c>Lazy&lt;T&gt;</c>.
 	/// </summary>
-	private static string ResolveExpression(ParameterModel parameter, InstanceModel[] instances, Names names, Dictionary<string, int> serviceToIndex, bool ownerIsRoot)
+	private static string ResolveExpression(ParameterModel parameter, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool ownerIsRoot)
 	{
-		int targetIndex = serviceToIndex[parameter.ServiceType];
+		int targetIndex = serviceToIndex[new ServiceKey(parameter.ServiceType, parameter.Key)];
 		string resolver = names.Resolver(targetIndex);
 		InstanceModel target = instances[targetIndex];
 

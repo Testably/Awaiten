@@ -205,4 +205,16 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     Two different implementations are registered under the same service type and key, so a keyed
+	///     resolution of that key would be ambiguous.
+	/// </summary>
+	public static readonly DiagnosticDescriptor DuplicateKey = new(
+		"AWT117",
+		"Duplicate keyed registration",
+		"'{0}' is registered more than once with key '{1}'; a keyed resolution would be ambiguous",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

@@ -29,6 +29,12 @@ public sealed class SingletonAttribute<TImplementation> : Attribute
 	///     The container neither constructs nor disposes it - the caller owns it.
 	/// </summary>
 	public string? Instance { get; set; }
+
+	/// <summary>
+	///     An optional resolution key. Several implementations may share one service type under
+	///     different keys; consumers select one with <c>[FromKey]</c>.
+	/// </summary>
+	public string? Key { get; set; }
 }
 
 /// <summary>
@@ -58,6 +64,12 @@ public sealed class SingletonAttribute<TImplementation, TService> : Attribute
 	///     service types with the same member exposes one instance through all of them.
 	/// </summary>
 	public string? Instance { get; set; }
+
+	/// <summary>
+	///     An optional resolution key. Several implementations may share one service type under
+	///     different keys; consumers select one with <c>[FromKey]</c>.
+	/// </summary>
+	public string? Key { get; set; }
 }
 
 #pragma warning restore S2326
