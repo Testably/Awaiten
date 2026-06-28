@@ -198,8 +198,9 @@ internal static class Diagnostics
 	/// <remarks>
 	///     Unlike the retired per-registration check, this is flow-based: it fires only for the statically
 	///     visible root-accumulating pattern, not for every disposable transient. A disposable transient
-	///     reached only from a scope (or through <c>Owned&lt;T&gt;</c>) is bounded and is not reported. It is a
-	///     warning by default and escalates to an error under strict lifetime safety.
+	///     reached only from a scope (or through <c>Owned&lt;T&gt;</c>) is bounded and is not reported. This
+	///     descriptor is the loose-lifetime-safety form: a warning that can be suppressed in source; strict
+	///     lifetime safety reports <see cref="RootAccumulatingFactoryStrict" /> instead.
 	/// </remarks>
 	public static readonly DiagnosticDescriptor RootAccumulatingFactory = new(
 		"AWT117",
@@ -208,4 +209,30 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Warning,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     The strict-lifetime-safety form of <see cref="RootAccumulatingFactory">AWT117</see>: the same
+	///     diagnostic, reported at error severity (by the analyzer) and carrying
+	///     <see cref="WellKnownDiagnosticTags.NotConfigurable" /> so it cannot be silenced by
+	///     <c>#pragma warning disable</c>, <c>&lt;NoWarn&gt;</c> or an editorconfig severity override - the only
+	///     way to opt out is to set <c>LifetimeSafety.Loose</c> on the <c>[Container]</c>, which switches back
+	///     to the suppressible <see cref="RootAccumulatingFactory" />. This is what makes the root-accumulation
+	///     leak structurally impossible under strict lifetime safety rather than merely warned-about.
+	/// </summary>
+	/// <remarks>
+	///     Its declared default severity is <see cref="DiagnosticSeverity.Warning" /> - identical to
+	///     <see cref="RootAccumulatingFactory" /> - so that release tracking sees a single, consistent AWT117;
+	///     the analyzer raises it to an error per report. <see cref="WellKnownDiagnosticTags.NotConfigurable" />,
+	///     not the severity, is what makes it non-suppressible.
+	/// </remarks>
+	public static readonly DiagnosticDescriptor RootAccumulatingFactoryStrict = new(
+		"AWT117",
+		RootAccumulatingFactory.Title,
+		RootAccumulatingFactory.MessageFormat,
+		RootAccumulatingFactory.Category,
+		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true,
+		description: RootAccumulatingFactory.Description,
+		helpLinkUri: RootAccumulatingFactory.HelpLinkUri,
+		WellKnownDiagnosticTags.NotConfigurable);
 }

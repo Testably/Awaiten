@@ -21,8 +21,12 @@ namespace Awaiten.SourceGenerators;
 ///     AWT117 is an analyzer (rather than a generator) diagnostic so that, under loose lifetime safety where
 ///     it is a warning, it can be suppressed in source with <c>#pragma warning disable AWT117</c> or
 ///     <c>[SuppressMessage]</c> - a generator-reported diagnostic cannot. Under strict lifetime safety (the
-///     default) it is escalated to an error, which is not suppressible, keeping the leak structurally
-///     impossible. The graph it walks is built by the same <c>AwaitenGenerator.BuildGraph</c> the generator uses.
+///     default) it is instead reported through <see cref="Diagnostics.RootAccumulatingFactoryStrict" />: an
+///     error carrying <see cref="WellKnownDiagnosticTags.NotConfigurable" />, so it cannot be suppressed by
+///     <c>#pragma</c>, <c>&lt;NoWarn&gt;</c> or an editorconfig severity override - the only opt-out is
+///     <c>LifetimeSafety.Loose</c>. That non-suppressibility is what keeps the leak structurally impossible
+///     under strict lifetime safety. The graph it walks is built by the same
+///     <c>AwaitenGenerator.BuildGraph</c> the generator uses.
 /// </remarks>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
@@ -31,7 +35,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 
 	/// <inheritdoc />
 	public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
-		ImmutableArray.Create(Diagnostics.RootAccumulatingFactory);
+		ImmutableArray.Create(Diagnostics.RootAccumulatingFactory, Diagnostics.RootAccumulatingFactoryStrict);
 
 	/// <inheritdoc />
 	public override void Initialize(AnalysisContext context)
@@ -67,12 +71,12 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 
 		// Re-derive the object graph; the registration diagnostics produced while building it are the
 		// generator's to report, so they are collected into a throwaway list and discarded here. Strict
-		// lifetime safety makes the root-accumulating pattern a hard error; loose leaves it a (suppressible)
-		// warning by passing no severity override (the descriptor's default Warning applies).
+		// lifetime safety reports the root-accumulating pattern through the non-suppressible error descriptor,
+		// loose reports the plain suppressible warning.
 		GraphModel graph = AwaitenGenerator.BuildGraph(type, compilation, new List<DiagnosticInfo>(), cancellationToken);
-		DiagnosticSeverity? severity = AwaitenGenerator.ReadStrict(type) ? DiagnosticSeverity.Error : null;
+		bool strict = AwaitenGenerator.ReadStrict(type);
 
-		foreach (DiagnosticInfo diagnostic in Detect(graph, severity))
+		foreach (DiagnosticInfo diagnostic in Detect(graph, strict))
 		{
 			report(ToDiagnostic(diagnostic, compilation));
 		}
@@ -97,7 +101,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 			: Diagnostic.Create(info.Descriptor, location, args);
 	}
 
-	private static List<DiagnosticInfo> Detect(GraphModel graph, DiagnosticSeverity? severity)
+	private static List<DiagnosticInfo> Detect(GraphModel graph, bool strict)
 	{
 		List<DiagnosticInfo> diagnostics = new();
 		// One report per holder+service, even when several root-owned owners reach the same factory.
@@ -106,7 +110,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 		{
 			if (IsRootOwned(graph.Instances[i]))
 			{
-				ReportFromOwner(i, graph, severity, reported, diagnostics);
+				ReportFromOwner(i, graph, strict, reported, diagnostics);
 			}
 		}
 
@@ -116,7 +120,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 	private static void ReportFromOwner(
 		int owner,
 		GraphModel graph,
-		DiagnosticSeverity? severity,
+		bool strict,
 		HashSet<string> reported,
 		List<DiagnosticInfo> diagnostics)
 	{
@@ -135,7 +139,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 				continue;
 			}
 
-			AddAccumulatingFuncs(node, graph, severity, reported, diagnostics);
+			AddAccumulatingFuncs(node, graph, strict, reported, diagnostics);
 			PushTransientDependencies(node, graph, stack);
 		}
 	}
@@ -143,10 +147,15 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 	private static void AddAccumulatingFuncs(
 		int node,
 		GraphModel graph,
-		DiagnosticSeverity? severity,
+		bool strict,
 		HashSet<string> reported,
 		List<DiagnosticInfo> diagnostics)
 	{
+		// Strict lifetime safety reports the non-suppressible error variant at error severity; loose reports the
+		// plain warning descriptor at its default warning severity (no override).
+		DiagnosticDescriptor descriptor = strict ? Diagnostics.RootAccumulatingFactoryStrict : Diagnostics.RootAccumulatingFactory;
+		DiagnosticSeverity? severity = strict ? DiagnosticSeverity.Error : null;
+
 		InstanceModel holder = graph.Instances[node];
 		foreach (ParameterModel parameter in holder.ConstructorParameters.AsArray())
 		{
@@ -156,7 +165,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 			}
 
 			diagnostics.Add(new DiagnosticInfo(
-				Diagnostics.RootAccumulatingFactory,
+				descriptor,
 				parameter.Location ?? graph.InstanceLocations[node],
 				new EquatableArray<string>([
 					AwaitenGenerator.Display(parameter.ServiceType),

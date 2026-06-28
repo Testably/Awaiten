@@ -50,6 +50,33 @@ public class LifetimeSafetyTests
 	}
 
 	[Fact]
+	public async Task Strict_TheRootAccumulatingFactoryError_CannotBeSuppressedInSource()
+	{
+		string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>("""
+		                                       using Awaiten;
+		                                       using System;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class Tool : IDisposable { public void Dispose() { } }
+
+		                                       #pragma warning disable AWT117
+		                                       public sealed class Depot { public Depot(Func<Tool> tools) { } }
+		                                       #pragma warning restore AWT117
+
+		                                       [Container]
+		                                       [Transient<Tool>]
+		                                       [Singleton<Depot>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(diagnostics.Any(d => d.Contains("error") && d.Contains("AWT117"))).IsTrue()
+			.Because("under strict lifetime safety AWT117 is reported through a NotConfigurable descriptor, so #pragma warning disable cannot silence it - the only opt-out is LifetimeSafety.Loose");
+	}
+
+	[Fact]
 	public async Task Loose_TheRootAccumulatingFactoryWarning_CanBeSuppressedInSource()
 	{
 		string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>("""
