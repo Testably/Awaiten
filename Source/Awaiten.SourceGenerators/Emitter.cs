@@ -145,9 +145,9 @@ internal static class Emitter
 		// generated lives on it directly. All state and resolution live on those types: the base Scope holds
 		// the static dispatch table plus scoped/transient logic and delegates singletons to the root, while
 		// the sealed Root subclass owns the singletons and is the usable instance (new MyContainer.Root()).
-		EmitScopeBaseClass(builder, depth, model, instances, names, serviceToIndex);
-		builder.AppendLine();
 		EmitRootScopeClass(builder, depth, model, instances, names, serviceToIndex);
+		builder.AppendLine();
+		EmitScopeBaseClass(builder, depth, model, instances, names, serviceToIndex);
 	}
 
 	/// <summary>
@@ -202,13 +202,14 @@ internal static class Emitter
 		EmitCacheFields(builder, body, instances, names, Lifetime.Scoped);
 		builder.AppendLine();
 		// The root is its own __root (this parameterless ctor is only ever reached through Root's base call,
-		// so the cast always holds); child scopes are handed the shared root.
-		Indent(builder, body).AppendLine("protected Scope()");
+		// so the cast always holds); child scopes are handed the shared root. The child ctor is private so a
+		// scope is only ever created through CreateScope(), never hand-built with a borrowed root.
+		Indent(builder, body).AppendLine("private protected Scope()");
 		Indent(builder, body).AppendLine("{");
 		Indent(builder, body + 1).AppendLine("__root = (Root)this;");
 		Indent(builder, body).AppendLine("}");
 		builder.AppendLine();
-		Indent(builder, body).AppendLine("public Scope(Root root)");
+		Indent(builder, body).AppendLine("private Scope(Root root)");
 		Indent(builder, body).AppendLine("{");
 		Indent(builder, body + 1).AppendLine("__root = root;");
 		Indent(builder, body).AppendLine("}");
