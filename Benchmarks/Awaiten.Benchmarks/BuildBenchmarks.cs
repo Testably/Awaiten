@@ -26,7 +26,7 @@ public class BuildBenchmarks : BenchmarksBase
 	[Benchmark(Baseline = true)]
 	public object Build_Awaiten()
 	{
-		return Size == 8 ? new AwaitenContainer8() : new AwaitenContainer256();
+		return Size == 8 ? new AwaitenContainer8.Root() : new AwaitenContainer256.Root();
 	}
 
 	[Benchmark]

@@ -20,7 +20,7 @@ namespace Awaiten.Benchmarks;
 public class ResolveBenchmarks : BenchmarksBase
 {
 	private IContainer _autofac = null!;
-	private IAwaitenContainer _awaiten = null!;
+	private IAwaitenScope _awaiten = null!;
 	private DryIoc.Container _dryioc = null!;
 	private IServiceProvider _jab = null!;
 	private Type _last = null!;
@@ -35,7 +35,7 @@ public class ResolveBenchmarks : BenchmarksBase
 		Type[] types = Markers.ServiceTypes(Size);
 		_last = types[^1];
 
-		_awaiten = Size == 8 ? new AwaitenContainer8() : new AwaitenContainer256();
+		_awaiten = Size == 8 ? new AwaitenContainer8.Root() : new AwaitenContainer256.Root();
 		_jab = Size == 8 ? new JabContainer8() : new JabContainer256();
 		_pure = Size == 8 ? new PureContainer8().Resolve : new PureContainer256().Resolve;
 

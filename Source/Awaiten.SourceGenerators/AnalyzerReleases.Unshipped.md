@@ -17,3 +17,4 @@
  AWT113  | Awaiten   | Error    | A Func<TArg...,T> relationship's runtime arguments do not match the service's [Arg] parameters
  AWT114  | Awaiten   | Error    | A service with [Arg] parameters is registered with a non-Transient lifetime
  AWT115  | Awaiten   | Error    | A service with [Arg] parameters is required as a plain or Lazy<T> dependency instead of a Func<TArg...,T>
+ AWT116  | Awaiten   | Error    | A [Container] class is not declared static

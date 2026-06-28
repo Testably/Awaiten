@@ -16,7 +16,7 @@ public partial class LifetimeTests
 	[Fact]
 	public async Task Scoped_ReturnsOneInstancePerScope()
 	{
-		using LifetimeContainer container = new();
+		using LifetimeContainer.Root container = new();
 		using IAwaitenScope scope1 = container.CreateScope();
 		using IAwaitenScope scope2 = container.CreateScope();
 
@@ -29,9 +29,37 @@ public partial class LifetimeTests
 	}
 
 	[Fact]
+	public async Task ChildScope_FromAScope_HasItsOwnScopedInstancesAndSharesTheSingletons()
+	{
+		using LifetimeContainer.Root container = new();
+		using IAwaitenScope parent = container.CreateScope();
+		using IAwaitenScope child = parent.CreateScope();
+
+		await That(child.Resolve<IScopedService>()).IsNotSameAs(parent.Resolve<IScopedService>());
+		await That(child.Resolve<ISingletonService>()).IsSameAs(container.Resolve<ISingletonService>());
+	}
+
+	[Fact]
+	public async Task DisposingAChildScope_DoesNotDisposeTheParentScope()
+	{
+		using LifetimeContainer.Root container = new();
+		using IAwaitenScope parent = container.CreateScope();
+		ScopedService parentScoped = (ScopedService)parent.Resolve<IScopedService>();
+
+		ScopedService childScoped;
+		using (IAwaitenScope child = parent.CreateScope())
+		{
+			childScoped = (ScopedService)child.Resolve<IScopedService>();
+		}
+
+		await That(childScoped.Disposed).IsTrue();
+		await That(parentScoped.Disposed).IsFalse();
+	}
+
+	[Fact]
 	public async Task Singleton_IsSharedAcrossScopesAndTheContainer()
 	{
-		using LifetimeContainer container = new();
+		using LifetimeContainer.Root container = new();
 		using IAwaitenScope scope1 = container.CreateScope();
 		using IAwaitenScope scope2 = container.CreateScope();
 
@@ -44,7 +72,7 @@ public partial class LifetimeTests
 	[Fact]
 	public async Task DisposingAScope_DisposesItsScopedInstances()
 	{
-		using LifetimeContainer container = new();
+		using LifetimeContainer.Root container = new();
 		ScopedService scoped;
 		using (IAwaitenScope scope = container.CreateScope())
 		{
@@ -58,7 +86,7 @@ public partial class LifetimeTests
 	[Fact]
 	public async Task DisposingAScope_DisposesTransientsCreatedWithinIt()
 	{
-		using LifetimeContainer container = new();
+		using LifetimeContainer.Root container = new();
 		TransientService transient;
 		using (IAwaitenScope scope = container.CreateScope())
 		{
@@ -72,7 +100,7 @@ public partial class LifetimeTests
 	public async Task DisposingTheContainer_DisposesSingletons()
 	{
 		SingletonService singleton;
-		using (LifetimeContainer container = new())
+		using (LifetimeContainer.Root container = new())
 		{
 			singleton = (SingletonService)container.Resolve<ISingletonService>();
 			await That(singleton.Disposed).IsFalse();
@@ -85,7 +113,7 @@ public partial class LifetimeTests
 	public async Task DisposingTheContainer_DisposesInReverseOrderOfCreation()
 	{
 		DisposalRecorder recorder;
-		using (DisposalOrderContainer container = new())
+		using (DisposalOrderContainer.Root container = new())
 		{
 			recorder = container.Resolve<DisposalRecorder>();
 			container.Resolve<Beta>();
@@ -100,7 +128,7 @@ public partial class LifetimeTests
 	[Fact]
 	public async Task MultiServiceRegistration_ResolvesOneSharedInstance()
 	{
-		using MultiServiceContainer container = new();
+		using MultiServiceContainer.Root container = new();
 
 		IReader reader = container.Resolve<IReader>();
 		IWriter writer = container.Resolve<IWriter>();
@@ -111,7 +139,7 @@ public partial class LifetimeTests
 	[Fact]
 	public async Task Singleton_ResolvedConcurrently_IsCreatedExactlyOnce()
 	{
-		using ConcurrencyContainer container = new();
+		using ConcurrencyContainer.Root container = new();
 
 		const int threadCount = 64;
 		CountedSingleton[] results = new CountedSingleton[threadCount];
@@ -145,7 +173,7 @@ public partial class LifetimeTests
 		ConcurrentBag<CountedTransient> produced = new();
 		CountedTransient[] captured;
 
-		using (ConcurrencyContainer container = new())
+		using (ConcurrencyContainer.Root container = new())
 		{
 			using ManualResetEventSlim start = new(false);
 			Task[] workers = new Task[threadCount];
@@ -178,7 +206,7 @@ public partial class LifetimeTests
 	[Fact]
 	public async Task ResolvingFromADisposedContainer_Throws()
 	{
-		LifetimeContainer container = new();
+		LifetimeContainer.Root container = new();
 		container.Dispose();
 
 		await That(() => container.Resolve<ISingletonService>()).Throws<ObjectDisposedException>();
@@ -187,7 +215,7 @@ public partial class LifetimeTests
 	[Fact]
 	public async Task ResolvingFromADisposedScope_Throws()
 	{
-		using LifetimeContainer container = new();
+		using LifetimeContainer.Root container = new();
 		IAwaitenScope scope = container.CreateScope();
 		scope.Dispose();
 
@@ -227,7 +255,7 @@ public partial class LifetimeTests
 #pragma warning disable AWT106
 	[Transient<TransientService>]
 #pragma warning restore AWT106
-	public partial class LifetimeContainer;
+	public static partial class LifetimeContainer;
 
 	public interface IReader;
 
@@ -238,7 +266,7 @@ public partial class LifetimeTests
 	[Container]
 	[Singleton<Store, IReader>]
 	[Singleton<Store, IWriter>]
-	public partial class MultiServiceContainer;
+	public static partial class MultiServiceContainer;
 
 	public sealed class DisposalRecorder
 	{
@@ -268,7 +296,7 @@ public partial class LifetimeTests
 	[Singleton<DisposalRecorder>]
 	[Singleton<Alpha>]
 	[Singleton<Beta>]
-	public partial class DisposalOrderContainer;
+	public static partial class DisposalOrderContainer;
 
 	public sealed class ConstructionCounter
 	{
@@ -299,5 +327,5 @@ public partial class LifetimeTests
 #pragma warning disable AWT106
 	[Transient<CountedTransient>]
 #pragma warning restore AWT106
-	public partial class ConcurrencyContainer;
+	public static partial class ConcurrencyContainer;
 }

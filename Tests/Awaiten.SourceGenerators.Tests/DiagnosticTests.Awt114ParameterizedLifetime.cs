@@ -21,7 +21,7 @@ public partial class DiagnosticTests
 
 			                                       [Container]
 			                                       [Singleton<Robot>]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
 			                                       }
 			                                       """);
@@ -45,7 +45,7 @@ public partial class DiagnosticTests
 
 			                                       [Container]
 			                                       [Scoped<Robot>]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
 			                                       }
 			                                       """);
@@ -69,7 +69,7 @@ public partial class DiagnosticTests
 
 			                                       [Container]
 			                                       [Transient<Robot>]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
 			                                       }
 			                                       """);

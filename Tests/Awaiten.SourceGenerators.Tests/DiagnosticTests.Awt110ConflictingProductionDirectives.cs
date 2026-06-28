@@ -1,5 +1,3 @@
-using System.Linq;
-
 namespace Awaiten.SourceGenerators.Tests;
 
 public partial class DiagnosticTests
@@ -19,14 +17,14 @@ public partial class DiagnosticTests
 
 			                                       [Container]
 			                                       [Singleton<IService>(Factory = nameof(Make), Instance = nameof(_field))]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
-			                                       	private IService Make() => new Service();
-			                                       	private readonly IService _field = new Service();
+			                                       	private static IService Make() => new Service();
+			                                       	private static readonly IService _field = new Service();
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT110"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT110*").AsWildcard()
 				.Because("Factory and Instance are mutually exclusive directives");
 		}
 	}

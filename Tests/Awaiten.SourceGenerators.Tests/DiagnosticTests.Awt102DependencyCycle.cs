@@ -21,12 +21,12 @@ public partial class DiagnosticTests
 			                                       [Container]
 			                                       [Singleton<A>]
 			                                       [Singleton<B>]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT102"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT102*").AsWildcard()
 				.Because("the Func<B> defers resolution, so the A -> B -> A edge is not a hard cycle");
 		}
 
@@ -44,14 +44,14 @@ public partial class DiagnosticTests
 			                                       [Container]
 			                                       [Singleton<A>]
 			                                       [Singleton<B>]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
 			                                       }
 			                                       """);
 
 			string[] cycleDiagnostics = result.Diagnostics.Where(d => d.Contains("AWT102")).ToArray();
 			await That(cycleDiagnostics).IsNotEmpty();
-			await That(cycleDiagnostics.Any(d => d.Contains("->"))).IsTrue();
+			await That(cycleDiagnostics).Contains("*->*").AsWildcard();
 		}
 	}
 }

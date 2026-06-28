@@ -62,6 +62,18 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 		List<DiagnosticInfo> diagnostics = new();
 
+		// The container must be a static class: it is a pure definition (registrations plus static factory
+		// and instance members) and the usable instance is the generated Root. A non-static class is an
+		// error; the emitter still emits a throwing Root so consumers fail on this AWT116 rather than on a
+		// cascade of missing-member errors.
+		if (!containerSymbol.IsStatic)
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.NonStaticContainer,
+				LocationInfo.From(containerSymbol.Locations.FirstOrDefault()),
+				new EquatableArray<string>([Display(containerSymbol.ToDisplayString(FullyQualified)),])));
+		}
+
 		// Coalesce registrations by implementation: the first registration per service type wins, and
 		// registrations of the same implementation share one instance. Declaring one implementation with
 		// two different lifetimes is reported as AWT107.
@@ -263,7 +275,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		// interface (so the not-instantiable check is skipped) and it contributes no graph edges.
 		if (info.Production == ProductionKind.Instance)
 		{
-			bool memberIsStatic = ValidateInstanceMember(containerSymbol, info, compilation, diagnostics);
+			ValidateInstanceMember(containerSymbol, info, compilation, diagnostics);
 			return new InstanceModel(
 				info.ImplementationType,
 				info.Symbol.Name,
@@ -273,8 +285,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 				false,
 				info.Symbol.IsReferenceType,
 				ProductionKind.Instance,
-				info.ProductionMember,
-				memberIsStatic);
+				info.ProductionMember);
 		}
 
 		// Select the producer: a container method (Factory) or the implementation's constructor (the
@@ -332,8 +343,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			disposable,
 			info.Symbol.IsReferenceType,
 			info.Production,
-			info.ProductionMember,
-			producer is { IsStatic: true, });
+			info.ProductionMember);
 
 		static bool ImplementsInterface(ITypeSymbol type, INamedTypeSymbol @interface)
 		{
@@ -406,7 +416,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	///     <see cref="Diagnostics.InvalidInstance">AWT109</see> when no accessible field or property of
 	///     that name (on the container or an accessible base type) holds the registered type.
 	/// </summary>
-	private static bool ValidateInstanceMember(
+	private static void ValidateInstanceMember(
 		INamedTypeSymbol containerSymbol,
 		ImplInfo info,
 		Compilation compilation,
@@ -422,7 +432,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			};
 			if (memberType is not null && compilation.HasImplicitConversion(memberType, info.Symbol))
 			{
-				return member.IsStatic;
+				return;
 			}
 		}
 
@@ -430,7 +440,6 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			Diagnostics.InvalidInstance,
 			info.Location,
 			new EquatableArray<string>([Display(info.ServiceTypes[0]), info.ProductionMember!,])));
-		return false;
 	}
 
 	private static IMethodSymbol? SelectConstructor(

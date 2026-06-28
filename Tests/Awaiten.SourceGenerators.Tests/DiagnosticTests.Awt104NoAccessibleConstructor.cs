@@ -1,5 +1,3 @@
-using System.Linq;
-
 namespace Awaiten.SourceGenerators.Tests;
 
 public partial class DiagnosticTests
@@ -18,12 +16,12 @@ public partial class DiagnosticTests
 
 			                                       [Container]
 			                                       [Singleton<Foo>]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT104"))).IsTrue();
+			await That(result.Diagnostics).Contains("*AWT104*").AsWildcard();
 		}
 	}
 }

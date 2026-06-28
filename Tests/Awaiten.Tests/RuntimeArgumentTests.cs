@@ -13,7 +13,7 @@ public partial class RuntimeArgumentTests
 	[Fact]
 	public async Task Func_WithRuntimeArgument_BuildsTheServiceFromBothTheArgumentAndTheGraph()
 	{
-		using RuntimeArgumentContainer container = new();
+		using RuntimeArgumentContainer.Root container = new();
 
 		Workshop workshop = container.Resolve<Workshop>();
 		Robot first = workshop.Build("R2");
@@ -31,7 +31,7 @@ public partial class RuntimeArgumentTests
 	[Fact]
 	public async Task Func_WithTwoRuntimeArguments_ForwardsThemPositionally()
 	{
-		using RuntimeArgumentContainer container = new();
+		using RuntimeArgumentContainer.Root container = new();
 
 		Func<string, int, Gadget> factory = container.Resolve<Func<string, int, Gadget>>();
 		Gadget gadget = factory("Bender", 42);
@@ -43,7 +43,7 @@ public partial class RuntimeArgumentTests
 	[Fact]
 	public async Task Func_BoundToAScope_ReleasesTheBuiltDisposablesWithThatScope()
 	{
-		using RuntimeArgumentContainer container = new();
+		using RuntimeArgumentContainer.Root container = new();
 
 		Tool tool;
 		using (IAwaitenScope scope = container.CreateScope())
@@ -62,7 +62,7 @@ public partial class RuntimeArgumentTests
 	[Fact]
 	public async Task Func_OverAParameterizedServiceThatItselfTakesRuntimeArguments_Composes()
 	{
-		using RuntimeArgumentContainer container = new();
+		using RuntimeArgumentContainer.Root container = new();
 
 		Func<string, Crate> crates = container.Resolve<Func<string, Crate>>();
 		Crate crate = crates("export");
@@ -83,7 +83,7 @@ public partial class RuntimeArgumentTests
 	[Fact]
 	public async Task Factory_WithRuntimeArgument_ForwardsItToTheFactoryMethod()
 	{
-		using FactoryArgContainer container = new();
+		using FactoryArgContainer.Root container = new();
 
 		Func<string, Badge> badges = container.Resolve<Func<string, Badge>>();
 
@@ -95,7 +95,7 @@ public partial class RuntimeArgumentTests
 	[Fact]
 	public async Task Arg_WhoseTypeIsAlsoRegistered_IsSuppliedAtRuntimeRatherThanFromTheGraph()
 	{
-		using RuntimeArgumentContainer container = new();
+		using RuntimeArgumentContainer.Root container = new();
 
 		Engine supplied = new();
 		Func<Engine, Stamp> stamps = container.Resolve<Func<Engine, Stamp>>();
@@ -108,7 +108,7 @@ public partial class RuntimeArgumentTests
 	[Fact]
 	public async Task Func_BoundToASingleton_ReleasesTheBuiltDisposablesWithTheContainer()
 	{
-		RuntimeArgumentContainer container = new();
+		RuntimeArgumentContainer.Root container = new();
 
 		Depot depot = container.Resolve<Depot>();
 		Tool tool = depot.Make(1);
@@ -231,7 +231,7 @@ public partial class RuntimeArgumentTests
 	[Transient<Stamp>]
 	[Singleton<Depot>]
 	[Singleton<Workshop>]
-	public partial class RuntimeArgumentContainer;
+	public static partial class RuntimeArgumentContainer;
 #pragma warning restore AWT106
 
 	public sealed class Badge
@@ -245,7 +245,7 @@ public partial class RuntimeArgumentTests
 	// constructor, so the produced type need not declare [Arg] itself.
 	[Container]
 	[Transient<Badge>(Factory = nameof(MakeBadge))]
-	public partial class FactoryArgContainer
+	public static partial class FactoryArgContainer
 	{
 		private static Badge MakeBadge([Arg] string code) => new(code);
 	}

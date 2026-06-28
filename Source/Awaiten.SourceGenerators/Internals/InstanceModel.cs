@@ -11,9 +11,8 @@ namespace Awaiten.SourceGenerators.Internals;
 ///     implementation are coalesced into one instance, so a multi-service registration shares a single
 ///     object. <see cref="Production" /> records how the instance is produced: a constructor (the
 ///     default), a container <see cref="ProductionMember">method</see> (Factory), or a pre-built
-///     container <see cref="ProductionMember">member</see> (Instance);
-///     <see cref="ProductionMemberIsStatic" /> captures whether that factory method or instance member is
-///     static (an instance member is reached through the container, a static one by simple name).
+///     container <see cref="ProductionMember">member</see> (Instance). The container is a static class, so
+///     a factory method or instance member is always reached by simple name.
 /// </summary>
 internal sealed record InstanceModel(
 	string ImplementationType,
@@ -24,8 +23,7 @@ internal sealed record InstanceModel(
 	bool IsDisposable,
 	bool IsReferenceType,
 	ProductionKind Production = ProductionKind.Constructor,
-	string? ProductionMember = null,
-	bool ProductionMemberIsStatic = false)
+	string? ProductionMember = null)
 {
 	/// <summary>
 	///     The ordered runtime-argument types of this instance: the service types of its <c>[Arg]</c>-marked

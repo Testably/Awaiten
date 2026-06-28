@@ -11,7 +11,7 @@ public partial class ExampleTests
 	[Fact]
 	public async Task Container_ResolvesTheRegisteredService()
 	{
-		Container container = new();
+		Container.Root container = new();
 
 		IMyService myService = container.Resolve<IMyService>();
 
@@ -25,5 +25,5 @@ public partial class ExampleTests
 	/// </summary>
 	[Container]
 	[Singleton<MyService, IMyService>]
-	public partial class Container;
+	public static partial class Container;
 }

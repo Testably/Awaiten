@@ -4,9 +4,10 @@ using Awaiten.SourceGenerators.Internals;
 namespace Awaiten.SourceGenerators;
 
 /// <summary>
-///     Emits the <c>partial class</c> implementation of a container from its
-///     <see cref="ContainerModel" />: thread-safe singletons, a nested <c>Scope</c> type for scoped
-///     instances, transient construction, and synchronous disposal. Enclosing types are re-opened as
+///     Emits the generated members of a container from its <see cref="ContainerModel" />: a base
+///     <c>Scope</c> type holding the resolution logic (scoped instances, transient construction, synchronous
+///     disposal) and a sealed <c>Root</c> subclass owning the thread-safe singletons. The <c>[Container]</c>
+///     class itself is a static definition and carries no generated state. Enclosing types are re-opened as
 ///     <c>partial</c> so the container can be a nested type. Per-instance members are named after the
 ///     implementation type (e.g. <c>ResolveGreeter</c>, <c>_greeter</c>), with a numeric suffix added
 ///     only when two implementations would otherwise collide.
@@ -36,8 +37,7 @@ internal static class Emitter
 			depth++;
 		}
 
-		Indent(builder, depth).Append("partial class ").Append(model.TypeName)
-			.AppendLine(" : global::Awaiten.IAwaitenContainer");
+		Indent(builder, depth).Append("static partial class ").AppendLine(model.TypeName);
 		Indent(builder, depth).AppendLine("{");
 
 		if (model.HasErrors)
@@ -83,27 +83,39 @@ internal static class Emitter
 	}
 
 	/// <summary>
-	///     Appends <c>, global::Awaiten.IAwaitenResolver&lt;S&gt;</c> for each registered service type to a
-	///     just-written base list, so the container and its scope expose a typed resolution fast path. Service
-	///     types are unique across instances (registrations are coalesced), but the set guards against an
-	///     accidental duplicate base which would not compile.
+	///     Each registered service type paired with the instance that produces it, deduplicated on the service
+	///     type. Registrations are coalesced upstream so service types are already unique, but deduping here
+	///     keeps the typed base list and its explicit implementations in lockstep: a duplicate base or a
+	///     duplicate explicit implementation would each fail to compile, so neither must be emitted twice.
+	///     A parameterized service is excluded: it is not directly resolvable (only through its
+	///     <c>Func&lt;TArg…, T&gt;</c> factory), so it gets no typed resolution fast path.
 	/// </summary>
-	private static void EmitGenericResolverBases(StringBuilder builder, ContainerModel model)
+	private static IEnumerable<(string Service, int Index)> UniqueServices(InstanceModel[] instances)
 	{
 		HashSet<string> seen = new(StringComparer.Ordinal);
-		foreach (InstanceModel instance in model.Instances.AsArray())
+		for (int i = 0; i < instances.Length; i++)
 		{
-			// A parameterized service is not directly resolvable (only through its Func<TArg…, T> factory),
-			// so it gets no typed resolution fast path.
-			if (instance.IsParameterized)
+			if (instances[i].IsParameterized)
 			{
 				continue;
 			}
 
-			foreach (string service in instance.ServiceTypes.AsArray().Where(seen.Add))
+			foreach (string service in instances[i].ServiceTypes.AsArray().Where(seen.Add))
 			{
-				builder.Append(", global::Awaiten.IAwaitenResolver<").Append(service).Append('>');
+				yield return (service, i);
 			}
+		}
+	}
+
+	/// <summary>
+	///     Appends <c>, global::Awaiten.IAwaitenResolver&lt;S&gt;</c> for each registered service type to a
+	///     just-written base list, so the scope (and its root) exposes a typed resolution fast path.
+	/// </summary>
+	private static void EmitGenericResolverBases(StringBuilder builder, InstanceModel[] instances)
+	{
+		foreach ((string service, int _) in UniqueServices(instances))
+		{
+			builder.Append(", global::Awaiten.IAwaitenResolver<").Append(service).Append('>');
 		}
 	}
 
@@ -115,21 +127,10 @@ internal static class Emitter
 	/// </summary>
 	private static void EmitGenericResolverImpls(StringBuilder builder, int depth, InstanceModel[] instances, Names names)
 	{
-		for (int i = 0; i < instances.Length; i++)
+		foreach ((string service, int index) in UniqueServices(instances))
 		{
-			// A parameterized service has no typed resolver: its resolver takes the runtime arguments, so it
-			// is reached only through its Func<TArg…, T> factory in the Type-based dispatch table.
-			if (instances[i].IsParameterized)
-			{
-				continue;
-			}
-
-			string resolver = names.Resolver(i);
-			foreach (string service in instances[i].ServiceTypes.AsArray())
-			{
-				Indent(builder, depth).Append(service).Append(" global::Awaiten.IAwaitenResolver<")
-					.Append(service).Append(">.Resolve() => ").Append(resolver).AppendLine("();");
-			}
+			Indent(builder, depth).Append(service).Append(" global::Awaiten.IAwaitenResolver<")
+				.Append(service).Append(">.Resolve() => ").Append(names.Resolver(index)).AppendLine("();");
 		}
 	}
 
@@ -155,99 +156,14 @@ internal static class Emitter
 	{
 		InstanceModel[] instances = model.Instances.AsArray();
 
-		// The container is a facade: it owns only the static dispatch table and a lazily-created root scope,
-		// and forwards the resolver surface (kept for the DI bridge) to it. All resolution lives in the nested
-		// Scope hierarchy - the base Scope holds scoped/transient logic and delegates singletons to the root,
-		// while the RootScope subclass owns the singletons. The dispatch table is read by the Scope through
-		// the container type.
-		List<DispatchEntry> entries = BuildDispatchEntries(instances, names);
-		if (entries.Count > 0)
-		{
-			EmitDispatchTable(builder, depth, entries);
-			builder.AppendLine();
-		}
-
-		Indent(builder, depth).AppendLine("private volatile bool __disposed;");
-		Indent(builder, depth).AppendLine("private volatile Scope? __root;");
+		// The [Container] class is a pure static definition: it carries the registration attributes and any
+		// static factory or instance members they name, and holds the generated Scope/Root types - nothing
+		// generated lives on it directly. All state and resolution live on those types: the base Scope holds
+		// the static dispatch table plus scoped/transient logic and delegates singletons to the root, while
+		// the sealed Root subclass owns the singletons and is the usable instance (new MyContainer.Root()).
+		EmitRootClass(builder, depth, instances, names, serviceToIndex);
 		builder.AppendLine();
-		EmitRootProperty(builder, depth);
-		builder.AppendLine();
-		EmitContainerForwarding(builder, depth);
-		builder.AppendLine();
-		EmitContainerDispose(builder, depth);
-		builder.AppendLine();
-		EmitScopeBaseClass(builder, depth, model, instances, names, serviceToIndex);
-		builder.AppendLine();
-		EmitRootScopeClass(builder, depth, model, instances, names, serviceToIndex);
-	}
-
-	/// <summary>
-	///     Emits the lazily-created root <c>Scope</c> property. The root is built on first use under the
-	///     singleton gate (rather than in a constructor, which would clash with a user-defined one), and acts
-	///     as the default scope that the container forwards to.
-	/// </summary>
-	private static void EmitRootProperty(StringBuilder builder, int depth)
-	{
-		Indent(builder, depth).AppendLine("public Scope Root");
-		Indent(builder, depth).AppendLine("{");
-		Indent(builder, depth + 1).AppendLine("get");
-		Indent(builder, depth + 1).AppendLine("{");
-		// Guard against use after disposal here (not just in the resolvers): otherwise the lazy getter
-		// would silently rebuild a fresh root scope on a disposed container.
-		EmitDisposedGuard(builder, depth + 2);
-		Indent(builder, depth + 2).AppendLine("Scope? __current = __root;");
-		Indent(builder, depth + 2).AppendLine("if (__current is not null)");
-		Indent(builder, depth + 2).AppendLine("{");
-		Indent(builder, depth + 3).AppendLine("return __current;");
-		Indent(builder, depth + 2).AppendLine("}");
-		builder.AppendLine();
-		Indent(builder, depth + 2).AppendLine("lock (this)");
-		Indent(builder, depth + 2).AppendLine("{");
-		EmitDisposedGuard(builder, depth + 3);
-		Indent(builder, depth + 3).AppendLine("return __root ??= new RootScope(this);");
-		Indent(builder, depth + 2).AppendLine("}");
-		Indent(builder, depth + 1).AppendLine("}");
-		Indent(builder, depth).AppendLine("}");
-	}
-
-	/// <summary>
-	///     Emits the container's <c>IAwaitenContainer</c> surface as thin forwarders to the root scope. The
-	///     public <c>CreateScope</c> returns the concrete <c>Scope</c> (so callers holding the container
-	///     resolve through a sealed receiver); the interface contract is met explicitly.
-	/// </summary>
-	private static void EmitContainerForwarding(StringBuilder builder, int depth)
-	{
-		Indent(builder, depth).AppendLine("public object Resolve(global::System.Type serviceType) => Root.Resolve(serviceType);");
-		Indent(builder, depth).AppendLine(
-			"public bool TryResolve(global::System.Type serviceType, [global::System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? instance) => Root.TryResolve(serviceType, out instance);");
-		Indent(builder, depth).AppendLine("public Scope CreateScope() => Root.CreateScope();");
-		Indent(builder, depth).AppendLine("global::Awaiten.IAwaitenScope global::Awaiten.IAwaitenContainer.CreateScope() => Root.CreateScope();");
-	}
-
-	/// <summary>
-	///     Emits the container's disposal: it owns nothing but the root scope, so disposing the container
-	///     disposes the root (which in turn disposes the singletons and the root's own scoped instances).
-	/// </summary>
-	private static void EmitContainerDispose(StringBuilder builder, int depth)
-	{
-		Indent(builder, depth).AppendLine("public void Dispose()");
-		Indent(builder, depth).AppendLine("{");
-		Indent(builder, depth + 1).AppendLine("Scope? __rootToDispose;");
-		Indent(builder, depth + 1).AppendLine("lock (this)");
-		Indent(builder, depth + 1).AppendLine("{");
-		Indent(builder, depth + 2).AppendLine("if (__disposed)");
-		Indent(builder, depth + 2).AppendLine("{");
-		Indent(builder, depth + 3).AppendLine("return;");
-		Indent(builder, depth + 2).AppendLine("}");
-		builder.AppendLine();
-		Indent(builder, depth + 2).AppendLine("__disposed = true;");
-		Indent(builder, depth + 2).AppendLine("__rootToDispose = __root;");
-		Indent(builder, depth + 2).AppendLine("__root = null;");
-		Indent(builder, depth + 1).AppendLine("}");
-		builder.AppendLine();
-		// Dispose outside the lock so user code does not run under the lock.
-		Indent(builder, depth + 1).AppendLine("__rootToDispose?.Dispose();");
-		Indent(builder, depth).AppendLine("}");
+		EmitScopeBaseClass(builder, depth, instances, names, serviceToIndex);
 	}
 
 	/// <summary>
@@ -271,33 +187,61 @@ internal static class Emitter
 	/// <summary>
 	///     Emits the base <c>Scope</c>: the single home of resolution logic. It caches scoped instances on
 	///     itself, constructs transients, and resolves singletons through <c>protected virtual</c> delegators
-	///     that the <c>RootScope</c> subclass overrides. Child (request) scopes are instances of this type.
+	///     that the <c>Root</c> subclass overrides. Child (request) scopes are instances of this type.
 	/// </summary>
-	private static void EmitScopeBaseClass(StringBuilder builder, int depth, ContainerModel model, InstanceModel[] instances, Names names, Dictionary<string, int> serviceToIndex)
+	private static void EmitScopeBaseClass(StringBuilder builder, int depth, InstanceModel[] instances, Names names, Dictionary<string, int> serviceToIndex)
 	{
 		Indent(builder, depth).Append("public class Scope : global::Awaiten.IAwaitenScope");
-		EmitGenericResolverBases(builder, model);
+		EmitGenericResolverBases(builder, instances);
 		builder.AppendLine();
 		Indent(builder, depth).AppendLine("{");
 		int body = depth + 1;
 
-		Indent(builder, body).Append("protected readonly ").Append(model.TypeName).AppendLine(" __container;");
-		// Synchronization is on the owner instance itself (no separate gate object to allocate); the
-		// disposables list is created lazily on first use. These are protected so the RootScope subclass's
-		// singleton overrides share them.
+		// The dispatch table lives on the Scope (the only reader, through TryResolve); it is static, so it is
+		// built once for the whole container, and reached by simple name from this type and its Root subclass.
+		List<DispatchEntry> entries = BuildDispatchEntries(instances, names);
+		if (entries.Count > 0)
+		{
+			EmitDispatchTable(builder, body, entries);
+			builder.AppendLine();
+		}
+
+		// The (sealed) root scope this scope resolves singletons through. Holding the root directly lets a
+		// child scope reach a singleton with a devirtualized call instead of a virtual override dispatch; it
+		// is the root itself on the Root subclass, and shared down every child scope.
+		Indent(builder, body).AppendLine("protected readonly Root __root;");
+		// Synchronization is on a private gate object rather than the owner instance: a Scope/Root is
+		// publicly reachable, and locking on it would let consumer code (lock (scope)) interfere with
+		// resolution and disposal. The disposables list is created lazily on first use. These are protected
+		// so the Root subclass's singleton overrides share the same gate and list.
+		Indent(builder, body).AppendLine("protected readonly object __gate = new object();");
 		Indent(builder, body).AppendLine("protected volatile bool __disposed;");
 		Indent(builder, body).AppendLine("protected global::System.Collections.Generic.List<object>? __disposables;");
 		EmitCacheFields(builder, body, instances, names, Lifetime.Scoped);
 		builder.AppendLine();
-		Indent(builder, body).Append("public Scope(").Append(model.TypeName).AppendLine(" container) => __container = container;");
+		// The root is its own __root (this parameterless ctor is only ever reached through Root's base call,
+		// so the cast always holds); child scopes are handed the shared root. The child ctor is private so a
+		// scope is only ever created through CreateScope(), never hand-built with a borrowed root.
+		Indent(builder, body).AppendLine("private protected Scope()");
+		Indent(builder, body).AppendLine("{");
+		Indent(builder, body + 1).AppendLine("__root = (Root)this;");
+		Indent(builder, body).AppendLine("}");
 		builder.AppendLine();
-		EmitResolutionApi(builder, body, instances, names, true, model.TypeName);
+		Indent(builder, body).AppendLine("private Scope(Root root)");
+		Indent(builder, body).AppendLine("{");
+		Indent(builder, body + 1).AppendLine("__root = root;");
+		Indent(builder, body).AppendLine("}");
+		builder.AppendLine();
+		EmitResolutionApi(builder, body, instances, names);
 		builder.AppendLine();
 		EmitGenericResolveMethod(builder, body);
 		builder.AppendLine();
-		// A scope is the single source of scopes: nesting shares the same container (and therefore the same
-		// root singletons). A child scope's lifetime is owned by its caller; the parent does not track it.
-		Indent(builder, body).AppendLine("public Scope CreateScope() => new Scope(__container);");
+		// A scope is the single source of scopes: nesting shares the same root (and therefore the same
+		// singletons), so a child created from a child is no different from one created from the root. A
+		// child scope's lifetime is owned by its caller; the parent does not track it. The concrete return
+		// type spares callers holding a Scope an interface hop; the interface contract is met explicitly.
+		Indent(builder, body).AppendLine("public Scope CreateScope() => new Scope(__root);");
+		Indent(builder, body).AppendLine("global::Awaiten.IAwaitenScope global::Awaiten.IAwaitenScope.CreateScope() => CreateScope();");
 		builder.AppendLine();
 		EmitGenericResolverImpls(builder, body, instances, names);
 
@@ -314,26 +258,27 @@ internal static class Emitter
 	}
 
 	/// <summary>
-	///     Emits the <c>RootScope</c>: the root scope where singletons (and pre-built Instances) physically
-	///     live. It overrides the base's virtual singleton delegators with the real caching/member access, so
-	///     a child scope delegating to <c>__container.Root</c> lands here.
+	///     Emits the <c>Root</c>: the root scope where singletons (and pre-built Instances) physically live,
+	///     and the usable container instance (<c>new MyContainer.Root()</c>). It overrides the base's virtual
+	///     singleton delegators with the real caching/member access, so a child scope delegating through
+	///     <c>__root</c> lands here.
 	/// </summary>
-	private static void EmitRootScopeClass(StringBuilder builder, int depth, ContainerModel model, InstanceModel[] instances, Names names, Dictionary<string, int> serviceToIndex)
+	private static void EmitRootClass(StringBuilder builder, int depth, InstanceModel[] instances, Names names, Dictionary<string, int> serviceToIndex)
 	{
-		Indent(builder, depth).AppendLine("public sealed class RootScope : Scope");
+		Indent(builder, depth).AppendLine("public sealed class Root : Scope");
 		Indent(builder, depth).AppendLine("{");
 		int body = depth + 1;
 
 		EmitCacheFields(builder, body, instances, names, Lifetime.Singleton);
 		builder.AppendLine();
-		Indent(builder, body).Append("public RootScope(").Append(model.TypeName).AppendLine(" container) : base(container)");
+		Indent(builder, body).AppendLine("public Root() : base()");
 		Indent(builder, body).AppendLine("{");
 		Indent(builder, body).AppendLine("}");
 
 		for (int i = 0; i < instances.Length; i++)
 		{
 			// A parameterized service is never cached on the root; its single fresh-per-call resolver lives
-			// on the base Scope (protected) and the RootScope inherits it.
+			// on the base Scope (protected) and the Root inherits it.
 			if (instances[i].IsParameterized
 			    || (instances[i].Lifetime != Lifetime.Singleton && instances[i].Production != ProductionKind.Instance))
 			{
@@ -378,15 +323,9 @@ internal static class Emitter
 		Indent(builder, depth).AppendLine("}");
 	}
 
-	private static void EmitResolutionApi(StringBuilder builder, int depth, InstanceModel[] instances, Names names, bool isScope, string containerTypeName)
+	private static void EmitResolutionApi(StringBuilder builder, int depth, InstanceModel[] instances, Names names)
 	{
 		List<DispatchEntry> entries = BuildDispatchEntries(instances, names);
-
-		if (entries.Count > 0 && !isScope)
-		{
-			EmitDispatchTable(builder, depth, entries);
-			builder.AppendLine();
-		}
 
 		Indent(builder, depth).AppendLine("public object Resolve(global::System.Type serviceType)");
 		Indent(builder, depth).AppendLine("{");
@@ -410,8 +349,7 @@ internal static class Emitter
 			return;
 		}
 
-		string table = isScope ? containerTypeName + ".__dispatch" : "__dispatch";
-		Indent(builder, depth + 1).Append("if (").Append(table).AppendLine(".TryGetValue(serviceType, out int __case))");
+		Indent(builder, depth + 1).AppendLine("if (__dispatch.TryGetValue(serviceType, out int __case))");
 		Indent(builder, depth + 1).AppendLine("{");
 		Indent(builder, depth + 2).AppendLine("switch (__case)");
 		Indent(builder, depth + 2).AppendLine("{");
@@ -511,9 +449,9 @@ internal static class Emitter
 	}
 
 	/// <summary>
-	///     Emits the static <c>__dispatch</c> table mapping each service type to its case number. It is
-	///     <c>static</c> so it is built once per container type, and emitted only on the container; the nested
-	///     Scope reuses it through the container type.
+	///     Emits the static <c>__dispatch</c> table mapping each service type to its case number. It lives on
+	///     the base <c>Scope</c> and is <c>static</c>, so it is built once and shared by every scope and the
+	///     <c>Root</c> subclass that inherits it.
 	/// </summary>
 	private static void EmitDispatchTable(StringBuilder builder, int depth, List<DispatchEntry> entries)
 	{
@@ -531,10 +469,10 @@ internal static class Emitter
 	/// <summary>
 	///     Emits a resolver on the base <c>Scope</c>. A parameterized service (with <c>[Arg]</c> parameters)
 	///     takes those runtime arguments and is built fresh per call (regardless of its declared lifetime),
-	///     so it lives here as a <c>protected</c> method the RootScope can also call. Otherwise
+	///     so it lives here as a <c>protected</c> method the <c>Root</c> can also call. Otherwise
 	///     singleton-owned services (singletons and pre-built Instances) become a <c>protected virtual</c>
-	///     delegator to <c>__container.Root</c> (overridden by the RootScope); scoped services cache on the
-	///     scope; transients construct fresh.
+	///     delegator to <c>__root</c> (overridden by the <c>Root</c>); scoped services cache on the scope;
+	///     transients construct fresh.
 	/// </summary>
 	private static void EmitScopeResolver(StringBuilder builder, int depth, int index, InstanceModel instance, InstanceModel[] instances, Names names, Dictionary<string, int> serviceToIndex)
 	{
@@ -546,7 +484,7 @@ internal static class Emitter
 			string[] argTypes = instance.ArgTypes();
 			string signature = string.Join(", ", argTypes.Select((t, i) => $"{t} a{i}"));
 			string parameterizedConstruction = EmitConstruction(instance, instances, names, serviceToIndex, false);
-			// Reachable from the RootScope (a singleton's Func<TArg…, T> binds it there), so it is protected.
+			// Reachable from the Root (a singleton's Func<TArg…, T> binds it there), so it is protected.
 			EmitFreshResolver(builder, depth, new FreshResolver("protected", type, resolver, signature, parameterizedConstruction, instance.IsDisposable));
 			return;
 		}
@@ -556,7 +494,7 @@ internal static class Emitter
 			Indent(builder, depth).Append("protected virtual ").Append(type).Append(' ').Append(resolver).AppendLine("()");
 			Indent(builder, depth).AppendLine("{");
 			EmitDisposedGuard(builder, depth + 1);
-			Indent(builder, depth + 1).Append("return __container.Root.").Append(resolver).AppendLine("();");
+			Indent(builder, depth + 1).Append("return __root.").Append(resolver).AppendLine("();");
 			Indent(builder, depth).AppendLine("}");
 			return;
 		}
@@ -589,7 +527,7 @@ internal static class Emitter
 		if (resolver.Disposable)
 		{
 			Indent(builder, depth + 1).Append(type).Append(" created = ").Append(construction).AppendLine(";");
-			Indent(builder, depth + 1).AppendLine("lock (this)");
+			Indent(builder, depth + 1).AppendLine("lock (__gate)");
 			Indent(builder, depth + 1).AppendLine("{");
 			Indent(builder, depth + 2).AppendLine("if (__disposed)");
 			Indent(builder, depth + 2).AppendLine("{");
@@ -611,9 +549,9 @@ internal static class Emitter
 	}
 
 	/// <summary>
-	///     Emits a singleton resolver on the <c>RootScope</c> as a <c>protected override</c>: a pre-built
-	///     Instance returns the container member directly (an instance member through <c>__container</c>, a
-	///     static one by simple name); a constructed/factory singleton is cached once under the lock.
+	///     Emits a singleton resolver on the <c>Root</c> as a <c>protected override</c>: a pre-built Instance
+	///     returns the static container member by simple name; a constructed/factory singleton is cached once
+	///     under the lock.
 	/// </summary>
 	private static void EmitRootResolver(StringBuilder builder, int depth, int index, InstanceModel instance, InstanceModel[] instances, Names names, Dictionary<string, int> serviceToIndex)
 	{
@@ -622,11 +560,11 @@ internal static class Emitter
 
 		if (instance.Production == ProductionKind.Instance)
 		{
-			string receiver = instance.ProductionMemberIsStatic ? string.Empty : "__container.";
+			// The container is a static class, so its pre-built instance member is in scope by simple name.
 			Indent(builder, depth).Append("protected override ").Append(type).Append(' ').Append(resolver).AppendLine("()");
 			Indent(builder, depth).AppendLine("{");
 			EmitDisposedGuard(builder, depth + 1);
-			Indent(builder, depth + 1).Append("return ").Append(receiver).Append(instance.ProductionMember).AppendLine(";");
+			Indent(builder, depth + 1).Append("return ").Append(instance.ProductionMember).AppendLine(";");
 			Indent(builder, depth).AppendLine("}");
 			return;
 		}
@@ -637,7 +575,7 @@ internal static class Emitter
 
 	/// <summary>
 	///     Emits a lock-free-read, lock-on-write cached resolver: return the cached field if set, otherwise
-	///     construct once under <c>lock (this)</c>, registering a disposable instance for teardown.
+	///     construct once under <c>lock (__gate)</c>, registering a disposable instance for teardown.
 	/// </summary>
 	private static void EmitCachingResolver(StringBuilder builder, int depth, in CachingResolver resolver)
 	{
@@ -654,7 +592,7 @@ internal static class Emitter
 		Indent(builder, depth + 2).Append("return ").Append(resolver.Field).AppendLine(";");
 		Indent(builder, depth + 1).AppendLine("}");
 		builder.AppendLine();
-		Indent(builder, depth + 1).AppendLine("lock (this)");
+		Indent(builder, depth + 1).AppendLine("lock (__gate)");
 		Indent(builder, depth + 1).AppendLine("{");
 		EmitDisposedGuard(builder, depth + 2);
 		Indent(builder, depth + 2).Append("if (").Append(resolver.Field).AppendLine(" is null)");
@@ -693,10 +631,9 @@ internal static class Emitter
 
 		if (instance.Production == ProductionKind.Factory)
 		{
-			// Both Scope and RootScope are nested in the container, so a static factory method is in scope
-			// by simple name; an instance method is reached through the container.
-			string receiver = instance.ProductionMemberIsStatic ? string.Empty : "__container.";
-			return $"{receiver}{instance.ProductionMember}({arguments})";
+			// The container is a static class nested-enclosing both Scope and Root, so its static factory
+			// method is in scope by simple name - no receiver.
+			return $"{instance.ProductionMember}({arguments})";
 		}
 
 		return $"new {instance.ImplementationType}({arguments})";
@@ -720,12 +657,24 @@ internal static class Emitter
 		{
 			// A Func<TArg…, T> over a parameterized service binds the owner's parameterized resolver, which
 			// takes the runtime arguments and is never cached - so the root routing below does not apply (the
-			// protected resolver is reachable from the RootScope directly).
+			// protected resolver is reachable from the Root directly).
 			return FuncFactory(funcArgTypes, parameter.ServiceType, resolver);
 		}
 
 		bool rootOwned = target.Lifetime == Lifetime.Singleton || target.Production == ProductionKind.Instance;
-		string value = ownerIsRoot && !rootOwned ? $"Resolve<{parameter.ServiceType}>()" : $"{resolver}()";
+		string value;
+		if (rootOwned)
+		{
+			// Read singletons straight off the (sealed) root scope so the dependency call devirtualizes,
+			// rather than dispatching through this scope's virtual delegator. On the root, __root is itself.
+			value = $"__root.{resolver}()";
+		}
+		else
+		{
+			// A singleton built on the root can only capture a non-singleton through a relationship; the root's
+			// scoped/transient resolvers are private to the base, so route that target through its generic entry.
+			value = ownerIsRoot ? $"Resolve<{parameter.ServiceType}>()" : $"{resolver}()";
+		}
 
 		return parameter.Kind switch
 		{
@@ -752,7 +701,7 @@ internal static class Emitter
 		Indent(builder, depth).AppendLine("public void Dispose()");
 		Indent(builder, depth).AppendLine("{");
 		Indent(builder, depth + 1).AppendLine("global::System.Collections.Generic.List<object>? __toDispose;");
-		Indent(builder, depth + 1).AppendLine("lock (this)");
+		Indent(builder, depth + 1).AppendLine("lock (__gate)");
 		Indent(builder, depth + 1).AppendLine("{");
 		Indent(builder, depth + 2).AppendLine("if (__disposed)");
 		Indent(builder, depth + 2).AppendLine("{");
@@ -774,21 +723,27 @@ internal static class Emitter
 	{
 		string message =
 			$"\"Awaiten: container '{typeName}' has registration errors; see the build diagnostics (AWT1xx).\"";
-		Indent(builder, depth).Append(
+		// The container has registration errors, so emit a throwing Root that still satisfies the shape
+		// consumers depend on (new MyContainer.Root(), Resolve, CreateScope, Dispose). This keeps the build
+		// focused on the actionable AWT diagnostics rather than cascading "type not found" errors.
+		Indent(builder, depth).AppendLine("public sealed class Root : global::Awaiten.IAwaitenScope");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).Append(
 				"public object Resolve(global::System.Type serviceType) => throw new global::System.InvalidOperationException(")
 			.Append(message).AppendLine(");");
 		builder.AppendLine();
-		Indent(builder, depth).AppendLine("public bool TryResolve(global::System.Type serviceType, [global::System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? instance)");
-		Indent(builder, depth).AppendLine("{");
-		Indent(builder, depth + 1).AppendLine("instance = null;");
-		Indent(builder, depth + 1).AppendLine("return false;");
-		Indent(builder, depth).AppendLine("}");
+		Indent(builder, depth + 1).AppendLine("public bool TryResolve(global::System.Type serviceType, [global::System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? instance)");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).AppendLine("instance = null;");
+		Indent(builder, depth + 2).AppendLine("return false;");
+		Indent(builder, depth + 1).AppendLine("}");
 		builder.AppendLine();
-		Indent(builder, depth).Append(
+		Indent(builder, depth + 1).Append(
 				"public global::Awaiten.IAwaitenScope CreateScope() => throw new global::System.InvalidOperationException(")
 			.Append(message).AppendLine(");");
 		builder.AppendLine();
-		Indent(builder, depth).AppendLine("public void Dispose() { }");
+		Indent(builder, depth + 1).AppendLine("public void Dispose() { }");
+		Indent(builder, depth).AppendLine("}");
 	}
 
 	private static StringBuilder Indent(StringBuilder builder, int depth)

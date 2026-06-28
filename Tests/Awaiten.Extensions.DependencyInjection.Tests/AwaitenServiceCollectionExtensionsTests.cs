@@ -13,9 +13,9 @@ public sealed class AwaitenServiceCollectionExtensionsTests
 		services.AddGeneratedContainer<DummyContainer>();
 
 		ServiceProvider provider = services.BuildServiceProvider();
-		IAwaitenContainer container = provider.GetRequiredService<IAwaitenContainer>();
+		IAwaitenScope container = provider.GetRequiredService<IAwaitenScope>();
 		await That(container).Is<DummyContainer>();
-		await That(provider.GetRequiredService<IAwaitenContainer>()).IsSameAs(container);
+		await That(provider.GetRequiredService<IAwaitenScope>()).IsSameAs(container);
 	}
 
 	[Fact]
@@ -37,7 +37,7 @@ public sealed class AwaitenServiceCollectionExtensionsTests
 		await That(type is { IsAbstract: true, IsSealed: true, }).IsTrue();
 	}
 
-	private sealed class DummyContainer : IAwaitenContainer
+	private sealed class DummyContainer : IAwaitenScope
 	{
 		public object Resolve(Type serviceType) => throw new NotSupportedException();
 

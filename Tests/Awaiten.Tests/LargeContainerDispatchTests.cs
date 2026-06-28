@@ -11,29 +11,33 @@ public partial class LargeContainerDispatchTests
 	[Fact]
 	public async Task DirectServices_ResolveAcrossTheWholeTable()
 	{
-		LargeContainer container = new();
+		LargeContainer.Root container = new();
 
 		await That(container.Resolve<S00>()).IsNotNull()
 			.Because("the first registration exercises one end of the switch");
 		await That(container.Resolve<S19>()).IsNotNull()
 			.Because("the last registration exercises the other end of the switch");
-		await That(container.Resolve(typeof(S10))).Is<S10>();
+		// Resolve a middle registration by runtime Type so the Dictionary + switch dispatch table is
+		// exercised (the generic Resolve<T> takes the typed fast path and never touches the table).
+		await That(container.TryResolve(typeof(S10), out object? middle)).IsTrue();
+		await That(middle).Is<S10>();
 	}
 
 	[Fact]
 	public async Task Scope_ResolvesThroughTheSharedTable()
 	{
-		LargeContainer container = new();
+		LargeContainer.Root container = new();
 		using IAwaitenScope scope = container.CreateScope();
 
 		await That(scope.Resolve<S03>()).IsNotNull();
-		await That(scope.Resolve(typeof(S15))).Is<S15>();
+		await That(scope.TryResolve(typeof(S15), out object? service)).IsTrue();
+		await That(service).Is<S15>();
 	}
 
 	[Fact]
 	public async Task Singleton_ReturnsTheSameInstanceThroughTheTable()
 	{
-		LargeContainer container = new();
+		LargeContainer.Root container = new();
 
 		await That(container.Resolve<S07>()).IsSameAs(container.Resolve<S07>());
 	}
@@ -41,7 +45,7 @@ public partial class LargeContainerDispatchTests
 	[Fact]
 	public async Task UnregisteredType_FallsThroughToFalse()
 	{
-		LargeContainer container = new();
+		LargeContainer.Root container = new();
 
 		bool resolved = container.TryResolve(typeof(string), out object? instance);
 
@@ -112,5 +116,5 @@ public partial class LargeContainerDispatchTests
 	[Singleton<S17>]
 	[Singleton<S18>]
 	[Singleton<S19>]
-	public partial class LargeContainer;
+	public static partial class LargeContainer;
 }

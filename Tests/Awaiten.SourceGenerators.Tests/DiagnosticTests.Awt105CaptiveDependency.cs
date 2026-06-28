@@ -20,12 +20,12 @@ public partial class DiagnosticTests
 			                                       [Container]
 			                                       [Scoped<ScopedConsumer>]
 			                                       [Scoped<ScopedDependency>]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT105"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT105*").AsWildcard()
 				.Because("a scoped service sharing the scope's lifetime does not capture it");
 		}
 
@@ -43,12 +43,12 @@ public partial class DiagnosticTests
 			                                       [Container]
 			                                       [Singleton<Consumer>]
 			                                       [Singleton<Dependency>]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT105"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT105*").AsWildcard()
 				.Because("a singleton depending on a same-or-longer lifetime is not captive");
 		}
 
@@ -67,12 +67,12 @@ public partial class DiagnosticTests
 			                                       [Container]
 			                                       [Singleton<SingletonConsumer>]
 			                                       [Scoped<ScopedDependency>]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT105"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT105*").AsWildcard()
 				.Because("a deferred Func<T> does not capture the scoped instance for the singleton's lifetime");
 		}
 
@@ -90,12 +90,12 @@ public partial class DiagnosticTests
 			                                       [Container]
 			                                       [Transient<TransientConsumer>]
 			                                       [Scoped<ScopedDependency>]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT105"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT105*").AsWildcard()
 				.Because("only a singleton outlives a scope and so captures it");
 		}
 
@@ -118,15 +118,15 @@ public partial class DiagnosticTests
 			                                       [Singleton<Consumer>]
 			                                       [Scoped<Store, IReader>]
 			                                       [Scoped<Store, IWriter>]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
 			                                       }
 			                                       """);
 
 			string captive = result.Diagnostics.Single(d => d.Contains("AWT105"));
-			await That(captive.Contains("MyCode.IWriter")).IsTrue()
+			await That(captive).Contains("MyCode.IWriter")
 				.Because("the diagnostic names the service alias the constructor referenced");
-			await That(captive.Contains("MyCode.IReader")).IsFalse()
+			await That(captive).DoesNotContain("MyCode.IReader")
 				.Because("not an arbitrary other service the implementation is registered as");
 		}
 
@@ -144,12 +144,12 @@ public partial class DiagnosticTests
 			                                       [Container]
 			                                       [Singleton<SingletonConsumer>]
 			                                       [Scoped<ScopedDependency>]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT105"))).IsTrue();
+			await That(result.Diagnostics).Contains("*AWT105*").AsWildcard();
 		}
 
 		[Fact]
@@ -168,12 +168,12 @@ public partial class DiagnosticTests
 			                                       [Singleton<SingletonConsumer>]
 			                                       [Transient<TransientMiddle>]
 			                                       [Scoped<ScopedDependency>]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT105"))).IsTrue();
+			await That(result.Diagnostics).Contains("*AWT105*").AsWildcard();
 		}
 	}
 }

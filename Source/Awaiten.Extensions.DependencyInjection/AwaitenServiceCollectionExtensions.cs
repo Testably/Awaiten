@@ -10,22 +10,23 @@ namespace Awaiten.Extensions.DependencyInjection;
 public static class AwaitenServiceCollectionExtensions
 {
 	/// <summary>
-	///     Projects the registrations of the generated Awaiten container
-	///     <typeparamref name="TContainer" /> into the <paramref name="services" /> collection,
-	///     so a Microsoft.Extensions.DependencyInjection host can resolve Awaiten-owned services.
+	///     Projects the registrations of the generated Awaiten container root
+	///     <typeparamref name="TRoot" /> (the generated <c>Root</c> type) into the
+	///     <paramref name="services" /> collection, so a Microsoft.Extensions.DependencyInjection host can
+	///     resolve Awaiten-owned services.
 	/// </summary>
-	public static IServiceCollection AddGeneratedContainer<TContainer>(this IServiceCollection services)
-		where TContainer : IAwaitenContainer, new()
+	public static IServiceCollection AddGeneratedContainer<TRoot>(this IServiceCollection services)
+		where TRoot : class, IAwaitenScope, new()
 	{
 		if (services is null)
 		{
 			throw new ArgumentNullException(nameof(services));
 		}
 
-		TContainer container = new();
-		services.AddSingleton<IAwaitenContainer>(container);
+		TRoot root = new();
+		services.AddSingleton<IAwaitenScope>(root);
 
-		// TODO: project TContainer.Registrations into the service collection.
+		// TODO: project TRoot's registrations into the service collection.
 		return services;
 	}
 }

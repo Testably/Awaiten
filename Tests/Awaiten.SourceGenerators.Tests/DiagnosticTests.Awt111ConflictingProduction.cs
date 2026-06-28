@@ -1,5 +1,3 @@
-using System.Linq;
-
 namespace Awaiten.SourceGenerators.Tests;
 
 public partial class DiagnosticTests
@@ -19,13 +17,13 @@ public partial class DiagnosticTests
 			                                       [Container]
 			                                       [Singleton<Service>(Factory = nameof(Make))]
 			                                       [Singleton<Service>]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
-			                                       	private Service Make() => new Service();
+			                                       	private static Service Make() => new Service();
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT111"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT111*").AsWildcard()
 				.Because("coalescing keeps the first production strategy, so the contradicting one must not be silently dropped");
 		}
 
@@ -42,14 +40,14 @@ public partial class DiagnosticTests
 			                                       [Container]
 			                                       [Singleton<Service>(Factory = nameof(MakeA))]
 			                                       [Singleton<Service>(Factory = nameof(MakeB))]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
-			                                       	private Service MakeA() => new Service();
-			                                       	private Service MakeB() => new Service();
+			                                       	private static Service MakeA() => new Service();
+			                                       	private static Service MakeB() => new Service();
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT111"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT111*").AsWildcard()
 				.Because("coalescing keeps the first factory, so naming a different one for the same implementation must not be silently dropped");
 		}
 
@@ -68,14 +66,14 @@ public partial class DiagnosticTests
 			                                       [Container]
 			                                       [Singleton<Store, IRead>(Factory = nameof(MakeA))]
 			                                       [Singleton<Store, IWrite>(Factory = nameof(MakeB))]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
-			                                       	private Store MakeA() => new Store();
-			                                       	private Store MakeB() => new Store();
+			                                       	private static Store MakeA() => new Store();
+			                                       	private static Store MakeB() => new Store();
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT111"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT111*").AsWildcard()
 				.Because("coalescing one implementation across services keeps the first factory, so a second, different one must not be silently dropped");
 		}
 	}

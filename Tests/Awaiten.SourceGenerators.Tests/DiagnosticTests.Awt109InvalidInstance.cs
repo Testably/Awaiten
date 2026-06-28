@@ -1,5 +1,3 @@
-using System.Linq;
-
 namespace Awaiten.SourceGenerators.Tests;
 
 public partial class DiagnosticTests
@@ -18,13 +16,13 @@ public partial class DiagnosticTests
 
 			                                       [Container]
 			                                       [Singleton<Service>(Instance = nameof(Missing))]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
-			                                       	private int Missing = 0;
+			                                       	private static int Missing = 0;
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT109"))).IsTrue();
+			await That(result.Diagnostics).Contains("*AWT109*").AsWildcard();
 		}
 
 		[Fact]
@@ -39,13 +37,13 @@ public partial class DiagnosticTests
 
 			                                       [Container]
 			                                       [Singleton<Service>(Instance = nameof(NotAMember))]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
-			                                       	private Service NotAMember() => new Service();
+			                                       	private static Service NotAMember() => new Service();
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT109"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT109*").AsWildcard()
 				.Because("a method is not a usable pre-built instance member even when its type matches");
 		}
 
@@ -61,12 +59,12 @@ public partial class DiagnosticTests
 
 			                                       [Container]
 			                                       [Singleton<Service>(Instance = "")]
-			                                       public partial class MyContainer
+			                                       public static partial class MyContainer
 			                                       {
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT109"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT109*").AsWildcard()
 				.Because("an empty instance name is a mistake, not a silent fall back to the constructor");
 		}
 	}
