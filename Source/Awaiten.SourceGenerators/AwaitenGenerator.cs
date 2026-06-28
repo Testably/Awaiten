@@ -160,6 +160,55 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		return new GraphModel(instances, dependencies, serviceToImpl, implToIndex, instanceLocations);
 	}
 
+	/// <summary>
+	///     Whether building the service at <paramref name="start" /> on its owner tracks a fresh disposable
+	///     there: the service itself is disposable, or its construction transitively rebuilds one. The walk
+	///     follows only direct <em>transient</em> dependency edges, because a scoped or singleton dependency is
+	///     cached/shared (built at most once on the owner) and so is bounded, whereas a transient dependency is
+	///     rebuilt - and, if disposable, re-tracked - on every construction. Used to decide whether a plain
+	///     <c>Func&lt;…&gt;</c> over the service accumulates on the container root (AWT117 / strict withholding):
+	///     a non-disposable transient that injects a disposable transient leaks just the same when built
+	///     repeatedly through a root-bound factory.
+	/// </summary>
+	internal static bool BuildsFreshDisposable(
+		IReadOnlyList<InstanceModel> instances,
+		Dictionary<string, int> serviceToIndex,
+		int start)
+	{
+		HashSet<int> visited = new();
+		Stack<int> stack = new();
+		stack.Push(start);
+
+		while (stack.Count > 0)
+		{
+			int node = stack.Pop();
+			if (!visited.Add(node))
+			{
+				continue;
+			}
+
+			InstanceModel instance = instances[node];
+			if (instance.IsDisposable)
+			{
+				return true;
+			}
+
+			foreach (ParameterModel parameter in instance.ConstructorParameters.AsArray())
+			{
+				// Only a direct (non-deferred) transient dependency is rebuilt as part of constructing this node;
+				// a relationship/Owned/Arg parameter defers, and a scoped/singleton dependency is cached/shared.
+				if (parameter.Kind == DependencyKind.Direct
+				    && serviceToIndex.TryGetValue(parameter.ServiceType, out int dependency)
+				    && instances[dependency].Lifetime == Lifetime.Transient)
+				{
+					stack.Push(dependency);
+				}
+			}
+		}
+
+		return false;
+	}
+
 	private static (List<ImplInfo> Order, Dictionary<string, string> ServiceToImpl) CoalesceByImplementation(
 		List<RawRegistration> raw,
 		List<DiagnosticInfo> diagnostics)

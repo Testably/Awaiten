@@ -101,11 +101,45 @@ public partial class OwnedTests
 			.Because("a bare Owned<T> dependency transfers disposal to whoever holds the handle");
 	}
 
+	[Fact]
+	public async Task FuncOwned_OverANonDisposableThatBuildsADisposable_DrainsTheTransitiveDisposableWithTheHandle()
+	{
+		using OwnedContainer.Root container = new();
+
+		Func<Owned<Gizmo>> gizmos = container.Resolve<Func<Owned<Gizmo>>>();
+
+		Bolt bolt;
+		using (Owned<Gizmo> owned = gizmos())
+		{
+			bolt = owned.Value.Bolt;
+			await That(bolt.Disposed).IsFalse()
+				.Because("the handle is still alive");
+		}
+
+		await That(bolt.Disposed).IsTrue()
+			.Because("Gizmo is not disposable, but its transient Bolt is built into the throwaway scope and released when the handle is disposed - the transitive disposable does not accumulate on the root");
+	}
+
 	public sealed class Engine : IDisposable
 	{
 		public bool Disposed { get; private set; }
 
 		public void Dispose() => Disposed = true;
+	}
+
+	public sealed class Bolt : IDisposable
+	{
+		public bool Disposed { get; private set; }
+
+		public void Dispose() => Disposed = true;
+	}
+
+	// Non-disposable, but each construction pulls a fresh disposable Bolt - the transitive-accumulation case.
+	public sealed class Gizmo
+	{
+		public Gizmo(Bolt bolt) => Bolt = bolt;
+
+		public Bolt Bolt { get; }
 	}
 
 	public sealed class Widget : IDisposable
@@ -155,5 +189,7 @@ public partial class OwnedTests
 	[Transient<Label>]
 	[Singleton<Workshop>]
 	[Transient<Holder>]
+	[Transient<Bolt>]
+	[Transient<Gizmo>]
 	public static partial class OwnedContainer;
 }

@@ -19,6 +19,30 @@ public partial class StrictModeTests
 	}
 
 	[Fact]
+	public async Task Strict_TryResolvingAWithheldDisposableTransient_ReturnsFalseRatherThanThrowing()
+	{
+		using StrictContainer.Root container = new();
+
+		bool resolved = container.TryResolve<Widget>(out Widget? widget);
+
+		await That(resolved).IsFalse()
+			.Because("TryResolve is a non-throwing probe; a withheld disposable transient is simply not resolvable by type, so it reports false rather than throwing the by-type guidance");
+		await That(widget).IsNull();
+	}
+
+	[Fact]
+	public async Task Strict_TryResolvingTheWithheldPlainFunc_ReturnsFalseRatherThanThrowing()
+	{
+		using StrictContainer.Root container = new();
+
+		bool resolved = container.TryResolve<Func<Widget>>(out Func<Widget>? factory);
+
+		await That(resolved).IsFalse()
+			.Because("the plain Func<Widget> is withheld under strict safety; TryResolve reports that as false, while Resolve throws the guidance");
+		await That(factory is null).IsTrue();
+	}
+
+	[Fact]
 	public async Task Strict_OwnedAndFuncOwned_RemainResolvable()
 	{
 		using StrictContainer.Root container = new();

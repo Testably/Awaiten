@@ -12,10 +12,12 @@ namespace Awaiten.SourceGenerators;
 /// <summary>
 ///     Reports <see cref="Diagnostics.RootAccumulatingFactory">AWT117</see> for a root-owned instance (a
 ///     singleton or pre-built instance) that, directly or through its transitive transient dependencies,
-///     holds a plain <c>Func&lt;…&gt;</c> over a disposable build-on-demand service (a disposable transient
-///     or parameterized service). Such a factory is bound to the root, so every instance it builds is tracked
-///     on the root and accumulates for the container's lifetime; a <c>Func&lt;…, Owned&lt;T&gt;&gt;</c> hands
-///     each instance back as a disposal handle and is not reported.
+///     holds a plain <c>Func&lt;…&gt;</c> over a build-on-demand service (a transient or parameterized service)
+///     whose construction tracks a fresh disposable on the root - the produced service is itself disposable, or
+///     it transitively rebuilds a disposable transient. Such a factory is bound to the root, so every instance
+///     it builds (and the disposables built with it) is tracked on the root and accumulates for the container's
+///     lifetime; a <c>Func&lt;…, Owned&lt;T&gt;&gt;</c> hands each instance back as a disposal handle and is not
+///     reported.
 /// </summary>
 /// <remarks>
 ///     AWT117 is an analyzer (rather than a generator) diagnostic so that, under loose lifetime safety where
@@ -104,13 +106,24 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 	private static List<DiagnosticInfo> Detect(GraphModel graph, bool strict)
 	{
 		List<DiagnosticInfo> diagnostics = new();
+		// A service-type -> instance-index lookup for the transitive-disposable walk (composed once from the
+		// graph's service-to-implementation and implementation-to-index maps).
+		Dictionary<string, int> serviceToIndex = new(StringComparer.Ordinal);
+		foreach (KeyValuePair<string, string> entry in graph.ServiceToImpl)
+		{
+			if (graph.ImplToIndex.TryGetValue(entry.Value, out int index))
+			{
+				serviceToIndex[entry.Key] = index;
+			}
+		}
+
 		// One report per holder+service, even when several root-owned owners reach the same factory.
 		HashSet<string> reported = new(StringComparer.Ordinal);
 		for (int i = 0; i < graph.Instances.Count; i++)
 		{
 			if (IsRootOwned(graph.Instances[i]))
 			{
-				ReportFromOwner(i, graph, strict, reported, diagnostics);
+				ReportFromOwner(i, graph, serviceToIndex, strict, reported, diagnostics);
 			}
 		}
 
@@ -120,6 +133,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 	private static void ReportFromOwner(
 		int owner,
 		GraphModel graph,
+		Dictionary<string, int> serviceToIndex,
 		bool strict,
 		HashSet<string> reported,
 		List<DiagnosticInfo> diagnostics)
@@ -139,7 +153,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 				continue;
 			}
 
-			AddAccumulatingFuncs(node, graph, strict, reported, diagnostics);
+			AddAccumulatingFuncs(node, graph, serviceToIndex, strict, reported, diagnostics);
 			PushTransientDependencies(node, graph, stack);
 		}
 	}
@@ -147,6 +161,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 	private static void AddAccumulatingFuncs(
 		int node,
 		GraphModel graph,
+		Dictionary<string, int> serviceToIndex,
 		bool strict,
 		HashSet<string> reported,
 		List<DiagnosticInfo> diagnostics)
@@ -159,7 +174,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 		InstanceModel holder = graph.Instances[node];
 		foreach (ParameterModel parameter in holder.ConstructorParameters.AsArray())
 		{
-			if (!IsRootAccumulatingFunc(graph, parameter) || !reported.Add($"{node}|{parameter.ServiceType}"))
+			if (!IsRootAccumulatingFunc(graph, serviceToIndex, parameter) || !reported.Add($"{node}|{parameter.ServiceType}"))
 			{
 				continue;
 			}
@@ -175,9 +190,11 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 		}
 	}
 
-	// A plain Func<…> (not a Func<…, Owned<T>>) over a disposable build-on-demand service - a disposable
-	// transient or parameterized service. Each call builds a fresh instance the owner tracks, so they accumulate.
-	private static bool IsRootAccumulatingFunc(GraphModel graph, ParameterModel parameter)
+	// A plain Func<…> (not a Func<…, Owned<T>>) over a build-on-demand service (a transient or parameterized
+	// service) whose construction tracks a fresh disposable on its owner - the produced service itself is
+	// disposable, or it transitively rebuilds a disposable transient. Each call to such a Func, bound to the
+	// root, builds and re-tracks those disposables on the root, so they accumulate for the container's lifetime.
+	private static bool IsRootAccumulatingFunc(GraphModel graph, Dictionary<string, int> serviceToIndex, ParameterModel parameter)
 	{
 		if (parameter.Kind != DependencyKind.Func || parameter.ProducesOwned
 		    || !graph.ServiceToImpl.TryGetValue(parameter.ServiceType, out string? targetImpl)
@@ -187,7 +204,8 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 		}
 
 		InstanceModel target = graph.Instances[targetIndex];
-		return target.IsDisposable && (target.Lifetime == Lifetime.Transient || target.IsParameterized);
+		return (target.Lifetime == Lifetime.Transient || target.IsParameterized)
+		       && AwaitenGenerator.BuildsFreshDisposable(graph.Instances, serviceToIndex, targetIndex);
 	}
 
 	private static void PushTransientDependencies(int node, GraphModel graph, Stack<int> stack)

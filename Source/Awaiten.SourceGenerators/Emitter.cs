@@ -175,14 +175,35 @@ internal static class Emitter
 	private static bool IsWithheld(InstanceModel instance, bool strict)
 		=> strict && instance.IsDisposable && (instance.Lifetime == Lifetime.Transient || instance.IsParameterized);
 
+	// Whether a plain Func<…> over this service is withheld from by-type resolution under strict lifetime
+	// safety: the service is built on demand (transient or parameterized) and building it tracks a fresh
+	// disposable on the root - the service itself is disposable, or its construction transitively rebuilds one.
+	// Such a Func re-invoked off a root binding accumulates those disposables for the container's lifetime, so
+	// only the Func<…, Owned<T>> form (which drains into a throwaway scope) is offered.
+	private static bool IsFuncWithheld(InstanceModel[] instances, int index, Dictionary<string, int> serviceToIndex, bool strict)
+		=> strict
+		   && (instances[index].Lifetime == Lifetime.Transient || instances[index].IsParameterized)
+		   && AwaitenGenerator.BuildsFreshDisposable(instances, serviceToIndex, index);
+
 	private static bool IsRootOwned(InstanceModel instance)
 		=> instance.Lifetime == Lifetime.Singleton || instance.Production == ProductionKind.Instance;
 
-	// The guidance thrown when a withheld service is requested by type under strict lifetime safety.
-	private static string WithheldThrow(string service)
+	// The guidance message (a quoted string literal) thrown by Resolve(Type) when a service withheld from
+	// by-type resolution under strict lifetime safety is requested by its bare type: it is itself a disposable
+	// build-on-demand service, reachable only by injection or through an Owned<T> handle.
+	private static string BareWithheldMessage(string service)
 	{
 		string display = service.Replace("global::", string.Empty);
-		return $"throw new global::System.InvalidOperationException(\"Awaiten: '{display}' is a disposable service withheld from by-type resolution under strict lifetime safety; obtain it through Owned<{display}> or Func<…, Owned<{display}>>, inject it directly, or set LifetimeSafety.Loose on the [Container].\")";
+		return $"\"Awaiten: '{display}' is withheld from by-type resolution under strict lifetime safety; obtain it through Owned<{display}> or Func<…, Owned<{display}>>, inject it directly, or set LifetimeSafety.Loose on the [Container].\"";
+	}
+
+	// The guidance message (a quoted string literal) thrown by Resolve(Type) when a plain Func over the service
+	// is requested: that factory accumulates disposables on the root, so the leak-free Func<…, Owned<T>> form
+	// is offered instead. The bare type may still be resolvable (its single resolution is bounded).
+	private static string FuncWithheldMessage(string service)
+	{
+		string display = service.Replace("global::", string.Empty);
+		return $"\"Awaiten: a plain Func over '{display}' is withheld from by-type resolution under strict lifetime safety because building it on demand accumulates disposables on the container root; resolve it as Func<…, Owned<{display}>> for per-use disposal, or set LifetimeSafety.Loose on the [Container].\"";
 	}
 
 	/// <summary>
@@ -218,10 +239,20 @@ internal static class Emitter
 
 		// The dispatch table lives on the Scope (the only reader, through TryResolve); it is static, so it is
 		// built once for the whole container, and reached by simple name from this type and its Root subclass.
-		List<DispatchEntry> entries = BuildDispatchEntries(instances, names, strict);
-		if (entries.Count > 0)
+		// Withheld entries go to a separate __withheld table consulted only by Resolve (for guidance), so
+		// TryResolve stays a non-throwing probe that simply returns false for them.
+		List<DispatchEntry> entries = BuildDispatchEntries(instances, names, serviceToIndex, strict);
+		List<DispatchEntry> resolvable = Resolvable(entries);
+		List<DispatchEntry> withheld = Withheld(entries);
+		if (resolvable.Count > 0)
 		{
-			EmitDispatchTable(builder, body, entries);
+			EmitDispatchTable(builder, body, resolvable);
+			builder.AppendLine();
+		}
+
+		if (withheld.Count > 0)
+		{
+			EmitWithheldTable(builder, body, withheld);
 			builder.AppendLine();
 		}
 
@@ -251,7 +282,7 @@ internal static class Emitter
 		Indent(builder, body + 1).AppendLine("__root = root;");
 		Indent(builder, body).AppendLine("}");
 		builder.AppendLine();
-		EmitResolutionApi(builder, body, instances, names, strict);
+		EmitResolutionApi(builder, body, instances, names, serviceToIndex, strict);
 		builder.AppendLine();
 		EmitGenericResolveMethod(builder, body);
 		builder.AppendLine();
@@ -349,9 +380,11 @@ internal static class Emitter
 		Indent(builder, depth).AppendLine("}");
 	}
 
-	private static void EmitResolutionApi(StringBuilder builder, int depth, InstanceModel[] instances, Names names, bool strict)
+	private static void EmitResolutionApi(StringBuilder builder, int depth, InstanceModel[] instances, Names names, Dictionary<string, int> serviceToIndex, bool strict)
 	{
-		List<DispatchEntry> entries = BuildDispatchEntries(instances, names, strict);
+		List<DispatchEntry> entries = BuildDispatchEntries(instances, names, serviceToIndex, strict);
+		List<DispatchEntry> resolvable = Resolvable(entries);
+		bool hasWithheld = Withheld(entries).Count > 0;
 
 		Indent(builder, depth).AppendLine("public object Resolve(global::System.Type serviceType)");
 		Indent(builder, depth).AppendLine("{");
@@ -360,6 +393,17 @@ internal static class Emitter
 		Indent(builder, depth + 2).AppendLine("return instance!;");
 		Indent(builder, depth + 1).AppendLine("}");
 		builder.AppendLine();
+		if (hasWithheld)
+		{
+			// A withheld service is known but not resolvable by type; surface the guidance (pointing at Owned<T>)
+			// instead of the generic "no registration" message. TryResolve stays non-throwing - it returned false.
+			Indent(builder, depth + 1).AppendLine("if (__withheld.TryGetValue(serviceType, out string? __guidance))");
+			Indent(builder, depth + 1).AppendLine("{");
+			Indent(builder, depth + 2).AppendLine("throw new global::System.InvalidOperationException(__guidance);");
+			Indent(builder, depth + 1).AppendLine("}");
+			builder.AppendLine();
+		}
+
 		Indent(builder, depth + 1).AppendLine(
 			"throw new global::System.InvalidOperationException($\"No registration for type '{serviceType}' on this container.\");");
 		Indent(builder, depth).AppendLine("}");
@@ -367,7 +411,7 @@ internal static class Emitter
 
 		Indent(builder, depth).AppendLine("public bool TryResolve(global::System.Type serviceType, [global::System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? instance)");
 		Indent(builder, depth).AppendLine("{");
-		if (entries.Count == 0)
+		if (resolvable.Count == 0)
 		{
 			Indent(builder, depth + 1).AppendLine("instance = null;");
 			Indent(builder, depth + 1).AppendLine("return false;");
@@ -379,19 +423,10 @@ internal static class Emitter
 		Indent(builder, depth + 1).AppendLine("{");
 		Indent(builder, depth + 2).AppendLine("switch (__case)");
 		Indent(builder, depth + 2).AppendLine("{");
-		for (int i = 0; i < entries.Count; i++)
+		for (int i = 0; i < resolvable.Count; i++)
 		{
-			// A withheld service's case throws a guidance exception instead of producing an instance, so the
-			// type stays known (a helpful error) rather than silently reading as "no registration".
-			if (entries[i].Throws)
-			{
-				Indent(builder, depth + 3).Append("case ").Append(i).Append(": ").Append(entries[i].Value).AppendLine(";");
-			}
-			else
-			{
-				Indent(builder, depth + 3).Append("case ").Append(i).Append(": instance = ")
-					.Append(entries[i].Value).AppendLine("; return true;");
-			}
+			Indent(builder, depth + 3).Append("case ").Append(i).Append(": instance = ")
+				.Append(resolvable[i].Value).AppendLine("; return true;");
 		}
 
 		Indent(builder, depth + 2).AppendLine("}");
@@ -408,7 +443,7 @@ internal static class Emitter
 	///     factory/lazy bound to this owner's resolver). The order is identical on the container and its
 	///     scope, so a single static table built on the container is valid for both.
 	/// </summary>
-	private static List<DispatchEntry> BuildDispatchEntries(InstanceModel[] instances, Names names, bool strict)
+	private static List<DispatchEntry> BuildDispatchEntries(InstanceModel[] instances, Names names, Dictionary<string, int> serviceToIndex, bool strict)
 	{
 		List<DispatchEntry> entries = new();
 		HashSet<string> seen = new(StringComparer.Ordinal);
@@ -419,7 +454,7 @@ internal static class Emitter
 		// Seeding 'seen' here lets the synthetic pass skip any key an explicit registration already claimed.
 		for (int i = 0; i < instances.Length; i++)
 		{
-			AddServiceEntries(instances[i], names.Resolver(i), entries, seen, strict);
+			AddServiceEntries(instances[i], names.Resolver(i), entries, seen, IsWithheld(instances[i], strict), IsFuncWithheld(instances, i, serviceToIndex, strict));
 		}
 
 		// Synthetic Func<T>/Lazy<T> over each service, skipping any key an explicit registration already
@@ -430,7 +465,7 @@ internal static class Emitter
 		{
 			if (!instances[i].IsParameterized)
 			{
-				AddRelationshipEntries(instances[i], names.Resolver(i), entries, seen, strict);
+				AddRelationshipEntries(instances[i], names.Resolver(i), entries, seen, IsFuncWithheld(instances, i, serviceToIndex, strict));
 			}
 		}
 
@@ -442,9 +477,8 @@ internal static class Emitter
 	///     service contributes only its <c>Func&lt;TArg…, T&gt;</c> factory (its bare type cannot be built
 	///     without the runtime arguments); any other service maps to its resolver call.
 	/// </summary>
-	private static void AddServiceEntries(InstanceModel instance, string resolver, List<DispatchEntry> entries, HashSet<string> seen, bool strict)
+	private static void AddServiceEntries(InstanceModel instance, string resolver, List<DispatchEntry> entries, HashSet<string> seen, bool bareWithheld, bool funcWithheld)
 	{
-		bool withheld = IsWithheld(instance, strict);
 		bool rootOwned = IsRootOwned(instance);
 		string[] argTypes = instance.ArgTypes();
 		foreach (string service in instance.ServiceTypes.AsArray())
@@ -452,11 +486,12 @@ internal static class Emitter
 			if (argTypes.Length > 0)
 			{
 				// The plain Func<TArg…, T> factory accumulates on the owner; under strict safety it is withheld
-				// (throws guidance) so only the Owned form below can build the disposable parameterized service.
+				// (resolving it by type throws guidance) so only the Owned form below can build the disposable
+				// parameterized service - or one whose construction transitively tracks a disposable on the root.
 				string parameterizedFunc = $"global::System.Func<{string.Join(", ", argTypes)}, {service}>";
 				seen.Add(parameterizedFunc);
-				entries.Add(withheld
-					? new DispatchEntry(parameterizedFunc, WithheldThrow(service), true)
+				entries.Add(funcWithheld
+					? new DispatchEntry(parameterizedFunc, FuncWithheldMessage(service), true)
 					: new DispatchEntry(parameterizedFunc, FuncFactory(argTypes, service, resolver)));
 
 				// The leak-free factory for a parameterized service: Func<TArg…, Owned<T>> hands each built
@@ -469,9 +504,10 @@ internal static class Emitter
 
 			seen.Add(service);
 			// A strictly-withheld disposable transient's bare type is no longer dispatchable; resolving it by
-			// type throws guidance (reachable only by injection or Owned<T>).
-			entries.Add(withheld
-				? new DispatchEntry(service, WithheldThrow(service), true)
+			// type throws guidance (reachable only by injection or Owned<T>). A non-disposable service is not
+			// withheld at the bare type even when its Func is (its single bare resolution is bounded).
+			entries.Add(bareWithheld
+				? new DispatchEntry(service, BareWithheldMessage(service), true)
 				: new DispatchEntry(service, resolver + "()"));
 		}
 	}
@@ -481,19 +517,19 @@ internal static class Emitter
 	///     service types, skipping any key an explicit registration already claimed (tracked in
 	///     <paramref name="seen" />) so the dispatch table never contains a duplicate key.
 	/// </summary>
-	private static void AddRelationshipEntries(InstanceModel instance, string resolver, List<DispatchEntry> entries, HashSet<string> seen, bool strict)
+	private static void AddRelationshipEntries(InstanceModel instance, string resolver, List<DispatchEntry> entries, HashSet<string> seen, bool funcWithheld)
 	{
-		bool withheld = IsWithheld(instance, strict);
 		bool rootOwned = IsRootOwned(instance);
 		foreach (string service in instance.ServiceTypes.AsArray())
 		{
-			// The plain Func<T> factory accumulates on its owner; under strict safety it is withheld (throws
-			// guidance), leaving Func<Owned<T>> as the leak-free way to build the disposable on demand.
+			// The plain Func<T> factory accumulates on its owner; under strict safety it is withheld (resolving
+			// it by type throws guidance), leaving Func<Owned<T>> as the leak-free way to build on demand a
+			// disposable - or a service whose construction transitively tracks a disposable on the root.
 			string func = $"global::System.Func<{service}>";
 			if (seen.Add(func))
 			{
-				entries.Add(withheld
-					? new DispatchEntry(func, WithheldThrow(service), true)
+				entries.Add(funcWithheld
+					? new DispatchEntry(func, FuncWithheldMessage(service), true)
 					: new DispatchEntry(func, $"new global::System.Func<{service}>(() => {resolver}())"));
 			}
 
@@ -522,10 +558,41 @@ internal static class Emitter
 		}
 	}
 
+	// The resolvable (directly dispatchable) entries, in order - their position is their dispatch case number.
+	private static List<DispatchEntry> Resolvable(List<DispatchEntry> entries)
+	{
+		List<DispatchEntry> resolvable = new();
+		foreach (DispatchEntry entry in entries)
+		{
+			if (!entry.Throws)
+			{
+				resolvable.Add(entry);
+			}
+		}
+
+		return resolvable;
+	}
+
+	// The withheld entries (a known service type with guidance instead of a resolver) - kept out of the
+	// dispatch switch so TryResolve returns false for them; Resolve consults them to throw the guidance.
+	private static List<DispatchEntry> Withheld(List<DispatchEntry> entries)
+	{
+		List<DispatchEntry> withheld = new();
+		foreach (DispatchEntry entry in entries)
+		{
+			if (entry.Throws)
+			{
+				withheld.Add(entry);
+			}
+		}
+
+		return withheld;
+	}
+
 	/// <summary>
-	///     Emits the static <c>__dispatch</c> table mapping each service type to its case number. It lives on
-	///     the base <c>Scope</c> and is <c>static</c>, so it is built once and shared by every scope and the
-	///     <c>Root</c> subclass that inherits it.
+	///     Emits the static <c>__dispatch</c> table mapping each resolvable service type to its case number. It
+	///     lives on the base <c>Scope</c> and is <c>static</c>, so it is built once and shared by every scope and
+	///     the <c>Root</c> subclass that inherits it.
 	/// </summary>
 	private static void EmitDispatchTable(StringBuilder builder, int depth, List<DispatchEntry> entries)
 	{
@@ -535,6 +602,25 @@ internal static class Emitter
 		for (int i = 0; i < entries.Count; i++)
 		{
 			Indent(builder, depth + 1).Append("{ typeof(").Append(entries[i].Type).Append("), ").Append(i).AppendLine(" },");
+		}
+
+		Indent(builder, depth).AppendLine("};");
+	}
+
+	/// <summary>
+	///     Emits the static <c>__withheld</c> table mapping each service type withheld from by-type resolution
+	///     under strict lifetime safety to its guidance message. It is consulted only by <c>Resolve</c>, which
+	///     throws the guidance; <c>TryResolve</c> never reads it and so returns <see langword="false" /> for a
+	///     withheld type rather than throwing.
+	/// </summary>
+	private static void EmitWithheldTable(StringBuilder builder, int depth, List<DispatchEntry> entries)
+	{
+		Indent(builder, depth).AppendLine(
+			"private static readonly global::System.Collections.Generic.Dictionary<global::System.Type, string> __withheld = new global::System.Collections.Generic.Dictionary<global::System.Type, string>");
+		Indent(builder, depth).AppendLine("{");
+		foreach (DispatchEntry entry in entries)
+		{
+			Indent(builder, depth + 1).Append("{ typeof(").Append(entry.Type).Append("), ").Append(entry.Value).AppendLine(" },");
 		}
 
 		Indent(builder, depth).AppendLine("};");
@@ -947,9 +1033,10 @@ internal static class Emitter
 
 	/// <summary>
 	///     A single dispatch case: the service <see cref="Type" /> requested and the <see cref="Value" />
-	///     assigned to <c>instance</c> (the resolver call). When <see cref="Throws" /> is set, <see cref="Value" />
-	///     is instead a <c>throw</c> expression and the case throws rather than producing an instance - used for
-	///     a service withheld from by-type resolution under strict lifetime safety.
+	///     assigned to <c>instance</c> (the resolver call). When <see cref="Throws" /> is set, the entry is
+	///     instead withheld from by-type resolution under strict lifetime safety: <see cref="Value" /> is a
+	///     guidance message literal placed in the <c>__withheld</c> table (which <c>Resolve</c> throws), and the
+	///     entry is kept out of the dispatch switch so <c>TryResolve</c> returns <see langword="false" /> for it.
 	/// </summary>
 	private readonly struct DispatchEntry(string type, string value, bool throws = false)
 	{

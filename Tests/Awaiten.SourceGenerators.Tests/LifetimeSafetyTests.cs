@@ -146,6 +146,37 @@ public class LifetimeSafetyTests
 	}
 
 	[Fact]
+	public async Task Strict_WithholdsThePlainFuncOverATransitivelyDisposableService_ButKeepsTheBareTypeResolvable()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class Spark : IDisposable { public void Dispose() { } }
+		                                       public sealed class Tool { public Tool(Spark spark) { } }
+
+		                                       [Container]
+		                                       [Transient<Spark>]
+		                                       [Transient<Tool>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics.Where(d => d.Contains("error"))).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("a plain Func over 'MyCode.Tool' is withheld")
+			.Because("building the non-disposable Tool on demand transitively rebuilds its disposable Spark, so its plain Func accumulates on the root and is withheld");
+		await That(source).Contains("instance = ResolveTool(); return true;")
+			.Because("the bare non-disposable Tool stays resolvable by type - a single resolution is bounded");
+		await That(source).Contains("typeof(global::System.Func<global::Awaiten.Owned<global::MyCode.Tool>>)")
+			.Because("Func<Owned<Tool>> remains the leak-free factory that drains the transitive Spark with the handle");
+	}
+
+	[Fact]
 	public async Task Loose_KeepsADisposableTransientFullyResolvable()
 	{
 		GeneratorResult result = Generator.Run("""

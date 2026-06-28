@@ -189,11 +189,12 @@ internal static class Diagnostics
 
 	/// <summary>
 	///     A root-owned instance (a singleton or pre-built instance), directly or through its transitive
-	///     transient dependencies, holds a <c>Func&lt;…&gt;</c> over a disposable build-on-demand service (a
-	///     disposable transient or parameterized service). Each call to that factory builds a fresh instance
-	///     the container tracks on its root, so they accumulate for the container's entire lifetime - an
-	///     unbounded leak. Resolving through <c>Func&lt;…, Owned&lt;T&gt;&gt;</c> instead hands each instance
-	///     back as a disposal handle, so nothing accumulates.
+	///     transient dependencies, holds a <c>Func&lt;…&gt;</c> over a build-on-demand service (a transient or
+	///     parameterized service) whose construction tracks a fresh disposable on the root - the produced
+	///     service is itself disposable, or it transitively rebuilds a disposable transient. Each call to that
+	///     factory builds and re-tracks those disposables on the container's root, so they accumulate for its
+	///     entire lifetime - an unbounded leak. Resolving through <c>Func&lt;…, Owned&lt;T&gt;&gt;</c> instead
+	///     hands each instance back as a disposal handle (draining into a throwaway scope), so nothing accumulates.
 	/// </summary>
 	/// <remarks>
 	///     Unlike the retired per-registration check, this is flow-based: it fires only for the statically
@@ -205,7 +206,7 @@ internal static class Diagnostics
 	public static readonly DiagnosticDescriptor RootAccumulatingFactory = new(
 		"AWT117",
 		"Factory accumulates disposables on the container root",
-		"'{1}' holds a Func over the disposable '{0}', which is built on demand and tracked on the container root, so instances accumulate for the container's lifetime; resolve it as Func<…, Owned<{0}>> for per-use disposal",
+		"'{1}' holds a Func over '{0}', which is built on demand; the instances it builds - and the disposables created while constructing them - are tracked on the container root and accumulate for its lifetime; resolve it as Func<…, Owned<{0}>> for per-use disposal",
 		"Awaiten",
 		DiagnosticSeverity.Warning,
 		isEnabledByDefault: true);

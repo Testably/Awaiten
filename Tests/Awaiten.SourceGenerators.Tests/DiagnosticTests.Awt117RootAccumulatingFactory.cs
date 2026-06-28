@@ -126,7 +126,33 @@ public partial class DiagnosticTests
 			                                       """);
 
 			await That(diagnostics.Any(d => d.Contains("AWT117"))).IsFalse()
-				.Because("a non-disposable transient leaves nothing to accumulate");
+				.Because("a non-disposable transient with no disposable dependencies leaves nothing to accumulate");
+		}
+
+		[Fact]
+		public async Task ReportsWhenAFuncBuildsANonDisposableThatTransitivelyConstructsADisposable()
+		{
+			string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>("""
+			                                       using Awaiten;
+			                                       using System;
+
+			                                       namespace MyCode;
+
+			                                       public sealed class Spark : IDisposable { public void Dispose() { } }
+			                                       public sealed class Tool { public Tool(Spark spark) { } }
+			                                       public sealed class Depot { public Depot(Func<Tool> tools) { } }
+
+			                                       [Container]
+			                                       [Transient<Spark>]
+			                                       [Transient<Tool>]
+			                                       [Singleton<Depot>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(diagnostics.Any(d => d.Contains("AWT117"))).IsTrue()
+				.Because("building the non-disposable Tool on demand rebuilds its disposable transient Spark, which accumulates on the root just the same");
 		}
 	}
 }
