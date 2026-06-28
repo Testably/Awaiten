@@ -17,7 +17,7 @@ public partial class DiagnosticTests
 
 			                                       public sealed class Robot
 			                                       {
-			                                       	public Robot([Arg<string>] string name) { }
+			                                       	public Robot([Arg] string name) { }
 			                                       }
 			                                       public sealed class Plant { public Plant(Func<int, Robot> robots) { } }
 
@@ -44,7 +44,7 @@ public partial class DiagnosticTests
 
 			                                       public sealed class Robot
 			                                       {
-			                                       	public Robot([Arg<string>] string name) { }
+			                                       	public Robot([Arg] string name) { }
 			                                       }
 			                                       public sealed class Plant { public Plant(Func<Robot> robots) { } }
 

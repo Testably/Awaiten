@@ -63,7 +63,7 @@ public partial class RuntimeArgumentTests
 
 	public sealed class Robot
 	{
-		public Robot(Engine engine, [Arg<string>] string name)
+		public Robot(Engine engine, [Arg] string name)
 		{
 			Engine = engine;
 			Name = name;
@@ -76,7 +76,7 @@ public partial class RuntimeArgumentTests
 
 	public sealed class Gadget
 	{
-		public Gadget([Arg<string>] string name, [Arg<int>] int serial)
+		public Gadget([Arg] string name, [Arg] int serial)
 		{
 			Name = name;
 			Serial = serial;
@@ -89,7 +89,7 @@ public partial class RuntimeArgumentTests
 
 	public sealed class Tool : IDisposable
 	{
-		public Tool([Arg<int>] int id) => Id = id;
+		public Tool([Arg] int id) => Id = id;
 
 		public int Id { get; }
 
@@ -107,6 +107,9 @@ public partial class RuntimeArgumentTests
 		public Robot Build(string name) => _robots(name);
 	}
 
+	// AWT106 (disposable transient accumulates from the root) is suppressed: Func_BoundToAScope... resolves
+	// Tool only from a scope, which releases it on scope disposal, so it does not accumulate on the root.
+#pragma warning disable AWT106
 	[Container]
 	[Singleton<Engine>]
 	[Transient<Robot>]
@@ -114,4 +117,5 @@ public partial class RuntimeArgumentTests
 	[Transient<Tool>]
 	[Singleton<Workshop>]
 	public partial class RuntimeArgumentContainer;
+#pragma warning restore AWT106
 }

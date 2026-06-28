@@ -478,7 +478,7 @@ public class GeneralTests
 		                                       public sealed class Engine { }
 		                                       public sealed class Robot
 		                                       {
-		                                       	public Robot(Engine engine, [Arg<string>] string name) { }
+		                                       	public Robot(Engine engine, [Arg] string name) { }
 		                                       }
 		                                       public sealed class Plant { public Plant(Func<string, Robot> robots) { } }
 

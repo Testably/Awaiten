@@ -3,7 +3,7 @@
 namespace Awaiten
 {
     [System.AttributeUsage(System.AttributeTargets.Parameter, AllowMultiple=false, Inherited=false)]
-    public sealed class ArgAttribute<T> : System.Attribute
+    public sealed class ArgAttribute : System.Attribute
     {
         public ArgAttribute() { }
     }

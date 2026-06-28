@@ -84,7 +84,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			}
 		}
 
-		ValidateRuntimeArguments(instances, serviceToImpl, implToIndex, diagnostics);
+		ValidateRuntimeArguments(instances, instanceLocations, serviceToImpl, implToIndex, diagnostics);
 
 		Dictionary<int, List<int>> dependencies = BuildDependencyGraph(instances, serviceToImpl, implToIndex);
 
@@ -314,26 +314,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		}
 
 		// A factory's parameters resolve from the graph exactly like a constructor's.
-		List<ParameterModel> parameters = new();
-		foreach (IParameterSymbol parameter in producer.Parameters)
-		{
-			ParameterModel parameterModel = ClassifyParameter(parameter);
-			parameters.Add(parameterModel);
-
-			// A runtime argument is supplied at resolve time, not from the graph, so it is never a missing
-			// dependency.
-			if (parameterModel.Kind != DependencyKind.Arg && !serviceToImpl.ContainsKey(parameterModel.ServiceType))
-			{
-				diagnostics.Add(new DiagnosticInfo(
-					Diagnostics.MissingDependency,
-					info.Location,
-					new EquatableArray<string>([
-						Display(info.ServiceTypes[0]),
-						Display(info.ImplementationType),
-						Display(parameterModel.ServiceType),
-					])));
-			}
-		}
+		List<ParameterModel> parameters = ClassifyParameters(producer, info, serviceToImpl, diagnostics);
 
 		// Disposability follows the type the container actually owns: a factory's concrete return type
 		// (which may implement IDisposable behind a non-disposable service interface), or the constructed
@@ -359,6 +340,40 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			return SymbolEqualityComparer.Default.Equals(type, @interface)
 			       || type.AllInterfaces.Any(implemented => SymbolEqualityComparer.Default.Equals(implemented, @interface));
 		}
+	}
+
+	/// <summary>
+	///     Classifies the producer's parameters (a constructor's or a factory method's) and reports
+	///     <see cref="Diagnostics.MissingDependency">AWT101</see> for any non-<c>[Arg]</c> parameter whose
+	///     service type is not registered. A runtime argument (<c>[Arg]</c>) is supplied at resolve time, so
+	///     it is never a missing dependency.
+	/// </summary>
+	private static List<ParameterModel> ClassifyParameters(
+		IMethodSymbol producer,
+		ImplInfo info,
+		Dictionary<string, string> serviceToImpl,
+		List<DiagnosticInfo> diagnostics)
+	{
+		List<ParameterModel> parameters = new();
+		foreach (IParameterSymbol parameter in producer.Parameters)
+		{
+			ParameterModel parameterModel = ClassifyParameter(parameter);
+			parameters.Add(parameterModel);
+
+			if (parameterModel.Kind != DependencyKind.Arg && !serviceToImpl.ContainsKey(parameterModel.ServiceType))
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.MissingDependency,
+					info.Location,
+					new EquatableArray<string>([
+						Display(info.ServiceTypes[0]),
+						Display(info.ImplementationType),
+						Display(parameterModel.ServiceType),
+					])));
+			}
+		}
+
+		return parameters;
 	}
 
 	/// <summary>
@@ -530,41 +545,93 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			.ToArray();
 
 	/// <summary>
-	///     AWT113: a <c>Func&lt;TArg…, T&gt;</c> relationship must request exactly the runtime arguments
-	///     that <c>T</c>'s <c>[Arg]</c>-marked parameters expect, in order. A plain <c>Func&lt;T&gt;</c> over
-	///     a parameterized service (no requested arguments) likewise mismatches, since the service cannot be
-	///     built without them.
+	///     Validates how parameterized services (those with <c>[Arg]</c>-marked parameters) are registered
+	///     and consumed:
+	///     <list type="bullet">
+	///         <item>
+	///             AWT114: a parameterized service is built fresh from its runtime arguments on every
+	///             request, so a non-<c>Transient</c> lifetime cannot be honored.
+	///         </item>
+	///         <item>
+	///             AWT113: a <c>Func&lt;TArg…, T&gt;</c> relationship must request exactly the runtime
+	///             arguments that <c>T</c>'s <c>[Arg]</c> parameters expect, in order (a plain
+	///             <c>Func&lt;T&gt;</c> over a parameterized service requests none, so it mismatches).
+	///         </item>
+	///         <item>
+	///             AWT115: a parameterized service requested as a plain dependency or a <c>Lazy&lt;T&gt;</c>
+	///             cannot be supplied its runtime arguments, so it is reachable only through a
+	///             <c>Func&lt;TArg…, T&gt;</c>.
+	///         </item>
+	///     </list>
 	/// </summary>
 	private static void ValidateRuntimeArguments(
 		List<InstanceModel> instances,
+		List<LocationInfo?> instanceLocations,
 		Dictionary<string, string> serviceToImpl,
 		Dictionary<string, int> implToIndex,
 		List<DiagnosticInfo> diagnostics)
 	{
-		foreach (InstanceModel instance in instances)
+		for (int i = 0; i < instances.Count; i++)
 		{
+			InstanceModel instance = instances[i];
+			LocationInfo? location = instanceLocations[i];
+
+			if (ArgTypesOf(instance).Length > 0 && instance.Lifetime != Lifetime.Transient)
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.ParameterizedLifetime,
+					location,
+					new EquatableArray<string>([Display(instance.ImplementationType), instance.Lifetime.ToString(),])));
+			}
+
 			foreach (ParameterModel parameter in instance.ConstructorParameters.AsArray())
 			{
-				if (parameter.Kind != DependencyKind.Func
+				if (parameter.Kind == DependencyKind.Arg
 				    || !serviceToImpl.TryGetValue(parameter.ServiceType, out string? targetImpl))
 				{
 					continue;
 				}
 
-				string[] requested = parameter.FuncArgTypes.AsArray();
-				string[] expected = ArgTypesOf(instances[implToIndex[targetImpl]]);
-				if (!requested.SequenceEqual(expected))
-				{
-					diagnostics.Add(new DiagnosticInfo(
-						Diagnostics.RuntimeArgumentMismatch,
-						null,
-						new EquatableArray<string>([
-							Display(parameter.ServiceType),
-							string.Join(", ", requested.Select(Display)),
-							string.Join(", ", expected.Select(Display)),
-						])));
-				}
+				ValidateDependency(
+					instance, parameter, ArgTypesOf(instances[implToIndex[targetImpl]]), location, diagnostics);
 			}
+		}
+	}
+
+	/// <summary>
+	///     Validates a single (non-<c>[Arg]</c>) dependency against its target's runtime arguments
+	///     (<paramref name="expected" />): a <c>Func&lt;TArg…, T&gt;</c> must request exactly them (AWT113);
+	///     a plain or <c>Lazy&lt;T&gt;</c> dependency cannot supply them at all, so it must instead be a
+	///     <c>Func</c> when the target is parameterized (AWT115).
+	/// </summary>
+	private static void ValidateDependency(
+		InstanceModel consumer,
+		ParameterModel parameter,
+		string[] expected,
+		LocationInfo? location,
+		List<DiagnosticInfo> diagnostics)
+	{
+		if (parameter.Kind == DependencyKind.Func)
+		{
+			string[] requested = parameter.FuncArgTypes.AsArray();
+			if (!requested.SequenceEqual(expected))
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.RuntimeArgumentMismatch,
+					location,
+					new EquatableArray<string>([
+						Display(parameter.ServiceType),
+						string.Join(", ", requested.Select(Display)),
+						string.Join(", ", expected.Select(Display)),
+					])));
+			}
+		}
+		else if (expected.Length > 0)
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.ParameterizedRequiresFunc,
+				location,
+				new EquatableArray<string>([Display(parameter.ServiceType), Display(consumer.ImplementationType),])));
 		}
 	}
 
