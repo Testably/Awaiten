@@ -289,8 +289,8 @@ public class GeneralTests
 
 		await That(result.Diagnostics).IsEmpty();
 		await That(result.Sources).HasCount(2);
-		await That(result.Sources.ContainsKey("Awaiten.A.MyContainer.g.cs")).IsTrue();
-		await That(result.Sources.ContainsKey("Awaiten.B.MyContainer.g.cs")).IsTrue();
+		await That(result.Sources).ContainsKey("Awaiten.A.MyContainer.g.cs");
+		await That(result.Sources).ContainsKey("Awaiten.B.MyContainer.g.cs");
 	}
 
 	[Fact]

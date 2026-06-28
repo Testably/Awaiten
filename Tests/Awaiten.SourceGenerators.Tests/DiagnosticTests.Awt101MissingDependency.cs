@@ -26,7 +26,8 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT101") && d.Contains("System.Func<System.Func<MyCode.Leaf>>"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT101*").AsWildcard()
+				.And.Contains("*System.Func<System.Func<MyCode.Leaf>>*").AsWildcard()
 				.Because("a relationship over another relationship is reported as the unregistered service type it is");
 			await That(result.Diagnostics).DoesNotContain("*global::*").AsWildcard()
 				.Because("diagnostics strip the global:: alias, including nested generic arguments");

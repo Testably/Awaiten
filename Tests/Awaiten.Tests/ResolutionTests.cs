@@ -40,6 +40,17 @@ public partial class ResolutionTests
 	}
 
 	[Fact]
+	public async Task Resolve_ByRuntimeType_ReturnsTheRegisteredInstance()
+	{
+		GraphContainer.Root container = new();
+		Type serviceType = typeof(IMiddle);
+
+		object middle = container.Resolve(serviceType);
+
+		await That(middle).IsSameAs(container.Resolve<IMiddle>());
+	}
+
+	[Fact]
 	public async Task Singleton_ReturnsTheSameInstanceEachTime()
 	{
 		GraphContainer.Root container = new();
