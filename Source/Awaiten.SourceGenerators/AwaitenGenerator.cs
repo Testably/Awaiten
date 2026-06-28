@@ -198,18 +198,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			ServiceKey serviceKey = new(registration.ServiceType, registration.Key);
 			if (serviceToImpl.TryGetValue(serviceKey, out string? existingImpl))
 			{
-				// AWT116: two different implementations claim the same service type and key, so a keyed
-				// resolution of that key would be ambiguous. The same implementation re-registered under one
-				// key is just a coalesce (first wins), and an unkeyed duplicate keeps the existing first-wins
-				// behavior, so neither is reported.
-				if (registration.Key is not null && existingImpl != registration.ImplementationType)
-				{
-					diagnostics.Add(new DiagnosticInfo(
-						Diagnostics.DuplicateKey,
-						LocationInfo.From(registration.Location),
-						new EquatableArray<string>([Display(registration.ServiceType), registration.Key,])));
-				}
-
+				ReportDuplicateKey(registration, existingImpl, diagnostics);
 				continue;
 			}
 
@@ -227,6 +216,22 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		}
 
 		return (implOrder, serviceToImpl);
+	}
+
+	// AWT116: two different implementations claim the same service type and key, so a keyed resolution of
+	// that key would be ambiguous. The same implementation re-registered under one key is just a coalesce
+	// (first wins), and an unkeyed duplicate keeps the existing first-wins behavior, so neither is reported.
+	private static void ReportDuplicateKey(RawRegistration registration, string existingImpl, List<DiagnosticInfo> diagnostics)
+	{
+		if (registration.Key is null || existingImpl == registration.ImplementationType)
+		{
+			return;
+		}
+
+		diagnostics.Add(new DiagnosticInfo(
+			Diagnostics.DuplicateKey,
+			LocationInfo.From(registration.Location),
+			new EquatableArray<string>([Display(registration.ServiceType), registration.Key,])));
 	}
 
 	// Two registrations of the same implementation conflict when they produce it differently: a different
@@ -513,13 +518,17 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			return new ParameterModel(parameter.Type.ToDisplayString(FullyQualified), DependencyKind.Arg, Location: location);
 		}
 
+		// A [FromKey] selects the keyed registration of the dependency's service type, whether it is required
+		// directly or deferred behind a Func<T>/Lazy<T> - the service type is the same, only the delivery differs.
+		string? key = FromKey(parameter);
+
 		if (parameter.Type is INamedTypeSymbol { IsGenericType: true, } named
 		    && named.ContainingNamespace?.ToDisplayString() == "System")
 		{
 			if (named is { Name: "Lazy", TypeArguments.Length: 1, } && !IsRelationshipType(named.TypeArguments[0]))
 			{
 				return new ParameterModel(
-					named.TypeArguments[0].ToDisplayString(FullyQualified), DependencyKind.Lazy, Location: location);
+					named.TypeArguments[0].ToDisplayString(FullyQualified), DependencyKind.Lazy, Key: key, Location: location);
 			}
 
 			if (named is { Name: "Func", TypeArguments.Length: >= 1, })
@@ -534,14 +543,14 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 						.Select(t => t.ToDisplayString(FullyQualified))
 						.ToArray();
 					return new ParameterModel(
-						service.ToDisplayString(FullyQualified), DependencyKind.Func, new EquatableArray<string>(argTypes), Location: location);
+						service.ToDisplayString(FullyQualified), DependencyKind.Func, new EquatableArray<string>(argTypes), Key: key, Location: location);
 				}
 			}
 		}
 
 		// A direct dependency, optionally selecting a keyed registration with [FromKey].
 		return new ParameterModel(
-			parameter.Type.ToDisplayString(FullyQualified), DependencyKind.Direct, Key: FromKey(parameter), Location: location);
+			parameter.Type.ToDisplayString(FullyQualified), DependencyKind.Direct, Key: key, Location: location);
 	}
 
 	private static ServiceKey KeyOf(ParameterModel parameter) => new(parameter.ServiceType, parameter.Key);

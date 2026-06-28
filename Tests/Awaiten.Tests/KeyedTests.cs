@@ -46,6 +46,19 @@ public partial class KeyedTests
 			.Because("the keyed consumer still selects the keyed implementation");
 	}
 
+	[Fact]
+	public async Task FromKey_SelectsTheKeyedImplementationThroughFuncAndLazyRelationships()
+	{
+		using KeyedContainer container = new();
+
+		DeferredRouter router = container.Resolve<DeferredRouter>();
+
+		await That(router.Primary()).Is<FastChannel>()
+			.Because("a [FromKey(\"fast\")] Func<IChannel> defers to the implementation keyed 'fast'");
+		await That(router.Backup.Value).Is<SlowChannel>()
+			.Because("a [FromKey(\"slow\")] Lazy<IChannel> defers to the implementation keyed 'slow'");
+	}
+
 	public interface IChannel;
 
 	public sealed class FastChannel : IChannel;
@@ -65,10 +78,24 @@ public partial class KeyedTests
 		public IChannel Backup { get; }
 	}
 
+	public sealed class DeferredRouter
+	{
+		public DeferredRouter([FromKey("fast")] Func<IChannel> primary, [FromKey("slow")] Lazy<IChannel> backup)
+		{
+			Primary = primary;
+			Backup = backup;
+		}
+
+		public Func<IChannel> Primary { get; }
+
+		public Lazy<IChannel> Backup { get; }
+	}
+
 	[Container]
 	[Singleton<FastChannel, IChannel>(Key = "fast")]
 	[Singleton<SlowChannel, IChannel>(Key = "slow")]
 	[Singleton<Router>]
+	[Singleton<DeferredRouter>]
 	public partial class KeyedContainer;
 
 	public interface IClock;
