@@ -29,6 +29,34 @@ public partial class LifetimeTests
 	}
 
 	[Fact]
+	public async Task ChildScope_FromAScope_HasItsOwnScopedInstancesAndSharesTheSingletons()
+	{
+		using LifetimeContainer.Root container = new();
+		using IAwaitenScope parent = container.CreateScope();
+		using IAwaitenScope child = parent.CreateScope();
+
+		await That(child.Resolve<IScopedService>()).IsNotSameAs(parent.Resolve<IScopedService>());
+		await That(child.Resolve<ISingletonService>()).IsSameAs(container.Resolve<ISingletonService>());
+	}
+
+	[Fact]
+	public async Task DisposingAChildScope_DoesNotDisposeTheParentScope()
+	{
+		using LifetimeContainer.Root container = new();
+		using IAwaitenScope parent = container.CreateScope();
+		ScopedService parentScoped = (ScopedService)parent.Resolve<IScopedService>();
+
+		ScopedService childScoped;
+		using (IAwaitenScope child = parent.CreateScope())
+		{
+			childScoped = (ScopedService)child.Resolve<IScopedService>();
+		}
+
+		await That(childScoped.Disposed).IsTrue();
+		await That(parentScoped.Disposed).IsFalse();
+	}
+
+	[Fact]
 	public async Task Singleton_IsSharedAcrossScopesAndTheContainer()
 	{
 		using LifetimeContainer.Root container = new();

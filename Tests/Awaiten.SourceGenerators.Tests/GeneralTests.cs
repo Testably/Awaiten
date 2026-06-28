@@ -150,8 +150,8 @@ public class GeneralTests
 			.Because("reference-type singletons are cached in a volatile backing field");
 		await That(source).Contains("private volatile global::MyCode.Middle? _middle;")
 			.Because("reference-type singletons are cached in a volatile backing field");
-		await That(source).Contains("lock (this)")
-			.Because("singletons are created once under a lock");
+		await That(source).Contains("lock (__gate)")
+			.Because("singletons are created once under a lock on a private gate, not the publicly reachable scope");
 		await That(source).Contains("_middle = new global::MyCode.Middle(__root.ResolveLeaf());")
 			.Because("singletons are memoized into their backing field and read straight off the root scope");
 		await That(source).Contains("return new global::MyCode.Top(__root.ResolveMiddle(), __root.ResolveLeaf());")
