@@ -55,6 +55,32 @@ public partial class DiagnosticTests
 		}
 
 		[Fact]
+		public async Task ReportsWhenAFromKeyParameterHasNoMatchingKeyedRegistration()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IClock { }
+			                                       public sealed class FastClock : IClock { }
+			                                       public sealed class Consumer { public Consumer([FromKey("missing")] IClock clock) { } }
+
+			                                       [Container]
+			                                       [Singleton<FastClock, IClock>(Key = "fast")]
+			                                       [Singleton<Consumer>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics.Any(d => d.Contains("AWT101"))).IsTrue()
+				.Because("a [FromKey] with no registration under that key is a missing dependency");
+			await That(result.Diagnostics.Any(d => d.Contains("AWT101") && d.Contains("key: missing"))).IsTrue()
+				.Because("the missing dependency names the requested key");
+		}
+
+		[Fact]
 		public async Task ReportsWhenAFuncTargetIsNotRegistered()
 		{
 			GeneratorResult result = Generator.Run("""

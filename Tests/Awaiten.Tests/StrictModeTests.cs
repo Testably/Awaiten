@@ -99,7 +99,7 @@ public partial class StrictModeTests
 	}
 
 	// A singleton holding a Lazy over a disposable transient: bounded to a single memoized instance, disposed
-	// with the container, so it is allowed under strict safety (unlike a re-invokable Func, which is AWT117).
+	// with the container, so it is allowed under strict safety (unlike a re-invokable Func, which is AWT118).
 	public sealed class Vault
 	{
 		public Vault(Lazy<Widget> widget) => Widget = widget;

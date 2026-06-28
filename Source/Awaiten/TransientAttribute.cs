@@ -24,6 +24,12 @@ public sealed class TransientAttribute<TImplementation> : Attribute
 	///     invoked anew on every request, like any other transient registration.
 	/// </summary>
 	public string? Factory { get; set; }
+
+	/// <summary>
+	///     An optional resolution key. Several implementations may share one service type under
+	///     different keys; consumers select one with <c>[FromKey]</c>.
+	/// </summary>
+	public string? Key { get; set; }
 }
 
 /// <summary>
@@ -45,6 +51,12 @@ public sealed class TransientAttribute<TImplementation, TService> : Attribute
 	///     the one factory for all of them.
 	/// </summary>
 	public string? Factory { get; set; }
+
+	/// <summary>
+	///     An optional resolution key. Several implementations may share one service type under
+	///     different keys; consumers select one with <c>[FromKey]</c>.
+	/// </summary>
+	public string? Key { get; set; }
 }
 
 #pragma warning restore S2326

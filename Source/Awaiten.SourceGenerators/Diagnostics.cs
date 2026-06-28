@@ -188,6 +188,18 @@ internal static class Diagnostics
 		isEnabledByDefault: true);
 
 	/// <summary>
+	///     Two different implementations are registered under the same service type and key, so a keyed
+	///     resolution of that key would be ambiguous.
+	/// </summary>
+	public static readonly DiagnosticDescriptor DuplicateKey = new(
+		"AWT117",
+		"Duplicate keyed registration",
+		"'{0}' is registered more than once with key '{1}'; a keyed resolution would be ambiguous",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
 	///     A root-owned instance (a singleton or pre-built instance), directly or through its transitive
 	///     transient dependencies, holds a <c>Func&lt;…&gt;</c> over a build-on-demand service (a transient or
 	///     parameterized service) whose construction tracks a fresh disposable on the root - the produced
@@ -204,7 +216,7 @@ internal static class Diagnostics
 	///     lifetime safety reports <see cref="RootAccumulatingFactoryStrict" /> instead.
 	/// </remarks>
 	public static readonly DiagnosticDescriptor RootAccumulatingFactory = new(
-		"AWT117",
+		"AWT118",
 		"Factory accumulates disposables on the container root",
 		"'{1}' holds a Func over '{0}', which is built on demand; the instances it builds - and the disposables created while constructing them - are tracked on the container root and accumulate for its lifetime; resolve it as Func<…, Owned<{0}>> for per-use disposal",
 		"Awaiten",
@@ -212,7 +224,7 @@ internal static class Diagnostics
 		isEnabledByDefault: true);
 
 	/// <summary>
-	///     The strict-lifetime-safety form of <see cref="RootAccumulatingFactory">AWT117</see>: the same
+	///     The strict-lifetime-safety form of <see cref="RootAccumulatingFactory">AWT118</see>: the same
 	///     diagnostic, reported at error severity (by the analyzer) and carrying
 	///     <see cref="WellKnownDiagnosticTags.NotConfigurable" /> so it cannot be silenced by
 	///     <c>#pragma warning disable</c>, <c>&lt;NoWarn&gt;</c> or an editorconfig severity override - the only
@@ -222,12 +234,12 @@ internal static class Diagnostics
 	/// </summary>
 	/// <remarks>
 	///     Its declared default severity is <see cref="DiagnosticSeverity.Warning" /> - identical to
-	///     <see cref="RootAccumulatingFactory" /> - so that release tracking sees a single, consistent AWT117;
+	///     <see cref="RootAccumulatingFactory" /> - so that release tracking sees a single, consistent AWT118;
 	///     the analyzer raises it to an error per report. <see cref="WellKnownDiagnosticTags.NotConfigurable" />,
 	///     not the severity, is what makes it non-suppressible.
 	/// </remarks>
 	public static readonly DiagnosticDescriptor RootAccumulatingFactoryStrict = new(
-		"AWT117",
+		"AWT118",
 		RootAccumulatingFactory.Title,
 		RootAccumulatingFactory.MessageFormat,
 		RootAccumulatingFactory.Category,

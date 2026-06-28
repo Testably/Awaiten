@@ -10,7 +10,7 @@ using Microsoft.CodeAnalysis.Diagnostics;
 namespace Awaiten.SourceGenerators;
 
 /// <summary>
-///     Reports <see cref="Diagnostics.RootAccumulatingFactory">AWT117</see> for a root-owned instance (a
+///     Reports <see cref="Diagnostics.RootAccumulatingFactory">AWT118</see> for a root-owned instance (a
 ///     singleton or pre-built instance) that, directly or through its transitive transient dependencies,
 ///     holds a plain <c>Func&lt;…&gt;</c> over a build-on-demand service (a transient or parameterized service)
 ///     whose construction tracks a fresh disposable on the root - the produced service is itself disposable, or
@@ -20,8 +20,8 @@ namespace Awaiten.SourceGenerators;
 ///     reported.
 /// </summary>
 /// <remarks>
-///     AWT117 is an analyzer (rather than a generator) diagnostic so that, under loose lifetime safety where
-///     it is a warning, it can be suppressed in source with <c>#pragma warning disable AWT117</c> or
+///     AWT118 is an analyzer (rather than a generator) diagnostic so that, under loose lifetime safety where
+///     it is a warning, it can be suppressed in source with <c>#pragma warning disable AWT118</c> or
 ///     <c>[SuppressMessage]</c> - a generator-reported diagnostic cannot. Under strict lifetime safety (the
 ///     default) it is instead reported through <see cref="Diagnostics.RootAccumulatingFactoryStrict" />: an
 ///     error carrying <see cref="WellKnownDiagnosticTags.NotConfigurable" />, so it cannot be suppressed by
@@ -106,10 +106,10 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 	private static List<DiagnosticInfo> Detect(GraphModel graph, bool strict)
 	{
 		List<DiagnosticInfo> diagnostics = new();
-		// A service-type -> instance-index lookup for the transitive-disposable walk (composed once from the
+		// A service-key -> instance-index lookup for the transitive-disposable walk (composed once from the
 		// graph's service-to-implementation and implementation-to-index maps).
-		Dictionary<string, int> serviceToIndex = new(StringComparer.Ordinal);
-		foreach (KeyValuePair<string, string> entry in graph.ServiceToImpl)
+		Dictionary<ServiceKey, int> serviceToIndex = new();
+		foreach (KeyValuePair<ServiceKey, string> entry in graph.ServiceToImpl)
 		{
 			if (graph.ImplToIndex.TryGetValue(entry.Value, out int index))
 			{
@@ -133,7 +133,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 	private static void ReportFromOwner(
 		int owner,
 		GraphModel graph,
-		Dictionary<string, int> serviceToIndex,
+		Dictionary<ServiceKey, int> serviceToIndex,
 		bool strict,
 		HashSet<string> reported,
 		List<DiagnosticInfo> diagnostics)
@@ -161,7 +161,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 	private static void AddAccumulatingFuncs(
 		int node,
 		GraphModel graph,
-		Dictionary<string, int> serviceToIndex,
+		Dictionary<ServiceKey, int> serviceToIndex,
 		bool strict,
 		HashSet<string> reported,
 		List<DiagnosticInfo> diagnostics)
@@ -174,7 +174,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 		InstanceModel holder = graph.Instances[node];
 		foreach (ParameterModel parameter in holder.ConstructorParameters.AsArray())
 		{
-			if (!IsRootAccumulatingFunc(graph, serviceToIndex, parameter) || !reported.Add($"{node}|{parameter.ServiceType}"))
+			if (!IsRootAccumulatingFunc(graph, serviceToIndex, parameter) || !reported.Add($"{node}|{parameter.ServiceType}|{parameter.Key}"))
 			{
 				continue;
 			}
@@ -194,10 +194,10 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 	// service) whose construction tracks a fresh disposable on its owner - the produced service itself is
 	// disposable, or it transitively rebuilds a disposable transient. Each call to such a Func, bound to the
 	// root, builds and re-tracks those disposables on the root, so they accumulate for the container's lifetime.
-	private static bool IsRootAccumulatingFunc(GraphModel graph, Dictionary<string, int> serviceToIndex, ParameterModel parameter)
+	private static bool IsRootAccumulatingFunc(GraphModel graph, Dictionary<ServiceKey, int> serviceToIndex, ParameterModel parameter)
 	{
 		if (parameter.Kind != DependencyKind.Func || parameter.ProducesOwned
-		    || !graph.ServiceToImpl.TryGetValue(parameter.ServiceType, out string? targetImpl)
+		    || !graph.ServiceToImpl.TryGetValue(new ServiceKey(parameter.ServiceType, parameter.Key), out string? targetImpl)
 		    || !graph.ImplToIndex.TryGetValue(targetImpl, out int targetIndex))
 		{
 			return false;
