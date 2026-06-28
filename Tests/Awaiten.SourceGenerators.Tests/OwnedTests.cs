@@ -37,8 +37,8 @@ public class OwnedTests
 			.Because("the throwaway-scope owned helper is emitted on the base Scope");
 		await That(source).Contains("Scope __owned = CreateScope();")
 			.Because("the owned helper builds its value in a fresh child scope");
-		await That(source).Contains("__Owned<global::MyCode.Widget>(__s => __s.Resolve<global::MyCode.Widget>())")
-			.Because("the Func<Owned<Widget>> factory resolves the widget into the throwaway scope");
+		await That(source).Contains("__Owned<global::MyCode.Widget>(__s => __s.ResolveWidget())")
+			.Because("the Func<Owned<Widget>> factory builds the widget into the throwaway scope through its resolver");
 	}
 
 	[Fact]

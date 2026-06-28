@@ -217,11 +217,11 @@ public partial class RuntimeArgumentTests
 		public Tool Make(int id) => _tools(id);
 	}
 
-	// The singleton Depot holds a Func<int, Tool> over the disposable parameterized Tool, so it draws an
-	// AWT117 warning: tools built through it accumulate on the root until the container is disposed. That is
-	// exactly what Func_BoundToASingleton... asserts (deliberate loose-mode accumulation); the leak-free
-	// alternative is Func<int, Owned<Tool>>, exercised in OwnedTests.
-	[Container]
+	// The singleton Depot holds a Func<int, Tool> over the disposable parameterized Tool: tools built through
+	// it accumulate on the root until the container is disposed, which is exactly what Func_BoundToASingleton...
+	// asserts. That deliberate accumulation is an AWT117 error under strict lifetime safety, so this container
+	// opts into Loose; the leak-free alternative (Func<int, Owned<Tool>>) is exercised in OwnedTests.
+	[Container(LifetimeSafety = LifetimeSafety.Loose)]
 	[Singleton<Engine>]
 	[Transient<Robot>]
 	[Transient<Gadget>]

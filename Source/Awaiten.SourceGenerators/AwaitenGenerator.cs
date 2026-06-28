@@ -60,6 +60,10 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 		List<RawRegistration> raw = ContainerRegistrations.Collect(containerSymbol);
 
+		// Strict lifetime safety (the default) makes a root-accumulating Func over a disposable service an
+		// error and withholds such services from by-type resolution; Loose relaxes both for MS.DI interop.
+		bool strict = ReadStrict(containerSymbol);
+
 		List<DiagnosticInfo> diagnostics = new();
 
 		// The container must be a static class: it is a pure definition (registrations plus static factory
@@ -103,7 +107,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		LocationInfo? containerLocation = LocationInfo.From(containerSymbol.Locations.FirstOrDefault());
 		DetectCycles(instances, dependencies, containerLocation, diagnostics);
 		DetectCaptiveDependencies(instances, dependencies, instanceLocations, diagnostics);
-		DetectRootAccumulatingFactories(instances, dependencies, serviceToImpl, implToIndex, instanceLocations, diagnostics);
+		DetectRootAccumulatingFactories(instances, dependencies, serviceToImpl, implToIndex, instanceLocations, strict, diagnostics);
 
 		string? containerNamespace = containerSymbol.ContainingNamespace is { IsGlobalNamespace: false, } ns
 			? ns.ToDisplayString()
@@ -132,7 +136,8 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			containerSymbol.Name,
 			hintName,
 			new EquatableArray<InstanceModel>(instances.ToArray()),
-			new EquatableArray<DiagnosticInfo>(diagnostics.ToArray()));
+			new EquatableArray<DiagnosticInfo>(diagnostics.ToArray()),
+			strict);
 	}
 
 	private static (List<ImplInfo> Order, Dictionary<string, string> ServiceToImpl) CoalesceByImplementation(
@@ -544,6 +549,30 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		return new ParameterModel(parameter.Type.ToDisplayString(FullyQualified), DependencyKind.Direct, Location: location);
 	}
 
+	// Reads the container's LifetimeSafety from its [Container] attribute. Strict (the default, enum value 0)
+	// unless the attribute explicitly sets Loose.
+	private static bool ReadStrict(INamedTypeSymbol containerSymbol)
+	{
+		foreach (AttributeData attribute in containerSymbol.GetAttributes())
+		{
+			if (attribute.AttributeClass?.ToDisplayString() != ContainerAttributeName)
+			{
+				continue;
+			}
+
+			foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
+			{
+				// LifetimeSafety is an enum; its TypedConstant value is the underlying int (Strict = 0, Loose = 1).
+				if (argument.Key == "LifetimeSafety" && argument.Value.Value is int value)
+				{
+					return value == 0;
+				}
+			}
+		}
+
+		return true;
+	}
+
 	// Whether a type is an Awaiten.Owned<T> disposal handle, yielding the owned service type T.
 	private static bool IsOwned(ITypeSymbol type, out ITypeSymbol inner)
 	{
@@ -764,15 +793,19 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		Dictionary<string, string> serviceToImpl,
 		Dictionary<string, int> implToIndex,
 		List<LocationInfo?> instanceLocations,
+		bool strict,
 		List<DiagnosticInfo> diagnostics)
 	{
+		// Strict lifetime safety makes the root-accumulating pattern a hard error; loose leaves it a warning.
+		DiagnosticSeverity? severity = strict ? DiagnosticSeverity.Error : null;
+
 		// One report per holder+service, even when several root-owned owners reach the same factory.
 		HashSet<string> reported = new(StringComparer.Ordinal);
 		for (int i = 0; i < instances.Count; i++)
 		{
 			if (instances[i].Lifetime == Lifetime.Singleton || instances[i].Production == ProductionKind.Instance)
 			{
-				ReportRootAccumulation(i, instances, dependencies, serviceToImpl, implToIndex, instanceLocations, reported, diagnostics);
+				ReportRootAccumulation(i, instances, dependencies, serviceToImpl, implToIndex, instanceLocations, severity, reported, diagnostics);
 			}
 		}
 	}
@@ -784,6 +817,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		Dictionary<string, string> serviceToImpl,
 		Dictionary<string, int> implToIndex,
 		List<LocationInfo?> instanceLocations,
+		DiagnosticSeverity? severity,
 		HashSet<string> reported,
 		List<DiagnosticInfo> diagnostics)
 	{
@@ -821,7 +855,8 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 						new EquatableArray<string>([
 							Display(parameter.ServiceType),
 							Display(instances[node].ImplementationType),
-						])));
+						]),
+						severity));
 				}
 			}
 

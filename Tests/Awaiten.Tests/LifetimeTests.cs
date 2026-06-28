@@ -247,7 +247,10 @@ public partial class LifetimeTests
 		public void Dispose() => Disposed = true;
 	}
 
-	[Container]
+	// Loose: these tests resolve the disposable transient directly by type and assert it is tracked and
+	// disposed with its owning scope - the permissive path that strict lifetime safety withholds in favor of
+	// Owned<T>.
+	[Container(LifetimeSafety = LifetimeSafety.Loose)]
 	[Singleton<SingletonService, ISingletonService>]
 	[Scoped<ScopedService, IScopedService>]
 	[Transient<TransientService>]
@@ -315,7 +318,9 @@ public partial class LifetimeTests
 		public void Dispose() => Disposed = true;
 	}
 
-	[Container]
+	// Loose: this test resolves the disposable transient directly by type and asserts every concurrently
+	// tracked instance is disposed with the container - the permissive path that strict withholds.
+	[Container(LifetimeSafety = LifetimeSafety.Loose)]
 	[Singleton<ConstructionCounter>]
 	[Singleton<CountedSingleton>]
 	[Transient<CountedTransient>]

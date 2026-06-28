@@ -12,7 +12,8 @@ internal sealed record ContainerModel(
 	string TypeName,
 	string HintName,
 	EquatableArray<InstanceModel> Instances,
-	EquatableArray<DiagnosticInfo> Diagnostics)
+	EquatableArray<DiagnosticInfo> Diagnostics,
+	bool Strict)
 {
 	public bool HasErrors
 	{
@@ -20,7 +21,7 @@ internal sealed record ContainerModel(
 		{
 			foreach (DiagnosticInfo diagnostic in Diagnostics.AsArray())
 			{
-				if (diagnostic.Descriptor.DefaultSeverity == DiagnosticSeverity.Error)
+				if (diagnostic.EffectiveSeverity == DiagnosticSeverity.Error)
 				{
 					return true;
 				}
