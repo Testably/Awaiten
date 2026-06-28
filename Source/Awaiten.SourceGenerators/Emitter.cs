@@ -557,7 +557,7 @@ internal static class Emitter
 		{
 			string[] argTypes = instance.ArgTypes();
 			string signature = string.Join(", ", argTypes.Select((t, i) => $"{t} a{i}"));
-			string parameterizedConstruction = EmitConstruction(instance, instances, names, serviceToIndex, false);
+			string parameterizedConstruction = EmitConstruction(instance, instances, names, serviceToIndex);
 			// Reachable from the Root (a singleton's Func<TArg…, T> binds it there) and from a throwaway
 			// Owned<T> scope built off any owner (__s.ResolveX(args)), so it is internal rather than protected -
 			// protected would not be callable through a base-typed scope reference from the derived Root (CS1540).
@@ -575,7 +575,7 @@ internal static class Emitter
 			return;
 		}
 
-		string construction = EmitConstruction(instance, instances, names, serviceToIndex, false);
+		string construction = EmitConstruction(instance, instances, names, serviceToIndex);
 
 		// Transient and scoped resolvers are internal (not private) so a throwaway Owned<T> scope can call them
 		// directly through a base-typed scope reference (__s.ResolveX()) - this bypasses the strict by-type
@@ -648,7 +648,7 @@ internal static class Emitter
 			return;
 		}
 
-		string construction = EmitConstruction(instance, instances, names, serviceToIndex, true);
+		string construction = EmitConstruction(instance, instances, names, serviceToIndex);
 		EmitCachingResolver(builder, depth, new CachingResolver("protected override", type, resolver, names.Field(index), construction, instance.IsDisposable, null));
 	}
 
@@ -689,7 +689,7 @@ internal static class Emitter
 		Indent(builder, depth).AppendLine("}");
 	}
 
-	private static string EmitConstruction(InstanceModel instance, InstanceModel[] instances, Names names, Dictionary<string, int> serviceToIndex, bool ownerIsRoot)
+	private static string EmitConstruction(InstanceModel instance, InstanceModel[] instances, Names names, Dictionary<string, int> serviceToIndex)
 	{
 		ParameterModel[] parameters = instance.ConstructorParameters.AsArray();
 		StringBuilder arguments = new();
@@ -705,7 +705,7 @@ internal static class Emitter
 			// from the graph.
 			arguments.Append(parameters[p].Kind == DependencyKind.Arg
 				? "a" + argIndex++
-				: ResolveExpression(parameters[p], instances, names, serviceToIndex, ownerIsRoot));
+				: ResolveExpression(parameters[p], instances, names, serviceToIndex));
 		}
 
 		if (instance.Production == ProductionKind.Factory)
@@ -719,13 +719,13 @@ internal static class Emitter
 	}
 
 	/// <summary>
-	///     The expression that supplies a single constructor argument. The target resolves through the
-	///     owner's own resolver, except when a singleton being built on the root captures a non-singleton
-	///     (only ever through a relationship): the root's scoped/transient resolvers are private to the base,
-	///     so it routes that target through the root's generic <c>Resolve&lt;T&gt;</c> entry. A relationship
-	///     type wraps the target in a deferred <c>Func&lt;T&gt;</c> / <c>Lazy&lt;T&gt;</c>.
+	///     The expression that supplies a single constructor argument. The target resolves through its own
+	///     resolver - read straight off <c>__root</c> for a singleton/pre-built instance (a devirtualized
+	///     call), or by simple name for a scoped/transient (its resolver is <c>internal</c> on the base
+	///     <c>Scope</c>, reachable from the <c>Root</c> too). A relationship type wraps the target in a
+	///     deferred <c>Func&lt;T&gt;</c> / <c>Lazy&lt;T&gt;</c>.
 	/// </summary>
-	private static string ResolveExpression(ParameterModel parameter, InstanceModel[] instances, Names names, Dictionary<string, int> serviceToIndex, bool ownerIsRoot)
+	private static string ResolveExpression(ParameterModel parameter, InstanceModel[] instances, Names names, Dictionary<string, int> serviceToIndex)
 	{
 		int targetIndex = serviceToIndex[parameter.ServiceType];
 		string resolver = names.Resolver(targetIndex);
@@ -763,9 +763,12 @@ internal static class Emitter
 		}
 		else
 		{
-			// A singleton built on the root can only capture a non-singleton through a relationship; the root's
-			// scoped/transient resolvers are private to the base, so route that target through its generic entry.
-			value = ownerIsRoot ? $"Resolve<{parameter.ServiceType}>()" : $"{resolver}()";
+			// A root-owned owner can only capture a non-singleton through a relationship (a direct capture
+			// would be a captive dependency). The target's scoped/transient resolver is internal on the base
+			// Scope, so it is reachable by simple name from the Root too - call it directly. Routing through the
+			// generic Resolve<T>() instead would hit the by-type withholding under strict lifetime safety and
+			// throw when a Lazy<DisposableTransient> held by a singleton is forced.
+			value = $"{resolver}()";
 		}
 
 		return parameter.Kind switch

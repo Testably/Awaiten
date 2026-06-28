@@ -59,6 +59,30 @@ public partial class StrictModeTests
 			.Because("Loose lifetime safety keeps a disposable transient resolvable by type, like MS.DI");
 	}
 
+	[Fact]
+	public async Task Strict_SingletonHoldingLazyOfADisposableTransient_ForcingBuildsIt()
+	{
+		using LazyContainer.Root container = new();
+
+		Vault vault = container.Resolve<Vault>();
+
+		// Lazy<T> is memoized (bounded to one), so it is not withheld even under strict safety; forcing it must
+		// build the widget rather than throw the by-type withholding guidance.
+		Widget widget = vault.Widget.Value;
+
+		await That(widget).IsNotNull()
+			.Because("a Lazy<DisposableTransient> held by a singleton stays usable - it builds at most one instance");
+	}
+
+	// A singleton holding a Lazy over a disposable transient: bounded to a single memoized instance, disposed
+	// with the container, so it is allowed under strict safety (unlike a re-invokable Func, which is AWT117).
+	public sealed class Vault
+	{
+		public Vault(Lazy<Widget> widget) => Widget = widget;
+
+		public Lazy<Widget> Widget { get; }
+	}
+
 	public sealed class Widget : IDisposable
 	{
 		public void Dispose()
@@ -81,4 +105,9 @@ public partial class StrictModeTests
 	[Container(LifetimeSafety = LifetimeSafety.Loose)]
 	[Transient<Widget>]
 	public static partial class LooseContainer;
+
+	[Container]
+	[Transient<Widget>]
+	[Singleton<Vault>]
+	public static partial class LazyContainer;
 }
