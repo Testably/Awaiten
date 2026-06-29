@@ -18,6 +18,11 @@ namespace Awaiten.SourceGenerators.Internals;
 ///     <c>IAsyncInitializable</c> (so it must be awaited once after construction);
 ///     <see cref="IsAsyncTainted" /> additionally covers an instance that only reaches one through its
 ///     non-deferred dependencies, so it too must be resolved asynchronously.
+///     <see cref="RuntimeDisposalCheck" /> is set for a factory whose declared return type is not itself
+///     <c>IDisposable</c> yet could produce one at runtime (an interface or a non-sealed class): the emitted
+///     resolver then tracks the realized instance for disposal behind a runtime <c>is IDisposable</c> test,
+///     rather than trusting <see cref="IsDisposable" /> (which only sees the declared type and would leak a
+///     disposable hidden behind a non-disposable service interface).
 /// </summary>
 internal sealed record InstanceModel(
 	string ImplementationType,
@@ -30,7 +35,8 @@ internal sealed record InstanceModel(
 	ProductionKind Production = ProductionKind.Constructor,
 	string? ProductionMember = null,
 	bool IsAsyncInitializable = false,
-	bool IsAsyncTainted = false)
+	bool IsAsyncTainted = false,
+	bool RuntimeDisposalCheck = false)
 {
 	/// <summary>
 	///     The ordered runtime-argument types of this instance: the service types of its <c>[Arg]</c>-marked

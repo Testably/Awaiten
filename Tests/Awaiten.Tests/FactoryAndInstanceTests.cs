@@ -126,6 +126,75 @@ public partial class FactoryAndInstanceTests
 			.Because("disposability follows the factory's concrete return type, even when the service interface is not disposable");
 	}
 
+	[Fact]
+	public async Task Factory_SingletonReturningInterfaceButBuildingADisposable_IsDisposedWithTheContainer()
+	{
+		HiddenDisposable hidden;
+		using (HiddenDisposableContainer.Root container = new())
+		{
+			hidden = (HiddenDisposable)container.Resolve<IHidden>();
+		}
+
+		await That(hidden.Disposed).IsTrue()
+			.Because("a singleton factory declared to return the non-disposable interface still builds a concrete IDisposable, which the container must dispose");
+	}
+
+	[Fact]
+	public async Task Factory_ScopedReturningInterfaceButBuildingADisposable_IsDisposedWithTheScope()
+	{
+		using HiddenDisposableContainer.Root container = new();
+		HiddenDisposable hidden;
+		using (IAwaitenScope scope = container.CreateScope())
+		{
+			hidden = (HiddenDisposable)scope.Resolve<IScopedHidden>();
+			await That(hidden.Disposed).IsFalse()
+				.Because("the scope still owns the instance");
+		}
+
+		await That(hidden.Disposed).IsTrue()
+			.Because("a scoped factory declared to return the non-disposable interface still builds a concrete IDisposable, which the scope must dispose");
+	}
+
+	[Fact]
+	public async Task Factory_TransientReturningInterfaceButBuildingADisposable_IsDisposedWithTheContainer()
+	{
+		HiddenDisposable hidden;
+		using (HiddenDisposableContainer.Root container = new())
+		{
+			hidden = (HiddenDisposable)container.Resolve<ITransientHidden>();
+		}
+
+		await That(hidden.Disposed).IsTrue()
+			.Because("a transient factory declared to return the non-disposable interface still builds a concrete IDisposable, which the owner must dispose");
+	}
+
+	[Fact]
+	public async Task Factory_ReturnTypeAlreadyDisposable_IsStillDisposed_NoRegression()
+	{
+		PlainDisposable plain;
+		using (HiddenDisposableContainer.Root container = new())
+		{
+			plain = container.Resolve<PlainDisposable>();
+		}
+
+		await That(plain.Disposed).IsTrue()
+			.Because("a factory whose declared return type already implements IDisposable is tracked as before");
+	}
+
+	[Fact]
+	public async Task Factory_ReturningInterfaceButBuildingANonDisposable_IsNotRetained()
+	{
+		// A non-disposable factory output must not be retained: resolving it (and disposing the container)
+		// must not throw, and the output is simply not tracked. The interesting half is that the generated
+		// runtime `is IDisposable` check leaves it untracked rather than mis-casting it.
+		using (HiddenDisposableContainer.Root container = new())
+		{
+			object plain = container.Resolve<IPlain>();
+			await That(plain).IsNotNull()
+				.Because("a non-disposable factory output resolves normally");
+		}
+	}
+
 	public interface IWidget;
 
 	public sealed class Widget : IWidget
@@ -197,6 +266,54 @@ public partial class FactoryAndInstanceTests
 	public static partial class GadgetContainer
 	{
 		private static DisposableGadget MakeGadget() => new();
+	}
+
+	public interface IHidden;
+
+	public interface IScopedHidden;
+
+	public interface ITransientHidden;
+
+	public interface IPlain;
+
+	// A concrete IDisposable behind a non-disposable service interface: the factory's *declared* return type
+	// is the interface, so static disposability analysis misses it - the container must track it at runtime.
+	public sealed class HiddenDisposable : IHidden, IScopedHidden, ITransientHidden, IDisposable
+	{
+		public bool Disposed { get; private set; }
+
+		public void Dispose() => Disposed = true;
+	}
+
+	// A factory whose declared return type already implements IDisposable: the no-regression baseline.
+	public sealed class PlainDisposable : IDisposable
+	{
+		public bool Disposed { get; private set; }
+
+		public void Dispose() => Disposed = true;
+	}
+
+	// A non-disposable factory output behind an interface: the runtime check must leave it untracked.
+	public sealed class PlainImpl : IPlain;
+
+	[Container]
+	[Singleton<IHidden>(Factory = nameof(MakeHidden))]
+	[Scoped<IScopedHidden>(Factory = nameof(MakeScopedHidden))]
+	[Transient<ITransientHidden>(Factory = nameof(MakeTransientHidden))]
+	[Singleton<PlainDisposable>(Factory = nameof(MakePlainDisposable))]
+	[Transient<IPlain>(Factory = nameof(MakePlain))]
+	public static partial class HiddenDisposableContainer
+	{
+		// Each factory is declared to return the non-disposable interface yet builds the concrete IDisposable.
+		private static IHidden MakeHidden() => new HiddenDisposable();
+
+		private static IScopedHidden MakeScopedHidden() => new HiddenDisposable();
+
+		private static ITransientHidden MakeTransientHidden() => new HiddenDisposable();
+
+		private static PlainDisposable MakePlainDisposable() => new();
+
+		private static IPlain MakePlain() => new PlainImpl();
 	}
 
 	public interface IRead;

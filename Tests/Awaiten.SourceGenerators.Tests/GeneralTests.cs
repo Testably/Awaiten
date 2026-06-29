@@ -341,10 +341,69 @@ public class GeneralTests
 
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-		await That(source).Contains("return MakeClock();")
-			.Because("the scope calls the static factory method by simple name instead of constructing the type");
+		await That(source).Contains("global::MyCode.IClock created = MakeClock();")
+			.Because("the scope calls the static factory method by simple name instead of constructing the type (the realized instance is captured so its disposal can be tracked at runtime)");
 		await That(source).DoesNotContain("new global::MyCode.SystemClock(")
 			.Because("a factory registration is produced by its method, never constructed directly");
+	}
+
+	[Fact]
+	public async Task FactoryReturningInterface_TracksDisposalByARuntimeCheckOnTheRealizedInstance()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System;
+
+		                                       namespace MyCode;
+
+		                                       public interface IClock { }
+		                                       public sealed class DisposableClock : IClock, IDisposable { public void Dispose() { } }
+
+		                                       [Container]
+		                                       [Transient<IClock>(Factory = nameof(MakeClock))]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       	private static IClock MakeClock() => new DisposableClock();
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+		await That(source).Contains("if (created is global::System.IDisposable __disposable)")
+			.Because("a factory declared to return a non-disposable interface may build a concrete IDisposable, so disposal is tracked by a runtime check on the realized instance");
+		await That(source).Contains("(__disposables ??= new global::System.Collections.Generic.List<object>()).Add(created);")
+			.Because("a genuinely-disposable factory output is still registered for teardown");
+		await That(source).DoesNotContain("((global::System.IDisposable)created).Dispose();")
+			.Because("the realized instance is reached through the runtime pattern variable, never an unchecked cast");
+	}
+
+	[Fact]
+	public async Task FactoryReturningANonDisposableSealedType_EmitsNoDisposalTracking()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface IClock { }
+		                                       public sealed class PlainClock : IClock { }
+
+		                                       [Container]
+		                                       [Transient<IClock>(Factory = nameof(MakeClock))]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       	private static PlainClock MakeClock() => new PlainClock();
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+		await That(source).Contains("return MakeClock();")
+			.Because("a factory whose declared return type is a sealed non-disposable class cannot hide a disposable, so its resolver returns the call directly with no tracking");
+		await That(source).DoesNotContain("created is global::System.IDisposable")
+			.Because("a provably non-disposable factory output gets no runtime disposal check");
+		await That(source).DoesNotContain("(__disposables ??= new")
+			.Because("a provably non-disposable factory output is never added to the disposal list");
 	}
 
 	[Fact]
