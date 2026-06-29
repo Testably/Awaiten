@@ -248,4 +248,32 @@ internal static class Diagnostics
 		description: RootAccumulatingFactory.Description,
 		helpLinkUri: RootAccumulatingFactory.HelpLinkUri,
 		WellKnownDiagnosticTags.NotConfigurable);
+
+	/// <summary>
+	///     A synchronous <c>Func&lt;T&gt;</c> / <c>Lazy&lt;T&gt;</c> / <c>Owned&lt;T&gt;</c> relationship
+	///     targets a service whose implementation is <c>IAsyncInitializable</c>: it would resolve the service
+	///     without awaiting its initialization. Resolve it through <c>ResolveAsync</c>, or set
+	///     <c>SyncResolveAfterInit</c> on the <c>[Container]</c> to allow synchronous resolution after warm-up.
+	/// </summary>
+	public static readonly DiagnosticDescriptor SynchronousAsyncResolution = new(
+		"AWT119",
+		"Synchronous resolution of an async-initialized service",
+		"'{0}' resolves '{2}' through a synchronous {1}<>, but '{2}' is async-initialized; resolve it through ResolveAsync, or set SyncResolveAfterInit on the [Container]",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A synchronous <c>Func&lt;T&gt;</c> / <c>Lazy&lt;T&gt;</c> / <c>Owned&lt;T&gt;</c> relationship
+	///     targets a service that is not itself async-initialized but reaches one through its non-deferred
+	///     dependencies, so resolving it synchronously would hand back an instance whose async dependencies
+	///     were never initialized.
+	/// </summary>
+	public static readonly DiagnosticDescriptor AsyncDependencyOnSyncPath = new(
+		"AWT120",
+		"Async-tainted service reached synchronously",
+		"'{0}' resolves an async-tainted service synchronously: {1}. Resolve it through ResolveAsync, or set SyncResolveAfterInit on the [Container].",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

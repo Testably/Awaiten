@@ -63,6 +63,10 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		// #pragma warning disable AWT118 / [SuppressMessage] (a generator-reported diagnostic cannot be).
 		bool strict = ReadStrict(containerSymbol);
 
+		// Pragmatic loosening: when set, async-tainted services may also be resolved synchronously after
+		// InitializeAsync has warmed them, and the AWT119/AWT120 sync-resolution diagnostics are not reported.
+		bool syncResolveAfterInit = ReadSyncResolveAfterInit(containerSymbol);
+
 		List<DiagnosticInfo> diagnostics = new();
 
 		// The container must be a static class: it is a pure definition (registrations plus static factory
@@ -84,6 +88,15 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		LocationInfo? containerLocation = LocationInfo.From(containerSymbol.Locations.FirstOrDefault());
 		DetectCycles(graph.Instances, graph.Dependencies, containerLocation, diagnostics);
 		DetectCaptiveDependencies(graph.Instances, graph.Dependencies, graph.InstanceLocations, diagnostics);
+
+		// AWT119/AWT120 (strict only): a synchronous Func<T>/Lazy<T>/Owned<T> relationship resolves its
+		// target without awaiting initialization, so it may not target an async-tainted service. The
+		// pragmatic SyncResolveAfterInit mode allows such resolution (after warm-up) and so is not reported.
+		if (!syncResolveAfterInit)
+		{
+			DetectSynchronousAsyncResolution(
+				graph.Instances, graph.Dependencies, graph.ServiceToImpl, graph.ImplToIndex, graph.InstanceLocations, diagnostics);
+		}
 
 		string? containerNamespace = containerSymbol.ContainingNamespace is { IsGlobalNamespace: false, } ns
 			? ns.ToDisplayString()
@@ -113,7 +126,8 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			hintName,
 			new EquatableArray<InstanceModel>(graph.Instances.ToArray()),
 			new EquatableArray<DiagnosticInfo>(diagnostics.ToArray()),
-			strict);
+			strict,
+			syncResolveAfterInit);
 	}
 
 	/// <summary>
@@ -130,6 +144,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		CancellationToken cancellationToken)
 	{
 		INamedTypeSymbol? disposableSymbol = compilation.GetTypeByMetadataName("System.IDisposable");
+		INamedTypeSymbol? asyncInitializableSymbol = compilation.GetTypeByMetadataName("Awaiten.IAsyncInitializable");
 
 		List<RawRegistration> raw = ContainerRegistrations.Collect(containerSymbol);
 
@@ -147,7 +162,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		foreach (ImplInfo info in implOrder)
 		{
 			cancellationToken.ThrowIfCancellationRequested();
-			InstanceModel? instance = BuildInstance(info, containerSymbol, compilation, serviceToImpl, disposableSymbol, diagnostics);
+			InstanceModel? instance = BuildInstance(info, containerSymbol, compilation, serviceToImpl, disposableSymbol, asyncInitializableSymbol, diagnostics);
 			if (instance is not null)
 			{
 				implToIndex[info.ImplementationType] = instances.Count;
@@ -157,6 +172,18 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		}
 
 		Dictionary<int, List<int>> dependencies = BuildDependencyGraph(instances, serviceToImpl, implToIndex);
+
+		// Async taint: an instance is tainted if its implementation is async-initialized, or if it reaches
+		// one through non-deferred (Direct) edges. Relationship types (Func/Lazy/Owned/Arg) launder the
+		// taint the same way they break cycles, so they contribute no edges to BuildDependencyGraph above.
+		bool[] tainted = PropagateAsyncTaint(instances, dependencies);
+		for (int i = 0; i < instances.Count; i++)
+		{
+			if (tainted[i])
+			{
+				instances[i] = instances[i] with { IsAsyncTainted = true, };
+			}
+		}
 
 		return new GraphModel(instances, dependencies, serviceToImpl, implToIndex, instanceLocations);
 	}
@@ -362,6 +389,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		Compilation compilation,
 		Dictionary<ServiceKey, string> serviceToImpl,
 		INamedTypeSymbol? disposableSymbol,
+		INamedTypeSymbol? asyncInitializableSymbol,
 		List<DiagnosticInfo> diagnostics)
 	{
 		// A pre-built Instance is handed back from a container member, never constructed here. The
@@ -428,6 +456,12 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		ITypeSymbol disposalType = info.Production == ProductionKind.Factory ? producer.ReturnType : info.Symbol;
 		bool disposable = disposableSymbol is not null && ImplementsInterface(disposalType, disposableSymbol);
 
+		// Async initialization follows the type the container actually owns - a factory's concrete return type
+		// (which may implement IAsyncInitializable behind a non-async service interface) or the constructed
+		// implementation type - mirroring the disposal-type choice above. A pre-built Instance is returned
+		// early above and is never initialized here (the caller owns it).
+		bool asyncInit = asyncInitializableSymbol is not null && ImplementsInterface(disposalType, asyncInitializableSymbol);
+
 		return new InstanceModel(
 			info.ImplementationType,
 			info.Symbol.Name,
@@ -437,7 +471,8 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			disposable,
 			info.Symbol.IsReferenceType,
 			info.Production,
-			info.ProductionMember);
+			info.ProductionMember,
+			asyncInit);
 
 		static bool ImplementsInterface(ITypeSymbol type, INamedTypeSymbol @interface)
 		{
@@ -687,6 +722,172 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		}
 
 		return true;
+	}
+
+	// Reads the container's SyncResolveAfterInit flag from its [Container] attribute (default false: strict
+	// async resolution, where an async-tainted service is reachable only through ResolveAsync).
+	internal static bool ReadSyncResolveAfterInit(INamedTypeSymbol containerSymbol)
+	{
+		foreach (AttributeData attribute in containerSymbol.GetAttributes())
+		{
+			if (attribute.AttributeClass?.ToDisplayString() != ContainerAttributeName)
+			{
+				continue;
+			}
+
+			foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
+			{
+				if (argument.Key == "SyncResolveAfterInit" && argument.Value.Value is bool value)
+				{
+					return value;
+				}
+			}
+		}
+
+		return false;
+	}
+
+	/// <summary>
+	///     Marks every instance that is async-initialized or that reaches one through non-deferred (Direct)
+	///     edges, by fixpoint over the dependency graph. The edges already exclude relationship/Owned/Arg
+	///     parameters, so the taint is laundered by exactly the deferrals that break cycles.
+	/// </summary>
+	private static bool[] PropagateAsyncTaint(List<InstanceModel> instances, Dictionary<int, List<int>> dependencies)
+	{
+		bool[] tainted = new bool[instances.Count];
+		for (int i = 0; i < instances.Count; i++)
+		{
+			tainted[i] = instances[i].IsAsyncInitializable;
+		}
+
+		bool changed = true;
+		while (changed)
+		{
+			changed = false;
+			for (int i = 0; i < instances.Count; i++)
+			{
+				if (tainted[i])
+				{
+					continue;
+				}
+
+				foreach (int dependency in dependencies[i])
+				{
+					if (tainted[dependency])
+					{
+						tainted[i] = true;
+						changed = true;
+						break;
+					}
+				}
+			}
+		}
+
+		return tainted;
+	}
+
+	/// <summary>
+	///     AWT119 / AWT120 (strict mode): a synchronous <c>Func&lt;T&gt;</c> / <c>Lazy&lt;T&gt;</c> /
+	///     <c>Owned&lt;T&gt;</c> relationship resolves its target on demand without awaiting initialization,
+	///     so it must not target an async-tainted service. AWT119 fires when the target is itself
+	///     async-initialized; AWT120 fires when it only reaches one transitively, and reports the dependency
+	///     path. (The prototype checked only <c>Func</c>/<c>Lazy</c>; <c>Owned</c> is included here because
+	///     it is the same synchronous deferral and an async-tainted service emits no synchronous resolver
+	///     for the <c>Owned</c> handle to build into.)
+	/// </summary>
+	private static void DetectSynchronousAsyncResolution(
+		List<InstanceModel> instances,
+		Dictionary<int, List<int>> dependencies,
+		Dictionary<ServiceKey, string> serviceToImpl,
+		Dictionary<string, int> implToIndex,
+		List<LocationInfo?> instanceLocations,
+		List<DiagnosticInfo> diagnostics)
+	{
+		for (int i = 0; i < instances.Count; i++)
+		{
+			foreach (ParameterModel parameter in instances[i].ConstructorParameters.AsArray())
+			{
+				if (parameter.Kind is not (DependencyKind.Func or DependencyKind.Lazy or DependencyKind.Owned)
+				    || !serviceToImpl.TryGetValue(KeyOf(parameter), out string? targetImpl))
+				{
+					continue;
+				}
+
+				int target = implToIndex[targetImpl];
+				if (!instances[target].IsAsyncTainted)
+				{
+					continue;
+				}
+
+				// Point the diagnostic at the offending parameter; fall back to the consumer's registration.
+				LocationInfo? location = parameter.Location ?? instanceLocations[i];
+				if (instances[target].IsAsyncInitializable)
+				{
+					diagnostics.Add(new DiagnosticInfo(
+						Diagnostics.SynchronousAsyncResolution,
+						location,
+						new EquatableArray<string>([
+							Display(instances[i].ImplementationType),
+							parameter.Kind.ToString(),
+							Display(instances[target].ImplementationType),
+						])));
+				}
+				else
+				{
+					string path = AsyncTaintPath(instances, dependencies, target);
+					diagnostics.Add(new DiagnosticInfo(
+						Diagnostics.AsyncDependencyOnSyncPath,
+						location,
+						new EquatableArray<string>([
+							Display(instances[i].ImplementationType),
+							path,
+						])));
+				}
+			}
+		}
+	}
+
+	/// <summary>
+	///     The shortest chain of Direct edges from <paramref name="start" /> to an async-initialized
+	///     instance, rendered for the AWT120 message.
+	/// </summary>
+	private static string AsyncTaintPath(List<InstanceModel> instances, Dictionary<int, List<int>> dependencies, int start)
+	{
+		Queue<int> queue = new();
+		Dictionary<int, int> previous = new();
+		HashSet<int> visited = new() { start, };
+		queue.Enqueue(start);
+		int end = start;
+		while (queue.Count > 0)
+		{
+			int node = queue.Dequeue();
+			if (instances[node].IsAsyncInitializable)
+			{
+				end = node;
+				break;
+			}
+
+			foreach (int next in dependencies[node])
+			{
+				if (visited.Add(next))
+				{
+					previous[next] = node;
+					queue.Enqueue(next);
+				}
+			}
+		}
+
+		List<int> chain = new();
+		for (int node = end; ; node = previous[node])
+		{
+			chain.Insert(0, node);
+			if (node == start)
+			{
+				break;
+			}
+		}
+
+		return string.Join(" -> ", chain.Select(index => Display(instances[index].ImplementationType)));
 	}
 
 	// Whether a type is an Awaiten.Owned<T> disposal handle, yielding the owned service type T.

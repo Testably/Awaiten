@@ -91,5 +91,13 @@ public sealed class AwaitenResolverExtensionsTests
 			instance = TryResolveInstance;
 			return TryResolveResult;
 		}
+
+		public Type? RequestedResolveAsyncType { get; private set; }
+
+		public Task<object> ResolveAsync(Type serviceType, System.Threading.CancellationToken cancellationToken = default)
+		{
+			RequestedResolveAsyncType = serviceType;
+			return Task.FromResult(ResolveResult);
+		}
 	}
 }

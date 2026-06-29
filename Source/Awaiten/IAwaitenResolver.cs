@@ -1,5 +1,7 @@
 using System;
 using System.Diagnostics.CodeAnalysis;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Awaiten;
 
@@ -23,4 +25,13 @@ public interface IAwaitenResolver
 	///     Attempts to resolve a service of the given <paramref name="serviceType" />.
 	/// </summary>
 	bool TryResolve(Type serviceType, [NotNullWhen(true)] out object? instance);
+
+	/// <summary>
+	///     Resolves a service of the given <paramref name="serviceType" /> asynchronously, awaiting the
+	///     <see cref="IAsyncInitializable.InitializeAsync" /> of the service and of its non-deferred async
+	///     dependencies (each exactly once). For a service that needs no asynchronous initialization this
+	///     completes synchronously. Throws if it is not registered. In the strict default this is the only
+	///     way to obtain an async-tainted service.
+	/// </summary>
+	Task<object> ResolveAsync(Type serviceType, CancellationToken cancellationToken = default);
 }

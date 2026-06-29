@@ -1,5 +1,7 @@
 using System;
 using System.Diagnostics.CodeAnalysis;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Awaiten;
 
@@ -56,6 +58,19 @@ public static class AwaitenResolverExtensions
 
 			instance = default;
 			return false;
+		}
+
+		/// <summary>
+		///     Resolves a service of type <typeparamref name="T" /> asynchronously, awaiting its
+		///     <see cref="IAsyncInitializable.InitializeAsync" /> (and that of its non-deferred async
+		///     dependencies) where required. For a service that needs no asynchronous initialization this
+		///     completes synchronously. Throws if it is not registered.
+		/// </summary>
+		public async Task<T> ResolveAsync<T>(CancellationToken cancellationToken = default)
+		{
+			ThrowIfNull(resolver);
+
+			return (T)await resolver.ResolveAsync(typeof(T), cancellationToken).ConfigureAwait(false);
 		}
 	}
 }

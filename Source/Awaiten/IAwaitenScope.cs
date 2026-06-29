@@ -1,4 +1,6 @@
 using System;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Awaiten;
 
@@ -20,4 +22,17 @@ public interface IAwaitenScope : IAwaitenResolver, IDisposable
 	///     instance per scope; disposing the scope disposes the instances it owns.
 	/// </summary>
 	IAwaitenScope CreateScope();
+
+	/// <summary>
+	///     Eagerly constructs and initializes, in dependency order, the async-initialized services this
+	///     scope owns: the shared singletons on the root, and the scoped instances on a child scope.
+	///     Idempotent and thread-safe - initialization of each instance runs at most once.
+	/// </summary>
+	Task InitializeAsync(CancellationToken cancellationToken = default);
+
+	/// <summary>
+	///     Creates a new child <see cref="IAwaitenScope" /> whose async-initialized scoped services have
+	///     been eagerly constructed and initialized in dependency order.
+	/// </summary>
+	Task<IAwaitenScope> CreateScopeAsync(CancellationToken cancellationToken = default);
 }

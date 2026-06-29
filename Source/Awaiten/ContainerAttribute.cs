@@ -15,7 +15,7 @@ public sealed class ContainerAttribute : Attribute
 	/// <summary>
 	///     Opt into pragmatic synchronous resolution of async-initialized services
 	///     after <c>InitializeAsync</c> has completed. Defaults to <see langword="false" />
-	///     (strict: async-tainted services must be resolved through <c>GetAsync</c>).
+	///     (strict: async-tainted services must be resolved through <c>ResolveAsync</c>).
 	/// </summary>
 	public bool SyncResolveAfterInit { get; set; }
 

@@ -14,6 +14,10 @@ namespace Awaiten.SourceGenerators.Internals;
 ///     default), a container <see cref="ProductionMember">method</see> (Factory), or a pre-built
 ///     container <see cref="ProductionMember">member</see> (Instance). The container is a static class, so
 ///     a factory method or instance member is always reached by simple name.
+///     <see cref="IsAsyncInitializable" /> is set when the constructed/factory-produced type implements
+///     <c>IAsyncInitializable</c> (so it must be awaited once after construction);
+///     <see cref="IsAsyncTainted" /> additionally covers an instance that only reaches one through its
+///     non-deferred dependencies, so it too must be resolved asynchronously.
 /// </summary>
 internal sealed record InstanceModel(
 	string ImplementationType,
@@ -24,7 +28,9 @@ internal sealed record InstanceModel(
 	bool IsDisposable,
 	bool IsReferenceType,
 	ProductionKind Production = ProductionKind.Constructor,
-	string? ProductionMember = null)
+	string? ProductionMember = null,
+	bool IsAsyncInitializable = false,
+	bool IsAsyncTainted = false)
 {
 	/// <summary>
 	///     The ordered runtime-argument types of this instance: the service types of its <c>[Arg]</c>-marked
