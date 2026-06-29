@@ -534,13 +534,17 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		Dictionary<ServiceKey, string> serviceToImpl,
 		List<DiagnosticInfo> diagnostics)
 	{
+		bool isFactory = info.Production == ProductionKind.Factory;
 		List<ParameterModel> parameters = new();
 		foreach (IParameterSymbol parameter in producer.Parameters)
 		{
-			ParameterModel parameterModel = ClassifyParameter(parameter);
+			ParameterModel parameterModel = ClassifyParameter(parameter, isFactory);
 			parameters.Add(parameterModel);
 
-			if (parameterModel.Kind != DependencyKind.Arg && !serviceToImpl.ContainsKey(KeyOf(parameterModel)))
+			// A CancellationToken is forwarded from the resolve-time token, not resolved from the graph (like
+			// [Arg]), so it is never a missing dependency.
+			if (parameterModel.Kind is not (DependencyKind.Arg or DependencyKind.CancellationToken)
+			    && !serviceToImpl.ContainsKey(KeyOf(parameterModel)))
 			{
 				diagnostics.Add(new DiagnosticInfo(
 					Diagnostics.MissingDependency,
@@ -660,13 +664,25 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	///     (e.g. <c>Func&lt;Func&lt;T&gt;&gt;</c>) is classified as a direct dependency so it surfaces as an
 	///     unregistered service type rather than a misleading diagnostic about the inner relationship.
 	/// </summary>
-	private static ParameterModel ClassifyParameter(IParameterSymbol parameter)
+	private static ParameterModel ClassifyParameter(IParameterSymbol parameter, bool isFactory = false)
 	{
 		LocationInfo? location = LocationInfo.From(parameter.Locations.FirstOrDefault());
 
 		if (HasArgAttribute(parameter))
 		{
 			return new ParameterModel(parameter.Type.ToDisplayString(FullyQualified), DependencyKind.Arg, Location: location);
+		}
+
+		// A factory's CancellationToken parameter is not resolved from the graph: the container forwards the
+		// resolve-time token (the async creator's cancellationToken; default on a synchronous path). Limited to
+		// factory methods - a constructor has no ambient token to forward. An [Arg] CancellationToken is handled
+		// above as a caller-supplied runtime argument and is left untouched.
+		if (isFactory
+		    && parameter.Type is INamedTypeSymbol { Name: "CancellationToken", } token
+		    && token.ContainingNamespace?.ToDisplayString() == "System.Threading")
+		{
+			return new ParameterModel(
+				parameter.Type.ToDisplayString(FullyQualified), DependencyKind.CancellationToken, Location: location);
 		}
 
 		// A [FromKey] selects the keyed registration of the dependency's service type, whether it is required

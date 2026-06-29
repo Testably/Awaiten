@@ -664,10 +664,10 @@ public partial class AsyncInitializationTests
 		AsyncFactoryService.Reset();
 		using AsyncFactoryContainer.Root container = new();
 
-		// An async-factory service is async-tainted: in the strict default the synchronous path cannot unwrap
-		// the Task, so it is not exposed there (it would otherwise hand back an unawaited instance).
-		await That(container.TryResolve(typeof(IAsyncFactoryService), out _)).IsFalse();
-		await That(() => container.Resolve<IAsyncFactoryService>()).Throws<InvalidOperationException>();
+		await That(container.TryResolve(typeof(IAsyncFactoryService), out _)).IsFalse()
+			.Because("an async-factory service is async-tainted: in the strict default the synchronous path cannot unwrap the Task, so it is not exposed there (it would otherwise hand back an unawaited instance)");
+		await That(() => container.Resolve<IAsyncFactoryService>()).Throws<InvalidOperationException>()
+			.Because("synchronous by-type resolution of an async-factory service is withheld in the strict default");
 	}
 
 	[Fact]
@@ -678,13 +678,13 @@ public partial class AsyncInitializationTests
 
 		await container.InitializeAsync(Ct);
 
-		// SyncResolveAfterInit = true: once warmed, the async-factory singleton is also resolvable synchronously
-		// and returns the very instance ResolveAsync built.
 		PragmaticAsyncFactoryService sync = container.Resolve<PragmaticAsyncFactoryService>();
 		PragmaticAsyncFactoryService async = await container.ResolveAsync<PragmaticAsyncFactoryService>(Ct);
 
-		await That(sync).IsSameAs(async);
-		await That(PragmaticAsyncFactoryService.BuildCount).IsEqualTo(1);
+		await That(sync).IsSameAs(async)
+			.Because("SyncResolveAfterInit = true: once warmed, the async-factory singleton is also resolvable synchronously and returns the very instance ResolveAsync built");
+		await That(PragmaticAsyncFactoryService.BuildCount).IsEqualTo(1)
+			.Because("warm-up and the two resolutions share the single memoized instance, so the factory ran once");
 	}
 
 	[Fact]
@@ -695,10 +695,10 @@ public partial class AsyncInitializationTests
 		TransientAsyncFactoryService first = await container.ResolveAsync<TransientAsyncFactoryService>(Ct);
 		TransientAsyncFactoryService second = await container.ResolveAsync<TransientAsyncFactoryService>(Ct);
 
-		await That(first).IsNotSameAs(second);
-		// An async-factory transient is async-only forever (never warmed by InitializeAsync, so the strict
-		// default has no synchronous path to it).
-		await That(container.TryResolve(typeof(TransientAsyncFactoryService), out _)).IsFalse();
+		await That(first).IsNotSameAs(second)
+			.Because("an async-factory transient builds a fresh instance on each ResolveAsync");
+		await That(container.TryResolve(typeof(TransientAsyncFactoryService), out _)).IsFalse()
+			.Because("an async-factory transient is async-only forever (never warmed by InitializeAsync, so the strict default has no synchronous path to it)");
 	}
 
 	[Fact]
@@ -708,9 +708,10 @@ public partial class AsyncInitializationTests
 
 		InitializingAsyncFactoryService service = await container.ResolveAsync<InitializingAsyncFactoryService>(Ct);
 
-		// The factory built it asynchronously and the container additionally awaited its InitializeAsync (once).
-		await That(service.Initialized).IsTrue();
-		await That(service.InitializeCount).IsEqualTo(1);
+		await That(service.Initialized).IsTrue()
+			.Because("the factory built it asynchronously and the container additionally awaited its InitializeAsync");
+		await That(service.InitializeCount).IsEqualTo(1)
+			.Because("InitializeAsync runs exactly once after the factory completes - no double-initialization");
 	}
 
 	[Fact]
@@ -720,9 +721,35 @@ public partial class AsyncInitializationTests
 
 		SelfInitializingService service = await container.ResolveAsync<SelfInitializingService>(Ct);
 
-		// The factory body did its own async work; the container did not call InitializeAsync (the type is not
-		// IAsyncInitializable), yet the instance is fully initialized.
-		await That(service.Initialized).IsTrue();
+		await That(service.Initialized).IsTrue()
+			.Because("the factory body did its own async work; the container did not call InitializeAsync (the type is not IAsyncInitializable), yet the instance is fully initialized");
+	}
+
+	[Fact]
+	public async Task AsyncFactory_DisposableHiddenBehindTheServiceInterface_IsDisposedOnContainerTeardown()
+	{
+		HiddenDisposableFactoryService hidden;
+		using (HiddenDisposableAsyncFactoryContainer.Root container = new())
+		{
+			hidden = (HiddenDisposableFactoryService)await container.ResolveAsync<IHiddenDisposableFactoryService>(Ct);
+			await That(hidden.DisposeCount).IsEqualTo(0)
+				.Because("the container still owns the instance");
+		}
+
+		await That(hidden.DisposeCount).IsEqualTo(1)
+			.Because("the disposable produced behind Task<> and a non-disposable interface is tracked by the generated runtime is-IDisposable check on the awaited result, so container teardown disposes it exactly once");
+	}
+
+	[Fact]
+	public async Task AsyncFactory_WithCancellationTokenParameter_ReceivesTheResolveTimeToken()
+	{
+		using TokenForwardingContainer.Root container = new();
+		using CancellationTokenSource cts = new();
+
+		TokenAwareService service = await container.ResolveAsync<TokenAwareService>(cts.Token);
+
+		await That(service.ReceivedToken).IsEqualTo(cts.Token)
+			.Because("the container forwards the exact resolve-time token into the factory's CancellationToken parameter");
 	}
 
 	public interface IAsyncFactoryService;
@@ -798,7 +825,8 @@ public partial class AsyncInitializationTests
 	[Singleton<InitializingAsyncFactoryService>(Factory = nameof(CreateAsync))]
 	public static partial class InitializingAsyncFactoryContainer
 	{
-		private static Task<InitializingAsyncFactoryService> CreateAsync() => Task.FromResult(new InitializingAsyncFactoryService());
+		private static Task<InitializingAsyncFactoryService> CreateAsync(CancellationToken _)
+			=> Task.FromResult(new InitializingAsyncFactoryService());
 	}
 
 	// The factory does its own async initialization without the type implementing IAsyncInitializable.
@@ -820,5 +848,41 @@ public partial class AsyncInitializationTests
 			service.MarkInitialized();
 			return service;
 		}
+	}
+
+	// A non-disposable service interface hiding a concrete IDisposable, produced by an async Task<T> factory.
+	// Async-taint comes purely from the factory being asynchronous (the type is not IAsyncInitializable), and
+	// the disposable stays hidden behind the interface and the Task - so disposal can only be tracked by the
+	// generated runtime is-IDisposable check on the awaited result. DisposeCount (not a bool) proves exactly once.
+	public interface IHiddenDisposableFactoryService;
+
+	public sealed class HiddenDisposableFactoryService : IHiddenDisposableFactoryService, IDisposable
+	{
+		public int DisposeCount { get; private set; }
+
+		public void Dispose() => DisposeCount++;
+	}
+
+	[Container]
+	[Singleton<IHiddenDisposableFactoryService>(Factory = nameof(CreateAsync))]
+	public static partial class HiddenDisposableAsyncFactoryContainer
+	{
+		private static Task<IHiddenDisposableFactoryService> CreateAsync()
+			=> Task.FromResult<IHiddenDisposableFactoryService>(new HiddenDisposableFactoryService());
+	}
+
+	// A factory that takes a CancellationToken: the container forwards the resolve-time token, which the
+	// service captures so the test can assert the exact token flowed through.
+	public sealed class TokenAwareService(CancellationToken token)
+	{
+		public CancellationToken ReceivedToken { get; } = token;
+	}
+
+	[Container]
+	[Singleton<TokenAwareService>(Factory = nameof(CreateAsync))]
+	public static partial class TokenForwardingContainer
+	{
+		private static Task<TokenAwareService> CreateAsync(CancellationToken cancellationToken)
+			=> Task.FromResult(new TokenAwareService(cancellationToken));
 	}
 }

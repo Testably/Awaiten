@@ -59,12 +59,10 @@ public class AsyncFactoryTests
 
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-		// Async-tainted in the strict default: an async resolver exists, but no synchronous caching field for it
-		// (its sole home is the memoized async Task cache), so the sync path cannot hand out an unawaited instance.
 		await That(source).Contains("InitializeAsync")
-			.Because("an async factory makes the container async-initializable");
+			.Because("an async factory makes the container async-initializable, so an async resolver exists in the strict default");
 		await That(source).Contains("global::System.Threading.Tasks.Task<global::MyCode.Foo>? _fooAsyncTask")
-			.Because("the async-tainted singleton is cached as a memoized Task");
+			.Because("the async-tainted singleton's sole home is the memoized async Task cache - there is no synchronous caching field, so the sync path cannot hand out an unawaited instance");
 	}
 
 	[Fact]
@@ -169,11 +167,8 @@ public class AsyncFactoryTests
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 		await That(source).Contains("await Create().ConfigureAwait(false)")
 			.Because("the factory is awaited to build the instance");
-		// The produced type is IAsyncInitializable, so its InitializeAsync is also awaited - once for the
-		// factory call, once for initialization. The single InitializeAsync call site (not two) proves there is
-		// no double-initialization.
 		await That(source).Contains("InitializeAsync(cancellationToken).ConfigureAwait(false)")
-			.Because("an async-initializable factory result still has its InitializeAsync awaited after construction");
+			.Because("an async-initializable factory result still has its InitializeAsync awaited after construction - once for the factory call, once for initialization, with a single InitializeAsync call site proving no double-initialization");
 	}
 
 	[Fact]
@@ -218,12 +213,10 @@ public class AsyncFactoryTests
 		                                       }
 		                                       """);
 
-		// AWT121 is an error, so the emitter replaces resolution with a throwing stub rather than emitting a
-		// parameterized resolver that would 'await' the factory in a non-async method (which would not compile).
 		await That(string.Join("\n", result.Diagnostics)).DoesNotContain("error CS")
-			.Because("an error-stubbed container must not also produce spurious compile errors");
+			.Because("AWT121 is an error, so the emitter replaces resolution with a throwing stub and must not also produce spurious compile errors");
 		await That(result.Sources["Awaiten.MyCode.MyContainer.g.cs"]).DoesNotContain("await Create(")
-			.Because("no parameterized resolver awaiting the factory is emitted once AWT121 stubs the container");
+			.Because("no parameterized resolver awaiting the factory in a non-async method (which would not compile) is emitted once AWT121 stubs the container");
 	}
 
 	[Fact]
@@ -274,9 +267,54 @@ public class AsyncFactoryTests
 
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-		// Disposability is computed from the unwrapped FooImpl (behind the IFoo service and the Task), so the
-		// singleton is registered for disposal.
 		await That(source).Contains("global::System.IDisposable")
-			.Because("the disposable produced type is tracked even though it sits behind Task<> and an interface");
+			.Because("disposability is computed from the unwrapped FooImpl (behind the IFoo service and the Task), so the singleton is registered for disposal even though it sits behind Task<> and an interface");
+	}
+
+	[Fact]
+	public async Task TaskFactory_WithCancellationTokenParameter_ForwardsTheResolveTimeToken()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Threading;
+		                                       using System.Threading.Tasks;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class Foo { }
+
+		                                       [Container]
+		                                       [Singleton<Foo>(Factory = nameof(Create))]
+		                                       public static partial class MyContainer
+		                                       {
+		                                           private static Task<Foo> Create(CancellationToken cancellationToken) => Task.FromResult(new Foo());
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty()
+			.Because("a factory's CancellationToken parameter is forwarded from the resolve-time token, not resolved from the graph, so it is not a missing dependency (AWT101)");
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+		await That(source).Contains("await Create(cancellationToken).ConfigureAwait(false)")
+			.Because("the async creator forwards its in-scope resolve-time token into the factory's CancellationToken parameter");
+	}
+
+	[Fact]
+	public async Task ConstructorCancellationTokenParameter_IsNotForwarded_AndReportsAwt101()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Threading;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class Foo { public Foo(CancellationToken cancellationToken) { } }
+
+		                                       [Container]
+		                                       [Singleton<Foo>]
+		                                       public static partial class MyContainer { }
+		                                       """);
+
+		await That(result.Diagnostics).Contains("*AWT101*").AsWildcard()
+			.Because("token forwarding is scoped to factory methods - a constructor has no ambient resolve-time token, so its CancellationToken parameter stays an ordinary (unregistered) dependency");
 	}
 }

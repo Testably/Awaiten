@@ -7,7 +7,9 @@ namespace Awaiten.SourceGenerators.Internals;
 ///     <see cref="Arg" /> is supplied at resolve time from a <c>Func&lt;TArg…, T&gt;</c> relationship
 ///     rather than from the graph. <see cref="Owned" /> resolves the service into a dedicated throwaway
 ///     scope and hands the caller an <c>Owned&lt;T&gt;</c> disposal handle (it defers like a relationship
-///     type, so it contributes no graph edge).
+///     type, so it contributes no graph edge). <see cref="CancellationToken" /> is a factory method's
+///     <c>System.Threading.CancellationToken</c> parameter, satisfied by forwarding the resolve-time token
+///     (the async creator's) rather than from the graph - so, like <see cref="Arg" />, it contributes no edge.
 /// </summary>
 internal enum DependencyKind
 {
@@ -16,4 +18,5 @@ internal enum DependencyKind
 	Lazy,
 	Arg,
 	Owned,
+	CancellationToken,
 }
