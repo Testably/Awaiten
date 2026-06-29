@@ -91,14 +91,15 @@ internal static class Emitter
 	///     <c>Func&lt;TArg…, T&gt;</c> factory), so it gets no typed resolution fast path. A keyed registration
 	///     is likewise excluded: it is reached only by <c>[FromKey]</c> injection, never the typed path.
 	/// </summary>
-	private static IEnumerable<(string Service, int Index)> UniqueServices(InstanceModel[] instances, bool strict)
+	private static IEnumerable<(string Service, int Index)> UniqueServices(InstanceModel[] instances, bool strict, bool syncResolveAfterInit)
 	{
 		HashSet<string> seen = new(StringComparer.Ordinal);
 		for (int i = 0; i < instances.Length; i++)
 		{
 			// A parameterized service has no typed fast path; a strictly-withheld disposable service is reached
-			// only through Owned<T>, so it gets none either.
-			if (instances[i].IsParameterized || IsWithheld(instances[i], strict))
+			// only through Owned<T>, so it gets none either. An async-tainted service in the strict default is
+			// reached only through ResolveAsync, so it gets no synchronous typed resolver either.
+			if (instances[i].IsParameterized || IsWithheld(instances[i], strict) || !EmitsSync(instances[i], syncResolveAfterInit))
 			{
 				continue;
 			}
@@ -121,9 +122,9 @@ internal static class Emitter
 	///     Appends <c>, global::Awaiten.IAwaitenResolver&lt;S&gt;</c> for each registered service type to a
 	///     just-written base list, so the scope (and its root) exposes a typed resolution fast path.
 	/// </summary>
-	private static void EmitGenericResolverBases(StringBuilder builder, InstanceModel[] instances, bool strict)
+	private static void EmitGenericResolverBases(StringBuilder builder, InstanceModel[] instances, bool strict, bool syncResolveAfterInit)
 	{
-		foreach ((string service, int _) in UniqueServices(instances, strict))
+		foreach ((string service, int _) in UniqueServices(instances, strict, syncResolveAfterInit))
 		{
 			builder.Append(", global::Awaiten.IAwaitenResolver<").Append(service).Append('>');
 		}
@@ -135,9 +136,9 @@ internal static class Emitter
 	///     types get a typed path; the synthetic <c>Func&lt;T&gt;</c>/<c>Lazy&lt;T&gt;</c> relationship entries
 	///     remain reachable through the Type-based dispatch table.
 	/// </summary>
-	private static void EmitGenericResolverImpls(StringBuilder builder, int depth, InstanceModel[] instances, Names names, bool strict)
+	private static void EmitGenericResolverImpls(StringBuilder builder, int depth, InstanceModel[] instances, Names names, bool strict, bool syncResolveAfterInit)
 	{
-		foreach ((string service, int index) in UniqueServices(instances, strict))
+		foreach ((string service, int index) in UniqueServices(instances, strict, syncResolveAfterInit))
 		{
 			Indent(builder, depth).Append(service).Append(" global::Awaiten.IAwaitenResolver<")
 				.Append(service).Append(">.Resolve() => ").Append(names.Resolver(index)).AppendLine("();");
@@ -171,9 +172,9 @@ internal static class Emitter
 		// generated lives on it directly. All state and resolution live on those types: the base Scope holds
 		// the static dispatch table plus scoped/transient logic and delegates singletons to the root, while
 		// the sealed Root subclass owns the singletons and is the usable instance (new MyContainer.Root()).
-		EmitRootClass(builder, depth, instances, names, serviceToIndex);
+		EmitRootClass(builder, depth, instances, names, serviceToIndex, model.SyncResolveAfterInit);
 		builder.AppendLine();
-		EmitScopeBaseClass(builder, depth, instances, names, serviceToIndex, model.Strict);
+		EmitScopeBaseClass(builder, depth, instances, names, serviceToIndex, model.Strict, model.SyncResolveAfterInit);
 	}
 
 	// A disposable build-on-demand service (a disposable transient or parameterized service) is withheld from
@@ -198,6 +199,13 @@ internal static class Emitter
 	private static bool IsRootOwned(InstanceModel instance)
 		=> instance.Lifetime == Lifetime.Singleton || instance.Production == ProductionKind.Instance;
 
+	// Whether synchronous resolution members (resolver, cache field, dispatch entries, typed fast path) are
+	// emitted for an instance: always for a non-tainted service, and for an async-tainted one only in
+	// pragmatic mode (SyncResolveAfterInit), where it may be resolved synchronously once InitializeAsync has
+	// warmed it. In the strict default an async-tainted service is reachable only through ResolveAsync.
+	private static bool EmitsSync(InstanceModel instance, bool syncResolveAfterInit)
+		=> !instance.IsAsyncTainted || syncResolveAfterInit;
+
 	// The guidance message (a quoted string literal) thrown by Resolve(Type) on the Root when a service
 	// withheld there under strict lifetime safety is requested by its bare type: it is itself a disposable
 	// build-on-demand service, reachable from the Root only by injection or through an Owned<T> handle - but
@@ -216,6 +224,27 @@ internal static class Emitter
 	{
 		string display = service.Replace("global::", string.Empty);
 		return $"\"Awaiten: a plain Func over '{display}' is withheld from by-type resolution on the container root under strict lifetime safety because building it on demand accumulates disposables on the container root; resolve it as Func<…, Owned<{display}>> for per-use disposal, resolve it from a child scope, or set LifetimeSafety.Loose on the [Container].\"";
+	}
+
+	// The guidance message (a quoted string literal) thrown by Resolve(Type) when an async-tainted service is
+	// requested by type: it is async-initialized (or reaches one through its non-deferred dependencies), so it
+	// has no synchronous resolution path in the strict default and must be obtained asynchronously.
+	private static string AsyncWithheldMessage(string service)
+	{
+		string display = service.Replace("global::", string.Empty);
+		return $"\"Awaiten: '{display}' requires asynchronous initialization (it is IAsyncInitializable, or depends on one) and cannot be resolved synchronously; resolve it through ResolveAsync (or warm it through InitializeAsync / CreateScopeAsync), or set SyncResolveAfterInit on the [Container].\"";
+	}
+
+	// The guidance message (a quoted string literal) thrown by ResolveAsync(Type) on the Root when a disposable
+	// build-on-demand service that needs asynchronous initialization is requested by its bare type: building it
+	// on demand from the Root tracks a fresh disposable on the root for the container's lifetime (an unbounded
+	// leak), so the Root withholds it. It stays resolvable from a child scope, whose disposal bounds it - the
+	// async counterpart to BareWithheldMessage (Owned<T> is a synchronous relationship, so it is not offered for
+	// an async-initialized service).
+	private static string AsyncRootWithheldMessage(string service)
+	{
+		string display = service.Replace("global::", string.Empty);
+		return $"\"Awaiten: '{display}' is a disposable transient that needs asynchronous initialization; resolving it through ResolveAsync on the container root would track a fresh disposable on the root for the container's lifetime, so it is withheld there under strict lifetime safety. Resolve it from a child scope (await CreateScopeAsync(), ResolveAsync from that scope, then dispose the scope), or set LifetimeSafety.Loose on the [Container].\"";
 	}
 
 	/// <summary>
@@ -241,10 +270,10 @@ internal static class Emitter
 	///     itself, constructs transients, and resolves singletons through <c>protected virtual</c> delegators
 	///     that the <c>Root</c> subclass overrides. Child (request) scopes are instances of this type.
 	/// </summary>
-	private static void EmitScopeBaseClass(StringBuilder builder, int depth, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool strict)
+	private static void EmitScopeBaseClass(StringBuilder builder, int depth, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool strict, bool syncResolveAfterInit)
 	{
 		Indent(builder, depth).Append("public class Scope : global::Awaiten.IAwaitenScope");
-		EmitGenericResolverBases(builder, instances, strict);
+		EmitGenericResolverBases(builder, instances, strict, syncResolveAfterInit);
 		builder.AppendLine();
 		Indent(builder, depth).AppendLine("{");
 		int body = depth + 1;
@@ -254,18 +283,28 @@ internal static class Emitter
 		// Every entry is dispatchable; a root-withheld entry additionally appears in the __withheld table (its
 		// guidance, thrown by Resolve on the Root) and is flagged in the __rootWithheld mask (which TryResolve
 		// consults only on the Root), so a child scope resolves it while the Root withholds it.
-		List<DispatchEntry> entries = BuildDispatchEntries(instances, names, serviceToIndex, strict);
-		List<DispatchEntry> withheld = Withheld(entries);
+		List<DispatchEntry> entries = BuildDispatchEntries(instances, names, serviceToIndex, strict, syncResolveAfterInit);
+		List<DispatchEntry> rootWithheld = Withheld(entries);
+		// The __withheld guidance table merges two sources: the root-withheld disposable build-on-demand
+		// services (still dispatchable from a child scope) and the async-tainted services excluded from
+		// synchronous resolution entirely (reachable only through ResolveAsync). Both surface a helpful
+		// message from Resolve instead of the generic "no registration"; only the former needs the
+		// __rootWithheld mask (it gates TryResolve on the Root), so that stays keyed to the dispatch entries.
+		List<(string Type, string Guidance)> withheldTypes = WithheldTypes(rootWithheld, instances, syncResolveAfterInit);
 		if (entries.Count > 0)
 		{
 			EmitDispatchTable(builder, body, entries);
 			builder.AppendLine();
 		}
 
-		if (withheld.Count > 0)
+		if (withheldTypes.Count > 0)
 		{
-			EmitWithheldTable(builder, body, withheld);
+			EmitWithheldTable(builder, body, withheldTypes);
 			builder.AppendLine();
+		}
+
+		if (rootWithheld.Count > 0)
+		{
 			EmitRootWithheldMask(builder, body, entries);
 			builder.AppendLine();
 		}
@@ -296,9 +335,18 @@ internal static class Emitter
 		Indent(builder, body + 1).AppendLine("__root = root;");
 		Indent(builder, body).AppendLine("}");
 		builder.AppendLine();
-		EmitResolutionApi(builder, body, instances, names, serviceToIndex, strict);
+		EmitResolutionApi(builder, body, instances, names, serviceToIndex, strict, syncResolveAfterInit);
 		builder.AppendLine();
 		EmitGenericResolveMethod(builder, body);
+		builder.AppendLine();
+		// The asynchronous surface: ResolveAsync(Type) on every owner, plus the IAwaitenScope members
+		// InitializeAsync (the base warms this scope's async scoped services; the Root overrides it to warm
+		// the singletons) and CreateScopeAsync. The Root's per-singleton async resolvers are emitted there.
+		EmitAsyncResolutionApi(builder, body, instances, names, strict);
+		builder.AppendLine();
+		EmitScopeInitializeAsync(builder, body, instances, names);
+		builder.AppendLine();
+		EmitCreateScopeAsync(builder, body);
 		builder.AppendLine();
 		// A scope is the single source of scopes: nesting shares the same root (and therefore the same
 		// singletons), so a child created from a child is no different from one created from the root. A
@@ -314,12 +362,35 @@ internal static class Emitter
 		}
 
 		builder.AppendLine();
-		EmitGenericResolverImpls(builder, body, instances, names, strict);
+		EmitGenericResolverImpls(builder, body, instances, names, strict, syncResolveAfterInit);
 
 		for (int i = 0; i < instances.Length; i++)
 		{
-			builder.AppendLine();
-			EmitScopeResolver(builder, body, i, instances[i], instances, names, serviceToIndex);
+			// The synchronous resolver is suppressed for an async-tainted service in the strict default
+			// (where it is reachable only through ResolveAsync); the async resolver is added for every
+			// async-tainted, non-parameterized service (a parameterized one is reached only by its Func<TArg…, T>).
+			if (EmitsSync(instances[i], syncResolveAfterInit))
+			{
+				builder.AppendLine();
+
+				// In pragmatic mode an async-tainted (non-parameterized) service is also resolvable
+				// synchronously; its synchronous resolver delegates to the memoizing async one rather than
+				// constructing a second, uninitialized instance, so there is a single init path.
+				if (instances[i].IsAsyncTainted && !instances[i].IsParameterized)
+				{
+					EmitDelegatingSyncResolver(builder, body, i, instances[i], names);
+				}
+				else
+				{
+					EmitScopeResolver(builder, body, i, instances[i], instances, names, serviceToIndex);
+				}
+			}
+
+			if (instances[i].IsAsyncTainted && !instances[i].IsParameterized)
+			{
+				builder.AppendLine();
+				EmitAsyncScopeResolver(builder, body, i, instances[i], instances, names, serviceToIndex);
+			}
 		}
 
 		builder.AppendLine();
@@ -334,9 +405,11 @@ internal static class Emitter
 	///     singleton delegators with the real caching/member access, so a child scope delegating through
 	///     <c>__root</c> lands here.
 	/// </summary>
-	private static void EmitRootClass(StringBuilder builder, int depth, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex)
+	private static void EmitRootClass(StringBuilder builder, int depth, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool syncResolveAfterInit)
 	{
-		Indent(builder, depth).AppendLine("public sealed class Root : Scope");
+		// The Root is the composition root (IAwaitenRoot): it adds InitializeAsync to warm the singletons. A
+		// child scope is only an IAwaitenScope - it is warmed when created (CreateScopeAsync), never explicitly.
+		Indent(builder, depth).AppendLine("public sealed class Root : Scope, global::Awaiten.IAwaitenRoot");
 		Indent(builder, depth).AppendLine("{");
 		int body = depth + 1;
 
@@ -345,19 +418,38 @@ internal static class Emitter
 		Indent(builder, body).AppendLine("public Root() : base()");
 		Indent(builder, body).AppendLine("{");
 		Indent(builder, body).AppendLine("}");
+		builder.AppendLine();
+		// The Root override of InitializeAsync warms the async singletons in dependency order (the base
+		// Scope warms only its async scoped services).
+		EmitRootInitializeAsync(builder, body, instances, names);
 
 		for (int i = 0; i < instances.Length; i++)
 		{
+			InstanceModel instance = instances[i];
 			// A parameterized service is never cached on the root; its single fresh-per-call resolver lives
-			// on the base Scope (protected) and the Root inherits it.
-			if (instances[i].IsParameterized
-			    || (instances[i].Lifetime != Lifetime.Singleton && instances[i].Production != ProductionKind.Instance))
+			// on the base Scope (protected) and the Root inherits it. Only singleton-owned instances
+			// (singletons and pre-built Instances) get a Root override.
+			if (instance.IsParameterized
+			    || (instance.Lifetime != Lifetime.Singleton && instance.Production != ProductionKind.Instance))
 			{
 				continue;
 			}
 
-			builder.AppendLine();
-			EmitRootResolver(builder, body, i, instances[i], instances, names, serviceToIndex);
+			// The synchronous override is suppressed for an async-tainted singleton: in the strict default it
+			// is reachable only through ResolveAsync, and in pragmatic mode its synchronous resolver is the
+			// base Scope's delegator to the async path (which the async override below backs), so it needs no
+			// Root sync override of its own.
+			if (EmitsSync(instance, syncResolveAfterInit) && !instance.IsAsyncTainted)
+			{
+				builder.AppendLine();
+				EmitRootResolver(builder, body, i, instance, instances, names, serviceToIndex);
+			}
+
+			if (instance.IsAsyncTainted)
+			{
+				builder.AppendLine();
+				EmitAsyncRootResolver(builder, body, i, instance, instances, names, serviceToIndex);
+			}
 		}
 
 		Indent(builder, depth).AppendLine("}");
@@ -380,9 +472,24 @@ internal static class Emitter
 				continue;
 			}
 
-			string modifier = instance.IsReferenceType ? "private volatile " : "private ";
-			Indent(builder, depth).Append(modifier).Append(instance.ImplementationType)
-				.Append("? ").Append(names.Field(i)).AppendLine(";");
+			// The synchronous cache backs synchronous resolution. An async-tainted service is never cached
+			// synchronously: in the strict default it has no synchronous resolver at all, and in pragmatic
+			// mode its synchronous resolver delegates to the (memoizing) async one - so the async cache below
+			// is its single home and there is no second, uninitialized instance to cache here.
+			if (!instance.IsAsyncTainted)
+			{
+				string modifier = instance.IsReferenceType ? "private volatile " : "private ";
+				Indent(builder, depth).Append(modifier).Append(instance.ImplementationType)
+					.Append("? ").Append(names.Field(i)).AppendLine(";");
+			}
+
+			// The async cache memoizes the construction-and-initialization Task so it is awaited exactly
+			// once; it is volatile so the lock-free read cannot observe it before its writes are visible.
+			if (instance.IsAsyncTainted)
+			{
+				Indent(builder, depth).Append("private volatile global::System.Threading.Tasks.Task<").Append(instance.ImplementationType)
+					.Append(">? ").Append(names.AsyncField(i)).AppendLine(";");
+			}
 		}
 	}
 
@@ -394,10 +501,15 @@ internal static class Emitter
 		Indent(builder, depth).AppendLine("}");
 	}
 
-	private static void EmitResolutionApi(StringBuilder builder, int depth, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool strict)
+	private static void EmitResolutionApi(StringBuilder builder, int depth, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool strict, bool syncResolveAfterInit)
 	{
-		List<DispatchEntry> entries = BuildDispatchEntries(instances, names, serviceToIndex, strict);
-		bool hasWithheld = Withheld(entries).Count > 0;
+		List<DispatchEntry> entries = BuildDispatchEntries(instances, names, serviceToIndex, strict, syncResolveAfterInit);
+		List<DispatchEntry> rootWithheld = Withheld(entries);
+		// hasWithheld gates the __withheld guidance lookup in Resolve (root-withheld disposables plus
+		// async-only services); hasRootWithheld gates the __rootWithheld mask check in TryResolve, which only
+		// the dispatchable root-withheld disposables need (async-only services have no dispatch entry).
+		bool hasRootWithheld = rootWithheld.Count > 0;
+		bool hasWithheld = WithheldTypes(rootWithheld, instances, syncResolveAfterInit).Count > 0;
 
 		Indent(builder, depth).AppendLine("public object Resolve(global::System.Type serviceType)");
 		Indent(builder, depth).AppendLine("{");
@@ -408,9 +520,10 @@ internal static class Emitter
 		builder.AppendLine();
 		if (hasWithheld)
 		{
-			// Only reached on the Root (a child scope resolved the type through TryResolve and returned above): the
-			// type is root-withheld, so surface the guidance (pointing at Owned<T>) instead of the generic "no
-			// registration" message. TryResolve stays non-throwing - on the Root it returned false via the mask.
+			// The type was not resolved synchronously: either it is root-withheld and this is the Root (a child
+			// scope resolved it through TryResolve and returned above), or it is an async-only service excluded
+			// from synchronous resolution on every scope. Surface the targeted guidance (Owned<T> / ResolveAsync)
+			// instead of the generic "no registration" message. TryResolve stays non-throwing in both cases.
 			Indent(builder, depth + 1).AppendLine("if (__withheld.TryGetValue(serviceType, out string? __guidance))");
 			Indent(builder, depth + 1).AppendLine("{");
 			Indent(builder, depth + 2).AppendLine("throw new global::System.InvalidOperationException(__guidance);");
@@ -435,7 +548,7 @@ internal static class Emitter
 
 		Indent(builder, depth + 1).AppendLine("if (__dispatch.TryGetValue(serviceType, out int __case))");
 		Indent(builder, depth + 1).AppendLine("{");
-		if (hasWithheld)
+		if (hasRootWithheld)
 		{
 			// Root-only withholding: a child scope resolves the case (its lifetime bounded by the scope), but the
 			// Root returns false (and Resolve then throws the guidance), so the root-accumulation leak stays
@@ -470,7 +583,7 @@ internal static class Emitter
 	///     factory/lazy bound to this owner's resolver). The order is identical on the container and its
 	///     scope, so a single static table built on the container is valid for both.
 	/// </summary>
-	private static List<DispatchEntry> BuildDispatchEntries(InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool strict)
+	private static List<DispatchEntry> BuildDispatchEntries(InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool strict, bool syncResolveAfterInit)
 	{
 		List<DispatchEntry> entries = new();
 		HashSet<string> seen = new(StringComparer.Ordinal);
@@ -479,8 +592,15 @@ internal static class Emitter
 		// registered Lazy<T>) wins the dispatch slot over the synthetic relationship entry below. Service
 		// types are unique across instances (registrations are coalesced), so each is added exactly once.
 		// Seeding 'seen' here lets the synthetic pass skip any key an explicit registration already claimed.
+		// An async-tainted service in the strict default is excluded from synchronous dispatch entirely - it
+		// is reachable only through ResolveAsync - so neither its bare type nor any relationship over it is added.
 		for (int i = 0; i < instances.Length; i++)
 		{
+			if (!EmitsSync(instances[i], syncResolveAfterInit))
+			{
+				continue;
+			}
+
 			AddServiceEntries(instances[i], names.Resolver(i), entries, seen, IsWithheld(instances[i], strict), IsFuncWithheld(instances, i, serviceToIndex, strict));
 		}
 
@@ -490,7 +610,7 @@ internal static class Emitter
 		// the Func<TArg…, T> added above.
 		for (int i = 0; i < instances.Length; i++)
 		{
-			if (!instances[i].IsParameterized)
+			if (!instances[i].IsParameterized && EmitsSync(instances[i], syncResolveAfterInit))
 			{
 				AddRelationshipEntries(instances[i], names.Resolver(i), entries, seen, IsFuncWithheld(instances, i, serviceToIndex, strict));
 			}
@@ -620,6 +740,69 @@ internal static class Emitter
 	}
 
 	/// <summary>
+	///     The (service type, guidance) pairs that populate the static <c>__withheld</c> table: the
+	///     dispatchable root-withheld disposable services (<paramref name="rootWithheld" />), plus the
+	///     async-tainted services excluded from synchronous resolution entirely. Deduplicated by service type
+	///     (the two sources are disjoint - an async-tainted service emits no dispatch entry - but a
+	///     belt-and-braces dedup keeps the emitted dictionary initializer free of a duplicate-key throw).
+	/// </summary>
+	private static List<(string Type, string Guidance)> WithheldTypes(
+		List<DispatchEntry> rootWithheld, InstanceModel[] instances, bool syncResolveAfterInit)
+	{
+		List<(string Type, string Guidance)> result = new();
+		HashSet<string> seen = new(StringComparer.Ordinal);
+		foreach (DispatchEntry entry in rootWithheld.Where(entry => seen.Add(entry.Type)))
+		{
+			result.Add((entry.Type, entry.Guidance!));
+		}
+
+		foreach ((string service, string guidance) in AsyncWithheldServices(instances, syncResolveAfterInit))
+		{
+			if (seen.Add(service))
+			{
+				result.Add((service, guidance));
+			}
+		}
+
+		return result;
+	}
+
+	/// <summary>
+	///     The service types that are reachable only asynchronously, paired with their guidance: each
+	///     async-tainted, non-parameterized service's (non-keyed) service types, when the container is not in
+	///     pragmatic mode (where the same services are synchronously resolvable after warm-up). They have no
+	///     synchronous dispatch entry, so without this they would surface as a generic "no registration".
+	/// </summary>
+	private static IEnumerable<(string Service, string Guidance)> AsyncWithheldServices(
+		InstanceModel[] instances, bool syncResolveAfterInit)
+	{
+		if (syncResolveAfterInit)
+		{
+			yield break;
+		}
+
+		HashSet<string> seen = new(StringComparer.Ordinal);
+		for (int i = 0; i < instances.Length; i++)
+		{
+			if (!instances[i].IsAsyncTainted || instances[i].IsParameterized)
+			{
+				continue;
+			}
+
+			foreach (ServiceKey service in instances[i].Services.AsArray())
+			{
+				// Keyed registrations are reached only by [FromKey] injection, never by-type resolution.
+				if (service.Key is not null || !seen.Add(service.Service))
+				{
+					continue;
+				}
+
+				yield return (service.Service, AsyncWithheldMessage(service.Service));
+			}
+		}
+	}
+
+	/// <summary>
 	///     Emits the static <c>__dispatch</c> table mapping each resolvable service type to its case number. It
 	///     lives on the base <c>Scope</c> and is <c>static</c>, so it is built once and shared by every scope and
 	///     the <c>Root</c> subclass that inherits it.
@@ -638,19 +821,19 @@ internal static class Emitter
 	}
 
 	/// <summary>
-	///     Emits the static <c>__withheld</c> table mapping each root-withheld service type to its guidance
-	///     message. It is consulted only by <c>Resolve</c> on the Root (where the parallel <c>__rootWithheld</c>
-	///     mask made <c>TryResolve</c> return <see langword="false" />), to throw the guidance instead of the
-	///     generic "no registration" message; a child scope resolves the type and never reaches it.
+	///     Emits the static <c>__withheld</c> table mapping each withheld service type to its guidance message.
+	///     <c>Resolve</c> consults it (after <c>TryResolve</c> returned <see langword="false" />) to throw the
+	///     targeted guidance instead of the generic "no registration" message - for a root-withheld disposable
+	///     on the Root, or an async-only service on any scope.
 	/// </summary>
-	private static void EmitWithheldTable(StringBuilder builder, int depth, List<DispatchEntry> entries)
+	private static void EmitWithheldTable(StringBuilder builder, int depth, List<(string Type, string Guidance)> entries)
 	{
 		Indent(builder, depth).AppendLine(
 			"private static readonly global::System.Collections.Generic.Dictionary<global::System.Type, string> __withheld = new global::System.Collections.Generic.Dictionary<global::System.Type, string>");
 		Indent(builder, depth).AppendLine("{");
-		foreach (DispatchEntry entry in entries)
+		foreach ((string type, string guidance) in entries)
 		{
-			Indent(builder, depth + 1).Append("{ typeof(").Append(entry.Type).Append("), ").Append(entry.Guidance).AppendLine(" },");
+			Indent(builder, depth + 1).Append("{ typeof(").Append(type).Append("), ").Append(guidance).AppendLine(" },");
 		}
 
 		Indent(builder, depth).AppendLine("};");
@@ -793,6 +976,368 @@ internal static class Emitter
 	}
 
 	/// <summary>
+	///     Emits the asynchronous <c>ResolveAsync(Type)</c> on the base <c>Scope</c> (inherited by the
+	///     <c>Root</c>): async-tainted services are routed to their memoizing async resolver and converted to
+	///     <c>Task&lt;object&gt;</c>, while everything that needs no asynchronous initialization resolves
+	///     synchronously and completes immediately (deferring to <c>Resolve</c> for the same registration /
+	///     withholding errors as the synchronous path).
+	/// </summary>
+	private static void EmitAsyncResolutionApi(StringBuilder builder, int depth, InstanceModel[] instances, Names names, bool strict)
+	{
+		const string task = "global::System.Threading.Tasks.Task";
+
+		Indent(builder, depth).Append("public ").Append(task)
+			.AppendLine("<object> ResolveAsync(global::System.Type serviceType, global::System.Threading.CancellationToken cancellationToken = default)");
+		Indent(builder, depth).AppendLine("{");
+		EmitDisposedGuard(builder, depth + 1);
+
+		bool hasAsync = false;
+		for (int i = 0; i < instances.Length; i++)
+		{
+			// A parameterized service is reached only through its synchronous Func<TArg…, T>, so it has no
+			// async resolver of its own.
+			if (!instances[i].IsAsyncTainted || instances[i].IsParameterized)
+			{
+				continue;
+			}
+
+			hasAsync = true;
+			string asyncResolver = names.AsyncResolver(i);
+			// A disposable async transient is withheld from by-type resolution on the Root, mirroring the
+			// synchronous __rootWithheld mask: each Root resolution would track a fresh disposable on the root
+			// for the container's lifetime (an unbounded leak), so the Root throws guidance toward a child scope
+			// while a child scope still resolves it (its disposal bounds the instance). Injection into a
+			// singleton stays allowed - that is bounded to one instance.
+			bool rootWithheld = IsWithheld(instances[i], strict);
+			foreach (ServiceKey serviceKey in instances[i].Services.AsArray())
+			{
+				// Keyed registrations are reached only by [FromKey] injection, never by-type resolution.
+				if (serviceKey.Key is not null)
+				{
+					continue;
+				}
+
+				if (rootWithheld)
+				{
+					Indent(builder, depth + 1).Append("if (serviceType == typeof(").Append(serviceKey.Service).AppendLine("))");
+					Indent(builder, depth + 1).AppendLine("{");
+					Indent(builder, depth + 2).Append("if (this is Root) { throw new global::System.InvalidOperationException(")
+						.Append(AsyncRootWithheldMessage(serviceKey.Service)).AppendLine("); }");
+					Indent(builder, depth + 2).Append("return __AsObject(").Append(asyncResolver).AppendLine("(cancellationToken));");
+					Indent(builder, depth + 1).AppendLine("}");
+				}
+				else
+				{
+					Indent(builder, depth + 1).Append("if (serviceType == typeof(").Append(serviceKey.Service)
+						.Append(")) { return __AsObject(").Append(asyncResolver).AppendLine("(cancellationToken)); }");
+				}
+			}
+		}
+
+		// Not async-tainted: resolve synchronously and complete immediately. Resolve throws the same
+		// registration / strict-withholding guidance as the synchronous path when the type is unresolvable.
+		Indent(builder, depth + 1).Append("return ").Append(task).AppendLine(".FromResult(Resolve(serviceType));");
+		Indent(builder, depth).AppendLine("}");
+
+		if (hasAsync)
+		{
+			builder.AppendLine();
+			Indent(builder, depth).Append("private static async ").Append(task)
+				.AppendLine("<object> __AsObject<T>(global::System.Threading.Tasks.Task<T> __task) => (object)(await __task.ConfigureAwait(false))!;");
+		}
+	}
+
+	/// <summary>
+	///     Emits the async resolver for an async-tainted instance on the base <c>Scope</c>: a singleton becomes
+	///     a <c>protected virtual</c> delegator to <c>__root</c> (the <c>Root</c> overrides it with the real
+	///     caching creator); a scoped service memoizes its construction-and-initialization <c>Task</c> on the
+	///     scope; a transient constructs, initializes and returns each call.
+	/// </summary>
+	private static void EmitAsyncScopeResolver(StringBuilder builder, int depth, int index, InstanceModel instance, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex)
+	{
+		const string task = "global::System.Threading.Tasks.Task";
+		const string ct = "global::System.Threading.CancellationToken cancellationToken";
+
+		if (instance.Lifetime == Lifetime.Singleton)
+		{
+			Indent(builder, depth).Append("protected virtual ").Append(task).Append('<').Append(instance.ImplementationType)
+				.Append("> ").Append(names.AsyncResolver(index)).Append('(').Append(ct).Append(") => __root.")
+				.Append(names.AsyncResolver(index)).AppendLine("(cancellationToken);");
+			return;
+		}
+
+		string construction = EmitConstruction(instance, instances, names, serviceToIndex, asynchronous: true);
+		if (instance.Lifetime == Lifetime.Transient)
+		{
+			EmitAsyncFreshResolver(builder, depth, index, instance, names, construction);
+			return;
+		}
+
+		// Scoped: a memoized Task on the scope guards construction-and-initialization.
+		EmitAsyncCachingResolver(builder, depth, index, instance, names, construction, "internal");
+	}
+
+	/// <summary>
+	///     Emits the synchronous resolver for an async-tainted service in pragmatic mode
+	///     (<c>SyncResolveAfterInit</c>): it blocks on the memoizing async resolver - the single
+	///     construction-and-initialization path - rather than building a second, uninitialized instance. Once
+	///     the service has been warmed (through <c>InitializeAsync</c> / <c>CreateScopeAsync</c> / an earlier
+	///     <c>ResolveAsync</c>) the async resolver returns a completed task, so this returns the cached
+	///     instance without blocking; resolving before warm-up blocks the caller until initialization
+	///     completes. (Strict mode emits no synchronous resolver for an async-tainted service at all.)
+	/// </summary>
+	private static void EmitDelegatingSyncResolver(StringBuilder builder, int depth, int index, InstanceModel instance, Names names)
+	{
+		Indent(builder, depth).Append("internal ").Append(instance.ImplementationType).Append(' ')
+			.Append(names.Resolver(index)).AppendLine("()");
+		Indent(builder, depth).AppendLine("{");
+		EmitDisposedGuard(builder, depth + 1);
+		Indent(builder, depth + 1).Append("return ").Append(names.AsyncResolver(index))
+			.AppendLine("(default).GetAwaiter().GetResult();");
+		Indent(builder, depth).AppendLine("}");
+	}
+
+	/// <summary>
+	///     Emits the singleton async resolver on the <c>Root</c> as a <c>protected override</c>, plus its
+	///     creator: the memoized <c>Task</c> guarantees the construction and <c>InitializeAsync</c> run at most
+	///     once, thread-safely under <c>__gate</c>.
+	/// </summary>
+	private static void EmitAsyncRootResolver(StringBuilder builder, int depth, int index, InstanceModel instance, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex)
+	{
+		string construction = EmitConstruction(instance, instances, names, serviceToIndex, asynchronous: true);
+		EmitAsyncCachingResolver(builder, depth, index, instance, names, construction, "protected override");
+	}
+
+	/// <summary>
+	///     Emits a memoizing async resolver and its creator. The resolver returns the cached <c>Task</c> if it
+	///     exists (lock-free), otherwise assigns it under <c>__gate</c> so the creator runs once; the creator
+	///     constructs, registers for disposal and awaits <c>InitializeAsync</c>. A task that faults or is
+	///     canceled is evicted from the cache so a later call retries rather than replaying the same failure
+	///     (and so one caller's cancellation does not permanently poison a shared singleton).
+	/// </summary>
+	private static void EmitAsyncCachingResolver(StringBuilder builder, int depth, int index, InstanceModel instance, Names names, string construction, string modifiers)
+	{
+		string type = instance.ImplementationType;
+		string asyncResolver = names.AsyncResolver(index);
+		string asyncField = names.AsyncField(index);
+		string creator = names.AsyncCreator(index);
+		const string task = "global::System.Threading.Tasks.Task";
+		const string ct = "global::System.Threading.CancellationToken cancellationToken";
+
+		Indent(builder, depth).Append(modifiers).Append(' ').Append(task).Append('<').Append(type).Append("> ")
+			.Append(asyncResolver).Append('(').Append(ct).AppendLine(")");
+		Indent(builder, depth).AppendLine("{");
+		EmitDisposedGuard(builder, depth + 1);
+		Indent(builder, depth + 1).Append(task).Append('<').Append(type).Append(">? __cached = ").Append(asyncField).AppendLine(";");
+		// A faulted or canceled task is not memoized: treat it as absent so this call rebuilds rather than
+		// replaying a past failure (or a previous caller's cancellation) forever. A successful or still-running
+		// task is returned without taking the lock.
+		Indent(builder, depth + 1).AppendLine("if (__cached is not null && !__cached.IsFaulted && !__cached.IsCanceled)");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).AppendLine("return __cached;");
+		Indent(builder, depth + 1).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("lock (__gate)");
+		Indent(builder, depth + 1).AppendLine("{");
+		EmitDisposedGuard(builder, depth + 2);
+		Indent(builder, depth + 2).Append(task).Append('<').Append(type).Append(">? __pending = ").Append(asyncField).AppendLine(";");
+		Indent(builder, depth + 2).AppendLine("if (__pending is null || __pending.IsFaulted || __pending.IsCanceled)");
+		Indent(builder, depth + 2).AppendLine("{");
+		Indent(builder, depth + 3).Append("__pending = ").Append(creator).AppendLine("(cancellationToken);");
+		Indent(builder, depth + 3).Append(asyncField).AppendLine(" = __pending;");
+		Indent(builder, depth + 2).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, depth + 2).AppendLine("return __pending;");
+		Indent(builder, depth + 1).AppendLine("}");
+		Indent(builder, depth).AppendLine("}");
+		builder.AppendLine();
+
+		Indent(builder, depth).Append("private async ").Append(task).Append('<').Append(type).Append("> ")
+			.Append(creator).Append('(').Append(ct).AppendLine(")");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).Append(type).Append(" created = ").Append(construction).AppendLine(";");
+		EmitAsyncDisposableRegistration(builder, depth + 1, instance);
+		EmitAsyncInitialization(builder, depth + 1, instance, "created");
+		Indent(builder, depth + 1).AppendLine("return created;");
+		Indent(builder, depth).AppendLine("}");
+	}
+
+	/// <summary>
+	///     Emits an async resolver that constructs, initializes and returns a fresh instance on every call (a
+	///     transient). A disposable instance is registered for teardown on the owner.
+	/// </summary>
+	private static void EmitAsyncFreshResolver(StringBuilder builder, int depth, int index, InstanceModel instance, Names names, string construction)
+	{
+		string type = instance.ImplementationType;
+		const string task = "global::System.Threading.Tasks.Task";
+		const string ct = "global::System.Threading.CancellationToken cancellationToken";
+
+		Indent(builder, depth).Append("internal async ").Append(task).Append('<').Append(type).Append("> ")
+			.Append(names.AsyncResolver(index)).Append('(').Append(ct).AppendLine(")");
+		Indent(builder, depth).AppendLine("{");
+		EmitDisposedGuard(builder, depth + 1);
+		Indent(builder, depth + 1).Append(type).Append(" created = ").Append(construction).AppendLine(";");
+		EmitAsyncDisposableRegistration(builder, depth + 1, instance);
+		EmitAsyncInitialization(builder, depth + 1, instance, "created");
+		Indent(builder, depth + 1).AppendLine("return created;");
+		Indent(builder, depth).AppendLine("}");
+	}
+
+	/// <summary>
+	///     Registers a freshly built disposable instance for teardown on the owner under <c>__gate</c>,
+	///     re-checking <c>__disposed</c> so one built during a concurrent dispose is disposed here rather than
+	///     leaked. Mirrors the synchronous fresh-resolver registration.
+	/// </summary>
+	private static void EmitAsyncDisposableRegistration(StringBuilder builder, int depth, InstanceModel instance)
+	{
+		if (!instance.IsDisposable)
+		{
+			return;
+		}
+
+		Indent(builder, depth).AppendLine("lock (__gate)");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).AppendLine("if (__disposed)");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).AppendLine("((global::System.IDisposable)created).Dispose();");
+		Indent(builder, depth + 2).AppendLine("throw new global::System.ObjectDisposedException(GetType().FullName);");
+		Indent(builder, depth + 1).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("(__disposables ??= new global::System.Collections.Generic.List<object>()).Add(created);");
+		Indent(builder, depth).AppendLine("}");
+	}
+
+	/// <summary>
+	///     Awaits the instance's own <c>IAsyncInitializable.InitializeAsync</c> when its implementation is
+	///     async-initialized (an instance that is only async-tainted through a dependency has nothing of its
+	///     own to initialize - its async dependency was already awaited during construction).
+	/// </summary>
+	private static void EmitAsyncInitialization(StringBuilder builder, int depth, InstanceModel instance, string variable)
+	{
+		if (instance.IsAsyncInitializable)
+		{
+			Indent(builder, depth).Append("await ((global::Awaiten.IAsyncInitializable)").Append(variable)
+				.AppendLine(").InitializeAsync(cancellationToken).ConfigureAwait(false);");
+		}
+	}
+
+	/// <summary>
+	///     Emits the base <c>Scope</c>'s internal <c>__WarmAsync</c>: it eagerly warms this scope's
+	///     async-initialized scoped services in dependency order. It is internal (not on <c>IAwaitenScope</c>)
+	///     because a child scope is warmed only at creation, through <c>CreateScopeAsync</c>, which calls this.
+	/// </summary>
+	private static void EmitScopeInitializeAsync(StringBuilder builder, int depth, InstanceModel[] instances, Names names)
+		=> EmitWarmUp(builder, depth, instances, names, "internal", "__WarmAsync", Lifetime.Scoped);
+
+	/// <summary>
+	///     Emits the <c>Root</c>'s <c>InitializeAsync</c> (the <c>IAwaitenRoot</c> member): it eagerly warms
+	///     the async-initialized singletons in dependency order (idempotent and thread-safe, each warmed at
+	///     most once via its memoized resolver).
+	/// </summary>
+	private static void EmitRootInitializeAsync(StringBuilder builder, int depth, InstanceModel[] instances, Names names)
+		=> EmitWarmUp(builder, depth, instances, names, "public", "InitializeAsync", Lifetime.Singleton);
+
+	/// <summary>
+	///     Emits a warm-up method that awaits the async resolver of every async-tainted, non-parameterized
+	///     instance of the given lifetime; with none it returns <c>Task.CompletedTask</c>. The disposed-guard
+	///     runs synchronously (eager state validation, like <c>ResolveAsync</c>) rather than surfacing only when
+	///     the returned task is awaited: with targets the public/internal entry validates and delegates to a
+	///     private <c>async</c> core, so a disposed container throws immediately on the call.
+	/// </summary>
+	private static void EmitWarmUp(StringBuilder builder, int depth, InstanceModel[] instances, Names names, string modifiers, string method, Lifetime lifetime)
+	{
+		const string task = "global::System.Threading.Tasks.Task";
+		const string ctParam = "global::System.Threading.CancellationToken cancellationToken = default";
+		int[] targets = WarmUpTargets(instances, lifetime);
+
+		if (targets.Length == 0)
+		{
+			Indent(builder, depth).Append(modifiers).Append(' ').Append(task).Append(' ').Append(method).Append('(').Append(ctParam).AppendLine(")");
+			Indent(builder, depth).AppendLine("{");
+			EmitDisposedGuard(builder, depth + 1);
+			Indent(builder, depth + 1).Append("return ").Append(task).AppendLine(".CompletedTask;");
+			Indent(builder, depth).AppendLine("}");
+			return;
+		}
+
+		string core = method + "Core";
+		Indent(builder, depth).Append(modifiers).Append(' ').Append(task).Append(' ').Append(method).Append('(').Append(ctParam).AppendLine(")");
+		Indent(builder, depth).AppendLine("{");
+		EmitDisposedGuard(builder, depth + 1);
+		Indent(builder, depth + 1).Append("return ").Append(core).AppendLine("(cancellationToken);");
+		Indent(builder, depth).AppendLine("}");
+		builder.AppendLine();
+
+		Indent(builder, depth).Append("private async ").Append(task).Append(' ').Append(core)
+			.AppendLine("(global::System.Threading.CancellationToken cancellationToken)");
+		Indent(builder, depth).AppendLine("{");
+		foreach (int i in targets)
+		{
+			Indent(builder, depth + 1).Append("await ").Append(names.AsyncResolver(i)).AppendLine("(cancellationToken).ConfigureAwait(false);");
+		}
+
+		Indent(builder, depth).AppendLine("}");
+	}
+
+	/// <summary>
+	///     Emits <c>CreateScopeAsync</c> on the base <c>Scope</c> (inherited by the <c>Root</c>): it opens a
+	///     child scope and warms its async-initialized scoped services before handing it back. If warm-up
+	///     throws, the scope is disposed (draining whatever was built before the failure) rather than leaked.
+	/// </summary>
+	private static void EmitCreateScopeAsync(StringBuilder builder, int depth)
+	{
+		const string task = "global::System.Threading.Tasks.Task";
+
+		// The disposed-guard runs synchronously (eager state validation, like ResolveAsync) by splitting the
+		// public entry from a private async core: the entry validates and returns the core's task, so a disposed
+		// container throws immediately on the call rather than only when the returned task is awaited.
+		Indent(builder, depth).Append("public ").Append(task)
+			.AppendLine("<global::Awaiten.IAwaitenScope> CreateScopeAsync(global::System.Threading.CancellationToken cancellationToken = default)");
+		Indent(builder, depth).AppendLine("{");
+		EmitDisposedGuard(builder, depth + 1);
+		Indent(builder, depth + 1).AppendLine("return CreateScopeAsyncCore(cancellationToken);");
+		Indent(builder, depth).AppendLine("}");
+		builder.AppendLine();
+
+		Indent(builder, depth).Append("private async ").Append(task)
+			.AppendLine("<global::Awaiten.IAwaitenScope> CreateScopeAsyncCore(global::System.Threading.CancellationToken cancellationToken)");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).AppendLine("Scope __scope = CreateScope();");
+		Indent(builder, depth + 1).AppendLine("try");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).AppendLine("await __scope.__WarmAsync(cancellationToken).ConfigureAwait(false);");
+		Indent(builder, depth + 1).AppendLine("}");
+		Indent(builder, depth + 1).AppendLine("catch");
+		Indent(builder, depth + 1).AppendLine("{");
+		// Initialization failed (or was canceled) partway through: dispose the scope so the instances it
+		// already built and tracked are torn down rather than leaked, then surface the original failure.
+		Indent(builder, depth + 2).AppendLine("__scope.Dispose();");
+		Indent(builder, depth + 2).AppendLine("throw;");
+		Indent(builder, depth + 1).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("return __scope;");
+		Indent(builder, depth).AppendLine("}");
+	}
+
+	/// <summary>
+	///     The indices of the async-tainted, non-parameterized instances of the given lifetime that are eagerly
+	///     warmed up (singletons by the Root's <c>InitializeAsync</c>, scoped services per scope).
+	/// </summary>
+	private static int[] WarmUpTargets(InstanceModel[] instances, Lifetime lifetime)
+	{
+		List<int> targets = new();
+		for (int i = 0; i < instances.Length; i++)
+		{
+			if (instances[i].IsAsyncTainted && instances[i].Lifetime == lifetime && !instances[i].IsParameterized)
+			{
+				targets.Add(i);
+			}
+		}
+
+		return targets.ToArray();
+	}
+
+	/// <summary>
 	///     Emits a lock-free-read, lock-on-write cached resolver: return the cached field if set, otherwise
 	///     construct once under <c>lock (__gate)</c>, registering a disposable instance for teardown.
 	/// </summary>
@@ -829,7 +1374,7 @@ internal static class Emitter
 		Indent(builder, depth).AppendLine("}");
 	}
 
-	private static string EmitConstruction(InstanceModel instance, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex)
+	private static string EmitConstruction(InstanceModel instance, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool asynchronous = false)
 	{
 		ParameterModel[] parameters = instance.ConstructorParameters.AsArray();
 		StringBuilder arguments = new();
@@ -842,10 +1387,23 @@ internal static class Emitter
 			}
 
 			// Runtime arguments are passed in as a0, a1, … by the parameterized resolver; the rest resolve
-			// from the graph.
-			arguments.Append(parameters[p].Kind == DependencyKind.Arg
-				? "a" + argIndex++
-				: ResolveExpression(parameters[p], instances, names, serviceToIndex));
+			// from the graph. On the async construction path, an async-tainted direct dependency is awaited
+			// so the instance it injects is already initialized - which also keeps initialization in
+			// dependency order (the dependency is warmed before the instance that consumes it).
+			if (parameters[p].Kind == DependencyKind.Arg)
+			{
+				arguments.Append("a" + argIndex++);
+			}
+			else if (asynchronous && parameters[p].Kind == DependencyKind.Direct
+			         && serviceToIndex.TryGetValue(new ServiceKey(parameters[p].ServiceType, parameters[p].Key), out int dependency)
+			         && instances[dependency].IsAsyncTainted)
+			{
+				arguments.Append("await ").Append(names.AsyncResolver(dependency)).Append("(cancellationToken).ConfigureAwait(false)");
+			}
+			else
+			{
+				arguments.Append(ResolveExpression(parameters[p], instances, names, serviceToIndex));
+			}
 		}
 
 		if (instance.Production == ProductionKind.Factory)
@@ -1010,9 +1568,10 @@ internal static class Emitter
 		string message =
 			$"\"Awaiten: container '{typeName}' has registration errors; see the build diagnostics (AWT1xx).\"";
 		// The container has registration errors, so emit a throwing Root that still satisfies the shape
-		// consumers depend on (new MyContainer.Root(), Resolve, CreateScope, Dispose). This keeps the build
-		// focused on the actionable AWT diagnostics rather than cascading "type not found" errors.
-		Indent(builder, depth).AppendLine("public sealed class Root : global::Awaiten.IAwaitenScope");
+		// consumers depend on (new MyContainer.Root(), Resolve, CreateScope, InitializeAsync, Dispose). This
+		// keeps the build focused on the actionable AWT diagnostics rather than cascading "type not found"
+		// errors. It implements IAwaitenRoot (which includes IAwaitenScope), matching the real Root.
+		Indent(builder, depth).AppendLine("public sealed class Root : global::Awaiten.IAwaitenRoot");
 		Indent(builder, depth).AppendLine("{");
 		Indent(builder, depth + 1).Append(
 				"public object Resolve(global::System.Type serviceType) => throw new global::System.InvalidOperationException(")
@@ -1026,6 +1585,18 @@ internal static class Emitter
 		builder.AppendLine();
 		Indent(builder, depth + 1).Append(
 				"public global::Awaiten.IAwaitenScope CreateScope() => throw new global::System.InvalidOperationException(")
+			.Append(message).AppendLine(");");
+		builder.AppendLine();
+		Indent(builder, depth + 1).Append(
+				"public global::System.Threading.Tasks.Task<object> ResolveAsync(global::System.Type serviceType, global::System.Threading.CancellationToken cancellationToken = default) => throw new global::System.InvalidOperationException(")
+			.Append(message).AppendLine(");");
+		builder.AppendLine();
+		Indent(builder, depth + 1).Append(
+				"public global::System.Threading.Tasks.Task InitializeAsync(global::System.Threading.CancellationToken cancellationToken = default) => throw new global::System.InvalidOperationException(")
+			.Append(message).AppendLine(");");
+		builder.AppendLine();
+		Indent(builder, depth + 1).Append(
+				"public global::System.Threading.Tasks.Task<global::Awaiten.IAwaitenScope> CreateScopeAsync(global::System.Threading.CancellationToken cancellationToken = default) => throw new global::System.InvalidOperationException(")
 			.Append(message).AppendLine(");");
 		builder.AppendLine();
 		Indent(builder, depth + 1).AppendLine("public void Dispose() { }");
@@ -1127,6 +1698,14 @@ internal static class Emitter
 		public string Resolver(int index) => _resolvers[index];
 
 		public string Field(int index) => _fields[index];
+
+		// The async members are named off the synchronous resolver/field so they stay collision-safe
+		// together: ResolveFoo -> ResolveFooAsync / CreateFooAsync, _foo -> _fooAsyncTask.
+		public string AsyncResolver(int index) => _resolvers[index] + "Async";
+
+		public string AsyncCreator(int index) => "Create" + _resolvers[index].Substring("Resolve".Length) + "Async";
+
+		public string AsyncField(int index) => _fields[index] + "AsyncTask";
 
 		public static Names Build(InstanceModel[] instances)
 		{

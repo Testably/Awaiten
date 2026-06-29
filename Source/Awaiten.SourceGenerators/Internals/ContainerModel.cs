@@ -13,7 +13,8 @@ internal sealed record ContainerModel(
 	string HintName,
 	EquatableArray<InstanceModel> Instances,
 	EquatableArray<DiagnosticInfo> Diagnostics,
-	bool Strict)
+	bool Strict,
+	bool SyncResolveAfterInit)
 {
 	public bool HasErrors
 	{

@@ -49,6 +49,15 @@ public sealed class AwaitenServiceCollectionExtensionsTests
 
 		public IAwaitenScope CreateScope() => throw new NotSupportedException();
 
+		public Task<object> ResolveAsync(Type serviceType, System.Threading.CancellationToken cancellationToken = default)
+			=> throw new NotSupportedException();
+
+		public Task InitializeAsync(System.Threading.CancellationToken cancellationToken = default)
+			=> throw new NotSupportedException();
+
+		public Task<IAwaitenScope> CreateScopeAsync(System.Threading.CancellationToken cancellationToken = default)
+			=> throw new NotSupportedException();
+
 		public void Dispose()
 		{
 		}

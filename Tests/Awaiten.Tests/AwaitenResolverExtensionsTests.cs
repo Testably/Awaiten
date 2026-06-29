@@ -71,7 +71,32 @@ public sealed class AwaitenResolverExtensionsTests
 			.WithParamName("resolver");
 	}
 
-	private sealed class FakeResolver : IAwaitenResolver
+	[Fact]
+	public async Task ResolveAsync_ForwardsTheRequestedTypeAndCastsTheResult()
+	{
+		FakeResolver resolver = new()
+		{
+			ResolveResult = "value",
+		};
+
+		string resolved = await resolver.ResolveAsync<string>(TestContext.Current.CancellationToken);
+
+		await That(resolved).IsEqualTo("value");
+		await That(resolver.RequestedResolveAsyncType).IsEqualTo(typeof(string));
+	}
+
+	[Fact]
+	public async Task ResolveAsync_WhenResolverIsNull_ThrowsSynchronously()
+	{
+		IAwaitenAsyncResolver resolver = null!;
+
+		// The null check is eager argument validation, not deferred into the returned task: invoking and
+		// discarding the call (without awaiting it) still throws, proving the guard runs before the task.
+		await That(() => { _ = resolver.ResolveAsync<string>(); }).Throws<ArgumentNullException>()
+			.WithParamName("resolver");
+	}
+
+	private sealed class FakeResolver : IAwaitenAsyncResolver
 	{
 		public object ResolveResult { get; set; } = null!;
 		public bool TryResolveResult { get; set; }
@@ -90,6 +115,14 @@ public sealed class AwaitenResolverExtensionsTests
 			RequestedTryResolveType = serviceType;
 			instance = TryResolveInstance;
 			return TryResolveResult;
+		}
+
+		public Type? RequestedResolveAsyncType { get; private set; }
+
+		public Task<object> ResolveAsync(Type serviceType, System.Threading.CancellationToken cancellationToken = default)
+		{
+			RequestedResolveAsyncType = serviceType;
+			return Task.FromResult(ResolveResult);
 		}
 	}
 }

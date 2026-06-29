@@ -1,5 +1,7 @@
 using System;
 using System.Diagnostics.CodeAnalysis;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Awaiten;
 
@@ -56,6 +58,28 @@ public static class AwaitenResolverExtensions
 
 			instance = default;
 			return false;
+		}
+	}
+
+	/// <inheritdoc cref="AwaitenResolverExtensions" />
+	extension(IAwaitenAsyncResolver resolver)
+	{
+		/// <summary>
+		///     Resolves a service of type <typeparamref name="T" /> asynchronously, awaiting its
+		///     <see cref="IAsyncInitializable.InitializeAsync" /> (and that of its non-deferred async
+		///     dependencies) where required. For a service that needs no asynchronous initialization this
+		///     completes synchronously. Throws if it is not registered.
+		/// </summary>
+		public Task<T> ResolveAsync<T>(CancellationToken cancellationToken = default)
+		{
+			// The null check runs synchronously (eager argument validation, like Resolve<T> / TryResolve<T>)
+			// rather than being deferred into the returned task by an async method: the await-and-cast lives in
+			// a local async function the synchronous body invokes only after the argument is validated.
+			ThrowIfNull(resolver);
+
+			return Cast(resolver.ResolveAsync(typeof(T), cancellationToken));
+
+			static async Task<T> Cast(Task<object> resolution) => (T)await resolution.ConfigureAwait(false);
 		}
 	}
 }
