@@ -59,7 +59,11 @@ public static class AwaitenResolverExtensions
 			instance = default;
 			return false;
 		}
+	}
 
+	/// <inheritdoc cref="AwaitenResolverExtensions" />
+	extension(IAwaitenAsyncResolver resolver)
+	{
 		/// <summary>
 		///     Resolves a service of type <typeparamref name="T" /> asynchronously, awaiting its
 		///     <see cref="IAsyncInitializable.InitializeAsync" /> (and that of its non-deferred async

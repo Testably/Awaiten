@@ -395,6 +395,14 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		// A pre-built Instance is handed back from a container member, never constructed here. The
 		// container does not own it, so it is not disposed; the registered type may legitimately be an
 		// interface (so the not-instantiable check is skipped) and it contributes no graph edges.
+		//
+		// It is likewise never async-initialized: a pre-built Instance implementing IAsyncInitializable is
+		// NOT awaited by the container and is NOT async-tainted, so it stays synchronously resolvable and is
+		// handed out without InitializeAsync ever running. This mirrors the disposal contract above - a
+		// pre-built instance is the caller's to construct, initialize and own; the container only hands back
+		// what the member produced. A service that needs the container to drive its asynchronous
+		// initialization must be registered for construction (or via a Factory whose concrete return type
+		// implements IAsyncInitializable), not as a pre-built Instance.
 		if (info.Production == ProductionKind.Instance)
 		{
 			ValidateInstanceMember(containerSymbol, info, compilation, diagnostics);

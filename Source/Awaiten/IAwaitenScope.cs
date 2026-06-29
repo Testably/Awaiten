@@ -16,7 +16,7 @@ namespace Awaiten;
 ///     transients) in reverse order of creation. Disposing the root additionally disposes the singletons;
 ///     disposing a child scope does not.
 /// </remarks>
-public interface IAwaitenScope : IAwaitenResolver, IDisposable
+public interface IAwaitenScope : IAwaitenAsyncResolver, IDisposable
 {
 	/// <summary>
 	///     Creates a new child <see cref="IAwaitenScope" />. Scoped registrations resolve to a single

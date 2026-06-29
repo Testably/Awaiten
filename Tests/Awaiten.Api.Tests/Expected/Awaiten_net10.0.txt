@@ -13,6 +13,9 @@ namespace Awaiten
         {
             public T Resolve<T>() { }
             public bool TryResolve<T>([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out T? instance) { }
+        }
+        extension(Awaiten.IAwaitenAsyncResolver resolver)
+        {
             public System.Threading.Tasks.Task<T> ResolveAsync<T>(System.Threading.CancellationToken cancellationToken = default) { }
         }
     }
@@ -33,21 +36,24 @@ namespace Awaiten
     {
         System.Threading.Tasks.Task InitializeAsync(System.Threading.CancellationToken cancellationToken);
     }
+    public interface IAwaitenAsyncResolver : Awaiten.IAwaitenResolver
+    {
+        System.Threading.Tasks.Task<object> ResolveAsync(System.Type serviceType, System.Threading.CancellationToken cancellationToken = default);
+    }
     public interface IAwaitenResolver
     {
         object Resolve(System.Type serviceType);
-        System.Threading.Tasks.Task<object> ResolveAsync(System.Type serviceType, System.Threading.CancellationToken cancellationToken = default);
         bool TryResolve(System.Type serviceType, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? instance);
     }
     public interface IAwaitenResolver<T>
     {
         T Resolve();
     }
-    public interface IAwaitenRoot : Awaiten.IAwaitenResolver, Awaiten.IAwaitenScope, System.IDisposable
+    public interface IAwaitenRoot : Awaiten.IAwaitenAsyncResolver, Awaiten.IAwaitenResolver, Awaiten.IAwaitenScope, System.IDisposable
     {
         System.Threading.Tasks.Task InitializeAsync(System.Threading.CancellationToken cancellationToken = default);
     }
-    public interface IAwaitenScope : Awaiten.IAwaitenResolver, System.IDisposable
+    public interface IAwaitenScope : Awaiten.IAwaitenAsyncResolver, Awaiten.IAwaitenResolver, System.IDisposable
     {
         Awaiten.IAwaitenScope CreateScope();
         System.Threading.Tasks.Task<Awaiten.IAwaitenScope> CreateScopeAsync(System.Threading.CancellationToken cancellationToken = default);

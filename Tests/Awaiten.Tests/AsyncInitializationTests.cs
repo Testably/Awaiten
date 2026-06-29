@@ -41,7 +41,7 @@ public partial class AsyncInitializationTests
 	public async Task ResolveAsync_ByType_ResolvesThroughTheNeutralInterface()
 	{
 		using AsyncContainer.Root container = new();
-		IAwaitenResolver neutral = container;
+		IAwaitenAsyncResolver neutral = container;
 
 		object connection = await neutral.ResolveAsync(typeof(Connection), Ct);
 
