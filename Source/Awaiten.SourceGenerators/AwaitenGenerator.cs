@@ -419,39 +419,11 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		}
 
 		// Select the producer: a container method (Factory) or the implementation's constructor (the
-		// default). A factory produces the instance, so the registered type may be an interface and is
-		// not subject to the not-instantiable check that a constructed type is.
-		IMethodSymbol? producer;
-		if (info.Production == ProductionKind.Factory)
+		// default). A null result means the registration is unusable and a diagnostic was already reported.
+		IMethodSymbol? producer = SelectProducer(info, containerSymbol, compilation, serviceToImpl, diagnostics);
+		if (producer is null)
 		{
-			producer = ResolveFactory(containerSymbol, info, compilation, diagnostics);
-			if (producer is null)
-			{
-				return null;
-			}
-		}
-		else
-		{
-			// An abstract type or interface cannot be constructed; reject it instead of emitting a 'new'
-			// against it (which would fail to compile in the generated source).
-			if (info.Symbol.IsAbstract || info.Symbol.TypeKind == TypeKind.Interface)
-			{
-				diagnostics.Add(new DiagnosticInfo(
-					Diagnostics.NotInstantiable,
-					info.Location,
-					new EquatableArray<string>([Display(info.ImplementationType),])));
-				return null;
-			}
-
-			producer = SelectConstructor(info.Symbol, containerSymbol, serviceToImpl.Keys.Select(k => k.Service));
-			if (producer is null)
-			{
-				diagnostics.Add(new DiagnosticInfo(
-					Diagnostics.NoAccessibleConstructor,
-					info.Location,
-					new EquatableArray<string>([Display(info.ImplementationType),])));
-				return null;
-			}
+			return null;
 		}
 
 		// An asynchronous factory returns Task<T> / ValueTask<T>: the container awaits it, so the type it
@@ -532,6 +504,49 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		static bool CouldHideDisposable(ITypeSymbol type)
 			=> type.TypeKind is TypeKind.Interface or TypeKind.TypeParameter
 			   || (type.TypeKind == TypeKind.Class && !type.IsSealed);
+	}
+
+	/// <summary>
+	///     Selects the method that produces an implementation: a container method for a <c>Factory</c>
+	///     registration, or the implementation's own constructor otherwise. Returns <see langword="null" />
+	///     when the registration is unusable - an unresolved factory (AWT108), a non-instantiable abstract or
+	///     interface type (AWT103), or a type with no accessible constructor (AWT104) - having already appended
+	///     the corresponding diagnostic. A factory produces the instance, so the registered type may be an
+	///     interface and is not subject to the not-instantiable check a constructed type is.
+	/// </summary>
+	private static IMethodSymbol? SelectProducer(
+		ImplInfo info,
+		INamedTypeSymbol containerSymbol,
+		Compilation compilation,
+		Dictionary<ServiceKey, string> serviceToImpl,
+		List<DiagnosticInfo> diagnostics)
+	{
+		if (info.Production == ProductionKind.Factory)
+		{
+			return ResolveFactory(containerSymbol, info, compilation, diagnostics);
+		}
+
+		// An abstract type or interface cannot be constructed; reject it instead of emitting a 'new'
+		// against it (which would fail to compile in the generated source).
+		if (info.Symbol.IsAbstract || info.Symbol.TypeKind == TypeKind.Interface)
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.NotInstantiable,
+				info.Location,
+				new EquatableArray<string>([Display(info.ImplementationType),])));
+			return null;
+		}
+
+		IMethodSymbol? constructor = SelectConstructor(info.Symbol, containerSymbol, serviceToImpl.Keys.Select(k => k.Service));
+		if (constructor is null)
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.NoAccessibleConstructor,
+				info.Location,
+				new EquatableArray<string>([Display(info.ImplementationType),])));
+		}
+
+		return constructor;
 	}
 
 	/// <summary>
