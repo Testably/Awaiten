@@ -135,8 +135,8 @@ public partial class FactoryAndInstanceTests
 			hidden = (HiddenDisposable)container.Resolve<IHidden>();
 		}
 
-		await That(hidden.Disposed).IsTrue()
-			.Because("a singleton factory declared to return the non-disposable interface still builds a concrete IDisposable, which the container must dispose");
+		await That(hidden.DisposeCount).IsEqualTo(1)
+			.Because("a singleton factory declared to return the non-disposable interface still builds a concrete IDisposable, which the container must dispose exactly once (not double-tracked by the runtime check)");
 	}
 
 	[Fact]
@@ -147,12 +147,12 @@ public partial class FactoryAndInstanceTests
 		using (IAwaitenScope scope = container.CreateScope())
 		{
 			hidden = (HiddenDisposable)scope.Resolve<IScopedHidden>();
-			await That(hidden.Disposed).IsFalse()
+			await That(hidden.DisposeCount).IsEqualTo(0)
 				.Because("the scope still owns the instance");
 		}
 
-		await That(hidden.Disposed).IsTrue()
-			.Because("a scoped factory declared to return the non-disposable interface still builds a concrete IDisposable, which the scope must dispose");
+		await That(hidden.DisposeCount).IsEqualTo(1)
+			.Because("a scoped factory declared to return the non-disposable interface still builds a concrete IDisposable, which the scope must dispose exactly once");
 	}
 
 	[Fact]
@@ -164,8 +164,8 @@ public partial class FactoryAndInstanceTests
 			hidden = (HiddenDisposable)container.Resolve<ITransientHidden>();
 		}
 
-		await That(hidden.Disposed).IsTrue()
-			.Because("a transient factory declared to return the non-disposable interface still builds a concrete IDisposable, which the owner must dispose");
+		await That(hidden.DisposeCount).IsEqualTo(1)
+			.Because("a transient factory declared to return the non-disposable interface still builds a concrete IDisposable, which the owner must dispose exactly once");
 	}
 
 	[Fact]
@@ -177,8 +177,8 @@ public partial class FactoryAndInstanceTests
 			plain = container.Resolve<PlainDisposable>();
 		}
 
-		await That(plain.Disposed).IsTrue()
-			.Because("a factory whose declared return type already implements IDisposable is tracked as before");
+		await That(plain.DisposeCount).IsEqualTo(1)
+			.Because("a factory whose declared return type already implements IDisposable is tracked - and disposed exactly once - as before");
 	}
 
 	[Fact]
@@ -278,19 +278,20 @@ public partial class FactoryAndInstanceTests
 
 	// A concrete IDisposable behind a non-disposable service interface: the factory's *declared* return type
 	// is the interface, so static disposability analysis misses it - the container must track it at runtime.
+	// DisposeCount proves the runtime check tracks the instance exactly once, not twice.
 	public sealed class HiddenDisposable : IHidden, IScopedHidden, ITransientHidden, IDisposable
 	{
-		public bool Disposed { get; private set; }
+		public int DisposeCount { get; private set; }
 
-		public void Dispose() => Disposed = true;
+		public void Dispose() => DisposeCount++;
 	}
 
 	// A factory whose declared return type already implements IDisposable: the no-regression baseline.
 	public sealed class PlainDisposable : IDisposable
 	{
-		public bool Disposed { get; private set; }
+		public int DisposeCount { get; private set; }
 
-		public void Dispose() => Disposed = true;
+		public void Dispose() => DisposeCount++;
 	}
 
 	// A non-disposable factory output behind an interface: the runtime check must leave it untracked.

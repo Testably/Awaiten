@@ -330,6 +330,28 @@ public partial class AsyncInitializationTests
 	}
 
 	[Fact]
+	public async Task ResolveAsync_OfAFactoryHidingAnAsyncDisposable_InitializesAndDisposesItExactlyOnce()
+	{
+		// The factory is declared to return a non-async, non-disposable interface yet builds a concrete type
+		// that is both IAsyncInitializable and IDisposable. The async-taint follows the concrete return type
+		// (so the container drives InitializeAsync), and disposal is tracked by the generated runtime
+		// `is IDisposable` check on the realized instance - exercising the async creator path that the
+		// synchronous hidden-disposable tests do not reach.
+		AsyncHiddenDisposable hidden;
+		using (AsyncHiddenDisposableContainer.Root container = new())
+		{
+			hidden = (AsyncHiddenDisposable)await container.ResolveAsync<IAsyncHidden>(Ct);
+			await That(hidden.Initialized).IsTrue()
+				.Because("the factory's concrete return type is IAsyncInitializable, so the container drives its initialization");
+			await That(hidden.DisposeCount).IsEqualTo(0)
+				.Because("the container still owns the instance");
+		}
+
+		await That(hidden.DisposeCount).IsEqualTo(1)
+			.Because("a hidden async-disposable singleton is disposed exactly once on container teardown (not double-tracked by the async registration's runtime check)");
+	}
+
+	[Fact]
 	public async Task ResolveAsync_OfADisposableAsyncTransient_IsWithheldOnTheRoot()
 	{
 		using DisposableWorkerContainer.Root container = new();
@@ -557,6 +579,36 @@ public partial class AsyncInitializationTests
 	[Container]
 	[Singleton<DisposableConnection>]
 	public static partial class DisposableAsyncContainer;
+
+	// An async-but-not-disposable service interface: the factory's declared return type, so async-taint is
+	// statically visible (it extends IAsyncInitializable) while the concrete IDisposable stays hidden behind
+	// it - exactly the split that drives the async creator yet needs the runtime disposal check.
+	public interface IAsyncHidden : IAsyncInitializable;
+
+	// A concrete type that is both async-initialized (through IAsyncHidden) and IDisposable. A factory
+	// declared to return IAsyncHidden still both drives its async initialization and disposes it -
+	// DisposeCount (not a bool) proves disposal happens exactly once.
+	public sealed class AsyncHiddenDisposable : IAsyncHidden, IDisposable
+	{
+		public bool Initialized { get; private set; }
+
+		public int DisposeCount { get; private set; }
+
+		public Task InitializeAsync(CancellationToken cancellationToken)
+		{
+			Initialized = true;
+			return Task.CompletedTask;
+		}
+
+		public void Dispose() => DisposeCount++;
+	}
+
+	[Container]
+	[Singleton<IAsyncHidden>(Factory = nameof(MakeAsyncHidden))]
+	public static partial class AsyncHiddenDisposableContainer
+	{
+		private static IAsyncHidden MakeAsyncHidden() => new AsyncHiddenDisposable();
+	}
 
 	// A disposable async transient: withheld from ResolveAsync on the Root (it would accumulate there), but
 	// resolvable from a child scope, which bounds and disposes it.
