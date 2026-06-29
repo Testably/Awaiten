@@ -177,20 +177,26 @@ internal static class Emitter
 		EmitScopeBaseClass(builder, depth, instances, names, serviceToIndex, model.Strict, model.SyncResolveAfterInit);
 	}
 
-	// A disposable build-on-demand service (a disposable transient or parameterized service) is withheld from
-	// by-type resolution on the container Root under strict lifetime safety: off the Root its bare type and
-	// plain Func factory throw a guidance exception, and it gets no typed resolver, so the leak-prone ways to
-	// reach it from the Root are constructor injection and Owned<T> / Func<…, Owned<T>>. It stays resolvable
-	// from a child scope, where its lifetime is bounded by the scope (the Root mask, not the table, gates it).
+	/// <summary>
+	///     A disposable build-on-demand service (a disposable transient or parameterized service) is withheld from
+	///     by-type resolution on the container Root under strict lifetime safety: off the Root its bare type and
+	///     plain Func factory throw a guidance exception, and it gets no typed resolver, so the leak-prone ways to
+	///     reach it from the Root are constructor injection and <c>Owned&lt;T&gt;</c> / <c>Func&lt;…, Owned&lt;T&gt;&gt;</c>.
+	///     It stays resolvable from a child scope, where its lifetime is bounded by the scope (the Root mask, not
+	///     the table, gates it).
+	/// </summary>
 	private static bool IsWithheld(InstanceModel instance, bool strict)
 		=> strict && instance.IsDisposable && (instance.Lifetime == Lifetime.Transient || instance.IsParameterized);
 
-	// Whether a plain Func<…> over this service is withheld from by-type resolution on the Root under strict
-	// lifetime safety: the service is built on demand (transient or parameterized) and building it tracks a
-	// fresh disposable on its owner - the service itself is disposable, or its construction transitively rebuilds
-	// one. Such a Func re-invoked off a root binding accumulates those disposables for the container's lifetime,
-	// so off the Root only the Func<…, Owned<T>> form (which drains into a throwaway scope) is offered; the plain
-	// Func stays resolvable from a child scope, which bounds the disposables it builds.
+	/// <summary>
+	///     Whether a plain <c>Func&lt;…&gt;</c> over this service is withheld from by-type resolution on the Root
+	///     under strict lifetime safety: the service is built on demand (transient or parameterized) and building
+	///     it tracks a fresh disposable on its owner - the service itself is disposable, or its construction
+	///     transitively rebuilds one. Such a Func re-invoked off a root binding accumulates those disposables for
+	///     the container's lifetime, so off the Root only the <c>Func&lt;…, Owned&lt;T&gt;&gt;</c> form (which drains
+	///     into a throwaway scope) is offered; the plain Func stays resolvable from a child scope, which bounds the
+	///     disposables it builds.
+	/// </summary>
 	private static bool IsFuncWithheld(InstanceModel[] instances, int index, Dictionary<ServiceKey, int> serviceToIndex, bool strict)
 		=> strict
 		   && (instances[index].Lifetime == Lifetime.Transient || instances[index].IsParameterized)
@@ -199,48 +205,87 @@ internal static class Emitter
 	private static bool IsRootOwned(InstanceModel instance)
 		=> instance.Lifetime == Lifetime.Singleton || instance.Production == ProductionKind.Instance;
 
-	// Whether synchronous resolution members (resolver, cache field, dispatch entries, typed fast path) are
-	// emitted for an instance: always for a non-tainted service, and for an async-tainted one only in
-	// pragmatic mode (SyncResolveAfterInit), where it may be resolved synchronously once InitializeAsync has
-	// warmed it. In the strict default an async-tainted service is reachable only through ResolveAsync.
+	/// <summary>
+	///     How a resolver tracks its instance for disposal. None: not disposable, nothing to track. Static: the
+	///     declared type is known IDisposable, so the instance is cast and added directly. Runtime: a factory's
+	///     declared return type can hide a concrete IDisposable behind a non-disposable service interface, so the
+	///     static IsDisposable flag under-reports; the output is added behind a runtime <c>is IDisposable</c> check
+	///     on the realized instance (retaining only genuinely-disposable outputs). Constructed and pre-built-Instance
+	///     production never need Runtime: info.Symbol is the concrete type, and a pre-built Instance is never owned.
+	/// </summary>
+	private enum DisposalTracking
+	{
+		None,
+		Static,
+		Runtime,
+	}
+
+	/// <summary>
+	///     Runtime and Static are mutually exclusive: RuntimeDisposalCheck is set by the model only when the static
+	///     IsDisposable flag is false (the declared type does not reveal the disposable), so a factory output is
+	///     either statically disposable or runtime-checked, never both.
+	/// </summary>
+	private static DisposalTracking DisposalOf(InstanceModel instance)
+		=> (instance.RuntimeDisposalCheck, instance.IsDisposable) switch
+		{
+			(true, _) => DisposalTracking.Runtime,
+			(_, true) => DisposalTracking.Static,
+			_ => DisposalTracking.None,
+		};
+
+	/// <summary>
+	///     Whether synchronous resolution members (resolver, cache field, dispatch entries, typed fast path) are
+	///     emitted for an instance: always for a non-tainted service, and for an async-tainted one only in
+	///     pragmatic mode (SyncResolveAfterInit), where it may be resolved synchronously once InitializeAsync has
+	///     warmed it. In the strict default an async-tainted service is reachable only through ResolveAsync.
+	/// </summary>
 	private static bool EmitsSync(InstanceModel instance, bool syncResolveAfterInit)
 		=> !instance.IsAsyncTainted || syncResolveAfterInit;
 
-	// The guidance message (a quoted string literal) thrown by Resolve(Type) on the Root when a service
-	// withheld there under strict lifetime safety is requested by its bare type: it is itself a disposable
-	// build-on-demand service, reachable from the Root only by injection or through an Owned<T> handle - but
-	// still resolvable from a child scope, which bounds its lifetime.
+	/// <summary>
+	///     The guidance message (a quoted string literal) thrown by Resolve(Type) on the Root when a service
+	///     withheld there under strict lifetime safety is requested by its bare type: it is itself a disposable
+	///     build-on-demand service, reachable from the Root only by injection or through an <c>Owned&lt;T&gt;</c>
+	///     handle - but still resolvable from a child scope, which bounds its lifetime.
+	/// </summary>
 	private static string BareWithheldMessage(string service)
 	{
 		string display = service.Replace("global::", string.Empty);
 		return $"\"Awaiten: '{display}' is withheld from by-type resolution on the container root under strict lifetime safety; obtain it through Owned<{display}> or Func<…, Owned<{display}>>, resolve it from a child scope, inject it directly, or set LifetimeSafety.Loose on the [Container].\"";
 	}
 
-	// The guidance message (a quoted string literal) thrown by Resolve(Type) on the Root when a plain Func over
-	// the service is requested: that factory accumulates disposables on the root, so the leak-free Func<…,
-	// Owned<T>> form is offered instead. The Func stays resolvable from a child scope, which bounds the
-	// disposables it builds; the bare type may also be resolvable (its single resolution is bounded).
+	/// <summary>
+	///     The guidance message (a quoted string literal) thrown by Resolve(Type) on the Root when a plain Func over
+	///     the service is requested: that factory accumulates disposables on the root, so the leak-free
+	///     <c>Func&lt;…, Owned&lt;T&gt;&gt;</c> form is offered instead. The Func stays resolvable from a child scope,
+	///     which bounds the disposables it builds; the bare type may also be resolvable (its single resolution is
+	///     bounded).
+	/// </summary>
 	private static string FuncWithheldMessage(string service)
 	{
 		string display = service.Replace("global::", string.Empty);
 		return $"\"Awaiten: a plain Func over '{display}' is withheld from by-type resolution on the container root under strict lifetime safety because building it on demand accumulates disposables on the container root; resolve it as Func<…, Owned<{display}>> for per-use disposal, resolve it from a child scope, or set LifetimeSafety.Loose on the [Container].\"";
 	}
 
-	// The guidance message (a quoted string literal) thrown by Resolve(Type) when an async-tainted service is
-	// requested by type: it is async-initialized (or reaches one through its non-deferred dependencies), so it
-	// has no synchronous resolution path in the strict default and must be obtained asynchronously.
+	/// <summary>
+	///     The guidance message (a quoted string literal) thrown by Resolve(Type) when an async-tainted service is
+	///     requested by type: it is async-initialized (or reaches one through its non-deferred dependencies), so it
+	///     has no synchronous resolution path in the strict default and must be obtained asynchronously.
+	/// </summary>
 	private static string AsyncWithheldMessage(string service)
 	{
 		string display = service.Replace("global::", string.Empty);
 		return $"\"Awaiten: '{display}' requires asynchronous initialization (it is IAsyncInitializable, or depends on one) and cannot be resolved synchronously; resolve it through ResolveAsync (or warm it through InitializeAsync / CreateScopeAsync), or set SyncResolveAfterInit on the [Container].\"";
 	}
 
-	// The guidance message (a quoted string literal) thrown by ResolveAsync(Type) on the Root when a disposable
-	// build-on-demand service that needs asynchronous initialization is requested by its bare type: building it
-	// on demand from the Root tracks a fresh disposable on the root for the container's lifetime (an unbounded
-	// leak), so the Root withholds it. It stays resolvable from a child scope, whose disposal bounds it - the
-	// async counterpart to BareWithheldMessage (Owned<T> is a synchronous relationship, so it is not offered for
-	// an async-initialized service).
+	/// <summary>
+	///     The guidance message (a quoted string literal) thrown by ResolveAsync(Type) on the Root when a disposable
+	///     build-on-demand service that needs asynchronous initialization is requested by its bare type: building it
+	///     on demand from the Root tracks a fresh disposable on the root for the container's lifetime (an unbounded
+	///     leak), so the Root withholds it. It stays resolvable from a child scope, whose disposal bounds it - the
+	///     async counterpart to BareWithheldMessage (<c>Owned&lt;T&gt;</c> is a synchronous relationship, so it is
+	///     not offered for an async-initialized service).
+	/// </summary>
 	private static string AsyncRootWithheldMessage(string service)
 	{
 		string display = service.Replace("global::", string.Empty);
@@ -722,9 +767,11 @@ internal static class Emitter
 		}
 	}
 
-	// The root-withheld entries (dispatchable, but carrying guidance) - their types and messages populate the
-	// __withheld table that Resolve throws from on the Root, while the parallel __rootWithheld mask (keyed by
-	// dispatch case) is what TryResolve consults to return false for them on the Root only.
+	/// <summary>
+	///     The root-withheld entries (dispatchable, but carrying guidance) - their types and messages populate the
+	///     <c>__withheld</c> table that Resolve throws from on the Root, while the parallel <c>__rootWithheld</c>
+	///     mask (keyed by dispatch case) is what TryResolve consults to return false for them on the Root only.
+	/// </summary>
 	private static List<DispatchEntry> Withheld(List<DispatchEntry> entries)
 	{
 		List<DispatchEntry> withheld = new();
@@ -883,7 +930,7 @@ internal static class Emitter
 			// Reachable from the Root (a singleton's Func<TArg…, T> binds it there) and from a throwaway
 			// Owned<T> scope built off any owner (__s.ResolveX(args)), so it is internal rather than protected -
 			// protected would not be callable through a base-typed scope reference from the derived Root (CS1540).
-			EmitFreshResolver(builder, depth, new FreshResolver("internal", type, resolver, signature, parameterizedConstruction, instance.IsDisposable));
+			EmitFreshResolver(builder, depth, new FreshResolver("internal", type, resolver, signature, parameterizedConstruction, DisposalOf(instance)));
 			return;
 		}
 
@@ -905,11 +952,11 @@ internal static class Emitter
 		// Internal also covers the case the Root (a subclass) reaches a captured scoped/transient's resolver.
 		if (instance.Lifetime == Lifetime.Transient)
 		{
-			EmitFreshResolver(builder, depth, new FreshResolver("internal", type, resolver, string.Empty, construction, instance.IsDisposable));
+			EmitFreshResolver(builder, depth, new FreshResolver("internal", type, resolver, string.Empty, construction, DisposalOf(instance)));
 			return;
 		}
 
-		EmitCachingResolver(builder, depth, new CachingResolver("internal", type, resolver, names.Field(index), construction, instance.IsDisposable, "// Scoped: one instance per scope."));
+		EmitCachingResolver(builder, depth, new CachingResolver("internal", type, resolver, names.Field(index), construction, DisposalOf(instance), "// Scoped: one instance per scope."));
 	}
 
 	/// <summary>
@@ -926,19 +973,10 @@ internal static class Emitter
 			.Append('(').Append(resolver.Signature).AppendLine(")");
 		Indent(builder, depth).AppendLine("{");
 		EmitDisposedGuard(builder, depth + 1);
-		if (resolver.Disposable)
+		if (resolver.Disposal != DisposalTracking.None)
 		{
 			Indent(builder, depth + 1).Append(type).Append(" created = ").Append(construction).AppendLine(";");
-			Indent(builder, depth + 1).AppendLine("lock (__gate)");
-			Indent(builder, depth + 1).AppendLine("{");
-			Indent(builder, depth + 2).AppendLine("if (__disposed)");
-			Indent(builder, depth + 2).AppendLine("{");
-			Indent(builder, depth + 3).AppendLine("((global::System.IDisposable)created).Dispose();");
-			Indent(builder, depth + 3).AppendLine("throw new global::System.ObjectDisposedException(GetType().FullName);");
-			Indent(builder, depth + 2).AppendLine("}");
-			builder.AppendLine();
-			Indent(builder, depth + 2).AppendLine("(__disposables ??= new global::System.Collections.Generic.List<object>()).Add(created);");
-			Indent(builder, depth + 1).AppendLine("}");
+			EmitFreshDisposalTracking(builder, depth + 1, resolver.Disposal == DisposalTracking.Runtime);
 			builder.AppendLine();
 			Indent(builder, depth + 1).AppendLine("return created;");
 		}
@@ -948,6 +986,48 @@ internal static class Emitter
 		}
 
 		Indent(builder, depth).AppendLine("}");
+	}
+
+	/// <summary>
+	///     Emits the disposal tracking for a freshly built <c>created</c> instance: under <c>lock (__gate)</c>,
+	///     re-check <c>__disposed</c> so one built during a concurrent dispose is disposed here rather than
+	///     leaked, then add it to <c>__disposables</c>. When <paramref name="runtimeCheck" /> is set (a factory
+	///     output, whose declared return type may hide a concrete <c>IDisposable</c>), the whole block is gated
+	///     on a runtime <c>is global::System.IDisposable</c> test so only genuinely-disposable outputs are
+	///     retained; otherwise the static flag already guarantees disposability and the instance is cast directly.
+	///     Shared by the synchronous fresh resolver and the async fresh resolver, which emit identical tracking.
+	/// </summary>
+	private static void EmitFreshDisposalTracking(StringBuilder builder, int depth, bool runtimeCheck)
+	{
+		string disposable;
+		if (runtimeCheck)
+		{
+			Indent(builder, depth).AppendLine("if (created is global::System.IDisposable __disposable)");
+			Indent(builder, depth).AppendLine("{");
+			depth++;
+			disposable = "__disposable";
+		}
+		else
+		{
+			disposable = "((global::System.IDisposable)created)";
+		}
+
+		Indent(builder, depth).AppendLine("lock (__gate)");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).AppendLine("if (__disposed)");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).Append(disposable).AppendLine(".Dispose();");
+		Indent(builder, depth + 2).AppendLine("throw new global::System.ObjectDisposedException(GetType().FullName);");
+		Indent(builder, depth + 1).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("(__disposables ??= new global::System.Collections.Generic.List<object>()).Add(created);");
+		Indent(builder, depth).AppendLine("}");
+
+		if (runtimeCheck)
+		{
+			depth--;
+			Indent(builder, depth).AppendLine("}");
+		}
 	}
 
 	/// <summary>
@@ -972,7 +1052,7 @@ internal static class Emitter
 		}
 
 		string construction = EmitConstruction(instance, instances, names, serviceToIndex);
-		EmitCachingResolver(builder, depth, new CachingResolver("protected override", type, resolver, names.Field(index), construction, instance.IsDisposable, null));
+		EmitCachingResolver(builder, depth, new CachingResolver("protected override", type, resolver, names.Field(index), construction, DisposalOf(instance), null));
 	}
 
 	/// <summary>
@@ -1190,21 +1270,13 @@ internal static class Emitter
 	/// </summary>
 	private static void EmitAsyncDisposableRegistration(StringBuilder builder, int depth, InstanceModel instance)
 	{
-		if (!instance.IsDisposable)
+		DisposalTracking disposal = DisposalOf(instance);
+		if (disposal == DisposalTracking.None)
 		{
 			return;
 		}
 
-		Indent(builder, depth).AppendLine("lock (__gate)");
-		Indent(builder, depth).AppendLine("{");
-		Indent(builder, depth + 1).AppendLine("if (__disposed)");
-		Indent(builder, depth + 1).AppendLine("{");
-		Indent(builder, depth + 2).AppendLine("((global::System.IDisposable)created).Dispose();");
-		Indent(builder, depth + 2).AppendLine("throw new global::System.ObjectDisposedException(GetType().FullName);");
-		Indent(builder, depth + 1).AppendLine("}");
-		builder.AppendLine();
-		Indent(builder, depth + 1).AppendLine("(__disposables ??= new global::System.Collections.Generic.List<object>()).Add(created);");
-		Indent(builder, depth).AppendLine("}");
+		EmitFreshDisposalTracking(builder, depth, disposal == DisposalTracking.Runtime);
 	}
 
 	/// <summary>
@@ -1362,7 +1434,16 @@ internal static class Emitter
 		Indent(builder, depth + 2).Append("if (").Append(resolver.Field).AppendLine(" is null)");
 		Indent(builder, depth + 2).AppendLine("{");
 		Indent(builder, depth + 3).Append(resolver.Field).Append(" = ").Append(resolver.Construction).AppendLine(";");
-		if (resolver.Disposable)
+		if (resolver.Disposal == DisposalTracking.Runtime)
+		{
+			// A factory's declared return type may hide a concrete IDisposable, so retain the realized instance
+			// only when it genuinely is one. The add stays under the lock that guards the field assignment.
+			Indent(builder, depth + 3).Append("if (").Append(resolver.Field).AppendLine(" is global::System.IDisposable)");
+			Indent(builder, depth + 3).AppendLine("{");
+			Indent(builder, depth + 4).Append("(__disposables ??= new global::System.Collections.Generic.List<object>()).Add(").Append(resolver.Field).AppendLine(");");
+			Indent(builder, depth + 3).AppendLine("}");
+		}
+		else if (resolver.Disposal == DisposalTracking.Static)
 		{
 			Indent(builder, depth + 3).Append("(__disposables ??= new global::System.Collections.Generic.List<object>()).Add(").Append(resolver.Field).AppendLine(");");
 		}
@@ -1506,7 +1587,9 @@ internal static class Emitter
 		Indent(builder, depth).AppendLine("}");
 	}
 
-	// A bare Owned<T>: resolve T once into a throwaway child scope and wrap it as a disposal handle.
+	/// <summary>
+	///     A bare <c>Owned&lt;T&gt;</c>: resolve T once into a throwaway child scope and wrap it as a disposal handle.
+	/// </summary>
 	private static string OwnedBare(string service, string resolver, bool rootOwned)
 		=> $"__Owned<{service}>({OwnedInner(service, resolver, [], rootOwned)})";
 
@@ -1616,10 +1699,11 @@ internal static class Emitter
 	/// <summary>
 	///     The inputs to <see cref="EmitCachingResolver" />: the method <see cref="Modifiers" /> and return
 	///     <see cref="Type" />, the resolver <see cref="Method" /> name and backing <see cref="Field" />, the
-	///     <see cref="Construction" /> expression, whether the instance <see cref="Disposable">needs disposal</see>,
-	///     and an optional leading <see cref="Comment" />.
+	///     <see cref="Construction" /> expression, how the instance is tracked for <see cref="Disposal" /> (not
+	///     at all, by the static type, or by a runtime <c>is IDisposable</c> check on the realized factory
+	///     output), and an optional leading <see cref="Comment" />.
 	/// </summary>
-	private readonly struct CachingResolver(string modifiers, string type, string method, string field, string construction, bool disposable, string? comment)
+	private readonly struct CachingResolver(string modifiers, string type, string method, string field, string construction, DisposalTracking disposal, string? comment)
 	{
 		public string Modifiers { get; } = modifiers;
 
@@ -1631,7 +1715,7 @@ internal static class Emitter
 
 		public string Construction { get; } = construction;
 
-		public bool Disposable { get; } = disposable;
+		public DisposalTracking Disposal { get; } = disposal;
 
 		public string? Comment { get; } = comment;
 	}
@@ -1640,10 +1724,11 @@ internal static class Emitter
 	///     The inputs to <see cref="EmitFreshResolver" />: the method <see cref="Modifiers" /> and return
 	///     <see cref="Type" />, the resolver <see cref="Method" /> name, its parameter <see cref="Signature" />
 	///     (empty for a transient, the runtime arguments for a parameterized service), the
-	///     <see cref="Construction" /> expression and whether the instance <see cref="Disposable">needs
-	///     disposal</see>.
+	///     <see cref="Construction" /> expression and how the instance is tracked for <see cref="Disposal" />
+	///     (not at all, by the static type, or by a runtime <c>is IDisposable</c> check on the realized factory
+	///     output).
 	/// </summary>
-	private readonly struct FreshResolver(string modifiers, string type, string method, string signature, string construction, bool disposable)
+	private readonly struct FreshResolver(string modifiers, string type, string method, string signature, string construction, DisposalTracking disposal)
 	{
 		public string Modifiers { get; } = modifiers;
 
@@ -1655,7 +1740,7 @@ internal static class Emitter
 
 		public string Construction { get; } = construction;
 
-		public bool Disposable { get; } = disposable;
+		public DisposalTracking Disposal { get; } = disposal;
 	}
 
 	/// <summary>

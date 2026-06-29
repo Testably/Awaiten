@@ -464,6 +464,17 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		ITypeSymbol disposalType = info.Production == ProductionKind.Factory ? producer.ReturnType : info.Symbol;
 		bool disposable = disposableSymbol is not null && ImplementsInterface(disposalType, disposableSymbol);
 
+		// A factory's declared return type can hide a concrete IDisposable behind a non-disposable service
+		// interface (or base class), which the static `disposable` flag above misses. When that is possible -
+		// the declared type is not itself disposable yet a subtype could be (an interface or a non-sealed
+		// class) - the emitter tracks the realized instance for disposal behind a runtime `is IDisposable`
+		// test instead. A sealed declared type that is not IDisposable cannot hide one, so it needs no check
+		// (and a runtime `is IDisposable` against it would not even compile). Constructed and pre-built
+		// Instance production never lie: info.Symbol is the concrete type, and an Instance is not owned.
+		bool runtimeDisposalCheck = info.Production == ProductionKind.Factory
+		                            && !disposable
+		                            && CouldHideDisposable(disposalType);
+
 		// Async initialization follows the type the container actually owns - a factory's concrete return type
 		// (which may implement IAsyncInitializable behind a non-async service interface) or the constructed
 		// implementation type - mirroring the disposal-type choice above. A pre-built Instance is returned
@@ -480,13 +491,23 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			info.Symbol.IsReferenceType,
 			info.Production,
 			info.ProductionMember,
-			asyncInit);
+			asyncInit,
+			RuntimeDisposalCheck: runtimeDisposalCheck);
 
 		static bool ImplementsInterface(ITypeSymbol type, INamedTypeSymbol @interface)
 		{
 			return SymbolEqualityComparer.Default.Equals(type, @interface)
 			       || type.AllInterfaces.Any(implemented => SymbolEqualityComparer.Default.Equals(implemented, @interface));
 		}
+
+		// Whether a value of this declared type could be IDisposable at runtime through a subtype the
+		// declaration does not reveal: an interface or type parameter (any implementer qualifies) or a
+		// non-sealed class (a derived type may implement it). A sealed class or a struct that does not
+		// itself implement IDisposable cannot, so a runtime `is IDisposable` test against it is pointless
+		// (and, for a sealed class, a compile error - CS8121/CS0184).
+		static bool CouldHideDisposable(ITypeSymbol type)
+			=> type.TypeKind is TypeKind.Interface or TypeKind.TypeParameter
+			   || (type.TypeKind == TypeKind.Class && !type.IsSealed);
 	}
 
 	/// <summary>
