@@ -305,6 +305,7 @@ public partial class FactoryAndInstanceTests
 	[Transient<IPlain>(Factory = nameof(MakePlain))]
 	public static partial class HiddenDisposableContainer
 	{
+#pragma warning disable CA1859
 		// Each factory is declared to return the non-disposable interface yet builds the concrete IDisposable.
 		private static IHidden MakeHidden() => new HiddenDisposable();
 
@@ -315,6 +316,7 @@ public partial class FactoryAndInstanceTests
 		private static PlainDisposable MakePlainDisposable() => new();
 
 		private static IPlain MakePlain() => new PlainImpl();
+#pragma warning restore CA1859
 	}
 
 	public interface IRead;

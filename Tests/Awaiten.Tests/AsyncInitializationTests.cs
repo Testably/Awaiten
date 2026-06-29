@@ -607,7 +607,9 @@ public partial class AsyncInitializationTests
 	[Singleton<IAsyncHidden>(Factory = nameof(MakeAsyncHidden))]
 	public static partial class AsyncHiddenDisposableContainer
 	{
+#pragma warning disable CA1859
 		private static IAsyncHidden MakeAsyncHidden() => new AsyncHiddenDisposable();
+#pragma warning restore CA1859
 	}
 
 	// A disposable async transient: withheld from ResolveAsync on the Root (it would accumulate there), but

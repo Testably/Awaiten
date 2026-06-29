@@ -199,14 +199,26 @@ internal static class Emitter
 	private static bool IsRootOwned(InstanceModel instance)
 		=> instance.Lifetime == Lifetime.Singleton || instance.Production == ProductionKind.Instance;
 
-	// A factory's declared return type can hide a concrete IDisposable behind a non-disposable service
-	// interface, so the static IsDisposable flag under-reports for such factory production. Its output is then
-	// tracked by a runtime `is IDisposable` check on the realized instance (retaining only genuinely-disposable
-	// outputs), instead of being statically gated. Constructed and pre-built-Instance production use the
-	// truthful static flag: info.Symbol is the concrete type, and a pre-built Instance is never owned. The
-	// model decides where the check is legal and needed (RuntimeDisposalCheck).
-	private static bool TracksDisposalAtRuntime(InstanceModel instance)
-		=> instance.RuntimeDisposalCheck;
+	// How a resolver tracks its instance for disposal. None: not disposable, nothing to track. Static: the
+	// declared type is known IDisposable, so the instance is cast and added directly. Runtime: a factory's
+	// declared return type can hide a concrete IDisposable behind a non-disposable service interface, so the
+	// static IsDisposable flag under-reports; the output is added behind a runtime `is IDisposable` check on
+	// the realized instance (retaining only genuinely-disposable outputs). Constructed and pre-built-Instance
+	// production never need Runtime: info.Symbol is the concrete type, and a pre-built Instance is never owned.
+	private enum DisposalTracking
+	{
+		None,
+		Static,
+		Runtime,
+	}
+
+	// Runtime and Static are mutually exclusive: RuntimeDisposalCheck is set by the model only when the static
+	// IsDisposable flag is false (the declared type does not reveal the disposable), so a factory output is
+	// either statically disposable or runtime-checked, never both.
+	private static DisposalTracking DisposalOf(InstanceModel instance)
+		=> instance.RuntimeDisposalCheck ? DisposalTracking.Runtime
+			: instance.IsDisposable ? DisposalTracking.Static
+			: DisposalTracking.None;
 
 	// Whether synchronous resolution members (resolver, cache field, dispatch entries, typed fast path) are
 	// emitted for an instance: always for a non-tainted service, and for an async-tainted one only in
@@ -892,7 +904,7 @@ internal static class Emitter
 			// Reachable from the Root (a singleton's Func<TArg…, T> binds it there) and from a throwaway
 			// Owned<T> scope built off any owner (__s.ResolveX(args)), so it is internal rather than protected -
 			// protected would not be callable through a base-typed scope reference from the derived Root (CS1540).
-			EmitFreshResolver(builder, depth, new FreshResolver("internal", type, resolver, signature, parameterizedConstruction, instance.IsDisposable || TracksDisposalAtRuntime(instance), TracksDisposalAtRuntime(instance)));
+			EmitFreshResolver(builder, depth, new FreshResolver("internal", type, resolver, signature, parameterizedConstruction, DisposalOf(instance)));
 			return;
 		}
 
@@ -914,11 +926,11 @@ internal static class Emitter
 		// Internal also covers the case the Root (a subclass) reaches a captured scoped/transient's resolver.
 		if (instance.Lifetime == Lifetime.Transient)
 		{
-			EmitFreshResolver(builder, depth, new FreshResolver("internal", type, resolver, string.Empty, construction, instance.IsDisposable || TracksDisposalAtRuntime(instance), TracksDisposalAtRuntime(instance)));
+			EmitFreshResolver(builder, depth, new FreshResolver("internal", type, resolver, string.Empty, construction, DisposalOf(instance)));
 			return;
 		}
 
-		EmitCachingResolver(builder, depth, new CachingResolver("internal", type, resolver, names.Field(index), construction, instance.IsDisposable || TracksDisposalAtRuntime(instance), TracksDisposalAtRuntime(instance), "// Scoped: one instance per scope."));
+		EmitCachingResolver(builder, depth, new CachingResolver("internal", type, resolver, names.Field(index), construction, DisposalOf(instance), "// Scoped: one instance per scope."));
 	}
 
 	/// <summary>
@@ -935,10 +947,10 @@ internal static class Emitter
 			.Append('(').Append(resolver.Signature).AppendLine(")");
 		Indent(builder, depth).AppendLine("{");
 		EmitDisposedGuard(builder, depth + 1);
-		if (resolver.Disposable)
+		if (resolver.Disposal != DisposalTracking.None)
 		{
 			Indent(builder, depth + 1).Append(type).Append(" created = ").Append(construction).AppendLine(";");
-			EmitFreshDisposalTracking(builder, depth + 1, resolver.RuntimeCheck);
+			EmitFreshDisposalTracking(builder, depth + 1, resolver.Disposal == DisposalTracking.Runtime);
 			builder.AppendLine();
 			Indent(builder, depth + 1).AppendLine("return created;");
 		}
@@ -1014,7 +1026,7 @@ internal static class Emitter
 		}
 
 		string construction = EmitConstruction(instance, instances, names, serviceToIndex);
-		EmitCachingResolver(builder, depth, new CachingResolver("protected override", type, resolver, names.Field(index), construction, instance.IsDisposable || TracksDisposalAtRuntime(instance), TracksDisposalAtRuntime(instance), null));
+		EmitCachingResolver(builder, depth, new CachingResolver("protected override", type, resolver, names.Field(index), construction, DisposalOf(instance), null));
 	}
 
 	/// <summary>
@@ -1232,12 +1244,13 @@ internal static class Emitter
 	/// </summary>
 	private static void EmitAsyncDisposableRegistration(StringBuilder builder, int depth, InstanceModel instance)
 	{
-		if (!instance.IsDisposable && !TracksDisposalAtRuntime(instance))
+		DisposalTracking disposal = DisposalOf(instance);
+		if (disposal == DisposalTracking.None)
 		{
 			return;
 		}
 
-		EmitFreshDisposalTracking(builder, depth, TracksDisposalAtRuntime(instance));
+		EmitFreshDisposalTracking(builder, depth, disposal == DisposalTracking.Runtime);
 	}
 
 	/// <summary>
@@ -1395,7 +1408,7 @@ internal static class Emitter
 		Indent(builder, depth + 2).Append("if (").Append(resolver.Field).AppendLine(" is null)");
 		Indent(builder, depth + 2).AppendLine("{");
 		Indent(builder, depth + 3).Append(resolver.Field).Append(" = ").Append(resolver.Construction).AppendLine(";");
-		if (resolver.Disposable && resolver.RuntimeCheck)
+		if (resolver.Disposal == DisposalTracking.Runtime)
 		{
 			// A factory's declared return type may hide a concrete IDisposable, so retain the realized instance
 			// only when it genuinely is one. The add stays under the lock that guards the field assignment.
@@ -1404,7 +1417,7 @@ internal static class Emitter
 			Indent(builder, depth + 4).Append("(__disposables ??= new global::System.Collections.Generic.List<object>()).Add(").Append(resolver.Field).AppendLine(");");
 			Indent(builder, depth + 3).AppendLine("}");
 		}
-		else if (resolver.Disposable)
+		else if (resolver.Disposal == DisposalTracking.Static)
 		{
 			Indent(builder, depth + 3).Append("(__disposables ??= new global::System.Collections.Generic.List<object>()).Add(").Append(resolver.Field).AppendLine(");");
 		}
@@ -1658,12 +1671,11 @@ internal static class Emitter
 	/// <summary>
 	///     The inputs to <see cref="EmitCachingResolver" />: the method <see cref="Modifiers" /> and return
 	///     <see cref="Type" />, the resolver <see cref="Method" /> name and backing <see cref="Field" />, the
-	///     <see cref="Construction" /> expression, whether the instance <see cref="Disposable">needs disposal</see>,
-	///     whether disposal tracking is gated by a <see cref="RuntimeCheck">runtime <c>is IDisposable</c> check</see>
-	///     on the realized instance (a factory output) rather than the static flag, and an optional leading
-	///     <see cref="Comment" />.
+	///     <see cref="Construction" /> expression, how the instance is tracked for <see cref="Disposal" /> (not
+	///     at all, by the static type, or by a runtime <c>is IDisposable</c> check on the realized factory
+	///     output), and an optional leading <see cref="Comment" />.
 	/// </summary>
-	private readonly struct CachingResolver(string modifiers, string type, string method, string field, string construction, bool disposable, bool runtimeCheck, string? comment)
+	private readonly struct CachingResolver(string modifiers, string type, string method, string field, string construction, DisposalTracking disposal, string? comment)
 	{
 		public string Modifiers { get; } = modifiers;
 
@@ -1675,9 +1687,7 @@ internal static class Emitter
 
 		public string Construction { get; } = construction;
 
-		public bool Disposable { get; } = disposable;
-
-		public bool RuntimeCheck { get; } = runtimeCheck;
+		public DisposalTracking Disposal { get; } = disposal;
 
 		public string? Comment { get; } = comment;
 	}
@@ -1686,12 +1696,11 @@ internal static class Emitter
 	///     The inputs to <see cref="EmitFreshResolver" />: the method <see cref="Modifiers" /> and return
 	///     <see cref="Type" />, the resolver <see cref="Method" /> name, its parameter <see cref="Signature" />
 	///     (empty for a transient, the runtime arguments for a parameterized service), the
-	///     <see cref="Construction" /> expression, whether the instance <see cref="Disposable">needs
-	///     disposal</see> and whether disposal tracking is gated by a <see cref="RuntimeCheck">runtime
-	///     <c>is IDisposable</c> check</see> on the realized instance (a factory output) rather than the static
-	///     flag.
+	///     <see cref="Construction" /> expression and how the instance is tracked for <see cref="Disposal" />
+	///     (not at all, by the static type, or by a runtime <c>is IDisposable</c> check on the realized factory
+	///     output).
 	/// </summary>
-	private readonly struct FreshResolver(string modifiers, string type, string method, string signature, string construction, bool disposable, bool runtimeCheck)
+	private readonly struct FreshResolver(string modifiers, string type, string method, string signature, string construction, DisposalTracking disposal)
 	{
 		public string Modifiers { get; } = modifiers;
 
@@ -1703,9 +1712,7 @@ internal static class Emitter
 
 		public string Construction { get; } = construction;
 
-		public bool Disposable { get; } = disposable;
-
-		public bool RuntimeCheck { get; } = runtimeCheck;
+		public DisposalTracking Disposal { get; } = disposal;
 	}
 
 	/// <summary>
