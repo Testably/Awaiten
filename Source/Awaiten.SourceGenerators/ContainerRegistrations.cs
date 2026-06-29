@@ -157,9 +157,11 @@ internal static class ContainerRegistrations
 
 	/// <summary>
 	///     The ordinary methods named <paramref name="name" /> on the container (or an accessible base
-	///     type) whose return type is implicitly convertible to <paramref name="serviceType" /> - the
-	///     candidate factory methods for a <c>Factory</c> registration. None means AWT108; more than one
-	///     means an ambiguous factory (AWT112).
+	///     type) whose return type produces <paramref name="serviceType" /> - the candidate factory methods
+	///     for a <c>Factory</c> registration. A synchronous factory's return type is implicitly convertible to
+	///     the service type; an asynchronous factory returns <c>Task&lt;T&gt;</c> / <c>ValueTask&lt;T&gt;</c>
+	///     and is matched against the unwrapped <c>T</c> (the container awaits it). None means AWT108; more
+	///     than one means an ambiguous factory (AWT112).
 	/// </summary>
 	public static List<IMethodSymbol> FindFactoryCandidates(
 		INamedTypeSymbol container, string name, ITypeSymbol serviceType, Compilation compilation)
@@ -168,12 +170,47 @@ internal static class ContainerRegistrations
 		foreach (ISymbol member in AccessibleMembers(container, name))
 		{
 			if (member is IMethodSymbol { MethodKind: MethodKind.Ordinary, } method
-			    && compilation.HasImplicitConversion(method.ReturnType, serviceType))
+			    && compilation.HasImplicitConversion(ProducedType(method.ReturnType, compilation), serviceType))
 			{
 				candidates.Add(method);
 			}
 		}
 
 		return candidates;
+	}
+
+	/// <summary>
+	///     The service type a factory's return type produces: the awaited result <c>T</c> for an asynchronous
+	///     factory returning <c>Task&lt;T&gt;</c> / <c>ValueTask&lt;T&gt;</c>, otherwise the return type
+	///     itself. A non-generic <c>Task</c> / <c>ValueTask</c> (no result) is not unwrapped, so it is matched
+	///     as-is and falls out as AWT108 (it produces no service).
+	/// </summary>
+	public static ITypeSymbol ProducedType(ITypeSymbol returnType, Compilation compilation)
+		=> IsAsyncFactoryReturn(returnType, compilation, out ITypeSymbol produced) ? produced : returnType;
+
+	/// <summary>
+	///     Whether <paramref name="returnType" /> is an awaitable factory return - <c>Task&lt;T&gt;</c> or
+	///     <c>ValueTask&lt;T&gt;</c> - yielding the produced result type <c>T</c>. Matched by the canonical
+	///     metadata symbols so a user-defined <c>Task`1</c> in another namespace is not mistaken for one.
+	///     <c>ValueTask&lt;T&gt;</c> is absent on netstandard2.0; <see cref="Compilation.GetTypeByMetadataName" />
+	///     returns <see langword="null" /> there and that branch is simply skipped.
+	/// </summary>
+	public static bool IsAsyncFactoryReturn(ITypeSymbol returnType, Compilation compilation, out ITypeSymbol produced)
+	{
+		if (returnType is INamedTypeSymbol { IsGenericType: true, TypeArguments.Length: 1, } named)
+		{
+			INamedTypeSymbol definition = named.ConstructedFrom;
+			INamedTypeSymbol? task = compilation.GetTypeByMetadataName("System.Threading.Tasks.Task`1");
+			INamedTypeSymbol? valueTask = compilation.GetTypeByMetadataName("System.Threading.Tasks.ValueTask`1");
+			if (SymbolEqualityComparer.Default.Equals(definition, task)
+			    || (valueTask is not null && SymbolEqualityComparer.Default.Equals(definition, valueTask)))
+			{
+				produced = named.TypeArguments[0];
+				return true;
+			}
+		}
+
+		produced = returnType;
+		return false;
 	}
 }

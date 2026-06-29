@@ -454,14 +454,24 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			}
 		}
 
-		// A factory's parameters resolve from the graph exactly like a constructor's.
-		List<ParameterModel> parameters = ClassifyParameters(producer, info, serviceToImpl, diagnostics);
+		// An asynchronous factory returns Task<T> / ValueTask<T>: the container awaits it, so the type it
+		// actually owns is the awaited result T, not the Task. A synchronous factory owns its return type
+		// directly, and a constructed implementation owns info.Symbol.
+		bool asyncFactory = info.Production == ProductionKind.Factory
+		                    && ContainerRegistrations.IsAsyncFactoryReturn(producer.ReturnType, compilation, out _);
 
-		// Disposability follows the type the container actually owns: a factory's concrete return type
-		// (which may implement IDisposable behind a non-disposable service interface), or the constructed
-		// implementation type. Using info.Symbol for a factory would miss a DisposableX behind an IX and
-		// leak it.
-		ITypeSymbol disposalType = info.Production == ProductionKind.Factory ? producer.ReturnType : info.Symbol;
+		// A factory's parameters resolve from the graph exactly like a constructor's. An async factory
+		// additionally forwards the resolve-time CancellationToken (the async creator's) into a matching
+		// parameter rather than resolving it from the graph.
+		List<ParameterModel> parameters = ClassifyParameters(producer, info, asyncFactory, serviceToImpl, diagnostics);
+
+		// Disposability follows the type the container actually owns: a factory's produced type (which may
+		// implement IDisposable behind a non-disposable service interface; for an async factory this is the
+		// awaited T, not the Task), or the constructed implementation type. Using info.Symbol for a factory
+		// would miss a DisposableX behind an IX and leak it.
+		ITypeSymbol disposalType = info.Production == ProductionKind.Factory
+			? ContainerRegistrations.ProducedType(producer.ReturnType, compilation)
+			: info.Symbol;
 		bool disposable = disposableSymbol is not null && ImplementsInterface(disposalType, disposableSymbol);
 
 		// A factory's declared return type can hide a concrete IDisposable behind a non-disposable service
@@ -478,7 +488,10 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		// Async initialization follows the type the container actually owns - a factory's concrete return type
 		// (which may implement IAsyncInitializable behind a non-async service interface) or the constructed
 		// implementation type - mirroring the disposal-type choice above. A pre-built Instance is returned
-		// early above and is never initialized here (the caller owns it).
+		// early above and is never initialized here (the caller owns it). An async factory is async-tainted
+		// regardless of whether its produced type implements IAsyncInitializable: its result is reached only by
+		// awaiting the Task (see the IsAsyncFactory seed in PropagateAsyncTaint). When the produced type IS
+		// IAsyncInitializable, the container additionally awaits its InitializeAsync after the factory completes.
 		bool asyncInit = asyncInitializableSymbol is not null && ImplementsInterface(disposalType, asyncInitializableSymbol);
 
 		return new InstanceModel(
@@ -492,6 +505,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			info.Production,
 			info.ProductionMember,
 			asyncInit,
+			IsAsyncFactory: asyncFactory,
 			RuntimeDisposalCheck: runtimeDisposalCheck);
 
 		static bool ImplementsInterface(ITypeSymbol type, INamedTypeSymbol @interface)
@@ -519,16 +533,20 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	private static List<ParameterModel> ClassifyParameters(
 		IMethodSymbol producer,
 		ImplInfo info,
+		bool asyncFactory,
 		Dictionary<ServiceKey, string> serviceToImpl,
 		List<DiagnosticInfo> diagnostics)
 	{
 		List<ParameterModel> parameters = new();
 		foreach (IParameterSymbol parameter in producer.Parameters)
 		{
-			ParameterModel parameterModel = ClassifyParameter(parameter);
+			ParameterModel parameterModel = ClassifyParameter(parameter, asyncFactory);
 			parameters.Add(parameterModel);
 
-			if (parameterModel.Kind != DependencyKind.Arg && !serviceToImpl.ContainsKey(KeyOf(parameterModel)))
+			// A CancellationToken is forwarded from the resolve-time token, not resolved from the graph (like
+			// [Arg]), so it is never a missing dependency.
+			if (parameterModel.Kind is not (DependencyKind.Arg or DependencyKind.CancellationToken)
+			    && !serviceToImpl.ContainsKey(KeyOf(parameterModel)))
 			{
 				diagnostics.Add(new DiagnosticInfo(
 					Diagnostics.MissingDependency,
@@ -617,7 +635,8 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		IMethodSymbol? resolvable = constructors
 			.Where(c => c.Parameters.All(p =>
 			{
-				ParameterModel parameter = ClassifyParameter(p);
+				// Selecting a constructor, never an async factory, so no CancellationToken forwarding applies.
+				ParameterModel parameter = ClassifyParameter(p, asyncFactory: false);
 				return parameter.Kind == DependencyKind.Arg || registered.Contains(parameter.ServiceType);
 			}))
 			.OrderByDescending(c => c.Parameters.Length)
@@ -648,13 +667,27 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	///     (e.g. <c>Func&lt;Func&lt;T&gt;&gt;</c>) is classified as a direct dependency so it surfaces as an
 	///     unregistered service type rather than a misleading diagnostic about the inner relationship.
 	/// </summary>
-	private static ParameterModel ClassifyParameter(IParameterSymbol parameter)
+	private static ParameterModel ClassifyParameter(IParameterSymbol parameter, bool asyncFactory)
 	{
 		LocationInfo? location = LocationInfo.From(parameter.Locations.FirstOrDefault());
 
 		if (HasArgAttribute(parameter))
 		{
 			return new ParameterModel(parameter.Type.ToDisplayString(FullyQualified), DependencyKind.Arg, Location: location);
+		}
+
+		// An asynchronous factory's CancellationToken parameter is not resolved from the graph: the container
+		// forwards the resolve-time token (the async creator's cancellationToken). Limited to async factories -
+		// only they are constructed on the async path where that token exists; a synchronous factory (or a
+		// constructor) has no ambient token to forward, so its CancellationToken stays an ordinary dependency
+		// and is reported as AWT101 when unregistered rather than silently receiving default. An [Arg]
+		// CancellationToken is handled above as a caller-supplied runtime argument and is left untouched.
+		if (asyncFactory
+		    && parameter.Type is INamedTypeSymbol { Name: "CancellationToken", } token
+		    && token.ContainingNamespace?.ToDisplayString() == "System.Threading")
+		{
+			return new ParameterModel(
+				parameter.Type.ToDisplayString(FullyQualified), DependencyKind.CancellationToken, Location: location);
 		}
 
 		// A [FromKey] selects the keyed registration of the dependency's service type, whether it is required
@@ -669,43 +702,58 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		}
 
 		if (parameter.Type is INamedTypeSymbol { IsGenericType: true, } named
-		    && named.ContainingNamespace?.ToDisplayString() == "System")
+		    && named.ContainingNamespace?.ToDisplayString() == "System"
+		    && ClassifyRelationship(named, key, location) is { } relationship)
 		{
-			if (named is { Name: "Lazy", TypeArguments.Length: 1, } && !IsRelationshipType(named.TypeArguments[0]))
-			{
-				return new ParameterModel(
-					named.TypeArguments[0].ToDisplayString(FullyQualified), DependencyKind.Lazy, Key: key, Location: location);
-			}
-
-			if (named is { Name: "Func", TypeArguments.Length: >= 1, })
-			{
-				// Func<T> defers resolution; Func<TArg…, T> additionally supplies runtime arguments (the
-				// leading type arguments) to the produced service's [Arg]-marked parameters.
-				ITypeSymbol[] typeArgs = named.TypeArguments.ToArray();
-				ITypeSymbol service = typeArgs[typeArgs.Length - 1];
-				string[] argTypes = typeArgs.Take(typeArgs.Length - 1)
-					.Select(t => t.ToDisplayString(FullyQualified))
-					.ToArray();
-
-				// Func<…, Owned<T>> is the leak-free factory: its produced value is an Owned<T> disposal handle.
-				if (IsOwned(service, out ITypeSymbol funcOwnedInner))
-				{
-					return new ParameterModel(
-						funcOwnedInner.ToDisplayString(FullyQualified), DependencyKind.Func,
-						new EquatableArray<string>(argTypes), Key: key, Location: location, ProducesOwned: true);
-				}
-
-				if (!IsRelationshipType(service))
-				{
-					return new ParameterModel(
-						service.ToDisplayString(FullyQualified), DependencyKind.Func, new EquatableArray<string>(argTypes), Key: key, Location: location);
-				}
-			}
+			return relationship;
 		}
 
 		// A direct dependency, optionally selecting a keyed registration with [FromKey].
 		return new ParameterModel(
 			parameter.Type.ToDisplayString(FullyQualified), DependencyKind.Direct, Key: key, Location: location);
+	}
+
+	/// <summary>
+	///     Classifies a <c>System</c> generic as the single-level relationship it defers - <c>Lazy&lt;T&gt;</c>,
+	///     <c>Func&lt;T&gt;</c> or <c>Func&lt;TArg…, T&gt;</c> (the latter optionally producing an
+	///     <c>Owned&lt;T&gt;</c> disposal handle) - returning the underlying service type. A type that is not a
+	///     recognized relationship, or whose produced type is itself a relationship (nesting beyond one level),
+	///     returns <see langword="null" /> so the caller treats it as a direct dependency on the whole type.
+	/// </summary>
+	private static ParameterModel? ClassifyRelationship(INamedTypeSymbol named, string? key, LocationInfo? location)
+	{
+		if (named is { Name: "Lazy", TypeArguments.Length: 1, } && !IsRelationshipType(named.TypeArguments[0]))
+		{
+			return new ParameterModel(
+				named.TypeArguments[0].ToDisplayString(FullyQualified), DependencyKind.Lazy, Key: key, Location: location);
+		}
+
+		if (named is not { Name: "Func", TypeArguments.Length: >= 1, })
+		{
+			return null;
+		}
+
+		// Func<T> defers resolution; Func<TArg…, T> additionally supplies runtime arguments (the leading type
+		// arguments) to the produced service's [Arg]-marked parameters.
+		ITypeSymbol[] typeArgs = named.TypeArguments.ToArray();
+		ITypeSymbol service = typeArgs[typeArgs.Length - 1];
+		string[] argTypes = typeArgs.Take(typeArgs.Length - 1)
+			.Select(t => t.ToDisplayString(FullyQualified))
+			.ToArray();
+
+		// Func<…, Owned<T>> is the leak-free factory: its produced value is an Owned<T> disposal handle.
+		if (IsOwned(service, out ITypeSymbol funcOwnedInner))
+		{
+			return new ParameterModel(
+				funcOwnedInner.ToDisplayString(FullyQualified), DependencyKind.Func,
+				new EquatableArray<string>(argTypes), Key: key, Location: location, ProducesOwned: true);
+		}
+
+		// Func<…, T> over a relationship type (nesting beyond one level) falls through to a direct dependency.
+		return IsRelationshipType(service)
+			? null
+			: new ParameterModel(
+				service.ToDisplayString(FullyQualified), DependencyKind.Func, new EquatableArray<string>(argTypes), Key: key, Location: location);
 	}
 
 	private static ServiceKey KeyOf(ParameterModel parameter) => new(parameter.ServiceType, parameter.Key);
@@ -782,16 +830,18 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	}
 
 	/// <summary>
-	///     Marks every instance that is async-initialized or that reaches one through non-deferred (Direct)
-	///     edges, by fixpoint over the dependency graph. The edges already exclude relationship/Owned/Arg
-	///     parameters, so the taint is laundered by exactly the deferrals that break cycles.
+	///     Marks every instance that is an async-taint source - its implementation is async-initialized, or it
+	///     is produced by an asynchronous factory (Task&lt;T&gt; / ValueTask&lt;T&gt;), which the container can
+	///     only reach by awaiting - or that reaches one through non-deferred (Direct) edges, by fixpoint over
+	///     the dependency graph. The edges already exclude relationship/Owned/Arg parameters, so the taint is
+	///     laundered by exactly the deferrals that break cycles.
 	/// </summary>
 	private static bool[] PropagateAsyncTaint(List<InstanceModel> instances, Dictionary<int, List<int>> dependencies)
 	{
 		bool[] tainted = new bool[instances.Count];
 		for (int i = 0; i < instances.Count; i++)
 		{
-			tainted[i] = instances[i].IsAsyncInitializable;
+			tainted[i] = instances[i].IsAsyncInitializable || instances[i].IsAsyncFactory;
 		}
 
 		bool changed = true;
@@ -859,7 +909,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 				// Point the diagnostic at the offending parameter; fall back to the consumer's registration.
 				LocationInfo? location = parameter.Location ?? instanceLocations[i];
-				if (instances[target].IsAsyncInitializable)
+				if (instances[target].IsAsyncSource)
 				{
 					diagnostics.Add(new DiagnosticInfo(
 						Diagnostics.SynchronousAsyncResolution,
@@ -899,7 +949,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		while (queue.Count > 0)
 		{
 			int node = queue.Dequeue();
-			if (instances[node].IsAsyncInitializable)
+			if (instances[node].IsAsyncSource)
 			{
 				end = node;
 				break;
@@ -998,12 +1048,13 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			}
 
 			// A parameterized service is reachable only through a synchronous Func<TArg…, T>, which returns the
-			// service directly and so cannot await InitializeAsync. Combining [Arg] with IAsyncInitializable
-			// would therefore either hand back an uninitialized instance (SyncResolveAfterInit) or be silently
-			// unreachable (strict) - neither has a correct resolution path until an async parameterized factory
-			// exists. Reported in both modes (it is not a sync-vs-async resolution choice but an unsupported
-			// combination).
-			if (instance.IsParameterized && instance.IsAsyncInitializable)
+			// service directly and so cannot await it. Combining [Arg] with an async-taint source (an
+			// IAsyncInitializable implementation, or an asynchronous Task<T> / ValueTask<T> factory) would
+			// therefore either hand back an uninitialized/unawaited instance (SyncResolveAfterInit) or be
+			// silently unreachable (strict) - neither has a correct resolution path until an async parameterized
+			// factory relationship (Func<TArg…, Task<T>>) exists. Reported in both modes (it is not a
+			// sync-vs-async resolution choice but an unsupported combination).
+			if (instance.IsParameterized && instance.IsAsyncSource)
 			{
 				diagnostics.Add(new DiagnosticInfo(
 					Diagnostics.ParameterizedAsyncInitialization,

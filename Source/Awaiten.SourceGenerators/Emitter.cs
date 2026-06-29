@@ -269,13 +269,15 @@ internal static class Emitter
 
 	/// <summary>
 	///     The guidance message (a quoted string literal) thrown by Resolve(Type) when an async-tainted service is
-	///     requested by type: it is async-initialized (or reaches one through its non-deferred dependencies), so it
-	///     has no synchronous resolution path in the strict default and must be obtained asynchronously.
+	///     requested by type: it is async-initialized - it implements IAsyncInitializable, is produced by an
+	///     asynchronous Task&lt;T&gt; / ValueTask&lt;T&gt; factory, or reaches one through its non-deferred
+	///     dependencies - so it has no synchronous resolution path in the strict default and must be obtained
+	///     asynchronously.
 	/// </summary>
 	private static string AsyncWithheldMessage(string service)
 	{
 		string display = service.Replace("global::", string.Empty);
-		return $"\"Awaiten: '{display}' requires asynchronous initialization (it is IAsyncInitializable, or depends on one) and cannot be resolved synchronously; resolve it through ResolveAsync (or warm it through InitializeAsync / CreateScopeAsync), or set SyncResolveAfterInit on the [Container].\"";
+		return $"\"Awaiten: '{display}' requires asynchronous initialization (it is IAsyncInitializable, is produced by an async Task<T> factory, or depends on one) and cannot be resolved synchronously; resolve it through ResolveAsync (or warm it through InitializeAsync / CreateScopeAsync), or set SyncResolveAfterInit on the [Container].\"";
 	}
 
 	/// <summary>
@@ -1475,6 +1477,13 @@ internal static class Emitter
 			{
 				arguments.Append("a" + argIndex++);
 			}
+			else if (parameters[p].Kind == DependencyKind.CancellationToken)
+			{
+				// Forward the resolve-time token: the async creator's cancellationToken is in scope here. Only an
+				// async factory yields a CancellationToken dependency, and an async factory is built solely on the
+				// async path, so this is never reached with asynchronous == false.
+				arguments.Append("cancellationToken");
+			}
 			else if (asynchronous && parameters[p].Kind == DependencyKind.Direct
 			         && serviceToIndex.TryGetValue(new ServiceKey(parameters[p].ServiceType, parameters[p].Key), out int dependency)
 			         && instances[dependency].IsAsyncTainted)
@@ -1490,7 +1499,16 @@ internal static class Emitter
 		if (instance.Production == ProductionKind.Factory)
 		{
 			// The container is a static class nested-enclosing both Scope and Root, so its static factory
-			// method is in scope by simple name - no receiver.
+			// method is in scope by simple name - no receiver. An asynchronous factory returns Task<T> /
+			// ValueTask<T>; it is awaited here so the construction expression yields the produced T. This is
+			// only ever reached on the async path (asynchronous: true): an async factory is async-tainted, so
+			// its synchronous resolver delegates to the async one rather than constructing directly. The await
+			// expression is uniform for Task and ValueTask, so no TFM gating of the emitted code is needed.
+			if (instance.IsAsyncFactory)
+			{
+				return $"await {instance.ProductionMember}({arguments}).ConfigureAwait(false)";
+			}
+
 			return $"{instance.ProductionMember}({arguments})";
 		}
 

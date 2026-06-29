@@ -16,6 +16,9 @@ namespace Awaiten.SourceGenerators.Internals;
 ///     a factory method or instance member is always reached by simple name.
 ///     <see cref="IsAsyncInitializable" /> is set when the constructed/factory-produced type implements
 ///     <c>IAsyncInitializable</c> (so it must be awaited once after construction);
+///     <see cref="IsAsyncFactory" /> is set when the instance is produced by an asynchronous factory
+///     (returning <c>Task&lt;T&gt;</c> / <c>ValueTask&lt;T&gt;</c>), which the container can only reach by
+///     awaiting the factory call - an async-taint source independent of <see cref="IsAsyncInitializable" />;
 ///     <see cref="IsAsyncTainted" /> additionally covers an instance that only reaches one through its
 ///     non-deferred dependencies, so it too must be resolved asynchronously.
 ///     <see cref="RuntimeDisposalCheck" /> is set for a factory whose declared return type is not itself
@@ -36,8 +39,17 @@ internal sealed record InstanceModel(
 	string? ProductionMember = null,
 	bool IsAsyncInitializable = false,
 	bool IsAsyncTainted = false,
+	bool IsAsyncFactory = false,
 	bool RuntimeDisposalCheck = false)
 {
+	/// <summary>
+	///     Whether this instance is itself an async-taint source (as opposed to being tainted only through a
+	///     dependency): its implementation is <c>IAsyncInitializable</c>, or it is produced by an asynchronous
+	///     factory. Either way it is reachable only by awaiting, so a synchronous relationship over it is an
+	///     AWT119 rather than a transitive AWT120.
+	/// </summary>
+	public bool IsAsyncSource => IsAsyncInitializable || IsAsyncFactory;
+
 	/// <summary>
 	///     The ordered runtime-argument types of this instance: the service types of its <c>[Arg]</c>-marked
 	///     constructor parameters, in declaration order. These are supplied at resolve time through a
