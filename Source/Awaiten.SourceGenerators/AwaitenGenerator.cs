@@ -820,13 +820,17 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		{
 			foreach (ParameterModel parameter in instances[i].ConstructorParameters.AsArray())
 			{
+				// Guard the implToIndex lookup: serviceToImpl can name an implementation whose BuildInstance
+				// failed (so it is absent from implToIndex), and an unguarded indexer would crash the generator
+				// (KeyNotFoundException) instead of surfacing the real registration error. Mirrors the guard in
+				// BuildDependencyGraph / ValidateRuntimeArguments.
 				if (parameter.Kind is not (DependencyKind.Func or DependencyKind.Lazy or DependencyKind.Owned)
-				    || !serviceToImpl.TryGetValue(KeyOf(parameter), out string? targetImpl))
+				    || !serviceToImpl.TryGetValue(KeyOf(parameter), out string? targetImpl)
+				    || !implToIndex.TryGetValue(targetImpl, out int target))
 				{
 					continue;
 				}
 
-				int target = implToIndex[targetImpl];
 				if (!instances[target].IsAsyncTainted)
 				{
 					continue;
@@ -972,16 +976,35 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 					new EquatableArray<string>([Display(instance.ImplementationType), instance.Lifetime.ToString(),])));
 			}
 
+			// A parameterized service is reachable only through a synchronous Func<TArg…, T>, which returns the
+			// service directly and so cannot await InitializeAsync. Combining [Arg] with IAsyncInitializable
+			// would therefore either hand back an uninitialized instance (SyncResolveAfterInit) or be silently
+			// unreachable (strict) - neither has a correct resolution path until an async parameterized factory
+			// exists. Reported in both modes (it is not a sync-vs-async resolution choice but an unsupported
+			// combination).
+			if (instance.IsParameterized && instance.IsAsyncInitializable)
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.ParameterizedAsyncInitialization,
+					location,
+					new EquatableArray<string>([Display(instance.ImplementationType),])));
+			}
+
 			foreach (ParameterModel parameter in instance.ConstructorParameters.AsArray())
 			{
+				// Guard the implToIndex lookup the same way BuildDependencyGraph does: serviceToImpl can name an
+				// implementation whose BuildInstance failed (so it is absent from implToIndex), and an unguarded
+				// indexer would crash the generator (KeyNotFoundException) instead of surfacing the real
+				// registration error (e.g. AWT103).
 				if (parameter.Kind == DependencyKind.Arg
-				    || !serviceToImpl.TryGetValue(KeyOf(parameter), out string? targetImpl))
+				    || !serviceToImpl.TryGetValue(KeyOf(parameter), out string? targetImpl)
+				    || !implToIndex.TryGetValue(targetImpl, out int targetIndex))
 				{
 					continue;
 				}
 
 				ValidateDependency(
-					instance, parameter, instances[implToIndex[targetImpl]].ArgTypes(), location, diagnostics);
+					instance, parameter, instances[targetIndex].ArgTypes(), location, diagnostics);
 			}
 		}
 	}

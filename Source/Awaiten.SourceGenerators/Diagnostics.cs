@@ -276,4 +276,20 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A service with <c>[Arg]</c>-marked parameters is also <c>IAsyncInitializable</c>. A parameterized
+	///     service is built fresh per request and reachable only through a synchronous
+	///     <c>Func&lt;TArg…, T&gt;</c>, which returns the service directly and so cannot await
+	///     <c>InitializeAsync</c> - it would hand back an uninitialized instance (under
+	///     <c>SyncResolveAfterInit</c>) or be unreachable (in the strict default). The two cannot be combined
+	///     until an async parameterized factory (<c>Func&lt;TArg…, Task&lt;T&gt;&gt;</c>) exists.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ParameterizedAsyncInitialization = new(
+		"AWT121",
+		"Parameterized service cannot be async-initialized",
+		"'{0}' has [Arg] parameters and is reachable only through a synchronous Func<…, {0}>, which cannot await IAsyncInitializable.InitializeAsync; a parameterized service therefore cannot implement IAsyncInitializable",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }
