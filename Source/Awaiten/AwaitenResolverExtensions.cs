@@ -66,11 +66,16 @@ public static class AwaitenResolverExtensions
 		///     dependencies) where required. For a service that needs no asynchronous initialization this
 		///     completes synchronously. Throws if it is not registered.
 		/// </summary>
-		public async Task<T> ResolveAsync<T>(CancellationToken cancellationToken = default)
+		public Task<T> ResolveAsync<T>(CancellationToken cancellationToken = default)
 		{
+			// The null check runs synchronously (eager argument validation, like Resolve<T> / TryResolve<T>)
+			// rather than being deferred into the returned task by an async method: the await-and-cast lives in
+			// a local async function the synchronous body invokes only after the argument is validated.
 			ThrowIfNull(resolver);
 
-			return (T)await resolver.ResolveAsync(typeof(T), cancellationToken).ConfigureAwait(false);
+			return Cast(resolver.ResolveAsync(typeof(T), cancellationToken));
+
+			static async Task<T> Cast(Task<object> resolution) => (T)await resolution.ConfigureAwait(false);
 		}
 	}
 }

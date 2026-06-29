@@ -322,6 +322,51 @@ public partial class AsyncInitializationTests
 		await That(DisposableConnection.DisposeCount).IsEqualTo(1);
 	}
 
+	[Fact]
+	public async Task ResolveAsync_OfADisposableAsyncTransient_IsWithheldOnTheRoot()
+	{
+		using DisposableWorkerContainer.Root container = new();
+
+		// Mirrors the synchronous strict withholding: resolving a disposable transient by type on the Root would
+		// track a fresh disposable on the root for the container's lifetime, so ResolveAsync refuses it there and
+		// steers toward a child scope (whose disposal bounds the instance) rather than leaking.
+		Func<Task> resolveOnRoot = () => container.ResolveAsync<DisposableWorker>(Ct);
+		await That(resolveOnRoot).Throws<InvalidOperationException>()
+			.WithMessage("*child scope*").AsWildcard()
+			.Because("a disposable async transient accumulates on the root and is withheld from ResolveAsync there");
+	}
+
+	[Fact]
+	public async Task ResolveAsync_OfADisposableAsyncTransient_ResolvesFromAChildScopeAndIsDisposedWithIt()
+	{
+		using DisposableWorkerContainer.Root container = new();
+
+		DisposableWorker worker;
+		using (IAwaitenScope scope = await container.CreateScopeAsync(Ct))
+		{
+			// From a child scope it resolves normally - the instance it builds is owned by the scope, so its
+			// lifetime is bounded rather than accumulating on the root.
+			worker = await scope.ResolveAsync<DisposableWorker>(Ct);
+			await That(worker.Initialized).IsTrue();
+			await That(worker.Disposed).IsFalse();
+		}
+
+		await That(worker.Disposed).IsTrue();
+	}
+
+	[Fact]
+	public async Task DisposedContainer_AsyncEntryPoints_ThrowSynchronouslyRatherThanReturningAFaultedTask()
+	{
+		AsyncContainer.Root container = new();
+		container.Dispose();
+
+		// The disposed-guard is eager state validation: the async entry points throw on the call itself (an
+		// Action that invokes and discards the task still throws), not only when the returned task is awaited.
+		await That(() => { _ = container.InitializeAsync(Ct); }).Throws<ObjectDisposedException>();
+		await That(() => { _ = container.CreateScopeAsync(Ct); }).Throws<ObjectDisposedException>();
+		await That(() => { _ = container.ResolveAsync<Connection>(Ct); }).Throws<ObjectDisposedException>();
+	}
+
 	public sealed class Connection : IAsyncInitializable
 	{
 		public bool Initialized { get; private set; }
@@ -505,4 +550,25 @@ public partial class AsyncInitializationTests
 	[Container]
 	[Singleton<DisposableConnection>]
 	public static partial class DisposableAsyncContainer;
+
+	// A disposable async transient: withheld from ResolveAsync on the Root (it would accumulate there), but
+	// resolvable from a child scope, which bounds and disposes it.
+	public sealed class DisposableWorker : IAsyncInitializable, IDisposable
+	{
+		public bool Initialized { get; private set; }
+
+		public bool Disposed { get; private set; }
+
+		public Task InitializeAsync(CancellationToken cancellationToken)
+		{
+			Initialized = true;
+			return Task.CompletedTask;
+		}
+
+		public void Dispose() => Disposed = true;
+	}
+
+	[Container]
+	[Transient<DisposableWorker>]
+	public static partial class DisposableWorkerContainer;
 }

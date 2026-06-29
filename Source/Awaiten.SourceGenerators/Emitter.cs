@@ -235,6 +235,18 @@ internal static class Emitter
 		return $"\"Awaiten: '{display}' requires asynchronous initialization (it is IAsyncInitializable, or depends on one) and cannot be resolved synchronously; resolve it through ResolveAsync (or warm it through InitializeAsync / CreateScopeAsync), or set SyncResolveAfterInit on the [Container].\"";
 	}
 
+	// The guidance message (a quoted string literal) thrown by ResolveAsync(Type) on the Root when a disposable
+	// build-on-demand service that needs asynchronous initialization is requested by its bare type: building it
+	// on demand from the Root tracks a fresh disposable on the root for the container's lifetime (an unbounded
+	// leak), so the Root withholds it. It stays resolvable from a child scope, whose disposal bounds it - the
+	// async counterpart to BareWithheldMessage (Owned<T> is a synchronous relationship, so it is not offered for
+	// an async-initialized service).
+	private static string AsyncRootWithheldMessage(string service)
+	{
+		string display = service.Replace("global::", string.Empty);
+		return $"\"Awaiten: '{display}' is a disposable transient that needs asynchronous initialization; resolving it through ResolveAsync on the container root would track a fresh disposable on the root for the container's lifetime, so it is withheld there under strict lifetime safety. Resolve it from a child scope (await CreateScopeAsync(), ResolveAsync from that scope, then dispose the scope), or set LifetimeSafety.Loose on the [Container].\"";
+	}
+
 	/// <summary>
 	///     Emits the reverse-order drain of the (possibly null) <c>__toDispose</c> list captured under the
 	///     lock - disposing what the owner created, newest first.
@@ -330,7 +342,7 @@ internal static class Emitter
 		// The asynchronous surface: ResolveAsync(Type) on every owner, plus the IAwaitenScope members
 		// InitializeAsync (the base warms this scope's async scoped services; the Root overrides it to warm
 		// the singletons) and CreateScopeAsync. The Root's per-singleton async resolvers are emitted there.
-		EmitAsyncResolutionApi(builder, body, instances, names);
+		EmitAsyncResolutionApi(builder, body, instances, names, strict);
 		builder.AppendLine();
 		EmitScopeInitializeAsync(builder, body, instances, names);
 		builder.AppendLine();
@@ -973,7 +985,7 @@ internal static class Emitter
 	///     synchronously and completes immediately (deferring to <c>Resolve</c> for the same registration /
 	///     withholding errors as the synchronous path).
 	/// </summary>
-	private static void EmitAsyncResolutionApi(StringBuilder builder, int depth, InstanceModel[] instances, Names names)
+	private static void EmitAsyncResolutionApi(StringBuilder builder, int depth, InstanceModel[] instances, Names names, bool strict)
 	{
 		const string task = "global::System.Threading.Tasks.Task";
 
@@ -994,6 +1006,12 @@ internal static class Emitter
 
 			hasAsync = true;
 			string asyncResolver = names.AsyncResolver(i);
+			// A disposable async transient is withheld from by-type resolution on the Root, mirroring the
+			// synchronous __rootWithheld mask: each Root resolution would track a fresh disposable on the root
+			// for the container's lifetime (an unbounded leak), so the Root throws guidance toward a child scope
+			// while a child scope still resolves it (its disposal bounds the instance). Injection into a
+			// singleton stays allowed - that is bounded to one instance.
+			bool rootWithheld = IsWithheld(instances[i], strict);
 			foreach (ServiceKey serviceKey in instances[i].Services.AsArray())
 			{
 				// Keyed registrations are reached only by [FromKey] injection, never by-type resolution.
@@ -1002,8 +1020,20 @@ internal static class Emitter
 					continue;
 				}
 
-				Indent(builder, depth + 1).Append("if (serviceType == typeof(").Append(serviceKey.Service)
-					.Append(")) { return __AsObject(").Append(asyncResolver).AppendLine("(cancellationToken)); }");
+				if (rootWithheld)
+				{
+					Indent(builder, depth + 1).Append("if (serviceType == typeof(").Append(serviceKey.Service).AppendLine("))");
+					Indent(builder, depth + 1).AppendLine("{");
+					Indent(builder, depth + 2).Append("if (this is Root) { throw new global::System.InvalidOperationException(")
+						.Append(AsyncRootWithheldMessage(serviceKey.Service)).AppendLine("); }");
+					Indent(builder, depth + 2).Append("return __AsObject(").Append(asyncResolver).AppendLine("(cancellationToken));");
+					Indent(builder, depth + 1).AppendLine("}");
+				}
+				else
+				{
+					Indent(builder, depth + 1).Append("if (serviceType == typeof(").Append(serviceKey.Service)
+						.Append(")) { return __AsObject(").Append(asyncResolver).AppendLine("(cancellationToken)); }");
+				}
 			}
 		}
 
@@ -1212,7 +1242,10 @@ internal static class Emitter
 
 	/// <summary>
 	///     Emits a warm-up method that awaits the async resolver of every async-tainted, non-parameterized
-	///     instance of the given lifetime; with none it returns <c>Task.CompletedTask</c>.
+	///     instance of the given lifetime; with none it returns <c>Task.CompletedTask</c>. The disposed-guard
+	///     runs synchronously (eager state validation, like <c>ResolveAsync</c>) rather than surfacing only when
+	///     the returned task is awaited: with targets the public/internal entry validates and delegates to a
+	///     private <c>async</c> core, so a disposed container throws immediately on the call.
 	/// </summary>
 	private static void EmitWarmUp(StringBuilder builder, int depth, InstanceModel[] instances, Names names, string modifiers, string method, Lifetime lifetime)
 	{
@@ -1230,9 +1263,17 @@ internal static class Emitter
 			return;
 		}
 
-		Indent(builder, depth).Append(modifiers).Append(" async ").Append(task).Append(' ').Append(method).Append('(').Append(ctParam).AppendLine(")");
+		string core = method + "Core";
+		Indent(builder, depth).Append(modifiers).Append(' ').Append(task).Append(' ').Append(method).Append('(').Append(ctParam).AppendLine(")");
 		Indent(builder, depth).AppendLine("{");
 		EmitDisposedGuard(builder, depth + 1);
+		Indent(builder, depth + 1).Append("return ").Append(core).AppendLine("(cancellationToken);");
+		Indent(builder, depth).AppendLine("}");
+		builder.AppendLine();
+
+		Indent(builder, depth).Append("private async ").Append(task).Append(' ').Append(core)
+			.AppendLine("(global::System.Threading.CancellationToken cancellationToken)");
+		Indent(builder, depth).AppendLine("{");
 		foreach (int i in targets)
 		{
 			Indent(builder, depth + 1).Append("await ").Append(names.AsyncResolver(i)).AppendLine("(cancellationToken).ConfigureAwait(false);");
@@ -1250,10 +1291,20 @@ internal static class Emitter
 	{
 		const string task = "global::System.Threading.Tasks.Task";
 
-		Indent(builder, depth).Append("public async ").Append(task)
+		// The disposed-guard runs synchronously (eager state validation, like ResolveAsync) by splitting the
+		// public entry from a private async core: the entry validates and returns the core's task, so a disposed
+		// container throws immediately on the call rather than only when the returned task is awaited.
+		Indent(builder, depth).Append("public ").Append(task)
 			.AppendLine("<global::Awaiten.IAwaitenScope> CreateScopeAsync(global::System.Threading.CancellationToken cancellationToken = default)");
 		Indent(builder, depth).AppendLine("{");
 		EmitDisposedGuard(builder, depth + 1);
+		Indent(builder, depth + 1).AppendLine("return CreateScopeAsyncCore(cancellationToken);");
+		Indent(builder, depth).AppendLine("}");
+		builder.AppendLine();
+
+		Indent(builder, depth).Append("private async ").Append(task)
+			.AppendLine("<global::Awaiten.IAwaitenScope> CreateScopeAsyncCore(global::System.Threading.CancellationToken cancellationToken)");
+		Indent(builder, depth).AppendLine("{");
 		Indent(builder, depth + 1).AppendLine("Scope __scope = CreateScope();");
 		Indent(builder, depth + 1).AppendLine("try");
 		Indent(builder, depth + 1).AppendLine("{");
