@@ -16,26 +16,6 @@ internal sealed record ContainerModel(
 	bool Strict,
 	bool SyncResolveAfterInit)
 {
-	/// <summary>
-	///     True when any instance requires asynchronous initialization (directly or transitively), so the
-	///     container emits a memoizing async resolution path in addition to the synchronous one.
-	/// </summary>
-	public bool HasAsync
-	{
-		get
-		{
-			foreach (InstanceModel instance in Instances.AsArray())
-			{
-				if (instance.IsAsyncTainted)
-				{
-					return true;
-				}
-			}
-
-			return false;
-		}
-	}
-
 	public bool HasErrors
 	{
 		get

@@ -22,8 +22,17 @@ public interface IAwaitenResolver
 	object Resolve(Type serviceType);
 
 	/// <summary>
-	///     Attempts to resolve a service of the given <paramref name="serviceType" />.
+	///     Attempts to resolve a service of the given <paramref name="serviceType" />, reporting whether it
+	///     could be resolved <em>synchronously</em>.
 	/// </summary>
+	/// <remarks>
+	///     This probes synchronous resolvability, not mere registration. In the strict default an
+	///     async-tainted service (one that is <see cref="IAsyncInitializable" />, or reaches one through its
+	///     non-deferred dependencies) has no synchronous resolution path, so this returns
+	///     <see langword="false" /> for it even though it is registered - resolve it through
+	///     <see cref="ResolveAsync" /> instead (or set <c>SyncResolveAfterInit</c> on the <c>[Container]</c> to
+	///     make it synchronously resolvable after warm-up).
+	/// </remarks>
 	bool TryResolve(Type serviceType, [NotNullWhen(true)] out object? instance);
 
 	/// <summary>

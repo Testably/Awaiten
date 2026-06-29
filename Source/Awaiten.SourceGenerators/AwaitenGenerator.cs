@@ -700,8 +700,10 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		return null;
 	}
 
-	// Reads the container's LifetimeSafety from its [Container] attribute. Strict (the default, enum value 0)
-	// unless the attribute explicitly sets Loose.
+	/// <summary>
+	///     Reads the container's <c>LifetimeSafety</c> from its <c>[Container]</c> attribute. Strict (the
+	///     default, enum value 0) unless the attribute explicitly sets <c>Loose</c>.
+	/// </summary>
 	internal static bool ReadStrict(INamedTypeSymbol containerSymbol)
 	{
 		foreach (AttributeData attribute in containerSymbol.GetAttributes())
@@ -724,8 +726,11 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		return true;
 	}
 
-	// Reads the container's SyncResolveAfterInit flag from its [Container] attribute (default false: strict
-	// async resolution, where an async-tainted service is reachable only through ResolveAsync).
+	/// <summary>
+	///     Reads the container's <c>SyncResolveAfterInit</c> flag from its <c>[Container]</c> attribute
+	///     (default <see langword="false" />: strict async resolution, where an async-tainted service is
+	///     reachable only through <c>ResolveAsync</c>).
+	/// </summary>
 	internal static bool ReadSyncResolveAfterInit(INamedTypeSymbol containerSymbol)
 	{
 		foreach (AttributeData attribute in containerSymbol.GetAttributes())

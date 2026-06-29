@@ -43,11 +43,14 @@ namespace Awaiten
     {
         T Resolve();
     }
+    public interface IAwaitenRoot : Awaiten.IAwaitenResolver, Awaiten.IAwaitenScope, System.IDisposable
+    {
+        System.Threading.Tasks.Task InitializeAsync(System.Threading.CancellationToken cancellationToken = default);
+    }
     public interface IAwaitenScope : Awaiten.IAwaitenResolver, System.IDisposable
     {
         Awaiten.IAwaitenScope CreateScope();
         System.Threading.Tasks.Task<Awaiten.IAwaitenScope> CreateScopeAsync(System.Threading.CancellationToken cancellationToken = default);
-        System.Threading.Tasks.Task InitializeAsync(System.Threading.CancellationToken cancellationToken = default);
     }
     public enum LifetimeSafety
     {

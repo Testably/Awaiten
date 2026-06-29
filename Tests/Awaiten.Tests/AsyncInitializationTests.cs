@@ -189,6 +189,139 @@ public partial class AsyncInitializationTests
 		await That(container.TryResolve(typeof(Consumer), out _)).IsFalse();
 	}
 
+	[Fact]
+	public async Task SyncResolve_OfAnAsyncTaintedService_ThrowsGuidancePointingAtResolveAsync()
+	{
+		using AsyncContainer.Root container = new();
+
+		// The service IS registered; resolving it by type surfaces guidance toward ResolveAsync rather than
+		// the generic "no registration" message (which would wrongly suggest it was never registered).
+		await That(() => container.Resolve(typeof(Connection))).Throws<InvalidOperationException>()
+			.WithMessage("*ResolveAsync*").AsWildcard()
+			.Because("an async-tainted service is registered but reachable only asynchronously");
+	}
+
+	[Fact]
+	public async Task CreateScopeAsync_DisposesTheScope_WhenScopedInitializationThrows()
+	{
+		using FailingScopeContainer.Root container = new();
+		FailingScoped.Reset();
+
+		Func<Task> createScope = () => container.CreateScopeAsync(Ct);
+		await That(createScope).Throws<InvalidOperationException>();
+
+		// The scoped instance was constructed (and tracked for disposal) before its InitializeAsync threw; the
+		// failed CreateScopeAsync disposed the scope rather than leaking it, so that instance was disposed.
+		await That(FailingScoped.Disposed).IsTrue();
+	}
+
+	[Fact]
+	public async Task PragmaticMode_SyncResolveBeforeWarmUp_StillReturnsAnInitializedSingleton()
+	{
+		using PragmaticContainer.Root container = new();
+
+		// No InitializeAsync first: the synchronous resolver delegates to the (memoizing) async path, so it
+		// returns a fully initialized instance built exactly once - never a second, uninitialized one.
+		Connection first = container.Resolve<Connection>();
+
+		await That(first.Initialized).IsTrue();
+		await That(first.InitializeCount).IsEqualTo(1);
+		await That(container.Resolve<Connection>()).IsSameAs(first);
+	}
+
+	[Fact]
+	public async Task PragmaticMode_TryResolveOfAnAsyncTaintedService_ReturnsTrueWithAnInitializedInstance()
+	{
+		using PragmaticContainer.Root container = new();
+
+		// The complement of the strict default (where TryResolve reports an async-tainted service as false):
+		// pragmatic mode exposes it to synchronous resolution, so TryResolve reports it and hands back a fully
+		// initialized instance.
+		bool resolved = container.TryResolve(typeof(Connection), out object? instance);
+
+		await That(resolved).IsTrue();
+		await That(instance).Is<Connection>();
+		await That(((Connection)instance!).Initialized).IsTrue();
+	}
+
+	[Fact]
+	public async Task PragmaticMode_SyncResolveOfATransient_ReturnsAnInitializedInstance()
+	{
+		using PragmaticContainer.Root container = new();
+
+		// A transient is never warmed by InitializeAsync, so the synchronous resolver must still initialize it.
+		Worker worker = container.Resolve<Worker>();
+
+		await That(worker.Initialized).IsTrue();
+	}
+
+	[Fact]
+	public async Task PragmaticMode_ConcurrentSyncAndAsyncResolution_ConstructsOneInitializedSingleton()
+	{
+		using PragmaticContainer.Root container = new();
+
+		Task<Connection>[] asyncTasks = Enumerable.Range(0, 32)
+			.Select(_ => Task.Run(() => container.ResolveAsync<Connection>(Ct))).ToArray();
+		Task<Connection>[] syncTasks = Enumerable.Range(0, 32)
+			.Select(_ => Task.Run(() => container.Resolve<Connection>())).ToArray();
+
+		Connection[] resolved = (await Task.WhenAll(asyncTasks)).Concat(await Task.WhenAll(syncTasks)).ToArray();
+
+		// The synchronous and asynchronous paths share one construction-and-initialization, so even under
+		// concurrency there is a single instance initialized exactly once.
+		await That(resolved.Distinct().Count()).IsEqualTo(1);
+		await That(resolved[0].InitializeCount).IsEqualTo(1);
+	}
+
+	[Fact]
+	public async Task ResolveAsync_AfterAFailedInitialization_RetriesRatherThanCachingTheFailure()
+	{
+		using FlakyContainer.Root container = new();
+		FlakyConnection.Reset();
+
+		Func<Task> resolveFlaky = () => container.ResolveAsync<FlakyConnection>(Ct);
+		await That(resolveFlaky).Throws<InvalidOperationException>();
+
+		// The faulted task is not memoized, so a second resolve builds and initializes a fresh instance.
+		FlakyConnection second = await container.ResolveAsync<FlakyConnection>(Ct);
+
+		await That(second.Initialized).IsTrue();
+		await That(FlakyConnection.Attempts).IsEqualTo(2);
+	}
+
+	[Fact]
+	public async Task ResolveAsync_AfterACanceledInitialization_RetriesWithAFreshToken()
+	{
+		using SlowContainer.Root container = new();
+		SlowConnection.Reset();
+		using CancellationTokenSource cts = new();
+
+		Task<SlowConnection> first = container.ResolveAsync<SlowConnection>(cts.Token);
+		cts.Cancel();
+		Func<Task> awaitFirst = () => first;
+		await That(awaitFirst).Throws<OperationCanceledException>();
+
+		// One caller's cancellation does not poison the shared singleton: a later resolve with a live token
+		// initializes successfully.
+		SlowConnection second = await container.ResolveAsync<SlowConnection>(Ct);
+
+		await That(second.Initialized).IsTrue();
+	}
+
+	[Fact]
+	public async Task Dispose_DisposesAnAsyncInitializedSingleton()
+	{
+		DisposableConnection.Reset();
+
+		using (DisposableAsyncContainer.Root container = new())
+		{
+			DisposableConnection resolved = await container.ResolveAsync<DisposableConnection>(Ct);
+			await That(resolved.Initialized).IsTrue();
+		}
+
+		await That(DisposableConnection.DisposeCount).IsEqualTo(1);
+	}
+
 	public sealed class Connection : IAsyncInitializable
 	{
 		public bool Initialized { get; private set; }
@@ -236,6 +369,7 @@ public partial class AsyncInitializationTests
 
 	[Container(SyncResolveAfterInit = true)]
 	[Singleton<Connection>]
+	[Transient<Worker>]
 	public static partial class PragmaticContainer;
 
 	public sealed class Database : IAsyncInitializable
@@ -281,4 +415,94 @@ public partial class AsyncInitializationTests
 	[Singleton<Repository>]
 	[Singleton<Consumer>]
 	public static partial class OrderedContainer;
+
+	// A scoped service whose initialization throws, so CreateScopeAsync must dispose the half-built scope.
+	public sealed class FailingScoped : IAsyncInitializable, IDisposable
+	{
+		public static bool Disposed { get; private set; }
+
+		public static void Reset() => Disposed = false;
+
+		public Task InitializeAsync(CancellationToken cancellationToken)
+			=> throw new InvalidOperationException("scoped initialization failed");
+
+		public void Dispose() => Disposed = true;
+	}
+
+	[Container]
+	[Scoped<FailingScoped>]
+	public static partial class FailingScopeContainer;
+
+	// Fails its first initialization, then succeeds - to prove a faulted task is not memoized.
+	public sealed class FlakyConnection : IAsyncInitializable
+	{
+		public static int Attempts { get; private set; }
+
+		public bool Initialized { get; private set; }
+
+		public static void Reset() => Attempts = 0;
+
+		public Task InitializeAsync(CancellationToken cancellationToken)
+		{
+			Attempts++;
+			if (Attempts == 1)
+			{
+				throw new InvalidOperationException("transient initialization failure");
+			}
+
+			Initialized = true;
+			return Task.CompletedTask;
+		}
+	}
+
+	[Container]
+	[Singleton<FlakyConnection>]
+	public static partial class FlakyContainer;
+
+	// Blocks (honoring cancellation) on its first initialization, then succeeds - to prove a canceled task is
+	// not memoized and a later caller with a live token can still initialize it.
+	public sealed class SlowConnection : IAsyncInitializable
+	{
+		public static int Attempts { get; private set; }
+
+		public bool Initialized { get; private set; }
+
+		public static void Reset() => Attempts = 0;
+
+		public async Task InitializeAsync(CancellationToken cancellationToken)
+		{
+			Attempts++;
+			if (Attempts == 1)
+			{
+				await Task.Delay(Timeout.Infinite, cancellationToken).ConfigureAwait(false);
+			}
+
+			Initialized = true;
+		}
+	}
+
+	[Container]
+	[Singleton<SlowConnection>]
+	public static partial class SlowContainer;
+
+	public sealed class DisposableConnection : IAsyncInitializable, IDisposable
+	{
+		public static int DisposeCount { get; private set; }
+
+		public bool Initialized { get; private set; }
+
+		public static void Reset() => DisposeCount = 0;
+
+		public Task InitializeAsync(CancellationToken cancellationToken)
+		{
+			Initialized = true;
+			return Task.CompletedTask;
+		}
+
+		public void Dispose() => DisposeCount++;
+	}
+
+	[Container]
+	[Singleton<DisposableConnection>]
+	public static partial class DisposableAsyncContainer;
 }
