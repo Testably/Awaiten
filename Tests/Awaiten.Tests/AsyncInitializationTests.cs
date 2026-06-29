@@ -632,4 +632,193 @@ public partial class AsyncInitializationTests
 	[Container]
 	[Transient<DisposableWorker>]
 	public static partial class DisposableWorkerContainer;
+
+	[Fact]
+	public async Task AsyncFactory_Singleton_AwaitsTheFactoryAndReturnsTheBuiltInstance()
+	{
+		AsyncFactoryService.Reset();
+		using AsyncFactoryContainer.Root container = new();
+
+		IAsyncFactoryService service = await container.ResolveAsync<IAsyncFactoryService>(Ct);
+
+		await That(service).IsNotNull();
+		await That(AsyncFactoryService.BuildCount).IsEqualTo(1);
+	}
+
+	[Fact]
+	public async Task AsyncFactory_Singleton_IsBuiltExactlyOnceAndReturnsTheSameInstance()
+	{
+		AsyncFactoryService.Reset();
+		using AsyncFactoryContainer.Root container = new();
+
+		IAsyncFactoryService first = await container.ResolveAsync<IAsyncFactoryService>(Ct);
+		IAsyncFactoryService second = await container.ResolveAsync<IAsyncFactoryService>(Ct);
+
+		await That(first).IsSameAs(second);
+		await That(AsyncFactoryService.BuildCount).IsEqualTo(1);
+	}
+
+	[Fact]
+	public async Task AsyncFactory_Singleton_IsWithheldFromSynchronousResolution()
+	{
+		AsyncFactoryService.Reset();
+		using AsyncFactoryContainer.Root container = new();
+
+		// An async-factory service is async-tainted: in the strict default the synchronous path cannot unwrap
+		// the Task, so it is not exposed there (it would otherwise hand back an unawaited instance).
+		await That(container.TryResolve(typeof(IAsyncFactoryService), out _)).IsFalse();
+		await That(() => container.Resolve<IAsyncFactoryService>()).Throws<InvalidOperationException>();
+	}
+
+	[Fact]
+	public async Task AsyncFactory_Singleton_WarmedByInitializeAsync_IsSyncResolvableUnderSyncResolveAfterInit()
+	{
+		PragmaticAsyncFactoryService.Reset();
+		using PragmaticAsyncFactoryContainer.Root container = new();
+
+		await container.InitializeAsync(Ct);
+
+		// SyncResolveAfterInit = true: once warmed, the async-factory singleton is also resolvable synchronously
+		// and returns the very instance ResolveAsync built.
+		PragmaticAsyncFactoryService sync = container.Resolve<PragmaticAsyncFactoryService>();
+		PragmaticAsyncFactoryService async = await container.ResolveAsync<PragmaticAsyncFactoryService>(Ct);
+
+		await That(sync).IsSameAs(async);
+		await That(PragmaticAsyncFactoryService.BuildCount).IsEqualTo(1);
+	}
+
+	[Fact]
+	public async Task AsyncFactory_Transient_BuildsAFreshInstanceEachCall_AndIsAsyncOnly()
+	{
+		using TransientAsyncFactoryContainer.Root container = new();
+
+		TransientAsyncFactoryService first = await container.ResolveAsync<TransientAsyncFactoryService>(Ct);
+		TransientAsyncFactoryService second = await container.ResolveAsync<TransientAsyncFactoryService>(Ct);
+
+		await That(first).IsNotSameAs(second);
+		// An async-factory transient is async-only forever (never warmed by InitializeAsync, so the strict
+		// default has no synchronous path to it).
+		await That(container.TryResolve(typeof(TransientAsyncFactoryService), out _)).IsFalse();
+	}
+
+	[Fact]
+	public async Task AsyncFactory_WhoseResultIsAsyncInitializable_AwaitsBothTheFactoryAndInitializeAsync()
+	{
+		using InitializingAsyncFactoryContainer.Root container = new();
+
+		InitializingAsyncFactoryService service = await container.ResolveAsync<InitializingAsyncFactoryService>(Ct);
+
+		// The factory built it asynchronously and the container additionally awaited its InitializeAsync (once).
+		await That(service.Initialized).IsTrue();
+		await That(service.InitializeCount).IsEqualTo(1);
+	}
+
+	[Fact]
+	public async Task AsyncFactory_MayAwaitInternalInitializationItself_WithoutImplementingIAsyncInitializable()
+	{
+		using SelfInitializingFactoryContainer.Root container = new();
+
+		SelfInitializingService service = await container.ResolveAsync<SelfInitializingService>(Ct);
+
+		// The factory body did its own async work; the container did not call InitializeAsync (the type is not
+		// IAsyncInitializable), yet the instance is fully initialized.
+		await That(service.Initialized).IsTrue();
+	}
+
+	public interface IAsyncFactoryService;
+
+	public sealed class AsyncFactoryService : IAsyncFactoryService
+	{
+		public static int BuildCount { get; private set; }
+
+		public static void Reset() => BuildCount = 0;
+
+		public static void Built() => BuildCount++;
+	}
+
+	[Container]
+	[Singleton<AsyncFactoryService, IAsyncFactoryService>(Factory = nameof(CreateAsync))]
+	public static partial class AsyncFactoryContainer
+	{
+		private static async Task<AsyncFactoryService> CreateAsync()
+		{
+			await Task.Yield();
+			AsyncFactoryService.Built();
+			return new AsyncFactoryService();
+		}
+	}
+
+	public sealed class PragmaticAsyncFactoryService
+	{
+		public static int BuildCount { get; private set; }
+
+		public static void Reset() => BuildCount = 0;
+
+		public static void Built() => BuildCount++;
+	}
+
+	[Container(SyncResolveAfterInit = true)]
+	[Singleton<PragmaticAsyncFactoryService>(Factory = nameof(CreateAsync))]
+	public static partial class PragmaticAsyncFactoryContainer
+	{
+		private static async Task<PragmaticAsyncFactoryService> CreateAsync()
+		{
+			await Task.Yield();
+			PragmaticAsyncFactoryService.Built();
+			return new PragmaticAsyncFactoryService();
+		}
+	}
+
+	public sealed class TransientAsyncFactoryService;
+
+	[Container]
+	[Transient<TransientAsyncFactoryService>(Factory = nameof(CreateAsync))]
+	public static partial class TransientAsyncFactoryContainer
+	{
+		private static Task<TransientAsyncFactoryService> CreateAsync() => Task.FromResult(new TransientAsyncFactoryService());
+	}
+
+	// The factory result is itself IAsyncInitializable: the container awaits the factory, then awaits
+	// InitializeAsync - so it is built and initialized exactly once each, with no double-initialization.
+	public sealed class InitializingAsyncFactoryService : IAsyncInitializable
+	{
+		public bool Initialized { get; private set; }
+
+		public int InitializeCount { get; private set; }
+
+		public Task InitializeAsync(CancellationToken cancellationToken)
+		{
+			Initialized = true;
+			InitializeCount++;
+			return Task.CompletedTask;
+		}
+	}
+
+	[Container]
+	[Singleton<InitializingAsyncFactoryService>(Factory = nameof(CreateAsync))]
+	public static partial class InitializingAsyncFactoryContainer
+	{
+		private static Task<InitializingAsyncFactoryService> CreateAsync() => Task.FromResult(new InitializingAsyncFactoryService());
+	}
+
+	// The factory does its own async initialization without the type implementing IAsyncInitializable.
+	public sealed class SelfInitializingService
+	{
+		public bool Initialized { get; private set; }
+
+		public void MarkInitialized() => Initialized = true;
+	}
+
+	[Container]
+	[Singleton<SelfInitializingService>(Factory = nameof(CreateAsync))]
+	public static partial class SelfInitializingFactoryContainer
+	{
+		private static async Task<SelfInitializingService> CreateAsync()
+		{
+			SelfInitializingService service = new();
+			await Task.Yield();
+			service.MarkInitialized();
+			return service;
+		}
+	}
 }

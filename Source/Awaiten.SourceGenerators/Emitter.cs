@@ -1490,7 +1490,16 @@ internal static class Emitter
 		if (instance.Production == ProductionKind.Factory)
 		{
 			// The container is a static class nested-enclosing both Scope and Root, so its static factory
-			// method is in scope by simple name - no receiver.
+			// method is in scope by simple name - no receiver. An asynchronous factory returns Task<T> /
+			// ValueTask<T>; it is awaited here so the construction expression yields the produced T. This is
+			// only ever reached on the async path (asynchronous: true): an async factory is async-tainted, so
+			// its synchronous resolver delegates to the async one rather than constructing directly. The await
+			// expression is uniform for Task and ValueTask, so no TFM gating of the emitted code is needed.
+			if (instance.IsAsyncFactory)
+			{
+				return $"await {instance.ProductionMember}({arguments}).ConfigureAwait(false)";
+			}
+
 			return $"{instance.ProductionMember}({arguments})";
 		}
 

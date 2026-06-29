@@ -457,11 +457,19 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		// A factory's parameters resolve from the graph exactly like a constructor's.
 		List<ParameterModel> parameters = ClassifyParameters(producer, info, serviceToImpl, diagnostics);
 
-		// Disposability follows the type the container actually owns: a factory's concrete return type
-		// (which may implement IDisposable behind a non-disposable service interface), or the constructed
-		// implementation type. Using info.Symbol for a factory would miss a DisposableX behind an IX and
-		// leak it.
-		ITypeSymbol disposalType = info.Production == ProductionKind.Factory ? producer.ReturnType : info.Symbol;
+		// An asynchronous factory returns Task<T> / ValueTask<T>: the container awaits it, so the type it
+		// actually owns is the awaited result T, not the Task. A synchronous factory owns its return type
+		// directly, and a constructed implementation owns info.Symbol.
+		bool asyncFactory = info.Production == ProductionKind.Factory
+		                    && ContainerRegistrations.IsAsyncFactoryReturn(producer.ReturnType, compilation, out _);
+
+		// Disposability follows the type the container actually owns: a factory's produced type (which may
+		// implement IDisposable behind a non-disposable service interface; for an async factory this is the
+		// awaited T, not the Task), or the constructed implementation type. Using info.Symbol for a factory
+		// would miss a DisposableX behind an IX and leak it.
+		ITypeSymbol disposalType = info.Production == ProductionKind.Factory
+			? ContainerRegistrations.ProducedType(producer.ReturnType, compilation)
+			: info.Symbol;
 		bool disposable = disposableSymbol is not null && ImplementsInterface(disposalType, disposableSymbol);
 
 		// A factory's declared return type can hide a concrete IDisposable behind a non-disposable service
@@ -478,7 +486,10 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		// Async initialization follows the type the container actually owns - a factory's concrete return type
 		// (which may implement IAsyncInitializable behind a non-async service interface) or the constructed
 		// implementation type - mirroring the disposal-type choice above. A pre-built Instance is returned
-		// early above and is never initialized here (the caller owns it).
+		// early above and is never initialized here (the caller owns it). An async factory is async-tainted
+		// regardless of whether its produced type implements IAsyncInitializable: its result is reached only by
+		// awaiting the Task (see the IsAsyncFactory seed in PropagateAsyncTaint). When the produced type IS
+		// IAsyncInitializable, the container additionally awaits its InitializeAsync after the factory completes.
 		bool asyncInit = asyncInitializableSymbol is not null && ImplementsInterface(disposalType, asyncInitializableSymbol);
 
 		return new InstanceModel(
@@ -492,6 +503,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			info.Production,
 			info.ProductionMember,
 			asyncInit,
+			IsAsyncFactory: asyncFactory,
 			RuntimeDisposalCheck: runtimeDisposalCheck);
 
 		static bool ImplementsInterface(ITypeSymbol type, INamedTypeSymbol @interface)
@@ -782,16 +794,18 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	}
 
 	/// <summary>
-	///     Marks every instance that is async-initialized or that reaches one through non-deferred (Direct)
-	///     edges, by fixpoint over the dependency graph. The edges already exclude relationship/Owned/Arg
-	///     parameters, so the taint is laundered by exactly the deferrals that break cycles.
+	///     Marks every instance that is an async-taint source - its implementation is async-initialized, or it
+	///     is produced by an asynchronous factory (Task&lt;T&gt; / ValueTask&lt;T&gt;), which the container can
+	///     only reach by awaiting - or that reaches one through non-deferred (Direct) edges, by fixpoint over
+	///     the dependency graph. The edges already exclude relationship/Owned/Arg parameters, so the taint is
+	///     laundered by exactly the deferrals that break cycles.
 	/// </summary>
 	private static bool[] PropagateAsyncTaint(List<InstanceModel> instances, Dictionary<int, List<int>> dependencies)
 	{
 		bool[] tainted = new bool[instances.Count];
 		for (int i = 0; i < instances.Count; i++)
 		{
-			tainted[i] = instances[i].IsAsyncInitializable;
+			tainted[i] = instances[i].IsAsyncInitializable || instances[i].IsAsyncFactory;
 		}
 
 		bool changed = true;
@@ -859,7 +873,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 				// Point the diagnostic at the offending parameter; fall back to the consumer's registration.
 				LocationInfo? location = parameter.Location ?? instanceLocations[i];
-				if (instances[target].IsAsyncInitializable)
+				if (instances[target].IsAsyncSource)
 				{
 					diagnostics.Add(new DiagnosticInfo(
 						Diagnostics.SynchronousAsyncResolution,
@@ -899,7 +913,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		while (queue.Count > 0)
 		{
 			int node = queue.Dequeue();
-			if (instances[node].IsAsyncInitializable)
+			if (instances[node].IsAsyncSource)
 			{
 				end = node;
 				break;
@@ -998,12 +1012,13 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			}
 
 			// A parameterized service is reachable only through a synchronous Func<TArg…, T>, which returns the
-			// service directly and so cannot await InitializeAsync. Combining [Arg] with IAsyncInitializable
-			// would therefore either hand back an uninitialized instance (SyncResolveAfterInit) or be silently
-			// unreachable (strict) - neither has a correct resolution path until an async parameterized factory
-			// exists. Reported in both modes (it is not a sync-vs-async resolution choice but an unsupported
-			// combination).
-			if (instance.IsParameterized && instance.IsAsyncInitializable)
+			// service directly and so cannot await it. Combining [Arg] with an async-taint source (an
+			// IAsyncInitializable implementation, or an asynchronous Task<T> / ValueTask<T> factory) would
+			// therefore either hand back an uninitialized/unawaited instance (SyncResolveAfterInit) or be
+			// silently unreachable (strict) - neither has a correct resolution path until an async parameterized
+			// factory relationship (Func<TArg…, Task<T>>) exists. Reported in both modes (it is not a
+			// sync-vs-async resolution choice but an unsupported combination).
+			if (instance.IsParameterized && instance.IsAsyncSource)
 			{
 				diagnostics.Add(new DiagnosticInfo(
 					Diagnostics.ParameterizedAsyncInitialization,
