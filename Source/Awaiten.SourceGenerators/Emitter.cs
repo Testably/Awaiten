@@ -1479,9 +1479,10 @@ internal static class Emitter
 			}
 			else if (parameters[p].Kind == DependencyKind.CancellationToken)
 			{
-				// Forward the resolve-time token on the async path (the creator's cancellationToken is in scope);
-				// a synchronous resolver has no ambient token, so it passes default.
-				arguments.Append(asynchronous ? "cancellationToken" : "default");
+				// Forward the resolve-time token: the async creator's cancellationToken is in scope here. Only an
+				// async factory yields a CancellationToken dependency, and an async factory is built solely on the
+				// async path, so this is never reached with asynchronous == false.
+				arguments.Append("cancellationToken");
 			}
 			else if (asynchronous && parameters[p].Kind == DependencyKind.Direct
 			         && serviceToIndex.TryGetValue(new ServiceKey(parameters[p].ServiceType, parameters[p].Key), out int dependency)

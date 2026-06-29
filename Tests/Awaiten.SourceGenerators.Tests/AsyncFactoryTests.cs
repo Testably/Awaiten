@@ -315,6 +315,29 @@ public class AsyncFactoryTests
 		                                       """);
 
 		await That(result.Diagnostics).Contains("*AWT101*").AsWildcard()
-			.Because("token forwarding is scoped to factory methods - a constructor has no ambient resolve-time token, so its CancellationToken parameter stays an ordinary (unregistered) dependency");
+			.Because("token forwarding is scoped to asynchronous factory methods - a constructor has no ambient resolve-time token, so its CancellationToken parameter stays an ordinary (unregistered) dependency");
+	}
+
+	[Fact]
+	public async Task SynchronousFactoryCancellationTokenParameter_IsNotForwarded_AndReportsAwt101()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Threading;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class Foo { }
+
+		                                       [Container]
+		                                       [Singleton<Foo>(Factory = nameof(Create))]
+		                                       public static partial class MyContainer
+		                                       {
+		                                           private static Foo Create(CancellationToken cancellationToken) => new Foo();
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).Contains("*AWT101*").AsWildcard()
+			.Because("token forwarding is scoped to asynchronous factories: a synchronous factory is only ever built on the synchronous path, which has no ambient resolve-time token, so its CancellationToken would always be default - it stays an ordinary (unregistered) dependency rather than silently receiving default");
 	}
 }

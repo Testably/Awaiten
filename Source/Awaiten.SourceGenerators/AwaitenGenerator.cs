@@ -454,14 +454,16 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			}
 		}
 
-		// A factory's parameters resolve from the graph exactly like a constructor's.
-		List<ParameterModel> parameters = ClassifyParameters(producer, info, serviceToImpl, diagnostics);
-
 		// An asynchronous factory returns Task<T> / ValueTask<T>: the container awaits it, so the type it
 		// actually owns is the awaited result T, not the Task. A synchronous factory owns its return type
 		// directly, and a constructed implementation owns info.Symbol.
 		bool asyncFactory = info.Production == ProductionKind.Factory
 		                    && ContainerRegistrations.IsAsyncFactoryReturn(producer.ReturnType, compilation, out _);
+
+		// A factory's parameters resolve from the graph exactly like a constructor's. An async factory
+		// additionally forwards the resolve-time CancellationToken (the async creator's) into a matching
+		// parameter rather than resolving it from the graph.
+		List<ParameterModel> parameters = ClassifyParameters(producer, info, asyncFactory, serviceToImpl, diagnostics);
 
 		// Disposability follows the type the container actually owns: a factory's produced type (which may
 		// implement IDisposable behind a non-disposable service interface; for an async factory this is the
@@ -531,14 +533,14 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	private static List<ParameterModel> ClassifyParameters(
 		IMethodSymbol producer,
 		ImplInfo info,
+		bool asyncFactory,
 		Dictionary<ServiceKey, string> serviceToImpl,
 		List<DiagnosticInfo> diagnostics)
 	{
-		bool isFactory = info.Production == ProductionKind.Factory;
 		List<ParameterModel> parameters = new();
 		foreach (IParameterSymbol parameter in producer.Parameters)
 		{
-			ParameterModel parameterModel = ClassifyParameter(parameter, isFactory);
+			ParameterModel parameterModel = ClassifyParameter(parameter, asyncFactory);
 			parameters.Add(parameterModel);
 
 			// A CancellationToken is forwarded from the resolve-time token, not resolved from the graph (like
@@ -633,7 +635,8 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		IMethodSymbol? resolvable = constructors
 			.Where(c => c.Parameters.All(p =>
 			{
-				ParameterModel parameter = ClassifyParameter(p);
+				// Selecting a constructor, never an async factory, so no CancellationToken forwarding applies.
+				ParameterModel parameter = ClassifyParameter(p, asyncFactory: false);
 				return parameter.Kind == DependencyKind.Arg || registered.Contains(parameter.ServiceType);
 			}))
 			.OrderByDescending(c => c.Parameters.Length)
@@ -664,7 +667,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	///     (e.g. <c>Func&lt;Func&lt;T&gt;&gt;</c>) is classified as a direct dependency so it surfaces as an
 	///     unregistered service type rather than a misleading diagnostic about the inner relationship.
 	/// </summary>
-	private static ParameterModel ClassifyParameter(IParameterSymbol parameter, bool isFactory = false)
+	private static ParameterModel ClassifyParameter(IParameterSymbol parameter, bool asyncFactory)
 	{
 		LocationInfo? location = LocationInfo.From(parameter.Locations.FirstOrDefault());
 
@@ -673,11 +676,13 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			return new ParameterModel(parameter.Type.ToDisplayString(FullyQualified), DependencyKind.Arg, Location: location);
 		}
 
-		// A factory's CancellationToken parameter is not resolved from the graph: the container forwards the
-		// resolve-time token (the async creator's cancellationToken; default on a synchronous path). Limited to
-		// factory methods - a constructor has no ambient token to forward. An [Arg] CancellationToken is handled
-		// above as a caller-supplied runtime argument and is left untouched.
-		if (isFactory
+		// An asynchronous factory's CancellationToken parameter is not resolved from the graph: the container
+		// forwards the resolve-time token (the async creator's cancellationToken). Limited to async factories -
+		// only they are constructed on the async path where that token exists; a synchronous factory (or a
+		// constructor) has no ambient token to forward, so its CancellationToken stays an ordinary dependency
+		// and is reported as AWT101 when unregistered rather than silently receiving default. An [Arg]
+		// CancellationToken is handled above as a caller-supplied runtime argument and is left untouched.
+		if (asyncFactory
 		    && parameter.Type is INamedTypeSymbol { Name: "CancellationToken", } token
 		    && token.ContainingNamespace?.ToDisplayString() == "System.Threading")
 		{
@@ -697,43 +702,58 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		}
 
 		if (parameter.Type is INamedTypeSymbol { IsGenericType: true, } named
-		    && named.ContainingNamespace?.ToDisplayString() == "System")
+		    && named.ContainingNamespace?.ToDisplayString() == "System"
+		    && ClassifyRelationship(named, key, location) is { } relationship)
 		{
-			if (named is { Name: "Lazy", TypeArguments.Length: 1, } && !IsRelationshipType(named.TypeArguments[0]))
-			{
-				return new ParameterModel(
-					named.TypeArguments[0].ToDisplayString(FullyQualified), DependencyKind.Lazy, Key: key, Location: location);
-			}
-
-			if (named is { Name: "Func", TypeArguments.Length: >= 1, })
-			{
-				// Func<T> defers resolution; Func<TArg…, T> additionally supplies runtime arguments (the
-				// leading type arguments) to the produced service's [Arg]-marked parameters.
-				ITypeSymbol[] typeArgs = named.TypeArguments.ToArray();
-				ITypeSymbol service = typeArgs[typeArgs.Length - 1];
-				string[] argTypes = typeArgs.Take(typeArgs.Length - 1)
-					.Select(t => t.ToDisplayString(FullyQualified))
-					.ToArray();
-
-				// Func<…, Owned<T>> is the leak-free factory: its produced value is an Owned<T> disposal handle.
-				if (IsOwned(service, out ITypeSymbol funcOwnedInner))
-				{
-					return new ParameterModel(
-						funcOwnedInner.ToDisplayString(FullyQualified), DependencyKind.Func,
-						new EquatableArray<string>(argTypes), Key: key, Location: location, ProducesOwned: true);
-				}
-
-				if (!IsRelationshipType(service))
-				{
-					return new ParameterModel(
-						service.ToDisplayString(FullyQualified), DependencyKind.Func, new EquatableArray<string>(argTypes), Key: key, Location: location);
-				}
-			}
+			return relationship;
 		}
 
 		// A direct dependency, optionally selecting a keyed registration with [FromKey].
 		return new ParameterModel(
 			parameter.Type.ToDisplayString(FullyQualified), DependencyKind.Direct, Key: key, Location: location);
+	}
+
+	/// <summary>
+	///     Classifies a <c>System</c> generic as the single-level relationship it defers - <c>Lazy&lt;T&gt;</c>,
+	///     <c>Func&lt;T&gt;</c> or <c>Func&lt;TArg…, T&gt;</c> (the latter optionally producing an
+	///     <c>Owned&lt;T&gt;</c> disposal handle) - returning the underlying service type. A type that is not a
+	///     recognized relationship, or whose produced type is itself a relationship (nesting beyond one level),
+	///     returns <see langword="null" /> so the caller treats it as a direct dependency on the whole type.
+	/// </summary>
+	private static ParameterModel? ClassifyRelationship(INamedTypeSymbol named, string? key, LocationInfo? location)
+	{
+		if (named is { Name: "Lazy", TypeArguments.Length: 1, } && !IsRelationshipType(named.TypeArguments[0]))
+		{
+			return new ParameterModel(
+				named.TypeArguments[0].ToDisplayString(FullyQualified), DependencyKind.Lazy, Key: key, Location: location);
+		}
+
+		if (named is not { Name: "Func", TypeArguments.Length: >= 1, })
+		{
+			return null;
+		}
+
+		// Func<T> defers resolution; Func<TArg…, T> additionally supplies runtime arguments (the leading type
+		// arguments) to the produced service's [Arg]-marked parameters.
+		ITypeSymbol[] typeArgs = named.TypeArguments.ToArray();
+		ITypeSymbol service = typeArgs[typeArgs.Length - 1];
+		string[] argTypes = typeArgs.Take(typeArgs.Length - 1)
+			.Select(t => t.ToDisplayString(FullyQualified))
+			.ToArray();
+
+		// Func<…, Owned<T>> is the leak-free factory: its produced value is an Owned<T> disposal handle.
+		if (IsOwned(service, out ITypeSymbol funcOwnedInner))
+		{
+			return new ParameterModel(
+				funcOwnedInner.ToDisplayString(FullyQualified), DependencyKind.Func,
+				new EquatableArray<string>(argTypes), Key: key, Location: location, ProducesOwned: true);
+		}
+
+		// Func<…, T> over a relationship type (nesting beyond one level) falls through to a direct dependency.
+		return IsRelationshipType(service)
+			? null
+			: new ParameterModel(
+				service.ToDisplayString(FullyQualified), DependencyKind.Func, new EquatableArray<string>(argTypes), Key: key, Location: location);
 	}
 
 	private static ServiceKey KeyOf(ParameterModel parameter) => new(parameter.ServiceType, parameter.Key);
