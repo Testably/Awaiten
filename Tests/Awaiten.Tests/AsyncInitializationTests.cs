@@ -41,7 +41,12 @@ public partial class AsyncInitializationTests
 	public async Task ResolveAsync_ByType_ResolvesThroughTheNeutralInterface()
 	{
 		using AsyncContainer.Root container = new();
+		// The neutral interface is the subject under test: resolve through it (not the concrete Root) to pin
+		// that the by-type async surface is reachable from the dependency-free seam, so CA1859's "use the
+		// concrete type for performance" nudge does not apply here.
+#pragma warning disable CA1859
 		IAwaitenAsyncResolver neutral = container;
+#pragma warning restore CA1859
 
 		object connection = await neutral.ResolveAsync(typeof(Connection), Ct);
 
@@ -194,9 +199,11 @@ public partial class AsyncInitializationTests
 	{
 		using AsyncContainer.Root container = new();
 
-		// The service IS registered; resolving it by type surfaces guidance toward ResolveAsync rather than
-		// the generic "no registration" message (which would wrongly suggest it was never registered).
-		await That(() => container.Resolve(typeof(Connection))).Throws<InvalidOperationException>()
+		// The service IS registered; resolving it synchronously surfaces guidance toward ResolveAsync rather
+		// than the generic "no registration" message (which would wrongly suggest it was never registered).
+		// Resolve<T> over an async-tainted service falls through to the by-type Resolve, so it surfaces the
+		// same guidance.
+		await That(() => container.Resolve<Connection>()).Throws<InvalidOperationException>()
 			.WithMessage("*ResolveAsync*").AsWildcard()
 			.Because("an async-tainted service is registered but reachable only asynchronously");
 	}

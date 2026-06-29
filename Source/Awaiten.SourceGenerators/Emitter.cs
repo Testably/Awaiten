@@ -751,12 +751,9 @@ internal static class Emitter
 	{
 		List<(string Type, string Guidance)> result = new();
 		HashSet<string> seen = new(StringComparer.Ordinal);
-		foreach (DispatchEntry entry in rootWithheld)
+		foreach (DispatchEntry entry in rootWithheld.Where(entry => seen.Add(entry.Type)))
 		{
-			if (seen.Add(entry.Type))
-			{
-				result.Add((entry.Type, entry.Guidance!));
-			}
+			result.Add((entry.Type, entry.Guidance!));
 		}
 
 		foreach ((string service, string guidance) in AsyncWithheldServices(instances, syncResolveAfterInit))
@@ -1069,7 +1066,7 @@ internal static class Emitter
 			return;
 		}
 
-		string construction = EmitConstruction(instance, instances, names, serviceToIndex, async: true);
+		string construction = EmitConstruction(instance, instances, names, serviceToIndex, asynchronous: true);
 		if (instance.Lifetime == Lifetime.Transient)
 		{
 			EmitAsyncFreshResolver(builder, depth, index, instance, names, construction);
@@ -1107,7 +1104,7 @@ internal static class Emitter
 	/// </summary>
 	private static void EmitAsyncRootResolver(StringBuilder builder, int depth, int index, InstanceModel instance, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex)
 	{
-		string construction = EmitConstruction(instance, instances, names, serviceToIndex, async: true);
+		string construction = EmitConstruction(instance, instances, names, serviceToIndex, asynchronous: true);
 		EmitAsyncCachingResolver(builder, depth, index, instance, names, construction, "protected override");
 	}
 
@@ -1377,7 +1374,7 @@ internal static class Emitter
 		Indent(builder, depth).AppendLine("}");
 	}
 
-	private static string EmitConstruction(InstanceModel instance, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool async = false)
+	private static string EmitConstruction(InstanceModel instance, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool asynchronous = false)
 	{
 		ParameterModel[] parameters = instance.ConstructorParameters.AsArray();
 		StringBuilder arguments = new();
@@ -1397,7 +1394,7 @@ internal static class Emitter
 			{
 				arguments.Append("a" + argIndex++);
 			}
-			else if (async && parameters[p].Kind == DependencyKind.Direct
+			else if (asynchronous && parameters[p].Kind == DependencyKind.Direct
 			         && serviceToIndex.TryGetValue(new ServiceKey(parameters[p].ServiceType, parameters[p].Key), out int dependency)
 			         && instances[dependency].IsAsyncTainted)
 			{

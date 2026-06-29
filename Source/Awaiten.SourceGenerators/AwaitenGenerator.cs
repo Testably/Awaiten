@@ -880,13 +880,10 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 				break;
 			}
 
-			foreach (int next in dependencies[node])
+			foreach (int next in dependencies[node].Where(visited.Add))
 			{
-				if (visited.Add(next))
-				{
-					previous[next] = node;
-					queue.Enqueue(next);
-				}
+				previous[next] = node;
+				queue.Enqueue(next);
 			}
 		}
 
