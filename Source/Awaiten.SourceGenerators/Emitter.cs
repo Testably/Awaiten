@@ -177,20 +177,26 @@ internal static class Emitter
 		EmitScopeBaseClass(builder, depth, instances, names, serviceToIndex, model.Strict, model.SyncResolveAfterInit);
 	}
 
-	// A disposable build-on-demand service (a disposable transient or parameterized service) is withheld from
-	// by-type resolution on the container Root under strict lifetime safety: off the Root its bare type and
-	// plain Func factory throw a guidance exception, and it gets no typed resolver, so the leak-prone ways to
-	// reach it from the Root are constructor injection and Owned<T> / Func<…, Owned<T>>. It stays resolvable
-	// from a child scope, where its lifetime is bounded by the scope (the Root mask, not the table, gates it).
+	/// <summary>
+	///     A disposable build-on-demand service (a disposable transient or parameterized service) is withheld from
+	///     by-type resolution on the container Root under strict lifetime safety: off the Root its bare type and
+	///     plain Func factory throw a guidance exception, and it gets no typed resolver, so the leak-prone ways to
+	///     reach it from the Root are constructor injection and <c>Owned&lt;T&gt;</c> / <c>Func&lt;…, Owned&lt;T&gt;&gt;</c>.
+	///     It stays resolvable from a child scope, where its lifetime is bounded by the scope (the Root mask, not
+	///     the table, gates it).
+	/// </summary>
 	private static bool IsWithheld(InstanceModel instance, bool strict)
 		=> strict && instance.IsDisposable && (instance.Lifetime == Lifetime.Transient || instance.IsParameterized);
 
-	// Whether a plain Func<…> over this service is withheld from by-type resolution on the Root under strict
-	// lifetime safety: the service is built on demand (transient or parameterized) and building it tracks a
-	// fresh disposable on its owner - the service itself is disposable, or its construction transitively rebuilds
-	// one. Such a Func re-invoked off a root binding accumulates those disposables for the container's lifetime,
-	// so off the Root only the Func<…, Owned<T>> form (which drains into a throwaway scope) is offered; the plain
-	// Func stays resolvable from a child scope, which bounds the disposables it builds.
+	/// <summary>
+	///     Whether a plain <c>Func&lt;…&gt;</c> over this service is withheld from by-type resolution on the Root
+	///     under strict lifetime safety: the service is built on demand (transient or parameterized) and building
+	///     it tracks a fresh disposable on its owner - the service itself is disposable, or its construction
+	///     transitively rebuilds one. Such a Func re-invoked off a root binding accumulates those disposables for
+	///     the container's lifetime, so off the Root only the <c>Func&lt;…, Owned&lt;T&gt;&gt;</c> form (which drains
+	///     into a throwaway scope) is offered; the plain Func stays resolvable from a child scope, which bounds the
+	///     disposables it builds.
+	/// </summary>
 	private static bool IsFuncWithheld(InstanceModel[] instances, int index, Dictionary<ServiceKey, int> serviceToIndex, bool strict)
 		=> strict
 		   && (instances[index].Lifetime == Lifetime.Transient || instances[index].IsParameterized)
@@ -199,12 +205,14 @@ internal static class Emitter
 	private static bool IsRootOwned(InstanceModel instance)
 		=> instance.Lifetime == Lifetime.Singleton || instance.Production == ProductionKind.Instance;
 
-	// How a resolver tracks its instance for disposal. None: not disposable, nothing to track. Static: the
-	// declared type is known IDisposable, so the instance is cast and added directly. Runtime: a factory's
-	// declared return type can hide a concrete IDisposable behind a non-disposable service interface, so the
-	// static IsDisposable flag under-reports; the output is added behind a runtime `is IDisposable` check on
-	// the realized instance (retaining only genuinely-disposable outputs). Constructed and pre-built-Instance
-	// production never need Runtime: info.Symbol is the concrete type, and a pre-built Instance is never owned.
+	/// <summary>
+	///     How a resolver tracks its instance for disposal. None: not disposable, nothing to track. Static: the
+	///     declared type is known IDisposable, so the instance is cast and added directly. Runtime: a factory's
+	///     declared return type can hide a concrete IDisposable behind a non-disposable service interface, so the
+	///     static IsDisposable flag under-reports; the output is added behind a runtime <c>is IDisposable</c> check
+	///     on the realized instance (retaining only genuinely-disposable outputs). Constructed and pre-built-Instance
+	///     production never need Runtime: info.Symbol is the concrete type, and a pre-built Instance is never owned.
+	/// </summary>
 	private enum DisposalTracking
 	{
 		None,
@@ -212,56 +220,72 @@ internal static class Emitter
 		Runtime,
 	}
 
-	// Runtime and Static are mutually exclusive: RuntimeDisposalCheck is set by the model only when the static
-	// IsDisposable flag is false (the declared type does not reveal the disposable), so a factory output is
-	// either statically disposable or runtime-checked, never both.
+	/// <summary>
+	///     Runtime and Static are mutually exclusive: RuntimeDisposalCheck is set by the model only when the static
+	///     IsDisposable flag is false (the declared type does not reveal the disposable), so a factory output is
+	///     either statically disposable or runtime-checked, never both.
+	/// </summary>
 	private static DisposalTracking DisposalOf(InstanceModel instance)
-		=> instance.RuntimeDisposalCheck ? DisposalTracking.Runtime
-			: instance.IsDisposable ? DisposalTracking.Static
-			: DisposalTracking.None;
+		=> (instance.RuntimeDisposalCheck, instance.IsDisposable) switch
+		{
+			(true, _) => DisposalTracking.Runtime,
+			(_, true) => DisposalTracking.Static,
+			_ => DisposalTracking.None,
+		};
 
-	// Whether synchronous resolution members (resolver, cache field, dispatch entries, typed fast path) are
-	// emitted for an instance: always for a non-tainted service, and for an async-tainted one only in
-	// pragmatic mode (SyncResolveAfterInit), where it may be resolved synchronously once InitializeAsync has
-	// warmed it. In the strict default an async-tainted service is reachable only through ResolveAsync.
+	/// <summary>
+	///     Whether synchronous resolution members (resolver, cache field, dispatch entries, typed fast path) are
+	///     emitted for an instance: always for a non-tainted service, and for an async-tainted one only in
+	///     pragmatic mode (SyncResolveAfterInit), where it may be resolved synchronously once InitializeAsync has
+	///     warmed it. In the strict default an async-tainted service is reachable only through ResolveAsync.
+	/// </summary>
 	private static bool EmitsSync(InstanceModel instance, bool syncResolveAfterInit)
 		=> !instance.IsAsyncTainted || syncResolveAfterInit;
 
-	// The guidance message (a quoted string literal) thrown by Resolve(Type) on the Root when a service
-	// withheld there under strict lifetime safety is requested by its bare type: it is itself a disposable
-	// build-on-demand service, reachable from the Root only by injection or through an Owned<T> handle - but
-	// still resolvable from a child scope, which bounds its lifetime.
+	/// <summary>
+	///     The guidance message (a quoted string literal) thrown by Resolve(Type) on the Root when a service
+	///     withheld there under strict lifetime safety is requested by its bare type: it is itself a disposable
+	///     build-on-demand service, reachable from the Root only by injection or through an <c>Owned&lt;T&gt;</c>
+	///     handle - but still resolvable from a child scope, which bounds its lifetime.
+	/// </summary>
 	private static string BareWithheldMessage(string service)
 	{
 		string display = service.Replace("global::", string.Empty);
 		return $"\"Awaiten: '{display}' is withheld from by-type resolution on the container root under strict lifetime safety; obtain it through Owned<{display}> or Func<…, Owned<{display}>>, resolve it from a child scope, inject it directly, or set LifetimeSafety.Loose on the [Container].\"";
 	}
 
-	// The guidance message (a quoted string literal) thrown by Resolve(Type) on the Root when a plain Func over
-	// the service is requested: that factory accumulates disposables on the root, so the leak-free Func<…,
-	// Owned<T>> form is offered instead. The Func stays resolvable from a child scope, which bounds the
-	// disposables it builds; the bare type may also be resolvable (its single resolution is bounded).
+	/// <summary>
+	///     The guidance message (a quoted string literal) thrown by Resolve(Type) on the Root when a plain Func over
+	///     the service is requested: that factory accumulates disposables on the root, so the leak-free
+	///     <c>Func&lt;…, Owned&lt;T&gt;&gt;</c> form is offered instead. The Func stays resolvable from a child scope,
+	///     which bounds the disposables it builds; the bare type may also be resolvable (its single resolution is
+	///     bounded).
+	/// </summary>
 	private static string FuncWithheldMessage(string service)
 	{
 		string display = service.Replace("global::", string.Empty);
 		return $"\"Awaiten: a plain Func over '{display}' is withheld from by-type resolution on the container root under strict lifetime safety because building it on demand accumulates disposables on the container root; resolve it as Func<…, Owned<{display}>> for per-use disposal, resolve it from a child scope, or set LifetimeSafety.Loose on the [Container].\"";
 	}
 
-	// The guidance message (a quoted string literal) thrown by Resolve(Type) when an async-tainted service is
-	// requested by type: it is async-initialized (or reaches one through its non-deferred dependencies), so it
-	// has no synchronous resolution path in the strict default and must be obtained asynchronously.
+	/// <summary>
+	///     The guidance message (a quoted string literal) thrown by Resolve(Type) when an async-tainted service is
+	///     requested by type: it is async-initialized (or reaches one through its non-deferred dependencies), so it
+	///     has no synchronous resolution path in the strict default and must be obtained asynchronously.
+	/// </summary>
 	private static string AsyncWithheldMessage(string service)
 	{
 		string display = service.Replace("global::", string.Empty);
 		return $"\"Awaiten: '{display}' requires asynchronous initialization (it is IAsyncInitializable, or depends on one) and cannot be resolved synchronously; resolve it through ResolveAsync (or warm it through InitializeAsync / CreateScopeAsync), or set SyncResolveAfterInit on the [Container].\"";
 	}
 
-	// The guidance message (a quoted string literal) thrown by ResolveAsync(Type) on the Root when a disposable
-	// build-on-demand service that needs asynchronous initialization is requested by its bare type: building it
-	// on demand from the Root tracks a fresh disposable on the root for the container's lifetime (an unbounded
-	// leak), so the Root withholds it. It stays resolvable from a child scope, whose disposal bounds it - the
-	// async counterpart to BareWithheldMessage (Owned<T> is a synchronous relationship, so it is not offered for
-	// an async-initialized service).
+	/// <summary>
+	///     The guidance message (a quoted string literal) thrown by ResolveAsync(Type) on the Root when a disposable
+	///     build-on-demand service that needs asynchronous initialization is requested by its bare type: building it
+	///     on demand from the Root tracks a fresh disposable on the root for the container's lifetime (an unbounded
+	///     leak), so the Root withholds it. It stays resolvable from a child scope, whose disposal bounds it - the
+	///     async counterpart to BareWithheldMessage (<c>Owned&lt;T&gt;</c> is a synchronous relationship, so it is
+	///     not offered for an async-initialized service).
+	/// </summary>
 	private static string AsyncRootWithheldMessage(string service)
 	{
 		string display = service.Replace("global::", string.Empty);
@@ -743,9 +767,11 @@ internal static class Emitter
 		}
 	}
 
-	// The root-withheld entries (dispatchable, but carrying guidance) - their types and messages populate the
-	// __withheld table that Resolve throws from on the Root, while the parallel __rootWithheld mask (keyed by
-	// dispatch case) is what TryResolve consults to return false for them on the Root only.
+	/// <summary>
+	///     The root-withheld entries (dispatchable, but carrying guidance) - their types and messages populate the
+	///     <c>__withheld</c> table that Resolve throws from on the Root, while the parallel <c>__rootWithheld</c>
+	///     mask (keyed by dispatch case) is what TryResolve consults to return false for them on the Root only.
+	/// </summary>
 	private static List<DispatchEntry> Withheld(List<DispatchEntry> entries)
 	{
 		List<DispatchEntry> withheld = new();
@@ -1561,7 +1587,9 @@ internal static class Emitter
 		Indent(builder, depth).AppendLine("}");
 	}
 
-	// A bare Owned<T>: resolve T once into a throwaway child scope and wrap it as a disposal handle.
+	/// <summary>
+	///     A bare <c>Owned&lt;T&gt;</c>: resolve T once into a throwaway child scope and wrap it as a disposal handle.
+	/// </summary>
 	private static string OwnedBare(string service, string resolver, bool rootOwned)
 		=> $"__Owned<{service}>({OwnedInner(service, resolver, [], rootOwned)})";
 
