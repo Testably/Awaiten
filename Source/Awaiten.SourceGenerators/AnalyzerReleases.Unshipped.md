@@ -7,6 +7,7 @@
  AWT103  | Awaiten   | Error    | An implementation type is abstract or an interface
  AWT104  | Awaiten   | Error    | An implementation type has no accessible constructor
  AWT105  | Awaiten   | Error    | A singleton captures a shorter-lived scoped dependency
+ AWT106  | Awaiten   | Warning  | A synchronous factory's body provably produces an IAsyncInitializable concrete type its declared return type hides
  AWT107  | Awaiten   | Error    | An implementation is registered with conflicting lifetimes
  AWT108  | Awaiten   | Error    | A Factory registration names a member that is not a usable factory method
  AWT109  | Awaiten   | Error    | An Instance registration names a member that is not a usable instance member

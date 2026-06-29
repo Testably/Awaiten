@@ -66,6 +66,27 @@ internal static class Diagnostics
 		isEnabledByDefault: true);
 
 	/// <summary>
+	///     A synchronous <c>Factory</c> method's body provably constructs (or returns a local of) a concrete
+	///     type that implements <c>IAsyncInitializable</c>, while its declared return type does not expose it.
+	///     The container reads async-initialization taint off the declared return type, so it cannot see that
+	///     the produced instance needs initialization - the hidden <c>InitializeAsync</c> never runs and the
+	///     instance is handed out uninitialized. A hidden <c>IDisposable</c> is <em>not</em> reported: the
+	///     container disposes factory outputs behind a runtime check, so it does not leak. An asynchronous
+	///     <c>Task&lt;T&gt;</c> / <c>ValueTask&lt;T&gt;</c> factory is <em>not</em> reported either: it owns its
+	///     own initialization (the container awaits the factory itself). This is a best-effort lint (Warning):
+	///     it fires only when the concrete returned type is statically provable from the body, so it has false
+	///     negatives by design (a helper-returned or runtime-selected implementation is not reported), but is
+	///     intended to have no false positives.
+	/// </summary>
+	public static readonly DiagnosticDescriptor FactoryHidesAsyncInitialization = new(
+		"AWT106",
+		"Factory hides asynchronous initialization behind its declared return type",
+		"factory '{0}' constructs '{1}', which is async-initialized, but declares return type '{2}'; the container cannot see that it needs initialization, so its InitializeAsync never runs. Return '{1}', or make the factory 'async Task<{2}>' and handle initialization inside it.",
+		"Awaiten",
+		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true);
+
+	/// <summary>
 	///     The same implementation is registered with more than one lifetime; coalescing into a single
 	///     instance would silently drop one of the declared lifetimes.
 	/// </summary>

@@ -494,6 +494,16 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		// IAsyncInitializable, the container additionally awaits its InitializeAsync after the factory completes.
 		bool asyncInit = asyncInitializableSymbol is not null && ImplementsInterface(disposalType, asyncInitializableSymbol);
 
+		// Best-effort lint (AWT106): a synchronous factory whose declared return type hides the asynchronous
+		// initialization its body provably produces. The container reads async-init taint off producer.ReturnType
+		// (above), so a concrete IAsyncInitializable returned behind a plainer interface is never initialized.
+		// An async Task<T>/ValueTask<T> factory owns its own initialization (the container awaits the factory),
+		// and a hidden IDisposable is disposed at runtime via RuntimeDisposalCheck - neither is reported.
+		if (info.Production == ProductionKind.Factory && !asyncFactory)
+		{
+			ReportFactoryHidingAsyncInitialization(producer, compilation, asyncInitializableSymbol, diagnostics);
+		}
+
 		return new InstanceModel(
 			info.ImplementationType,
 			info.Symbol.Name,
@@ -522,6 +532,129 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		static bool CouldHideDisposable(ITypeSymbol type)
 			=> type.TypeKind is TypeKind.Interface or TypeKind.TypeParameter
 			   || (type.TypeKind == TypeKind.Class && !type.IsSealed);
+	}
+
+	/// <summary>
+	///     Reports <see cref="Diagnostics.FactoryHidesAsyncInitialization">AWT106</see> when a synchronous
+	///     factory method's body provably returns a concrete type that implements <c>IAsyncInitializable</c>
+	///     while the method's declared return type does not - so the initialization is invisible to the
+	///     container and never runs.
+	/// </summary>
+	/// <remarks>
+	///     Conservative by design: it inspects only the producer's own <c>return</c> expressions (both
+	///     expression-bodied and block-bodied), never descending into nested lambdas or local functions, and
+	///     fires only when the statically determined type of the returned expression is a non-abstract,
+	///     non-interface named type that is async-initializable. A metadata-only factory (no syntax) or an
+	///     unresolved/unanalyzable return type yields no diagnostic. False negatives (helper-returned or
+	///     runtime-selected implementations) are accepted; false positives are not. A hidden <c>IDisposable</c>
+	///     is not reported (the container disposes factory outputs behind a runtime check); an asynchronous
+	///     factory is excluded by the caller (it owns its own initialization).
+	/// </remarks>
+	private static void ReportFactoryHidingAsyncInitialization(
+		IMethodSymbol producer,
+		Compilation compilation,
+		INamedTypeSymbol? asyncInitializableSymbol,
+		List<DiagnosticInfo> diagnostics)
+	{
+		if (asyncInitializableSymbol is null)
+		{
+			return;
+		}
+
+		ITypeSymbol declaredReturnType = producer.ReturnType;
+
+		// The container already sees the initialization when the declared return type is itself
+		// async-initializable, so nothing it hides could be missed - there is no diagnostic to report.
+		if (Implements(declaredReturnType, asyncInitializableSymbol))
+		{
+			return;
+		}
+
+		// Already-reported concrete types: a factory with several returns of the same hidden type should
+		// surface a single diagnostic, not one per return.
+		HashSet<ITypeSymbol> reported = new(SymbolEqualityComparer.Default);
+
+		foreach (SyntaxReference reference in producer.DeclaringSyntaxReferences)
+		{
+			// A factory must be a method on the container; anything else (or metadata-only, no syntax) is
+			// not analyzable here and is left silent.
+			if (reference.GetSyntax() is not MethodDeclarationSyntax method)
+			{
+				continue;
+			}
+
+			SemanticModel model = compilation.GetSemanticModel(method.SyntaxTree);
+
+			foreach (ExpressionSyntax returnExpression in CollectReturnExpressions(method))
+			{
+				ITypeSymbol? returnedType = model.GetTypeInfo(returnExpression).Type;
+				if (returnedType is not INamedTypeSymbol concrete
+				    || concrete.TypeKind == TypeKind.Interface
+				    || concrete.IsAbstract
+				    || concrete.TypeKind == TypeKind.Error
+				    || !reported.Add(concrete)
+				    || !Implements(concrete, asyncInitializableSymbol))
+				{
+					continue;
+				}
+
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.FactoryHidesAsyncInitialization,
+					LocationInfo.From(returnExpression.GetLocation()),
+					new EquatableArray<string>([
+						producer.Name,
+						Display(concrete.ToDisplayString(FullyQualified)),
+						Display(declaredReturnType.ToDisplayString(FullyQualified)),
+					])));
+			}
+		}
+
+		static bool Implements(ITypeSymbol type, INamedTypeSymbol @interface)
+		{
+			return SymbolEqualityComparer.Default.Equals(type, @interface)
+			       || type.AllInterfaces.Any(implemented => SymbolEqualityComparer.Default.Equals(implemented, @interface));
+		}
+	}
+
+	/// <summary>
+	///     The expressions a method directly returns: the arrow expression of an expression-bodied method, or
+	///     every <c>return x;</c> in a block body. Nested lambdas and local functions are not descended into,
+	///     so their returns are never attributed to the enclosing factory.
+	/// </summary>
+	private static IEnumerable<ExpressionSyntax> CollectReturnExpressions(MethodDeclarationSyntax method)
+	{
+		if (method.ExpressionBody?.Expression is { } arrow)
+		{
+			yield return arrow;
+			yield break;
+		}
+
+		if (method.Body is null)
+		{
+			yield break;
+		}
+
+		Stack<SyntaxNode> pending = new();
+		pending.Push(method.Body);
+		while (pending.Count > 0)
+		{
+			SyntaxNode node = pending.Pop();
+			foreach (SyntaxNode child in node.ChildNodes())
+			{
+				// Do not cross into a nested function: its returns belong to it, not to the factory.
+				if (child is AnonymousFunctionExpressionSyntax or LocalFunctionStatementSyntax)
+				{
+					continue;
+				}
+
+				if (child is ReturnStatementSyntax { Expression: { } returned })
+				{
+					yield return returned;
+				}
+
+				pending.Push(child);
+			}
+		}
 	}
 
 	/// <summary>
