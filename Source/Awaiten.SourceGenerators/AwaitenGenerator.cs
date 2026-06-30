@@ -68,11 +68,11 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		bool syncResolveAfterInit = ReadSyncResolveAfterInit(containerSymbol);
 
 		// IAsyncDisposable support (the async drain, DisposeAsync on the Scope/Root, and tracking of
-		// async-disposable services) is emitted only when the consumer's compilation can see the type: net5.0+
-		// and netstandard2.1+ have it in-box, and an older target (e.g. net48 / netstandard2.0) may add it
-		// through Microsoft.Bcl.AsyncInterfaces. When it is absent the generated container is synchronous-dispose
-		// only and references no IAsyncDisposable, so it still compiles there.
-		bool hasAsyncDisposable = compilation.GetTypeByMetadataName("System.IAsyncDisposable") is not null;
+		// async-disposable services) is emitted only when the referenced Awaiten runtime actually exposes it -
+		// AsyncDisposableSupport reads that off Owned<T>, not off the mere presence of System.IAsyncDisposable in
+		// the compilation. When it is absent the generated container is synchronous-dispose only and references
+		// no IAsyncDisposable, so it still compiles there.
+		bool hasAsyncDisposable = AsyncDisposableSupport(compilation) is not null;
 
 		List<DiagnosticInfo> diagnostics = new();
 
@@ -139,6 +139,43 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	}
 
 	/// <summary>
+	///     The <c>System.IAsyncDisposable</c> symbol when - and only when - the referenced Awaiten runtime
+	///     actually exposes its async-disposal surface, otherwise <see langword="null" />. The runtime gates
+	///     that surface (<c>Owned&lt;T&gt;.DisposeAsync</c> and the awaiting scope drain) behind
+	///     <c>#if NET || NETSTANDARD2_1_OR_GREATER</c>, so a consumer that binds the netstandard2.0 asset -
+	///     net6.0 / net7.0, a netstandard2.1 library, or net48 even with Microsoft.Bcl.AsyncInterfaces - gets an
+	///     <c>Owned&lt;T&gt;</c> with no <c>DisposeAsync</c> even though its own compilation can see
+	///     <c>System.IAsyncDisposable</c>. Emitting the surface there would hand back a handle that cannot be
+	///     <c>await using</c>d and would track async-only services the synchronous drain cannot release. Reading
+	///     the capability off <c>Owned&lt;T&gt;</c> keeps the generated container consistent with the exact
+	///     runtime asset it compiles against - the realized result of that same <c>#if</c>.
+	/// </summary>
+	private static INamedTypeSymbol? AsyncDisposableSupport(Compilation compilation)
+	{
+		if (compilation.GetTypeByMetadataName("System.IAsyncDisposable") is not { } asyncDisposable)
+		{
+			return null;
+		}
+
+		return compilation.GetTypeByMetadataName("Awaiten.Owned`1") is { } owned
+		       && owned.AllInterfaces.Any(i => SymbolEqualityComparer.Default.Equals(i, asyncDisposable))
+			? asyncDisposable
+			: null;
+	}
+
+	/// <summary>
+	///     The framework/Awaiten interface symbols an instance is matched against, looked up once and passed
+	///     together: <c>System.IDisposable</c>, the async-disposal symbol (the <c>System.IAsyncDisposable</c>
+	///     from <see cref="AsyncDisposableSupport" />, so it is non-null only when the runtime actually exposes
+	///     async disposal) and <c>Awaiten.IAsyncInitializable</c>. Any may be <see langword="null" /> when the
+	///     compilation cannot see (or does not support) it.
+	/// </summary>
+	private sealed record WellKnownTypes(
+		INamedTypeSymbol? Disposable,
+		INamedTypeSymbol? AsyncDisposable,
+		INamedTypeSymbol? AsyncInitializable);
+
+	/// <summary>
 	///     Resolves the container's object graph: coalesces its registrations, builds an
 	///     <see cref="InstanceModel" /> per implementation (selecting constructors / factories / instance
 	///     members) and computes the direct-dependency edges between them. Registration faults discovered on
@@ -151,9 +188,13 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		List<DiagnosticInfo> diagnostics,
 		CancellationToken cancellationToken)
 	{
-		INamedTypeSymbol? disposableSymbol = compilation.GetTypeByMetadataName("System.IDisposable");
-		INamedTypeSymbol? asyncDisposableSymbol = compilation.GetTypeByMetadataName("System.IAsyncDisposable");
-		INamedTypeSymbol? asyncInitializableSymbol = compilation.GetTypeByMetadataName("Awaiten.IAsyncInitializable");
+		// Detect async disposal off the referenced Awaiten runtime (Owned<T>), so an instance is marked
+		// IsAsyncDisposable only when the emitter will actually emit the async-disposal surface for it -
+		// see AsyncDisposableSupport for why this differs from the bare System.IAsyncDisposable lookup.
+		WellKnownTypes wellKnown = new(
+			compilation.GetTypeByMetadataName("System.IDisposable"),
+			AsyncDisposableSupport(compilation),
+			compilation.GetTypeByMetadataName("Awaiten.IAsyncInitializable"));
 
 		List<RawRegistration> raw = ContainerRegistrations.Collect(containerSymbol);
 
@@ -171,7 +212,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		foreach (ImplInfo info in implOrder)
 		{
 			cancellationToken.ThrowIfCancellationRequested();
-			InstanceModel? instance = BuildInstance(info, containerSymbol, compilation, serviceToImpl, disposableSymbol, asyncDisposableSymbol, asyncInitializableSymbol, diagnostics);
+			InstanceModel? instance = BuildInstance(info, containerSymbol, compilation, serviceToImpl, wellKnown, diagnostics);
 			if (instance is not null)
 			{
 				implToIndex[info.ImplementationType] = instances.Count;
@@ -397,9 +438,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		INamedTypeSymbol containerSymbol,
 		Compilation compilation,
 		Dictionary<ServiceKey, string> serviceToImpl,
-		INamedTypeSymbol? disposableSymbol,
-		INamedTypeSymbol? asyncDisposableSymbol,
-		INamedTypeSymbol? asyncInitializableSymbol,
+		WellKnownTypes wellKnown,
 		List<DiagnosticInfo> diagnostics)
 	{
 		// A pre-built Instance is handed back from a container member, never constructed here. The
@@ -454,13 +493,13 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		ITypeSymbol disposalType = info.Production == ProductionKind.Factory
 			? ContainerRegistrations.ProducedType(producer.ReturnType, compilation)
 			: info.Symbol;
-		bool disposable = disposableSymbol is not null && ImplementsInterface(disposalType, disposableSymbol);
+		bool disposable = wellKnown.Disposable is not null && ImplementsInterface(disposalType, wellKnown.Disposable);
 
 		// Async disposal mirrors synchronous disposal: the container owns an IAsyncDisposable instance for
-		// teardown too, and the drain awaits its DisposeAsync (preferring it over IDisposable when a type is
-		// both). Only recognized when the compilation can see IAsyncDisposable (asyncDisposableSymbol non-null);
-		// otherwise the generated container is synchronous-dispose only.
-		bool asyncDisposable = asyncDisposableSymbol is not null && ImplementsInterface(disposalType, asyncDisposableSymbol);
+		// teardown too, and the drain awaits its DisposeAsync, preferring it over IDisposable when a type is
+		// both. This is recognized only when the runtime exposes async disposal at all - otherwise the generated
+		// container stays synchronous-dispose only.
+		bool asyncDisposable = wellKnown.AsyncDisposable is not null && ImplementsInterface(disposalType, wellKnown.AsyncDisposable);
 
 		// A factory's declared return type can hide a concrete IDisposable (or IAsyncDisposable) behind a
 		// non-disposable service interface (or base class), which the static flags above miss. When that is
@@ -481,7 +520,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		// regardless of whether its produced type implements IAsyncInitializable: its result is reached only by
 		// awaiting the Task (see the IsAsyncFactory seed in PropagateAsyncTaint). When the produced type IS
 		// IAsyncInitializable, the container additionally awaits its InitializeAsync after the factory completes.
-		bool asyncInit = asyncInitializableSymbol is not null && ImplementsInterface(disposalType, asyncInitializableSymbol);
+		bool asyncInit = wellKnown.AsyncInitializable is not null && ImplementsInterface(disposalType, wellKnown.AsyncInitializable);
 
 		// Best-effort lint (AWT106): a synchronous factory whose declared return type hides the asynchronous
 		// initialization its body provably produces. The container reads async-init taint off producer.ReturnType
@@ -490,7 +529,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		// and a hidden IDisposable is disposed at runtime via RuntimeDisposalCheck - neither is reported.
 		if (info.Production == ProductionKind.Factory && !asyncFactory)
 		{
-			ReportFactoryHidingAsyncInitialization(producer, compilation, asyncInitializableSymbol, diagnostics);
+			ReportFactoryHidingAsyncInitialization(producer, compilation, wellKnown.AsyncInitializable, diagnostics);
 		}
 
 		return new InstanceModel(
@@ -714,8 +753,14 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			if (parameterModel.Kind is not (DependencyKind.Arg or DependencyKind.CancellationToken)
 			    && !serviceToImpl.ContainsKey(KeyOf(parameterModel)))
 			{
+				// Lazy does not unwrap Owned<T> (memoizing a disposal handle is a footgun), so a Lazy<Owned<T>> /
+				// Lazy<Task<Owned<T>>> leaves the handle's Owned<T> type as the service - which is not registered.
+				// Report that with the supported owned forms rather than a bare "missing Owned<T>" (AWT101).
+				bool ownedThroughLazy = parameterModel.Kind is DependencyKind.Lazy or DependencyKind.LazyTask
+				                        && parameterModel.ServiceType.StartsWith("global::Awaiten.Owned<", StringComparison.Ordinal);
+
 				diagnostics.Add(new DiagnosticInfo(
-					Diagnostics.MissingDependency,
+					ownedThroughLazy ? Diagnostics.OwnedThroughLazy : Diagnostics.MissingDependency,
 					info.Location,
 					new EquatableArray<string>([
 						Display(info.Services[0].Service),

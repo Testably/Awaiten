@@ -1104,7 +1104,7 @@ public partial class AsyncInitializationTests
 		Valve captured;
 		await using (ValveSingletonContainer.Root container = new())
 		{
-			captured = await container.ResolveAsync<Valve>();
+			captured = await container.ResolveAsync<Valve>(Ct);
 			await That(captured.DisposeAsyncCount).IsEqualTo(0);
 		}
 
@@ -1116,7 +1116,7 @@ public partial class AsyncInitializationTests
 	public async Task AsyncDisposableSingleton_SyncDispose_Throws()
 	{
 		ValveSingletonContainer.Root container = new();
-		await container.ResolveAsync<Valve>();
+		await container.ResolveAsync<Valve>(Ct);
 
 		// The container now owns an IAsyncDisposable-only instance; a synchronous Dispose cannot tear it down.
 		await That(() => container.Dispose()).Throws<InvalidOperationException>()

@@ -300,4 +300,20 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     An <c>Owned&lt;T&gt;</c> disposal handle is requested through a <c>Lazy&lt;Owned&lt;T&gt;&gt;</c> or
+	///     <c>Lazy&lt;Task&lt;Owned&lt;T&gt;&gt;&gt;</c> relationship. <c>Lazy</c> does not unwrap
+	///     <c>Owned&lt;T&gt;</c> (memoizing a single disposal handle would hand back a disposed handle after the
+	///     first teardown), so the handle's inner type is treated as the service - which is not registered. This
+	///     reports that mismatch with the supported owned forms instead of a bare "missing dependency" for the
+	///     <c>Owned&lt;T&gt;</c> type itself.
+	/// </summary>
+	public static readonly DiagnosticDescriptor OwnedThroughLazy = new(
+		"AWT121",
+		"Owned<T> handle requested through Lazy",
+		"'{0}' cannot be resolved: '{1}' requires '{2}' through a Lazy relationship, but an Owned<T> disposal handle cannot be produced through Lazy<…>; request it directly as an Owned<T>, or through Func<…, Owned<T>>, Task<Owned<T>> or Func<…, Task<Owned<T>>>",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }
