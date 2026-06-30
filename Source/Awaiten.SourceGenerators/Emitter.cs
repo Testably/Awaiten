@@ -413,17 +413,17 @@ internal static class Emitter
 
 		for (int i = 0; i < instances.Length; i++)
 		{
-			// The synchronous resolver is suppressed for an async-tainted service in the strict default
-			// (where it is reachable only through ResolveAsync); the async resolver is added for every
-			// async-tainted, non-parameterized service (a parameterized one is reached only by its Func<TArg…, T>).
+			// The synchronous resolver is suppressed for an async-tainted service in the strict default (where it
+			// is reachable only through ResolveAsync); the async resolver is added for every async-tainted
+			// service, including a parameterized one (reached through its Func<TArg…, Task<T>>).
 			if (EmitsSync(instances[i], syncResolveAfterInit))
 			{
 				builder.AppendLine();
 
-				// In pragmatic mode an async-tainted (non-parameterized) service is also resolvable
-				// synchronously; its synchronous resolver delegates to the memoizing async one rather than
-				// constructing a second, uninitialized instance, so there is a single init path.
-				if (instances[i].IsAsyncTainted && !instances[i].IsParameterized)
+				// In pragmatic mode an async-tainted service is also resolvable synchronously; its synchronous
+				// resolver delegates to the memoizing async one (a parameterized service forwarding its runtime
+				// arguments) rather than constructing a second, uninitialized instance, so there is a single init path.
+				if (instances[i].IsAsyncTainted)
 				{
 					EmitDelegatingSyncResolver(builder, body, i, instances[i], names);
 				}
@@ -433,7 +433,7 @@ internal static class Emitter
 				}
 			}
 
-			if (instances[i].IsAsyncTainted && !instances[i].IsParameterized)
+			if (instances[i].IsAsyncTainted)
 			{
 				builder.AppendLine();
 				EmitAsyncScopeResolver(builder, body, i, instances[i], instances, names, serviceToIndex);
@@ -1140,6 +1140,19 @@ internal static class Emitter
 		const string task = "global::System.Threading.Tasks.Task";
 		const string ct = "global::System.Threading.CancellationToken cancellationToken";
 
+		// A parameterized async service is built fresh per call from its runtime arguments AND awaits
+		// initialization, so it is reached only through Func<TArg…, Task<T>>. Its async resolver takes the
+		// arguments alongside the token; like the synchronous parameterized resolver it lives on the base Scope
+		// (internal) and the Root inherits it, never caching (a parameterized service is always transient).
+		if (instance.IsParameterized)
+		{
+			string[] argTypes = instance.ArgTypes();
+			string argSignature = string.Join("", argTypes.Select((t, i) => $"{t} a{i}, "));
+			string parameterizedConstruction = EmitConstruction(instance, instances, names, serviceToIndex, asynchronous: true);
+			EmitAsyncFreshResolver(builder, depth, index, instance, names, parameterizedConstruction, argSignature);
+			return;
+		}
+
 		if (instance.Lifetime == Lifetime.Singleton)
 		{
 			Indent(builder, depth).Append("protected virtual ").Append(task).Append('<').Append(instance.ImplementationType)
@@ -1170,12 +1183,18 @@ internal static class Emitter
 	/// </summary>
 	private static void EmitDelegatingSyncResolver(StringBuilder builder, int depth, int index, InstanceModel instance, Names names)
 	{
+		// A parameterized service forwards its runtime arguments to the async resolver: the synchronous resolver
+		// takes the same arguments, blocks on the (per-call) async resolver, and so still drives initialization.
+		string[] argTypes = instance.ArgTypes();
+		string signature = string.Join(", ", argTypes.Select((t, i) => $"{t} a{i}"));
+		string forward = string.Join("", argTypes.Select((_, i) => "a" + i + ", "));
+
 		Indent(builder, depth).Append("internal ").Append(instance.ImplementationType).Append(' ')
-			.Append(names.Resolver(index)).AppendLine("()");
+			.Append(names.Resolver(index)).Append('(').Append(signature).AppendLine(")");
 		Indent(builder, depth).AppendLine("{");
 		EmitDisposedGuard(builder, depth + 1);
 		Indent(builder, depth + 1).Append("return ").Append(names.AsyncResolver(index))
-			.AppendLine("(default).GetAwaiter().GetResult();");
+			.Append('(').Append(forward).AppendLine("default).GetAwaiter().GetResult();");
 		Indent(builder, depth).AppendLine("}");
 	}
 
@@ -1246,16 +1265,17 @@ internal static class Emitter
 
 	/// <summary>
 	///     Emits an async resolver that constructs, initializes and returns a fresh instance on every call (a
-	///     transient). A disposable instance is registered for teardown on the owner.
+	///     transient, or a parameterized service that additionally takes the runtime arguments named in
+	///     <paramref name="argSignature" />). A disposable instance is registered for teardown on the owner.
 	/// </summary>
-	private static void EmitAsyncFreshResolver(StringBuilder builder, int depth, int index, InstanceModel instance, Names names, string construction)
+	private static void EmitAsyncFreshResolver(StringBuilder builder, int depth, int index, InstanceModel instance, Names names, string construction, string argSignature = "")
 	{
 		string type = instance.ImplementationType;
 		const string task = "global::System.Threading.Tasks.Task";
 		const string ct = "global::System.Threading.CancellationToken cancellationToken";
 
 		Indent(builder, depth).Append("internal async ").Append(task).Append('<').Append(type).Append("> ")
-			.Append(names.AsyncResolver(index)).Append('(').Append(ct).AppendLine(")");
+			.Append(names.AsyncResolver(index)).Append('(').Append(argSignature).Append(ct).AppendLine(")");
 		Indent(builder, depth).AppendLine("{");
 		EmitDisposedGuard(builder, depth + 1);
 		Indent(builder, depth + 1).Append(type).Append(" created = ").Append(construction).AppendLine(";");
@@ -1552,6 +1572,20 @@ internal static class Emitter
 			return FuncFactory(funcArgTypes, parameter.ServiceType, resolver);
 		}
 
+		// The async relationship types resolve their target through its async resolver (awaiting
+		// initialization), or wrap a synchronous target in a completed Task. They defer like the synchronous
+		// relationships, so they are created here at construction time and carry no ambient cancellation token.
+		if (parameter.Kind is DependencyKind.Task or DependencyKind.FuncTask or DependencyKind.LazyTask)
+		{
+			string asyncValue = AsyncRelationshipValue(parameter, target, targetIndex, names, rootOwned, funcArgTypes);
+			return parameter.Kind switch
+			{
+				DependencyKind.FuncTask => AsyncFuncFactory(funcArgTypes, parameter.ServiceType, asyncValue),
+				DependencyKind.LazyTask => $"new global::System.Lazy<global::System.Threading.Tasks.Task<{parameter.ServiceType}>>(() => {asyncValue})",
+				_ => asyncValue,
+			};
+		}
+
 		string value;
 		if (rootOwned)
 		{
@@ -1588,6 +1622,40 @@ internal static class Emitter
 		string generics = argTypes.Length == 0 ? service : string.Join(", ", argTypes) + ", " + service;
 		string lambdaArgs = string.Join(", ", argTypes.Select((_, i) => "a" + i));
 		return $"new global::System.Func<{generics}>(({lambdaArgs}) => {resolver}({lambdaArgs}))";
+	}
+
+	/// <summary>
+	///     A <c>Task&lt;T&gt;</c>-valued expression for an async relationship. An async-tainted target is
+	///     produced by its async resolver - which awaits initialization, and for a parameterized target forwards
+	///     the runtime arguments (<c>a0…</c>) - so the relationship hands back an initialized instance. A
+	///     synchronously-resolvable target is wrapped with <c>Task.FromResult</c> over its synchronous resolver.
+	///     The relationship is created at construction time and carries no ambient cancellation token
+	///     (<c>default</c>). A root-owned target is read straight off <c>__root</c> so the call devirtualizes.
+	/// </summary>
+	private static string AsyncRelationshipValue(ParameterModel parameter, InstanceModel target, int targetIndex, Names names, bool rootOwned, string[] argTypes)
+	{
+		string callArgs = string.Join("", argTypes.Select((_, i) => "a" + i + ", "));
+		if (target.IsAsyncTainted)
+		{
+			string asyncResolver = rootOwned ? $"__root.{names.AsyncResolver(targetIndex)}" : names.AsyncResolver(targetIndex);
+			return $"{asyncResolver}({callArgs}default)";
+		}
+
+		string resolver = rootOwned ? $"__root.{names.Resolver(targetIndex)}" : names.Resolver(targetIndex);
+		return $"global::System.Threading.Tasks.Task.FromResult<{parameter.ServiceType}>({resolver}({string.Join(", ", argTypes.Select((_, i) => "a" + i))}))";
+	}
+
+	/// <summary>
+	///     A <c>new Func&lt;TArg…, Task&lt;T&gt;&gt;((a0, …) =&gt; …)</c> expression: the async counterpart of
+	///     <see cref="FuncFactory" />, wrapping the async relationship value in a factory that forwards any
+	///     runtime arguments. With no argument types this is the plain async factory <c>Func&lt;Task&lt;T&gt;&gt;</c>.
+	/// </summary>
+	private static string AsyncFuncFactory(string[] argTypes, string service, string asyncValue)
+	{
+		string task = $"global::System.Threading.Tasks.Task<{service}>";
+		string generics = argTypes.Length == 0 ? task : string.Join(", ", argTypes) + ", " + task;
+		string lambdaArgs = string.Join(", ", argTypes.Select((_, i) => "a" + i));
+		return $"new global::System.Func<{generics}>(({lambdaArgs}) => {asyncValue})";
 	}
 
 	/// <summary>

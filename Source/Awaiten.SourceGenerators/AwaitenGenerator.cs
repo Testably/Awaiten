@@ -849,6 +849,14 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			return new ParameterModel(ownedInner.ToDisplayString(FullyQualified), DependencyKind.Owned, Key: key, Location: location);
 		}
 
+		// A bare Task<T> dependency: an awaitable that resolves (and initializes) T. Task lives in
+		// System.Threading.Tasks, not System, so it is recognized here rather than through the System-generic
+		// relationship gate below (which handles the Func/Lazy wrappers, including Func<…, Task<T>>).
+		if (IsTask(parameter.Type, out ITypeSymbol taskResult))
+		{
+			return new ParameterModel(taskResult.ToDisplayString(FullyQualified), DependencyKind.Task, Key: key, Location: location);
+		}
+
 		if (parameter.Type is INamedTypeSymbol { IsGenericType: true, } named
 		    && named.ContainingNamespace?.ToDisplayString() == "System"
 		    && ClassifyRelationship(named, key, location) is { } relationship)
@@ -872,8 +880,10 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	{
 		if (named is { Name: "Lazy", TypeArguments.Length: 1, } && !IsRelationshipType(named.TypeArguments[0]))
 		{
-			return new ParameterModel(
-				named.TypeArguments[0].ToDisplayString(FullyQualified), DependencyKind.Lazy, Key: key, Location: location);
+			// Lazy<Task<T>> is the async counterpart of Lazy<T>: a memoized awaitable dependency.
+			return IsTask(named.TypeArguments[0], out ITypeSymbol lazyTaskResult)
+				? new ParameterModel(lazyTaskResult.ToDisplayString(FullyQualified), DependencyKind.LazyTask, Key: key, Location: location)
+				: new ParameterModel(named.TypeArguments[0].ToDisplayString(FullyQualified), DependencyKind.Lazy, Key: key, Location: location);
 		}
 
 		if (named is not { Name: "Func", TypeArguments.Length: >= 1, })
@@ -888,6 +898,15 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		string[] argTypes = typeArgs.Take(typeArgs.Length - 1)
 			.Select(t => t.ToDisplayString(FullyQualified))
 			.ToArray();
+
+		// Func<…, Task<T>> is the async counterpart of Func<…, T>: an async factory that resolves (and
+		// initializes) T, awaiting it. It forwards any leading runtime arguments to T's [Arg] parameters.
+		if (IsTask(service, out ITypeSymbol funcTaskResult))
+		{
+			return new ParameterModel(
+				funcTaskResult.ToDisplayString(FullyQualified), DependencyKind.FuncTask,
+				new EquatableArray<string>(argTypes), Key: key, Location: location);
+		}
 
 		// Func<…, Owned<T>> is the leak-free factory: its produced value is an Owned<T> disposal handle.
 		if (IsOwned(service, out ITypeSymbol funcOwnedInner))
@@ -1123,6 +1142,23 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		return string.Join(" -> ", chain.Select(index => Display(instances[index].ImplementationType)));
 	}
 
+	// Whether a type is a System.Threading.Tasks.Task<T>, yielding its result type T. Used to recognize the
+	// async relationship types (Task<T>, Func<…, Task<T>>, Lazy<Task<T>>); ValueTask<T> is deliberately not a
+	// relationship type (a stored ValueTask may only be awaited once) - it is supported solely as an async
+	// factory's return type, on the producer side.
+	private static bool IsTask(ITypeSymbol type, out ITypeSymbol result)
+	{
+		if (type is INamedTypeSymbol { IsGenericType: true, Name: "Task", TypeArguments.Length: 1, } named
+		    && named.ContainingNamespace?.ToDisplayString() == "System.Threading.Tasks")
+		{
+			result = named.TypeArguments[0];
+			return true;
+		}
+
+		result = type;
+		return false;
+	}
+
 	// Whether a type is an Awaiten.Owned<T> disposal handle, yielding the owned service type T.
 	private static bool IsOwned(ITypeSymbol type, out ITypeSymbol inner)
 	{
@@ -1195,21 +1231,14 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 					new EquatableArray<string>([Display(instance.ImplementationType), instance.Lifetime.ToString(),])));
 			}
 
-			// A parameterized service is reachable only through a synchronous Func<TArg…, T>, which returns the
-			// service directly and so cannot await it. Combining [Arg] with an async-taint source (an
-			// IAsyncInitializable implementation, or an asynchronous Task<T> / ValueTask<T> factory) would
-			// therefore either hand back an uninitialized/unawaited instance (SyncResolveAfterInit) or be
-			// silently unreachable (strict) - neither has a correct resolution path until an async parameterized
-			// factory relationship (Func<TArg…, Task<T>>) exists. Reported in both modes (it is not a
-			// sync-vs-async resolution choice but an unsupported combination).
-			if (instance.IsParameterized && instance.IsAsyncSource)
-			{
-				diagnostics.Add(new DiagnosticInfo(
-					Diagnostics.ParameterizedAsyncInitialization,
-					location,
-					new EquatableArray<string>([Display(instance.ImplementationType),])));
-			}
-
+			// A parameterized async service (an [Arg] service that is IAsyncInitializable, is produced by an
+			// asynchronous Task<T> / ValueTask<T> factory, or transitively reaches one) is built fresh per call
+			// from its runtime arguments AND must await initialization, so its correct resolution path is the
+			// async parameterized factory relationship Func<TArg…, Task<T>>, which forwards the arguments to the
+			// async resolver. Misuse is caught at the consumption site rather than the registration: a synchronous
+			// Func<TArg…, T> over it is AWT119 (cannot await), and a plain / Lazy<T> / Task<T> dependency that
+			// supplies no arguments is AWT115 (parameterized requires a Func). There is therefore no
+			// registration-time diagnostic for the [Arg]-plus-async combination itself.
 			foreach (ParameterModel parameter in instance.ConstructorParameters.AsArray())
 			{
 				// Guard the implToIndex lookup the same way BuildDependencyGraph does: serviceToImpl can name an
@@ -1231,9 +1260,10 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 	/// <summary>
 	///     Validates a single (non-<c>[Arg]</c>) dependency against its target's runtime arguments
-	///     (<paramref name="expected" />): a <c>Func&lt;TArg…, T&gt;</c> must request exactly them (AWT113);
-	///     a plain or <c>Lazy&lt;T&gt;</c> dependency cannot supply them at all, so it must instead be a
-	///     <c>Func</c> when the target is parameterized (AWT115).
+	///     (<paramref name="expected" />): a <c>Func&lt;TArg…, T&gt;</c> or its async form
+	///     <c>Func&lt;TArg…, Task&lt;T&gt;&gt;</c> must request exactly them (AWT113); a plain, <c>Lazy&lt;T&gt;</c>
+	///     or <c>Task&lt;T&gt;</c> dependency cannot supply them at all, so a parameterized target must instead be
+	///     reached through a <c>Func</c> (AWT115).
 	/// </summary>
 	private static void ValidateDependency(
 		InstanceModel consumer,
@@ -1246,7 +1276,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		// parameter has no usable location.
 		LocationInfo? location = parameter.Location ?? consumerLocation;
 
-		if (parameter.Kind == DependencyKind.Func)
+		if (parameter.Kind is DependencyKind.Func or DependencyKind.FuncTask)
 		{
 			string[] requested = parameter.FuncArgTypes.AsArray();
 			if (!requested.SequenceEqual(expected))

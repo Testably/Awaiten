@@ -11,7 +11,12 @@ namespace Awaiten.SourceGenerators.Internals;
 ///     method's <c>System.Threading.CancellationToken</c> parameter, satisfied by forwarding the resolve-time
 ///     token (the async creator's) rather than from the graph - so, like <see cref="Arg" />, it contributes no
 ///     edge. A synchronous factory or a constructor has no ambient token, so its <c>CancellationToken</c> is an
-///     ordinary <see cref="Direct" /> dependency instead.
+///     ordinary <see cref="Direct" /> dependency instead. <see cref="Task" />, <see cref="FuncTask" /> and
+///     <see cref="LazyTask" /> are the asynchronous counterparts of <see cref="Direct" />/<see cref="Func" />/
+///     <see cref="Lazy" />: awaitable relationships that resolve (and initialize) the target through its async
+///     resolver. Like the synchronous relationship types they defer resolution, so they contribute no graph
+///     edge and launder async taint - which is what lets a synchronously-resolvable consumer hold one over an
+///     async-initialized service without becoming async-tainted (and without tripping AWT119/AWT120).
 /// </summary>
 internal enum DependencyKind
 {
@@ -21,4 +26,13 @@ internal enum DependencyKind
 	Arg,
 	Owned,
 	CancellationToken,
+
+	/// <summary>A <c>Task&lt;T&gt;</c> dependency: an awaitable that resolves (and initializes) <c>T</c>.</summary>
+	Task,
+
+	/// <summary>A <c>Func&lt;…, Task&lt;T&gt;&gt;</c> async factory; like <see cref="Func" /> but awaitable.</summary>
+	FuncTask,
+
+	/// <summary>A <c>Lazy&lt;Task&lt;T&gt;&gt;</c> async dependency; like <see cref="Lazy" /> but awaitable.</summary>
+	LazyTask,
 }

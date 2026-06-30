@@ -885,4 +885,94 @@ public partial class AsyncInitializationTests
 		private static Task<TokenAwareService> CreateAsync(CancellationToken cancellationToken)
 			=> Task.FromResult(new TokenAwareService(cancellationToken));
 	}
+
+	[Fact]
+	public async Task AsyncRelationship_FuncOfTask_ResolvesAnInitializedServiceWithoutTaintingTheConsumer()
+	{
+		using RelationshipContainer.Root container = new();
+
+		// Pool is a plain (synchronously resolvable) singleton: the async relationships launder the taint, so it
+		// is reachable through Resolve<T>. It pulls the async connection lazily through Func<Task<Connection>>.
+		Pool pool = container.Resolve<Pool>();
+		Connection connection = await pool.OpenAsync();
+
+		await That(connection.Initialized).IsTrue();
+	}
+
+	[Fact]
+	public async Task AsyncRelationship_TaskAndLazyDependencies_DeliverAnInitializedService()
+	{
+		using RelationshipContainer.Root container = new();
+
+		Pool pool = container.Resolve<Pool>();
+
+		await That((await pool.Eager).Initialized).IsTrue();
+		await That((await pool.Deferred.Value).Initialized).IsTrue();
+	}
+
+	[Fact]
+	public async Task AsyncRelationship_ParameterizedFuncOfTask_ForwardsTheArgumentAndInitializes()
+	{
+		using ParameterizedAsyncContainer.Root container = new();
+
+		// RobotFactory is a synchronously-resolvable singleton holding Func<int, Task<Robot>>; invoking it builds
+		// a fresh Robot from the runtime argument AND awaits its asynchronous initialization.
+		RobotFactory factory = container.Resolve<RobotFactory>();
+		Robot robot = await factory.CreateAsync(42);
+
+		await That(robot.Id).IsEqualTo(42);
+		await That(robot.Initialized).IsTrue();
+	}
+
+	public sealed class Pool
+	{
+		private readonly Func<Task<Connection>> _factory;
+
+		public Pool(Func<Task<Connection>> factory, Lazy<Task<Connection>> lazy, Task<Connection> task)
+		{
+			_factory = factory;
+			Deferred = lazy;
+			Eager = task;
+		}
+
+		public Task<Connection> Eager { get; }
+
+		public Lazy<Task<Connection>> Deferred { get; }
+
+		public Task<Connection> OpenAsync() => _factory();
+	}
+
+	[Container]
+	[Singleton<Connection>]
+	[Singleton<Pool>]
+	public static partial class RelationshipContainer;
+
+	public sealed class Robot : IAsyncInitializable
+	{
+		public Robot([Arg] int id) => Id = id;
+
+		public int Id { get; }
+
+		public bool Initialized { get; private set; }
+
+		public Task InitializeAsync(CancellationToken cancellationToken)
+		{
+			Initialized = true;
+			return Task.CompletedTask;
+		}
+	}
+
+	public sealed class RobotFactory
+	{
+		private readonly Func<int, Task<Robot>> _factory;
+
+		public RobotFactory(Func<int, Task<Robot>> factory) => _factory = factory;
+
+		public Task<Robot> CreateAsync(int id) => _factory(id);
+	}
+
+	[Container]
+	[Transient<Robot>]
+	[Singleton<RobotFactory>]
+	public static partial class ParameterizedAsyncContainer;
 }
