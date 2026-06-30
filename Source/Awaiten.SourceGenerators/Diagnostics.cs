@@ -226,8 +226,11 @@ internal static class Diagnostics
 	///     parameterized service) whose construction tracks a fresh disposable on the root - the produced
 	///     service is itself disposable, or it transitively rebuilds a disposable transient. Each call to that
 	///     factory builds and re-tracks those disposables on the container's root, so they accumulate for its
-	///     entire lifetime - an unbounded leak. Resolving through <c>Func&lt;…, Owned&lt;T&gt;&gt;</c> instead
-	///     hands each instance back as a disposal handle (draining into a throwaway scope), so nothing accumulates.
+	///     entire lifetime - an unbounded leak. The leak-free remedy is the <c>{2}</c> message argument, since it
+	///     differs by relationship: a synchronous <c>Func&lt;…&gt;</c> is redirected to a
+	///     <c>Func&lt;…, Owned&lt;T&gt;&gt;</c> disposal handle (draining into a throwaway scope), while an
+	///     asynchronous <c>Func&lt;…, Task&lt;T&gt;&gt;</c> cannot use <c>Owned&lt;T&gt;</c> - a synchronous handle
+	///     that cannot await initialization (AWT119) - so it is pointed at an explicitly scoped resolution instead.
 	/// </summary>
 	/// <remarks>
 	///     Unlike the retired per-registration check, this is flow-based: it fires only for the statically
@@ -239,7 +242,7 @@ internal static class Diagnostics
 	public static readonly DiagnosticDescriptor RootAccumulatingFactory = new(
 		"AWT118",
 		"Factory accumulates disposables on the container root",
-		"'{1}' holds a Func over '{0}', which is built on demand; the instances it builds - and the disposables created while constructing them - are tracked on the container root and accumulate for its lifetime; resolve it as Func<…, Owned<{0}>> for per-use disposal",
+		"'{1}' holds a Func over '{0}', which is built on demand; the instances it builds - and the disposables created while constructing them - are tracked on the container root and accumulate for its lifetime; {2}",
 		"Awaiten",
 		DiagnosticSeverity.Warning,
 		isEnabledByDefault: true);

@@ -19,6 +19,6 @@
  AWT115  | Awaiten   | Error    | A service with [Arg] parameters is required as a plain, Lazy<T> or Task<T> dependency instead of a Func<TArg...,T>
  AWT116  | Awaiten   | Error    | A [Container] class is not declared static
  AWT117  | Awaiten   | Error    | Two registrations share the same service type and key
- AWT118  | Awaiten   | Warning  | A root-owned instance holds a Func over a disposable build-on-demand service
+ AWT118  | Awaiten   | Warning  | A root-owned instance holds a Func or Func<…,Task<T>> over a disposable build-on-demand service
  AWT119  | Awaiten   | Error    | A synchronous Func/Lazy/Owned relationship targets an async-initialized service
  AWT120  | Awaiten   | Error    | A synchronous Func/Lazy/Owned relationship reaches an async-tainted service transitively
