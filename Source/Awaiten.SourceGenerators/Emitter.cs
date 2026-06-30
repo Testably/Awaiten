@@ -869,6 +869,9 @@ internal static class Emitter
 	///     async-tainted, non-parameterized service's (non-keyed) service types, when the container is not in
 	///     pragmatic mode (where the same services are synchronously resolvable after warm-up). They have no
 	///     synchronous dispatch entry, so without this they would surface as a generic "no registration".
+	///     A parameterized service is excluded: it is never resolvable by its bare type (it needs its runtime
+	///     arguments through a <c>Func&lt;TArg…, …&gt;</c>), so the "resolve through ResolveAsync" guidance would
+	///     not fit - its bare-type unavailability is governed by parameterization, not asynchronous initialization.
 	/// </summary>
 	private static IEnumerable<(string Service, string Guidance)> AsyncWithheldServices(
 		InstanceModel[] instances, bool syncResolveAfterInit)
@@ -1160,8 +1163,9 @@ internal static class Emitter
 		bool hasAsync = false;
 		for (int i = 0; i < instances.Length; i++)
 		{
-			// A parameterized service is reached only through its synchronous Func<TArg…, T>, so it has no
-			// async resolver of its own.
+			// A parameterized service is built fresh from its runtime arguments, so it is reached only through
+			// its Func<TArg…, T> / Func<TArg…, Task<T>> factory; by-type ResolveAsync cannot supply those [Arg]s,
+			// so it gets no entry here (it does have an async resolver - the async factory relationship binds it).
 			if (!instances[i].IsAsyncTainted || instances[i].IsParameterized)
 			{
 				continue;
