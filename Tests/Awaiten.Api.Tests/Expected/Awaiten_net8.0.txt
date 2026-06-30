@@ -63,11 +63,12 @@ namespace Awaiten
         Strict = 0,
         Loose = 1,
     }
-    public readonly struct Owned<T> : System.IDisposable
+    public readonly struct Owned<T> : System.IAsyncDisposable, System.IDisposable
     {
         public Owned(Awaiten.IAwaitenScope scope, T value) { }
         public T Value { get; }
         public void Dispose() { }
+        public System.Threading.Tasks.ValueTask DisposeAsync() { }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
     public sealed class ScopedAttribute<TImplementation> : System.Attribute

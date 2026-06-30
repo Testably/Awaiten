@@ -885,4 +885,279 @@ public partial class AsyncInitializationTests
 		private static Task<TokenAwareService> CreateAsync(CancellationToken cancellationToken)
 			=> Task.FromResult(new TokenAwareService(cancellationToken));
 	}
+
+	[Fact]
+	public async Task AsyncRelationship_FuncOfTask_ResolvesAnInitializedServiceWithoutTaintingTheConsumer()
+	{
+		using RelationshipContainer.Root container = new();
+
+		// Pool is a plain (synchronously resolvable) singleton: the async relationships launder the taint, so it
+		// is reachable through Resolve<T>. It pulls the async connection lazily through Func<Task<Connection>>.
+		Pool pool = container.Resolve<Pool>();
+		Connection connection = await pool.OpenAsync();
+
+		await That(connection.Initialized).IsTrue();
+	}
+
+	[Fact]
+	public async Task AsyncRelationship_TaskAndLazyDependencies_DeliverAnInitializedService()
+	{
+		using RelationshipContainer.Root container = new();
+
+		Pool pool = container.Resolve<Pool>();
+
+		await That((await pool.Eager).Initialized).IsTrue();
+		await That((await pool.Deferred.Value).Initialized).IsTrue();
+	}
+
+	[Fact]
+	public async Task AsyncRelationship_ParameterizedFuncOfTask_ForwardsTheArgumentAndInitializes()
+	{
+		using ParameterizedAsyncContainer.Root container = new();
+
+		// RobotFactory is a synchronously-resolvable singleton holding Func<int, Task<Robot>>; invoking it builds
+		// a fresh Robot from the runtime argument AND awaits its asynchronous initialization.
+		RobotFactory factory = container.Resolve<RobotFactory>();
+		Robot robot = await factory.CreateAsync(42);
+
+		await That(robot.Id).IsEqualTo(42);
+		await That(robot.Initialized).IsTrue();
+	}
+
+	public sealed class Pool
+	{
+		private readonly Func<Task<Connection>> _factory;
+
+		public Pool(Func<Task<Connection>> factory, Lazy<Task<Connection>> lazy, Task<Connection> task)
+		{
+			_factory = factory;
+			Deferred = lazy;
+			Eager = task;
+		}
+
+		public Task<Connection> Eager { get; }
+
+		public Lazy<Task<Connection>> Deferred { get; }
+
+		public Task<Connection> OpenAsync() => _factory();
+	}
+
+	[Container]
+	[Singleton<Connection>]
+	[Singleton<Pool>]
+	public static partial class RelationshipContainer;
+
+	public sealed class Robot : IAsyncInitializable
+	{
+		public Robot([Arg] int id) => Id = id;
+
+		public int Id { get; }
+
+		public bool Initialized { get; private set; }
+
+		public Task InitializeAsync(CancellationToken cancellationToken)
+		{
+			Initialized = true;
+			return Task.CompletedTask;
+		}
+	}
+
+	public sealed class RobotFactory
+	{
+		private readonly Func<int, Task<Robot>> _factory;
+
+		public RobotFactory(Func<int, Task<Robot>> factory) => _factory = factory;
+
+		public Task<Robot> CreateAsync(int id) => _factory(id);
+	}
+
+	[Container]
+	[Transient<Robot>]
+	[Singleton<RobotFactory>]
+	public static partial class ParameterizedAsyncContainer;
+
+	[Fact]
+	public async Task AsyncOwned_FuncOfTaskOfOwned_ResolvesInitializesAndScopesDisposalPerHandle()
+	{
+		using AsyncOwnedContainer.Root container = new();
+
+		// GizmoPlant is a synchronously-resolvable singleton holding Func<Task<Owned<Gizmo>>>: each call
+		// async-resolves (and initializes) a fresh transient into its own child scope and hands back the handle.
+		GizmoPlant plant = container.Resolve<GizmoPlant>();
+
+		Owned<Gizmo> first = await plant.MakeAsync();
+		Owned<Gizmo> second = await plant.MakeAsync();
+
+		await That(first.Value.Initialized).IsTrue()
+			.Because("the async owned handle awaits the service's initialization before handing it back");
+		await That(ReferenceEquals(first.Value, second.Value)).IsFalse()
+			.Because("each call builds a fresh transient in its own scope");
+
+		first.Dispose();
+		await That(first.Value.Disposed).IsTrue();
+		await That(second.Value.Disposed).IsFalse()
+			.Because("disposing one handle disposes only its own child scope, not another's");
+
+		second.Dispose();
+		await That(second.Value.Disposed).IsTrue();
+	}
+
+	[Fact]
+	public async Task AsyncOwned_ParameterizedFuncOfTaskOfOwned_ForwardsArgumentInitializesAndDisposes()
+	{
+		using ParameterizedAsyncOwnedContainer.Root container = new();
+
+		WidgetPlant plant = container.Resolve<WidgetPlant>();
+		Owned<Widget> handle = await plant.MakeAsync(7);
+
+		await That(handle.Value.Id).IsEqualTo(7)
+			.Because("the async owned factory forwards the runtime argument to the service's [Arg] parameter");
+		await That(handle.Value.Initialized).IsTrue();
+
+		handle.Dispose();
+		await That(handle.Value.Disposed).IsTrue();
+	}
+
+	public sealed class Gizmo : IAsyncInitializable, IDisposable
+	{
+		public bool Initialized { get; private set; }
+
+		public bool Disposed { get; private set; }
+
+		public Task InitializeAsync(CancellationToken cancellationToken)
+		{
+			Initialized = true;
+			return Task.CompletedTask;
+		}
+
+		public void Dispose() => Disposed = true;
+	}
+
+	public sealed class GizmoPlant
+	{
+		private readonly Func<Task<Owned<Gizmo>>> _factory;
+
+		public GizmoPlant(Func<Task<Owned<Gizmo>>> factory) => _factory = factory;
+
+		public Task<Owned<Gizmo>> MakeAsync() => _factory();
+	}
+
+	[Container]
+	[Transient<Gizmo>]
+	[Singleton<GizmoPlant>]
+	public static partial class AsyncOwnedContainer;
+
+	public sealed class Widget : IAsyncInitializable, IDisposable
+	{
+		public Widget([Arg] int id) => Id = id;
+
+		public int Id { get; }
+
+		public bool Initialized { get; private set; }
+
+		public bool Disposed { get; private set; }
+
+		public Task InitializeAsync(CancellationToken cancellationToken)
+		{
+			Initialized = true;
+			return Task.CompletedTask;
+		}
+
+		public void Dispose() => Disposed = true;
+	}
+
+	public sealed class WidgetPlant
+	{
+		private readonly Func<int, Task<Owned<Widget>>> _factory;
+
+		public WidgetPlant(Func<int, Task<Owned<Widget>>> factory) => _factory = factory;
+
+		public Task<Owned<Widget>> MakeAsync(int id) => _factory(id);
+	}
+
+	[Container]
+	[Transient<Widget>]
+	[Singleton<WidgetPlant>]
+	public static partial class ParameterizedAsyncOwnedContainer;
+
+#if NET || NETSTANDARD2_1_OR_GREATER
+	[Fact]
+	public async Task AsyncOwned_FuncOfTaskOfOwned_DisposeAsync_TearsDownAnAsyncDisposableService()
+	{
+		using AsyncDisposableOwnedContainer.Root container = new();
+
+		ValvePlant plant = container.Resolve<ValvePlant>();
+		Owned<Valve> handle = await plant.MakeAsync();
+
+		await That(handle.Value.Initialized).IsTrue();
+		await That(handle.Value.DisposeAsyncCount).IsEqualTo(0);
+
+		await handle.DisposeAsync();
+
+		await That(handle.Value.DisposeAsyncCount).IsEqualTo(1)
+			.Because("await using the async owned handle drains its child scope through DisposeAsync");
+	}
+
+	[Fact]
+	public async Task AsyncDisposableSingleton_DisposedThroughTheContainerDisposeAsync()
+	{
+		Valve captured;
+		await using (ValveSingletonContainer.Root container = new())
+		{
+			captured = await container.ResolveAsync<Valve>(Ct);
+			await That(captured.DisposeAsyncCount).IsEqualTo(0);
+		}
+
+		await That(captured.DisposeAsyncCount).IsEqualTo(1)
+			.Because("disposing the container through DisposeAsync awaits the async-disposable instances it owns");
+	}
+
+	[Fact]
+	public async Task AsyncDisposableSingleton_SyncDispose_Throws()
+	{
+		ValveSingletonContainer.Root container = new();
+		await container.ResolveAsync<Valve>(Ct);
+
+		// The container now owns an IAsyncDisposable-only instance; a synchronous Dispose cannot tear it down.
+		await That(() => container.Dispose()).Throws<InvalidOperationException>()
+			.Because("an IAsyncDisposable-only service requires DisposeAsync; a synchronous Dispose throws rather than leak or block");
+	}
+
+	public sealed class Valve : IAsyncInitializable, IAsyncDisposable
+	{
+		public bool Initialized { get; private set; }
+
+		public int DisposeAsyncCount { get; private set; }
+
+		public Task InitializeAsync(CancellationToken cancellationToken)
+		{
+			Initialized = true;
+			return Task.CompletedTask;
+		}
+
+		public ValueTask DisposeAsync()
+		{
+			DisposeAsyncCount++;
+			return default;
+		}
+	}
+
+	public sealed class ValvePlant
+	{
+		private readonly Func<Task<Owned<Valve>>> _factory;
+
+		public ValvePlant(Func<Task<Owned<Valve>>> factory) => _factory = factory;
+
+		public Task<Owned<Valve>> MakeAsync() => _factory();
+	}
+
+	[Container]
+	[Transient<Valve>]
+	[Singleton<ValvePlant>]
+	public static partial class AsyncDisposableOwnedContainer;
+
+	[Container]
+	[Singleton<Valve>]
+	public static partial class ValveSingletonContainer;
+#endif
 }

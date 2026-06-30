@@ -14,7 +14,8 @@ internal sealed record ContainerModel(
 	EquatableArray<InstanceModel> Instances,
 	EquatableArray<DiagnosticInfo> Diagnostics,
 	bool Strict,
-	bool SyncResolveAfterInit)
+	bool SyncResolveAfterInit,
+	bool HasAsyncDisposable)
 {
 	public bool HasErrors
 	{

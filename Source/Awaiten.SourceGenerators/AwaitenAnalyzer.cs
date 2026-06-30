@@ -179,24 +179,38 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 				continue;
 			}
 
+			string service = AwaitenGenerator.Display(parameter.ServiceType);
+
+			// The leak-free remedy differs by relationship. A synchronous Func is redirected to a
+			// Func<…, Owned<T>> disposal handle; an async Func<…, Task<T>> cannot use Owned<T> (a synchronous
+			// handle that cannot await initialization - AWT119), so it is redirected to the async owned form
+			// Func<…, Task<Owned<T>>>, which async-resolves each instance into a throwaway scope.
+			string remedy = parameter.Kind == DependencyKind.FuncTask
+				? $"resolve it as Func<…, Task<Owned<{service}>>> for per-use disposal"
+				: $"resolve it as Func<…, Owned<{service}>> for per-use disposal";
+
 			diagnostics.Add(new DiagnosticInfo(
 				descriptor,
 				parameter.Location ?? graph.InstanceLocations[node],
 				new EquatableArray<string>([
-					AwaitenGenerator.Display(parameter.ServiceType),
+					service,
 					AwaitenGenerator.Display(holder.ImplementationType),
+					remedy,
 				]),
 				severity));
 		}
 	}
 
-	// A plain Func<…> (not a Func<…, Owned<T>>) over a build-on-demand service (a transient or parameterized
-	// service) whose construction tracks a fresh disposable on its owner - the produced service itself is
-	// disposable, or it transitively rebuilds a disposable transient. Each call to such a Func, bound to the
-	// root, builds and re-tracks those disposables on the root, so they accumulate for the container's lifetime.
+	// A plain Func<…> or its async form Func<…, Task<T>> (but not a Func<…, Owned<T>>) over a build-on-demand
+	// service (a transient or parameterized service) whose construction tracks a fresh disposable on its owner -
+	// the produced service itself is disposable, or it transitively rebuilds a disposable transient. Each call to
+	// such a Func, bound to the root, builds and re-tracks those disposables on the root, so they accumulate for
+	// the container's lifetime. The async resolver tracks disposables identically to the synchronous one, so the
+	// async factory leaks the same way and is included here - and since Owned<T> is unavailable for an async
+	// service, the async form is the only deferred factory that can reach an async-tainted target at all.
 	private static bool IsRootAccumulatingFunc(GraphModel graph, Dictionary<ServiceKey, int> serviceToIndex, ParameterModel parameter)
 	{
-		if (parameter.Kind != DependencyKind.Func || parameter.ProducesOwned
+		if (parameter.Kind is not (DependencyKind.Func or DependencyKind.FuncTask) || parameter.ProducesOwned
 		    || !graph.ServiceToImpl.TryGetValue(new ServiceKey(parameter.ServiceType, parameter.Key), out string? targetImpl)
 		    || !graph.ImplToIndex.TryGetValue(targetImpl, out int targetIndex))
 		{

@@ -14,12 +14,12 @@
  AWT110  | Awaiten   | Error    | A registration sets both Factory and Instance
  AWT111  | Awaiten   | Error    | An implementation is registered with conflicting production strategies
  AWT112  | Awaiten   | Error    | A Factory registration names an overloaded method
- AWT113  | Awaiten   | Error    | A Func<TArg...,T> relationship's runtime arguments do not match the service's [Arg] parameters
+ AWT113  | Awaiten   | Error    | A Func<TArg...,T> or Func<TArg...,Task<T>> relationship's runtime arguments do not match the service's [Arg] parameters
  AWT114  | Awaiten   | Error    | A service with [Arg] parameters is registered with a non-Transient lifetime
- AWT115  | Awaiten   | Error    | A service with [Arg] parameters is required as a plain or Lazy<T> dependency instead of a Func<TArg...,T>
+ AWT115  | Awaiten   | Error    | A service with [Arg] parameters is required as a plain, Lazy<T> or Task<T> dependency instead of a Func<TArg...,T>
  AWT116  | Awaiten   | Error    | A [Container] class is not declared static
  AWT117  | Awaiten   | Error    | Two registrations share the same service type and key
- AWT118  | Awaiten   | Warning  | A root-owned instance holds a Func over a disposable build-on-demand service
+ AWT118  | Awaiten   | Warning  | A root-owned instance holds a Func or Func<…,Task<T>> over a disposable build-on-demand service
  AWT119  | Awaiten   | Error    | A synchronous Func/Lazy/Owned relationship targets an async-initialized service
  AWT120  | Awaiten   | Error    | A synchronous Func/Lazy/Owned relationship reaches an async-tainted service transitively
- AWT121  | Awaiten   | Error    | A service with [Arg] parameters also implements IAsyncInitializable
+ AWT121  | Awaiten   | Error    | An Owned<T> disposal handle is requested through a Lazy<Owned<T>> or Lazy<Task<Owned<T>>> relationship

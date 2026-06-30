@@ -226,8 +226,11 @@ internal static class Diagnostics
 	///     parameterized service) whose construction tracks a fresh disposable on the root - the produced
 	///     service is itself disposable, or it transitively rebuilds a disposable transient. Each call to that
 	///     factory builds and re-tracks those disposables on the container's root, so they accumulate for its
-	///     entire lifetime - an unbounded leak. Resolving through <c>Func&lt;…, Owned&lt;T&gt;&gt;</c> instead
-	///     hands each instance back as a disposal handle (draining into a throwaway scope), so nothing accumulates.
+	///     entire lifetime - an unbounded leak. The leak-free remedy is the <c>{2}</c> message argument, since it
+	///     differs by relationship: a synchronous <c>Func&lt;…&gt;</c> is redirected to a
+	///     <c>Func&lt;…, Owned&lt;T&gt;&gt;</c> disposal handle (draining into a throwaway scope), while an
+	///     asynchronous <c>Func&lt;…, Task&lt;T&gt;&gt;</c> cannot use <c>Owned&lt;T&gt;</c> - a synchronous handle
+	///     that cannot await initialization (AWT119) - so it is pointed at an explicitly scoped resolution instead.
 	/// </summary>
 	/// <remarks>
 	///     Unlike the retired per-registration check, this is flow-based: it fires only for the statically
@@ -239,7 +242,7 @@ internal static class Diagnostics
 	public static readonly DiagnosticDescriptor RootAccumulatingFactory = new(
 		"AWT118",
 		"Factory accumulates disposables on the container root",
-		"'{1}' holds a Func over '{0}', which is built on demand; the instances it builds - and the disposables created while constructing them - are tracked on the container root and accumulate for its lifetime; resolve it as Func<…, Owned<{0}>> for per-use disposal",
+		"'{1}' holds a Func over '{0}', which is built on demand; the instances it builds - and the disposables created while constructing them - are tracked on the container root and accumulate for its lifetime; {2}",
 		"Awaiten",
 		DiagnosticSeverity.Warning,
 		isEnabledByDefault: true);
@@ -299,18 +302,17 @@ internal static class Diagnostics
 		isEnabledByDefault: true);
 
 	/// <summary>
-	///     A service with <c>[Arg]</c>-marked parameters is also an async-taint source - it implements
-	///     <c>IAsyncInitializable</c>, or it is produced by an asynchronous <c>Task&lt;T&gt;</c> /
-	///     <c>ValueTask&lt;T&gt;</c> factory. A parameterized service is built fresh per request and reachable
-	///     only through a synchronous <c>Func&lt;TArg…, T&gt;</c>, which returns the service directly and so
-	///     cannot await it - it would hand back an uninitialized/unawaited instance (under
-	///     <c>SyncResolveAfterInit</c>) or be unreachable (in the strict default). The two cannot be combined
-	///     until an async parameterized factory relationship (<c>Func&lt;TArg…, Task&lt;T&gt;&gt;</c>) exists.
+	///     An <c>Owned&lt;T&gt;</c> disposal handle is requested through a <c>Lazy&lt;Owned&lt;T&gt;&gt;</c> or
+	///     <c>Lazy&lt;Task&lt;Owned&lt;T&gt;&gt;&gt;</c> relationship. <c>Lazy</c> does not unwrap
+	///     <c>Owned&lt;T&gt;</c> (memoizing a single disposal handle would hand back a disposed handle after the
+	///     first teardown), so the handle's inner type is treated as the service - which is not registered. This
+	///     reports that mismatch with the supported owned forms instead of a bare "missing dependency" for the
+	///     <c>Owned&lt;T&gt;</c> type itself.
 	/// </summary>
-	public static readonly DiagnosticDescriptor ParameterizedAsyncInitialization = new(
+	public static readonly DiagnosticDescriptor OwnedThroughLazy = new(
 		"AWT121",
-		"Parameterized service cannot be async-initialized",
-		"'{0}' has [Arg] parameters and is reachable only through a synchronous Func<…, {0}>, which cannot await its asynchronous initialization; a parameterized service therefore cannot be async-initialized (neither IAsyncInitializable nor an async Task<T> factory)",
+		"Owned<T> handle requested through Lazy",
+		"'{0}' cannot be resolved: '{1}' requires '{2}' through a Lazy relationship, but an Owned<T> disposal handle cannot be produced through Lazy<…>; request it directly as an Owned<T>, or through Func<…, Owned<T>>, Task<Owned<T>> or Func<…, Task<Owned<T>>>",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);

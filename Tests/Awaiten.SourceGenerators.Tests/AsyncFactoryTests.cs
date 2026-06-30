@@ -172,51 +172,64 @@ public class AsyncFactoryTests
 	}
 
 	[Fact]
-	public async Task TaskFactory_WithArgParameter_ReportsAwt121()
+	public async Task ParameterizedTaskFactory_ConsumedViaFuncOfTask_IsLegalAndAwaitsTheFactory()
 	{
 		GeneratorResult result = Generator.Run("""
 		                                       using Awaiten;
+		                                       using System;
 		                                       using System.Threading.Tasks;
 
 		                                       namespace MyCode;
 
 		                                       public sealed class Foo { }
+		                                       public sealed class Consumer { public Consumer(Func<string, Task<Foo>> make) { } }
 
 		                                       [Container]
 		                                       [Transient<Foo>(Factory = nameof(Create))]
+		                                       [Singleton<Consumer>]
 		                                       public static partial class MyContainer
 		                                       {
 		                                           private static Task<Foo> Create([Arg] string name) => Task.FromResult(new Foo());
 		                                       }
 		                                       """);
 
-		await That(result.Diagnostics).Contains("*AWT121*").AsWildcard()
-			.Because("a parameterized async factory is reachable only through a synchronous Func<…, Foo>, which cannot await the Task");
+		// A parameterized async factory now has a correct resolution path: Func<string, Task<Foo>> forwards the
+		// runtime argument to the async parameterized resolver, which awaits the factory. There is no AWT121.
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+		await That(source).Contains("await Create(a0).ConfigureAwait(false)")
+			.Because("the async parameterized resolver forwards the runtime argument to the factory and awaits it");
+		await That(source).Contains("new global::System.Func<string, global::System.Threading.Tasks.Task<global::MyCode.Foo>>")
+			.Because("the consumer's Func<string, Task<Foo>> binds the async parameterized resolver");
 	}
 
 	[Fact]
-	public async Task ParameterizedAsyncFactory_EmitsNoBrokenCode_TheErrorStubReplacesResolution()
+	public async Task ParameterizedTaskFactory_ConsumedViaSyncFunc_ReportsAwt119()
 	{
 		GeneratorResult result = Generator.Run("""
 		                                       using Awaiten;
+		                                       using System;
 		                                       using System.Threading.Tasks;
 
 		                                       namespace MyCode;
 
 		                                       public sealed class Foo { }
+		                                       public sealed class Consumer { public Consumer(Func<string, Foo> make) { } }
 
 		                                       [Container]
 		                                       [Transient<Foo>(Factory = nameof(Create))]
+		                                       [Singleton<Consumer>]
 		                                       public static partial class MyContainer
 		                                       {
 		                                           private static Task<Foo> Create([Arg] string name) => Task.FromResult(new Foo());
 		                                       }
 		                                       """);
 
-		await That(string.Join("\n", result.Diagnostics)).DoesNotContain("error CS")
-			.Because("AWT121 is an error, so the emitter replaces resolution with a throwing stub and must not also produce spurious compile errors");
-		await That(result.Sources["Awaiten.MyCode.MyContainer.g.cs"]).DoesNotContain("await Create(")
-			.Because("no parameterized resolver awaiting the factory in a non-async method (which would not compile) is emitted once AWT121 stubs the container");
+		// A synchronous Func<string, Foo> over an async-tainted (async-factory) parameterized service cannot
+		// await the Task, so it is rejected at the consumption site - the async form Func<string, Task<Foo>> is
+		// the fix.
+		await That(result.Diagnostics).Contains("*AWT119*").AsWildcard()
+			.Because("a synchronous Func relationship cannot await an async parameterized factory");
 	}
 
 	[Fact]

@@ -40,8 +40,18 @@ internal sealed record InstanceModel(
 	bool IsAsyncInitializable = false,
 	bool IsAsyncTainted = false,
 	bool IsAsyncFactory = false,
-	bool RuntimeDisposalCheck = false)
+	bool RuntimeDisposalCheck = false,
+	bool IsAsyncDisposable = false)
 {
+	/// <summary>
+	///     Whether the container owns this instance for disposal in either sense - its declared type implements
+	///     <c>IDisposable</c> or <c>IAsyncDisposable</c> - so it is tracked for teardown and its on-demand
+	///     construction accumulates on the owner. The drain selects the right disposal at runtime;
+	///     <see cref="RuntimeDisposalCheck" /> covers a factory whose declared type could hide either behind a
+	///     non-disposable service type.
+	/// </summary>
+	public bool NeedsDisposal => IsDisposable || IsAsyncDisposable;
+
 	/// <summary>
 	///     Whether this instance is itself an async-taint source (as opposed to being tainted only through a
 	///     dependency): its implementation is <c>IAsyncInitializable</c>, or it is produced by an asynchronous

@@ -94,4 +94,62 @@ public class OwnedTests
 		await That(source).Contains("__Owned<global::MyCode.Label>(__s => __s.ResolveLabel(a0))")
 			.Because("the runtime argument flows into the parameterized resolver called on the throwaway scope");
 	}
+
+	[Fact]
+	public async Task LazyOwned_ReportsAwt121RatherThanAMissingOwnedDependency()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class Widget : IDisposable { public void Dispose() { } }
+		                                       public sealed class Workshop { public Workshop(Lazy<Owned<Widget>> widgets) { } }
+
+		                                       [Container]
+		                                       [Transient<Widget>]
+		                                       [Singleton<Workshop>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		// Lazy does not unwrap Owned<T>, so Owned<Widget> is left as the (unregistered) service type; AWT121
+		// reports that with the supported owned forms instead of a bare "Owned<Widget> is not registered".
+		await That(result.Diagnostics).Contains("*AWT121*").AsWildcard()
+			.Because("an Owned<T> disposal handle cannot be produced through a Lazy<Owned<T>> relationship");
+		await That(result.Diagnostics.All(d => !d.Contains("AWT101"))).IsTrue()
+			.Because("the clearer AWT121 replaces the generic missing-dependency diagnostic for the Owned<T> type");
+	}
+
+	[Fact]
+	public async Task LazyTaskOwned_ReportsAwt121()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System;
+		                                       using System.Threading;
+		                                       using System.Threading.Tasks;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class Widget : IAsyncInitializable, IDisposable
+		                                       {
+		                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+		                                           public void Dispose() { }
+		                                       }
+		                                       public sealed class Workshop { public Workshop(Lazy<Task<Owned<Widget>>> widgets) { } }
+
+		                                       [Container]
+		                                       [Transient<Widget>]
+		                                       [Singleton<Workshop>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).Contains("*AWT121*").AsWildcard()
+			.Because("the async Lazy<Task<Owned<T>>> form likewise cannot produce an Owned<T> disposal handle");
+	}
 }

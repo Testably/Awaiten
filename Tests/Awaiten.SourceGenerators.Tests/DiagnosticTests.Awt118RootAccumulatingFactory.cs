@@ -154,5 +154,66 @@ public partial class DiagnosticTests
 			await That(diagnostics.Any(d => d.Contains("AWT118"))).IsTrue()
 				.Because("building the non-disposable Tool on demand rebuilds its disposable transient Spark, which accumulates on the root just the same");
 		}
+
+		[Fact]
+		public async Task ReportsWhenASingletonHoldsAFuncOfTaskOverADisposableAsyncTransient()
+		{
+			string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>("""
+			                                       using Awaiten;
+			                                       using System;
+			                                       using System.Threading;
+			                                       using System.Threading.Tasks;
+
+			                                       namespace MyCode;
+
+			                                       public sealed class Conn : IAsyncInitializable, IDisposable
+			                                       {
+			                                           public Task InitializeAsync(CancellationToken ct) => Task.CompletedTask;
+			                                           public void Dispose() { }
+			                                       }
+			                                       public sealed class Pool { public Pool(Func<Task<Conn>> open) { } }
+
+			                                       [Container]
+			                                       [Transient<Conn>]
+			                                       [Singleton<Pool>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(diagnostics.Any(d => d.Contains("AWT118"))).IsTrue()
+				.Because("a singleton holding a Func<…, Task<T>> over a disposable async transient accumulates initialized instances on the root, just as the synchronous Func does - and Func<…, Task<T>> is the only deferred factory that can reach an async service");
+			await That(diagnostics.Any(d => d.Contains("AWT118") && d.Contains("Task<Owned<"))).IsTrue()
+				.Because("the async remedy points at the async owned form Func<…, Task<Owned<T>>>, the leak-free way to obtain a disposable async service per use (a synchronous Owned<T> is illegal here - AWT119)");
+		}
+
+		[Fact]
+		public async Task DoesNotReportForANonDisposableAsyncTransientFactory()
+		{
+			string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>("""
+			                                       using Awaiten;
+			                                       using System;
+			                                       using System.Threading;
+			                                       using System.Threading.Tasks;
+
+			                                       namespace MyCode;
+
+			                                       public sealed class Conn : IAsyncInitializable
+			                                       {
+			                                           public Task InitializeAsync(CancellationToken ct) => Task.CompletedTask;
+			                                       }
+			                                       public sealed class Pool { public Pool(Func<Task<Conn>> open) { } }
+
+			                                       [Container]
+			                                       [Transient<Conn>]
+			                                       [Singleton<Pool>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(diagnostics.Any(d => d.Contains("AWT118"))).IsFalse()
+				.Because("a non-disposable async transient leaves nothing to accumulate, so the async factory is not flagged");
+		}
 	}
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 
 namespace Awaiten;
 
@@ -11,7 +12,11 @@ namespace Awaiten;
 ///     disposable transient on demand - the container never accumulates it on the root.
 /// </summary>
 /// <typeparam name="T">The resolved service type.</typeparam>
-public readonly struct Owned<T> : IDisposable
+public readonly struct Owned<T> :
+#if NET || NETSTANDARD2_1_OR_GREATER
+	IAsyncDisposable,
+#endif
+	IDisposable
 {
 	private readonly IAwaitenScope _scope;
 
@@ -39,4 +44,17 @@ public readonly struct Owned<T> : IDisposable
 	///     <see langword="default" /> handle, is a no-op.
 	/// </summary>
 	public void Dispose() => _scope?.Dispose();
+
+#if NET || NETSTANDARD2_1_OR_GREATER
+	/// <summary>
+	///     Asynchronously disposes the scope backing this handle, awaiting the
+	///     <see cref="IAsyncDisposable.DisposeAsync" /> of the instances it owns (falling back to
+	///     <see cref="IDisposable.Dispose" /> for those that are only synchronously disposable). Use this -
+	///     through <c>await using</c> - when <see cref="Value" /> (or anything built for it) is
+	///     <see cref="IAsyncDisposable" />; a synchronous <see cref="Dispose" /> of such a handle throws.
+	///     Shared singletons are unaffected. Disposing a <see langword="default" /> handle is a no-op.
+	/// </summary>
+	public ValueTask DisposeAsync()
+		=> _scope is IAsyncDisposable asyncScope ? asyncScope.DisposeAsync() : default;
+#endif
 }
