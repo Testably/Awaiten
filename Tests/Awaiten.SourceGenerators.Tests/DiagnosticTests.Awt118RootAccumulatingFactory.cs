@@ -183,8 +183,8 @@ public partial class DiagnosticTests
 
 			await That(diagnostics.Any(d => d.Contains("AWT118"))).IsTrue()
 				.Because("a singleton holding a Func<…, Task<T>> over a disposable async transient accumulates initialized instances on the root, just as the synchronous Func does - and Func<…, Task<T>> is the only deferred factory that can reach an async service");
-			await That(diagnostics.Any(d => d.Contains("AWT118") && d.Contains("child scope") && !d.Contains("Owned<"))).IsTrue()
-				.Because("the async remedy points at a child scope, not the Owned<T> handle, which is itself illegal (AWT119) for an async service");
+			await That(diagnostics.Any(d => d.Contains("AWT118") && d.Contains("Task<Owned<"))).IsTrue()
+				.Because("the async remedy points at the async owned form Func<…, Task<Owned<T>>>, the leak-free way to obtain a disposable async service per use (a synchronous Owned<T> is illegal here - AWT119)");
 		}
 
 		[Fact]

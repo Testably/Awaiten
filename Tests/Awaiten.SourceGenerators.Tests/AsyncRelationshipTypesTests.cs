@@ -196,4 +196,79 @@ public class AsyncRelationshipTypesTests
 		await That(result.Diagnostics).Contains("*AWT115*").AsWildcard()
 			.Because("a bare Task<Robot> supplies no runtime arguments, so a parameterized service must instead be reached through a Func<TArg…, Task<T>>");
 	}
+
+	[Fact]
+	public async Task AsyncOwned_FuncOfTaskOfOwned_AsyncResolvesIntoAThrowawayScopeAndIsExemptFromAwt118()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System;
+		                                       using System.Threading;
+		                                       using System.Threading.Tasks;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class Connection : IAsyncInitializable, IDisposable
+		                                       {
+		                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+		                                           public void Dispose() { }
+		                                       }
+		                                       public sealed class Pool { public Pool(Func<Task<Owned<Connection>>> open) { } }
+
+		                                       [Container]
+		                                       [Transient<Connection>]
+		                                       [Singleton<Pool>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		// The owned form is leak-free, so a root-held async factory over a disposable transient is not AWT118.
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+		await That(source).Contains("new global::System.Func<global::System.Threading.Tasks.Task<global::Awaiten.Owned<global::MyCode.Connection>>>")
+			.Because("the consumer binds a Func<Task<Owned<Connection>>> factory");
+		await That(source).Contains("__OwnedAsync<global::MyCode.Connection>")
+			.Because("the async owned handle resolves the service into a throwaway child scope through the async owned helper");
+		await That(source).Contains("ResolveConnectionAsync(__ct)")
+			.Because("the throwaway scope awaits the service's async resolver (initialization included)");
+	}
+
+	[Fact]
+	public async Task AsyncDisposableService_EmitsDisposeAsyncAndAnAwaitingDrain()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System;
+		                                       using System.Threading;
+		                                       using System.Threading.Tasks;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class Connection : IAsyncInitializable, IAsyncDisposable
+		                                       {
+		                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+		                                           public ValueTask DisposeAsync() => default;
+		                                       }
+
+		                                       [Container]
+		                                       [Singleton<Connection>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+		await That(source).Contains("public class Scope : global::Awaiten.IAwaitenScope")
+			.Because("the IAsyncDisposable surface is on the concrete Scope, not added to the IAwaitenScope interface");
+		await That(source).Contains("global::System.IAsyncDisposable")
+			.Because("the generated Scope implements IAsyncDisposable when the compilation can see the type");
+		await That(source).Contains("public async global::System.Threading.Tasks.ValueTask DisposeAsync()")
+			.Because("a DisposeAsync drain is emitted alongside the synchronous Dispose");
+		await That(source).Contains("await __asyncDisposable.DisposeAsync().ConfigureAwait(false)")
+			.Because("the async drain awaits IAsyncDisposable, preferring it over a synchronous Dispose");
+		await That(source).Contains("global::System.InvalidOperationException")
+			.Because("the synchronous Dispose throws when it meets an IAsyncDisposable-only service rather than blocking");
+	}
 }

@@ -26,31 +26,27 @@ Add the async mirror of `Func<…, Owned<T>>`, **reusing the existing `Owned<T>`
 
 Once this exists, the Stage 1 AWT118 message (and `AsyncRootWithheldMessage`) can additionally point at `Func<…, Task<Owned<T>>>` rather than only "open a child scope by hand".
 
-**Constraint to keep the promise honest:** disposal is still synchronous `IDisposable` at this stage. For an `IAsyncDisposable`-**only** target (no `IDisposable`), the child scope's synchronous `Dispose()` would find nothing to dispose — a silent leak. So Stage 2 must **diagnose** an `IAsyncDisposable`-only owned target ("async disposal not yet supported; implement `IDisposable`, or await Stage 3") rather than appear to handle it. Stage 3 lifts that restriction with no API change.
+Stage 2 needs **no** `IAsyncDisposable` at all — it only async-resolves into a child scope and returns an ordinary `Owned<T>`, so it ships on every target framework (net48 included), with synchronous `IDisposable` disposal of the handle. Async *disposal* of what the handle owns is Stage 3.
 
-## Stage 3 — `IAsyncDisposable` support (async disposal pipeline)
+**Status: done.** `Task<Owned<T>>` and `Func<…, Task<Owned<T>>>` (`DependencyKind` `Task`/`FuncTask` with `ProducesOwned`) are classified in `ClassifyParameter`/`ClassifyRelationship`, emitted through the new `__OwnedAsync<T>` helper (the async twin of `__Owned<T>`: open a child scope, await the target's async resolver into it, return the `Owned<T>`), and validated by AWT113. The AWT118 message and `AsyncRootWithheldMessage` now point at `Func<…, Task<Owned<T>>>` as the leak-free async remedy.
 
-The actual async-disposal feature lives in the disposal pipeline, independent of the Stage 2 surface syntax:
+## Stage 3 — `IAsyncDisposable` support (async disposal pipeline) — done
 
-- Track `IAsyncDisposable` instances in the generated scope, not just `IDisposable`.
-- Give the generated `Scope`/`Root` a `DisposeAsync()` that awaits `IAsyncDisposable.DisposeAsync()` with an `IDisposable` fallback.
-- Make `Owned<T>` implement `IAsyncDisposable` **additively**:
-  ```csharp
-  public readonly struct Owned<T> : IDisposable, IAsyncDisposable
-  {
-      public void Dispose() => _scope?.Dispose();
-      public ValueTask DisposeAsync() => _scope is IAsyncDisposable a ? a.DisposeAsync() : default;
-  }
-  ```
-  Existing `using`/`.Dispose()` callers are unchanged; new code opts into `await using`. The relationship type (`Task<Owned<T>>`) does not change shape — so Stage 2 does not need to be revisited.
-- Lift the Stage 2 diagnostic that rejected `IAsyncDisposable`-only owned targets.
+Implemented as an additive, **net8.0+ / polyfilled-only** capability, gated by detection rather than a forced dependency (per the project decision: net8.0+ async disposal, no new NuGet dependency):
 
-**Trap to avoid:** never make `Owned<T>.Dispose()` block on `DisposeAsync().GetAwaiter().GetResult()` to fake async disposal. Sync-over-async risks deadlock and bakes the wrong contract into the public API — *that* is the choice that would foreclose Stage 3. Keep synchronous `Dispose()` for `IDisposable`; add real `DisposeAsync()` here.
+- **Detection, not dependency.** The generator checks `compilation.GetTypeByMetadataName("System.IAsyncDisposable")`. When present (net5.0+/netstandard2.1+ in-box, or an older target that added `Microsoft.Bcl.AsyncInterfaces`), it emits the async-disposal machinery; when absent (e.g. net48 without the polyfill) the container is synchronous-dispose only and references no `IAsyncDisposable`, so it still compiles. No dependency was added to the library.
+- **Tracking.** `IAsyncDisposable` is folded into the disposal decision (`InstanceModel.NeedsDisposal = IsDisposable || IsAsyncDisposable`), which also flows into the leak analyses (AWT118 / by-type withholding / `BuildsFreshDisposable`). Tracked instances live in the same `List<object>`; the drain pattern-matches at runtime.
+- **`DisposeAsync`.** The generated **concrete `Scope`** implements `IAsyncDisposable` (the `Root` inherits it) and gets a `DisposeAsync()` that drains newest-first, awaiting `IAsyncDisposable.DisposeAsync()` and falling back to `Dispose()`. This was **not** added to the `IAwaitenScope` interface — doing so would break every hand-implementer (the MS.DI adapter, test doubles, external code); a concrete-class implementation gives `await using` on the container/scope without that break.
+- **Sync `Dispose()` throws.** When the synchronous `Dispose()` meets an instance that is `IAsyncDisposable` but not `IDisposable`, it throws `InvalidOperationException` (matching Microsoft.Extensions.DependencyInjection) rather than blocking on an async dispose.
+- **`Owned<T>`** implements `IAsyncDisposable` under `#if NET || NETSTANDARD2_1_OR_GREATER` (additive; `using`/`.Dispose()` callers unchanged), with `DisposeAsync()` routing to the backing scope via `_scope is IAsyncDisposable`.
 
-## Why the ordering is safe
+**Trap avoided:** `Owned<T>.Dispose()` / the scope's `Dispose()` never block on `DisposeAsync().GetAwaiter().GetResult()`. Sync-over-async risks deadlock and would bake the wrong contract into the public API; the synchronous path stays synchronous and throws for async-only services instead.
 
-| Decision | Forecloses `IAsyncDisposable`? |
+## Why the design holds
+
+| Decision | Outcome |
 |---|---|
-| Stage 2 via `Func<…, Task<Owned<T>>>` reusing `Owned<T>` | No — `Owned<T>` gains `IAsyncDisposable` additively; the scope async-dispose path is needed regardless |
-| A separate new `AsyncOwned<T>` type | No, but leaves two parallel handle types to reconcile |
-| Sync-over-async `Dispose()` shim | **Yes — avoid** |
+| Async-owned resolution (`Func<…, Task<Owned<T>>>`) reuses `Owned<T>` | One handle type; ships on all TFMs with sync disposal |
+| `IAsyncDisposable` detected in the compilation, not depended upon | net8.0+ (and polyfilled) get async disposal; net48 stays sync-only and still compiles; no new dependency |
+| `IAsyncDisposable` on the concrete `Scope`, not the `IAwaitenScope` interface | `await using` works on containers/scopes without breaking hand-implementers |
+| Sync `Dispose()` throws on an async-only service | No sync-over-async; clear contract |

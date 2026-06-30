@@ -183,10 +183,10 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 
 			// The leak-free remedy differs by relationship. A synchronous Func is redirected to a
 			// Func<…, Owned<T>> disposal handle; an async Func<…, Task<T>> cannot use Owned<T> (a synchronous
-			// handle that cannot await initialization - AWT119), so it is pointed at an explicitly scoped
-			// resolution instead, mirroring the bare-type async withholding guidance.
+			// handle that cannot await initialization - AWT119), so it is redirected to the async owned form
+			// Func<…, Task<Owned<T>>>, which async-resolves each instance into a throwaway scope.
 			string remedy = parameter.Kind == DependencyKind.FuncTask
-				? "resolve it within a child scope (await CreateScopeAsync(), ResolveAsync from that scope, then dispose the scope) for per-use disposal"
+				? $"resolve it as Func<…, Task<Owned<{service}>>> for per-use disposal"
 				: $"resolve it as Func<…, Owned<{service}>> for per-use disposal";
 
 			diagnostics.Add(new DiagnosticInfo(

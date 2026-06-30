@@ -67,6 +67,13 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		// InitializeAsync has warmed them, and the AWT119/AWT120 sync-resolution diagnostics are not reported.
 		bool syncResolveAfterInit = ReadSyncResolveAfterInit(containerSymbol);
 
+		// IAsyncDisposable support (the async drain, DisposeAsync on the Scope/Root, and tracking of
+		// async-disposable services) is emitted only when the consumer's compilation can see the type: net5.0+
+		// and netstandard2.1+ have it in-box, and an older target (e.g. net48 / netstandard2.0) may add it
+		// through Microsoft.Bcl.AsyncInterfaces. When it is absent the generated container is synchronous-dispose
+		// only and references no IAsyncDisposable, so it still compiles there.
+		bool hasAsyncDisposable = compilation.GetTypeByMetadataName("System.IAsyncDisposable") is not null;
+
 		List<DiagnosticInfo> diagnostics = new();
 
 		// The container must be a static class: it is a pure definition (registrations plus static factory
@@ -127,7 +134,8 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			new EquatableArray<InstanceModel>(graph.Instances.ToArray()),
 			new EquatableArray<DiagnosticInfo>(diagnostics.ToArray()),
 			strict,
-			syncResolveAfterInit);
+			syncResolveAfterInit,
+			hasAsyncDisposable);
 	}
 
 	/// <summary>
@@ -144,6 +152,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		CancellationToken cancellationToken)
 	{
 		INamedTypeSymbol? disposableSymbol = compilation.GetTypeByMetadataName("System.IDisposable");
+		INamedTypeSymbol? asyncDisposableSymbol = compilation.GetTypeByMetadataName("System.IAsyncDisposable");
 		INamedTypeSymbol? asyncInitializableSymbol = compilation.GetTypeByMetadataName("Awaiten.IAsyncInitializable");
 
 		List<RawRegistration> raw = ContainerRegistrations.Collect(containerSymbol);
@@ -162,7 +171,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		foreach (ImplInfo info in implOrder)
 		{
 			cancellationToken.ThrowIfCancellationRequested();
-			InstanceModel? instance = BuildInstance(info, containerSymbol, compilation, serviceToImpl, disposableSymbol, asyncInitializableSymbol, diagnostics);
+			InstanceModel? instance = BuildInstance(info, containerSymbol, compilation, serviceToImpl, disposableSymbol, asyncDisposableSymbol, asyncInitializableSymbol, diagnostics);
 			if (instance is not null)
 			{
 				implToIndex[info.ImplementationType] = instances.Count;
@@ -216,7 +225,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			}
 
 			InstanceModel instance = instances[node];
-			if (instance.IsDisposable)
+			if (instance.NeedsDisposal)
 			{
 				return true;
 			}
@@ -389,6 +398,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		Compilation compilation,
 		Dictionary<ServiceKey, string> serviceToImpl,
 		INamedTypeSymbol? disposableSymbol,
+		INamedTypeSymbol? asyncDisposableSymbol,
 		INamedTypeSymbol? asyncInitializableSymbol,
 		List<DiagnosticInfo> diagnostics)
 	{
@@ -446,15 +456,22 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			: info.Symbol;
 		bool disposable = disposableSymbol is not null && ImplementsInterface(disposalType, disposableSymbol);
 
-		// A factory's declared return type can hide a concrete IDisposable behind a non-disposable service
-		// interface (or base class), which the static `disposable` flag above misses. When that is possible -
-		// the declared type is not itself disposable yet a subtype could be (an interface or a non-sealed
-		// class) - the emitter tracks the realized instance for disposal behind a runtime `is IDisposable`
-		// test instead. A sealed declared type that is not IDisposable cannot hide one, so it needs no check
-		// (and a runtime `is IDisposable` against it would not even compile). Constructed and pre-built
+		// Async disposal mirrors synchronous disposal: the container owns an IAsyncDisposable instance for
+		// teardown too, and the drain awaits its DisposeAsync (preferring it over IDisposable when a type is
+		// both). Only recognized when the compilation can see IAsyncDisposable (asyncDisposableSymbol non-null);
+		// otherwise the generated container is synchronous-dispose only.
+		bool asyncDisposable = asyncDisposableSymbol is not null && ImplementsInterface(disposalType, asyncDisposableSymbol);
+
+		// A factory's declared return type can hide a concrete IDisposable (or IAsyncDisposable) behind a
+		// non-disposable service interface (or base class), which the static flags above miss. When that is
+		// possible - the declared type is itself neither yet a subtype could be (an interface or a non-sealed
+		// class) - the emitter tracks the realized instance for disposal behind a runtime
+		// `is IDisposable or IAsyncDisposable` test instead. A sealed declared type that is neither cannot hide
+		// one, so it needs no check (and the runtime test would not even compile). Constructed and pre-built
 		// Instance production never lie: info.Symbol is the concrete type, and an Instance is not owned.
 		bool runtimeDisposalCheck = info.Production == ProductionKind.Factory
 		                            && !disposable
+		                            && !asyncDisposable
 		                            && CouldHideDisposable(disposalType);
 
 		// Async initialization follows the type the container actually owns - a factory's concrete return type
@@ -488,7 +505,8 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			info.ProductionMember,
 			asyncInit,
 			IsAsyncFactory: asyncFactory,
-			RuntimeDisposalCheck: runtimeDisposalCheck);
+			RuntimeDisposalCheck: runtimeDisposalCheck,
+			IsAsyncDisposable: asyncDisposable);
 
 		static bool ImplementsInterface(ITypeSymbol type, INamedTypeSymbol @interface)
 		{
@@ -854,7 +872,11 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		// relationship gate below (which handles the Func/Lazy wrappers, including Func<…, Task<T>>).
 		if (IsTask(parameter.Type, out ITypeSymbol taskResult))
 		{
-			return new ParameterModel(taskResult.ToDisplayString(FullyQualified), DependencyKind.Task, Key: key, Location: location);
+			// Task<Owned<T>> is the async counterpart of a bare Owned<T>: async-resolve (and initialize) T into a
+			// throwaway child scope and hand back the disposal handle.
+			return IsOwned(taskResult, out ITypeSymbol taskOwnedInner)
+				? new ParameterModel(taskOwnedInner.ToDisplayString(FullyQualified), DependencyKind.Task, Key: key, Location: location, ProducesOwned: true)
+				: new ParameterModel(taskResult.ToDisplayString(FullyQualified), DependencyKind.Task, Key: key, Location: location);
 		}
 
 		if (parameter.Type is INamedTypeSymbol { IsGenericType: true, } named
@@ -901,11 +923,17 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 		// Func<…, Task<T>> is the async counterpart of Func<…, T>: an async factory that resolves (and
 		// initializes) T, awaiting it. It forwards any leading runtime arguments to T's [Arg] parameters.
+		// Func<…, Task<Owned<T>>> is its leak-free form: each call async-resolves T into a throwaway child scope
+		// and hands back the Owned<T> disposal handle (the async counterpart of Func<…, Owned<T>>).
 		if (IsTask(service, out ITypeSymbol funcTaskResult))
 		{
-			return new ParameterModel(
-				funcTaskResult.ToDisplayString(FullyQualified), DependencyKind.FuncTask,
-				new EquatableArray<string>(argTypes), Key: key, Location: location);
+			return IsOwned(funcTaskResult, out ITypeSymbol funcTaskOwnedInner)
+				? new ParameterModel(
+					funcTaskOwnedInner.ToDisplayString(FullyQualified), DependencyKind.FuncTask,
+					new EquatableArray<string>(argTypes), Key: key, Location: location, ProducesOwned: true)
+				: new ParameterModel(
+					funcTaskResult.ToDisplayString(FullyQualified), DependencyKind.FuncTask,
+					new EquatableArray<string>(argTypes), Key: key, Location: location);
 		}
 
 		// Func<…, Owned<T>> is the leak-free factory: its produced value is an Owned<T> disposal handle.

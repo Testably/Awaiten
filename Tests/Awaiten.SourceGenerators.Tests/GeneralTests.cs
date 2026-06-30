@@ -369,12 +369,12 @@ public class GeneralTests
 
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-		await That(source).Contains("if (created is global::System.IDisposable __disposable)")
-			.Because("a factory declared to return a non-disposable interface may build a concrete IDisposable, so disposal is tracked by a runtime check on the realized instance");
+		await That(source).Contains("if (created is global::System.IDisposable or global::System.IAsyncDisposable)")
+			.Because("a factory declared to return a non-disposable interface may build a concrete IDisposable (or IAsyncDisposable), so disposal is tracked by a runtime check on the realized instance");
 		await That(source).Contains("(__disposables ??= new global::System.Collections.Generic.List<object>()).Add(created);")
 			.Because("a genuinely-disposable factory output is still registered for teardown");
 		await That(source).DoesNotContain("((global::System.IDisposable)created).Dispose();")
-			.Because("the realized instance is reached through the runtime pattern variable, never an unchecked cast");
+			.Because("the realized instance is reached through the runtime pattern, never an unchecked cast");
 	}
 
 	[Fact]
