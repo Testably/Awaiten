@@ -356,4 +356,30 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     An open generic registration's implementation and service have different arity, so no closed
+	///     service can be mapped onto the implementation's type parameters (e.g. <c>Repository&lt;,&gt;</c>
+	///     declared for <c>IRepository&lt;&gt;</c>). v1 matches the open form exactly, so the arities must be equal.
+	/// </summary>
+	public static readonly DiagnosticDescriptor OpenGenericArityMismatch = new(
+		"AWT125",
+		"Open generic arity mismatch",
+		"The open generic registration of '{0}' for '{1}' is invalid: the implementation has {2} type parameter(s) but the service has {3}; their arity must match",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A closed generic required from the graph cannot be constructed from an open generic
+	///     registration because its type arguments violate the implementation's type-parameter
+	///     constraints (e.g. <c>Repository&lt;int&gt;</c> where the implementation declares <c>where T : class</c>).
+	/// </summary>
+	public static readonly DiagnosticDescriptor OpenGenericConstraintViolation = new(
+		"AWT126",
+		"Open generic constraint violation",
+		"'{0}' cannot be constructed from the open generic '{1}': the type argument(s) violate its type-parameter constraints",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

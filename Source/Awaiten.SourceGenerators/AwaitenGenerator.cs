@@ -199,7 +199,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			AsyncDisposableSupport(compilation),
 			compilation.GetTypeByMetadataName("Awaiten.IAsyncInitializable"));
 
-		List<RawRegistration> raw = ContainerRegistrations.Collect(containerSymbol);
+		List<RawRegistration> raw = ContainerRegistrations.Collect(containerSymbol, diagnostics);
 		List<DecorateRegistration> decorators = ContainerRegistrations.CollectDecorators(containerSymbol);
 
 		// Coalesce registrations by (service type, key): the first registration per key wins, and

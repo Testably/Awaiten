@@ -77,6 +77,14 @@ namespace Awaiten
         public void Dispose() { }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
+    public sealed class ScopedAttribute : System.Attribute
+    {
+        public ScopedAttribute(System.Type implementation) { }
+        public ScopedAttribute(System.Type implementation, System.Type service) { }
+        public System.Type Implementation { get; }
+        public System.Type Service { get; }
+    }
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
     public sealed class ScopedAttribute<TImplementation> : System.Attribute
         where TImplementation :  class
     {
@@ -91,6 +99,14 @@ namespace Awaiten
         public ScopedAttribute() { }
         public string? Factory { get; set; }
         public string? Key { get; set; }
+    }
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
+    public sealed class SingletonAttribute : System.Attribute
+    {
+        public SingletonAttribute(System.Type implementation) { }
+        public SingletonAttribute(System.Type implementation, System.Type service) { }
+        public System.Type Implementation { get; }
+        public System.Type Service { get; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
     public sealed class SingletonAttribute<TImplementation> : System.Attribute
@@ -109,6 +125,14 @@ namespace Awaiten
         public string? Factory { get; set; }
         public string? Instance { get; set; }
         public string? Key { get; set; }
+    }
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
+    public sealed class TransientAttribute : System.Attribute
+    {
+        public TransientAttribute(System.Type implementation) { }
+        public TransientAttribute(System.Type implementation, System.Type service) { }
+        public System.Type Implementation { get; }
+        public System.Type Service { get; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
     public sealed class TransientAttribute<TImplementation> : System.Attribute

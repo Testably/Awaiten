@@ -1,0 +1,59 @@
+using System.Linq;
+
+namespace Awaiten.SourceGenerators.Tests;
+
+public partial class DiagnosticTests
+{
+	public class Awt126OpenGenericConstraint
+	{
+		[Fact]
+		public async Task ReportsWhenAClosedTypeArgumentViolatesAReferenceTypeConstraint()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IRepository<T> where T : class { }
+			                                       // where T : class on the implementation: a value-type argument violates it.
+			                                       public sealed class Repository<T> : IRepository<T> where T : class { }
+			                                       public sealed class Root { public Root(IRepository<int> numbers) { } }
+
+			                                       [Container]
+			                                       [Transient(typeof(Repository<>), typeof(IRepository<>))]
+			                                       [Transient<Root>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics.Any(d => d.Contains("AWT126"))).IsTrue()
+				.Because("Repository<int> violates the implementation's where T : class constraint");
+		}
+
+		[Fact]
+		public async Task DoesNotReportWhenTheClosedTypeArgumentSatisfiesTheConstraint()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public sealed class Order { }
+			                                       public interface IRepository<T> where T : class { }
+			                                       public sealed class Repository<T> : IRepository<T> where T : class { }
+			                                       public sealed class Root { public Root(IRepository<Order> orders) { } }
+
+			                                       [Container]
+			                                       [Transient(typeof(Repository<>), typeof(IRepository<>))]
+			                                       [Transient<Root>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics.Any(d => d.Contains("AWT126"))).IsFalse()
+				.Because("Order is a reference type, so it satisfies where T : class");
+		}
+	}
+}
