@@ -1,5 +1,8 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Awaiten.Tests;
 
@@ -12,6 +15,8 @@ namespace Awaiten.Tests;
 /// </summary>
 public partial class DecoratorTests
 {
+	private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
 	[Fact]
 	public async Task SingleDecorator_WrapsTheRegisteredImplementation()
 	{
@@ -126,9 +131,129 @@ public partial class DecoratorTests
 		await That(service.Describe()).IsEqualTo("D2(D1(Real))");
 	}
 
+	[Fact]
+	public async Task Decorator_WithInnerParameterTypedAsABaseOfTheService_ResolvesThroughTheChain()
+	{
+		using BaseTypedInnerContainer.Root container = new();
+
+		IDerivedService service = container.Resolve<IDerivedService>();
+
+		// The decorator's inner parameter is IBase, a base of the decorated IDerivedService. The chain link is
+		// registered under IDerivedService, so the redirect must key to that, not to the parameter's own base type.
+		await That(service).Is<BaseTypedDecorator>();
+		await That(service.Describe()).IsEqualTo("Base(Real)");
+	}
+
+	[Fact]
+	public async Task Decorator_InheritsTheDecoratedRegistrationsScopedLifetime()
+	{
+		using ScopedLifetimeContainer.Root container = new();
+		using IAwaitenScope scope1 = container.CreateScope();
+		using IAwaitenScope scope2 = container.CreateScope();
+
+		IService a = scope1.Resolve<IService>();
+		IService b = scope1.Resolve<IService>();
+		IService c = scope2.Resolve<IService>();
+
+		await That(a).Is<LoggingDecorator>();
+		await That(a).IsSameAs(b).Because("a scoped decorator is one instance within a scope");
+		await That(a).IsNotSameAs(c).Because("each scope builds its own decorated instance");
+	}
+
+	[Fact]
+	public async Task Decorator_OfAnAsyncInitializableService_InitializesTheInnerThenWrapsItAsync()
+	{
+		using AsyncInnerContainer.Root container = new();
+
+		// The inner is IAsyncInitializable, so the whole chain is async-tainted: reachable only through
+		// ResolveAsync (the redirect keeps the taint flowing from the inner up through the decorator).
+		await That(() => container.Resolve<IService>()).Throws<InvalidOperationException>()
+			.Because("an async-tainted decorated service is not exposed to synchronous resolution");
+
+		IService service = await container.ResolveAsync<IService>(Ct);
+
+		await That(service).Is<LoggingDecorator>();
+		await That(service.Describe()).IsEqualTo("Logging(Real(init))")
+			.Because("the async-initializable inner is initialized before the decorator wraps it");
+	}
+
+	[Fact]
+	public async Task Dispose_DisposesBothTheDecoratorAndItsInner_OutermostFirst()
+	{
+		DisposalLog log;
+		using (DisposalOrderContainer.Root container = new())
+		{
+			log = container.Resolve<DisposalLog>();
+			container.Resolve<IService>();
+		}
+
+		// Both the decorator and the implementation it wraps are container-owned and disposed; the decorator is
+		// built after its inner, so it is disposed first (outermost-first) - see the DecorateAttribute remarks.
+		await That(log.Order).HasCount(2);
+		await That(log.Order[0]).IsEqualTo("Decorator");
+		await That(log.Order[1]).IsEqualTo("Real");
+	}
+
 	public interface IService
 	{
 		string Describe();
+	}
+
+	public interface IBase
+	{
+		string Describe();
+	}
+
+	public interface IDerivedService : IBase;
+
+	public sealed class DerivedReal : IDerivedService
+	{
+		public string Describe() => "Real";
+	}
+
+	// A decorator whose single inner parameter is typed as IBase, a base of the decorated IDerivedService.
+	public sealed class BaseTypedDecorator(IBase inner) : IDerivedService
+	{
+		public string Describe() => $"Base({inner.Describe()})";
+	}
+
+	public sealed class ScopedReal : IService
+	{
+		public string Describe() => "Real";
+	}
+
+	// An async-initializable base implementation, to check the async taint flows up through the decorator chain.
+	public sealed class AsyncReal : IService, IAsyncInitializable
+	{
+		private bool _initialized;
+
+		public string Describe() => _initialized ? "Real(init)" : "Real";
+
+		public Task InitializeAsync(CancellationToken cancellationToken)
+		{
+			_initialized = true;
+			return Task.CompletedTask;
+		}
+	}
+
+	// A shared sink recording disposal order; both the inner and the decorator take it as an extra dependency.
+	public sealed class DisposalLog
+	{
+		public List<string> Order { get; } = new();
+	}
+
+	public sealed class DisposableReal(DisposalLog log) : IService, IDisposable
+	{
+		public string Describe() => "Real";
+
+		public void Dispose() => log.Order.Add("Real");
+	}
+
+	public sealed class DisposableDecorator(IService inner, DisposalLog log) : IService, IDisposable
+	{
+		public string Describe() => $"Disposable({inner.Describe()})";
+
+		public void Dispose() => log.Order.Add("Decorator");
 	}
 
 	public sealed class Real : IService
@@ -221,4 +346,25 @@ public partial class DecoratorTests
 	[Decorate<IService, D2>(Order = 1)]
 	[Decorate<IService, D1>]
 	public static partial class ExplicitOrderContainer;
+
+	[Container]
+	[Transient<DerivedReal, IDerivedService>]
+	[Decorate<IDerivedService, BaseTypedDecorator>]
+	public static partial class BaseTypedInnerContainer;
+
+	[Container]
+	[Scoped<ScopedReal, IService>]
+	[Decorate<IService, LoggingDecorator>]
+	public static partial class ScopedLifetimeContainer;
+
+	[Container]
+	[Singleton<AsyncReal, IService>]
+	[Decorate<IService, LoggingDecorator>]
+	public static partial class AsyncInnerContainer;
+
+	[Container]
+	[Singleton<DisposalLog>]
+	[Singleton<DisposableReal, IService>]
+	[Decorate<IService, DisposableDecorator>]
+	public static partial class DisposalOrderContainer;
 }

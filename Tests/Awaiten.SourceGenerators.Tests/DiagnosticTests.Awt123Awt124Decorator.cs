@@ -102,5 +102,57 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).IsEmpty()
 				.Because("a decorator with exactly one inner parameter over a registered service is well-formed");
 		}
+
+		[Fact]
+		public async Task DoesNotReportAwt124WhenAnExtraParameterIsAlsoAssignableFromTheService()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IService { }
+			                                       public sealed class Real : IService { }
+			                                       // (IService inner, object state): `object` is technically assignable-from IService,
+			                                       // but the inner is the most-derived assignable parameter, so it is unambiguous.
+			                                       public sealed class LoggingDecorator : IService { public LoggingDecorator(IService inner, object state) { } }
+
+			                                       [Container]
+			                                       [Transient<Real, IService>]
+			                                       [Decorate<IService, LoggingDecorator>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics.Any(d => d.Contains("AWT124"))).IsFalse()
+				.Because("the inner is the most-derived assignable parameter, so an unrelated `object` sibling is not ambiguous");
+		}
+
+		[Fact]
+		public async Task DoesNotReportAwt124ForADecoratorWithAnInternalConstructor()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IService { }
+			                                       public sealed class Real : IService { }
+			                                       // The container builds the decorator through its internal (same-assembly) constructor,
+			                                       // so validation must consider it too - a public-only check would wrongly report AWT124.
+			                                       public sealed class LoggingDecorator : IService { internal LoggingDecorator(IService inner) { } }
+
+			                                       [Container]
+			                                       [Transient<Real, IService>]
+			                                       [Decorate<IService, LoggingDecorator>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("the decorator's internal same-assembly constructor is the one the container constructs, so it is well-formed");
+		}
 	}
 }

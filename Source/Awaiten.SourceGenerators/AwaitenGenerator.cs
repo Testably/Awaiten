@@ -216,7 +216,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		Dictionary<string, DecoratorInner> decoratorInner = new(StringComparer.Ordinal);
 		if (decorators.Count > 0)
 		{
-			BuildDecoratorChains(decorators, compilation, serviceToImpl, implOrder, serviceMembers, decoratorInner, diagnostics);
+			BuildDecoratorChains(decorators, containerSymbol, compilation, serviceToImpl, implOrder, serviceMembers, decoratorInner, diagnostics);
 		}
 
 		List<InstanceModel> instances = new();
@@ -717,6 +717,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	/// </summary>
 	private static void BuildDecoratorChains(
 		List<DecorateRegistration> decorators,
+		INamedTypeSymbol containerSymbol,
 		Compilation compilation,
 		Dictionary<ServiceKey, string> serviceToImpl,
 		List<ImplInfo> implOrder,
@@ -786,7 +787,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			bool valid = true;
 			foreach (DecorateRegistration decorator in ordered)
 			{
-				string? innerType = SingleInnerParameterType(decorator.Decorator, decorator.ServiceSymbol, compilation);
+				string? innerType = SingleInnerParameterType(decorator.Decorator, decorator.ServiceSymbol, containerSymbol, serviceToImpl, compilation);
 				innerParameterTypes.Add(innerType);
 				if (innerType is null)
 				{
@@ -854,8 +855,10 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 					info.Services.Add(ownKey);
 					serviceToImpl[ownKey] = identity;
 
-					// Redirect this link's inner parameter to the link below it.
-					decoratorInner[identity] = new DecoratorInner(innerParameterTypes[i]!, innerKey);
+					// Redirect this link's inner parameter to the link below it. The chain links are all registered
+					// under the decorated service type, so the redirect keys to (service, innerKey) - not to the
+					// parameter's own declared type, which may be a base of the service and is not a registration key.
+					decoratorInner[identity] = new DecoratorInner(innerParameterTypes[i]!, service, innerKey);
 
 					innerKey = DecoratorKey(service, k, link);
 					previousIdentity = identity;
@@ -876,39 +879,56 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	}
 
 	/// <summary>
-	///     The fully-qualified type of a decorator's single constructor parameter assignable to
-	///     <paramref name="service" />, or <see langword="null" /> when there is none or more than one (AWT124).
-	///     The returned type string is what <see cref="ClassifyParameter" /> produces for that parameter, so the
-	///     inner-parameter redirect in <see cref="ClassifyParameters" /> can match it and key it to the next link.
+	///     The fully-qualified type of a decorator's single constructor parameter that receives the inner
+	///     instance, or <see langword="null" /> when there is none or it is ambiguous (AWT124). The constructor
+	///     is chosen by the same <see cref="SelectConstructor" /> the container uses to build the decorator, so
+	///     this validation can never inspect a different constructor than the one constructed - a divergence
+	///     would leave the inner parameter un-redirected and the link resolving itself. The returned type string
+	///     is what <see cref="ClassifyParameter" /> produces for that parameter, so the inner-parameter redirect
+	///     in <see cref="ClassifyParameters" /> can match it.
 	/// </summary>
-	private static string? SingleInnerParameterType(INamedTypeSymbol decorator, INamedTypeSymbol service, Compilation compilation)
+	private static string? SingleInnerParameterType(
+		INamedTypeSymbol decorator,
+		INamedTypeSymbol service,
+		INamedTypeSymbol containerSymbol,
+		Dictionary<ServiceKey, string> serviceToImpl,
+		Compilation compilation)
 	{
-		IMethodSymbol? constructor = decorator.InstanceConstructors
-			.Where(c => c.DeclaredAccessibility == Accessibility.Public)
-			.OrderByDescending(c => c.Parameters.Length)
-			.FirstOrDefault();
+		IMethodSymbol? constructor = SelectConstructor(decorator, containerSymbol, serviceToImpl.Keys.Select(k => k.Service));
 		if (constructor is null)
 		{
 			return null;
 		}
 
-		// The inner is an instance of the decorated service, so the parameter must accept it: the service type is
-		// implicitly convertible to the parameter's type (the parameter is the service, or a base type of it).
-		string? found = null;
-		foreach (IParameterSymbol parameter in constructor.Parameters)
-		{
-			if (compilation.HasImplicitConversion(service, parameter.Type))
-			{
-				if (found is not null)
-				{
-					return null;
-				}
+		// The inner is an instance of the decorated service, so its parameter must accept it: the service is
+		// implicitly convertible to the parameter's type (the parameter is the service, or a base of it). More
+		// than one parameter can be assignable at once - e.g. a plain `object` state parameter alongside the
+		// inner - so the inner is the most-derived of them: the one every other assignable parameter is a base
+		// of. Exactly one such maximum makes the inner unambiguous; a tie (two equally-derived assignable
+		// parameters, e.g. two `IService`) is genuinely ambiguous and reported as AWT124.
+		List<IParameterSymbol> assignable = constructor.Parameters
+			.Where(p => compilation.HasImplicitConversion(service, p.Type))
+			.ToList();
 
-				found = parameter.Type.ToDisplayString(FullyQualified);
+		IParameterSymbol? inner = null;
+		foreach (IParameterSymbol candidate in assignable)
+		{
+			bool isMaximum = assignable.All(other =>
+				ReferenceEquals(other, candidate) || compilation.HasImplicitConversion(candidate.Type, other.Type));
+			if (!isMaximum)
+			{
+				continue;
 			}
+
+			if (inner is not null)
+			{
+				return null;
+			}
+
+			inner = candidate;
 		}
 
-		return found;
+		return inner?.Type.ToDisplayString(FullyQualified);
 	}
 
 	private static string DecoratorKey(string service, int baseIndex, int link)
@@ -1240,14 +1260,17 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			ParameterModel parameterModel = ClassifyParameter(parameter, asyncFactory);
 
 			// Decorator chain: this instance is a chain link, so its single inner parameter (a direct,
-			// unkeyed dependency on the decorated service type) is redirected to the synthetic key of the
-			// next-lower link - so the keyed resolver produces D2(D1(Real)) rather than the link resolving
-			// its own public service (itself) and recursing. Every other parameter resolves from the graph.
+			// unkeyed dependency assignable to the decorated service type) is redirected to the synthetic key
+			// of the next-lower link - so the keyed resolver produces D2(D1(Real)) rather than the link resolving
+			// its own public service (itself) and recursing. Both the service type and key are rewritten: the
+			// links are registered under the decorated service type, so a parameter declared as a base of the
+			// service still resolves the link (its own declared type is not a registration key). Every other
+			// parameter resolves from the graph.
 			if (parameterModel is { Kind: DependencyKind.Direct, Key: null, }
 			    && decoratorInner.TryGetValue(info.ImplementationType, out DecoratorInner inner)
 			    && parameterModel.ServiceType == inner.ParameterServiceType)
 			{
-				parameterModel = parameterModel with { Key = inner.InnerKey, };
+				parameterModel = parameterModel with { ServiceType = inner.ServiceType, Key = inner.InnerKey, };
 			}
 
 			// A collection type (IEnumerable<T> and friends, or T[]) is normally synthesized from the registrations
@@ -2186,11 +2209,14 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		=> fullyQualified.Replace("global::", string.Empty);
 
 	/// <summary>
-	///     Redirects a decorator instance's inner parameter to the next-lower chain link: the parameter's own
-	///     service type (as <see cref="ClassifyParameter" /> classifies it) and the synthetic key of the link it
-	///     must resolve. Consumed by <see cref="ClassifyParameters" /> when it classifies the decorator link.
+	///     Redirects a decorator instance's inner parameter to the next-lower chain link. <see cref="ParameterServiceType" />
+	///     is the parameter's own declared type (as <see cref="ClassifyParameter" /> classifies it), used to pick the single
+	///     inner parameter out of the constructor. <see cref="ServiceType" /> is the decorated service type - the type under
+	///     which every chain link is registered - so the redirect keys the parameter to <c>(ServiceType, InnerKey)</c> even
+	///     when the parameter is declared as a base type of the service (its declared type is not a registration key).
+	///     Consumed by <see cref="ClassifyParameters" /> when it classifies the decorator link.
 	/// </summary>
-	private readonly record struct DecoratorInner(string ParameterServiceType, string InnerKey);
+	private readonly record struct DecoratorInner(string ParameterServiceType, string ServiceType, string InnerKey);
 
 	private sealed class ImplInfo
 	{

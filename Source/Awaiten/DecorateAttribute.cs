@@ -18,6 +18,13 @@ namespace Awaiten;
 ///     by declaration order. Decorating a service also decorates every collection
 ///     (<c>IEnumerable&lt;IService&gt;</c>, <c>IService[]</c>, …) view of it, so the decorator cannot
 ///     be bypassed: a service with several registrations is decorated member by member.
+///     <para>
+///         The decorator and the implementation it wraps are <em>each</em> owned by the container and
+///         disposed independently, outermost first (a decorator is built after its inner, so it is
+///         disposed before it). A decorator that also disposes the inner instance handed to it would
+///         therefore dispose it twice, so leave the inner's disposal to the container - or make the
+///         decorator's <c>Dispose</c> idempotent if it must forward.
+///     </para>
 /// </remarks>
 /// <typeparam name="TService">The service type to decorate.</typeparam>
 /// <typeparam name="TDecorator">
