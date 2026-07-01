@@ -173,25 +173,29 @@ internal static class ContainerRegistrations
 	}
 
 	/// <summary>
-	///     The open generic expansion worklist. Seeds from every closed generic service required by an
-	///     already-known implementation's constructor whose open form is registered but which has no concrete
-	///     registration; constructs the matching closed implementation through Roslyn symbol construction,
-	///     verifies its type-parameter constraints (AWT126), and synthesizes a concrete <see cref="RawRegistration" />.
-	///     The synthesized implementation's own constructor may reference further closed generics, so the
-	///     worklist iterates to a fixpoint.
+	///     The open generic expansion worklist (extended for open-generic collections). Seeds from every
+	///     closed generic service required by an already-known implementation's constructor - including the
+	///     element of a collection parameter (<c>IEnumerable&lt;IHandler&lt;OrderPlaced&gt;&gt;</c> seeds the
+	///     closed service <c>IHandler&lt;OrderPlaced&gt;</c>). For each such service it expands <em>every</em>
+	///     open registration whose open form matches (not just the first), so a collection of a closed generic
+	///     receives one closed implementation per matching open registration in declaration order; constructs
+	///     each closed implementation through Roslyn symbol construction, verifies its type-parameter
+	///     constraints (AWT126), and synthesizes a concrete <see cref="RawRegistration" /> per match. Synthesized
+	///     registrations are ordinary unkeyed registrations from coalescing onward, so the first wins single
+	///     dispatch and all of them become collection members exactly like hand-written duplicates. The
+	///     synthesized implementations' own constructors may reference further closed generics, so the worklist
+	///     iterates to a fixpoint.
 	/// </summary>
 	private static void ExpandOpenGenerics(
 		List<RawRegistration> raw,
 		List<OpenRegistration> open,
 		List<DiagnosticInfo> diagnostics)
 	{
-		// Already-satisfied closed services (concrete registrations) - never re-synthesized; the explicit
-		// registration wins. Synthesized closed impls are also tracked so a service is expanded only once.
-		HashSet<string> registeredServices = new(StringComparer.Ordinal);
-		foreach (RawRegistration registration in raw)
-		{
-			registeredServices.Add(registration.ServiceType);
-		}
+		// Closed services already expanded from the open registrations - expanded once, since a single visit
+		// synthesizes every matching open registration. An explicitly-registered concrete closed service is
+		// not blocked here: its open-expanded siblings coexist as additional collection members, joining the
+		// explicit one through ordinary coalescing.
+		HashSet<string> expandedServices = new(StringComparer.Ordinal);
 
 		// The constructor parameters to scan for closed generic dependencies. Seeded from every known
 		// implementation; grows as closed impls are synthesized.
@@ -219,63 +223,64 @@ internal static class ContainerRegistrations
 				}
 
 				string closedService = closed.ToDisplayString(FullyQualified);
-				if (registeredServices.Contains(closedService))
+				if (!expandedServices.Add(closedService))
 				{
 					continue;
 				}
 
-				// Match the closed service's open form against an open registration (exact arity, v1).
+				// Expand every open registration whose open form matches the closed service's open form
+				// (exact arity, v1), in declaration order, deduped by closed implementation. A single match
+				// yields one closed registration (the single-dispatch case); several matches yield the
+				// collection members for a closed-generic collection.
 				INamedTypeSymbol openForm = closed.ConstructedFrom;
-				OpenRegistration? match = null;
+				ITypeSymbol[] typeArguments = closed.TypeArguments.ToArray();
+				HashSet<string> synthesizedImpls = new(StringComparer.Ordinal);
 				foreach (OpenRegistration candidate in open)
 				{
-					if (SymbolEqualityComparer.Default.Equals(candidate.Service, openForm))
+					if (!SymbolEqualityComparer.Default.Equals(candidate.Service, openForm))
 					{
-						match = candidate;
-						break;
-					}
-				}
-
-				if (match is null)
-				{
-					continue;
-				}
-
-				// Map the closed service's type arguments onto the implementation's type parameters and
-				// construct the closed implementation (e.g. Repository<> + [Order] -> Repository<Order>).
-				ITypeSymbol[] typeArguments = closed.TypeArguments.ToArray();
-				INamedTypeSymbol closedImpl = match.Implementation.Construct(typeArguments);
-
-				// AWT126: the closed type arguments must satisfy the implementation's constraints
-				// (e.g. Repository<int> against where T : class).
-				if (!ConstraintsSatisfied(match.Implementation, typeArguments))
-				{
-					if (reportedConstraints.Add(closedService))
-					{
-						diagnostics.Add(new DiagnosticInfo(
-							Diagnostics.OpenGenericConstraintViolation,
-							match.Location,
-							new EquatableArray<string>([
-								AwaitenGenerator.Display(closedImpl.ToDisplayString(FullyQualified)),
-								AwaitenGenerator.Display(match.Implementation.ToDisplayString(FullyQualified)),
-							])));
+						continue;
 					}
 
-					registeredServices.Add(closedService);
-					continue;
-				}
+					// Map the closed service's type arguments onto the implementation's type parameters and
+					// construct the closed implementation (e.g. Repository<> + [Order] -> Repository<Order>).
+					INamedTypeSymbol closedImpl = candidate.Implementation.Construct(typeArguments);
+					string closedImplName = closedImpl.ToDisplayString(FullyQualified);
 
-				registeredServices.Add(closedService);
-				raw.Add(new RawRegistration(
-					closedService,
-					closedImpl.ToDisplayString(FullyQualified),
-					match.Lifetime,
-					closedImpl,
-					match.Location?.ToLocation()));
+					// AWT126: the closed type arguments must satisfy the implementation's constraints
+					// (e.g. Repository<int> against where T : class).
+					if (!ConstraintsSatisfied(candidate.Implementation, typeArguments))
+					{
+						if (reportedConstraints.Add(closedImplName))
+						{
+							diagnostics.Add(new DiagnosticInfo(
+								Diagnostics.OpenGenericConstraintViolation,
+								candidate.Location,
+								new EquatableArray<string>([
+									AwaitenGenerator.Display(closedImplName),
+									AwaitenGenerator.Display(candidate.Implementation.ToDisplayString(FullyQualified)),
+								])));
+						}
 
-				if (seen.Add(closedImpl))
-				{
-					worklist.Enqueue(closedImpl);
+						continue;
+					}
+
+					if (!synthesizedImpls.Add(closedImplName))
+					{
+						continue;
+					}
+
+					raw.Add(new RawRegistration(
+						closedService,
+						closedImplName,
+						candidate.Lifetime,
+						closedImpl,
+						candidate.Location?.ToLocation()));
+
+					if (seen.Add(closedImpl))
+					{
+						worklist.Enqueue(closedImpl);
+					}
 				}
 			}
 		}
@@ -284,7 +289,8 @@ internal static class ContainerRegistrations
 	/// <summary>
 	///     The service types an implementation's (greediest public) constructor depends on, unwrapping the
 	///     relationship and collection shapes so a closed generic reached through <c>Func&lt;T&gt;</c>,
-	///     <c>Lazy&lt;T&gt;</c> or <c>IEnumerable&lt;T&gt;</c> still seeds open generic expansion.
+	///     <c>Lazy&lt;T&gt;</c>, <c>IEnumerable&lt;T&gt;</c> or an awaited collection
+	///     (<c>Task&lt;IReadOnlyList&lt;T&gt;&gt;</c> / <c>ValueTask&lt;T[]&gt;</c>) still seeds open generic expansion.
 	/// </summary>
 	private static IEnumerable<ITypeSymbol> RequiredServiceTypes(INamedTypeSymbol implementation)
 	{
@@ -300,6 +306,15 @@ internal static class ContainerRegistrations
 		foreach (IParameterSymbol parameter in constructor.Parameters)
 		{
 			ITypeSymbol type = parameter.Type;
+
+			// Unwrap one Task<…>/ValueTask<…> layer first, so an awaited single service (Task<IHandler<T>>)
+			// or awaited collection (Task<IReadOnlyList<IHandler<T>>>) seeds expansion through the inner type.
+			if (type is INamedTypeSymbol { IsGenericType: true, TypeArguments.Length: 1, } awaitable
+			    && awaitable.ContainingNamespace?.ToDisplayString() == "System.Threading.Tasks"
+			    && awaitable.Name is "Task" or "ValueTask")
+			{
+				type = awaitable.TypeArguments[0];
+			}
 
 			// Unwrap a collection element (T[] or IEnumerable<T> and friends).
 			if (type is IArrayTypeSymbol array)

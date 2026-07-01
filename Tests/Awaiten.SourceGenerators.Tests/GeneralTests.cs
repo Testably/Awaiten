@@ -568,4 +568,38 @@ public class GeneralTests
 		await That(source).Contains("new global::MyCode.Validator<global::MyCode.Order>()");
 		await That(source).Contains("new global::MyCode.Handler<global::MyCode.Order>(");
 	}
+
+	[Fact]
+	public async Task OpenGenericCollection_ExpandsEveryOpenRegistrationIntoTheClosedCollection()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class OrderPlaced { }
+		                                       public interface IHandler<T> { }
+		                                       public sealed class AuditHandler<T> : IHandler<T> { }
+		                                       public sealed class ProjectionHandler<T> : IHandler<T> { }
+		                                       public sealed class Dispatcher { public Dispatcher(IEnumerable<IHandler<OrderPlaced>> handlers) { } }
+
+		                                       [Container]
+		                                       [Transient(typeof(AuditHandler<>), typeof(IHandler<>))]
+		                                       [Transient(typeof(ProjectionHandler<>), typeof(IHandler<>))]
+		                                       [Transient<Dispatcher>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// Both open registrations are expanded at OrderPlaced, so the collection of IHandler<OrderPlaced> is a
+		// closed array over both expanded implementations (the winner still takes the single-dispatch slot).
+		await That(source).Contains("new global::MyCode.IHandler<global::MyCode.OrderPlaced>[] {");
+		await That(source).Contains("new global::MyCode.AuditHandler<global::MyCode.OrderPlaced>()");
+		await That(source).Contains("new global::MyCode.ProjectionHandler<global::MyCode.OrderPlaced>()");
+	}
 }
