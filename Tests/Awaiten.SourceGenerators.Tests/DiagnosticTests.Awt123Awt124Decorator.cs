@@ -154,5 +154,61 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).IsEmpty()
 				.Because("the decorator's internal same-assembly constructor is the one the container constructs, so it is well-formed");
 		}
+
+		[Fact]
+		public async Task ReportsAwt124WhenTheOnlyServiceAssignableParameterIsKeyed()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IService { }
+			                                       public sealed class Real : IService { }
+			                                       // The single IService parameter is [FromKey]-ed: it selects a specific keyed
+			                                       // registration, so it is a separate dependency, not the chain inner - leaving the
+			                                       // decorator with no unkeyed parameter to receive the inner instance.
+			                                       public sealed class Deco : IService { public Deco([FromKey("k")] IService inner) { } }
+
+			                                       [Container]
+			                                       [Transient<Real, IService>]
+			                                       [Decorate<Deco, IService>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics.Any(d => d.Contains("AWT124"))).IsTrue()
+				.Because("a [FromKey] parameter is not the chain inner, so the decorator has no parameter to receive it");
+		}
+
+		[Fact]
+		public async Task DiagnosticsNameTheRealDecoratorTypeNotTheSyntheticIdentity()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using System.Collections.Generic;
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IService { }
+			                                       public sealed class Real : IService { }
+			                                       // Depending on the collection of the decorated service closes a cycle (the collection
+			                                       // now yields the decorator itself), so this reports AWT102 naming the decorator.
+			                                       public sealed class Deco : IService { public Deco(IService inner, IEnumerable<IService> all) { } }
+
+			                                       [Container]
+			                                       [Transient<Real, IService>]
+			                                       [Decorate<Deco, IService>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics.Any(d => d.Contains("AWT102") && d.Contains("MyCode.Deco"))).IsTrue()
+				.Because("the cycle diagnostic must name the real decorator type");
+			await That(result.Diagnostics.Any(d => d.Contains("@__dec:"))).IsFalse()
+				.Because("the internal synthetic '@__dec:' identity must not leak into user-facing diagnostics");
+		}
 	}
 }

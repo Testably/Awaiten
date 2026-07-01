@@ -22,7 +22,9 @@ namespace Awaiten;
 ///     <c>D2(D1(Real))</c>. Use <see cref="Order" /> to position a decorator explicitly rather than
 ///     by declaration order. Decorating a service also decorates every collection
 ///     (<c>IEnumerable&lt;IService&gt;</c>, <c>IService[]</c>, …) view of it, so the decorator cannot
-///     be bypassed: a service with several registrations is decorated member by member.
+///     be bypassed: a service with several registrations is decorated member by member. Only the unkeyed
+///     registration of <typeparamref name="TService" /> is decorated; a service registered solely under a
+///     <c>[FromKey]</c> key has no unkeyed registration to wrap and reports AWT123.
 ///     <para>
 ///         The type parameters are ordered <typeparamref name="TDecorator" /> then
 ///         <typeparamref name="TService" /> - the concrete type first, then the service it is exposed

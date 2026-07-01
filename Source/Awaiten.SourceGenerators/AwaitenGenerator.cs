@@ -704,6 +704,9 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		}
 	}
 
+	// A decorator chain link's synthetic key and identity are built from this prefix; DisplayInstance also keys
+	// off it to trim the synthetic suffix out of diagnostics. Kept on the enclosing type so both the nested
+	// DecoratorChainBuilder and DisplayInstance can reach it (a nested type's private member is not visible here).
 	private const string DecoratorKeyPrefix = "__dec:";
 
 	/// <summary>
@@ -842,7 +845,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			bool valid = true;
 			foreach (DecorateRegistration decorator in ordered)
 			{
-				string? innerType = SingleInnerParameterType(decorator.Decorator, decorator.ServiceSymbol, _containerSymbol, _serviceToImpl, _compilation);
+				string? innerType = SingleInnerParameterType(decorator.Decorator, decorator.ServiceSymbol);
 				if (innerType is null)
 				{
 					Report(Diagnostics.DecoratorMissingInnerParameter, decorator.Location,
@@ -961,66 +964,64 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			List<string>? Members,
 			List<DecorateRegistration> Ordered,
 			List<string> InnerParameterTypes);
-	}
 
-	/// <summary>
-	///     The fully-qualified type of a decorator's single constructor parameter that receives the inner
-	///     instance, or <see langword="null" /> when there is none or it is ambiguous (AWT124). The constructor
-	///     is chosen by the same <see cref="SelectConstructor" /> the container uses to build the decorator, so
-	///     this validation can never inspect a different constructor than the one constructed - a divergence
-	///     would leave the inner parameter un-redirected and the link resolving itself. The returned type string
-	///     is what <see cref="ClassifyParameter" /> produces for that parameter, so the inner-parameter redirect
-	///     in <see cref="ClassifyParameters" /> can match it.
-	/// </summary>
-	private static string? SingleInnerParameterType(
-		INamedTypeSymbol decorator,
-		INamedTypeSymbol service,
-		INamedTypeSymbol containerSymbol,
-		Dictionary<ServiceKey, string> serviceToImpl,
-		Compilation compilation)
-	{
-		IMethodSymbol? constructor = SelectConstructor(decorator, containerSymbol, serviceToImpl.Keys.Select(k => k.Service));
-		if (constructor is null)
+		/// <summary>
+		///     The fully-qualified type of a decorator's single constructor parameter that receives the inner
+		///     instance, or <see langword="null" /> when there is none or it is ambiguous (AWT124). The constructor
+		///     is chosen by the same <see cref="SelectConstructor" /> the container uses to build the decorator, so
+		///     this validation can never inspect a different constructor than the one constructed - a divergence
+		///     would leave the inner parameter un-redirected and the link resolving itself. The returned type string
+		///     is what <see cref="ClassifyParameter" /> produces for that parameter, so the inner-parameter redirect
+		///     in <see cref="ClassifyParameters" /> can match it.
+		/// </summary>
+		private string? SingleInnerParameterType(INamedTypeSymbol decorator, INamedTypeSymbol service)
 		{
-			return null;
-		}
-
-		// The inner is an instance of the decorated service, so its parameter must accept it: the service is
-		// implicitly convertible to the parameter's type (the parameter is the service, or a base of it). More
-		// than one parameter can be assignable at once - e.g. a plain `object` state parameter alongside the
-		// inner - so the inner is the most-derived of them: the one every other assignable parameter is a base
-		// of. Exactly one such maximum makes the inner unambiguous; a tie (two equally-derived assignable
-		// parameters, e.g. two `IService`) is genuinely ambiguous and reported as AWT124.
-		List<IParameterSymbol> assignable = constructor.Parameters
-			.Where(p => compilation.HasImplicitConversion(service, p.Type))
-			.ToList();
-
-		IParameterSymbol? inner = null;
-		foreach (IParameterSymbol candidate in assignable)
-		{
-			bool isMaximum = assignable.All(other =>
-				ReferenceEquals(other, candidate) || compilation.HasImplicitConversion(candidate.Type, other.Type));
-			if (!isMaximum)
-			{
-				continue;
-			}
-
-			if (inner is not null)
+			IMethodSymbol? constructor = SelectConstructor(decorator, _containerSymbol, _serviceToImpl.Keys.Select(k => k.Service));
+			if (constructor is null)
 			{
 				return null;
 			}
 
-			inner = candidate;
+			// The inner is an instance of the decorated service, so its parameter must accept it: the service is
+			// implicitly convertible to the parameter's type (the parameter is the service, or a base of it). A
+			// [FromKey] parameter is excluded - it deliberately selects a specific keyed registration, so it is a
+			// separate dependency, never the chain inner (which is redirected by key and would ignore the [FromKey]
+			// anyway). More than one parameter can be assignable at once - e.g. a plain `object` state parameter
+			// alongside the inner - so the inner is the most-derived of them: the one every other assignable
+			// parameter is a base of. Exactly one such maximum makes the inner unambiguous; a tie (two
+			// equally-derived assignable parameters, e.g. two `IService`) is genuinely ambiguous and reported as
+			// AWT124, as is a decorator whose only service-assignable parameter is [FromKey]-ed.
+			List<IParameterSymbol> assignable = constructor.Parameters
+				.Where(p => FromKey(p) is null && _compilation.HasImplicitConversion(service, p.Type))
+				.ToList();
+
+			IParameterSymbol? inner = null;
+			foreach (IParameterSymbol candidate in assignable)
+			{
+				bool isMaximum = assignable.All(other =>
+					ReferenceEquals(other, candidate) || _compilation.HasImplicitConversion(candidate.Type, other.Type));
+				if (!isMaximum)
+				{
+					continue;
+				}
+
+				if (inner is not null)
+				{
+					return null;
+				}
+
+				inner = candidate;
+			}
+
+			return inner?.Type.ToDisplayString(FullyQualified);
 		}
 
-		return inner?.Type.ToDisplayString(FullyQualified);
+		private static string DecoratorKey(string service, int baseIndex, int link)
+			=> $"{DecoratorKeyPrefix}{service}:{baseIndex}:{link}";
+
+		private static string DecoratorIdentity(string decoratorType, string service, int baseIndex, int link)
+			=> $"{decoratorType}@{DecoratorKeyPrefix}{service}:{baseIndex}:{link}";
 	}
-
-	private static string DecoratorKey(string service, int baseIndex, int link)
-		=> $"{DecoratorKeyPrefix}{service}:{baseIndex}:{link}";
-
-	private static string DecoratorIdentity(string decoratorType, string service, int baseIndex, int link)
-		=> $"{decoratorType}@{DecoratorKeyPrefix}{service}:{baseIndex}:{link}";
 
 	private static InstanceModel? BuildInstance(
 		ImplInfo info,
@@ -1405,7 +1406,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 					info.Location,
 					new EquatableArray<string>([
 						Display(info.OwningServiceOrImpl),
-						Display(info.ImplementationType),
+						DisplayInstance(info.ImplementationType),
 						DisplayKeyed(parameterModel.ServiceType, parameterModel.Key),
 					])));
 			}
@@ -2281,7 +2282,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 				return;
 			}
 
-			string rendered = string.Join(" -> ", cycle.Select(index => Display(instances[index].ImplementationType)));
+			string rendered = string.Join(" -> ", cycle.Select(index => DisplayInstance(instances[index].ImplementationType)));
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.DependencyCycle,
 				containerLocation,
@@ -2303,6 +2304,15 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	// diagnostics read 'System.Func<MyCode.Leaf>' rather than 'System.Func<global::MyCode.Leaf>'.
 	internal static string Display(string fullyQualified)
 		=> fullyQualified.Replace("global::", string.Empty);
+
+	// Renders an instance identity for diagnostics. A decorator chain link carries a synthetic
+	// '<type>@__dec:…' identity (see DecoratorIdentity); trim the synthetic suffix so an error names the real
+	// decorator type ('MyCode.Deco') rather than the internal key ('MyCode.Deco@__dec:MyCode.IService:0:1').
+	internal static string DisplayInstance(string implementationType)
+	{
+		int marker = implementationType.IndexOf("@" + DecoratorKeyPrefix, StringComparison.Ordinal);
+		return Display(marker >= 0 ? implementationType.Substring(0, marker) : implementationType);
+	}
 
 	/// <summary>
 	///     Redirects a decorator instance's inner parameter to the next-lower chain link. <see cref="ParameterServiceType" />
