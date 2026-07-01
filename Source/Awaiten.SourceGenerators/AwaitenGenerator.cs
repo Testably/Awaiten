@@ -1808,9 +1808,9 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 						Diagnostics.SynchronousAsyncResolution,
 						location,
 						new EquatableArray<string>([
-							Display(instances[i].ImplementationType),
+							DisplayInstance(instances[i].ImplementationType),
 							parameter.Kind.ToString(),
-							Display(instances[target].ImplementationType),
+							DisplayInstance(instances[target].ImplementationType),
 						])));
 				}
 				else
@@ -1820,7 +1820,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 						Diagnostics.AsyncDependencyOnSyncPath,
 						location,
 						new EquatableArray<string>([
-							Display(instances[i].ImplementationType),
+							DisplayInstance(instances[i].ImplementationType),
 							path,
 						])));
 				}
@@ -1890,9 +1890,9 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 				Diagnostics.AsyncCollectionResolution,
 				instanceLocations[consumer],
 				new EquatableArray<string>([
-					Display(instances[consumer].ImplementationType),
+					DisplayInstance(instances[consumer].ImplementationType),
 					Display(parameter.ServiceType),
-					Display(instances[memberIndex].ImplementationType),
+					DisplayInstance(instances[memberIndex].ImplementationType),
 				])));
 		}
 	}
@@ -1934,7 +1934,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			}
 		}
 
-		return string.Join(" -> ", chain.Select(index => Display(instances[index].ImplementationType)));
+		return string.Join(" -> ", chain.Select(index => DisplayInstance(instances[index].ImplementationType)));
 	}
 
 	// Whether a type is a System.Threading.Tasks.Task<T>, yielding its result type T. Used to recognize the
@@ -2138,7 +2138,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.ParameterizedRequiresFunc,
 				location,
-				new EquatableArray<string>([Display(parameter.ServiceType), Display(consumer.ImplementationType),])));
+				new EquatableArray<string>([Display(parameter.ServiceType), DisplayInstance(consumer.ImplementationType),])));
 		}
 	}
 
@@ -2196,7 +2196,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 						Diagnostics.CaptiveDependency,
 						instanceLocations[singleton],
 						new EquatableArray<string>([
-							Display(instances[singleton].ImplementationType),
+							DisplayInstance(instances[singleton].ImplementationType),
 							DisplayKeyed(referenced.Service, referenced.Key),
 						])));
 					break;

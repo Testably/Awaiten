@@ -210,5 +210,35 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics.Any(d => d.Contains("@__dec:"))).IsFalse()
 				.Because("the internal synthetic '@__dec:' identity must not leak into user-facing diagnostics");
 		}
+
+		[Fact]
+		public async Task CaptiveDependencyDiagnosticNamesTheRealDecoratorType()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IService { }
+			                                       public sealed class Real : IService { }
+			                                       public sealed class Narrower { }
+			                                       // The decorator inherits Real's singleton lifetime and takes a scoped side-dependency,
+			                                       // so the singleton decorator captively holds the scoped Narrower - reported as AWT105.
+			                                       public sealed class Deco : IService { public Deco(IService inner, Narrower narrower) { } }
+
+			                                       [Container]
+			                                       [Singleton<Real, IService>]
+			                                       [Scoped<Narrower>]
+			                                       [Decorate<Deco, IService>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics.Any(d => d.Contains("AWT105") && d.Contains("MyCode.Deco"))).IsTrue()
+				.Because("the captive-dependency diagnostic must name the real decorator type");
+			await That(result.Diagnostics.Any(d => d.Contains("@__dec:"))).IsFalse()
+				.Because("the internal synthetic '@__dec:' identity must not leak into the captive-dependency diagnostic");
+		}
 	}
 }
