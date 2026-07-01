@@ -1327,12 +1327,6 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	}
 
 	/// <summary>
-	///     Classifies the producer's parameters (a constructor's or a factory method's) and reports
-	///     <see cref="Diagnostics.MissingDependency">AWT101</see> for any non-<c>[Arg]</c> parameter whose
-	///     service type is not registered. A runtime argument (<c>[Arg]</c>) is supplied at resolve time, so
-	///     it is never a missing dependency.
-	/// </summary>
-	/// <summary>
 	///     Redirects a decorator chain link's single inner parameter (a direct, unkeyed dependency assignable to
 	///     the decorated service type) to the synthetic key of the next-lower link - so the keyed resolver
 	///     produces <c>D2(D1(Real))</c> rather than the link resolving its own public service (itself) and
@@ -1356,6 +1350,12 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		return parameterModel;
 	}
 
+	/// <summary>
+	///     Classifies the producer's parameters (a constructor's or a factory method's) and reports
+	///     <see cref="Diagnostics.MissingDependency">AWT101</see> for any non-<c>[Arg]</c> parameter whose
+	///     service type is not registered. A runtime argument (<c>[Arg]</c>) is supplied at resolve time, so
+	///     it is never a missing dependency.
+	/// </summary>
 	private static List<ParameterModel> ClassifyParameters(
 		IMethodSymbol producer,
 		ImplInfo info,
