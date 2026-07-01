@@ -26,6 +26,13 @@ namespace Awaiten
         public Awaiten.LifetimeSafety LifetimeSafety { get; set; }
         public bool SyncResolveAfterInit { get; set; }
     }
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
+    public sealed class DecorateAttribute<TService, TDecorator> : System.Attribute
+        where TDecorator :  class, TService
+    {
+        public DecorateAttribute() { }
+        public int Order { get; set; }
+    }
     [System.AttributeUsage(System.AttributeTargets.Parameter, AllowMultiple=false, Inherited=false)]
     public sealed class FromKeyAttribute : System.Attribute
     {

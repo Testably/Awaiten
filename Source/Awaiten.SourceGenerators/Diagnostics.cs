@@ -331,4 +331,29 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A <c>[Decorate&lt;TService, TDecorator&gt;]</c> names a service that has no registration to
+	///     decorate, so there is no inner implementation to wrap.
+	/// </summary>
+	public static readonly DiagnosticDescriptor DecoratedServiceNotRegistered = new(
+		"AWT123",
+		"Decorated service not registered",
+		"'{0}' is decorated by '{1}' but has no registration to decorate; register the service before decorating it",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A decorator's constructor has no — or more than one ambiguous — parameter assignable to the
+	///     decorated service type, so Awaiten cannot tell which parameter receives the inner instance
+	///     (e.g. <c>LoggingDecorator(IService a, IService b)</c> or one that takes no <c>IService</c> at all).
+	/// </summary>
+	public static readonly DiagnosticDescriptor DecoratorMissingInnerParameter = new(
+		"AWT124",
+		"Decorator has no single inner parameter",
+		"The decorator '{0}' must have exactly one constructor parameter assignable to the decorated service '{1}'; it has none or several",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

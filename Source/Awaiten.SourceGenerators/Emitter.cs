@@ -619,7 +619,7 @@ internal static class Emitter
 			if (!instance.IsAsyncTainted)
 			{
 				string modifier = instance.IsReferenceType ? "private volatile " : "private ";
-				Indent(builder, depth).Append(modifier).Append(instance.ImplementationType)
+				Indent(builder, depth).Append(modifier).Append(instance.ConstructedType)
 					.Append("? ").Append(names.Field(i)).AppendLine(";");
 			}
 
@@ -627,7 +627,7 @@ internal static class Emitter
 			// once; it is volatile so the lock-free read cannot observe it before its writes are visible.
 			if (instance.IsAsyncTainted)
 			{
-				Indent(builder, depth).Append("private volatile global::System.Threading.Tasks.Task<").Append(instance.ImplementationType)
+				Indent(builder, depth).Append("private volatile global::System.Threading.Tasks.Task<").Append(instance.ConstructedType)
 					.Append(">? ").Append(names.AsyncField(i)).AppendLine(";");
 			}
 		}
@@ -1158,7 +1158,7 @@ internal static class Emitter
 		InstanceModel instance = context.Instances[index];
 		Names names = context.Names;
 		bool asyncDisposal = context.AsyncDisposal;
-		string type = instance.ImplementationType;
+		string type = instance.ConstructedType;
 		string resolver = names.Resolver(index);
 
 		if (instance.IsParameterized)
@@ -1314,7 +1314,7 @@ internal static class Emitter
 	{
 		InstanceModel instance = context.Instances[index];
 		Names names = context.Names;
-		string type = instance.ImplementationType;
+		string type = instance.ConstructedType;
 		string resolver = names.Resolver(index);
 
 		if (instance.Production == ProductionKind.Instance)
@@ -1433,7 +1433,7 @@ internal static class Emitter
 
 		if (instance.Lifetime == Lifetime.Singleton)
 		{
-			Indent(builder, depth).Append("protected virtual ").Append(task).Append('<').Append(instance.ImplementationType)
+			Indent(builder, depth).Append("protected virtual ").Append(task).Append('<').Append(instance.ConstructedType)
 				.Append("> ").Append(names.AsyncResolver(index)).Append('(').Append(ct).Append(") => __root.")
 				.Append(names.AsyncResolver(index)).AppendLine("(cancellationToken);");
 			return;
@@ -1467,7 +1467,7 @@ internal static class Emitter
 		string signature = string.Join(", ", argTypes.Select((t, i) => $"{t} a{i}"));
 		string forward = string.Join("", argTypes.Select((_, i) => "a" + i + ", "));
 
-		Indent(builder, depth).Append("internal ").Append(instance.ImplementationType).Append(' ')
+		Indent(builder, depth).Append("internal ").Append(instance.ConstructedType).Append(' ')
 			.Append(names.Resolver(index)).Append('(').Append(signature).AppendLine(")");
 		Indent(builder, depth).AppendLine("{");
 		EmitDisposedGuard(builder, depth + 1);
@@ -1499,7 +1499,7 @@ internal static class Emitter
 	{
 		InstanceModel instance = context.Instances[index];
 		Names names = context.Names;
-		string type = instance.ImplementationType;
+		string type = instance.ConstructedType;
 		string asyncResolver = names.AsyncResolver(index);
 		string asyncField = names.AsyncField(index);
 		string creator = names.AsyncCreator(index);
@@ -1553,7 +1553,7 @@ internal static class Emitter
 	{
 		InstanceModel instance = context.Instances[index];
 		Names names = context.Names;
-		string type = instance.ImplementationType;
+		string type = instance.ConstructedType;
 		const string task = "global::System.Threading.Tasks.Task";
 		const string ct = "global::System.Threading.CancellationToken cancellationToken";
 
@@ -1827,7 +1827,7 @@ internal static class Emitter
 			return $"{instance.ProductionMember}({arguments})";
 		}
 
-		return $"new {instance.ImplementationType}({arguments})";
+		return $"new {instance.ConstructedType}({arguments})";
 	}
 
 	/// <summary>

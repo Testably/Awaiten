@@ -69,6 +69,46 @@ internal static class ContainerRegistrations
 	}
 
 	/// <summary>
+	///     Reads the <c>[Decorate&lt;TService, TDecorator&gt;]</c> registrations declared on a container, in
+	///     declaration order. Each carries its declaration index so equal <c>Order</c> values fall back to
+	///     declaration order when the chain is built. Collected apart from the lifetime registrations because a
+	///     decorator wraps an existing registration after coalescing rather than introducing a new service.
+	/// </summary>
+	public static List<DecorateRegistration> CollectDecorators(INamedTypeSymbol containerSymbol)
+	{
+		List<DecorateRegistration> result = new();
+		foreach (AttributeData attribute in containerSymbol.GetAttributes())
+		{
+			if (attribute.AttributeClass is not { Name: "DecorateAttribute", IsGenericType: true, TypeArguments.Length: 2, } attributeClass
+			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace
+			    || attributeClass.TypeArguments[0] is not INamedTypeSymbol service
+			    || attributeClass.TypeArguments[1] is not INamedTypeSymbol decorator)
+			{
+				continue;
+			}
+
+			int order = 0;
+			foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
+			{
+				if (argument.Key == "Order" && argument.Value.Value is int value)
+				{
+					order = value;
+				}
+			}
+
+			result.Add(new DecorateRegistration(
+				service.ToDisplayString(FullyQualified),
+				service,
+				decorator,
+				order,
+				result.Count,
+				attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation()));
+		}
+
+		return result;
+	}
+
+	/// <summary>
 	///     Resolves how a registration produces its instance. A <c>Factory</c> argument names a container
 	///     method that produces it; an <c>Instance</c> argument names a pre-built container member to
 	///     expose. Setting both is contradictory (the returned flag drives AWT110); when only one is set it

@@ -41,8 +41,19 @@ internal sealed record InstanceModel(
 	bool IsAsyncTainted = false,
 	bool IsAsyncFactory = false,
 	bool RuntimeDisposalCheck = false,
-	bool IsAsyncDisposable = false)
+	bool IsAsyncDisposable = false,
+	string? EmitType = null)
 {
+	/// <summary>
+	///     The concrete type to construct (<c>new …</c>) and to use for cache fields and resolver return
+	///     types. Normally the same as <see cref="ImplementationType" />, but a decorator chain link reuses
+	///     one decorator type across several distinct instances, so it carries a synthetic
+	///     <see cref="ImplementationType" /> identity while <see cref="EmitType" /> holds the real type. Every
+	///     other use of <see cref="ImplementationType" /> stays the instance identity (keying, caching and
+	///     collection tracking), so ordinary registrations - where <see cref="EmitType" /> is null - are unaffected.
+	/// </summary>
+	public string ConstructedType => EmitType ?? ImplementationType;
+
 	/// <summary>
 	///     Whether the container owns this instance for disposal in either sense - its declared type implements
 	///     <c>IDisposable</c> or <c>IAsyncDisposable</c> - so it is tracked for teardown and its on-demand
