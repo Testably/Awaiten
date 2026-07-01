@@ -14,9 +14,14 @@ namespace Awaiten.SourceGenerators.Internals;
 ///     ordinary <see cref="Direct" /> dependency instead. <see cref="Task" />, <see cref="FuncTask" /> and
 ///     <see cref="LazyTask" /> are the asynchronous counterparts of <see cref="Direct" />/<see cref="Func" />/
 ///     <see cref="Lazy" />: awaitable relationships that resolve (and initialize) the target through its async
-///     resolver. Like the synchronous relationship types they defer resolution, so they contribute no graph
-///     edge and launder async taint - which is what lets a synchronously-resolvable consumer hold one over an
-///     async-initialized service without becoming async-tainted (and without tripping AWT119/AWT120).
+///     resolver. All of these hand back a handle/awaitable rather than the resolved-and-initialized value, so
+///     they launder async taint - which is what lets a synchronously-resolvable consumer hold one over an
+///     async-initialized service without becoming async-tainted (and without tripping AWT119/AWT120). The
+///     <see cref="Func" />/<see cref="Lazy" /> forms (and <see cref="FuncTask" />/<see cref="LazyTask" />)
+///     additionally defer resolution behind a stored closure, so they also break dependency cycles. A bare
+///     <see cref="Owned" /> or <see cref="Task" />, by contrast, resolves its target at construction time
+///     (synchronously, or in an async resolver's synchronous prefix), so a cycle closed through one of them
+///     still overflows at runtime and is reported as AWT102 (the construction graph in BuildConstructionGraph).
 /// </summary>
 internal enum DependencyKind
 {

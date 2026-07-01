@@ -93,7 +93,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		ValidateRuntimeArguments(graph.Instances, graph.InstanceLocations, graph.ServiceToImpl, graph.ImplToIndex, diagnostics);
 
 		LocationInfo? containerLocation = LocationInfo.From(containerSymbol.Locations.FirstOrDefault());
-		DetectCycles(graph.Instances, graph.Dependencies, containerLocation, diagnostics);
+		DetectCycles(graph.Instances, graph.ConstructionDependencies, containerLocation, diagnostics);
 		DetectCaptiveDependencies(graph.Instances, graph.Dependencies, graph.InstanceLocations, diagnostics);
 
 		// AWT119/AWT120 (strict only): a synchronous Func<T>/Lazy<T>/Owned<T> relationship resolves its
@@ -222,10 +222,13 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		}
 
 		Dictionary<int, List<int>> dependencies = BuildDependencyGraph(instances, serviceToImpl, implToIndex);
+		Dictionary<int, List<int>> constructionDependencies = BuildConstructionGraph(instances, serviceToImpl, implToIndex);
 
 		// Async taint: an instance is tainted if its implementation is async-initialized, or if it reaches
-		// one through non-deferred (Direct) edges. Relationship types (Func/Lazy/Owned/Arg) launder the
-		// taint the same way they break cycles, so they contribute no edges to BuildDependencyGraph above.
+		// one through non-deferred (Direct) edges. Relationship types (Func/Lazy/Owned/Task/Arg) launder the
+		// taint - even the bare eager Owned<T>/Task<T>, which hand back a handle/awaitable rather than the
+		// resolved-and-initialized value - so they contribute no edges to BuildDependencyGraph above. (They do
+		// still close cycles, since they resolve at construction time; that is the wider construction graph.)
 		bool[] tainted = PropagateAsyncTaint(instances, dependencies);
 		for (int i = 0; i < instances.Count; i++)
 		{
@@ -235,7 +238,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			}
 		}
 
-		return new GraphModel(instances, dependencies, serviceToImpl, implToIndex, instanceLocations);
+		return new GraphModel(instances, dependencies, constructionDependencies, serviceToImpl, implToIndex, instanceLocations);
 	}
 
 	/// <summary>
@@ -401,21 +404,50 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			_ => "a constructor",
 		};
 
-	// Dependency graph over instance indices, keeping only resolvable edges to built instances.
+	// The direct-dependency graph over instance indices (resolvable edges to built instances): the edge set
+	// for async-taint and captive-dependency analysis. The relationship types (Func<T>/Lazy<T>/…) and the
+	// bare eager relationships (Owned<T>/Task<T>) all defer or launder, so only direct dependencies
+	// contribute edges here. Cycle detection uses the wider BuildConstructionGraph instead.
 	private static Dictionary<int, List<int>> BuildDependencyGraph(
 		List<InstanceModel> instances,
 		Dictionary<ServiceKey, string> serviceToImpl,
 		Dictionary<string, int> implToIndex)
+		=> BuildEdges(instances, serviceToImpl, implToIndex, includeEagerBare: false);
+
+	// The construction graph over instance indices: a superset of BuildDependencyGraph that additionally
+	// includes the bare eager relationships Owned<T> and Task<T> (the latter also covering Task<Owned<T>>).
+	// Unlike their deferred Func/Lazy wrappers - which are stored as a closure and invoked later - these
+	// resolve their target during the owner's construction: synchronously for a synchronous target, and in
+	// the synchronous prefix (before the first await, and before the memoized task is published) of an async
+	// resolver. A cycle closed through one of them therefore re-enters an as-yet-uncached resolver and
+	// overflows the stack at runtime rather than being broken, so it is reported as a dependency cycle
+	// (AWT102). The narrower direct-only graph stays the edge set for taint/captive analysis, which the
+	// deferrals correctly launder.
+	private static Dictionary<int, List<int>> BuildConstructionGraph(
+		List<InstanceModel> instances,
+		Dictionary<ServiceKey, string> serviceToImpl,
+		Dictionary<string, int> implToIndex)
+		=> BuildEdges(instances, serviceToImpl, implToIndex, includeEagerBare: true);
+
+	// Builds the edge set over instance indices, keeping only the parameters that contribute an edge and that
+	// resolve to a built instance. A direct dependency always contributes; the bare eager relationships
+	// Owned<T> and Task<T> contribute only when <paramref name="includeEagerBare" /> is set (the construction
+	// graph), since they resolve eagerly and so close cycles even though they launder async taint.
+	private static Dictionary<int, List<int>> BuildEdges(
+		List<InstanceModel> instances,
+		Dictionary<ServiceKey, string> serviceToImpl,
+		Dictionary<string, int> implToIndex,
+		bool includeEagerBare)
 	{
-		Dictionary<int, List<int>> dependencies = new();
+		Dictionary<int, List<int>> edges = new();
 		for (int i = 0; i < instances.Count; i++)
 		{
-			List<int> edges = new();
+			List<int> nodeEdges = new();
 			foreach (ParameterModel parameter in instances[i].ConstructorParameters.AsArray())
 			{
-				// Relationship types (Func<T>/Lazy<T>) defer resolution, so they break cycles and do not
-				// capture their target; only direct dependencies contribute graph edges.
-				if (parameter.Kind != DependencyKind.Direct)
+				bool contributes = parameter.Kind == DependencyKind.Direct
+				                   || (includeEagerBare && parameter.Kind is DependencyKind.Owned or DependencyKind.Task);
+				if (!contributes)
 				{
 					continue;
 				}
@@ -423,14 +455,14 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 				if (serviceToImpl.TryGetValue(KeyOf(parameter), out string? depImpl) &&
 				    implToIndex.TryGetValue(depImpl, out int depIndex))
 				{
-					edges.Add(depIndex);
+					nodeEdges.Add(depIndex);
 				}
 			}
 
-			dependencies[i] = edges;
+			edges[i] = nodeEdges;
 		}
 
-		return dependencies;
+		return edges;
 	}
 
 	private static InstanceModel? BuildInstance(
