@@ -333,7 +333,7 @@ internal static class Diagnostics
 		isEnabledByDefault: true);
 
 	/// <summary>
-	///     A <c>[Decorate&lt;TService, TDecorator&gt;]</c> names a service that has no registration to
+	///     A <c>[Decorate&lt;TDecorator, TService&gt;]</c> names a service that has no registration to
 	///     decorate, so there is no inner implementation to wrap.
 	/// </summary>
 	public static readonly DiagnosticDescriptor DecoratedServiceNotRegistered = new(

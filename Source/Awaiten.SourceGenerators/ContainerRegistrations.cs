@@ -69,7 +69,7 @@ internal static class ContainerRegistrations
 	}
 
 	/// <summary>
-	///     Reads the <c>[Decorate&lt;TService, TDecorator&gt;]</c> registrations declared on a container, in
+	///     Reads the <c>[Decorate&lt;TDecorator, TService&gt;]</c> registrations declared on a container, in
 	///     declaration order. Each carries its declaration index so equal <c>Order</c> values fall back to
 	///     declaration order when the chain is built. Collected apart from the lifetime registrations because a
 	///     decorator wraps an existing registration after coalescing rather than introducing a new service.
@@ -81,8 +81,8 @@ internal static class ContainerRegistrations
 		{
 			if (attribute.AttributeClass is not { Name: "DecorateAttribute", IsGenericType: true, TypeArguments.Length: 2, } attributeClass
 			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace
-			    || attributeClass.TypeArguments[0] is not INamedTypeSymbol service
-			    || attributeClass.TypeArguments[1] is not INamedTypeSymbol decorator)
+			    || attributeClass.TypeArguments[0] is not INamedTypeSymbol decorator
+			    || attributeClass.TypeArguments[1] is not INamedTypeSymbol service)
 			{
 				continue;
 			}

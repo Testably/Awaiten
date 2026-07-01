@@ -19,7 +19,7 @@ public partial class DiagnosticTests
 			                                       public sealed class LoggingDecorator : IService { public LoggingDecorator(IService inner) { } }
 
 			                                       [Container]
-			                                       [Decorate<IService, LoggingDecorator>]
+			                                       [Decorate<LoggingDecorator, IService>]
 			                                       public static partial class MyContainer
 			                                       {
 			                                       }
@@ -44,7 +44,7 @@ public partial class DiagnosticTests
 
 			                                       [Container]
 			                                       [Transient<Real, IService>]
-			                                       [Decorate<IService, BadDecorator>]
+			                                       [Decorate<BadDecorator, IService>]
 			                                       public static partial class MyContainer
 			                                       {
 			                                       }
@@ -69,7 +69,7 @@ public partial class DiagnosticTests
 
 			                                       [Container]
 			                                       [Transient<Real, IService>]
-			                                       [Decorate<IService, BadDecorator>]
+			                                       [Decorate<BadDecorator, IService>]
 			                                       public static partial class MyContainer
 			                                       {
 			                                       }
@@ -93,7 +93,7 @@ public partial class DiagnosticTests
 
 			                                       [Container]
 			                                       [Transient<Real, IService>]
-			                                       [Decorate<IService, LoggingDecorator>]
+			                                       [Decorate<LoggingDecorator, IService>]
 			                                       public static partial class MyContainer
 			                                       {
 			                                       }
@@ -119,7 +119,7 @@ public partial class DiagnosticTests
 
 			                                       [Container]
 			                                       [Transient<Real, IService>]
-			                                       [Decorate<IService, LoggingDecorator>]
+			                                       [Decorate<LoggingDecorator, IService>]
 			                                       public static partial class MyContainer
 			                                       {
 			                                       }
@@ -145,7 +145,7 @@ public partial class DiagnosticTests
 
 			                                       [Container]
 			                                       [Transient<Real, IService>]
-			                                       [Decorate<IService, LoggingDecorator>]
+			                                       [Decorate<LoggingDecorator, IService>]
 			                                       public static partial class MyContainer
 			                                       {
 			                                       }

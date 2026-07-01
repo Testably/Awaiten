@@ -3,7 +3,7 @@ using Microsoft.CodeAnalysis;
 namespace Awaiten.SourceGenerators;
 
 /// <summary>
-///     A single <c>[Decorate&lt;TService, TDecorator&gt;]</c> registration read from a container: the
+///     A single <c>[Decorate&lt;TDecorator, TService&gt;]</c> registration read from a container: the
 ///     decorated service type name, the service and decorator symbols, the requested chain
 ///     <see cref="Order" />, and the declaration index used to break ties between equal orders (so
 ///     decorators chain in declaration order by default). Collected apart from the lifetime registrations

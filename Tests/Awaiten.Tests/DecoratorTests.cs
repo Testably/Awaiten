@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 namespace Awaiten.Tests;
 
 /// <summary>
-///     Runtime behavior of decorators: <c>[Decorate&lt;IService, D&gt;]</c> wraps the registered service
+///     Runtime behavior of decorators: <c>[Decorate&lt;D, IService&gt;]</c> wraps the registered service
 ///     so consumers receive <c>D(inner)</c>. Multiple decorators chain in declaration order (last declared
 ///     is outermost), a decorated service injected anywhere receives the outermost decorator, and a
 ///     collection view of the service yields the decorated chain (the decorator is unbypassable). The
@@ -35,7 +35,7 @@ public partial class DecoratorTests
 
 		IService service = container.Resolve<IService>();
 
-		// [Decorate<IService, D1>] then [Decorate<IService, D2>] => D2(D1(Real)).
+		// [Decorate<D1, IService>] then [Decorate<D2, IService>] => D2(D1(Real)).
 		await That(service.Describe()).IsEqualTo("D2(D1(Real))");
 	}
 
@@ -286,9 +286,13 @@ public partial class DecoratorTests
 		public string Describe() => $"D2({inner.Describe()})";
 	}
 
+	// An extra dependency the AuditingDecorator resolves from the graph and calls as an instance member; it
+	// carries instance state so Now() is genuinely instance-bound (not a static utility).
 	public sealed class Clock
 	{
-		public string Now() => "clock";
+		private readonly string _label = "clock";
+
+		public string Now() => _label;
 	}
 
 	// A decorator with an extra (non-decorated) dependency resolved from the graph.
@@ -304,67 +308,67 @@ public partial class DecoratorTests
 
 	[Container]
 	[Transient<Real, IService>]
-	[Decorate<IService, LoggingDecorator>]
+	[Decorate<LoggingDecorator, IService>]
 	public static partial class SingleContainer;
 
 	[Container]
 	[Transient<Real, IService>]
-	[Decorate<IService, D1>]
-	[Decorate<IService, D2>]
+	[Decorate<D1, IService>]
+	[Decorate<D2, IService>]
 	public static partial class MultiContainer;
 
 	[Container]
 	[Transient<Clock>]
 	[Transient<Real, IService>]
-	[Decorate<IService, AuditingDecorator>]
+	[Decorate<AuditingDecorator, IService>]
 	public static partial class ExtraDepsContainer;
 
 	[Container]
 	[Transient<Real, IService>]
 	[Transient<Consumer>]
-	[Decorate<IService, LoggingDecorator>]
+	[Decorate<LoggingDecorator, IService>]
 	public static partial class ConsumerContainer;
 
 	[Container]
 	[Transient<Real1, IService>]
 	[Transient<Real2, IService>]
-	[Decorate<IService, LoggingDecorator>]
+	[Decorate<LoggingDecorator, IService>]
 	public static partial class MultiImplContainer;
 
 	[Container]
 	[Singleton<Real, IService>]
-	[Decorate<IService, LoggingDecorator>]
+	[Decorate<LoggingDecorator, IService>]
 	public static partial class SingletonLifetimeContainer;
 
 	[Container]
 	[Transient<Real, IService>]
-	[Decorate<IService, LoggingDecorator>]
+	[Decorate<LoggingDecorator, IService>]
 	public static partial class TransientLifetimeContainer;
 
 	[Container]
 	[Transient<Real, IService>]
-	[Decorate<IService, D2>(Order = 1)]
-	[Decorate<IService, D1>]
+	[Decorate<D2, IService>(Order = 1)]
+	[Decorate<D1, IService>]
 	public static partial class ExplicitOrderContainer;
 
 	[Container]
 	[Transient<DerivedReal, IDerivedService>]
-	[Decorate<IDerivedService, BaseTypedDecorator>]
+	[Decorate<BaseTypedDecorator, IDerivedService>]
 	public static partial class BaseTypedInnerContainer;
 
 	[Container]
 	[Scoped<ScopedReal, IService>]
-	[Decorate<IService, LoggingDecorator>]
+	[Decorate<LoggingDecorator, IService>]
 	public static partial class ScopedLifetimeContainer;
 
 	[Container]
 	[Singleton<AsyncReal, IService>]
-	[Decorate<IService, LoggingDecorator>]
+	[Decorate<LoggingDecorator, IService>]
 	public static partial class AsyncInnerContainer;
 
 	[Container]
 	[Singleton<DisposalLog>]
 	[Singleton<DisposableReal, IService>]
-	[Decorate<IService, DisposableDecorator>]
+	[Decorate<DisposableDecorator, IService>]
 	public static partial class DisposalOrderContainer;
 }

@@ -27,7 +27,7 @@ namespace Awaiten
         public bool SyncResolveAfterInit { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
-    public sealed class DecorateAttribute<TService, TDecorator> : System.Attribute
+    public sealed class DecorateAttribute<TDecorator, TService> : System.Attribute
         where TDecorator :  class, TService
     {
         public DecorateAttribute() { }

@@ -3,7 +3,7 @@ using System.Linq;
 namespace Awaiten.SourceGenerators.Tests;
 
 /// <summary>
-///     The generated shape of decorators: <c>[Decorate&lt;IService, D&gt;]</c> is model-building over the
+///     The generated shape of decorators: <c>[Decorate&lt;D, IService&gt;]</c> is model-building over the
 ///     existing keyed-resolution plumbing — each chain link is a synthetic-keyed instance whose inner
 ///     parameter resolves the link below it, and the public dispatch and every consumer reach the outermost
 ///     decorator. The collection view is rewritten to the decorated chain, so the decorator is unbypassable.
@@ -27,8 +27,8 @@ public class DecoratorTests
 		                                       [Container]
 		                                       [Transient<Real, IService>]
 		                                       [Transient<Consumer>]
-		                                       [Decorate<IService, LoggingDecorator>]
-		                                       [Decorate<IService, D2>]
+		                                       [Decorate<LoggingDecorator, IService>]
+		                                       [Decorate<D2, IService>]
 		                                       public static partial class MyContainer
 		                                       {
 		                                       }
@@ -76,7 +76,7 @@ public class DecoratorTests
 		                                       [Transient<Real1, IService>]
 		                                       [Transient<Real2, IService>]
 		                                       [Transient<Host>]
-		                                       [Decorate<IService, LoggingDecorator>]
+		                                       [Decorate<LoggingDecorator, IService>]
 		                                       public static partial class MyContainer
 		                                       {
 		                                       }
