@@ -458,7 +458,14 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 					new EquatableArray<string>([Display(registration.ServiceType),])));
 			}
 
+			// S4158 false positive: implInfos is populated by the EnsureImpl local function across loop
+			// iterations, a mutation Sonar's symbolic execution does not follow through the local-function call,
+			// so it wrongly concludes the dictionary is always empty here. The lookup returns the implementation's
+			// already-seen ImplInfo (null only on first sight), which ReportCoalescingConflicts needs to detect the
+			// AWT107/AWT111 coalescing conflicts below.
+#pragma warning disable S4158
 			implInfos.TryGetValue(registration.ImplementationType, out ImplInfo? info);
+#pragma warning restore S4158
 
 			// A lifetime (AWT107) or production (AWT111) conflict is a property of the implementation, not of any
 			// single service type, so it is checked before the per-service dedup below; otherwise re-registering
