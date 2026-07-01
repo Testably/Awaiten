@@ -44,6 +44,13 @@ public sealed class ScopedAttribute : Attribute
 
 	/// <summary>The open generic service type under which closed instances are resolved.</summary>
 	public Type Service { get; }
+
+	/// <summary>
+	///     An optional resolution key. Several open generic implementations may share one service type
+	///     under different keys; consumers select one with <c>[FromKey]</c>. The key flows onto every
+	///     closed implementation expanded from this registration.
+	/// </summary>
+	public string? Key { get; set; }
 }
 
 /// <summary>

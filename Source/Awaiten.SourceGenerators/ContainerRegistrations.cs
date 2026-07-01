@@ -12,6 +12,16 @@ internal static class ContainerRegistrations
 {
 	public const string AttributeNamespace = "Awaiten";
 
+	// The deepest open generic expansion nests a closed type argument before it is treated as an unbounded
+	// recursion (AWT129) rather than a real dependency. Well beyond any hand-written generic graph, but far
+	// below the point where the synthesized registrations would exhaust memory.
+	private const int MaxExpansionDepth = 100;
+
+	// A hard ceiling on the total number of closed implementations expansion may synthesize. The depth limit
+	// bounds a linear recursion (Node<T> -> Node<List<T>> -> ...); this also bounds a branching one that would
+	// otherwise explode across breadth before ever reaching that depth.
+	private const int MaxExpansionCount = 10_000;
+
 	private static readonly SymbolDisplayFormat FullyQualified = SymbolDisplayFormat.FullyQualifiedFormat;
 
 	public static List<RawRegistration> Collect(INamedTypeSymbol containerSymbol, List<DiagnosticInfo> diagnostics)
@@ -204,7 +214,7 @@ internal static class ContainerRegistrations
 			return;
 		}
 
-		open.Add(new OpenRegistration(service, implementation, lifetime, location));
+		open.Add(new OpenRegistration(service, implementation, lifetime, NamedArgument(attribute, "Key"), location));
 	}
 
 	/// <summary>
@@ -216,23 +226,18 @@ internal static class ContainerRegistrations
 	/// </summary>
 	private static bool ExposesServiceInOrder(INamedTypeSymbol implementation, INamedTypeSymbol service)
 	{
-		foreach (INamedTypeSymbol @interface in implementation.AllInterfaces)
-		{
-			if (MapsInOrder(@interface, service, implementation.TypeParameters))
-			{
-				return true;
-			}
-		}
+		ImmutableArray<ITypeParameterSymbol> parameters = implementation.TypeParameters;
+		return implementation.AllInterfaces.Any(@interface => MapsInOrder(@interface, service, parameters))
+		       || BaseTypes(implementation).Any(baseType => MapsInOrder(baseType, service, parameters));
+	}
 
-		for (INamedTypeSymbol? current = implementation.BaseType; current is not null; current = current.BaseType)
+	/// <summary>The base types of <paramref name="type" />, from its direct base up to (but excluding) <c>object</c>.</summary>
+	private static IEnumerable<INamedTypeSymbol> BaseTypes(ITypeSymbol type)
+	{
+		for (INamedTypeSymbol? current = type.BaseType; current is not null; current = current.BaseType)
 		{
-			if (MapsInOrder(current, service, implementation.TypeParameters))
-			{
-				return true;
-			}
+			yield return current;
 		}
-
-		return false;
 	}
 
 	private static bool MapsInOrder(
@@ -297,93 +302,137 @@ internal static class ContainerRegistrations
 			openServices.Add(registration.Service);
 		}
 
-		// The constructor parameters to scan for closed generic dependencies. Seeded from every known
-		// implementation; grows as closed impls are synthesized.
-		Queue<INamedTypeSymbol> worklist = new();
+		// The constructor parameters to scan for closed generic dependencies, each carried with the expansion
+		// depth that reached it. Seeded from every known implementation at depth 0; grows as closed impls are
+		// synthesized, each one depth deeper than the closed service that produced it.
+		Queue<(INamedTypeSymbol Impl, int Depth)> worklist = new();
 		HashSet<INamedTypeSymbol> seen = new(SymbolEqualityComparer.Default);
 		foreach (RawRegistration registration in raw)
 		{
 			if (seen.Add(registration.Implementation))
 			{
-				worklist.Enqueue(registration.Implementation);
+				worklist.Enqueue((registration.Implementation, 0));
 			}
 		}
 
-		HashSet<string> reportedConstraints = new(StringComparer.Ordinal);
+		ExpansionContext context = new(raw, open, worklist, seen, diagnostics);
 
 		while (worklist.Count > 0)
 		{
-			INamedTypeSymbol impl = worklist.Dequeue();
+			(INamedTypeSymbol impl, int depth) = worklist.Dequeue();
+
+			// AWT129: a self-growing registration (Node<T> depending on Node<List<T>>) synthesizes an
+			// ever-larger closed implementation at every step and would never converge. Once the total count
+			// runs away (a branching recursion), abandon expansion entirely; when a single chain is merely too
+			// deep, skip that branch but let shallower ones continue - so the generator terminates rather than
+			// looping until it exhausts memory.
+			if (context.Synthesized > MaxExpansionCount)
+			{
+				ReportExpansionTooDeep(impl, depth, context);
+				break;
+			}
+
+			if (depth > MaxExpansionDepth)
+			{
+				ReportExpansionTooDeep(impl, depth, context);
+				continue;
+			}
+
 			foreach (ITypeSymbol required in RequiredServiceTypes(impl, containerSymbol, raw, openServices))
 			{
-				if (required is not INamedTypeSymbol { IsGenericType: true, } closed
-				    || closed.IsUnboundGenericType)
+				if (required is INamedTypeSymbol { IsGenericType: true, IsUnboundGenericType: false, } closed
+				    && expandedServices.Add(closed.ToDisplayString(FullyQualified)))
 				{
-					continue;
-				}
-
-				string closedService = closed.ToDisplayString(FullyQualified);
-				if (!expandedServices.Add(closedService))
-				{
-					continue;
-				}
-
-				// Expand every open registration whose open form matches the closed service's open form
-				// (exact arity, v1), in declaration order, deduped by closed implementation. A single match
-				// yields one closed registration (the single-dispatch case); several matches yield the
-				// collection members for a closed-generic collection.
-				INamedTypeSymbol openForm = closed.ConstructedFrom;
-				ITypeSymbol[] typeArguments = closed.TypeArguments.ToArray();
-				HashSet<string> synthesizedImpls = new(StringComparer.Ordinal);
-				foreach (OpenRegistration candidate in open)
-				{
-					if (!SymbolEqualityComparer.Default.Equals(candidate.Service, openForm))
-					{
-						continue;
-					}
-
-					// Map the closed service's type arguments onto the implementation's type parameters and
-					// construct the closed implementation (e.g. Repository<> + [Order] -> Repository<Order>).
-					INamedTypeSymbol closedImpl = candidate.Implementation.Construct(typeArguments);
-					string closedImplName = closedImpl.ToDisplayString(FullyQualified);
-
-					// AWT126: the closed type arguments must satisfy the implementation's constraints
-					// (e.g. Repository<int> against where T : class).
-					if (!ConstraintsSatisfied(candidate.Implementation, typeArguments))
-					{
-						if (reportedConstraints.Add(closedImplName))
-						{
-							diagnostics.Add(new DiagnosticInfo(
-								Diagnostics.OpenGenericConstraintViolation,
-								candidate.Location,
-								new EquatableArray<string>([
-									AwaitenGenerator.Display(closedImplName),
-									AwaitenGenerator.Display(candidate.Implementation.ToDisplayString(FullyQualified)),
-								])));
-						}
-
-						continue;
-					}
-
-					if (!synthesizedImpls.Add(closedImplName))
-					{
-						continue;
-					}
-
-					raw.Add(new RawRegistration(
-						closedService,
-						closedImplName,
-						candidate.Lifetime,
-						closedImpl,
-						candidate.Location?.ToLocation()));
-
-					if (seen.Add(closedImpl))
-					{
-						worklist.Enqueue(closedImpl);
-					}
+					ExpandClosedService(closed, depth, context);
 				}
 			}
 		}
+	}
+
+	/// <summary>
+	///     Synthesizes a closed <see cref="RawRegistration" /> for every open registration whose open form matches
+	///     <paramref name="closed" />'s open form (exact arity, v1), in declaration order, deduped by (closed
+	///     implementation, key). A single match yields the single-dispatch registration; several yield the members
+	///     of a closed-generic collection. Each synthesized implementation is enqueued one depth deeper so its own
+	///     closed generic dependencies expand in turn.
+	/// </summary>
+	private static void ExpandClosedService(INamedTypeSymbol closed, int depth, ExpansionContext context)
+	{
+		INamedTypeSymbol openForm = closed.ConstructedFrom;
+		string closedService = closed.ToDisplayString(FullyQualified);
+		ITypeSymbol[] typeArguments = closed.TypeArguments.ToArray();
+
+		// Dedup by (implementation, key): two open registrations that produce the same closed implementation
+		// under different keys must both survive as distinct keyed registrations.
+		HashSet<string> synthesized = new(StringComparer.Ordinal);
+
+		foreach (OpenRegistration candidate in context.Open.Where(c => SymbolEqualityComparer.Default.Equals(c.Service, openForm)))
+		{
+			// Map the closed service's type arguments onto the implementation's type parameters and
+			// construct the closed implementation (e.g. Repository<> + [Order] -> Repository<Order>).
+			INamedTypeSymbol closedImpl = candidate.Implementation.Construct(typeArguments);
+			string closedImplName = closedImpl.ToDisplayString(FullyQualified);
+
+			// AWT126: the closed type arguments must satisfy the implementation's constraints
+			// (e.g. Repository<int> against where T : class).
+			if (!ConstraintsSatisfied(candidate.Implementation, typeArguments))
+			{
+				ReportConstraintViolation(candidate, closedImplName, context);
+				continue;
+			}
+
+			if (!synthesized.Add(closedImplName + "\0" + candidate.Key))
+			{
+				continue;
+			}
+
+			context.Raw.Add(new RawRegistration(
+				closedService,
+				closedImplName,
+				candidate.Lifetime,
+				closedImpl,
+				candidate.Location?.ToLocation(),
+				Key: candidate.Key));
+			context.Synthesized++;
+
+			if (context.Seen.Add(closedImpl))
+			{
+				context.Worklist.Enqueue((closedImpl, depth + 1));
+			}
+		}
+	}
+
+	private static void ReportConstraintViolation(OpenRegistration candidate, string closedImplName, ExpansionContext context)
+	{
+		if (!context.ReportedConstraints.Add(closedImplName))
+		{
+			return;
+		}
+
+		context.Diagnostics.Add(new DiagnosticInfo(
+			Diagnostics.OpenGenericConstraintViolation,
+			candidate.Location,
+			new EquatableArray<string>([
+				AwaitenGenerator.Display(closedImplName),
+				AwaitenGenerator.Display(candidate.Implementation.ToDisplayString(FullyQualified)),
+			])));
+	}
+
+	private static void ReportExpansionTooDeep(INamedTypeSymbol impl, int depth, ExpansionContext context)
+	{
+		string implName = impl.ToDisplayString(FullyQualified);
+		if (!context.ReportedConstraints.Add("depth:" + implName))
+		{
+			return;
+		}
+
+		context.Diagnostics.Add(new DiagnosticInfo(
+			Diagnostics.OpenGenericExpansionTooDeep,
+			null,
+			new EquatableArray<string>([
+				AwaitenGenerator.Display(implName),
+				depth.ToString(),
+			])));
 	}
 
 	/// <summary>
@@ -423,44 +472,54 @@ internal static class ContainerRegistrations
 	///     service the seed scans.
 	/// </summary>
 	private static ITypeSymbol RequiredServiceType(ITypeSymbol type)
-	{
-		// Unwrap one Task<…>/ValueTask<…> layer first, so an awaited single service (Task<IHandler<T>>)
-		// or awaited collection (Task<IReadOnlyList<IHandler<T>>>) seeds expansion through the inner type.
-		if (type is INamedTypeSymbol { IsGenericType: true, TypeArguments.Length: 1, } awaitable
-		    && awaitable.ContainingNamespace?.ToDisplayString() == "System.Threading.Tasks"
-		    && awaitable.Name is "Task" or "ValueTask")
-		{
-			type = awaitable.TypeArguments[0];
-		}
+		=> UnwrapElementOrRelationship(UnwrapAwaitable(type));
 
-		// Unwrap a collection element (T[] or IEnumerable<T> and friends).
+	/// <summary>
+	///     Unwraps one <c>Task&lt;…&gt;</c>/<c>ValueTask&lt;…&gt;</c> layer, so an awaited single service
+	///     (<c>Task&lt;IHandler&lt;T&gt;&gt;</c>) or awaited collection (<c>Task&lt;IReadOnlyList&lt;T&gt;&gt;</c>)
+	///     seeds expansion through the inner type.
+	/// </summary>
+	private static ITypeSymbol UnwrapAwaitable(ITypeSymbol type)
+		=> type is INamedTypeSymbol { IsGenericType: true, TypeArguments.Length: 1, } awaitable
+		   && awaitable.ContainingNamespace?.ToDisplayString() == "System.Threading.Tasks"
+		   && awaitable.Name is "Task" or "ValueTask"
+			? awaitable.TypeArguments[0]
+			: type;
+
+	/// <summary>
+	///     Unwraps a collection element (<c>T[]</c> / <c>IEnumerable&lt;T&gt;</c> and friends) or a
+	///     <c>Lazy&lt;T&gt;</c> / <c>Func&lt;TArg…, T&gt;</c> relationship, so a closed generic reached through
+	///     any of them still seeds open generic expansion.
+	/// </summary>
+	private static ITypeSymbol UnwrapElementOrRelationship(ITypeSymbol type)
+	{
 		if (type is IArrayTypeSymbol array)
 		{
 			return array.ElementType;
 		}
 
-		if (type is INamedTypeSymbol { IsGenericType: true, TypeArguments.Length: 1, } generic)
+		if (type is not INamedTypeSymbol { IsGenericType: true, } generic)
 		{
-			string? container = generic.ContainingNamespace?.ToDisplayString();
-			if (container == "System.Collections.Generic"
-			    && generic.Name is "IEnumerable" or "IReadOnlyList" or "IReadOnlyCollection" or "IList" or "ICollection")
-			{
-				return generic.TypeArguments[0];
-			}
+			return type;
+		}
 
-			// Unwrap a relationship type (Func<T> / Lazy<T>).
-			if (container == "System" && generic.Name == "Lazy")
-			{
-				return generic.TypeArguments[0];
-			}
+		string? container = generic.ContainingNamespace?.ToDisplayString();
+		if (container == "System.Collections.Generic"
+		    && generic.TypeArguments.Length == 1
+		    && generic.Name is "IEnumerable" or "IReadOnlyList" or "IReadOnlyCollection" or "IList" or "ICollection")
+		{
+			return generic.TypeArguments[0];
+		}
+
+		if (container == "System" && generic.Name == "Lazy" && generic.TypeArguments.Length == 1)
+		{
+			return generic.TypeArguments[0];
 		}
 
 		// A Func<TArg…, T> resolves its last type argument.
-		if (type is INamedTypeSymbol { IsGenericType: true, Name: "Func", } func
-		    && func.ContainingNamespace?.ToDisplayString() == "System"
-		    && func.TypeArguments.Length >= 1)
+		if (container == "System" && generic.Name == "Func" && generic.TypeArguments.Length >= 1)
 		{
-			return func.TypeArguments[func.TypeArguments.Length - 1];
+			return generic.TypeArguments[generic.TypeArguments.Length - 1];
 		}
 
 		return type;
@@ -479,83 +538,106 @@ internal static class ContainerRegistrations
 	/// <summary>
 	///     Verifies that <paramref name="typeArguments" /> satisfy the type-parameter constraints of an open
 	///     generic <paramref name="definition" /> - the reference/value-type and unmanaged kind constraints,
-	///     <c>new()</c>, and each declared base/interface constraint - so the closed construction is legal
-	///     C#. v1 covers the constraints expressible without recursive type-parameter substitution.
+	///     <c>new()</c>, and each declared base/interface constraint - so the closed construction is legal C#.
+	///     A constraint that mentions a type parameter (<c>where T : IComparable&lt;T&gt;</c>, <c>where T : U</c>)
+	///     is checked after substituting the closed type arguments into it; a constraint that cannot be
+	///     represented after substitution (e.g. one nesting an array as a type argument) is skipped rather than
+	///     treated as a violation.
 	/// </summary>
 	private static bool ConstraintsSatisfied(INamedTypeSymbol definition, ITypeSymbol[] typeArguments)
 	{
 		ImmutableArray<ITypeParameterSymbol> parameters = definition.TypeParameters;
-		for (int i = 0; i < parameters.Length && i < typeArguments.Length; i++)
+		int count = Math.Min(parameters.Length, typeArguments.Length);
+
+		Dictionary<ITypeParameterSymbol, ITypeSymbol> substitution = new(SymbolEqualityComparer.Default);
+		for (int i = 0; i < count; i++)
 		{
-			ITypeParameterSymbol parameter = parameters[i];
-			ITypeSymbol argument = typeArguments[i];
+			substitution[parameters[i]] = typeArguments[i];
+		}
 
-			if (parameter.HasReferenceTypeConstraint && !argument.IsReferenceType)
+		for (int i = 0; i < count; i++)
+		{
+			if (!ParameterConstraintSatisfied(parameters[i], typeArguments[i], substitution))
 			{
 				return false;
-			}
-
-			if (parameter.HasValueTypeConstraint && (!argument.IsValueType || IsNullableValueType(argument)))
-			{
-				return false;
-			}
-
-			if (parameter.HasUnmanagedTypeConstraint && !argument.IsUnmanagedType)
-			{
-				return false;
-			}
-
-			if (parameter.HasConstructorConstraint && !HasAccessibleParameterlessConstructor(argument))
-			{
-				return false;
-			}
-
-			foreach (ITypeSymbol constraintType in parameter.ConstraintTypes)
-			{
-				// A constraint that mentions a type parameter - a bare `where T : U`, or a constructed constraint
-				// such as `where T : IEquatable<T>` / `where T : IComparable<T>` - would need type-parameter
-				// substitution to check faithfully, which v1 does not perform. Skip it rather than reject a valid
-				// argument on a spurious mismatch (the unsubstituted IEquatable<T> never equals IEquatable<Order>).
-				if (ReferencesTypeParameter(constraintType))
-				{
-					continue;
-				}
-
-				if (!IsAssignableTo(argument, constraintType))
-				{
-					return false;
-				}
 			}
 		}
 
 		return true;
 	}
 
+	private static bool ParameterConstraintSatisfied(
+		ITypeParameterSymbol parameter,
+		ITypeSymbol argument,
+		Dictionary<ITypeParameterSymbol, ITypeSymbol> substitution)
+	{
+		if (parameter.HasReferenceTypeConstraint && !argument.IsReferenceType)
+		{
+			return false;
+		}
+
+		if (parameter.HasValueTypeConstraint && (!argument.IsValueType || IsNullableValueType(argument)))
+		{
+			return false;
+		}
+
+		if (parameter.HasUnmanagedTypeConstraint && !argument.IsUnmanagedType)
+		{
+			return false;
+		}
+
+		if (parameter.HasConstructorConstraint && !HasAccessibleParameterlessConstructor(argument))
+		{
+			return false;
+		}
+
+		return parameter.ConstraintTypes
+			.Select(constraintType => SubstituteConstraint(constraintType, substitution))
+			.All(substituted => substituted is null || IsAssignableTo(argument, substituted));
+	}
+
 	/// <summary>
-	///     True when <paramref name="type" /> is a type parameter or a constructed type that mentions one
-	///     (<c>IEquatable&lt;T&gt;</c>, <c>T[]</c>, <c>IDictionary&lt;string, T&gt;</c>). Such a constraint cannot
-	///     be checked without substituting the closed type argument, which v1 does not do.
+	///     Rewrites a constraint type by replacing each type parameter with the closed type argument mapped in
+	///     <paramref name="substitution" /> - so <c>IComparable&lt;T&gt;</c> becomes <c>IComparable&lt;Order&gt;</c>
+	///     and a bare <c>U</c> becomes its argument. Returns <see langword="null" /> when the constraint cannot be
+	///     reconstructed from symbols alone (an unmapped type parameter, or an array/pointer type argument), so the
+	///     caller skips that constraint rather than checking a wrong type.
 	/// </summary>
-	private static bool ReferencesTypeParameter(ITypeSymbol type)
+	private static ITypeSymbol? SubstituteConstraint(ITypeSymbol type, Dictionary<ITypeParameterSymbol, ITypeSymbol> substitution)
 	{
 		switch (type)
 		{
-			case ITypeParameterSymbol:
-				return true;
-			case IArrayTypeSymbol array:
-				return ReferencesTypeParameter(array.ElementType);
-			case INamedTypeSymbol named:
-				foreach (ITypeSymbol argument in named.TypeArguments)
+			case ITypeParameterSymbol parameter:
+				return substitution.TryGetValue(parameter, out ITypeSymbol? argument) ? argument : null;
+
+			case INamedTypeSymbol { IsGenericType: true, } generic:
+			{
+				INamedTypeSymbol definition = generic.OriginalDefinition;
+				if (definition.Arity != generic.TypeArguments.Length)
 				{
-					if (ReferencesTypeParameter(argument))
-					{
-						return true;
-					}
+					return null;
 				}
 
-				return false;
+				ITypeSymbol[] arguments = new ITypeSymbol[generic.TypeArguments.Length];
+				for (int i = 0; i < arguments.Length; i++)
+				{
+					ITypeSymbol? substituted = SubstituteConstraint(generic.TypeArguments[i], substitution);
+					if (substituted is null)
+					{
+						return null;
+					}
+
+					arguments[i] = substituted;
+				}
+
+				return definition.Construct(arguments);
+			}
+
+			case INamedTypeSymbol named:
+				return named;
+
 			default:
-				return false;
+				return null;
 		}
 	}
 
@@ -579,15 +661,8 @@ internal static class ContainerRegistrations
 			return false;
 		}
 
-		foreach (IMethodSymbol constructor in named.InstanceConstructors)
-		{
-			if (constructor.Parameters.Length == 0 && constructor.DeclaredAccessibility == Accessibility.Public)
-			{
-				return true;
-			}
-		}
-
-		return false;
+		return named.InstanceConstructors.Any(constructor =>
+			constructor.Parameters.Length == 0 && constructor.DeclaredAccessibility == Accessibility.Public);
 	}
 
 	/// <summary>
@@ -595,25 +670,9 @@ internal static class ContainerRegistrations
 	///     implements it - the assignment a base/interface type-parameter constraint requires.
 	/// </summary>
 	private static bool IsAssignableTo(ITypeSymbol argument, ITypeSymbol constraintType)
-	{
-		for (ITypeSymbol? current = argument; current is not null; current = current.BaseType)
-		{
-			if (SymbolEqualityComparer.Default.Equals(current, constraintType))
-			{
-				return true;
-			}
-		}
-
-		foreach (INamedTypeSymbol @interface in argument.AllInterfaces)
-		{
-			if (SymbolEqualityComparer.Default.Equals(@interface, constraintType))
-			{
-				return true;
-			}
-		}
-
-		return false;
-	}
+		=> SymbolEqualityComparer.Default.Equals(argument, constraintType)
+		   || BaseTypes(argument).Any(baseType => SymbolEqualityComparer.Default.Equals(baseType, constraintType))
+		   || argument.AllInterfaces.Any(@interface => SymbolEqualityComparer.Default.Equals(@interface, constraintType));
 
 	/// <summary>
 	///     Resolves how a registration produces its instance. A <c>Factory</c> argument names a container
@@ -766,5 +825,23 @@ internal static class ContainerRegistrations
 	///     - holding the unbound service and implementation definitions. Not an instance itself; expanded
 	///     into concrete closed <see cref="RawRegistration" />s on demand by <see cref="ExpandOpenGenerics" />.
 	/// </summary>
-	private sealed record OpenRegistration(INamedTypeSymbol Service, INamedTypeSymbol Implementation, Lifetime Lifetime, LocationInfo? Location);
+	private sealed record OpenRegistration(INamedTypeSymbol Service, INamedTypeSymbol Implementation, Lifetime Lifetime, string? Key, LocationInfo? Location);
+
+	/// <summary>
+	///     The mutable state threaded through open generic expansion: the growing registration list and worklist,
+	///     the implementations already enqueued, and the diagnostics sink. <see cref="ReportedConstraints" /> also
+	///     dedups the depth-limit report (AWT129) under a <c>depth:</c> prefix so each cause is reported once.
+	/// </summary>
+	private sealed record ExpansionContext(
+		List<RawRegistration> Raw,
+		List<OpenRegistration> Open,
+		Queue<(INamedTypeSymbol Impl, int Depth)> Worklist,
+		HashSet<INamedTypeSymbol> Seen,
+		List<DiagnosticInfo> Diagnostics)
+	{
+		public HashSet<string> ReportedConstraints { get; } = new(StringComparer.Ordinal);
+
+		/// <summary>The number of closed implementations synthesized so far, bounded by <c>MaxExpansionCount</c>.</summary>
+		public int Synthesized { get; set; }
+	}
 }

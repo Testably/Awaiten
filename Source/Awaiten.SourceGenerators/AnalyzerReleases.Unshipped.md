@@ -30,3 +30,4 @@
  AWT126  | Awaiten   | Error    | A required closed type violates the open generic implementation's type-parameter constraints
  AWT127  | Awaiten   | Error    | The typeof-argument form of a lifetime attribute must receive an unbound open generic type
  AWT128  | Awaiten   | Error    | An open generic implementation does not expose its service with type parameters in declaration order
+ AWT129  | Awaiten   | Error    | Open generic expansion nested too deep, indicating an unbounded generic recursion

@@ -412,4 +412,19 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     Open generic expansion nested deeper than the supported limit, which almost always means the
+	///     registrations form an unbounded generic recursion - a closed implementation whose constructor
+	///     depends on an ever-larger closed generic of the same open registration
+	///     (<c>Node&lt;T&gt;</c> depending on <c>Node&lt;List&lt;T&gt;&gt;</c>). Expansion is stopped at the
+	///     limit so the generator terminates rather than looping until it exhausts memory.
+	/// </summary>
+	public static readonly DiagnosticDescriptor OpenGenericExpansionTooDeep = new(
+		"AWT129",
+		"Open generic expansion is too deep",
+		"Open generic expansion reached '{0}' at nesting depth {1} and was stopped; the open generic registrations likely form an unbounded recursion (an implementation depending on an ever-larger closed generic of the same registration)",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

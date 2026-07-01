@@ -81,7 +81,37 @@ public partial class DiagnosticTests
 			                                       """);
 
 			await That(result.Diagnostics.Any(d => d.Contains("AWT126"))).IsFalse()
-				.Because("a constructed constraint mentioning the type parameter (IComparable<T>) is skipped, not rejected");
+				.Because("a constructed constraint mentioning the type parameter (IComparable<T>) is satisfied after substitution");
+		}
+
+		[Fact]
+		public async Task ReportsWhenAnImplementationOnlySelfReferentialConstraintIsViolated()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using System;
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       // The service has no constraint, so IRepository<NotComparable> is legal in Root's signature;
+			                                       // the implementation constrains T : IComparable<T>, which NotComparable does not satisfy.
+			                                       // Without substituting the closed argument this would emit uncompilable code (CS0311); instead
+			                                       // it must be reported cleanly as AWT126.
+			                                       public sealed class NotComparable { }
+			                                       public interface IRepository<T> { }
+			                                       public sealed class Repository<T> : IRepository<T> where T : IComparable<T> { }
+			                                       public sealed class Root { public Root(IRepository<NotComparable> repo) { } }
+
+			                                       [Container]
+			                                       [Transient(typeof(Repository<>), typeof(IRepository<>))]
+			                                       [Transient<Root>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics.Any(d => d.Contains("AWT126"))).IsTrue()
+				.Because("the implementation's self-referential constraint where T : IComparable<T> is violated by NotComparable after substitution");
 		}
 	}
 }
