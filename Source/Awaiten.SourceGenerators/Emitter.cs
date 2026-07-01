@@ -46,7 +46,7 @@ internal static class Emitter
 		}
 		else
 		{
-			Names names = Names.Build(model.Instances.AsArray());
+			Names names = Names.Build(model.Instances.AsArray(), model.Collections.AsArray(), model.SyncResolveAfterInit);
 			Dictionary<ServiceKey, int> serviceToIndex = BuildServiceMap(model);
 			EmitContainerBody(builder, depth + 1, model, names, serviceToIndex);
 		}
@@ -209,10 +209,10 @@ internal static class Emitter
 	///     into a throwaway scope) is offered; the plain Func stays resolvable from a child scope, which bounds the
 	///     disposables it builds.
 	/// </summary>
-	private static bool IsFuncWithheld(InstanceModel[] instances, int index, Dictionary<ServiceKey, int> serviceToIndex, bool strict)
+	private static bool IsFuncWithheld(InstanceModel[] instances, int index, Dictionary<ServiceKey, int> serviceToIndex, IReadOnlyDictionary<ServiceKey, List<int>> collectionMembers, bool strict)
 		=> strict
 		   && (instances[index].Lifetime == Lifetime.Transient || instances[index].IsParameterized)
-		   && AwaitenGenerator.BuildsFreshDisposable(instances, serviceToIndex, index);
+		   && AwaitenGenerator.BuildsFreshDisposable(instances, serviceToIndex, collectionMembers, index);
 
 	private static bool IsRootOwned(InstanceModel instance)
 		=> instance.Lifetime == Lifetime.Singleton || instance.Production == ProductionKind.Instance;
@@ -264,6 +264,31 @@ internal static class Emitter
 	{
 		string display = service.Replace("global::", string.Empty);
 		return $"\"Awaiten: '{display}' is withheld from by-type resolution on the container root under strict lifetime safety; obtain it through Owned<{display}> or Func<…, Owned<{display}>>, resolve it from a child scope, inject it directly, or set LifetimeSafety.Loose on the [Container].\"";
+	}
+
+	/// <summary>
+	///     The guidance thrown by Resolve(Type) on the Root for a collection (<c>IEnumerable&lt;T&gt;</c> / <c>T[]</c>)
+	///     that holds a build-on-demand disposable member: materializing it on the Root would accumulate those
+	///     disposables for the container's lifetime. Unlike a single service there is no <c>Owned&lt;T&gt;</c> form
+	///     for a collection, so the guidance steers to a child scope, direct injection, or <c>LifetimeSafety.Loose</c>.
+	/// </summary>
+	private static string CollectionWithheldMessage(string collection)
+	{
+		string display = collection.Replace("global::", string.Empty);
+		return $"\"Awaiten: the collection '{display}' has a build-on-demand disposable member and is withheld from by-type resolution on the container root under strict lifetime safety; resolve it from a child scope, inject it directly, or set LifetimeSafety.Loose on the [Container].\"";
+	}
+
+	/// <summary>
+	///     The guidance thrown by Resolve(Type) for a collection (<c>IEnumerable&lt;T&gt;</c> / <c>T[]</c>) that
+	///     holds an async-tainted member: a collection is materialized synchronously (built eagerly into an array,
+	///     with no place to await an initialization), so there is no synchronous - and no asynchronous - resolution
+	///     of it on any scope. Mirrors AWT122; the pragmatic SyncResolveAfterInit mode (which warms the graph) is
+	///     the way to make it synchronously resolvable after InitializeAsync.
+	/// </summary>
+	private static string CollectionAsyncMessage(string collection)
+	{
+		string display = collection.Replace("global::", string.Empty);
+		return $"\"Awaiten: the collection '{display}' has an async-tainted member and cannot be materialized synchronously (a collection is built eagerly, with no place to await an initialization); set SyncResolveAfterInit on the [Container] and resolve it after InitializeAsync, or remove the async member from the collection.\"";
 	}
 
 	/// <summary>
@@ -396,7 +421,7 @@ internal static class Emitter
 		// synchronous resolution entirely (reachable only through ResolveAsync). Both surface a helpful
 		// message from Resolve instead of the generic "no registration"; only the former needs the
 		// __rootWithheld mask (it gates TryResolve on the Root), so that stays keyed to the dispatch entries.
-		List<(string Type, string Guidance)> withheldTypes = WithheldTypes(rootWithheld, instances, syncResolveAfterInit);
+		List<(string Type, string Guidance)> withheldTypes = WithheldTypes(rootWithheld, instances, names, serviceToIndex, syncResolveAfterInit);
 		if (entries.Count > 0)
 		{
 			EmitDispatchTable(builder, body, entries);
@@ -624,7 +649,7 @@ internal static class Emitter
 		// async-only services); hasRootWithheld gates the __rootWithheld mask check in TryResolve, which only
 		// the dispatchable root-withheld disposables need (async-only services have no dispatch entry).
 		bool hasRootWithheld = rootWithheld.Count > 0;
-		bool hasWithheld = WithheldTypes(rootWithheld, instances, syncResolveAfterInit).Count > 0;
+		bool hasWithheld = WithheldTypes(rootWithheld, instances, names, serviceToIndex, syncResolveAfterInit).Count > 0;
 
 		Indent(builder, depth).AppendLine("public object Resolve(global::System.Type serviceType)");
 		Indent(builder, depth).AppendLine("{");
@@ -703,6 +728,17 @@ internal static class Emitter
 		List<DispatchEntry> entries = new();
 		HashSet<string> seen = new(StringComparer.Ordinal);
 
+		// Impl-to-index and collection membership, so the withholding analysis can follow a service's collection
+		// dependencies (BuildsFreshDisposable) and a collection with a build-on-demand disposable member can be
+		// withheld from by-type resolution on the Root, just like the singular resolution of such a member.
+		Dictionary<string, int> implToIndex = new(StringComparer.Ordinal);
+		for (int i = 0; i < instances.Length; i++)
+		{
+			implToIndex[instances[i].ImplementationType] = i;
+		}
+
+		Dictionary<ServiceKey, List<int>> collectionMembers = AwaitenGenerator.CollectionMemberIndices(names.Collections, implToIndex);
+
 		// Explicit service registrations first, so a directly registered relationship type (e.g. a
 		// registered Lazy<T>) wins the dispatch slot over the synthetic relationship entry below. Service
 		// types are unique across instances (registrations are coalesced), so each is added exactly once.
@@ -716,7 +752,7 @@ internal static class Emitter
 				continue;
 			}
 
-			AddServiceEntries(instances[i], names.Resolver(i), entries, seen, IsWithheld(instances[i], strict), IsFuncWithheld(instances, i, serviceToIndex, strict));
+			AddServiceEntries(instances[i], names.Resolver(i), entries, seen, IsWithheld(instances[i], strict), IsFuncWithheld(instances, i, serviceToIndex, collectionMembers, strict));
 		}
 
 		// Synthetic Func<T>/Lazy<T> over each service, skipping any key an explicit registration already
@@ -727,11 +763,98 @@ internal static class Emitter
 		{
 			if (!instances[i].IsParameterized && EmitsSync(instances[i], syncResolveAfterInit))
 			{
-				AddRelationshipEntries(instances[i], names.Resolver(i), entries, seen, IsFuncWithheld(instances, i, serviceToIndex, strict));
+				AddRelationshipEntries(instances[i], names.Resolver(i), entries, seen, IsFuncWithheld(instances, i, serviceToIndex, collectionMembers, strict));
 			}
 		}
 
+		// Collection dispatch: every unkeyed, sync-materializable collection is publicly resolvable as all six
+		// shapes (IEnumerable<T>, IReadOnlyList<T>, IReadOnlyCollection<T>, IList<T>, ICollection<T>, T[]) - the
+		// eagerly materialized array satisfies each. A keyed collection is reached only by [FromKey] injection; an
+		// element type whose collection was explicitly registered is not synthesized (all-or-nothing); a collection
+		// with an async-tainted member has no synchronous materialization (its shapes throw AWT122-style guidance
+		// via __withheld, and injecting one is AWT122). The seen guard is belt-and-braces against a slot an
+		// explicit registration already claimed.
+		AddCollectionEntries(instances, names, serviceToIndex, collectionMembers, strict, entries, seen);
+
 		return entries;
+	}
+
+	/// <summary>
+	///     Adds the public dispatch entries (all six collection shapes) for each unkeyed, sync-materializable
+	///     collection whose synthesis is not suppressed by an explicit registration. A collection materializes its
+	///     members eagerly on the resolving scope, so if any member is a build-on-demand disposable service (its
+	///     plain resolver tracks a fresh disposable on the owner), re-resolving the collection by type off the Root
+	///     would accumulate those disposables for the container's lifetime - the exact leak the singular resolution
+	///     of such a member is root-withheld to prevent. Such a collection is therefore root-withheld too:
+	///     resolvable from a child scope (which bounds its members), but withheld from by-type resolution on the
+	///     Root. There is no <c>Owned&lt;T&gt;</c> form for a collection, so the guidance steers to a child scope,
+	///     direct injection, or LifetimeSafety.Loose.
+	/// </summary>
+	private static void AddCollectionEntries(
+		InstanceModel[] instances,
+		Names names,
+		Dictionary<ServiceKey, int> serviceToIndex,
+		IReadOnlyDictionary<ServiceKey, List<int>> collectionMembers,
+		bool strict,
+		List<DispatchEntry> entries,
+		HashSet<string> seen)
+	{
+		foreach (ServiceMembers collection in names.Collections)
+		{
+			ServiceKey collectionKey = new(collection.Service, collection.Key);
+
+			// A keyed collection has no by-type surface; a synthesis-suppressed element is served by its explicit
+			// registration; a non-sync-materializable collection is handled by AsyncWithheldCollections instead.
+			if (collection.Key is not null
+			    || SynthesisSuppressed(serviceToIndex, collection.Service)
+			    || !names.IsSyncCollection(collectionKey))
+			{
+				continue;
+			}
+
+			bool rootWithheld = collectionMembers.TryGetValue(collectionKey, out List<int>? members)
+			                    && members.Any(member => IsFuncWithheld(instances, member, serviceToIndex, collectionMembers, strict));
+
+			string array = CollectionLiteral(collectionKey, names);
+			foreach (string shape in AwaitenGenerator.CollectionShapeTypes(collection.Service))
+			{
+				AddCollectionShape(shape, array, rootWithheld, entries, seen);
+			}
+		}
+	}
+
+	// Under all-or-nothing synthesis, an element type with any collection shape explicitly registered (unkeyed) is
+	// not synthesized at all - the registered shape is dispatched as an ordinary service and the other shapes are
+	// unresolvable. Mirrors the injection-side suppression in AwaitenGenerator.ClassifyParameters.
+	private static bool SynthesisSuppressed(Dictionary<ServiceKey, int> serviceToIndex, string elementType)
+		=> AwaitenGenerator.CollectionShapeTypes(elementType).Any(shape => serviceToIndex.ContainsKey(new ServiceKey(shape, null)));
+
+	// Adds one collection shape's dispatch entry, unless an explicit registration already claimed the slot (the
+	// seen guard). A root-withheld collection carries the guidance thrown by Resolve(Type) on the Root.
+	private static void AddCollectionShape(
+		string serviceType, string array, bool rootWithheld, List<DispatchEntry> entries, HashSet<string> seen)
+	{
+		if (seen.Add(serviceType))
+		{
+			entries.Add(rootWithheld
+				? new DispatchEntry(serviceType, array, CollectionWithheldMessage(serviceType))
+				: new DispatchEntry(serviceType, array));
+		}
+	}
+
+	/// <summary>
+	///     A <c>new T[] { resolverA(), resolverB(), … }</c> expression: every registration of the collection's
+	///     (element type, key), materialized eagerly in registration order (each member keeping its own lifetime).
+	///     An empty membership yields <c>new T[] { }</c>. An array satisfies every supported collection parameter
+	///     shape (<c>IEnumerable&lt;T&gt;</c>, <c>IReadOnlyList&lt;T&gt;</c>, <c>IReadOnlyCollection&lt;T&gt;</c>,
+	///     <c>IList&lt;T&gt;</c>, <c>ICollection&lt;T&gt;</c>, <c>T[]</c>). The member resolvers are called
+	///     unqualified against the current owner, so a singleton member routes through its virtual delegator to
+	///     the root and a scoped/transient member resolves on the scope evaluating the collection.
+	/// </summary>
+	private static string CollectionLiteral(ServiceKey collection, Names names)
+	{
+		string items = string.Join(", ", names.CollectionResolvers(collection).Select(resolver => resolver + "()"));
+		return $"new {collection.Service}[] {{ {items} }}";
 	}
 
 	/// <summary>
@@ -864,7 +987,7 @@ internal static class Emitter
 	///     belt-and-braces dedup keeps the emitted dictionary initializer free of a duplicate-key throw).
 	/// </summary>
 	private static List<(string Type, string Guidance)> WithheldTypes(
-		List<DispatchEntry> rootWithheld, InstanceModel[] instances, bool syncResolveAfterInit)
+		List<DispatchEntry> rootWithheld, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool syncResolveAfterInit)
 	{
 		List<(string Type, string Guidance)> result = new();
 		HashSet<string> seen = new(StringComparer.Ordinal);
@@ -881,7 +1004,47 @@ internal static class Emitter
 			}
 		}
 
+		foreach ((string type, string guidance) in AsyncWithheldCollections(names, serviceToIndex, syncResolveAfterInit))
+		{
+			if (seen.Add(type))
+			{
+				result.Add((type, guidance));
+			}
+		}
+
 		return result;
+	}
+
+	/// <summary>
+	///     The collection shape types that are reachable only after asynchronous warm-up, paired with their
+	///     guidance: every shape of an unkeyed, non-synthesis-suppressed collection that holds an async-tainted
+	///     member, when the container is not in pragmatic SyncResolveAfterInit mode. Unlike a single async service
+	///     a collection has no <c>ResolveAsync</c> form (it is built eagerly, with no place to await), so its
+	///     shapes have no synchronous dispatch entry on any scope; without this they would surface as a generic
+	///     "no registration" rather than the AWT122-style guidance.
+	/// </summary>
+	private static IEnumerable<(string Type, string Guidance)> AsyncWithheldCollections(
+		Names names, Dictionary<ServiceKey, int> serviceToIndex, bool syncResolveAfterInit)
+	{
+		if (syncResolveAfterInit)
+		{
+			yield break;
+		}
+
+		foreach (ServiceMembers collection in names.Collections)
+		{
+			if (collection.Key is not null
+			    || SynthesisSuppressed(serviceToIndex, collection.Service)
+			    || names.IsSyncCollection(new ServiceKey(collection.Service, collection.Key)))
+			{
+				continue;
+			}
+
+			foreach (string shape in AwaitenGenerator.CollectionShapeTypes(collection.Service))
+			{
+				yield return (shape, CollectionAsyncMessage(shape));
+			}
+		}
 	}
 
 	/// <summary>
@@ -1621,6 +1784,14 @@ internal static class Emitter
 			{
 				arguments.Append("a" + argIndex++);
 			}
+			else if (parameters[p].Kind == DependencyKind.Enumerable)
+			{
+				// A collection has no single resolver; it materializes eagerly from all of its members' resolvers
+				// (the members registered under the parameter's [FromKey] key). Collections are synchronous-only, so
+				// this is the same array literal on the sync and async paths (an async-tainted member is an AWT122
+				// error outside SyncResolveAfterInit, so none reaches emission there).
+				arguments.Append(CollectionLiteral(new ServiceKey(parameters[p].ServiceType, parameters[p].Key), names));
+			}
 			else if (parameters[p].Kind == DependencyKind.CancellationToken)
 			{
 				// Forward the resolve-time token: the async creator's cancellationToken is in scope here. Only an
@@ -2102,16 +2273,36 @@ internal static class Emitter
 	{
 		private readonly string[] _fields;
 		private readonly string[] _resolvers;
+		private readonly ServiceMembers[] _collections;
+		private readonly Dictionary<ServiceKey, string[]> _collectionResolvers;
+		private readonly HashSet<ServiceKey> _syncCollections;
 
-		private Names(string[] resolvers, string[] fields)
+		private Names(string[] resolvers, string[] fields, ServiceMembers[] collections, Dictionary<ServiceKey, string[]> collectionResolvers, HashSet<ServiceKey> syncCollections)
 		{
 			_resolvers = resolvers;
 			_fields = fields;
+			_collections = collections;
+			_collectionResolvers = collectionResolvers;
+			_syncCollections = syncCollections;
 		}
+
+		// The collection-resolvable services in first-seen (type, key) order, driving the public IEnumerable<T> /
+		// T[] dispatch (unkeyed collections only) and the injected collection literals.
+		public ServiceMembers[] Collections => _collections;
 
 		public string Resolver(int index) => _resolvers[index];
 
 		public string Field(int index) => _fields[index];
+
+		// The resolver method names of a collection's members, in registration order (empty when the (type, key)
+		// has no registration, which materializes an empty array).
+		public string[] CollectionResolvers(ServiceKey collection)
+			=> _collectionResolvers.TryGetValue(collection, out string[]? resolvers) ? resolvers : System.Array.Empty<string>();
+
+		// Whether a collection can be materialized synchronously - i.e. every member has a synchronous resolver.
+		// A collection with an async-tainted member (strict mode) is omitted from the public sync dispatch, so no
+		// synchronous resolver is referenced where none is emitted; injecting such a collection is AWT122.
+		public bool IsSyncCollection(ServiceKey collection) => _syncCollections.Contains(collection);
 
 		// The async members are named off the synchronous resolver/field so they stay collision-safe
 		// together: ResolveFoo -> ResolveFooAsync / CreateFooAsync, _foo -> _fooAsyncTask.
@@ -2121,10 +2312,12 @@ internal static class Emitter
 
 		public string AsyncField(int index) => _fields[index] + "AsyncTask";
 
-		public static Names Build(InstanceModel[] instances)
+		public static Names Build(InstanceModel[] instances, ServiceMembers[] collections, bool syncResolveAfterInit)
 		{
 			string[] resolvers = new string[instances.Length];
 			string[] fields = new string[instances.Length];
+			Dictionary<string, string> implToResolver = new(StringComparer.Ordinal);
+			HashSet<string> syncImpls = new(StringComparer.Ordinal);
 			HashSet<string> used = new(StringComparer.OrdinalIgnoreCase);
 
 			for (int i = 0; i < instances.Length; i++)
@@ -2140,9 +2333,40 @@ internal static class Emitter
 
 				resolvers[i] = "Resolve" + name;
 				fields[i] = "_" + char.ToLowerInvariant(name[0]) + name.Substring(1);
+				implToResolver[instances[i].ImplementationType] = resolvers[i];
+
+				// A member is synchronously resolvable unless it is async-tainted in strict mode (in pragmatic
+				// SyncResolveAfterInit mode every service has a synchronous resolver, delegating to the async one).
+				if (!instances[i].IsAsyncTainted || syncResolveAfterInit)
+				{
+					syncImpls.Add(instances[i].ImplementationType);
+				}
 			}
 
-			return new Names(resolvers, fields);
+			// Map each collection's member implementations to their resolvers, preserving registration order; a
+			// collection is sync-materializable only when every member has a synchronous resolver.
+			Dictionary<ServiceKey, string[]> collectionResolvers = new();
+			HashSet<ServiceKey> syncCollections = new();
+			foreach (ServiceMembers members in collections)
+			{
+				string[] memberImpls = members.Implementations.AsArray();
+				string[] memberResolvers = new string[memberImpls.Length];
+				bool allSync = true;
+				for (int m = 0; m < memberImpls.Length; m++)
+				{
+					memberResolvers[m] = implToResolver[memberImpls[m]];
+					allSync &= syncImpls.Contains(memberImpls[m]);
+				}
+
+				ServiceKey collectionKey = new(members.Service, members.Key);
+				collectionResolvers[collectionKey] = memberResolvers;
+				if (allSync)
+				{
+					syncCollections.Add(collectionKey);
+				}
+			}
+
+			return new Names(resolvers, fields, collections, collectionResolvers, syncCollections);
 		}
 
 		private static string Sanitize(string name)

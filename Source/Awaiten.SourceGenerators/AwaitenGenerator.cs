@@ -103,6 +103,8 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		{
 			DetectSynchronousAsyncResolution(
 				graph.Instances, graph.Dependencies, graph.ServiceToImpl, graph.ImplToIndex, graph.InstanceLocations, diagnostics);
+			DetectSynchronousAsyncCollection(
+				graph.Instances, graph.Collections, graph.ImplToIndex, graph.InstanceLocations, diagnostics);
 		}
 
 		string? containerNamespace = containerSymbol.ContainingNamespace is { IsGlobalNamespace: false, } ns
@@ -135,7 +137,8 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			new EquatableArray<DiagnosticInfo>(diagnostics.ToArray()),
 			strict,
 			syncResolveAfterInit,
-			hasAsyncDisposable);
+			hasAsyncDisposable,
+			new EquatableArray<ServiceMembers>(graph.Collections.ToArray()));
 	}
 
 	/// <summary>
@@ -202,7 +205,8 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		// registrations of the same implementation share one instance. Declaring one implementation with
 		// two different lifetimes is reported as AWT107; two implementations under the same service type and
 		// key as AWT117.
-		(List<ImplInfo> implOrder, Dictionary<ServiceKey, string> serviceToImpl) = CoalesceByImplementation(raw, diagnostics);
+		(List<ImplInfo> implOrder, Dictionary<ServiceKey, string> serviceToImpl, Dictionary<ServiceKey, List<string>> serviceMembers, List<ServiceKey> serviceMemberOrder) =
+			CoalesceByImplementation(raw, diagnostics);
 
 		List<InstanceModel> instances = new();
 		List<LocationInfo?> instanceLocations = new();
@@ -221,8 +225,13 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			}
 		}
 
-		Dictionary<int, List<int>> dependencies = BuildDependencyGraph(instances, serviceToImpl, implToIndex);
-		Dictionary<int, List<int>> constructionDependencies = BuildConstructionGraph(instances, serviceToImpl, implToIndex);
+		// A parameterized ([Arg]) service cannot be built without its runtime arguments, so it is reachable
+		// only through its Func<TArg…, T> factory - never as a collection member. Prune such implementations
+		// before they drive collection edges, AWT122 and emission.
+		PruneParameterizedMembers(instances, serviceMembers);
+
+		Dictionary<int, List<int>> dependencies = BuildDependencyGraph(instances, serviceToImpl, implToIndex, serviceMembers);
+		Dictionary<int, List<int>> constructionDependencies = BuildConstructionGraph(instances, serviceToImpl, implToIndex, serviceMembers);
 
 		// Async taint: an instance is tainted if its implementation is async-initialized, or if it reaches
 		// one through non-deferred (Direct) edges. Relationship types (Func/Lazy/Owned/Task/Arg) launder the
@@ -238,15 +247,86 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			}
 		}
 
-		return new GraphModel(instances, dependencies, constructionDependencies, serviceToImpl, implToIndex, instanceLocations);
+		// The collection-resolvable membership, in first-seen service order and deduped by implementation,
+		// keeping only members that were actually built (a member whose BuildInstance failed already surfaced
+		// its own error and is absent from implToIndex, so it is dropped rather than emitted as a dangling
+		// resolver call). A service whose only registrations were pruned contributes no collection.
+		List<ServiceMembers> collections = new();
+		foreach (ServiceKey service in serviceMemberOrder)
+		{
+			string[] members = serviceMembers[service].Where(implToIndex.ContainsKey).ToArray();
+			if (members.Length > 0)
+			{
+				collections.Add(new ServiceMembers(service.Service, service.Key, new EquatableArray<string>(members)));
+			}
+		}
+
+		return new GraphModel(instances, dependencies, constructionDependencies, serviceToImpl, implToIndex, instanceLocations, collections);
+	}
+
+	/// <summary>
+	///     Removes parameterized ([Arg]) implementations from every collection's membership: such a service is
+	///     built fresh from its runtime arguments and is reachable only through its <c>Func&lt;TArg…, T&gt;</c>
+	///     factory, so it is never a collection member.
+	/// </summary>
+	private static void PruneParameterizedMembers(List<InstanceModel> instances, Dictionary<ServiceKey, List<string>> serviceMembers)
+	{
+		HashSet<string> parameterized = new(StringComparer.Ordinal);
+		foreach (InstanceModel instance in instances)
+		{
+			if (instance.IsParameterized)
+			{
+				parameterized.Add(instance.ImplementationType);
+			}
+		}
+
+		if (parameterized.Count == 0)
+		{
+			return;
+		}
+
+		foreach (List<string> members in serviceMembers.Values)
+		{
+			members.RemoveAll(parameterized.Contains);
+		}
+	}
+
+	/// <summary>
+	///     The instance indices of every collection-resolvable service's members, keyed by the collection's
+	///     (element service type, key), for the transitive-disposable walk. Composed from the graph's
+	///     <paramref name="collections" /> and <paramref name="implToIndex" /> (a member absent from the latter
+	///     failed to build and is skipped).
+	/// </summary>
+	internal static Dictionary<ServiceKey, List<int>> CollectionMemberIndices(
+		IReadOnlyList<ServiceMembers> collections,
+		Dictionary<string, int> implToIndex)
+	{
+		Dictionary<ServiceKey, List<int>> members = new();
+		foreach (ServiceMembers collection in collections)
+		{
+			List<int> indices = new();
+			foreach (string implementation in collection.Implementations.AsArray())
+			{
+				if (implToIndex.TryGetValue(implementation, out int index))
+				{
+					indices.Add(index);
+				}
+			}
+
+			members[new ServiceKey(collection.Service, collection.Key)] = indices;
+		}
+
+		return members;
 	}
 
 	/// <summary>
 	///     Whether building the service at <paramref name="start" /> on its owner tracks a fresh disposable
 	///     there: the service itself is disposable, or its construction transitively rebuilds one. The walk
-	///     follows only direct <em>transient</em> dependency edges, because a scoped or singleton dependency is
+	///     follows only <em>transient</em> dependency edges, because a scoped or singleton dependency is
 	///     cached/shared (built at most once on the owner) and so is bounded, whereas a transient dependency is
-	///     rebuilt - and, if disposable, re-tracked - on every construction. Used to decide whether a plain
+	///     rebuilt - and, if disposable, re-tracked - on every construction. A collection (Enumerable) edge is
+	///     followed too: it materializes its members eagerly into the owner, so a transient disposable member is
+	///     rebuilt on every construction just like a direct transient dependency. Used to decide whether a plain
 	///     <c>Func&lt;…&gt;</c> over the service accumulates on the container root (AWT118 / strict withholding):
 	///     a non-disposable transient that injects a disposable transient leaks just the same when built
 	///     repeatedly through a root-bound factory.
@@ -254,6 +334,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	internal static bool BuildsFreshDisposable(
 		IReadOnlyList<InstanceModel> instances,
 		Dictionary<ServiceKey, int> serviceToIndex,
+		IReadOnlyDictionary<ServiceKey, List<int>> collectionMembers,
 		int start)
 	{
 		HashSet<int> visited = new();
@@ -274,23 +355,61 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 				return true;
 			}
 
-			foreach (ParameterModel parameter in instance.ConstructorParameters.AsArray())
-			{
-				// Only a direct (non-deferred) transient dependency is rebuilt as part of constructing this node;
-				// a relationship/Owned/Arg parameter defers, and a scoped/singleton dependency is cached/shared.
-				if (parameter.Kind == DependencyKind.Direct
-				    && serviceToIndex.TryGetValue(KeyOf(parameter), out int dependency)
-				    && instances[dependency].Lifetime == Lifetime.Transient)
-				{
-					stack.Push(dependency);
-				}
-			}
+			PushFreshTransientDependencies(instance, instances, serviceToIndex, collectionMembers, stack);
 		}
 
 		return false;
 	}
 
-	private static (List<ImplInfo> Order, Dictionary<ServiceKey, string> ServiceToImpl) CoalesceByImplementation(
+	// Pushes the dependencies of <paramref name="instance" /> that are rebuilt as part of constructing it: a
+	// direct (non-deferred) transient dependency, and each transient member of a collection (a collection
+	// materializes its members eagerly during construction). A relationship/Owned/Arg parameter defers, and a
+	// scoped/singleton dependency is cached/shared, so neither is followed.
+	private static void PushFreshTransientDependencies(
+		InstanceModel instance,
+		IReadOnlyList<InstanceModel> instances,
+		Dictionary<ServiceKey, int> serviceToIndex,
+		IReadOnlyDictionary<ServiceKey, List<int>> collectionMembers,
+		Stack<int> stack)
+	{
+		foreach (ParameterModel parameter in instance.ConstructorParameters.AsArray())
+		{
+			if (parameter.Kind == DependencyKind.Enumerable)
+			{
+				PushTransientCollectionMembers(KeyOf(parameter), instances, collectionMembers, stack);
+			}
+			else if (parameter.Kind == DependencyKind.Direct
+			         && serviceToIndex.TryGetValue(KeyOf(parameter), out int dependency)
+			         && instances[dependency].Lifetime == Lifetime.Transient)
+			{
+				stack.Push(dependency);
+			}
+		}
+	}
+
+	// Pushes each transient member of the collection reached under <paramref name="collectionKey" /> (its
+	// element service type plus resolution key; a non-transient member is cached/shared, so it is bounded).
+	private static void PushTransientCollectionMembers(
+		ServiceKey collectionKey,
+		IReadOnlyList<InstanceModel> instances,
+		IReadOnlyDictionary<ServiceKey, List<int>> collectionMembers,
+		Stack<int> stack)
+	{
+		if (!collectionMembers.TryGetValue(collectionKey, out List<int>? members))
+		{
+			return;
+		}
+
+		foreach (int member in members)
+		{
+			if (instances[member].Lifetime == Lifetime.Transient)
+			{
+				stack.Push(member);
+			}
+		}
+	}
+
+	private static (List<ImplInfo> Order, Dictionary<ServiceKey, string> ServiceToImpl, Dictionary<ServiceKey, List<string>> Members, List<ServiceKey> MemberOrder) CoalesceByImplementation(
 		List<RawRegistration> raw,
 		List<DiagnosticInfo> diagnostics)
 	{
@@ -299,6 +418,13 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		Dictionary<ServiceKey, string> serviceToImpl = new();
 		HashSet<string> reportedConflicts = new(StringComparer.Ordinal);
 		HashSet<string> reportedProductionConflicts = new(StringComparer.Ordinal);
+
+		// Collection membership: every registration of a service, keyed by (service type, resolution key) and
+		// deduped by implementation, kept in registration order - so an unkeyed IEnumerable<T> resolves the
+		// unkeyed registrations and a [FromKey("k")] IEnumerable<T> the registrations under "k".
+		// serviceMemberOrder preserves the first-seen (type, key) order for deterministic emission.
+		Dictionary<ServiceKey, List<string>> serviceMembers = new();
+		List<ServiceKey> serviceMemberOrder = new();
 
 		foreach (RawRegistration registration in raw)
 		{
@@ -314,63 +440,121 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 					new EquatableArray<string>([Display(registration.ServiceType),])));
 			}
 
+			// The implementation's already-recorded ImplInfo (null on first sight), which ReportCoalescingConflicts
+			// compares the current registration against. EnsureImpl below takes implInfos as a parameter rather
+			// than capturing it, so its Add crosses a call boundary and this lookup is not misread as reading an
+			// always-empty dictionary.
 			implInfos.TryGetValue(registration.ImplementationType, out ImplInfo? info);
 
-			// A lifetime conflict is a property of the implementation, not of any single service type, so it
-			// is checked before the per-service dedup below; otherwise re-registering the same service type
-			// with a different lifetime would be skipped and the contradiction silently dropped. Coalescing
-			// keeps the first lifetime, so the conflicting one is reported as AWT107 rather than ignored.
-			if (info is not null && info.Lifetime != registration.Lifetime &&
-			    reportedConflicts.Add(registration.ImplementationType))
-			{
-				diagnostics.Add(new DiagnosticInfo(
-					Diagnostics.ConflictingLifetime,
-					LocationInfo.From(registration.Location),
-					new EquatableArray<string>([
-						Display(registration.ImplementationType),
-						info.Lifetime.ToString(),
-						registration.Lifetime.ToString(),
-					])));
-			}
-
-			// Likewise the production: coalescing keeps the first, so a same-implementation re-registration
-			// that constructs, factories or exposes it differently - or names a different factory/instance
-			// member of the same kind - is reported as AWT111 rather than silently dropped. Checked before
-			// the dedup for the same reason as the lifetime.
-			if (info is not null && ConflictsWith(info, registration) &&
-			    reportedProductionConflicts.Add(registration.ImplementationType))
-			{
-				diagnostics.Add(new DiagnosticInfo(
-					Diagnostics.ConflictingProduction,
-					LocationInfo.From(registration.Location),
-					new EquatableArray<string>([
-						Display(registration.ImplementationType),
-						DescribeProduction(info.Production, info.ProductionMember),
-						DescribeProduction(registration.Production, registration.ProductionMember),
-					])));
-			}
+			// A lifetime (AWT107) or production (AWT111) conflict is a property of the implementation, not of any
+			// single service type, so it is checked before the per-service dedup below; otherwise re-registering
+			// the same service type differently would be skipped and the contradiction silently dropped.
+			// Coalescing keeps the first, so the conflicting one is reported rather than ignored.
+			ReportCoalescingConflicts(info, registration, reportedConflicts, reportedProductionConflicts, diagnostics);
 
 			ServiceKey serviceKey = new(registration.ServiceType, registration.Key);
-			if (serviceToImpl.TryGetValue(serviceKey, out string? existingImpl))
+			bool alreadyChosen = serviceToImpl.TryGetValue(serviceKey, out string? existingImpl);
+
+			// Every registration is a member of the collection for its (service type, key): an unkeyed
+			// IEnumerable<T> resolves the unkeyed registrations, a [FromKey("k")] IEnumerable<T> the ones under
+			// "k". A member is built even when it loses the single-resolution slot to an earlier registration,
+			// since it is reachable through the collection.
+			AddCollectionMember(serviceMembers, serviceMemberOrder, serviceKey, registration.ImplementationType);
+			EnsureImpl(implInfos, implOrder, registration);
+
+			if (alreadyChosen)
 			{
 				ReportDuplicateKey(registration, existingImpl, diagnostics);
 				continue;
 			}
 
-			if (info is null)
+			ImplInfo chosen = EnsureImpl(implInfos, implOrder, registration);
+			serviceToImpl[serviceKey] = registration.ImplementationType;
+			chosen.Services.Add(serviceKey);
+		}
+
+		return (implOrder, serviceToImpl, serviceMembers, serviceMemberOrder);
+
+		// Creates the single ImplInfo for a registration's implementation (idempotent): the first registration seen
+		// for an implementation fixes its lifetime/production, and the same instance is shared by every registration
+		// of that implementation (multi-service or collection member). A collection member that is not the
+		// single-resolution winner is still built here - it is reached only through the collection. Takes implInfos
+		// and implOrder as parameters (rather than being a capturing local function) so the caller's pre-loop lookup
+		// sees the Add across a call boundary.
+		static ImplInfo EnsureImpl(Dictionary<string, ImplInfo> implInfos, List<ImplInfo> implOrder, RawRegistration reg)
+		{
+			if (!implInfos.TryGetValue(reg.ImplementationType, out ImplInfo? info))
 			{
 				info = new ImplInfo(
-					registration.ImplementationType, registration.Implementation, registration.Lifetime,
-					LocationInfo.From(registration.Location), registration.Production, registration.ProductionMember);
-				implInfos.Add(registration.ImplementationType, info);
+					reg.ImplementationType, reg.Implementation, reg.Lifetime,
+					LocationInfo.From(reg.Location), reg.Production, reg.ProductionMember);
+				implInfos.Add(reg.ImplementationType, info);
 				implOrder.Add(info);
 			}
 
-			serviceToImpl[serviceKey] = registration.ImplementationType;
-			info.Services.Add(serviceKey);
+			return info;
+		}
+	}
+
+	// Reports the coalescing conflicts a re-registration of an already-seen implementation raises: a different
+	// lifetime (AWT107) or a different production strategy (AWT111). Each is reported at most once per
+	// implementation (the reported sets guard that), since coalescing keeps the first registration.
+	private static void ReportCoalescingConflicts(
+		ImplInfo? info,
+		RawRegistration registration,
+		HashSet<string> reportedConflicts,
+		HashSet<string> reportedProductionConflicts,
+		List<DiagnosticInfo> diagnostics)
+	{
+		if (info is null)
+		{
+			return;
 		}
 
-		return (implOrder, serviceToImpl);
+		if (info.Lifetime != registration.Lifetime && reportedConflicts.Add(registration.ImplementationType))
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.ConflictingLifetime,
+				LocationInfo.From(registration.Location),
+				new EquatableArray<string>([
+					Display(registration.ImplementationType),
+					info.Lifetime.ToString(),
+					registration.Lifetime.ToString(),
+				])));
+		}
+
+		if (ConflictsWith(info, registration) && reportedProductionConflicts.Add(registration.ImplementationType))
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.ConflictingProduction,
+				LocationInfo.From(registration.Location),
+				new EquatableArray<string>([
+					Display(registration.ImplementationType),
+					DescribeProduction(info.Production, info.ProductionMember),
+					DescribeProduction(registration.Production, registration.ProductionMember),
+				])));
+		}
+	}
+
+	// Records a registration's implementation as a member of the collection for its (service type, key), in
+	// registration order and deduped by implementation. serviceMemberOrder preserves first-seen (type, key) order.
+	private static void AddCollectionMember(
+		Dictionary<ServiceKey, List<string>> serviceMembers,
+		List<ServiceKey> serviceMemberOrder,
+		ServiceKey serviceKey,
+		string implementationType)
+	{
+		if (!serviceMembers.TryGetValue(serviceKey, out List<string>? members))
+		{
+			members = new List<string>();
+			serviceMembers.Add(serviceKey, members);
+			serviceMemberOrder.Add(serviceKey);
+		}
+
+		if (!members.Contains(implementationType))
+		{
+			members.Add(implementationType);
+		}
 	}
 
 	// AWT117: two different implementations claim the same service type and key, so a keyed resolution of
@@ -411,8 +595,9 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	private static Dictionary<int, List<int>> BuildDependencyGraph(
 		List<InstanceModel> instances,
 		Dictionary<ServiceKey, string> serviceToImpl,
-		Dictionary<string, int> implToIndex)
-		=> BuildEdges(instances, serviceToImpl, implToIndex, includeEagerBare: false);
+		Dictionary<string, int> implToIndex,
+		Dictionary<ServiceKey, List<string>> serviceMembers)
+		=> BuildEdges(instances, serviceToImpl, implToIndex, serviceMembers, includeEagerBare: false);
 
 	// The construction graph over instance indices: a superset of BuildDependencyGraph that additionally
 	// includes the bare eager relationships Owned<T> and Task<T> (the latter also covering Task<Owned<T>>).
@@ -426,17 +611,21 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	private static Dictionary<int, List<int>> BuildConstructionGraph(
 		List<InstanceModel> instances,
 		Dictionary<ServiceKey, string> serviceToImpl,
-		Dictionary<string, int> implToIndex)
-		=> BuildEdges(instances, serviceToImpl, implToIndex, includeEagerBare: true);
+		Dictionary<string, int> implToIndex,
+		Dictionary<ServiceKey, List<string>> serviceMembers)
+		=> BuildEdges(instances, serviceToImpl, implToIndex, serviceMembers, includeEagerBare: true);
 
 	// Builds the edge set over instance indices, keeping only the parameters that contribute an edge and that
 	// resolve to a built instance. A direct dependency always contributes; the bare eager relationships
 	// Owned<T> and Task<T> contribute only when <paramref name="includeEagerBare" /> is set (the construction
-	// graph), since they resolve eagerly and so close cycles even though they launder async taint.
+	// graph), since they resolve eagerly and so close cycles even though they launder async taint. A collection
+	// (Enumerable) contributes an edge to each of its members in both graphs: it materializes them eagerly into
+	// an array, so it captures them (taint/captive) and closes cycles through them just like a direct dependency.
 	private static Dictionary<int, List<int>> BuildEdges(
 		List<InstanceModel> instances,
 		Dictionary<ServiceKey, string> serviceToImpl,
 		Dictionary<string, int> implToIndex,
+		Dictionary<ServiceKey, List<string>> serviceMembers,
 		bool includeEagerBare)
 	{
 		Dictionary<int, List<int>> edges = new();
@@ -445,24 +634,62 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			List<int> nodeEdges = new();
 			foreach (ParameterModel parameter in instances[i].ConstructorParameters.AsArray())
 			{
-				bool contributes = parameter.Kind == DependencyKind.Direct
-				                   || (includeEagerBare && parameter.Kind is DependencyKind.Owned or DependencyKind.Task);
-				if (!contributes)
-				{
-					continue;
-				}
-
-				if (serviceToImpl.TryGetValue(KeyOf(parameter), out string? depImpl) &&
-				    implToIndex.TryGetValue(depImpl, out int depIndex))
-				{
-					nodeEdges.Add(depIndex);
-				}
+				AddParameterEdges(parameter, serviceToImpl, implToIndex, serviceMembers, includeEagerBare, nodeEdges);
 			}
 
 			edges[i] = nodeEdges;
 		}
 
 		return edges;
+	}
+
+	// Appends the edge(s) a single parameter contributes to its node's edge list. A collection (Enumerable)
+	// edges to each of its members; a direct dependency (and, in the construction graph, a bare eager
+	// Owned<T>/Task<T>) edges to its single resolved instance; everything else defers and contributes nothing.
+	private static void AddParameterEdges(
+		ParameterModel parameter,
+		Dictionary<ServiceKey, string> serviceToImpl,
+		Dictionary<string, int> implToIndex,
+		Dictionary<ServiceKey, List<string>> serviceMembers,
+		bool includeEagerBare,
+		List<int> nodeEdges)
+	{
+		if (parameter.Kind == DependencyKind.Enumerable)
+		{
+			AddCollectionMemberEdges(KeyOf(parameter), serviceMembers, implToIndex, nodeEdges);
+			return;
+		}
+
+		bool contributes = parameter.Kind == DependencyKind.Direct
+		                   || (includeEagerBare && parameter.Kind is DependencyKind.Owned or DependencyKind.Task);
+		if (contributes
+		    && serviceToImpl.TryGetValue(KeyOf(parameter), out string? depImpl)
+		    && implToIndex.TryGetValue(depImpl, out int depIndex))
+		{
+			nodeEdges.Add(depIndex);
+		}
+	}
+
+	// Appends an edge to each built member of the collection reached under <paramref name="collectionKey" />
+	// (its element service type plus resolution key; a member absent from implToIndex failed to build and is skipped).
+	private static void AddCollectionMemberEdges(
+		ServiceKey collectionKey,
+		Dictionary<ServiceKey, List<string>> serviceMembers,
+		Dictionary<string, int> implToIndex,
+		List<int> nodeEdges)
+	{
+		if (!serviceMembers.TryGetValue(collectionKey, out List<string>? members))
+		{
+			return;
+		}
+
+		foreach (string member in members)
+		{
+			if (implToIndex.TryGetValue(member, out int memberIndex))
+			{
+				nodeEdges.Add(memberIndex);
+			}
+		}
 	}
 
 	private static InstanceModel? BuildInstance(
@@ -778,11 +1005,30 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		foreach (IParameterSymbol parameter in producer.Parameters)
 		{
 			ParameterModel parameterModel = ClassifyParameter(parameter, asyncFactory);
+
+			// A collection type (IEnumerable<T> and friends, or T[]) is normally synthesized from the registrations
+			// of its element type under the parameter's key. But if any collection shape of that element type is
+			// itself registered as a service under the same key - a legitimate opaque value such as a string[] of
+			// command-line arguments or an IReadOnlyList<T> of config - synthesis steps aside entirely (all-or-
+			// nothing): the registered shape resolves to that opaque value as an ordinary direct dependency, and an
+			// unregistered sibling shape is a plain missing dependency (AWT101) rather than a silently synthesized
+			// second collection that could disagree with the registered one.
+			if (parameterModel.Kind == DependencyKind.Enumerable
+			    && CollectionShapeTypes(parameterModel.ServiceType).Any(shape => serviceToImpl.ContainsKey(new ServiceKey(shape, parameterModel.Key))))
+			{
+				string collectionType = parameter.Type.ToDisplayString(FullyQualified);
+				parameterModel = parameterModel with { ServiceType = collectionType, Kind = DependencyKind.Direct };
+			}
+
 			parameters.Add(parameterModel);
 
 			// A CancellationToken is forwarded from the resolve-time token, not resolved from the graph (like
-			// [Arg]), so it is never a missing dependency.
-			if (parameterModel.Kind is not (DependencyKind.Arg or DependencyKind.CancellationToken)
+			// [Arg]), so it is never a missing dependency. A collection (Enumerable) resolves to every registration
+			// of its element type under the parameter's key and an empty collection is legal, so an element type
+			// with no such registration is not a missing dependency either - it just yields an empty array. (An
+			// unregistered collection type whose synthesis was suppressed above was rewritten to Direct and so is
+			// no longer Enumerable here, and does surface as AWT101.)
+			if (parameterModel.Kind is not (DependencyKind.Arg or DependencyKind.CancellationToken or DependencyKind.Enumerable)
 			    && !serviceToImpl.ContainsKey(KeyOf(parameterModel)))
 			{
 				// Lazy does not unwrap Owned<T> (memoizing a disposal handle is a footgun), so a Lazy<Owned<T>> /
@@ -795,7 +1041,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 					ownedThroughLazy ? Diagnostics.OwnedThroughLazy : Diagnostics.MissingDependency,
 					info.Location,
 					new EquatableArray<string>([
-						Display(info.Services[0].Service),
+						Display(info.OwningServiceOrImpl),
 						Display(info.ImplementationType),
 						DisplayKeyed(parameterModel.ServiceType, parameterModel.Key),
 					])));
@@ -826,7 +1072,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		diagnostics.Add(new DiagnosticInfo(
 			candidates.Count == 0 ? Diagnostics.InvalidFactory : Diagnostics.AmbiguousFactory,
 			info.Location,
-			new EquatableArray<string>([Display(info.Services[0].Service), info.ProductionMember!,])));
+			new EquatableArray<string>([Display(info.OwningServiceOrImpl), info.ProductionMember!,])));
 		return null;
 	}
 
@@ -858,7 +1104,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		diagnostics.Add(new DiagnosticInfo(
 			Diagnostics.InvalidInstance,
 			info.Location,
-			new EquatableArray<string>([Display(info.Services[0].Service), info.ProductionMember!,])));
+			new EquatableArray<string>([Display(info.OwningServiceOrImpl), info.ProductionMember!,])));
 	}
 
 	private static IMethodSymbol? SelectConstructor(
@@ -879,8 +1125,11 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			.Where(c => c.Parameters.All(p =>
 			{
 				// Selecting a constructor, never an async factory, so no CancellationToken forwarding applies.
+				// A collection (Enumerable) is always satisfiable - an unregistered element type just yields an
+				// empty array - so it never disqualifies a constructor.
 				ParameterModel parameter = ClassifyParameter(p, asyncFactory: false);
-				return parameter.Kind == DependencyKind.Arg || registered.Contains(parameter.ServiceType);
+				return parameter.Kind is DependencyKind.Arg or DependencyKind.Enumerable
+				       || registered.Contains(parameter.ServiceType);
 			}))
 			.OrderByDescending(c => c.Parameters.Length)
 			.FirstOrDefault();
@@ -934,9 +1183,17 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		}
 
 		// A [FromKey] selects the keyed registration of the dependency's service type, whether it is required
-		// directly, deferred behind a Func<T>/Lazy<T>, or wrapped in an Owned<T> handle - the service type is
-		// the same, only the delivery differs.
+		// directly, deferred behind a Func<T>/Lazy<T>, wrapped in an Owned<T> handle, or a collection - the
+		// service type is the same, only the delivery differs.
 		string? key = FromKey(parameter);
+
+		// A collection dependency resolves to every registration of its element type under the parameter's
+		// [FromKey] key (unkeyed by default). Recognized before the relationship types so IEnumerable<T> and T[]
+		// are not mistaken for a plain generic service or an array-typed direct dependency.
+		if (TryGetCollectionElement(parameter.Type, out string? elementType))
+		{
+			return new ParameterModel(elementType!, DependencyKind.Enumerable, Key: key, Location: location);
+		}
 
 		// A bare Owned<T> dependency: resolve T into a throwaway scope and hand the caller the disposal handle.
 		if (IsOwned(parameter.Type, out ITypeSymbol ownedInner))
@@ -1208,6 +1465,75 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	}
 
 	/// <summary>
+	///     AWT122: a collection dependency is materialized synchronously, so a member whose implementation is
+	///     async-tainted would be resolved without awaiting its initialization. Collections are synchronous-only,
+	///     so this is reported rather than silently emitting a synchronous resolver for an async-tainted member
+	///     (which the synchronous path does not even generate for such a member). Like AWT119/AWT120 this is a
+	///     synchronous-resolution-of-async concern independent of lifetime safety, so it is reported under both
+	///     strict and loose safety; only the pragmatic SyncResolveAfterInit mode suppresses it (the caller gates
+	///     on that, as it does for AWT119/AWT120).
+	/// </summary>
+	private static void DetectSynchronousAsyncCollection(
+		List<InstanceModel> instances,
+		List<ServiceMembers> collections,
+		Dictionary<string, int> implToIndex,
+		List<LocationInfo?> instanceLocations,
+		List<DiagnosticInfo> diagnostics)
+	{
+		if (collections.Count == 0)
+		{
+			return;
+		}
+
+		Dictionary<ServiceKey, ServiceMembers> byService = new();
+		foreach (ServiceMembers collection in collections)
+		{
+			byService[new ServiceKey(collection.Service, collection.Key)] = collection;
+		}
+
+		for (int i = 0; i < instances.Count; i++)
+		{
+			foreach (ParameterModel parameter in instances[i].ConstructorParameters.AsArray())
+			{
+				if (parameter.Kind == DependencyKind.Enumerable
+				    && byService.TryGetValue(KeyOf(parameter), out ServiceMembers members))
+				{
+					ReportAsyncTaintedMembers(i, parameter, members, instances, implToIndex, instanceLocations, diagnostics);
+				}
+			}
+		}
+	}
+
+	// Reports AWT122 for each async-tainted member of the collection <paramref name="consumer" /> injects
+	// through <paramref name="parameter" /> (a member absent from implToIndex failed to build and is skipped).
+	private static void ReportAsyncTaintedMembers(
+		int consumer,
+		ParameterModel parameter,
+		ServiceMembers members,
+		List<InstanceModel> instances,
+		Dictionary<string, int> implToIndex,
+		List<LocationInfo?> instanceLocations,
+		List<DiagnosticInfo> diagnostics)
+	{
+		foreach (string member in members.Implementations.AsArray())
+		{
+			if (!implToIndex.TryGetValue(member, out int memberIndex) || !instances[memberIndex].IsAsyncTainted)
+			{
+				continue;
+			}
+
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.AsyncCollectionResolution,
+				instanceLocations[consumer],
+				new EquatableArray<string>([
+					Display(instances[consumer].ImplementationType),
+					Display(parameter.ServiceType),
+					Display(instances[memberIndex].ImplementationType),
+				])));
+		}
+	}
+
+	/// <summary>
 	///     The shortest chain of Direct edges from <paramref name="start" /> to an async-initialized
 	///     instance, rendered for the AWT120 message.
 	/// </summary>
@@ -1262,6 +1588,50 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 		result = type;
 		return false;
+	}
+
+	/// <summary>
+	///     Recognizes a collection dependency - an array <c>T[]</c> or one of the standard generic collection
+	///     interfaces (<c>IEnumerable&lt;T&gt;</c>, <c>IReadOnlyList&lt;T&gt;</c>,
+	///     <c>IReadOnlyCollection&lt;T&gt;</c>, <c>IList&lt;T&gt;</c>, <c>ICollection&lt;T&gt;</c>) - yielding the
+	///     fully-qualified element type. An array satisfies every one of these, so the emitter materializes all
+	///     of them as an array.
+	/// </summary>
+	private static bool TryGetCollectionElement(ITypeSymbol type, out string? elementType)
+	{
+		// Only a single-dimensional (rank-1) array is a collection shape: it is what the emitter materializes
+		// (new T[] { … }). A multidimensional array (T[,]) is a distinct type that a rank-1 literal cannot fill,
+		// so it stays an ordinary direct dependency (an unregistered one surfaces as AWT101, not broken codegen).
+		if (type is IArrayTypeSymbol { Rank: 1, } array)
+		{
+			elementType = array.ElementType.ToDisplayString(FullyQualified);
+			return true;
+		}
+
+		if (type is INamedTypeSymbol { IsGenericType: true, TypeArguments.Length: 1, } named
+		    && named.ContainingNamespace?.ToDisplayString() == "System.Collections.Generic"
+		    && named.Name is "IEnumerable" or "IReadOnlyList" or "IReadOnlyCollection" or "IList" or "ICollection")
+		{
+			elementType = named.TypeArguments[0].ToDisplayString(FullyQualified);
+			return true;
+		}
+
+		elementType = null;
+		return false;
+	}
+
+	// The fully-qualified type strings of every collection shape of <paramref name="elementType" /> - the five
+	// generic collection interfaces and the rank-1 array - in the exact form registrations are stored under, so a
+	// membership check against serviceToImpl recognizes an explicitly registered collection type. Shared by the
+	// generator (injection classification) and the emitter (public dispatch) so the two never drift.
+	internal static IEnumerable<string> CollectionShapeTypes(string elementType)
+	{
+		yield return $"global::System.Collections.Generic.IEnumerable<{elementType}>";
+		yield return $"global::System.Collections.Generic.IReadOnlyList<{elementType}>";
+		yield return $"global::System.Collections.Generic.IReadOnlyCollection<{elementType}>";
+		yield return $"global::System.Collections.Generic.IList<{elementType}>";
+		yield return $"global::System.Collections.Generic.ICollection<{elementType}>";
+		yield return $"{elementType}[]";
 	}
 
 	// Whether a type is an Awaiten.Owned<T> disposal handle, yielding the owned service type T.
@@ -1346,11 +1716,14 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			// registration-time diagnostic for the [Arg]-plus-async combination itself.
 			foreach (ParameterModel parameter in instance.ConstructorParameters.AsArray())
 			{
-				// Guard the implToIndex lookup the same way BuildDependencyGraph does: serviceToImpl can name an
-				// implementation whose BuildInstance failed (so it is absent from implToIndex), and an unguarded
-				// indexer would crash the generator (KeyNotFoundException) instead of surfacing the real
-				// registration error (e.g. AWT103).
-				if (parameter.Kind == DependencyKind.Arg
+				// A collection (Enumerable) resolves to a set of members, not a single registration whose [Arg]
+				// parameters could be supplied, so runtime-argument matching does not apply to it (its element
+				// type may coincidentally be singly registered, so it is excluded explicitly rather than by the
+				// serviceToImpl lookup below). Guard the implToIndex lookup the same way BuildDependencyGraph does:
+				// serviceToImpl can name an implementation whose BuildInstance failed (so it is absent from
+				// implToIndex), and an unguarded indexer would crash the generator (KeyNotFoundException) instead
+				// of surfacing the real registration error (e.g. AWT103).
+				if (parameter.Kind is DependencyKind.Arg or DependencyKind.Enumerable
 				    || !serviceToImpl.TryGetValue(KeyOf(parameter), out string? targetImpl)
 				    || !implToIndex.TryGetValue(targetImpl, out int targetIndex))
 				{
@@ -1475,7 +1848,9 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 		// The service key the parent's constructor used to reach this dependency - the alias the developer
 		// wrote, including any [FromKey] - which is the one of the dependency's service keys that a parent
-		// parameter selects. Falls back to the first service key if no parameter matches (it always should).
+		// parameter selects. Falls back to the first service key if no parameter matches, or - when the
+		// dependency is a collection member reached only through the collection and so exposes no service of
+		// its own - to its implementation type, so the diagnostic still names it.
 		static ServiceKey ReferencedService(InstanceModel parent, InstanceModel dependency)
 		{
 			ServiceKey[] dependencyServices = dependency.Services.AsArray();
@@ -1488,7 +1863,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 				}
 			}
 
-			return dependencyServices[0];
+			return dependencyServices.Length > 0 ? dependencyServices[0] : new ServiceKey(dependency.ImplementationType, null);
 		}
 	}
 
@@ -1592,5 +1967,12 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		public ProductionKind Production { get; }
 		public string? ProductionMember { get; }
 		public List<ServiceKey> Services { get; }
+
+		/// <summary>
+		///     The service type to name this implementation by in a diagnostic: its first winning service, or -
+		///     when it won none (a collection member reached only through the collection) - the implementation
+		///     type itself, so the message still identifies it rather than crashing on an empty service list.
+		/// </summary>
+		public string OwningServiceOrImpl => Services.Count > 0 ? Services[0].Service : ImplementationType;
 	}
 }
