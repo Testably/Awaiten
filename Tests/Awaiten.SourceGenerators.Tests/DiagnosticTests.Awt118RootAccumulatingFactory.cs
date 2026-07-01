@@ -156,6 +156,34 @@ public partial class DiagnosticTests
 		}
 
 		[Fact]
+		public async Task ReportsWhenAFuncBuildsAConsumerThatCollectsDisposableTransients()
+		{
+			string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>("""
+			                                       using Awaiten;
+			                                       using System;
+			                                       using System.Collections.Generic;
+
+			                                       namespace MyCode;
+
+			                                       public interface IPlugin { }
+			                                       public sealed class Disposable : IPlugin, IDisposable { public void Dispose() { } }
+			                                       public sealed class Consumer { public Consumer(IEnumerable<IPlugin> plugins) { } }
+			                                       public sealed class Depot { public Depot(Func<Consumer> consumers) { } }
+
+			                                       [Container]
+			                                       [Transient<Disposable, IPlugin>]
+			                                       [Transient<Consumer>]
+			                                       [Singleton<Depot>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(diagnostics).Contains("*AWT118*").AsWildcard()
+				.Because("building the non-disposable Consumer on demand materializes its collection of disposable transients, which accumulate on the root just as a direct disposable transient dependency would - the transitive-disposable walk follows collection edges");
+		}
+
+		[Fact]
 		public async Task ReportsWhenASingletonHoldsAFuncOfTaskOverADisposableAsyncTransient()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>("""

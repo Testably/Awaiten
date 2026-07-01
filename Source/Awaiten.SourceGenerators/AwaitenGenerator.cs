@@ -292,11 +292,40 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	}
 
 	/// <summary>
+	///     The instance indices of every collection-resolvable service's members, keyed by element service type,
+	///     for the transitive-disposable walk. Composed from the graph's <paramref name="collections" /> and
+	///     <paramref name="implToIndex" /> (a member absent from the latter failed to build and is skipped).
+	/// </summary>
+	internal static Dictionary<string, List<int>> CollectionMemberIndices(
+		IReadOnlyList<ServiceMembers> collections,
+		Dictionary<string, int> implToIndex)
+	{
+		Dictionary<string, List<int>> members = new(StringComparer.Ordinal);
+		foreach (ServiceMembers collection in collections)
+		{
+			List<int> indices = new();
+			foreach (string implementation in collection.Implementations.AsArray())
+			{
+				if (implToIndex.TryGetValue(implementation, out int index))
+				{
+					indices.Add(index);
+				}
+			}
+
+			members[collection.Service] = indices;
+		}
+
+		return members;
+	}
+
+	/// <summary>
 	///     Whether building the service at <paramref name="start" /> on its owner tracks a fresh disposable
 	///     there: the service itself is disposable, or its construction transitively rebuilds one. The walk
-	///     follows only direct <em>transient</em> dependency edges, because a scoped or singleton dependency is
+	///     follows only <em>transient</em> dependency edges, because a scoped or singleton dependency is
 	///     cached/shared (built at most once on the owner) and so is bounded, whereas a transient dependency is
-	///     rebuilt - and, if disposable, re-tracked - on every construction. Used to decide whether a plain
+	///     rebuilt - and, if disposable, re-tracked - on every construction. A collection (Enumerable) edge is
+	///     followed too: it materializes its members eagerly into the owner, so a transient disposable member is
+	///     rebuilt on every construction just like a direct transient dependency. Used to decide whether a plain
 	///     <c>Func&lt;…&gt;</c> over the service accumulates on the container root (AWT118 / strict withholding):
 	///     a non-disposable transient that injects a disposable transient leaks just the same when built
 	///     repeatedly through a root-bound factory.
@@ -304,6 +333,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	internal static bool BuildsFreshDisposable(
 		IReadOnlyList<InstanceModel> instances,
 		Dictionary<ServiceKey, int> serviceToIndex,
+		IReadOnlyDictionary<string, List<int>> collectionMembers,
 		int start)
 	{
 		HashSet<int> visited = new();
@@ -326,6 +356,24 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 			foreach (ParameterModel parameter in instance.ConstructorParameters.AsArray())
 			{
+				// A collection materializes its members eagerly during this node's construction, so each transient
+				// member is rebuilt (and, if disposable, re-tracked) on every construction - follow those edges.
+				if (parameter.Kind == DependencyKind.Enumerable)
+				{
+					if (collectionMembers.TryGetValue(parameter.ServiceType, out List<int>? members))
+					{
+						foreach (int member in members)
+						{
+							if (instances[member].Lifetime == Lifetime.Transient)
+							{
+								stack.Push(member);
+							}
+						}
+					}
+
+					continue;
+				}
+
 				// Only a direct (non-deferred) transient dependency is rebuilt as part of constructing this node;
 				// a relationship/Owned/Arg parameter defers, and a scoped/singleton dependency is cached/shared.
 				if (parameter.Kind == DependencyKind.Direct

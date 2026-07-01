@@ -1,5 +1,3 @@
-using System.Linq;
-
 namespace Awaiten.SourceGenerators.Tests;
 
 public partial class DiagnosticTests
@@ -32,7 +30,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT122"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT122*").AsWildcard()
 				.Because("a synchronously materialized collection cannot await an async-initialized member");
 		}
 
@@ -59,7 +57,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT122"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT122*").AsWildcard()
 				.Because("a collection whose members are all synchronous is materialized without any async initialization");
 		}
 
@@ -89,7 +87,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT122"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT122*").AsWildcard()
 				.Because("SyncResolveAfterInit permits synchronous resolution of an async-tainted member after warm-up");
 		}
 	}

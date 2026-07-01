@@ -94,6 +94,69 @@ public partial class CollectionTests
 		await That(units.Single()).IsSameAs(scope.Resolve<IUnit>());
 	}
 
+	[Fact]
+	public async Task Strict_ResolvingACollectionOfDisposableTransientsFromTheRoot_ThrowsGuidance()
+	{
+		using DisposableCollectionContainer.Root container = new();
+
+		await That(() => container.Resolve<IWidget[]>()).Throws<InvalidOperationException>()
+			.Because("materializing a collection of disposable transients by type on the root would accumulate them for the container's lifetime, so it is withheld under strict lifetime safety - just like the singular resolution of such a member");
+		await That(() => container.Resolve<IEnumerable<IWidget>>()).Throws<InvalidOperationException>()
+			.Because("the IEnumerable<T> shape of the same collection is withheld on the root too");
+	}
+
+	[Fact]
+	public async Task Strict_TryResolvingAWithheldCollectionFromTheRoot_ReturnsFalseRatherThanThrowing()
+	{
+		using DisposableCollectionContainer.Root container = new();
+
+		bool resolved = container.TryResolve<IWidget[]>(out IWidget[]? widgets);
+
+		await That(resolved).IsFalse()
+			.Because("TryResolve is a non-throwing probe; the withheld collection reports false on the root rather than throwing the guidance");
+		await That(widgets).IsNull();
+	}
+
+	[Fact]
+	public async Task Strict_ResolvingAWithheldCollectionFromAScope_Works()
+	{
+		using DisposableCollectionContainer.Root container = new();
+		using IAwaitenScope scope = container.CreateScope();
+
+		IWidget[] widgets = scope.Resolve<IWidget[]>();
+
+		await That(widgets).HasCount(1)
+			.Because("a child scope bounds the members' lifetime, so it resolves by type the collection the root withholds");
+	}
+
+	[Fact]
+	public async Task Strict_AWithheldCollectionResolvedFromAScope_IsDisposedWithTheScope()
+	{
+		using DisposableCollectionContainer.Root container = new();
+
+		DisposableWidget widget;
+		using (IAwaitenScope scope = container.CreateScope())
+		{
+			widget = (DisposableWidget)scope.Resolve<IWidget[]>().Single();
+			await That(widget.Disposed).IsFalse()
+				.Because("the scope is still alive");
+		}
+
+		await That(widget.Disposed).IsTrue()
+			.Because("the scope tracks the transient members it materialized and disposes them with the scope - the accumulation the root would suffer is bounded here");
+	}
+
+	[Fact]
+	public async Task Loose_ResolvingACollectionOfDisposableTransientsFromTheRoot_Works()
+	{
+		using LooseCollectionContainer.Root container = new();
+
+		IWidget[] widgets = container.Resolve<IWidget[]>();
+
+		await That(widgets).HasCount(1)
+			.Because("Loose lifetime safety keeps the collection resolvable by type on the root, like a singular disposable transient");
+	}
+
 	public interface IPlugin
 	{
 		string Name { get; }
@@ -147,6 +210,15 @@ public partial class CollectionTests
 		public IReadOnlyList<IUnit> Units { get; }
 	}
 
+	public interface IWidget;
+
+	public sealed class DisposableWidget : IWidget, IDisposable
+	{
+		public bool Disposed { get; private set; }
+
+		public void Dispose() => Disposed = true;
+	}
+
 	[Container]
 	[Singleton<Alpha, IPlugin>]
 	[Singleton<Beta, IPlugin>]
@@ -157,4 +229,15 @@ public partial class CollectionTests
 	[Scoped<UnitA, IUnit>]
 	[Scoped<UnitHost>]
 	public static partial class CollectionContainer;
+
+	// A collection whose member is a disposable transient: materializing it by type on the root would
+	// accumulate the transients for the container's lifetime, so under strict lifetime safety the collection is
+	// withheld on the root (resolvable from a child scope, which bounds it). Loose keeps it root-resolvable.
+	[Container]
+	[Transient<DisposableWidget, IWidget>]
+	public static partial class DisposableCollectionContainer;
+
+	[Container(LifetimeSafety = LifetimeSafety.Loose)]
+	[Transient<DisposableWidget, IWidget>]
+	public static partial class LooseCollectionContainer;
 }

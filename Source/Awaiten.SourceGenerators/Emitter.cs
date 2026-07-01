@@ -209,10 +209,10 @@ internal static class Emitter
 	///     into a throwaway scope) is offered; the plain Func stays resolvable from a child scope, which bounds the
 	///     disposables it builds.
 	/// </summary>
-	private static bool IsFuncWithheld(InstanceModel[] instances, int index, Dictionary<ServiceKey, int> serviceToIndex, bool strict)
+	private static bool IsFuncWithheld(InstanceModel[] instances, int index, Dictionary<ServiceKey, int> serviceToIndex, IReadOnlyDictionary<string, List<int>> collectionMembers, bool strict)
 		=> strict
 		   && (instances[index].Lifetime == Lifetime.Transient || instances[index].IsParameterized)
-		   && AwaitenGenerator.BuildsFreshDisposable(instances, serviceToIndex, index);
+		   && AwaitenGenerator.BuildsFreshDisposable(instances, serviceToIndex, collectionMembers, index);
 
 	private static bool IsRootOwned(InstanceModel instance)
 		=> instance.Lifetime == Lifetime.Singleton || instance.Production == ProductionKind.Instance;
@@ -264,6 +264,18 @@ internal static class Emitter
 	{
 		string display = service.Replace("global::", string.Empty);
 		return $"\"Awaiten: '{display}' is withheld from by-type resolution on the container root under strict lifetime safety; obtain it through Owned<{display}> or Func<…, Owned<{display}>>, resolve it from a child scope, inject it directly, or set LifetimeSafety.Loose on the [Container].\"";
+	}
+
+	/// <summary>
+	///     The guidance thrown by Resolve(Type) on the Root for a collection (<c>IEnumerable&lt;T&gt;</c> / <c>T[]</c>)
+	///     that holds a build-on-demand disposable member: materializing it on the Root would accumulate those
+	///     disposables for the container's lifetime. Unlike a single service there is no <c>Owned&lt;T&gt;</c> form
+	///     for a collection, so the guidance steers to a child scope, direct injection, or <c>LifetimeSafety.Loose</c>.
+	/// </summary>
+	private static string CollectionWithheldMessage(string collection)
+	{
+		string display = collection.Replace("global::", string.Empty);
+		return $"\"Awaiten: the collection '{display}' has a build-on-demand disposable member and is withheld from by-type resolution on the container root under strict lifetime safety; resolve it from a child scope, inject it directly, or set LifetimeSafety.Loose on the [Container].\"";
 	}
 
 	/// <summary>
@@ -703,6 +715,17 @@ internal static class Emitter
 		List<DispatchEntry> entries = new();
 		HashSet<string> seen = new(StringComparer.Ordinal);
 
+		// Impl-to-index and collection membership, so the withholding analysis can follow a service's collection
+		// dependencies (BuildsFreshDisposable) and a collection with a build-on-demand disposable member can be
+		// withheld from by-type resolution on the Root, just like the singular resolution of such a member.
+		Dictionary<string, int> implToIndex = new(StringComparer.Ordinal);
+		for (int i = 0; i < instances.Length; i++)
+		{
+			implToIndex[instances[i].ImplementationType] = i;
+		}
+
+		Dictionary<string, List<int>> collectionMembers = AwaitenGenerator.CollectionMemberIndices(names.Collections, implToIndex);
+
 		// Explicit service registrations first, so a directly registered relationship type (e.g. a
 		// registered Lazy<T>) wins the dispatch slot over the synthetic relationship entry below. Service
 		// types are unique across instances (registrations are coalesced), so each is added exactly once.
@@ -716,7 +739,7 @@ internal static class Emitter
 				continue;
 			}
 
-			AddServiceEntries(instances[i], names.Resolver(i), entries, seen, IsWithheld(instances[i], strict), IsFuncWithheld(instances, i, serviceToIndex, strict));
+			AddServiceEntries(instances[i], names.Resolver(i), entries, seen, IsWithheld(instances[i], strict), IsFuncWithheld(instances, i, serviceToIndex, collectionMembers, strict));
 		}
 
 		// Synthetic Func<T>/Lazy<T> over each service, skipping any key an explicit registration already
@@ -727,7 +750,7 @@ internal static class Emitter
 		{
 			if (!instances[i].IsParameterized && EmitsSync(instances[i], syncResolveAfterInit))
 			{
-				AddRelationshipEntries(instances[i], names.Resolver(i), entries, seen, IsFuncWithheld(instances, i, serviceToIndex, strict));
+				AddRelationshipEntries(instances[i], names.Resolver(i), entries, seen, IsFuncWithheld(instances, i, serviceToIndex, collectionMembers, strict));
 			}
 		}
 
@@ -743,17 +766,31 @@ internal static class Emitter
 				continue;
 			}
 
+			// A collection materializes its members eagerly on the resolving scope. If any member is a
+			// build-on-demand disposable service (its plain resolver tracks a fresh disposable on the owner), then
+			// re-resolving the collection by type off the Root accumulates those disposables for the container's
+			// lifetime - the exact leak the singular resolution of such a member is root-withheld to prevent. So
+			// the collection is root-withheld too: resolvable from a child scope (which bounds its members), but
+			// withheld from by-type resolution on the Root. There is no Owned<T> form for a collection, so the
+			// guidance steers to a child scope, direct injection, or LifetimeSafety.Loose.
+			bool rootWithheld = collectionMembers.TryGetValue(element, out List<int>? members)
+			                    && members.Any(member => IsFuncWithheld(instances, member, serviceToIndex, collectionMembers, strict));
+
 			string array = CollectionLiteral(element, names);
 			string enumerable = $"global::System.Collections.Generic.IEnumerable<{element}>";
 			string arrayType = $"{element}[]";
 			if (seen.Add(enumerable))
 			{
-				entries.Add(new DispatchEntry(enumerable, array));
+				entries.Add(rootWithheld
+					? new DispatchEntry(enumerable, array, CollectionWithheldMessage(enumerable))
+					: new DispatchEntry(enumerable, array));
 			}
 
 			if (seen.Add(arrayType))
 			{
-				entries.Add(new DispatchEntry(arrayType, array));
+				entries.Add(rootWithheld
+					? new DispatchEntry(arrayType, array, CollectionWithheldMessage(arrayType))
+					: new DispatchEntry(arrayType, array));
 			}
 		}
 

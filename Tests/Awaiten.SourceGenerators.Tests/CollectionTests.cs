@@ -1,5 +1,3 @@
-using System.Linq;
-
 namespace Awaiten.SourceGenerators.Tests;
 
 /// <summary>
@@ -193,7 +191,69 @@ public class CollectionTests
 		                                       }
 		                                       """);
 
-		await That(result.Diagnostics.Any(d => d.Contains("AWT105"))).IsTrue()
+		await That(result.Diagnostics).Contains("*AWT105*").AsWildcard()
 			.Because("a collection captures its members eagerly, so a singleton holding a collection of scoped services is a captive dependency");
+	}
+
+	[Fact]
+	public async Task CollectionWithADisposableTransientMember_IsWithheldFromRootByTypeResolution()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System;
+		                                       using System.Collections.Generic;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class Disposable : IPlugin, IDisposable { public void Dispose() { } }
+		                                       public sealed class Host { public Host(IEnumerable<IPlugin> plugins) { } }
+
+		                                       [Container]
+		                                       [Transient<Disposable, IPlugin>]
+		                                       [Singleton<Host>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// A collection of a build-on-demand disposable member is root-withheld: materializing it by type off the
+		// Root would accumulate the transient disposables for the container's lifetime, so Resolve on the Root
+		// throws the collection-specific guidance while a child scope still resolves it.
+		await That(source).Contains("the collection 'System.Collections.Generic.IEnumerable<MyCode.IPlugin>' has a build-on-demand disposable member")
+			.Because("the IEnumerable<T> collection dispatch is withheld from the Root when a member is a disposable transient");
+		await That(source).Contains("the collection 'MyCode.IPlugin[]' has a build-on-demand disposable member")
+			.Because("the T[] collection dispatch is withheld from the Root too");
+	}
+
+	[Fact]
+	public async Task CollectionOfNonDisposableMembers_IsNotWithheld()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class Plain : IPlugin { }
+		                                       public sealed class Host { public Host(IEnumerable<IPlugin> plugins) { } }
+
+		                                       [Container]
+		                                       [Transient<Plain, IPlugin>]
+		                                       [Singleton<Host>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).DoesNotContain("has a build-on-demand disposable member")
+			.Because("a collection whose members are not build-on-demand disposables leaks nothing on the Root, so it stays resolvable there");
 	}
 }
