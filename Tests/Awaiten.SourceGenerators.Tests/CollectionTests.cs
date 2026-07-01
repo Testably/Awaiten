@@ -260,6 +260,102 @@ public class CollectionTests
 		// as an opaque value (e.g. a string[] of command-line arguments) is therefore supported.
 		await That(source).Contains("new global::MyCode.Host(__root.ResolveBundle())")
 			.Because("an explicitly registered collection type wins over the synthesized collection on injection (the singleton member routes through the root)");
+
+		// All-or-nothing synthesis: because a shape of IPlugin (IEnumerable<IPlugin>) is registered, no shape is
+		// synthesized - the IPlugin[] shape is not added to the public dispatch as a synthesized collection.
+		await That(source).DoesNotContain("typeof(global::MyCode.IPlugin[])")
+			.Because("registering one collection shape of IPlugin suppresses synthesis for every shape of IPlugin");
+	}
+
+	[Fact]
+	public async Task ExplicitCollectionRegistration_SuppressesSynthesisOfEverySiblingShape()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class Alpha : IPlugin { }
+		                                       public sealed class Bundle : List<IPlugin> { }
+		                                       // Injects a *different* collection shape than the one registered.
+		                                       public sealed class Host { public Host(IPlugin[] plugins) { } }
+
+		                                       [Container]
+		                                       [Singleton<Alpha, IPlugin>]
+		                                       [Singleton<Bundle, IEnumerable<IPlugin>>]
+		                                       [Singleton<Host>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		// All-or-nothing synthesis: registering IEnumerable<IPlugin> suppresses synthesis for IPlugin[] too, so an
+		// injected IPlugin[] is an unregistered direct dependency (AWT101) rather than a silently synthesized
+		// collection that would disagree with the registered IEnumerable<IPlugin>.
+		await That(result.Diagnostics).Contains("*AWT101*").AsWildcard()
+			.Because("an unregistered sibling collection shape is a missing dependency once any shape of the element type is explicitly registered");
+	}
+
+	[Fact]
+	public async Task MultidimensionalArrayParameter_IsNotACollection()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class Host { public Host(int[,] grid) { } }
+
+		                                       [Container]
+		                                       [Singleton<Host>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		// A multidimensional array is not a collection shape (only a rank-1 array is), so an unregistered one is a
+		// plain missing dependency rather than a synthesized rank-1 literal that would not even compile.
+		await That(result.Diagnostics).Contains("*AWT101*").AsWildcard()
+			.Because("a multidimensional array (int[,]) is an ordinary direct dependency, so an unregistered one is AWT101 - not broken collection codegen");
+	}
+
+	[Fact]
+	public async Task KeyedCollection_ResolvesOnlyTheMembersUnderThatKey()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class Keyed : IPlugin { }
+		                                       public sealed class Plain : IPlugin { }
+		                                       public sealed class Host { public Host([FromKey("primary")] IEnumerable<IPlugin> plugins) { } }
+
+		                                       [Container]
+		                                       [Singleton<Keyed, IPlugin>(Key = "primary")]
+		                                       [Singleton<Plain, IPlugin>]
+		                                       [Singleton<Host>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// The [FromKey("primary")] collection materializes only the 'primary' member, not the unkeyed Plain. (A
+		// key identifies at most one registration per service type here, so the keyed collection holds one member.)
+		await That(source).Contains("new global::MyCode.Host(new global::MyCode.IPlugin[] { ResolveKeyed() })")
+			.Because("a keyed collection resolves exactly the registrations under that key");
+
+		// The unkeyed collection (publicly resolvable by type) holds only the unkeyed Plain - a keyed member is
+		// never an unkeyed one, so the two buckets stay disjoint.
+		await That(source).Contains("instance = new global::MyCode.IPlugin[] { ResolvePlain() }; return true;")
+			.Because("the public unkeyed collection resolves only the unkeyed registration");
 	}
 
 	[Fact]
@@ -288,5 +384,41 @@ public class CollectionTests
 
 		await That(source).DoesNotContain("has a build-on-demand disposable member")
 			.Because("a collection whose members are not build-on-demand disposables leaks nothing on the Root, so it stays resolvable there");
+	}
+
+	[Fact]
+	public async Task PubliclyRequestedAsyncCollection_ThrowsGuidanceRatherThanBeingSilentlyUnresolvable()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+		                                       using System.Threading;
+		                                       using System.Threading.Tasks;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class AsyncPlugin : IPlugin, IAsyncInitializable
+		                                       {
+		                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+		                                       }
+
+		                                       [Container]
+		                                       [Singleton<AsyncPlugin, IPlugin>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		// The collection is never injected, so there is no AWT122; but it holds an async-tainted member, so it has
+		// no synchronous materialization. Rather than surfacing a generic "no registration", its shapes carry
+		// AWT122-style guidance in the __withheld table, and none is added to the synchronous dispatch.
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("the collection 'System.Collections.Generic.IEnumerable<MyCode.IPlugin>' has an async-tainted member")
+			.Because("a publicly requested async collection surfaces guidance instead of a generic no-registration error");
+		await That(source).DoesNotContain("new global::MyCode.IPlugin[] { ResolveAsyncPlugin() }")
+			.Because("an async-tainted member has no synchronous resolver, so no synchronous collection literal is emitted for it");
 	}
 }

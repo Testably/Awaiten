@@ -10,7 +10,7 @@ namespace Awaiten.SourceGenerators.Internals;
 ///     <see cref="ServiceToImpl" /> / <see cref="ImplToIndex" /> lookups that map a service key (service type
 ///     plus optional resolution key) to its implementation and an implementation to its instance index, and
 ///     each instance's source <see cref="InstanceLocations" />. <see cref="Collections" /> is the
-///     collection-resolvable membership (each unkeyed service type and the instances registered under it, in
+///     collection-resolvable membership (each (service type, key) and the instances registered under it, in
 ///     registration order), which the emitter materializes as <c>IEnumerable&lt;T&gt;</c> / <c>T[]</c>.
 ///     Produced by <c>AwaitenGenerator.BuildGraph</c> and shared by the generator (which emits the container
 ///     from it) and <c>AwaitenAnalyzer</c> (which walks it for AWT118).

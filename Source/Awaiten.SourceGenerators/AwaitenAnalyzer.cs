@@ -117,10 +117,10 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 			}
 		}
 
-		// The collection membership by element service type, so the transitive-disposable walk can follow a
+		// The collection membership by (element service type, key), so the transitive-disposable walk can follow a
 		// service's collection dependencies (a transient disposable member accumulates on the root just like a
 		// direct transient one).
-		Dictionary<string, List<int>> collectionMembers =
+		Dictionary<ServiceKey, List<int>> collectionMembers =
 			AwaitenGenerator.CollectionMemberIndices(graph.Collections, graph.ImplToIndex);
 
 		// One report per holder+service, even when several root-owned owners reach the same factory.
@@ -140,7 +140,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 		int owner,
 		GraphModel graph,
 		Dictionary<ServiceKey, int> serviceToIndex,
-		Dictionary<string, List<int>> collectionMembers,
+		Dictionary<ServiceKey, List<int>> collectionMembers,
 		bool strict,
 		HashSet<string> reported,
 		List<DiagnosticInfo> diagnostics)
@@ -169,7 +169,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 		int node,
 		GraphModel graph,
 		Dictionary<ServiceKey, int> serviceToIndex,
-		Dictionary<string, List<int>> collectionMembers,
+		Dictionary<ServiceKey, List<int>> collectionMembers,
 		bool strict,
 		HashSet<string> reported,
 		List<DiagnosticInfo> diagnostics)
@@ -216,7 +216,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 	// the container's lifetime. The async resolver tracks disposables identically to the synchronous one, so the
 	// async factory leaks the same way and is included here - and since Owned<T> is unavailable for an async
 	// service, the async form is the only deferred factory that can reach an async-tainted target at all.
-	private static bool IsRootAccumulatingFunc(GraphModel graph, Dictionary<ServiceKey, int> serviceToIndex, Dictionary<string, List<int>> collectionMembers, ParameterModel parameter)
+	private static bool IsRootAccumulatingFunc(GraphModel graph, Dictionary<ServiceKey, int> serviceToIndex, Dictionary<ServiceKey, List<int>> collectionMembers, ParameterModel parameter)
 	{
 		if (parameter.Kind is not (DependencyKind.Func or DependencyKind.FuncTask) || parameter.ProducesOwned
 		    || !graph.ServiceToImpl.TryGetValue(new ServiceKey(parameter.ServiceType, parameter.Key), out string? targetImpl)

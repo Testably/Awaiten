@@ -170,8 +170,44 @@ public partial class CollectionTests
 		await That(host.Plugins[0].Name).IsEqualTo("bundle");
 		await That(container.Resolve<IEnumerable<IPlugin>>().Single().Name).IsEqualTo("bundle");
 
-		// The IPlugin[] shape was not explicitly registered, so it still synthesizes the collection of members.
-		await That(container.Resolve<IPlugin[]>()).HasCount(2);
+		// All-or-nothing synthesis: because a collection shape of IPlugin (IEnumerable<IPlugin>) is explicitly
+		// registered, no shape is synthesized - the unregistered IPlugin[] shape is unresolvable rather than a
+		// silently synthesized second collection that would disagree with the registered one.
+		await That(() => container.Resolve<IPlugin[]>()).Throws<InvalidOperationException>()
+			.Because("registering one collection shape of IPlugin suppresses synthesis for every shape of IPlugin");
+	}
+
+	[Fact]
+	public async Task AllCollectionShapes_ArePubliclyResolvable()
+	{
+		using CollectionContainer.Root container = new();
+
+		// Every supported collection shape resolves the same two members (the eagerly materialized array
+		// satisfies each), not only IEnumerable<T> and T[].
+		await That(container.Resolve<IReadOnlyList<IPlugin>>()).HasCount(2);
+		await That(container.Resolve<IReadOnlyCollection<IPlugin>>()).HasCount(2);
+		await That(container.Resolve<IList<IPlugin>>()).HasCount(2);
+		await That(container.Resolve<ICollection<IPlugin>>()).HasCount(2);
+	}
+
+	[Fact]
+	public async Task FromKey_CollectionResolvesOnlyTheMembersUnderThatKey()
+	{
+		using KeyedCollectionContainer.Root container = new();
+
+		KeyedPluginHost host = container.Resolve<KeyedPluginHost>();
+
+		// Each [FromKey] collection resolves the registration(s) under that key, never the others. A key
+		// identifies at most one registration per service type here (two would be AWT117), so each keyed
+		// collection holds its single keyed member; the point is that the buckets stay disjoint.
+		await That(host.Primary).HasCount(1);
+		await That(host.Primary[0].Name).IsEqualTo("alpha");
+		await That(host.Secondary).HasCount(1);
+		await That(host.Secondary[0].Name).IsEqualTo("gamma");
+
+		// The unkeyed collection resolves only the unkeyed registration - a keyed member is never an unkeyed one.
+		await That(host.Unkeyed).HasCount(1);
+		await That(host.Unkeyed[0].Name).IsEqualTo("plain");
 	}
 
 	public interface IPlugin
@@ -256,6 +292,35 @@ public partial class CollectionTests
 		public IReadOnlyList<IPlugin> Plugins { get; }
 	}
 
+	public sealed class Gamma : IPlugin
+	{
+		public string Name => "gamma";
+	}
+
+	public sealed class Plain : IPlugin
+	{
+		public string Name => "plain";
+	}
+
+	public sealed class KeyedPluginHost
+	{
+		public KeyedPluginHost(
+			[FromKey("primary")] IEnumerable<IPlugin> primary,
+			[FromKey("secondary")] IReadOnlyList<IPlugin> secondary,
+			IEnumerable<IPlugin> unkeyed)
+		{
+			Primary = primary.ToArray();
+			Secondary = secondary;
+			Unkeyed = unkeyed.ToArray();
+		}
+
+		public IReadOnlyList<IPlugin> Primary { get; }
+
+		public IReadOnlyList<IPlugin> Secondary { get; }
+
+		public IReadOnlyList<IPlugin> Unkeyed { get; }
+	}
+
 	[Container]
 	[Singleton<Alpha, IPlugin>]
 	[Singleton<Beta, IPlugin>]
@@ -286,4 +351,14 @@ public partial class CollectionTests
 	[Singleton<PluginBundle, IEnumerable<IPlugin>>]
 	[Singleton<BundleHost>]
 	public static partial class ExplicitCollectionContainer;
+
+	// Registrations under three disjoint buckets: 'primary' (alpha), 'secondary' (gamma) and unkeyed (plain).
+	// A [FromKey] collection resolves exactly the members of its bucket. A key identifies at most one
+	// registration per service type (two would be AWT117), so each keyed collection holds its single member.
+	[Container]
+	[Singleton<Alpha, IPlugin>(Key = "primary")]
+	[Singleton<Gamma, IPlugin>(Key = "secondary")]
+	[Singleton<Plain, IPlugin>]
+	[Singleton<KeyedPluginHost>]
+	public static partial class KeyedCollectionContainer;
 }

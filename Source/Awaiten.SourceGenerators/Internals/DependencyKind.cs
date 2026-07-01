@@ -44,10 +44,11 @@ internal enum DependencyKind
 	/// <summary>
 	///     A collection dependency (<c>IEnumerable&lt;T&gt;</c>, <c>IReadOnlyList&lt;T&gt;</c>,
 	///     <c>IReadOnlyCollection&lt;T&gt;</c>, <c>IList&lt;T&gt;</c>, <c>ICollection&lt;T&gt;</c> or
-	///     <c>T[]</c>): resolves to every unkeyed registration of the element type <c>T</c> (the parameter's
-	///     <c>ServiceType</c>), materialized eagerly into an array in registration order. Unlike the
-	///     relationship kinds it captures its members, so it contributes a graph edge to each of them (for
-	///     cycle, captive and async-taint analysis) and never launders their taint.
+	///     <c>T[]</c>): resolves to every registration of the element type <c>T</c> (the parameter's
+	///     <c>ServiceType</c>) under the parameter's <c>Key</c> - the unkeyed registrations by default, the
+	///     registrations under a <c>[FromKey]</c> key when one is present - materialized eagerly into an array
+	///     in registration order. Unlike the relationship kinds it captures its members, so it contributes a
+	///     graph edge to each of them (for cycle, captive and async-taint analysis) and never launders their taint.
 	/// </summary>
 	Enumerable,
 }
