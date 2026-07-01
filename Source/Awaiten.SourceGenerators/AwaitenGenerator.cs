@@ -1471,10 +1471,19 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			new EquatableArray<string>([Display(info.OwningServiceOrImpl), info.ProductionMember!,])));
 	}
 
-	private static IMethodSymbol? SelectConstructor(
+	/// <summary>
+	///     Chooses the constructor the container builds <paramref name="implementation" /> through: its single
+	///     accessible constructor, or the greediest whose parameters are all satisfiable (falling back to the
+	///     greediest so unresolved parameters surface as AWT101). <paramref name="additionallySatisfiable" />, when
+	///     supplied, marks parameters the caller can satisfy beyond the registered set - open generic expansion
+	///     passes it so a parameter whose closed generic is expanded on demand does not disqualify a constructor,
+	///     letting the seed scan the same constructor the emitted container resolves.
+	/// </summary>
+	internal static IMethodSymbol? SelectConstructor(
 		INamedTypeSymbol implementation,
 		INamedTypeSymbol containerSymbol,
-		IEnumerable<string> registeredServices)
+		IEnumerable<string> registeredServices,
+		Func<IParameterSymbol, bool>? additionallySatisfiable = null)
 	{
 		List<IMethodSymbol> constructors = implementation.InstanceConstructors
 			.Where(c => IsAccessibleConstructor(c, containerSymbol))
@@ -1493,7 +1502,8 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 				// empty array - so it never disqualifies a constructor.
 				ParameterModel parameter = ClassifyParameter(p, asyncFactory: false);
 				return parameter.Kind is DependencyKind.Arg or DependencyKind.Enumerable
-				       || registered.Contains(parameter.ServiceType);
+				       || registered.Contains(parameter.ServiceType)
+				       || (additionallySatisfiable?.Invoke(p) ?? false);
 			}))
 			.OrderByDescending(c => c.Parameters.Length)
 			.FirstOrDefault();

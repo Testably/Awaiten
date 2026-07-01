@@ -602,4 +602,74 @@ public class GeneralTests
 		await That(source).Contains("new global::MyCode.AuditHandler<global::MyCode.OrderPlaced>()");
 		await That(source).Contains("new global::MyCode.ProjectionHandler<global::MyCode.OrderPlaced>()");
 	}
+
+	[Fact]
+	public async Task OpenGeneric_SeedsExpansionFromTheConstructorTheContainerActuallyUses()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class Order { }
+		                                       public interface IRepository<T> { }
+		                                       public sealed class Repository<T> : IRepository<T> { }
+		                                       // Only an internal constructor: the container (same assembly) uses it, so seeding must scan it
+		                                       // too - a public-only seed heuristic would miss IRepository<Order> and report a false AWT101.
+		                                       public sealed class Root { internal Root(IRepository<Order> orders) { } }
+
+		                                       [Container]
+		                                       [Transient(typeof(Repository<>), typeof(IRepository<>))]
+		                                       [Transient<Root>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// The internal constructor's IRepository<Order> dependency seeded expansion of Repository<Order>.
+		await That(source).Contains("new global::MyCode.Repository<global::MyCode.Order>()");
+	}
+
+	[Fact]
+	public async Task OpenGeneric_SelectsTheResolvableConstructorDependingOnAnExpandableOpenGeneric()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class Order { }
+		                                       public interface IRepository<T> { }
+		                                       public sealed class Repository<T> : IRepository<T> { }
+		                                       public sealed class Dep { }
+		                                       public sealed class Unregistered { }
+
+		                                       public sealed class Service
+		                                       {
+		                                           // The greedier constructor is unresolvable (Unregistered has no registration); the container
+		                                           // uses this one. IRepository<Order> appears in no other constructor, so it is expanded only if
+		                                           // the seed recognizes it as satisfiable-via-open-generic and scans this constructor.
+		                                           public Service(IRepository<Order> repository) { }
+		                                           public Service(Dep dep, Unregistered unregistered) { }
+		                                       }
+
+		                                       [Container]
+		                                       [Transient(typeof(Repository<>), typeof(IRepository<>))]
+		                                       [Transient<Dep>]
+		                                       [Transient<Service>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty()
+			.Because("the resolvable constructor's open generic dependency is expandable, so no AWT101 is reported");
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// The seed picked the resolvable one-parameter constructor and expanded its open generic dependency.
+		await That(source).Contains("new global::MyCode.Repository<global::MyCode.Order>()");
+	}
 }

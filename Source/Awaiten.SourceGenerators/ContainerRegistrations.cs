@@ -80,7 +80,7 @@ internal static class ContainerRegistrations
 		// implementation (iterating to a fixpoint over its own generic dependencies).
 		if (open.Count > 0)
 		{
-			ExpandOpenGenerics(result, open, diagnostics);
+			ExpandOpenGenerics(result, open, containerSymbol, diagnostics);
 		}
 
 		return result;
@@ -148,10 +148,27 @@ internal static class ContainerRegistrations
 			? declaredService
 			: implementation;
 
+		LocationInfo? location = LocationInfo.From(attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation());
+
+		// AWT127: the typeof-ctor form exists for open generics and must receive unbound generics
+		// (typeof(Repository<>)). A closed generic (typeof(Repository<int>)) would otherwise be silently reduced
+		// to its open definition by ConstructedFrom below - dropping the type arguments - and a non-generic type
+		// would match no closed service, so reject both and point at the generic attribute form.
+		if (!implementation.IsUnboundGenericType || !service.IsUnboundGenericType)
+		{
+			INamedTypeSymbol offending = implementation.IsUnboundGenericType ? service : implementation;
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.OpenGenericNotUnbound,
+				location,
+				new EquatableArray<string>([
+					AwaitenGenerator.Display(offending.ToDisplayString(FullyQualified)),
+				])));
+			return;
+		}
+
 		// The original, unbound definition (typeof(Repository<>) is the unbound generic).
 		implementation = implementation.ConstructedFrom;
 		service = service.ConstructedFrom;
-		LocationInfo? location = LocationInfo.From(attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation());
 
 		// AWT125: the implementation's type parameters must line up with the service's, so a closed service
 		// can be re-mapped onto the implementation. v1 matches the open form exactly, so the arities must be equal.
@@ -169,7 +186,80 @@ internal static class ContainerRegistrations
 			return;
 		}
 
+		// AWT128: expansion maps the closed service's type arguments onto the implementation's type parameters
+		// positionally, which is only correct when the implementation exposes the service with its own type
+		// parameters in declaration order (Repository<T> : IRepository<T>). A reordered or remapped
+		// implementation (Repository<TKey, TValue> : IRepository<TValue, TKey>) would construct a closed type
+		// that does not satisfy the requested service, so reject it rather than emit a broken registration.
+		if (!SymbolEqualityComparer.Default.Equals(service, implementation)
+		    && !ExposesServiceInOrder(implementation, service))
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.OpenGenericServiceRemapped,
+				location,
+				new EquatableArray<string>([
+					AwaitenGenerator.Display(implementation.ToDisplayString(FullyQualified)),
+					AwaitenGenerator.Display(service.ToDisplayString(FullyQualified)),
+				])));
+			return;
+		}
+
 		open.Add(new OpenRegistration(service, implementation, lifetime, location));
+	}
+
+	/// <summary>
+	///     True when <paramref name="implementation" /> declares <paramref name="service" /> - as an interface or
+	///     a base type - with the implementation's own type parameters as the service's type arguments, in
+	///     declaration order (<c>Repository&lt;T&gt; : IRepository&lt;T&gt;</c>). This is the shape v1's positional
+	///     type-argument mapping requires; a reordered, partially-closed, or otherwise remapped declaration
+	///     returns <see langword="false" />.
+	/// </summary>
+	private static bool ExposesServiceInOrder(INamedTypeSymbol implementation, INamedTypeSymbol service)
+	{
+		foreach (INamedTypeSymbol @interface in implementation.AllInterfaces)
+		{
+			if (MapsInOrder(@interface, service, implementation.TypeParameters))
+			{
+				return true;
+			}
+		}
+
+		for (INamedTypeSymbol? current = implementation.BaseType; current is not null; current = current.BaseType)
+		{
+			if (MapsInOrder(current, service, implementation.TypeParameters))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	private static bool MapsInOrder(
+		INamedTypeSymbol candidate,
+		INamedTypeSymbol service,
+		ImmutableArray<ITypeParameterSymbol> parameters)
+	{
+		if (!SymbolEqualityComparer.Default.Equals(candidate.OriginalDefinition, service.OriginalDefinition))
+		{
+			return false;
+		}
+
+		ImmutableArray<ITypeSymbol> arguments = candidate.TypeArguments;
+		if (arguments.Length != parameters.Length)
+		{
+			return false;
+		}
+
+		for (int i = 0; i < arguments.Length; i++)
+		{
+			if (!SymbolEqualityComparer.Default.Equals(arguments[i], parameters[i]))
+			{
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	/// <summary>
@@ -189,6 +279,7 @@ internal static class ContainerRegistrations
 	private static void ExpandOpenGenerics(
 		List<RawRegistration> raw,
 		List<OpenRegistration> open,
+		INamedTypeSymbol containerSymbol,
 		List<DiagnosticInfo> diagnostics)
 	{
 		// Closed services already expanded from the open registrations - expanded once, since a single visit
@@ -196,6 +287,15 @@ internal static class ContainerRegistrations
 		// not blocked here: its open-expanded siblings coexist as additional collection members, joining the
 		// explicit one through ordinary coalescing.
 		HashSet<string> expandedServices = new(StringComparer.Ordinal);
+
+		// The open service definitions, so constructor selection recognizes a parameter whose closed generic is
+		// expandable on demand as satisfiable - otherwise the seed would pass over the constructor the emitted
+		// container actually resolves (its closed generic is not yet in raw) and never expand that dependency.
+		HashSet<INamedTypeSymbol> openServices = new(SymbolEqualityComparer.Default);
+		foreach (OpenRegistration registration in open)
+		{
+			openServices.Add(registration.Service);
+		}
 
 		// The constructor parameters to scan for closed generic dependencies. Seeded from every known
 		// implementation; grows as closed impls are synthesized.
@@ -214,7 +314,7 @@ internal static class ContainerRegistrations
 		while (worklist.Count > 0)
 		{
 			INamedTypeSymbol impl = worklist.Dequeue();
-			foreach (ITypeSymbol required in RequiredServiceTypes(impl))
+			foreach (ITypeSymbol required in RequiredServiceTypes(impl, containerSymbol, raw, openServices))
 			{
 				if (required is not INamedTypeSymbol { IsGenericType: true, } closed
 				    || closed.IsUnboundGenericType)
@@ -287,72 +387,94 @@ internal static class ContainerRegistrations
 	}
 
 	/// <summary>
-	///     The service types an implementation's (greediest public) constructor depends on, unwrapping the
-	///     relationship and collection shapes so a closed generic reached through <c>Func&lt;T&gt;</c>,
-	///     <c>Lazy&lt;T&gt;</c>, <c>IEnumerable&lt;T&gt;</c> or an awaited collection
-	///     (<c>Task&lt;IReadOnlyList&lt;T&gt;&gt;</c> / <c>ValueTask&lt;T[]&gt;</c>) still seeds open generic expansion.
+	///     The service types an implementation's constructor depends on, unwrapping the relationship and
+	///     collection shapes so a closed generic reached through <c>Func&lt;T&gt;</c>, <c>Lazy&lt;T&gt;</c>,
+	///     <c>IEnumerable&lt;T&gt;</c> or an awaited collection
+	///     (<c>Task&lt;IReadOnlyList&lt;T&gt;&gt;</c> / <c>ValueTask&lt;T[]&gt;</c>) still seeds open generic
+	///     expansion. The constructor is chosen by the same <see cref="AwaitenGenerator.SelectConstructor" /> the
+	///     container uses to build the implementation, so the seed scans exactly the parameters the emitted
+	///     container resolves - matching its accessible-constructor and resolvable-preference rules rather than a
+	///     divergent greediest-public heuristic. A parameter whose closed generic is expandable from an open
+	///     registration counts as satisfiable for that selection even before it is expanded, so the seed does not
+	///     pass over the constructor the container resolves and fail to expand its dependency.
 	/// </summary>
-	private static IEnumerable<ITypeSymbol> RequiredServiceTypes(INamedTypeSymbol implementation)
+	private static IEnumerable<ITypeSymbol> RequiredServiceTypes(
+		INamedTypeSymbol implementation,
+		INamedTypeSymbol containerSymbol,
+		List<RawRegistration> raw,
+		HashSet<INamedTypeSymbol> openServices)
 	{
-		IMethodSymbol? constructor = implementation.InstanceConstructors
-			.Where(c => c.DeclaredAccessibility == Accessibility.Public)
-			.OrderByDescending(c => c.Parameters.Length)
-			.FirstOrDefault();
-		if (constructor is null)
-		{
-			yield break;
-		}
+		IMethodSymbol? constructor = AwaitenGenerator.SelectConstructor(
+			implementation,
+			containerSymbol,
+			raw.Select(r => r.ServiceType),
+			p => IsOpenGenericSatisfiable(p.Type, openServices));
 
-		foreach (IParameterSymbol parameter in constructor.Parameters)
-		{
-			ITypeSymbol type = parameter.Type;
-
-			// Unwrap one Task<…>/ValueTask<…> layer first, so an awaited single service (Task<IHandler<T>>)
-			// or awaited collection (Task<IReadOnlyList<IHandler<T>>>) seeds expansion through the inner type.
-			if (type is INamedTypeSymbol { IsGenericType: true, TypeArguments.Length: 1, } awaitable
-			    && awaitable.ContainingNamespace?.ToDisplayString() == "System.Threading.Tasks"
-			    && awaitable.Name is "Task" or "ValueTask")
-			{
-				type = awaitable.TypeArguments[0];
-			}
-
-			// Unwrap a collection element (T[] or IEnumerable<T> and friends).
-			if (type is IArrayTypeSymbol array)
-			{
-				yield return array.ElementType;
-				continue;
-			}
-
-			if (type is INamedTypeSymbol { IsGenericType: true, TypeArguments.Length: 1, } generic)
-			{
-				string? container = generic.ContainingNamespace?.ToDisplayString();
-				if (container == "System.Collections.Generic"
-				    && generic.Name is "IEnumerable" or "IReadOnlyList" or "IReadOnlyCollection" or "IList" or "ICollection")
-				{
-					yield return generic.TypeArguments[0];
-					continue;
-				}
-
-				// Unwrap a relationship type (Func<T> / Lazy<T>).
-				if (container == "System" && generic.Name == "Lazy")
-				{
-					yield return generic.TypeArguments[0];
-					continue;
-				}
-			}
-
-			// A Func<TArg…, T> resolves its last type argument.
-			if (type is INamedTypeSymbol { IsGenericType: true, Name: "Func", } func
-			    && func.ContainingNamespace?.ToDisplayString() == "System"
-			    && func.TypeArguments.Length >= 1)
-			{
-				yield return func.TypeArguments[func.TypeArguments.Length - 1];
-				continue;
-			}
-
-			yield return type;
-		}
+		return constructor is null
+			? []
+			: constructor.Parameters.Select(p => RequiredServiceType(p.Type));
 	}
+
+	/// <summary>
+	///     The single service type a constructor parameter resolves, unwrapping one <c>Task</c>/<c>ValueTask</c>
+	///     layer, a collection element (<c>T[]</c> / <c>IEnumerable&lt;T&gt;</c> and friends), and a
+	///     <c>Lazy&lt;T&gt;</c> / <c>Func&lt;TArg…, T&gt;</c> relationship - so a closed generic reached through
+	///     any of them still seeds open generic expansion, and constructor selection sees the same underlying
+	///     service the seed scans.
+	/// </summary>
+	private static ITypeSymbol RequiredServiceType(ITypeSymbol type)
+	{
+		// Unwrap one Task<…>/ValueTask<…> layer first, so an awaited single service (Task<IHandler<T>>)
+		// or awaited collection (Task<IReadOnlyList<IHandler<T>>>) seeds expansion through the inner type.
+		if (type is INamedTypeSymbol { IsGenericType: true, TypeArguments.Length: 1, } awaitable
+		    && awaitable.ContainingNamespace?.ToDisplayString() == "System.Threading.Tasks"
+		    && awaitable.Name is "Task" or "ValueTask")
+		{
+			type = awaitable.TypeArguments[0];
+		}
+
+		// Unwrap a collection element (T[] or IEnumerable<T> and friends).
+		if (type is IArrayTypeSymbol array)
+		{
+			return array.ElementType;
+		}
+
+		if (type is INamedTypeSymbol { IsGenericType: true, TypeArguments.Length: 1, } generic)
+		{
+			string? container = generic.ContainingNamespace?.ToDisplayString();
+			if (container == "System.Collections.Generic"
+			    && generic.Name is "IEnumerable" or "IReadOnlyList" or "IReadOnlyCollection" or "IList" or "ICollection")
+			{
+				return generic.TypeArguments[0];
+			}
+
+			// Unwrap a relationship type (Func<T> / Lazy<T>).
+			if (container == "System" && generic.Name == "Lazy")
+			{
+				return generic.TypeArguments[0];
+			}
+		}
+
+		// A Func<TArg…, T> resolves its last type argument.
+		if (type is INamedTypeSymbol { IsGenericType: true, Name: "Func", } func
+		    && func.ContainingNamespace?.ToDisplayString() == "System"
+		    && func.TypeArguments.Length >= 1)
+		{
+			return func.TypeArguments[func.TypeArguments.Length - 1];
+		}
+
+		return type;
+	}
+
+	/// <summary>
+	///     Whether a constructor parameter is satisfied by an open generic registration: its underlying service
+	///     (through the same unwrapping the seed scans) is a closed generic whose open form is registered, so the
+	///     container can construct it on demand. Lets constructor selection prefer the constructor the container
+	///     resolves before the closed generic has been expanded into <c>raw</c>.
+	/// </summary>
+	private static bool IsOpenGenericSatisfiable(ITypeSymbol parameterType, HashSet<INamedTypeSymbol> openServices)
+		=> RequiredServiceType(parameterType) is INamedTypeSymbol { IsGenericType: true, IsUnboundGenericType: false, } closed
+		   && openServices.Contains(closed.ConstructedFrom);
 
 	/// <summary>
 	///     Verifies that <paramref name="typeArguments" /> satisfy the type-parameter constraints of an open
@@ -390,8 +512,11 @@ internal static class ContainerRegistrations
 
 			foreach (ITypeSymbol constraintType in parameter.ConstraintTypes)
 			{
-				// A constraint that is itself a type parameter (e.g. where T : U) is not checked in v1.
-				if (constraintType is ITypeParameterSymbol)
+				// A constraint that mentions a type parameter - a bare `where T : U`, or a constructed constraint
+				// such as `where T : IEquatable<T>` / `where T : IComparable<T>` - would need type-parameter
+				// substitution to check faithfully, which v1 does not perform. Skip it rather than reject a valid
+				// argument on a spurious mismatch (the unsubstituted IEquatable<T> never equals IEquatable<Order>).
+				if (ReferencesTypeParameter(constraintType))
 				{
 					continue;
 				}
@@ -404,6 +529,34 @@ internal static class ContainerRegistrations
 		}
 
 		return true;
+	}
+
+	/// <summary>
+	///     True when <paramref name="type" /> is a type parameter or a constructed type that mentions one
+	///     (<c>IEquatable&lt;T&gt;</c>, <c>T[]</c>, <c>IDictionary&lt;string, T&gt;</c>). Such a constraint cannot
+	///     be checked without substituting the closed type argument, which v1 does not do.
+	/// </summary>
+	private static bool ReferencesTypeParameter(ITypeSymbol type)
+	{
+		switch (type)
+		{
+			case ITypeParameterSymbol:
+				return true;
+			case IArrayTypeSymbol array:
+				return ReferencesTypeParameter(array.ElementType);
+			case INamedTypeSymbol named:
+				foreach (ITypeSymbol argument in named.TypeArguments)
+				{
+					if (ReferencesTypeParameter(argument))
+					{
+						return true;
+					}
+				}
+
+				return false;
+			default:
+				return false;
+		}
 	}
 
 	private static bool IsNullableValueType(ITypeSymbol type)
