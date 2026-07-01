@@ -354,38 +354,58 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 				return true;
 			}
 
-			foreach (ParameterModel parameter in instance.ConstructorParameters.AsArray())
-			{
-				// A collection materializes its members eagerly during this node's construction, so each transient
-				// member is rebuilt (and, if disposable, re-tracked) on every construction - follow those edges.
-				if (parameter.Kind == DependencyKind.Enumerable)
-				{
-					if (collectionMembers.TryGetValue(parameter.ServiceType, out List<int>? members))
-					{
-						foreach (int member in members)
-						{
-							if (instances[member].Lifetime == Lifetime.Transient)
-							{
-								stack.Push(member);
-							}
-						}
-					}
-
-					continue;
-				}
-
-				// Only a direct (non-deferred) transient dependency is rebuilt as part of constructing this node;
-				// a relationship/Owned/Arg parameter defers, and a scoped/singleton dependency is cached/shared.
-				if (parameter.Kind == DependencyKind.Direct
-				    && serviceToIndex.TryGetValue(KeyOf(parameter), out int dependency)
-				    && instances[dependency].Lifetime == Lifetime.Transient)
-				{
-					stack.Push(dependency);
-				}
-			}
+			PushFreshTransientDependencies(instance, instances, serviceToIndex, collectionMembers, stack);
 		}
 
 		return false;
+	}
+
+	// Pushes the dependencies of <paramref name="instance" /> that are rebuilt as part of constructing it: a
+	// direct (non-deferred) transient dependency, and each transient member of a collection (a collection
+	// materializes its members eagerly during construction). A relationship/Owned/Arg parameter defers, and a
+	// scoped/singleton dependency is cached/shared, so neither is followed.
+	private static void PushFreshTransientDependencies(
+		InstanceModel instance,
+		IReadOnlyList<InstanceModel> instances,
+		Dictionary<ServiceKey, int> serviceToIndex,
+		IReadOnlyDictionary<string, List<int>> collectionMembers,
+		Stack<int> stack)
+	{
+		foreach (ParameterModel parameter in instance.ConstructorParameters.AsArray())
+		{
+			if (parameter.Kind == DependencyKind.Enumerable)
+			{
+				PushTransientCollectionMembers(parameter.ServiceType, instances, collectionMembers, stack);
+			}
+			else if (parameter.Kind == DependencyKind.Direct
+			         && serviceToIndex.TryGetValue(KeyOf(parameter), out int dependency)
+			         && instances[dependency].Lifetime == Lifetime.Transient)
+			{
+				stack.Push(dependency);
+			}
+		}
+	}
+
+	// Pushes each transient member of the collection whose element service type is
+	// <paramref name="elementService" /> (a non-transient member is cached/shared, so it is bounded).
+	private static void PushTransientCollectionMembers(
+		string elementService,
+		IReadOnlyList<InstanceModel> instances,
+		IReadOnlyDictionary<string, List<int>> collectionMembers,
+		Stack<int> stack)
+	{
+		if (!collectionMembers.TryGetValue(elementService, out List<int>? members))
+		{
+			return;
+		}
+
+		foreach (int member in members)
+		{
+			if (instances[member].Lifetime == Lifetime.Transient)
+			{
+				stack.Push(member);
+			}
+		}
 	}
 
 	private static (List<ImplInfo> Order, Dictionary<ServiceKey, string> ServiceToImpl, Dictionary<string, List<string>> Members, List<string> MemberOrder) CoalesceByImplementation(
@@ -438,39 +458,11 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 			implInfos.TryGetValue(registration.ImplementationType, out ImplInfo? info);
 
-			// A lifetime conflict is a property of the implementation, not of any single service type, so it
-			// is checked before the per-service dedup below; otherwise re-registering the same service type
-			// with a different lifetime would be skipped and the contradiction silently dropped. Coalescing
-			// keeps the first lifetime, so the conflicting one is reported as AWT107 rather than ignored.
-			if (info is not null && info.Lifetime != registration.Lifetime &&
-			    reportedConflicts.Add(registration.ImplementationType))
-			{
-				diagnostics.Add(new DiagnosticInfo(
-					Diagnostics.ConflictingLifetime,
-					LocationInfo.From(registration.Location),
-					new EquatableArray<string>([
-						Display(registration.ImplementationType),
-						info.Lifetime.ToString(),
-						registration.Lifetime.ToString(),
-					])));
-			}
-
-			// Likewise the production: coalescing keeps the first, so a same-implementation re-registration
-			// that constructs, factories or exposes it differently - or names a different factory/instance
-			// member of the same kind - is reported as AWT111 rather than silently dropped. Checked before
-			// the dedup for the same reason as the lifetime.
-			if (info is not null && ConflictsWith(info, registration) &&
-			    reportedProductionConflicts.Add(registration.ImplementationType))
-			{
-				diagnostics.Add(new DiagnosticInfo(
-					Diagnostics.ConflictingProduction,
-					LocationInfo.From(registration.Location),
-					new EquatableArray<string>([
-						Display(registration.ImplementationType),
-						DescribeProduction(info.Production, info.ProductionMember),
-						DescribeProduction(registration.Production, registration.ProductionMember),
-					])));
-			}
+			// A lifetime (AWT107) or production (AWT111) conflict is a property of the implementation, not of any
+			// single service type, so it is checked before the per-service dedup below; otherwise re-registering
+			// the same service type differently would be skipped and the contradiction silently dropped.
+			// Coalescing keeps the first, so the conflicting one is reported rather than ignored.
+			ReportCoalescingConflicts(info, registration, reportedConflicts, reportedProductionConflicts, diagnostics);
 
 			ServiceKey serviceKey = new(registration.ServiceType, registration.Key);
 			bool alreadyChosen = serviceToImpl.TryGetValue(serviceKey, out string? existingImpl);
@@ -480,18 +472,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			// single-resolution slot to an earlier registration, since it is reachable through the collection.
 			if (registration.Key is null)
 			{
-				if (!serviceMembers.TryGetValue(registration.ServiceType, out List<string>? members))
-				{
-					members = new List<string>();
-					serviceMembers.Add(registration.ServiceType, members);
-					serviceMemberOrder.Add(registration.ServiceType);
-				}
-
-				if (!members.Contains(registration.ImplementationType))
-				{
-					members.Add(registration.ImplementationType);
-				}
-
+				AddCollectionMember(serviceMembers, serviceMemberOrder, registration.ServiceType, registration.ImplementationType);
 				EnsureImpl(registration);
 			}
 
@@ -507,6 +488,67 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		}
 
 		return (implOrder, serviceToImpl, serviceMembers, serviceMemberOrder);
+	}
+
+	// Reports the coalescing conflicts a re-registration of an already-seen implementation raises: a different
+	// lifetime (AWT107) or a different production strategy (AWT111). Each is reported at most once per
+	// implementation (the reported sets guard that), since coalescing keeps the first registration.
+	private static void ReportCoalescingConflicts(
+		ImplInfo? info,
+		RawRegistration registration,
+		HashSet<string> reportedConflicts,
+		HashSet<string> reportedProductionConflicts,
+		List<DiagnosticInfo> diagnostics)
+	{
+		if (info is null)
+		{
+			return;
+		}
+
+		if (info.Lifetime != registration.Lifetime && reportedConflicts.Add(registration.ImplementationType))
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.ConflictingLifetime,
+				LocationInfo.From(registration.Location),
+				new EquatableArray<string>([
+					Display(registration.ImplementationType),
+					info.Lifetime.ToString(),
+					registration.Lifetime.ToString(),
+				])));
+		}
+
+		if (ConflictsWith(info, registration) && reportedProductionConflicts.Add(registration.ImplementationType))
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.ConflictingProduction,
+				LocationInfo.From(registration.Location),
+				new EquatableArray<string>([
+					Display(registration.ImplementationType),
+					DescribeProduction(info.Production, info.ProductionMember),
+					DescribeProduction(registration.Production, registration.ProductionMember),
+				])));
+		}
+	}
+
+	// Records an unkeyed registration's implementation as a member of its service type's collection, in
+	// registration order and deduped by implementation. serviceMemberOrder preserves first-seen service order.
+	private static void AddCollectionMember(
+		Dictionary<string, List<string>> serviceMembers,
+		List<string> serviceMemberOrder,
+		string serviceType,
+		string implementationType)
+	{
+		if (!serviceMembers.TryGetValue(serviceType, out List<string>? members))
+		{
+			members = new List<string>();
+			serviceMembers.Add(serviceType, members);
+			serviceMemberOrder.Add(serviceType);
+		}
+
+		if (!members.Contains(implementationType))
+		{
+			members.Add(implementationType);
+		}
 	}
 
 	// AWT117: two different implementations claim the same service type and key, so a keyed resolution of
@@ -586,40 +628,62 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			List<int> nodeEdges = new();
 			foreach (ParameterModel parameter in instances[i].ConstructorParameters.AsArray())
 			{
-				if (parameter.Kind == DependencyKind.Enumerable)
-				{
-					if (serviceMembers.TryGetValue(parameter.ServiceType, out List<string>? members))
-					{
-						foreach (string member in members)
-						{
-							if (implToIndex.TryGetValue(member, out int memberIndex))
-							{
-								nodeEdges.Add(memberIndex);
-							}
-						}
-					}
-
-					continue;
-				}
-
-				bool contributes = parameter.Kind == DependencyKind.Direct
-				                   || (includeEagerBare && parameter.Kind is DependencyKind.Owned or DependencyKind.Task);
-				if (!contributes)
-				{
-					continue;
-				}
-
-				if (serviceToImpl.TryGetValue(KeyOf(parameter), out string? depImpl) &&
-				    implToIndex.TryGetValue(depImpl, out int depIndex))
-				{
-					nodeEdges.Add(depIndex);
-				}
+				AddParameterEdges(parameter, serviceToImpl, implToIndex, serviceMembers, includeEagerBare, nodeEdges);
 			}
 
 			edges[i] = nodeEdges;
 		}
 
 		return edges;
+	}
+
+	// Appends the edge(s) a single parameter contributes to its node's edge list. A collection (Enumerable)
+	// edges to each of its members; a direct dependency (and, in the construction graph, a bare eager
+	// Owned<T>/Task<T>) edges to its single resolved instance; everything else defers and contributes nothing.
+	private static void AddParameterEdges(
+		ParameterModel parameter,
+		Dictionary<ServiceKey, string> serviceToImpl,
+		Dictionary<string, int> implToIndex,
+		Dictionary<string, List<string>> serviceMembers,
+		bool includeEagerBare,
+		List<int> nodeEdges)
+	{
+		if (parameter.Kind == DependencyKind.Enumerable)
+		{
+			AddCollectionMemberEdges(parameter.ServiceType, serviceMembers, implToIndex, nodeEdges);
+			return;
+		}
+
+		bool contributes = parameter.Kind == DependencyKind.Direct
+		                   || (includeEagerBare && parameter.Kind is DependencyKind.Owned or DependencyKind.Task);
+		if (contributes
+		    && serviceToImpl.TryGetValue(KeyOf(parameter), out string? depImpl)
+		    && implToIndex.TryGetValue(depImpl, out int depIndex))
+		{
+			nodeEdges.Add(depIndex);
+		}
+	}
+
+	// Appends an edge to each built member of the collection whose element service type is
+	// <paramref name="elementService" /> (a member absent from implToIndex failed to build and is skipped).
+	private static void AddCollectionMemberEdges(
+		string elementService,
+		Dictionary<string, List<string>> serviceMembers,
+		Dictionary<string, int> implToIndex,
+		List<int> nodeEdges)
+	{
+		if (!serviceMembers.TryGetValue(elementService, out List<string>? members))
+		{
+			return;
+		}
+
+		foreach (string member in members)
+		{
+			if (implToIndex.TryGetValue(member, out int memberIndex))
+			{
+				nodeEdges.Add(memberIndex);
+			}
+		}
 	}
 
 	private static InstanceModel? BuildInstance(
@@ -935,6 +999,22 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		foreach (IParameterSymbol parameter in producer.Parameters)
 		{
 			ParameterModel parameterModel = ClassifyParameter(parameter, asyncFactory);
+
+			// A collection type (IEnumerable<T> and friends, or T[]) is normally synthesized from the unkeyed
+			// registrations of its element type. But if the collection type is itself registered as a service -
+			// a legitimate opaque value such as a string[] of command-line arguments or an IReadOnlyList<T> of
+			// config - that explicit registration wins: the parameter resolves to it as an ordinary direct
+			// dependency, exactly as the public Resolve<T> path does (which lets the explicit registration claim
+			// the dispatch slot). Only an unregistered collection type falls back to the synthesized collection.
+			if (parameterModel.Kind == DependencyKind.Enumerable)
+			{
+				string collectionType = parameter.Type.ToDisplayString(FullyQualified);
+				if (serviceToImpl.ContainsKey(new ServiceKey(collectionType, null)))
+				{
+					parameterModel = parameterModel with { ServiceType = collectionType, Kind = DependencyKind.Direct };
+				}
+			}
+
 			parameters.Add(parameterModel);
 
 			// A CancellationToken is forwarded from the resolve-time token, not resolved from the graph (like
@@ -1378,12 +1458,13 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	}
 
 	/// <summary>
-	///     AWT122 (strict mode): a collection dependency is materialized synchronously, so a member whose
-	///     implementation is async-tainted would be resolved without awaiting its initialization. Collections
-	///     are synchronous-only, so this is reported rather than silently emitting a synchronous resolver for an
-	///     async-tainted member (which strict mode does not even generate). Reported once per (consumer,
-	///     collection, async member) triple; the pragmatic SyncResolveAfterInit mode suppresses it (the caller
-	///     gates on that, as it does for AWT119/AWT120).
+	///     AWT122: a collection dependency is materialized synchronously, so a member whose implementation is
+	///     async-tainted would be resolved without awaiting its initialization. Collections are synchronous-only,
+	///     so this is reported rather than silently emitting a synchronous resolver for an async-tainted member
+	///     (which the synchronous path does not even generate for such a member). Like AWT119/AWT120 this is a
+	///     synchronous-resolution-of-async concern independent of lifetime safety, so it is reported under both
+	///     strict and loose safety; only the pragmatic SyncResolveAfterInit mode suppresses it (the caller gates
+	///     on that, as it does for AWT119/AWT120).
 	/// </summary>
 	private static void DetectSynchronousAsyncCollection(
 		List<InstanceModel> instances,
@@ -1407,27 +1488,41 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		{
 			foreach (ParameterModel parameter in instances[i].ConstructorParameters.AsArray())
 			{
-				if (parameter.Kind != DependencyKind.Enumerable
-				    || !byService.TryGetValue(parameter.ServiceType, out ServiceMembers members))
+				if (parameter.Kind == DependencyKind.Enumerable
+				    && byService.TryGetValue(parameter.ServiceType, out ServiceMembers members))
 				{
-					continue;
-				}
-
-				foreach (string member in members.Implementations.AsArray())
-				{
-					if (implToIndex.TryGetValue(member, out int memberIndex) && instances[memberIndex].IsAsyncTainted)
-					{
-						diagnostics.Add(new DiagnosticInfo(
-							Diagnostics.AsyncCollectionResolution,
-							instanceLocations[i],
-							new EquatableArray<string>([
-								Display(instances[i].ImplementationType),
-								Display(parameter.ServiceType),
-								Display(instances[memberIndex].ImplementationType),
-							])));
-					}
+					ReportAsyncTaintedMembers(i, parameter, members, instances, implToIndex, instanceLocations, diagnostics);
 				}
 			}
+		}
+	}
+
+	// Reports AWT122 for each async-tainted member of the collection <paramref name="consumer" /> injects
+	// through <paramref name="parameter" /> (a member absent from implToIndex failed to build and is skipped).
+	private static void ReportAsyncTaintedMembers(
+		int consumer,
+		ParameterModel parameter,
+		ServiceMembers members,
+		List<InstanceModel> instances,
+		Dictionary<string, int> implToIndex,
+		List<LocationInfo?> instanceLocations,
+		List<DiagnosticInfo> diagnostics)
+	{
+		foreach (string member in members.Implementations.AsArray())
+		{
+			if (!implToIndex.TryGetValue(member, out int memberIndex) || !instances[memberIndex].IsAsyncTainted)
+			{
+				continue;
+			}
+
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.AsyncCollectionResolution,
+				instanceLocations[consumer],
+				new EquatableArray<string>([
+					Display(instances[consumer].ImplementationType),
+					Display(parameter.ServiceType),
+					Display(instances[memberIndex].ImplementationType),
+				])));
 		}
 	}
 

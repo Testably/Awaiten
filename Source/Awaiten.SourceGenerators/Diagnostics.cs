@@ -327,7 +327,7 @@ internal static class Diagnostics
 	public static readonly DiagnosticDescriptor AsyncCollectionResolution = new(
 		"AWT122",
 		"Async-tainted service reached synchronously through a collection",
-		"'{0}' resolves the collection of '{1}' synchronously, but the member '{2}' is async-tainted; collections of async-initialized services are not supported in strict mode - set SyncResolveAfterInit on the [Container] (and resolve after InitializeAsync), or remove the async member from the collection",
+		"'{0}' resolves the collection of '{1}' synchronously, but the member '{2}' is async-tainted; a collection is materialized synchronously, with no place to await an initialization - set SyncResolveAfterInit on the [Container] (and resolve after InitializeAsync), or remove the async member from the collection",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);

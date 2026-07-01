@@ -157,6 +157,23 @@ public partial class CollectionTests
 			.Because("Loose lifetime safety keeps the collection resolvable by type on the root, like a singular disposable transient");
 	}
 
+	[Fact]
+	public async Task ExplicitCollectionRegistration_WinsOverSynthesis()
+	{
+		using ExplicitCollectionContainer.Root container = new();
+
+		BundleHost host = container.Resolve<BundleHost>();
+
+		// IEnumerable<IPlugin> is registered as an opaque value (a Bundle), so both the injected parameter and the
+		// public resolution return that registration - not the collection synthesized from the IPlugin members.
+		await That(host.Plugins).HasCount(1);
+		await That(host.Plugins[0].Name).IsEqualTo("bundle");
+		await That(container.Resolve<IEnumerable<IPlugin>>().Single().Name).IsEqualTo("bundle");
+
+		// The IPlugin[] shape was not explicitly registered, so it still synthesizes the collection of members.
+		await That(container.Resolve<IPlugin[]>()).HasCount(2);
+	}
+
 	public interface IPlugin
 	{
 		string Name { get; }
@@ -219,6 +236,26 @@ public partial class CollectionTests
 		public void Dispose() => Disposed = true;
 	}
 
+	public sealed class Bundled : IPlugin
+	{
+		public string Name => "bundle";
+	}
+
+	// An opaque collection value: a concrete IEnumerable<IPlugin> registered as a whole, the way command-line
+	// arguments (string[]) or a config list would be. It must win over the collection synthesized from the
+	// individual IPlugin registrations.
+	public sealed class PluginBundle : List<IPlugin>
+	{
+		public PluginBundle() => Add(new Bundled());
+	}
+
+	public sealed class BundleHost
+	{
+		public BundleHost(IEnumerable<IPlugin> plugins) => Plugins = plugins.ToArray();
+
+		public IReadOnlyList<IPlugin> Plugins { get; }
+	}
+
 	[Container]
 	[Singleton<Alpha, IPlugin>]
 	[Singleton<Beta, IPlugin>]
@@ -240,4 +277,13 @@ public partial class CollectionTests
 	[Container(LifetimeSafety = LifetimeSafety.Loose)]
 	[Transient<DisposableWidget, IWidget>]
 	public static partial class LooseCollectionContainer;
+
+	// IEnumerable<IPlugin> is registered directly (an opaque value); the individual IPlugin registrations would
+	// otherwise synthesize a collection of two, so the counts distinguish which one injection resolves to.
+	[Container]
+	[Singleton<Alpha, IPlugin>]
+	[Singleton<Beta, IPlugin>]
+	[Singleton<PluginBundle, IEnumerable<IPlugin>>]
+	[Singleton<BundleHost>]
+	public static partial class ExplicitCollectionContainer;
 }

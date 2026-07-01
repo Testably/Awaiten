@@ -230,6 +230,39 @@ public class CollectionTests
 	}
 
 	[Fact]
+	public async Task ExplicitlyRegisteredCollectionType_WinsOverSynthesisOnInjection()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class Alpha : IPlugin { }
+		                                       public sealed class Bundle : List<IPlugin> { }
+		                                       public sealed class Host { public Host(IEnumerable<IPlugin> plugins) { } }
+
+		                                       [Container]
+		                                       [Singleton<Alpha, IPlugin>]
+		                                       [Singleton<Bundle, IEnumerable<IPlugin>>]
+		                                       [Singleton<Host>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// IEnumerable<IPlugin> is itself a registered service, so the parameter is a direct dependency on that
+		// registration - not the collection synthesized from the IPlugin members. Registering a collection type
+		// as an opaque value (e.g. a string[] of command-line arguments) is therefore supported.
+		await That(source).Contains("new global::MyCode.Host(__root.ResolveBundle())")
+			.Because("an explicitly registered collection type wins over the synthesized collection on injection (the singleton member routes through the root)");
+	}
+
+	[Fact]
 	public async Task CollectionOfNonDisposableMembers_IsNotWithheld()
 	{
 		GeneratorResult result = Generator.Run("""

@@ -758,43 +758,57 @@ internal static class Emitter
 		// T[] (the eagerly materialized array satisfies the other collection shapes too). A collection with an
 		// async-tainted member is omitted (it has no synchronous materialization); injecting one is AWT122. The
 		// seen guard keeps an explicitly registered IEnumerable<T>/T[] service winning the dispatch slot.
-		foreach (ServiceMembers collection in names.Collections)
+		AddCollectionEntries(instances, names, serviceToIndex, collectionMembers, strict, entries, seen);
+
+		return entries;
+	}
+
+	/// <summary>
+	///     Adds the public <c>IEnumerable&lt;T&gt;</c> / <c>T[]</c> dispatch entries for each sync-materializable
+	///     collection. A collection materializes its members eagerly on the resolving scope, so if any member is
+	///     a build-on-demand disposable service (its plain resolver tracks a fresh disposable on the owner),
+	///     re-resolving the collection by type off the Root would accumulate those disposables for the
+	///     container's lifetime - the exact leak the singular resolution of such a member is root-withheld to
+	///     prevent. Such a collection is therefore root-withheld too: resolvable from a child scope (which bounds
+	///     its members), but withheld from by-type resolution on the Root. There is no <c>Owned&lt;T&gt;</c> form
+	///     for a collection, so the guidance steers to a child scope, direct injection, or LifetimeSafety.Loose.
+	/// </summary>
+	private static void AddCollectionEntries(
+		InstanceModel[] instances,
+		Names names,
+		Dictionary<ServiceKey, int> serviceToIndex,
+		IReadOnlyDictionary<string, List<int>> collectionMembers,
+		bool strict,
+		List<DispatchEntry> entries,
+		HashSet<string> seen)
+	{
+		foreach (string element in names.Collections.Select(collection => collection.Service))
 		{
-			string element = collection.Service;
 			if (!names.IsSyncCollection(element))
 			{
 				continue;
 			}
 
-			// A collection materializes its members eagerly on the resolving scope. If any member is a
-			// build-on-demand disposable service (its plain resolver tracks a fresh disposable on the owner), then
-			// re-resolving the collection by type off the Root accumulates those disposables for the container's
-			// lifetime - the exact leak the singular resolution of such a member is root-withheld to prevent. So
-			// the collection is root-withheld too: resolvable from a child scope (which bounds its members), but
-			// withheld from by-type resolution on the Root. There is no Owned<T> form for a collection, so the
-			// guidance steers to a child scope, direct injection, or LifetimeSafety.Loose.
 			bool rootWithheld = collectionMembers.TryGetValue(element, out List<int>? members)
 			                    && members.Any(member => IsFuncWithheld(instances, member, serviceToIndex, collectionMembers, strict));
 
 			string array = CollectionLiteral(element, names);
-			string enumerable = $"global::System.Collections.Generic.IEnumerable<{element}>";
-			string arrayType = $"{element}[]";
-			if (seen.Add(enumerable))
-			{
-				entries.Add(rootWithheld
-					? new DispatchEntry(enumerable, array, CollectionWithheldMessage(enumerable))
-					: new DispatchEntry(enumerable, array));
-			}
-
-			if (seen.Add(arrayType))
-			{
-				entries.Add(rootWithheld
-					? new DispatchEntry(arrayType, array, CollectionWithheldMessage(arrayType))
-					: new DispatchEntry(arrayType, array));
-			}
+			AddCollectionShape($"global::System.Collections.Generic.IEnumerable<{element}>", array, rootWithheld, entries, seen);
+			AddCollectionShape($"{element}[]", array, rootWithheld, entries, seen);
 		}
+	}
 
-		return entries;
+	// Adds one collection shape's dispatch entry, unless an explicit registration already claimed the slot (the
+	// seen guard). A root-withheld collection carries the guidance thrown by Resolve(Type) on the Root.
+	private static void AddCollectionShape(
+		string serviceType, string array, bool rootWithheld, List<DispatchEntry> entries, HashSet<string> seen)
+	{
+		if (seen.Add(serviceType))
+		{
+			entries.Add(rootWithheld
+				? new DispatchEntry(serviceType, array, CollectionWithheldMessage(serviceType))
+				: new DispatchEntry(serviceType, array));
+		}
 	}
 
 	/// <summary>
