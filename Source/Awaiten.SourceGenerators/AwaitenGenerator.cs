@@ -426,24 +426,6 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		Dictionary<ServiceKey, List<string>> serviceMembers = new();
 		List<ServiceKey> serviceMemberOrder = new();
 
-		// Creates the single ImplInfo for a registration's implementation (idempotent): the first registration
-		// seen for an implementation fixes its lifetime/production, and the same instance is shared by every
-		// registration of that implementation (multi-service or collection member). A collection member that is
-		// not the single-resolution winner is still built here - it is reached only through the collection.
-		ImplInfo EnsureImpl(RawRegistration reg)
-		{
-			if (!implInfos.TryGetValue(reg.ImplementationType, out ImplInfo? info))
-			{
-				info = new ImplInfo(
-					reg.ImplementationType, reg.Implementation, reg.Lifetime,
-					LocationInfo.From(reg.Location), reg.Production, reg.ProductionMember);
-				implInfos.Add(reg.ImplementationType, info);
-				implOrder.Add(info);
-			}
-
-			return info;
-		}
-
 		foreach (RawRegistration registration in raw)
 		{
 			// Setting both Factory and Instance on one attribute is contradictory; the directives are
@@ -458,14 +440,11 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 					new EquatableArray<string>([Display(registration.ServiceType),])));
 			}
 
-			// S4158 false positive: implInfos is populated by the EnsureImpl local function across loop
-			// iterations, a mutation Sonar's symbolic execution does not follow through the local-function call,
-			// so it wrongly concludes the dictionary is always empty here. The lookup returns the implementation's
-			// already-seen ImplInfo (null only on first sight), which ReportCoalescingConflicts needs to detect the
-			// AWT107/AWT111 coalescing conflicts below.
-#pragma warning disable S4158
+			// The implementation's already-recorded ImplInfo (null on first sight), which ReportCoalescingConflicts
+			// compares the current registration against. EnsureImpl below takes implInfos as a parameter rather
+			// than capturing it, so its Add crosses a call boundary and this lookup is not misread as reading an
+			// always-empty dictionary.
 			implInfos.TryGetValue(registration.ImplementationType, out ImplInfo? info);
-#pragma warning restore S4158
 
 			// A lifetime (AWT107) or production (AWT111) conflict is a property of the implementation, not of any
 			// single service type, so it is checked before the per-service dedup below; otherwise re-registering
@@ -481,7 +460,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			// "k". A member is built even when it loses the single-resolution slot to an earlier registration,
 			// since it is reachable through the collection.
 			AddCollectionMember(serviceMembers, serviceMemberOrder, serviceKey, registration.ImplementationType);
-			EnsureImpl(registration);
+			EnsureImpl(implInfos, implOrder, registration);
 
 			if (alreadyChosen)
 			{
@@ -489,12 +468,32 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 				continue;
 			}
 
-			ImplInfo chosen = EnsureImpl(registration);
+			ImplInfo chosen = EnsureImpl(implInfos, implOrder, registration);
 			serviceToImpl[serviceKey] = registration.ImplementationType;
 			chosen.Services.Add(serviceKey);
 		}
 
 		return (implOrder, serviceToImpl, serviceMembers, serviceMemberOrder);
+
+		// Creates the single ImplInfo for a registration's implementation (idempotent): the first registration seen
+		// for an implementation fixes its lifetime/production, and the same instance is shared by every registration
+		// of that implementation (multi-service or collection member). A collection member that is not the
+		// single-resolution winner is still built here - it is reached only through the collection. Takes implInfos
+		// and implOrder as parameters (rather than being a capturing local function) so the caller's pre-loop lookup
+		// sees the Add across a call boundary.
+		static ImplInfo EnsureImpl(Dictionary<string, ImplInfo> implInfos, List<ImplInfo> implOrder, RawRegistration reg)
+		{
+			if (!implInfos.TryGetValue(reg.ImplementationType, out ImplInfo? info))
+			{
+				info = new ImplInfo(
+					reg.ImplementationType, reg.Implementation, reg.Lifetime,
+					LocationInfo.From(reg.Location), reg.Production, reg.ProductionMember);
+				implInfos.Add(reg.ImplementationType, info);
+				implOrder.Add(info);
+			}
+
+			return info;
+		}
 	}
 
 	// Reports the coalescing conflicts a re-registration of an already-seen implementation raises: a different
