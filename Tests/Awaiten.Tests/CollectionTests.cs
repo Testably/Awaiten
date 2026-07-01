@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 
 namespace Awaiten.Tests;
 
@@ -210,6 +211,29 @@ public partial class CollectionTests
 		await That(host.Unkeyed[0].Name).IsEqualTo("plain");
 	}
 
+	[Fact]
+	public async Task SyncResolveAfterInit_CollectionWithAnAsyncMember_ResolvesInitializedMembersAfterWarmUp()
+	{
+		using PragmaticCollectionContainer.Root container = new();
+
+		await container.InitializeAsync(TestContext.Current.CancellationToken);
+
+		// The collection holds an async-initialized member. In the strict default this is AWT122 (a synchronous
+		// materialization cannot await the initialization); SyncResolveAfterInit warms the graph first, so the
+		// collection materializes synchronously and hands back the already-initialized member - both when injected
+		// through a host and when resolved publicly by type.
+		AsyncPluginHost host = container.Resolve<AsyncPluginHost>();
+
+		await That(host.Plugins).HasCount(2);
+		await That(host.Plugins.OfType<AsyncPlugin>().Single().Initialized).IsTrue()
+			.Because("InitializeAsync warmed the async member before the synchronously materialized collection handed it back");
+
+		AsyncPlugin publiclyResolved = container.Resolve<IEnumerable<IPlugin>>().OfType<AsyncPlugin>().Single();
+
+		await That(publiclyResolved.Initialized).IsTrue()
+			.Because("the publicly resolved collection returns the same warmed singleton member");
+	}
+
 	public interface IPlugin
 	{
 		string Name { get; }
@@ -223,6 +247,26 @@ public partial class CollectionTests
 	public sealed class Beta : IPlugin
 	{
 		public string Name => "beta";
+	}
+
+	public sealed class AsyncPlugin : IPlugin, IAsyncInitializable
+	{
+		public string Name => "async";
+
+		public bool Initialized { get; private set; }
+
+		public Task InitializeAsync(CancellationToken cancellationToken)
+		{
+			Initialized = true;
+			return Task.CompletedTask;
+		}
+	}
+
+	public sealed class AsyncPluginHost
+	{
+		public AsyncPluginHost(IEnumerable<IPlugin> plugins) => Plugins = plugins.ToArray();
+
+		public IReadOnlyList<IPlugin> Plugins { get; }
 	}
 
 	public sealed class PluginHost
@@ -331,6 +375,15 @@ public partial class CollectionTests
 	[Scoped<UnitA, IUnit>]
 	[Scoped<UnitHost>]
 	public static partial class CollectionContainer;
+
+	// A collection holding an async-initialized member. Under the strict default injecting it is AWT122 (a
+	// synchronous materialization has no place to await the member's initialization); SyncResolveAfterInit warms
+	// the graph so the collection is synchronously materializable after InitializeAsync.
+	[Container(SyncResolveAfterInit = true)]
+	[Singleton<Alpha, IPlugin>]
+	[Singleton<AsyncPlugin, IPlugin>]
+	[Singleton<AsyncPluginHost>]
+	public static partial class PragmaticCollectionContainer;
 
 	// A collection whose member is a disposable transient: materializing it by type on the root would
 	// accumulate the transients for the container's lifetime, so under strict lifetime safety the collection is
