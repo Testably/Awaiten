@@ -200,6 +200,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			compilation.GetTypeByMetadataName("Awaiten.IAsyncInitializable"));
 
 		List<RawRegistration> raw = ContainerRegistrations.Collect(containerSymbol);
+		List<DecorateRegistration> decorators = ContainerRegistrations.CollectDecorators(containerSymbol);
 
 		// Coalesce registrations by (service type, key): the first registration per key wins, and
 		// registrations of the same implementation share one instance. Declaring one implementation with
@@ -207,6 +208,17 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		// key as AWT117.
 		(List<ImplInfo> implOrder, Dictionary<ServiceKey, string> serviceToImpl, Dictionary<ServiceKey, List<string>> serviceMembers, List<ServiceKey> serviceMemberOrder) =
 			CoalesceByImplementation(raw, diagnostics);
+
+		// Decorator chains: for each [Decorate]d service, move the base implementation(s) onto a synthetic key
+		// and register each decorator as a chain link whose inner parameter is redirected to the next-lower key,
+		// rewriting the public winner and collection membership to the outermost decorator. decoratorInner is
+		// consumed by ClassifyParameters below to key each link's inner parameter to the link it wraps.
+		Dictionary<string, DecoratorInner> decoratorInner = new(StringComparer.Ordinal);
+		if (decorators.Count > 0)
+		{
+			new DecoratorChainBuilder(containerSymbol, compilation, serviceToImpl, implOrder, serviceMembers, decoratorInner, diagnostics)
+				.Build(decorators);
+		}
 
 		List<InstanceModel> instances = new();
 		List<LocationInfo?> instanceLocations = new();
@@ -216,7 +228,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		foreach (ImplInfo info in implOrder)
 		{
 			cancellationToken.ThrowIfCancellationRequested();
-			InstanceModel? instance = BuildInstance(info, containerSymbol, compilation, serviceToImpl, wellKnown, diagnostics);
+			InstanceModel? instance = BuildInstance(info, containerSymbol, compilation, serviceToImpl, decoratorInner, wellKnown, diagnostics);
 			if (instance is not null)
 			{
 				implToIndex[info.ImplementationType] = instances.Count;
@@ -692,11 +704,331 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		}
 	}
 
+	// A decorator chain link's synthetic key and identity are built from this prefix; DisplayInstance also keys
+	// off it to trim the synthetic suffix out of diagnostics. Kept on the enclosing type so both the nested
+	// DecoratorChainBuilder and DisplayInstance can reach it (a nested type's private member is not visible here).
+	private const string DecoratorKeyPrefix = "__dec:";
+
+	/// <summary>
+	///     Builds the decorator chains after coalescing. For each decorated service it locates the base
+	///     implementation(s) — every collection member, or the single-dispatch winner — and over each base impl
+	///     synthesizes a chain of synthetic-keyed links: the base implementation is moved onto a synthetic key
+	///     (<c>__dec:S:k:0</c>), each decorator is registered as a fresh instance whose single inner parameter is
+	///     redirected to the next-lower key, and the public unkeyed winner is rewritten to the outermost decorator.
+	///     The existing keyed resolver then produces <c>D2(D1(Real))</c> for free. The collection membership of the
+	///     service is rewritten so a collection view yields the decorated chain, never the bare base impl (the
+	///     decorator is unbypassable). Reports AWT123 (nothing to decorate) and AWT124 (no single inner parameter).
+	/// </summary>
+	/// <remarks>
+	///     Holds the mutable graph state (the coalesced <c>serviceToImpl</c>, <c>implOrder</c>, collection
+	///     membership and the decorator-inner map) as fields so the chain-building steps read as small focused
+	///     methods rather than one deeply nested loop.
+	/// </remarks>
+	private sealed class DecoratorChainBuilder
+	{
+		private readonly INamedTypeSymbol _containerSymbol;
+		private readonly Compilation _compilation;
+		private readonly Dictionary<ServiceKey, string> _serviceToImpl;
+		private readonly List<ImplInfo> _implOrder;
+		private readonly Dictionary<ServiceKey, List<string>> _serviceMembers;
+		private readonly Dictionary<string, DecoratorInner> _decoratorInner;
+		private readonly List<DiagnosticInfo> _diagnostics;
+
+		// The coalesced implementations by identity, so a base impl's ImplInfo can be moved onto a synthetic key
+		// and each new chain link's ImplInfo can be appended for BuildInstance to build.
+		private readonly Dictionary<string, ImplInfo> _byImpl;
+
+		public DecoratorChainBuilder(
+			INamedTypeSymbol containerSymbol,
+			Compilation compilation,
+			Dictionary<ServiceKey, string> serviceToImpl,
+			List<ImplInfo> implOrder,
+			Dictionary<ServiceKey, List<string>> serviceMembers,
+			Dictionary<string, DecoratorInner> decoratorInner,
+			List<DiagnosticInfo> diagnostics)
+		{
+			_containerSymbol = containerSymbol;
+			_compilation = compilation;
+			_serviceToImpl = serviceToImpl;
+			_implOrder = implOrder;
+			_serviceMembers = serviceMembers;
+			_decoratorInner = decoratorInner;
+			_diagnostics = diagnostics;
+
+			_byImpl = new Dictionary<string, ImplInfo>(StringComparer.Ordinal);
+			foreach (ImplInfo info in implOrder)
+			{
+				_byImpl[info.ImplementationType] = info;
+			}
+		}
+
+		public void Build(List<DecorateRegistration> decorators)
+		{
+			foreach ((string service, List<DecorateRegistration> chain) in GroupByService(decorators))
+			{
+				ProcessService(service, chain);
+			}
+		}
+
+		// Group decorators by decorated service, preserving first-seen service order for determinism.
+		private static List<(string Service, List<DecorateRegistration> Chain)> GroupByService(List<DecorateRegistration> decorators)
+		{
+			List<(string, List<DecorateRegistration>)> ordered = new();
+			Dictionary<string, List<DecorateRegistration>> byService = new(StringComparer.Ordinal);
+			foreach (DecorateRegistration decorator in decorators)
+			{
+				if (!byService.TryGetValue(decorator.Service, out List<DecorateRegistration>? list))
+				{
+					list = new List<DecorateRegistration>();
+					byService.Add(decorator.Service, list);
+					ordered.Add((decorator.Service, list));
+				}
+
+				list.Add(decorator);
+			}
+
+			return ordered;
+		}
+
+		// The base implementations to wrap: every unkeyed collection member (so the collection view is also
+		// decorated), or the single-dispatch winner when the service has no collection membership.
+		private static List<string> CollectBaseImpls(List<string>? members, string? winner)
+		{
+			if (members is { Count: > 0, })
+			{
+				return new List<string>(members);
+			}
+
+			return winner is null ? new List<string>() : new List<string> { winner, };
+		}
+
+		private void ProcessService(string service, List<DecorateRegistration> chain)
+		{
+			ServiceKey publicKey = new(service, null);
+			_serviceToImpl.TryGetValue(publicKey, out string? winner);
+			List<string>? members = _serviceMembers.TryGetValue(publicKey, out List<string>? m) ? m : null;
+			List<string> baseImpls = CollectBaseImpls(members, winner);
+
+			// AWT123: the decorated service has no registration to wrap.
+			if (baseImpls.Count == 0)
+			{
+				Report(Diagnostics.DecoratedServiceNotRegistered, chain[0].Location,
+					service, chain[0].Decorator.ToDisplayString(FullyQualified));
+				return;
+			}
+
+			// Order the chain by (Order, declaration) — innermost first, outermost last.
+			List<DecorateRegistration> ordered = chain
+				.OrderBy(d => d.Order)
+				.ThenBy(d => d.DeclarationOrder)
+				.ToList();
+
+			// AWT124: each decorator must have exactly one constructor parameter assignable to the service.
+			List<string>? innerParameterTypes = ResolveInnerParameterTypes(service, ordered);
+			if (innerParameterTypes is null)
+			{
+				return;
+			}
+
+			ServiceChain sc = new(service, winner, members, ordered, innerParameterTypes);
+			for (int k = 0; k < baseImpls.Count; k++)
+			{
+				WrapBaseImpl(sc, baseImpls[k], k);
+			}
+		}
+
+		// Each decorator's inner-parameter type in chain order, or null (having reported AWT124) when any
+		// decorator has no single constructor parameter that can receive the inner instance.
+		private List<string>? ResolveInnerParameterTypes(string service, List<DecorateRegistration> ordered)
+		{
+			List<string> innerParameterTypes = new();
+			bool valid = true;
+			foreach (DecorateRegistration decorator in ordered)
+			{
+				string? innerType = SingleInnerParameterType(decorator.Decorator, decorator.ServiceSymbol);
+				if (innerType is null)
+				{
+					Report(Diagnostics.DecoratorMissingInnerParameter, decorator.Location,
+						decorator.Decorator.ToDisplayString(FullyQualified), service);
+					valid = false;
+					continue;
+				}
+
+				innerParameterTypes.Add(innerType);
+			}
+
+			return valid ? innerParameterTypes : null;
+		}
+
+		private void WrapBaseImpl(ServiceChain chain, string baseImpl, int baseIndex)
+		{
+			string service = chain.Service;
+			bool isWinnerChain = baseImpl == chain.Winner;
+
+			// Move the base implementation off the public service onto the chain's lowest synthetic key, so the
+			// first decorator reaches it by key and the public dispatch no longer hits it directly.
+			string baseKey = DecoratorKey(service, baseIndex, 0);
+			MoveBaseToSyntheticKey(service, baseImpl, baseKey);
+
+			ImplInfo? baseInfo = _byImpl.TryGetValue(baseImpl, out ImplInfo? bi) ? bi : null;
+			Lifetime lifetime = baseInfo?.Lifetime ?? Lifetime.Transient;
+			LocationInfo? location = baseInfo?.Location;
+
+			// Register each decorator as a fresh instance with a synthetic identity (so one decorator type can
+			// wrap several base impls as distinct instances), inheriting the base registration's lifetime.
+			string innerKey = baseKey;
+			string outermostIdentity = baseImpl;
+			for (int i = 0; i < chain.Ordered.Count; i++)
+			{
+				bool isPublic = isWinnerChain && i == chain.Ordered.Count - 1;
+				outermostIdentity = AddChainLink(chain, baseIndex, i, isPublic, lifetime, location, innerKey);
+				innerKey = DecoratorKey(service, baseIndex, i + 1);
+			}
+
+			// Collection membership is unbypassable: replace the base impl with the chain's outermost decorator
+			// identity, so a collection view yields the full chain as a single element rather than the bare impl.
+			RewriteCollectionMembership(chain.Members, baseImpl, outermostIdentity);
+		}
+
+		// Moves the base implementation off the public service onto the chain's lowest synthetic key.
+		private void MoveBaseToSyntheticKey(string service, string baseImpl, string baseKey)
+		{
+			if (_byImpl.TryGetValue(baseImpl, out ImplInfo? baseInfo))
+			{
+				baseInfo.Services.Remove(new ServiceKey(service, null));
+				ServiceKey synthetic = new(service, baseKey);
+				if (!baseInfo.Services.Contains(synthetic))
+				{
+					baseInfo.Services.Add(synthetic);
+				}
+			}
+
+			_serviceToImpl[new ServiceKey(service, baseKey)] = baseImpl;
+		}
+
+		// Registers one chain link (the decorator at <paramref name="linkIndex" />) and returns its synthetic
+		// identity. The outermost link of the winner chain (<paramref name="isPublic" />) takes the public
+		// service key; every other link is keyed so it is reached only as the inner of the link above it (or as
+		// a rewritten collection member).
+		private string AddChainLink(ServiceChain chain, int baseIndex, int linkIndex, bool isPublic, Lifetime lifetime, LocationInfo? location, string innerKey)
+		{
+			string service = chain.Service;
+			int link = linkIndex + 1;
+			INamedTypeSymbol decorator = chain.Ordered[linkIndex].Decorator;
+			string identity = DecoratorIdentity(decorator.ToDisplayString(FullyQualified), service, baseIndex, link);
+
+			ImplInfo info = new(identity, decorator, lifetime, location, ProductionKind.Constructor, null);
+			_byImpl[identity] = info;
+			_implOrder.Add(info);
+
+			ServiceKey ownKey = isPublic
+				? new ServiceKey(service, null)
+				: new ServiceKey(service, DecoratorKey(service, baseIndex, link));
+			info.Services.Add(ownKey);
+			_serviceToImpl[ownKey] = identity;
+
+			// Redirect this link's inner parameter to the link below it. The chain links are all registered under
+			// the decorated service type, so the redirect keys to (service, innerKey) - not to the parameter's own
+			// declared type, which may be a base of the service and is not a registration key.
+			_decoratorInner[identity] = new DecoratorInner(chain.InnerParameterTypes[linkIndex], service, innerKey);
+
+			return identity;
+		}
+
+		private static void RewriteCollectionMembership(List<string>? members, string baseImpl, string outermostIdentity)
+		{
+			int index = members?.IndexOf(baseImpl) ?? -1;
+			if (index >= 0)
+			{
+				members![index] = outermostIdentity;
+			}
+		}
+
+		private void Report(DiagnosticDescriptor descriptor, Location? location, params string[] messageArgs)
+		{
+			string[] displayed = new string[messageArgs.Length];
+			for (int i = 0; i < messageArgs.Length; i++)
+			{
+				displayed[i] = Display(messageArgs[i]);
+			}
+
+			_diagnostics.Add(new DiagnosticInfo(descriptor, LocationInfo.From(location), new EquatableArray<string>(displayed)));
+		}
+
+		// The per-service state threaded through WrapBaseImpl / AddChainLink: the decorated service, its
+		// single-dispatch winner (if any), its collection membership (if any), the decorators innermost-first,
+		// and each decorator's inner-parameter type (positionally matching Ordered).
+		private readonly record struct ServiceChain(
+			string Service,
+			string? Winner,
+			List<string>? Members,
+			List<DecorateRegistration> Ordered,
+			List<string> InnerParameterTypes);
+
+		/// <summary>
+		///     The fully-qualified type of a decorator's single constructor parameter that receives the inner
+		///     instance, or <see langword="null" /> when there is none or it is ambiguous (AWT124). The constructor
+		///     is chosen by the same <see cref="SelectConstructor" /> the container uses to build the decorator, so
+		///     this validation can never inspect a different constructor than the one constructed - a divergence
+		///     would leave the inner parameter un-redirected and the link resolving itself. The returned type string
+		///     is what <see cref="ClassifyParameter" /> produces for that parameter, so the inner-parameter redirect
+		///     in <see cref="ClassifyParameters" /> can match it.
+		/// </summary>
+		private string? SingleInnerParameterType(INamedTypeSymbol decorator, INamedTypeSymbol service)
+		{
+			IMethodSymbol? constructor = SelectConstructor(decorator, _containerSymbol, _serviceToImpl.Keys.Select(k => k.Service));
+			if (constructor is null)
+			{
+				return null;
+			}
+
+			// The inner is an instance of the decorated service, so its parameter must accept it: the service is
+			// implicitly convertible to the parameter's type (the parameter is the service, or a base of it). A
+			// [FromKey] parameter is excluded - it deliberately selects a specific keyed registration, so it is a
+			// separate dependency, never the chain inner (which is redirected by key and would ignore the [FromKey]
+			// anyway). More than one parameter can be assignable at once - e.g. a plain `object` state parameter
+			// alongside the inner - so the inner is the most-derived of them: the one every other assignable
+			// parameter is a base of. Exactly one such maximum makes the inner unambiguous; a tie (two
+			// equally-derived assignable parameters, e.g. two `IService`) is genuinely ambiguous and reported as
+			// AWT124, as is a decorator whose only service-assignable parameter is [FromKey]-ed.
+			List<IParameterSymbol> assignable = constructor.Parameters
+				.Where(p => FromKey(p) is null && _compilation.HasImplicitConversion(service, p.Type))
+				.ToList();
+
+			IParameterSymbol? inner = null;
+			foreach (IParameterSymbol candidate in assignable)
+			{
+				bool isMaximum = assignable.All(other =>
+					ReferenceEquals(other, candidate) || _compilation.HasImplicitConversion(candidate.Type, other.Type));
+				if (!isMaximum)
+				{
+					continue;
+				}
+
+				if (inner is not null)
+				{
+					return null;
+				}
+
+				inner = candidate;
+			}
+
+			return inner?.Type.ToDisplayString(FullyQualified);
+		}
+
+		private static string DecoratorKey(string service, int baseIndex, int link)
+			=> $"{DecoratorKeyPrefix}{service}:{baseIndex}:{link}";
+
+		private static string DecoratorIdentity(string decoratorType, string service, int baseIndex, int link)
+			=> $"{decoratorType}@{DecoratorKeyPrefix}{service}:{baseIndex}:{link}";
+	}
+
 	private static InstanceModel? BuildInstance(
 		ImplInfo info,
 		INamedTypeSymbol containerSymbol,
 		Compilation compilation,
 		Dictionary<ServiceKey, string> serviceToImpl,
+		Dictionary<string, DecoratorInner> decoratorInner,
 		WellKnownTypes wellKnown,
 		List<DiagnosticInfo> diagnostics)
 	{
@@ -743,7 +1075,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		// A factory's parameters resolve from the graph exactly like a constructor's. An async factory
 		// additionally forwards the resolve-time CancellationToken (the async creator's) into a matching
 		// parameter rather than resolving it from the graph.
-		List<ParameterModel> parameters = ClassifyParameters(producer, info, asyncFactory, serviceToImpl, diagnostics);
+		List<ParameterModel> parameters = ClassifyParameters(producer, info, asyncFactory, serviceToImpl, decoratorInner, diagnostics);
 
 		// Disposability follows the type the container actually owns: a factory's produced type (which may
 		// implement IDisposable behind a non-disposable service interface; for an async factory this is the
@@ -791,6 +1123,11 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			ReportFactoryHidingAsyncInitialization(producer, compilation, wellKnown.AsyncInitializable, diagnostics);
 		}
 
+		// A decorator chain link carries a synthetic ImplementationType identity (so one decorator type can be
+		// several distinct instances); the real type to construct is then its symbol, kept apart in EmitType.
+		string realType = info.Symbol.ToDisplayString(FullyQualified);
+		string? emitType = info.ImplementationType == realType ? null : realType;
+
 		return new InstanceModel(
 			info.ImplementationType,
 			info.Symbol.Name,
@@ -804,7 +1141,8 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			asyncInit,
 			IsAsyncFactory: asyncFactory,
 			RuntimeDisposalCheck: runtimeDisposalCheck,
-			IsAsyncDisposable: asyncDisposable);
+			IsAsyncDisposable: asyncDisposable,
+			EmitType: emitType);
 
 		static bool ImplementsInterface(ITypeSymbol type, INamedTypeSymbol @interface)
 		{
@@ -989,6 +1327,30 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	}
 
 	/// <summary>
+	///     Redirects a decorator chain link's single inner parameter (a direct, unkeyed dependency assignable to
+	///     the decorated service type) to the synthetic key of the next-lower link - so the keyed resolver
+	///     produces <c>D2(D1(Real))</c> rather than the link resolving its own public service (itself) and
+	///     recursing. Both the service type and key are rewritten: the links are registered under the decorated
+	///     service type, so a parameter declared as a base of the service still resolves the link (its own
+	///     declared type is not a registration key). A non-link instance, or any other parameter, is returned
+	///     unchanged and resolves from the graph.
+	/// </summary>
+	private static ParameterModel RedirectDecoratorInner(
+		ParameterModel parameterModel,
+		ImplInfo info,
+		Dictionary<string, DecoratorInner> decoratorInner)
+	{
+		if (parameterModel is { Kind: DependencyKind.Direct, Key: null, }
+		    && decoratorInner.TryGetValue(info.ImplementationType, out DecoratorInner inner)
+		    && parameterModel.ServiceType == inner.ParameterServiceType)
+		{
+			return parameterModel with { ServiceType = inner.ServiceType, Key = inner.InnerKey, };
+		}
+
+		return parameterModel;
+	}
+
+	/// <summary>
 	///     Classifies the producer's parameters (a constructor's or a factory method's) and reports
 	///     <see cref="Diagnostics.MissingDependency">AWT101</see> for any non-<c>[Arg]</c> parameter whose
 	///     service type is not registered. A runtime argument (<c>[Arg]</c>) is supplied at resolve time, so
@@ -999,12 +1361,14 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		ImplInfo info,
 		bool asyncFactory,
 		Dictionary<ServiceKey, string> serviceToImpl,
+		Dictionary<string, DecoratorInner> decoratorInner,
 		List<DiagnosticInfo> diagnostics)
 	{
 		List<ParameterModel> parameters = new();
 		foreach (IParameterSymbol parameter in producer.Parameters)
 		{
 			ParameterModel parameterModel = ClassifyParameter(parameter, asyncFactory);
+			parameterModel = RedirectDecoratorInner(parameterModel, info, decoratorInner);
 
 			// A collection type (IEnumerable<T> and friends, or T[]) is normally synthesized from the registrations
 			// of its element type under the parameter's key. But if any collection shape of that element type is
@@ -1042,7 +1406,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 					info.Location,
 					new EquatableArray<string>([
 						Display(info.OwningServiceOrImpl),
-						Display(info.ImplementationType),
+						DisplayInstance(info.ImplementationType),
 						DisplayKeyed(parameterModel.ServiceType, parameterModel.Key),
 					])));
 			}
@@ -1444,9 +1808,9 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 						Diagnostics.SynchronousAsyncResolution,
 						location,
 						new EquatableArray<string>([
-							Display(instances[i].ImplementationType),
+							DisplayInstance(instances[i].ImplementationType),
 							parameter.Kind.ToString(),
-							Display(instances[target].ImplementationType),
+							DisplayInstance(instances[target].ImplementationType),
 						])));
 				}
 				else
@@ -1456,7 +1820,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 						Diagnostics.AsyncDependencyOnSyncPath,
 						location,
 						new EquatableArray<string>([
-							Display(instances[i].ImplementationType),
+							DisplayInstance(instances[i].ImplementationType),
 							path,
 						])));
 				}
@@ -1526,9 +1890,9 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 				Diagnostics.AsyncCollectionResolution,
 				instanceLocations[consumer],
 				new EquatableArray<string>([
-					Display(instances[consumer].ImplementationType),
+					DisplayInstance(instances[consumer].ImplementationType),
 					Display(parameter.ServiceType),
-					Display(instances[memberIndex].ImplementationType),
+					DisplayInstance(instances[memberIndex].ImplementationType),
 				])));
 		}
 	}
@@ -1570,7 +1934,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			}
 		}
 
-		return string.Join(" -> ", chain.Select(index => Display(instances[index].ImplementationType)));
+		return string.Join(" -> ", chain.Select(index => DisplayInstance(instances[index].ImplementationType)));
 	}
 
 	// Whether a type is a System.Threading.Tasks.Task<T>, yielding its result type T. Used to recognize the
@@ -1774,7 +2138,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.ParameterizedRequiresFunc,
 				location,
-				new EquatableArray<string>([Display(parameter.ServiceType), Display(consumer.ImplementationType),])));
+				new EquatableArray<string>([Display(parameter.ServiceType), DisplayInstance(consumer.ImplementationType),])));
 		}
 	}
 
@@ -1832,7 +2196,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 						Diagnostics.CaptiveDependency,
 						instanceLocations[singleton],
 						new EquatableArray<string>([
-							Display(instances[singleton].ImplementationType),
+							DisplayInstance(instances[singleton].ImplementationType),
 							DisplayKeyed(referenced.Service, referenced.Key),
 						])));
 					break;
@@ -1918,7 +2282,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 				return;
 			}
 
-			string rendered = string.Join(" -> ", cycle.Select(index => Display(instances[index].ImplementationType)));
+			string rendered = string.Join(" -> ", cycle.Select(index => DisplayInstance(instances[index].ImplementationType)));
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.DependencyCycle,
 				containerLocation,
@@ -1940,6 +2304,25 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	// diagnostics read 'System.Func<MyCode.Leaf>' rather than 'System.Func<global::MyCode.Leaf>'.
 	internal static string Display(string fullyQualified)
 		=> fullyQualified.Replace("global::", string.Empty);
+
+	// Renders an instance identity for diagnostics. A decorator chain link carries a synthetic
+	// '<type>@__dec:…' identity (see DecoratorIdentity); trim the synthetic suffix so an error names the real
+	// decorator type ('MyCode.Deco') rather than the internal key ('MyCode.Deco@__dec:MyCode.IService:0:1').
+	internal static string DisplayInstance(string implementationType)
+	{
+		int marker = implementationType.IndexOf("@" + DecoratorKeyPrefix, StringComparison.Ordinal);
+		return Display(marker >= 0 ? implementationType.Substring(0, marker) : implementationType);
+	}
+
+	/// <summary>
+	///     Redirects a decorator instance's inner parameter to the next-lower chain link. <see cref="ParameterServiceType" />
+	///     is the parameter's own declared type (as <see cref="ClassifyParameter" /> classifies it), used to pick the single
+	///     inner parameter out of the constructor. <see cref="ServiceType" /> is the decorated service type - the type under
+	///     which every chain link is registered - so the redirect keys the parameter to <c>(ServiceType, InnerKey)</c> even
+	///     when the parameter is declared as a base type of the service (its declared type is not a registration key).
+	///     Consumed by <see cref="ClassifyParameters" /> when it classifies the decorator link.
+	/// </summary>
+	private readonly record struct DecoratorInner(string ParameterServiceType, string ServiceType, string InnerKey);
 
 	private sealed class ImplInfo
 	{

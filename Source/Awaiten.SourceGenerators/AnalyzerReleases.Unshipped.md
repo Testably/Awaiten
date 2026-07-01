@@ -24,3 +24,5 @@
  AWT120  | Awaiten   | Error    | A synchronous Func/Lazy/Owned relationship reaches an async-tainted service transitively
  AWT121  | Awaiten   | Error    | An Owned<T> disposal handle is requested through a Lazy<Owned<T>> or Lazy<Task<Owned<T>>> relationship
  AWT122  | Awaiten   | Error    | A collection dependency has an async-tainted member but is materialized synchronously
+ AWT123  | Awaiten   | Error    | A [Decorate] names a service with no registration to decorate
+ AWT124  | Awaiten   | Error    | A decorator has no single constructor parameter assignable to the decorated service type
