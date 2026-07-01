@@ -46,7 +46,7 @@ internal static class Emitter
 		}
 		else
 		{
-			Names names = Names.Build(model.Instances.AsArray());
+			Names names = Names.Build(model.Instances.AsArray(), model.Collections.AsArray(), model.SyncResolveAfterInit);
 			Dictionary<ServiceKey, int> serviceToIndex = BuildServiceMap(model);
 			EmitContainerBody(builder, depth + 1, model, names, serviceToIndex);
 		}
@@ -731,7 +731,48 @@ internal static class Emitter
 			}
 		}
 
+		// Collection dispatch: every collection-resolvable service is publicly resolvable as IEnumerable<T> and
+		// T[] (the eagerly materialized array satisfies the other collection shapes too). A collection with an
+		// async-tainted member is omitted (it has no synchronous materialization); injecting one is AWT122. The
+		// seen guard keeps an explicitly registered IEnumerable<T>/T[] service winning the dispatch slot.
+		foreach (ServiceMembers collection in names.Collections)
+		{
+			string element = collection.Service;
+			if (!names.IsSyncCollection(element))
+			{
+				continue;
+			}
+
+			string array = CollectionLiteral(element, names);
+			string enumerable = $"global::System.Collections.Generic.IEnumerable<{element}>";
+			string arrayType = $"{element}[]";
+			if (seen.Add(enumerable))
+			{
+				entries.Add(new DispatchEntry(enumerable, array));
+			}
+
+			if (seen.Add(arrayType))
+			{
+				entries.Add(new DispatchEntry(arrayType, array));
+			}
+		}
+
 		return entries;
+	}
+
+	/// <summary>
+	///     A <c>new T[] { resolverA(), resolverB(), … }</c> expression: every unkeyed registration of the
+	///     element type, materialized eagerly in registration order (each member keeping its own lifetime). An
+	///     empty membership yields <c>new T[] { }</c>. An array satisfies every supported collection parameter
+	///     shape (<c>IEnumerable&lt;T&gt;</c>, <c>IReadOnlyList&lt;T&gt;</c>, <c>IReadOnlyCollection&lt;T&gt;</c>,
+	///     <c>IList&lt;T&gt;</c>, <c>ICollection&lt;T&gt;</c>, <c>T[]</c>). The member resolvers are called
+	///     unqualified against the current owner, so a singleton member routes through its virtual delegator to
+	///     the root and a scoped/transient member resolves on the scope evaluating the collection.
+	/// </summary>
+	private static string CollectionLiteral(string elementType, Names names)
+	{
+		string items = string.Join(", ", names.CollectionResolvers(elementType).Select(resolver => resolver + "()"));
+		return $"new {elementType}[] {{ {items} }}";
 	}
 
 	/// <summary>
@@ -1621,6 +1662,13 @@ internal static class Emitter
 			{
 				arguments.Append("a" + argIndex++);
 			}
+			else if (parameters[p].Kind == DependencyKind.Enumerable)
+			{
+				// A collection has no single resolver; it materializes eagerly from all of its members' resolvers.
+				// Collections are synchronous-only, so this is the same array literal on the sync and async paths
+				// (an async-tainted member is an AWT122 error in strict mode, so none reaches emission there).
+				arguments.Append(CollectionLiteral(parameters[p].ServiceType, names));
+			}
 			else if (parameters[p].Kind == DependencyKind.CancellationToken)
 			{
 				// Forward the resolve-time token: the async creator's cancellationToken is in scope here. Only an
@@ -2102,16 +2150,35 @@ internal static class Emitter
 	{
 		private readonly string[] _fields;
 		private readonly string[] _resolvers;
+		private readonly ServiceMembers[] _collections;
+		private readonly Dictionary<string, string[]> _collectionResolvers;
+		private readonly HashSet<string> _syncCollections;
 
-		private Names(string[] resolvers, string[] fields)
+		private Names(string[] resolvers, string[] fields, ServiceMembers[] collections, Dictionary<string, string[]> collectionResolvers, HashSet<string> syncCollections)
 		{
 			_resolvers = resolvers;
 			_fields = fields;
+			_collections = collections;
+			_collectionResolvers = collectionResolvers;
+			_syncCollections = syncCollections;
 		}
+
+		// The collection-resolvable services in first-seen order, driving the public IEnumerable<T> / T[] dispatch.
+		public ServiceMembers[] Collections => _collections;
 
 		public string Resolver(int index) => _resolvers[index];
 
 		public string Field(int index) => _fields[index];
+
+		// The resolver method names of a collection-resolvable service's members, in registration order (empty
+		// when the element type has no registration, which materializes an empty array).
+		public string[] CollectionResolvers(string elementService)
+			=> _collectionResolvers.TryGetValue(elementService, out string[]? resolvers) ? resolvers : System.Array.Empty<string>();
+
+		// Whether a collection can be materialized synchronously - i.e. every member has a synchronous resolver.
+		// A collection with an async-tainted member (strict mode) is omitted from the public sync dispatch, so no
+		// synchronous resolver is referenced where none is emitted; injecting such a collection is AWT122.
+		public bool IsSyncCollection(string elementService) => _syncCollections.Contains(elementService);
 
 		// The async members are named off the synchronous resolver/field so they stay collision-safe
 		// together: ResolveFoo -> ResolveFooAsync / CreateFooAsync, _foo -> _fooAsyncTask.
@@ -2121,10 +2188,12 @@ internal static class Emitter
 
 		public string AsyncField(int index) => _fields[index] + "AsyncTask";
 
-		public static Names Build(InstanceModel[] instances)
+		public static Names Build(InstanceModel[] instances, ServiceMembers[] collections, bool syncResolveAfterInit)
 		{
 			string[] resolvers = new string[instances.Length];
 			string[] fields = new string[instances.Length];
+			Dictionary<string, string> implToResolver = new(StringComparer.Ordinal);
+			HashSet<string> syncImpls = new(StringComparer.Ordinal);
 			HashSet<string> used = new(StringComparer.OrdinalIgnoreCase);
 
 			for (int i = 0; i < instances.Length; i++)
@@ -2140,9 +2209,39 @@ internal static class Emitter
 
 				resolvers[i] = "Resolve" + name;
 				fields[i] = "_" + char.ToLowerInvariant(name[0]) + name.Substring(1);
+				implToResolver[instances[i].ImplementationType] = resolvers[i];
+
+				// A member is synchronously resolvable unless it is async-tainted in strict mode (in pragmatic
+				// SyncResolveAfterInit mode every service has a synchronous resolver, delegating to the async one).
+				if (!instances[i].IsAsyncTainted || syncResolveAfterInit)
+				{
+					syncImpls.Add(instances[i].ImplementationType);
+				}
 			}
 
-			return new Names(resolvers, fields);
+			// Map each collection's member implementations to their resolvers, preserving registration order; a
+			// collection is sync-materializable only when every member has a synchronous resolver.
+			Dictionary<string, string[]> collectionResolvers = new(StringComparer.Ordinal);
+			HashSet<string> syncCollections = new(StringComparer.Ordinal);
+			foreach (ServiceMembers members in collections)
+			{
+				string[] memberImpls = members.Implementations.AsArray();
+				string[] memberResolvers = new string[memberImpls.Length];
+				bool allSync = true;
+				for (int m = 0; m < memberImpls.Length; m++)
+				{
+					memberResolvers[m] = implToResolver[memberImpls[m]];
+					allSync &= syncImpls.Contains(memberImpls[m]);
+				}
+
+				collectionResolvers[members.Service] = memberResolvers;
+				if (allSync)
+				{
+					syncCollections.Add(members.Service);
+				}
+			}
+
+			return new Names(resolvers, fields, collections, collectionResolvers, syncCollections);
 		}
 
 		private static string Sanitize(string name)

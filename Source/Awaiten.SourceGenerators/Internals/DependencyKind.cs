@@ -40,4 +40,14 @@ internal enum DependencyKind
 
 	/// <summary>A <c>Lazy&lt;Task&lt;T&gt;&gt;</c> async dependency; like <see cref="Lazy" /> but awaitable.</summary>
 	LazyTask,
+
+	/// <summary>
+	///     A collection dependency (<c>IEnumerable&lt;T&gt;</c>, <c>IReadOnlyList&lt;T&gt;</c>,
+	///     <c>IReadOnlyCollection&lt;T&gt;</c>, <c>IList&lt;T&gt;</c>, <c>ICollection&lt;T&gt;</c> or
+	///     <c>T[]</c>): resolves to every unkeyed registration of the element type <c>T</c> (the parameter's
+	///     <c>ServiceType</c>), materialized eagerly into an array in registration order. Unlike the
+	///     relationship kinds it captures its members, so it contributes a graph edge to each of them (for
+	///     cycle, captive and async-taint analysis) and never launders their taint.
+	/// </summary>
+	Enumerable,
 }

@@ -1,0 +1,199 @@
+using System.Linq;
+
+namespace Awaiten.SourceGenerators.Tests;
+
+/// <summary>
+///     The generated shape of collection dependencies: a collection-typed parameter (
+///     <c>IEnumerable&lt;T&gt;</c> and friends, or <c>T[]</c>) is materialized as an array of every unkeyed
+///     registration of <c>T</c>, in registration order, and <c>IEnumerable&lt;T&gt;</c> / <c>T[]</c> are
+///     added to the public dispatch table. Every member is a real instance (the "losing" registration is not
+///     dropped), an empty collection is a legal empty array, and an async-tainted member is rejected.
+/// </summary>
+public class CollectionTests
+{
+	[Fact]
+	public async Task CollectionDependency_MaterializesAllRegistrationsAsAnArray()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class Alpha : IPlugin { }
+		                                       public sealed class Beta : IPlugin { }
+		                                       public sealed class Host { public Host(IEnumerable<IPlugin> plugins) { } }
+
+		                                       [Container]
+		                                       [Singleton<Alpha, IPlugin>]
+		                                       [Singleton<Beta, IPlugin>]
+		                                       [Singleton<Host>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// The collection is an array of every member's resolver, in registration order; both members get their
+		// own backing field (no second instance is fabricated for the "losing" registration).
+		await That(source).Contains("new global::MyCode.Host(new global::MyCode.IPlugin[] { ResolveAlpha(), ResolveBeta() })")
+			.Because("the collection dependency materializes every registration in registration order");
+		await That(source).Contains("_alpha")
+			.Because("the first (winning) registration is a real instance");
+		await That(source).Contains("_beta")
+			.Because("the losing registration is still built - it is reached through the collection");
+
+		// IEnumerable<T> and T[] are added to the public dispatch table; the single IPlugin still dispatches to
+		// the winner.
+		await That(source).Contains("typeof(global::System.Collections.Generic.IEnumerable<global::MyCode.IPlugin>)")
+			.Because("the collection is publicly resolvable as IEnumerable<T>");
+		await That(source).Contains("typeof(global::MyCode.IPlugin[])")
+			.Because("the collection is publicly resolvable as T[]");
+		await That(source).Contains("instance = new global::MyCode.IPlugin[] { ResolveAlpha(), ResolveBeta() }; return true;")
+			.Because("the public collection dispatch returns the same materialized array");
+		await That(source).Contains("typeof(global::MyCode.IPlugin)")
+			.Because("the single IPlugin resolution still dispatches to the winning registration");
+	}
+
+	[Fact]
+	public async Task ArrayParameter_IsAlsoRecognizedAsACollection()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class Alpha : IPlugin { }
+		                                       public sealed class Host { public Host(IPlugin[] plugins) { } }
+
+		                                       [Container]
+		                                       [Singleton<Alpha, IPlugin>]
+		                                       [Singleton<Host>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("new global::MyCode.Host(new global::MyCode.IPlugin[] { ResolveAlpha() })")
+			.Because("an array parameter resolves to the collection of registrations, not a single registration");
+	}
+
+	[Fact]
+	public async Task EmptyCollection_MaterializesAnEmptyArrayWithoutAwt101()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class Host { public Host(IReadOnlyList<IPlugin> plugins) { } }
+
+		                                       [Container]
+		                                       [Singleton<Host>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty()
+			.Because("an unregistered element type resolves to an empty collection, not a missing-dependency error");
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("new global::MyCode.Host(new global::MyCode.IPlugin[] {  })")
+			.Because("an element type with no registration materializes an empty array");
+	}
+
+	[Fact]
+	public async Task KeyedRegistrations_AreNotCollectionMembers()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class Unkeyed : IPlugin { }
+		                                       public sealed class Keyed : IPlugin { }
+		                                       public sealed class Host { public Host(IEnumerable<IPlugin> plugins) { } }
+
+		                                       [Container]
+		                                       [Singleton<Unkeyed, IPlugin>]
+		                                       [Singleton<Keyed, IPlugin>(Key = "special")]
+		                                       [Singleton<Host>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("new global::MyCode.Host(new global::MyCode.IPlugin[] { ResolveUnkeyed() })")
+			.Because("only the unkeyed registration is a collection member; the keyed one is reached only by [FromKey]");
+	}
+
+	[Fact]
+	public async Task ParameterizedService_IsNotACollectionMember()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class Plain : IPlugin { }
+		                                       public sealed class WithArg : IPlugin { public WithArg([Arg] int id) { } }
+		                                       public sealed class Host { public Host(IEnumerable<IPlugin> plugins) { } }
+
+		                                       [Container]
+		                                       [Singleton<Plain, IPlugin>]
+		                                       [Transient<WithArg, IPlugin>]
+		                                       [Singleton<Host>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("new global::MyCode.Host(new global::MyCode.IPlugin[] { ResolvePlain() })")
+			.Because("a parameterized [Arg] service is reachable only through its Func<TArg…, T> factory, never a collection");
+	}
+
+	[Fact]
+	public async Task CaptiveCollection_ReportsAwt105WhenASingletonHoldsScopedMembers()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class ScopedPlugin : IPlugin { }
+		                                       public sealed class Host { public Host(IEnumerable<IPlugin> plugins) { } }
+
+		                                       [Container]
+		                                       [Scoped<ScopedPlugin, IPlugin>]
+		                                       [Singleton<Host>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics.Any(d => d.Contains("AWT105"))).IsTrue()
+			.Because("a collection captures its members eagerly, so a singleton holding a collection of scoped services is a captive dependency");
+	}
+}

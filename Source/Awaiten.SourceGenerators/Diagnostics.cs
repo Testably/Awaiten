@@ -316,4 +316,19 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A collection dependency (<c>IEnumerable&lt;T&gt;</c> and friends) has a member whose implementation
+	///     is async-initialized or async-tainted, but the collection is materialized synchronously. Collections
+	///     are synchronous-only: they build every member eagerly into an array, with no place to await an
+	///     asynchronous initialization. Warm the graph with <c>SyncResolveAfterInit</c> on the <c>[Container]</c>
+	///     (after <c>InitializeAsync</c>), or restructure so the collection holds no async-tainted members.
+	/// </summary>
+	public static readonly DiagnosticDescriptor AsyncCollectionResolution = new(
+		"AWT122",
+		"Async-tainted service reached synchronously through a collection",
+		"'{0}' resolves the collection of '{1}' synchronously, but the member '{2}' is async-tainted; collections of async-initialized services are not supported in strict mode - set SyncResolveAfterInit on the [Container] (and resolve after InitializeAsync), or remove the async member from the collection",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }
