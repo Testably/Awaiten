@@ -307,12 +307,9 @@ internal static class ContainerRegistrations
 		// synthesized, each one depth deeper than the closed service that produced it.
 		Queue<(INamedTypeSymbol Impl, int Depth)> worklist = new();
 		HashSet<INamedTypeSymbol> seen = new(SymbolEqualityComparer.Default);
-		foreach (RawRegistration registration in raw)
+		foreach (RawRegistration registration in raw.Where(registration => seen.Add(registration.Implementation)))
 		{
-			if (seen.Add(registration.Implementation))
-			{
-				worklist.Enqueue((registration.Implementation, 0));
-			}
+			worklist.Enqueue((registration.Implementation, 0));
 		}
 
 		ExpansionContext context = new(raw, open, worklist, seen, diagnostics);
