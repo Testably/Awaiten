@@ -112,6 +112,8 @@ public partial class DiagnosticTests
 
 			await That(result.Diagnostics.Any(d => d.Contains("AWT126"))).IsTrue()
 				.Because("the implementation's self-referential constraint where T : IComparable<T> is violated by NotComparable after substitution");
+			await That(result.Diagnostics.Any(d => d.Contains("AWT101"))).IsFalse()
+				.Because("the constraint violation is the single root cause; the consumer's now-unregistered IRepository<NotComparable> must not also raise AWT101");
 		}
 	}
 }

@@ -24,9 +24,16 @@ internal static class ContainerRegistrations
 
 	private static readonly SymbolDisplayFormat FullyQualified = SymbolDisplayFormat.FullyQualifiedFormat;
 
-	public static List<RawRegistration> Collect(INamedTypeSymbol containerSymbol, List<DiagnosticInfo> diagnostics)
+	public static (List<RawRegistration> Raw, HashSet<string> ConstraintRejectedServices) Collect(
+		INamedTypeSymbol containerSymbol,
+		List<DiagnosticInfo> diagnostics)
 	{
 		List<RawRegistration> result = new();
+
+		// Closed services an open registration was required to produce but could not, because the closed type
+		// arguments violate the implementation's constraints (AWT126). The emitter suppresses the AWT101 these
+		// would otherwise also raise on the consumer's parameter, so one root cause is reported once.
+		HashSet<string> constraintRejected = new(StringComparer.Ordinal);
 
 		// Open generic registrations are kept apart: they are not instances themselves, but templates
 		// expanded into concrete closed registrations on demand (see ExpandOpenGenerics).
@@ -90,10 +97,10 @@ internal static class ContainerRegistrations
 		// implementation (iterating to a fixpoint over its own generic dependencies).
 		if (open.Count > 0)
 		{
-			ExpandOpenGenerics(result, open, containerSymbol, diagnostics);
+			ExpandOpenGenerics(result, open, containerSymbol, diagnostics, constraintRejected);
 		}
 
-		return result;
+		return (result, constraintRejected);
 	}
 
 	/// <summary>
@@ -285,7 +292,8 @@ internal static class ContainerRegistrations
 		List<RawRegistration> raw,
 		List<OpenRegistration> open,
 		INamedTypeSymbol containerSymbol,
-		List<DiagnosticInfo> diagnostics)
+		List<DiagnosticInfo> diagnostics,
+		HashSet<string> constraintRejected)
 	{
 		// Closed services already expanded from the open registrations - expanded once, since a single visit
 		// synthesizes every matching open registration. An explicitly-registered concrete closed service is
@@ -312,7 +320,7 @@ internal static class ContainerRegistrations
 			worklist.Enqueue((registration.Implementation, 0));
 		}
 
-		ExpansionContext context = new(raw, open, worklist, seen, diagnostics);
+		ExpansionContext context = new(raw, open, worklist, seen, diagnostics, constraintRejected);
 
 		while (worklist.Count > 0)
 		{
@@ -371,9 +379,11 @@ internal static class ContainerRegistrations
 			string closedImplName = closedImpl.ToDisplayString(FullyQualified);
 
 			// AWT126: the closed type arguments must satisfy the implementation's constraints
-			// (e.g. Repository<int> against where T : class).
+			// (e.g. Repository<int> against where T : class). Record the closed service so the emitter can
+			// suppress the AWT101 the consumer's now-unregistered parameter would otherwise also raise.
 			if (!ConstraintsSatisfied(candidate.Implementation, typeArguments))
 			{
+				context.ConstraintRejectedServices.Add(closedService);
 				ReportConstraintViolation(candidate, closedImplName, context);
 				continue;
 			}
@@ -834,7 +844,8 @@ internal static class ContainerRegistrations
 		List<OpenRegistration> Open,
 		Queue<(INamedTypeSymbol Impl, int Depth)> Worklist,
 		HashSet<INamedTypeSymbol> Seen,
-		List<DiagnosticInfo> Diagnostics)
+		List<DiagnosticInfo> Diagnostics,
+		HashSet<string> ConstraintRejectedServices)
 	{
 		public HashSet<string> ReportedConstraints { get; } = new(StringComparer.Ordinal);
 

@@ -199,7 +199,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			AsyncDisposableSupport(compilation),
 			compilation.GetTypeByMetadataName("Awaiten.IAsyncInitializable"));
 
-		List<RawRegistration> raw = ContainerRegistrations.Collect(containerSymbol, diagnostics);
+		(List<RawRegistration> raw, HashSet<string> constraintRejected) = ContainerRegistrations.Collect(containerSymbol, diagnostics);
 		List<DecorateRegistration> decorators = ContainerRegistrations.CollectDecorators(containerSymbol);
 
 		// Coalesce registrations by (service type, key): the first registration per key wins, and
@@ -228,7 +228,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		foreach (ImplInfo info in implOrder)
 		{
 			cancellationToken.ThrowIfCancellationRequested();
-			InstanceModel? instance = BuildInstance(info, containerSymbol, compilation, serviceToImpl, decoratorInner, wellKnown, diagnostics);
+			InstanceModel? instance = BuildInstance(info, containerSymbol, compilation, serviceToImpl, decoratorInner, wellKnown, constraintRejected, diagnostics);
 			if (instance is not null)
 			{
 				implToIndex[info.ImplementationType] = instances.Count;
@@ -1030,6 +1030,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		Dictionary<ServiceKey, string> serviceToImpl,
 		Dictionary<string, DecoratorInner> decoratorInner,
 		WellKnownTypes wellKnown,
+		HashSet<string> constraintRejected,
 		List<DiagnosticInfo> diagnostics)
 	{
 		// A pre-built Instance is handed back from a container member, never constructed here. The
@@ -1075,7 +1076,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		// A factory's parameters resolve from the graph exactly like a constructor's. An async factory
 		// additionally forwards the resolve-time CancellationToken (the async creator's) into a matching
 		// parameter rather than resolving it from the graph.
-		List<ParameterModel> parameters = ClassifyParameters(producer, info, asyncFactory, serviceToImpl, decoratorInner, diagnostics);
+		List<ParameterModel> parameters = ClassifyParameters(producer, info, asyncFactory, serviceToImpl, decoratorInner, constraintRejected, diagnostics);
 
 		// Disposability follows the type the container actually owns: a factory's produced type (which may
 		// implement IDisposable behind a non-disposable service interface; for an async factory this is the
@@ -1354,7 +1355,9 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	///     Classifies the producer's parameters (a constructor's or a factory method's) and reports
 	///     <see cref="Diagnostics.MissingDependency">AWT101</see> for any non-<c>[Arg]</c> parameter whose
 	///     service type is not registered. A runtime argument (<c>[Arg]</c>) is supplied at resolve time, so
-	///     it is never a missing dependency.
+	///     it is never a missing dependency. A service in <paramref name="constraintRejected" /> - an open
+	///     generic that could not be closed at the required type argument (AWT126) - is not reported again as
+	///     AWT101: the constraint violation is the one root cause.
 	/// </summary>
 	private static List<ParameterModel> ClassifyParameters(
 		IMethodSymbol producer,
@@ -1362,6 +1365,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		bool asyncFactory,
 		Dictionary<ServiceKey, string> serviceToImpl,
 		Dictionary<string, DecoratorInner> decoratorInner,
+		HashSet<string> constraintRejected,
 		List<DiagnosticInfo> diagnostics)
 	{
 		List<ParameterModel> parameters = new();
@@ -1392,8 +1396,12 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			// with no such registration is not a missing dependency either - it just yields an empty array. (An
 			// unregistered collection type whose synthesis was suppressed above was rewritten to Direct and so is
 			// no longer Enumerable here, and does surface as AWT101.)
+			// A closed generic that expansion refused to synthesize because its type arguments violate the open
+			// implementation's constraints (AWT126) is deliberately absent from serviceToImpl. Reporting AWT101
+			// on top would name the same root cause twice, so suppress it here.
 			if (parameterModel.Kind is not (DependencyKind.Arg or DependencyKind.CancellationToken or DependencyKind.Enumerable)
-			    && !serviceToImpl.ContainsKey(KeyOf(parameterModel)))
+			    && !serviceToImpl.ContainsKey(KeyOf(parameterModel))
+			    && !constraintRejected.Contains(parameterModel.ServiceType))
 			{
 				// Lazy does not unwrap Owned<T> (memoizing a disposal handle is a footgun), so a Lazy<Owned<T>> /
 				// Lazy<Task<Owned<T>>> leaves the handle's Owned<T> type as the service - which is not registered.
