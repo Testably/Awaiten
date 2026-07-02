@@ -430,19 +430,17 @@ internal static class Emitter
 		List<(string Type, string Guidance)> withheldTypes = WithheldTypes(rootWithheld, instances, names, serviceToIndex, syncResolveAfterInit);
 		if (entries.Count > 0)
 		{
-			EmitDispatchTable(builder, body, entries);
+			// Data-driven by-type dispatch: a hand-tuned open-addressed table (keyed by Type identity hash) whose
+			// slots carry the resolver delegate directly. The table grows in data, never in a single method's IL, so
+			// it cannot exceed the JIT's optimization guards no matter how many registrations there are. The
+			// root-withholding that used to live in a parallel __rootWithheld mask is folded into each slot.
+			EmitBucketDispatch(builder, body, entries);
 			builder.AppendLine();
 		}
 
 		if (withheldTypes.Count > 0)
 		{
 			EmitWithheldTable(builder, body, withheldTypes);
-			builder.AppendLine();
-		}
-
-		if (rootWithheld.Count > 0)
-		{
-			EmitRootWithheldMask(builder, body, entries);
 			builder.AppendLine();
 		}
 
@@ -692,93 +690,36 @@ internal static class Emitter
 			return;
 		}
 
-		Indent(builder, depth + 1).AppendLine("if (__dispatch.TryGetValue(serviceType, out int __case))");
+		// Open-addressed probe: hash the requested type into its bucket window and scan the (small, fixed-width)
+		// window for an identity match. Each slot carries its resolver delegate directly, so a hit invokes it with
+		// no switch - the dispatch is O(1) and constant-size in IL regardless of the registration count.
+		Indent(builder, depth + 1).AppendLine("int __i = (int)((uint)serviceType.TypeHandle.GetHashCode() % (uint)__bucketCount) * __bucketSize;");
+		Indent(builder, depth + 1).AppendLine("int __end = __i + __bucketSize;");
+		Indent(builder, depth + 1).AppendLine("for (; __i < __end; __i++)");
 		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).AppendLine("ref readonly __Bucket __b = ref __buckets[__i];");
+		Indent(builder, depth + 2).AppendLine("if ((object?)__b.Key == (object?)serviceType)");
+		Indent(builder, depth + 2).AppendLine("{");
 		if (hasRootWithheld)
 		{
-			// Root-only withholding: a child scope resolves the case (its lifetime bounded by the scope), but the
+			// Root-only withholding: a child scope resolves the slot (its lifetime bounded by the scope), but the
 			// Root returns false (and Resolve then throws the guidance), so the root-accumulation leak stays
-			// impossible. The mask is keyed by case number, so it is a bare array index after the dispatch hit.
-			Indent(builder, depth + 2).AppendLine("if (this is Root && __rootWithheld[__case])");
-			Indent(builder, depth + 2).AppendLine("{");
-			Indent(builder, depth + 3).AppendLine("instance = null;");
-			Indent(builder, depth + 3).AppendLine("return false;");
-			Indent(builder, depth + 2).AppendLine("}");
+			// impossible. The flag rides on the slot, so it is a bare field read after the identity match.
+			Indent(builder, depth + 3).AppendLine("if (__b.RootWithheld && this is Root)");
+			Indent(builder, depth + 3).AppendLine("{");
+			Indent(builder, depth + 4).AppendLine("instance = null;");
+			Indent(builder, depth + 4).AppendLine("return false;");
+			Indent(builder, depth + 3).AppendLine("}");
 			builder.AppendLine();
 		}
 
-		if (entries.Count <= DispatchChunkSize)
-		{
-			// Small container: the whole dispatch fits comfortably under the JIT's optimization guards, so a
-			// single inline switch (a jump table) is optimal.
-			EmitDispatchSwitch(builder, depth + 2, entries, 0, entries.Count);
-			Indent(builder, depth + 1).AppendLine("}");
-			builder.AppendLine();
-			Indent(builder, depth + 1).AppendLine("instance = null;");
-			Indent(builder, depth + 1).AppendLine("return false;");
-			Indent(builder, depth).AppendLine("}");
-			return;
-		}
-
-		// Large container: split the dispatch across chunk methods so no single method exceeds RyuJIT's
-		// optimization guards (~60 KB IL / ~2000 basic blocks). Above those, the JIT permanently falls back to
-		// MinOpts and never promotes the method to Tier1 - which turned the O(1) jump-table dispatch into a
-		// per-call cost that scaled with the registration count. The outer TryResolve stays tiny; it looks up the
-		// dispatch case and hands off to a bucketed __Dispatch, each chunk of which optimizes on its own.
-		Indent(builder, depth + 2).AppendLine("return __Dispatch(__case, out instance);");
+		Indent(builder, depth + 3).AppendLine("instance = __b.Resolve(this);");
+		Indent(builder, depth + 3).AppendLine("return true;");
+		Indent(builder, depth + 2).AppendLine("}");
 		Indent(builder, depth + 1).AppendLine("}");
 		builder.AppendLine();
 		Indent(builder, depth + 1).AppendLine("instance = null;");
 		Indent(builder, depth + 1).AppendLine("return false;");
-		Indent(builder, depth).AppendLine("}");
-		builder.AppendLine();
-
-		int chunkCount = (entries.Count + DispatchChunkSize - 1) / DispatchChunkSize;
-		Indent(builder, depth).AppendLine("private bool __Dispatch(int __case, [global::System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? instance)");
-		Indent(builder, depth).AppendLine("{");
-		Indent(builder, depth + 1).Append("switch (__case / ").Append(DispatchChunkSize).AppendLine(")");
-		Indent(builder, depth + 1).AppendLine("{");
-		for (int chunk = 0; chunk < chunkCount; chunk++)
-		{
-			Indent(builder, depth + 2).Append("case ").Append(chunk).Append(": return __Dispatch").Append(chunk).AppendLine("(__case, out instance);");
-		}
-
-		Indent(builder, depth + 1).AppendLine("}");
-		builder.AppendLine();
-		Indent(builder, depth + 1).AppendLine("instance = null;");
-		Indent(builder, depth + 1).AppendLine("return false;");
-		Indent(builder, depth).AppendLine("}");
-
-		for (int chunk = 0; chunk < chunkCount; chunk++)
-		{
-			int start = chunk * DispatchChunkSize;
-			int end = System.Math.Min(start + DispatchChunkSize, entries.Count);
-			builder.AppendLine();
-			Indent(builder, depth).Append("private bool __Dispatch").Append(chunk).AppendLine("(int __case, [global::System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? instance)");
-			Indent(builder, depth).AppendLine("{");
-			EmitDispatchSwitch(builder, depth + 1, entries, start, end);
-			Indent(builder, depth + 1).AppendLine("instance = null;");
-			Indent(builder, depth + 1).AppendLine("return false;");
-			Indent(builder, depth).AppendLine("}");
-		}
-	}
-
-	/// <summary>
-	///     Emits <c>switch (__case) { case i: instance = …; return true; }</c> for the dispatch entries in
-	///     <c>[start, end)</c>. The case labels are the global case numbers (the values stored in
-	///     <c>__dispatch</c>), so a switch over any contiguous range dispatches the same cases whether it lives
-	///     inline in <c>TryResolve</c> or in a chunk method.
-	/// </summary>
-	private static void EmitDispatchSwitch(StringBuilder builder, int depth, List<DispatchEntry> entries, int start, int end)
-	{
-		Indent(builder, depth).AppendLine("switch (__case)");
-		Indent(builder, depth).AppendLine("{");
-		for (int i = start; i < end; i++)
-		{
-			Indent(builder, depth + 1).Append("case ").Append(i).Append(": instance = ")
-				.Append(entries[i].Value).AppendLine("; return true;");
-		}
-
 		Indent(builder, depth).AppendLine("}");
 	}
 
@@ -965,8 +906,8 @@ internal static class Emitter
 			// which bounds its lifetime. A non-disposable service is not withheld at the bare type even when its
 			// Func is (its single bare resolution is bounded).
 			entries.Add(bareWithheld
-				? new DispatchEntry(service, resolver + "()", BareWithheldMessage(service))
-				: new DispatchEntry(service, resolver + "()"));
+				? new DispatchEntry(service, resolver + "()", BareWithheldMessage(service), resolver)
+				: new DispatchEntry(service, resolver + "()", directResolver: resolver));
 		}
 	}
 
@@ -1151,21 +1092,123 @@ internal static class Emitter
 	}
 
 	/// <summary>
-	///     Emits the static <c>__dispatch</c> table mapping each resolvable service type to its case number. It
-	///     lives on the base <c>Scope</c> and is <c>static</c>, so it is built once and shared by every scope and
-	///     the <c>Root</c> subclass that inherits it.
+	///     Emits the data-driven by-type dispatch: a nested <c>__Bucket</c> slot type, the static
+	///     <c>__buckets</c> / <c>__bucketSize</c> table (built once in the static constructor and shared by every
+	///     scope and the <c>Root</c>), the <c>__BuildBuckets</c> distributor, and a <c>__R</c> forwarder per
+	///     compound entry. It lives on the base <c>Scope</c>; <c>TryResolve</c> probes the table by Type identity
+	///     hash. The table grows in data, never in a single method's IL, so it cannot hit the JIT optimization
+	///     guards no matter how many registrations there are.
 	/// </summary>
-	private static void EmitDispatchTable(StringBuilder builder, int depth, List<DispatchEntry> entries)
+	private static void EmitBucketDispatch(StringBuilder builder, int depth, List<DispatchEntry> entries)
 	{
-		Indent(builder, depth).AppendLine(
-			"private static readonly global::System.Collections.Generic.Dictionary<global::System.Type, int> __dispatch = new global::System.Collections.Generic.Dictionary<global::System.Type, int>");
+		int bucketCount = BucketCount(entries.Count);
+
+		// One table slot: the key type, its resolver delegate, and whether the slot is withheld from by-type
+		// resolution on the Root. A default slot (Key == null) is an empty probe cell and never matches a request.
+		Indent(builder, depth).AppendLine("private readonly struct __Bucket");
 		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).AppendLine("public readonly global::System.Type? Key;");
+		Indent(builder, depth + 1).AppendLine("public readonly global::System.Func<Scope, object> Resolve;");
+		Indent(builder, depth + 1).AppendLine("public readonly bool RootWithheld;");
+		Indent(builder, depth + 1).AppendLine("public __Bucket(global::System.Type? key, global::System.Func<Scope, object> resolve, bool rootWithheld)");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).AppendLine("Key = key;");
+		Indent(builder, depth + 2).AppendLine("Resolve = resolve;");
+		Indent(builder, depth + 2).AppendLine("RootWithheld = rootWithheld;");
+		Indent(builder, depth + 1).AppendLine("}");
+		Indent(builder, depth).AppendLine("}");
+		builder.AppendLine();
+
+		Indent(builder, depth).Append("private const int __bucketCount = ").Append(bucketCount).AppendLine(";");
+		Indent(builder, depth).AppendLine("private static readonly __Bucket[] __buckets;");
+		Indent(builder, depth).AppendLine("private static readonly int __bucketSize;");
+		builder.AppendLine();
+
+		// The static ctor lists every entry with its resolver delegate, then distributes them into fixed-width
+		// buckets by the runtime Type identity hash (unknown at generation time). A bare service binds a direct
+		// delegate to its existing virtual resolver; a compound value routes through a __R forwarder that preserves
+		// the expression verbatim, so all owner-context construction (throwaway scopes, __root) is unchanged.
+		Indent(builder, depth).AppendLine("static Scope()");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).AppendLine("__Bucket[] __entries =");
+		Indent(builder, depth + 1).AppendLine("{");
 		for (int i = 0; i < entries.Count; i++)
 		{
-			Indent(builder, depth + 1).Append("{ typeof(").Append(entries[i].Type).Append("), ").Append(i).AppendLine(" },");
+			string resolve = entries[i].DirectResolver is { } direct
+				? $"static __s => __s.{direct}()"
+				: $"static __s => __s.__R{i}()";
+			Indent(builder, depth + 2).Append("new __Bucket(typeof(").Append(entries[i].Type).Append("), ")
+				.Append(resolve).Append(", ").Append(entries[i].RootWithheld ? "true" : "false").AppendLine("),");
 		}
 
-		Indent(builder, depth).AppendLine("};");
+		Indent(builder, depth + 1).AppendLine("};");
+		Indent(builder, depth + 1).AppendLine("__buckets = __BuildBuckets(__entries, __bucketCount, out __bucketSize);");
+		Indent(builder, depth).AppendLine("}");
+		builder.AppendLine();
+
+		EmitBucketBuilder(builder, depth);
+
+		// A forwarder per compound entry, preserving the value expression verbatim. Bare entries bound a direct
+		// delegate above and need none. Each forwarder is tiny and individually optimizable.
+		for (int i = 0; i < entries.Count; i++)
+		{
+			if (entries[i].DirectResolver is null)
+			{
+				builder.AppendLine();
+				Indent(builder, depth).Append("private object __R").Append(i).Append("() => ").Append(entries[i].Value).AppendLine(";");
+			}
+		}
+	}
+
+	/// <summary>
+	///     Emits <c>__BuildBuckets</c>: distributes the entries into the fixed number of buckets by Type identity
+	///     hash, sizing every bucket to the largest collision count so a lookup probes a small constant window. Runs
+	///     once in the static constructor (the Type hashes are only known at runtime).
+	/// </summary>
+	private static void EmitBucketBuilder(StringBuilder builder, int depth)
+	{
+		Indent(builder, depth).AppendLine("private static __Bucket[] __BuildBuckets(__Bucket[] __entries, int __count, out int __size)");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).AppendLine("int[] __counts = new int[__count];");
+		Indent(builder, depth + 1).AppendLine("foreach (__Bucket __e in __entries)");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).AppendLine("__counts[(int)((uint)__e.Key!.TypeHandle.GetHashCode() % (uint)__count)]++;");
+		Indent(builder, depth + 1).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("int __max = 1;");
+		Indent(builder, depth + 1).AppendLine("foreach (int __c in __counts)");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).AppendLine("if (__c > __max) { __max = __c; }");
+		Indent(builder, depth + 1).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("__size = __max;");
+		Indent(builder, depth + 1).AppendLine("__Bucket[] __arr = new __Bucket[__count * __max];");
+		Indent(builder, depth + 1).AppendLine("int[] __fill = new int[__count];");
+		Indent(builder, depth + 1).AppendLine("foreach (__Bucket __e in __entries)");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).AppendLine("int __b = (int)((uint)__e.Key!.TypeHandle.GetHashCode() % (uint)__count);");
+		Indent(builder, depth + 2).AppendLine("__arr[(__b * __max) + __fill[__b]++] = __e;");
+		Indent(builder, depth + 1).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("return __arr;");
+		Indent(builder, depth).AppendLine("}");
+	}
+
+	/// <summary>
+	///     The bucket count for a table of <paramref name="entryCount" /> entries: the smallest power of two that
+	///     keeps the load factor at or below one half, so collisions - and thus the fixed probe window - stay small.
+	///     A power of two lets the runtime lower the <c>% __bucketCount</c> in the probe to a bitwise-and.
+	/// </summary>
+	private static int BucketCount(int entryCount)
+	{
+		int target = entryCount * 2;
+		int count = 4;
+		while (count < target)
+		{
+			count <<= 1;
+		}
+
+		return count;
 	}
 
 	/// <summary>
@@ -1185,29 +1228,6 @@ internal static class Emitter
 		}
 
 		Indent(builder, depth).AppendLine("};");
-	}
-
-	/// <summary>
-	///     Emits the static <c>__rootWithheld</c> mask: a <c>bool[]</c> indexed by dispatch case number,
-	///     <see langword="true" /> for the cases that leak when bound to the Root (a disposable build-on-demand
-	///     service's bare type, or its plain accumulating <c>Func&lt;…&gt;</c>). <c>TryResolve</c> reads it only
-	///     when <c>this is Root</c>, so the Root withholds those cases while a child scope resolves them (their
-	///     lifetime bounded by the scope). A bare array index is far cheaper than a second Type-keyed lookup.
-	/// </summary>
-	private static void EmitRootWithheldMask(StringBuilder builder, int depth, List<DispatchEntry> entries)
-	{
-		Indent(builder, depth).Append("private static readonly bool[] __rootWithheld = { ");
-		for (int i = 0; i < entries.Count; i++)
-		{
-			if (i > 0)
-			{
-				builder.Append(", ");
-			}
-
-			builder.Append(entries[i].RootWithheld ? "true" : "false");
-		}
-
-		builder.AppendLine(" };");
 	}
 
 	/// <summary>
@@ -2384,13 +2404,19 @@ internal static class Emitter
 	///     message (placed in the <c>__withheld</c> table) - so the root-accumulation leak stays impossible
 	///     while the safe scope-bound resolution is allowed.
 	/// </summary>
-	private readonly struct DispatchEntry(string type, string value, string? guidance = null)
+	private readonly struct DispatchEntry(string type, string value, string? guidance = null, string? directResolver = null)
 	{
 		public string Type { get; } = type;
 
 		public string Value { get; } = value;
 
 		public string? Guidance { get; } = guidance;
+
+		// A bare-service entry's value is a plain `resolver()` call over the current owner; the resolver method name
+		// is kept so the bucket table can bind a direct delegate (__s => __s.ResolveX()) to the existing virtual
+		// resolver instead of routing through a per-entry forwarder. Null for compound values (Func/Lazy/Owned/
+		// collection literals), which need their expression preserved verbatim in a __R forwarder.
+		public string? DirectResolver { get; } = directResolver;
 
 		public bool RootWithheld => Guidance is not null;
 	}
