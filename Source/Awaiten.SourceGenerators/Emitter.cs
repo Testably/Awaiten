@@ -14,12 +14,6 @@ namespace Awaiten.SourceGenerators;
 /// </summary>
 internal static class Emitter
 {
-	// Above this many dispatch entries the by-type resolution switch is split across chunk methods so no single
-	// method exceeds RyuJIT's optimization guards (~60 KB IL / ~2000 basic blocks), past which the JIT falls back
-	// to MinOpts for good. 256 keeps each chunk (jump table plus its arm bodies, including collection allocations)
-	// well under those limits while staying large enough that small containers keep a single inline switch.
-	private const int DispatchChunkSize = 256;
-
 	public static string Emit(ContainerModel model)
 	{
 		StringBuilder builder = new();
@@ -1444,7 +1438,6 @@ internal static class Emitter
 		// are collected up front so a large set can be split across chunk methods: a single flat if-chain over
 		// thousands of async services would exceed RyuJIT's optimization guards (~60 KB IL / ~2000 basic blocks)
 		// and be compiled MinOpts for good - the same cliff the synchronous dispatch hit before it was chunked.
-		bool hasAsync = false;
 		List<(string Service, string AsyncResolver, bool RootWithheld)> arms = new();
 		for (int i = 0; i < instances.Length; i++)
 		{
@@ -1456,13 +1449,11 @@ internal static class Emitter
 				continue;
 			}
 
-			hasAsync = true;
 			string asyncResolver = names.AsyncResolver(i);
-			// A disposable async transient is withheld from by-type resolution on the Root, mirroring the
-			// synchronous __rootWithheld mask: each Root resolution would track a fresh disposable on the root
-			// for the container's lifetime (an unbounded leak), so the Root throws guidance toward a child scope
-			// while a child scope still resolves it (its disposal bounds the instance). Injection into a
-			// singleton stays allowed - that is bounded to one instance.
+			// A disposable async transient is withheld from by-type resolution on the Root: each Root resolution
+			// would track a fresh disposable on the root for the container's lifetime (an unbounded leak), so the
+			// Root throws guidance toward a child scope while a child scope still resolves it (its disposal bounds
+			// the instance). Injection into a singleton stays allowed - that is bounded to one instance.
 			bool rootWithheld = IsWithheld(instances[i], strict);
 			foreach (ServiceKey serviceKey in instances[i].Services.AsArray())
 			{
@@ -1479,75 +1470,101 @@ internal static class Emitter
 		Indent(builder, depth).AppendLine("{");
 		EmitDisposedGuard(builder, depth + 1);
 
-		if (arms.Count <= DispatchChunkSize)
+		if (arms.Count == 0)
 		{
-			// Small set: a single inline if-chain is fine (and stays optimizable).
-			foreach ((string service, string asyncResolver, bool rootWithheld) in arms)
-			{
-				EmitAsyncArm(builder, depth + 1, service, asyncResolver, rootWithheld);
-			}
-
-			// Not async-tainted: resolve synchronously and complete immediately. Resolve throws the same
-			// registration / strict-withholding guidance as the synchronous path when the type is unresolvable.
+			// No async-tainted service: everything resolves synchronously and completes immediately. Resolve
+			// throws the same registration / strict-withholding guidance as the synchronous path.
 			Indent(builder, depth + 1).Append("return ").Append(task).AppendLine(".FromResult(Resolve(serviceType));");
 			Indent(builder, depth).AppendLine("}");
-			EmitAsObjectHelper(builder, depth, hasAsync);
 			return;
 		}
 
-		// Large set: probe chunk methods in turn - each returns null when the type is not one of its arms - then
-		// fall back to synchronous resolution. Each chunk stays small enough to reach Tier1.
-		int chunkCount = (arms.Count + DispatchChunkSize - 1) / DispatchChunkSize;
-		Indent(builder, depth + 1).Append(task).AppendLine("<object>? __t;");
-		for (int chunk = 0; chunk < chunkCount; chunk++)
-		{
-			Indent(builder, depth + 1).Append("if ((__t = __ResolveAsync").Append(chunk)
-				.AppendLine("(serviceType, cancellationToken)) is not null) { return __t; }");
-		}
-
+		// Bucket probe, mirroring the synchronous dispatch: hash the type into its window and invoke the matched
+		// async resolver delegate. A type with no async arm resolves synchronously and completes immediately.
+		Indent(builder, depth + 1).AppendLine("int __i = (int)((uint)serviceType.TypeHandle.GetHashCode() % (uint)__asyncBucketCount) * __asyncBucketSize;");
+		Indent(builder, depth + 1).AppendLine("int __end = __i + __asyncBucketSize;");
+		Indent(builder, depth + 1).AppendLine("for (; __i < __end; __i++)");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).AppendLine("ref readonly __AsyncBucket __b = ref __asyncBuckets[__i];");
+		Indent(builder, depth + 2).AppendLine("if ((object?)__b.Key == (object?)serviceType)");
+		Indent(builder, depth + 2).AppendLine("{");
+		Indent(builder, depth + 3).AppendLine("return __b.Resolve(this, cancellationToken);");
+		Indent(builder, depth + 2).AppendLine("}");
+		Indent(builder, depth + 1).AppendLine("}");
+		builder.AppendLine();
 		Indent(builder, depth + 1).Append("return ").Append(task).AppendLine(".FromResult(Resolve(serviceType));");
 		Indent(builder, depth).AppendLine("}");
+		builder.AppendLine();
 
-		for (int chunk = 0; chunk < chunkCount; chunk++)
-		{
-			int start = chunk * DispatchChunkSize;
-			int end = System.Math.Min(start + DispatchChunkSize, arms.Count);
-			builder.AppendLine();
-			Indent(builder, depth).Append("private ").Append(task).Append("<object>? __ResolveAsync").Append(chunk)
-				.AppendLine("(global::System.Type serviceType, global::System.Threading.CancellationToken cancellationToken)");
-			Indent(builder, depth).AppendLine("{");
-			for (int i = start; i < end; i++)
-			{
-				EmitAsyncArm(builder, depth + 1, arms[i].Service, arms[i].AsyncResolver, arms[i].RootWithheld);
-			}
-
-			Indent(builder, depth + 1).AppendLine("return null;");
-			Indent(builder, depth).AppendLine("}");
-		}
-
-		EmitAsObjectHelper(builder, depth, hasAsync);
+		EmitAsyncBucketDispatch(builder, depth, arms);
+		EmitAsObjectHelper(builder, depth, true);
 	}
 
 	/// <summary>
-	///     Emits one by-type async arm: <c>if (serviceType == typeof(S)) return __AsObject(resolverAsync(ct));</c>.
-	///     A root-withheld disposable throws its guidance on the Root before a child scope's resolver is reached.
+	///     Emits the async dispatch table: an <c>__AsyncBucket</c> slot type and the <c>__asyncBuckets</c> /
+	///     <c>__asyncBucketSize</c> table, built once through field initializers (which coexist with the
+	///     synchronous static constructor). Each slot's delegate awaits the async resolver and converts the result
+	///     to <c>Task&lt;object&gt;</c>; a root-withheld arm bakes its guidance throw into the delegate (the Root
+	///     throws, a child scope resolves). No forwarder methods are needed - the delegates are inline lambdas.
 	/// </summary>
-	private static void EmitAsyncArm(StringBuilder builder, int depth, string service, string asyncResolver, bool rootWithheld)
+	private static void EmitAsyncBucketDispatch(StringBuilder builder, int depth, List<(string Service, string AsyncResolver, bool RootWithheld)> arms)
 	{
-		if (rootWithheld)
+		const string func = "global::System.Func<Scope, global::System.Threading.CancellationToken, global::System.Threading.Tasks.Task<object>>";
+		int bucketCount = BucketCount(arms.Count);
+
+		Indent(builder, depth).AppendLine("private readonly struct __AsyncBucket");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).AppendLine("public readonly global::System.Type? Key;");
+		Indent(builder, depth + 1).Append("public readonly ").Append(func).AppendLine(" Resolve;");
+		Indent(builder, depth + 1).Append("public __AsyncBucket(global::System.Type? key, ").Append(func).AppendLine(" resolve)");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).AppendLine("Key = key;");
+		Indent(builder, depth + 2).AppendLine("Resolve = resolve;");
+		Indent(builder, depth + 1).AppendLine("}");
+		Indent(builder, depth).AppendLine("}");
+		builder.AppendLine();
+
+		Indent(builder, depth).Append("private const int __asyncBucketCount = ").Append(bucketCount).AppendLine(";");
+		Indent(builder, depth).AppendLine("private static readonly __AsyncBucket[] __asyncBuckets = __BuildAsyncBuckets();");
+		Indent(builder, depth).AppendLine("private static readonly int __asyncBucketSize = __asyncBuckets.Length / __asyncBucketCount;");
+		builder.AppendLine();
+
+		Indent(builder, depth).AppendLine("private static __AsyncBucket[] __BuildAsyncBuckets()");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).AppendLine("__AsyncBucket[] __entries =");
+		Indent(builder, depth + 1).AppendLine("{");
+		foreach ((string service, string asyncResolver, bool rootWithheld) in arms)
 		{
-			Indent(builder, depth).Append("if (serviceType == typeof(").Append(service).AppendLine("))");
-			Indent(builder, depth).AppendLine("{");
-			Indent(builder, depth + 1).Append("if (this is Root) { throw new global::System.InvalidOperationException(")
-				.Append(AsyncRootWithheldMessage(service)).AppendLine("); }");
-			Indent(builder, depth + 1).Append("return __AsObject(").Append(asyncResolver).AppendLine("(cancellationToken));");
-			Indent(builder, depth).AppendLine("}");
+			string resolve = rootWithheld
+				? $"static (__s, __ct) => __s is Root ? throw new global::System.InvalidOperationException({AsyncRootWithheldMessage(service)}) : __AsObject(__s.{asyncResolver}(__ct))"
+				: $"static (__s, __ct) => __AsObject(__s.{asyncResolver}(__ct))";
+			Indent(builder, depth + 2).Append("new __AsyncBucket(typeof(").Append(service).Append("), ").Append(resolve).AppendLine("),");
 		}
-		else
-		{
-			Indent(builder, depth).Append("if (serviceType == typeof(").Append(service)
-				.Append(")) { return __AsObject(").Append(asyncResolver).AppendLine("(cancellationToken)); }");
-		}
+
+		Indent(builder, depth + 1).AppendLine("};");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("int[] __counts = new int[__asyncBucketCount];");
+		Indent(builder, depth + 1).AppendLine("foreach (__AsyncBucket __e in __entries)");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).AppendLine("__counts[(int)((uint)__e.Key!.TypeHandle.GetHashCode() % (uint)__asyncBucketCount)]++;");
+		Indent(builder, depth + 1).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("int __max = 1;");
+		Indent(builder, depth + 1).AppendLine("foreach (int __c in __counts)");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).AppendLine("if (__c > __max) { __max = __c; }");
+		Indent(builder, depth + 1).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("__AsyncBucket[] __arr = new __AsyncBucket[__asyncBucketCount * __max];");
+		Indent(builder, depth + 1).AppendLine("int[] __fill = new int[__asyncBucketCount];");
+		Indent(builder, depth + 1).AppendLine("foreach (__AsyncBucket __e in __entries)");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).AppendLine("int __b = (int)((uint)__e.Key!.TypeHandle.GetHashCode() % (uint)__asyncBucketCount);");
+		Indent(builder, depth + 2).AppendLine("__arr[(__b * __max) + __fill[__b]++] = __e;");
+		Indent(builder, depth + 1).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("return __arr;");
+		Indent(builder, depth).AppendLine("}");
 	}
 
 	/// <summary>
