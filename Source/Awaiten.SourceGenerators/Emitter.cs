@@ -14,6 +14,12 @@ namespace Awaiten.SourceGenerators;
 /// </summary>
 internal static class Emitter
 {
+	// Above this many dispatch entries the by-type resolution switch is split across chunk methods so no single
+	// method exceeds RyuJIT's optimization guards (~60 KB IL / ~2000 basic blocks), past which the JIT falls back
+	// to MinOpts for good. 256 keeps each chunk (jump table plus its arm bodies, including collection allocations)
+	// well under those limits while staying large enough that small containers keep a single inline switch.
+	private const int DispatchChunkSize = 256;
+
 	public static string Emit(ContainerModel model)
 	{
 		StringBuilder builder = new();
@@ -701,19 +707,78 @@ internal static class Emitter
 			builder.AppendLine();
 		}
 
-		Indent(builder, depth + 2).AppendLine("switch (__case)");
-		Indent(builder, depth + 2).AppendLine("{");
-		for (int i = 0; i < entries.Count; i++)
+		if (entries.Count <= DispatchChunkSize)
 		{
-			Indent(builder, depth + 3).Append("case ").Append(i).Append(": instance = ")
-				.Append(entries[i].Value).AppendLine("; return true;");
+			// Small container: the whole dispatch fits comfortably under the JIT's optimization guards, so a
+			// single inline switch (a jump table) is optimal.
+			EmitDispatchSwitch(builder, depth + 2, entries, 0, entries.Count);
+			Indent(builder, depth + 1).AppendLine("}");
+			builder.AppendLine();
+			Indent(builder, depth + 1).AppendLine("instance = null;");
+			Indent(builder, depth + 1).AppendLine("return false;");
+			Indent(builder, depth).AppendLine("}");
+			return;
 		}
 
-		Indent(builder, depth + 2).AppendLine("}");
+		// Large container: split the dispatch across chunk methods so no single method exceeds RyuJIT's
+		// optimization guards (~60 KB IL / ~2000 basic blocks). Above those, the JIT permanently falls back to
+		// MinOpts and never promotes the method to Tier1 - which turned the O(1) jump-table dispatch into a
+		// per-call cost that scaled with the registration count. The outer TryResolve stays tiny; it looks up the
+		// dispatch case and hands off to a bucketed __Dispatch, each chunk of which optimizes on its own.
+		Indent(builder, depth + 2).AppendLine("return __Dispatch(__case, out instance);");
 		Indent(builder, depth + 1).AppendLine("}");
 		builder.AppendLine();
 		Indent(builder, depth + 1).AppendLine("instance = null;");
 		Indent(builder, depth + 1).AppendLine("return false;");
+		Indent(builder, depth).AppendLine("}");
+		builder.AppendLine();
+
+		int chunkCount = (entries.Count + DispatchChunkSize - 1) / DispatchChunkSize;
+		Indent(builder, depth).AppendLine("private bool __Dispatch(int __case, [global::System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? instance)");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).Append("switch (__case / ").Append(DispatchChunkSize).AppendLine(")");
+		Indent(builder, depth + 1).AppendLine("{");
+		for (int chunk = 0; chunk < chunkCount; chunk++)
+		{
+			Indent(builder, depth + 2).Append("case ").Append(chunk).Append(": return __Dispatch").Append(chunk).AppendLine("(__case, out instance);");
+		}
+
+		Indent(builder, depth + 1).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("instance = null;");
+		Indent(builder, depth + 1).AppendLine("return false;");
+		Indent(builder, depth).AppendLine("}");
+
+		for (int chunk = 0; chunk < chunkCount; chunk++)
+		{
+			int start = chunk * DispatchChunkSize;
+			int end = System.Math.Min(start + DispatchChunkSize, entries.Count);
+			builder.AppendLine();
+			Indent(builder, depth).Append("private bool __Dispatch").Append(chunk).AppendLine("(int __case, [global::System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? instance)");
+			Indent(builder, depth).AppendLine("{");
+			EmitDispatchSwitch(builder, depth + 1, entries, start, end);
+			Indent(builder, depth + 1).AppendLine("instance = null;");
+			Indent(builder, depth + 1).AppendLine("return false;");
+			Indent(builder, depth).AppendLine("}");
+		}
+	}
+
+	/// <summary>
+	///     Emits <c>switch (__case) { case i: instance = …; return true; }</c> for the dispatch entries in
+	///     <c>[start, end)</c>. The case labels are the global case numbers (the values stored in
+	///     <c>__dispatch</c>), so a switch over any contiguous range dispatches the same cases whether it lives
+	///     inline in <c>TryResolve</c> or in a chunk method.
+	/// </summary>
+	private static void EmitDispatchSwitch(StringBuilder builder, int depth, List<DispatchEntry> entries, int start, int end)
+	{
+		Indent(builder, depth).AppendLine("switch (__case)");
+		Indent(builder, depth).AppendLine("{");
+		for (int i = start; i < end; i++)
+		{
+			Indent(builder, depth + 1).Append("case ").Append(i).Append(": instance = ")
+				.Append(entries[i].Value).AppendLine("; return true;");
+		}
+
 		Indent(builder, depth).AppendLine("}");
 	}
 
@@ -1343,12 +1408,12 @@ internal static class Emitter
 	{
 		const string task = "global::System.Threading.Tasks.Task";
 
-		Indent(builder, depth).Append("public ").Append(task)
-			.AppendLine("<object> ResolveAsync(global::System.Type serviceType, global::System.Threading.CancellationToken cancellationToken = default)");
-		Indent(builder, depth).AppendLine("{");
-		EmitDisposedGuard(builder, depth + 1);
-
+		// Each async-tainted, non-parameterized service contributes one by-type arm per unkeyed service key. They
+		// are collected up front so a large set can be split across chunk methods: a single flat if-chain over
+		// thousands of async services would exceed RyuJIT's optimization guards (~60 KB IL / ~2000 basic blocks)
+		// and be compiled MinOpts for good - the same cliff the synchronous dispatch hit before it was chunked.
 		bool hasAsync = false;
+		List<(string Service, string AsyncResolver, bool RootWithheld)> arms = new();
 		for (int i = 0; i < instances.Length; i++)
 		{
 			// A parameterized service is built fresh from its runtime arguments, so it is reached only through
@@ -1370,39 +1435,105 @@ internal static class Emitter
 			foreach (ServiceKey serviceKey in instances[i].Services.AsArray())
 			{
 				// Keyed registrations are reached only by [FromKey] injection, never by-type resolution.
-				if (serviceKey.Key is not null)
+				if (serviceKey.Key is null)
 				{
-					continue;
-				}
-
-				if (rootWithheld)
-				{
-					Indent(builder, depth + 1).Append("if (serviceType == typeof(").Append(serviceKey.Service).AppendLine("))");
-					Indent(builder, depth + 1).AppendLine("{");
-					Indent(builder, depth + 2).Append("if (this is Root) { throw new global::System.InvalidOperationException(")
-						.Append(AsyncRootWithheldMessage(serviceKey.Service)).AppendLine("); }");
-					Indent(builder, depth + 2).Append("return __AsObject(").Append(asyncResolver).AppendLine("(cancellationToken));");
-					Indent(builder, depth + 1).AppendLine("}");
-				}
-				else
-				{
-					Indent(builder, depth + 1).Append("if (serviceType == typeof(").Append(serviceKey.Service)
-						.Append(")) { return __AsObject(").Append(asyncResolver).AppendLine("(cancellationToken)); }");
+					arms.Add((serviceKey.Service, asyncResolver, rootWithheld));
 				}
 			}
 		}
 
-		// Not async-tainted: resolve synchronously and complete immediately. Resolve throws the same
-		// registration / strict-withholding guidance as the synchronous path when the type is unresolvable.
+		Indent(builder, depth).Append("public ").Append(task)
+			.AppendLine("<object> ResolveAsync(global::System.Type serviceType, global::System.Threading.CancellationToken cancellationToken = default)");
+		Indent(builder, depth).AppendLine("{");
+		EmitDisposedGuard(builder, depth + 1);
+
+		if (arms.Count <= DispatchChunkSize)
+		{
+			// Small set: a single inline if-chain is fine (and stays optimizable).
+			foreach ((string service, string asyncResolver, bool rootWithheld) in arms)
+			{
+				EmitAsyncArm(builder, depth + 1, service, asyncResolver, rootWithheld);
+			}
+
+			// Not async-tainted: resolve synchronously and complete immediately. Resolve throws the same
+			// registration / strict-withholding guidance as the synchronous path when the type is unresolvable.
+			Indent(builder, depth + 1).Append("return ").Append(task).AppendLine(".FromResult(Resolve(serviceType));");
+			Indent(builder, depth).AppendLine("}");
+			EmitAsObjectHelper(builder, depth, hasAsync);
+			return;
+		}
+
+		// Large set: probe chunk methods in turn - each returns null when the type is not one of its arms - then
+		// fall back to synchronous resolution. Each chunk stays small enough to reach Tier1.
+		int chunkCount = (arms.Count + DispatchChunkSize - 1) / DispatchChunkSize;
+		Indent(builder, depth + 1).Append(task).AppendLine("<object>? __t;");
+		for (int chunk = 0; chunk < chunkCount; chunk++)
+		{
+			Indent(builder, depth + 1).Append("if ((__t = __ResolveAsync").Append(chunk)
+				.AppendLine("(serviceType, cancellationToken)) is not null) { return __t; }");
+		}
+
 		Indent(builder, depth + 1).Append("return ").Append(task).AppendLine(".FromResult(Resolve(serviceType));");
 		Indent(builder, depth).AppendLine("}");
 
-		if (hasAsync)
+		for (int chunk = 0; chunk < chunkCount; chunk++)
 		{
+			int start = chunk * DispatchChunkSize;
+			int end = System.Math.Min(start + DispatchChunkSize, arms.Count);
 			builder.AppendLine();
-			Indent(builder, depth).Append("private static async ").Append(task)
-				.AppendLine("<object> __AsObject<T>(global::System.Threading.Tasks.Task<T> __task) => (object)(await __task.ConfigureAwait(false))!;");
+			Indent(builder, depth).Append("private ").Append(task).Append("<object>? __ResolveAsync").Append(chunk)
+				.AppendLine("(global::System.Type serviceType, global::System.Threading.CancellationToken cancellationToken)");
+			Indent(builder, depth).AppendLine("{");
+			for (int i = start; i < end; i++)
+			{
+				EmitAsyncArm(builder, depth + 1, arms[i].Service, arms[i].AsyncResolver, arms[i].RootWithheld);
+			}
+
+			Indent(builder, depth + 1).AppendLine("return null;");
+			Indent(builder, depth).AppendLine("}");
 		}
+
+		EmitAsObjectHelper(builder, depth, hasAsync);
+	}
+
+	/// <summary>
+	///     Emits one by-type async arm: <c>if (serviceType == typeof(S)) return __AsObject(resolverAsync(ct));</c>.
+	///     A root-withheld disposable throws its guidance on the Root before a child scope's resolver is reached.
+	/// </summary>
+	private static void EmitAsyncArm(StringBuilder builder, int depth, string service, string asyncResolver, bool rootWithheld)
+	{
+		if (rootWithheld)
+		{
+			Indent(builder, depth).Append("if (serviceType == typeof(").Append(service).AppendLine("))");
+			Indent(builder, depth).AppendLine("{");
+			Indent(builder, depth + 1).Append("if (this is Root) { throw new global::System.InvalidOperationException(")
+				.Append(AsyncRootWithheldMessage(service)).AppendLine("); }");
+			Indent(builder, depth + 1).Append("return __AsObject(").Append(asyncResolver).AppendLine("(cancellationToken));");
+			Indent(builder, depth).AppendLine("}");
+		}
+		else
+		{
+			Indent(builder, depth).Append("if (serviceType == typeof(").Append(service)
+				.Append(")) { return __AsObject(").Append(asyncResolver).AppendLine("(cancellationToken)); }");
+		}
+	}
+
+	/// <summary>
+	///     Emits the <c>__AsObject&lt;T&gt;</c> helper that converts a <c>Task&lt;T&gt;</c> async resolver result to
+	///     the <c>Task&lt;object&gt;</c> the by-type <c>ResolveAsync</c> returns. Emitted only when at least one
+	///     async-tainted service exists (otherwise nothing references it).
+	/// </summary>
+	private static void EmitAsObjectHelper(StringBuilder builder, int depth, bool hasAsync)
+	{
+		if (!hasAsync)
+		{
+			return;
+		}
+
+		const string task = "global::System.Threading.Tasks.Task";
+		builder.AppendLine();
+		Indent(builder, depth).Append("private static async ").Append(task)
+			.AppendLine("<object> __AsObject<T>(global::System.Threading.Tasks.Task<T> __task) => (object)(await __task.ConfigureAwait(false))!;");
 	}
 
 	/// <summary>
