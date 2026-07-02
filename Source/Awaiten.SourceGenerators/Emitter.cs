@@ -412,15 +412,15 @@ internal static class Emitter
 		// The dispatch table lives on the Scope (the only reader, through TryResolve); it is static, so it is
 		// built once for the whole container, and reached by simple name from this type and its Root subclass.
 		// Every entry is dispatchable; a root-withheld entry additionally appears in the __withheld table (its
-		// guidance, thrown by Resolve on the Root) and is flagged in the __rootWithheld mask (which TryResolve
-		// consults only on the Root), so a child scope resolves it while the Root withholds it.
+		// guidance, thrown by Resolve on the Root) and carries the RootWithheld flag on its bucket slot (which
+		// TryResolve consults only on the Root), so a child scope resolves it while the Root withholds it.
 		List<DispatchEntry> entries = BuildDispatchEntries(instances, names, serviceToIndex, strict, syncResolveAfterInit);
 		List<DispatchEntry> rootWithheld = Withheld(entries);
 		// The __withheld guidance table merges two sources: the root-withheld disposable build-on-demand
 		// services (still dispatchable from a child scope) and the async-tainted services excluded from
 		// synchronous resolution entirely (reachable only through ResolveAsync). Both surface a helpful
 		// message from Resolve instead of the generic "no registration"; only the former needs the
-		// __rootWithheld mask (it gates TryResolve on the Root), so that stays keyed to the dispatch entries.
+		// RootWithheld slot flag (it gates TryResolve on the Root), so that rides on the dispatch entries.
 		List<(string Type, string Guidance)> withheldTypes = WithheldTypes(rootWithheld, instances, names, serviceToIndex, syncResolveAfterInit);
 		if (entries.Count > 0)
 		{
@@ -644,7 +644,7 @@ internal static class Emitter
 		List<DispatchEntry> entries = BuildDispatchEntries(instances, names, serviceToIndex, strict, syncResolveAfterInit);
 		List<DispatchEntry> rootWithheld = Withheld(entries);
 		// hasWithheld gates the __withheld guidance lookup in Resolve (root-withheld disposables plus
-		// async-only services); hasRootWithheld gates the __rootWithheld mask check in TryResolve, which only
+		// async-only services); hasRootWithheld gates the RootWithheld slot-flag check in TryResolve, which only
 		// the dispatchable root-withheld disposables need (async-only services have no dispatch entry).
 		bool hasRootWithheld = rootWithheld.Count > 0;
 		bool hasWithheld = WithheldTypes(rootWithheld, instances, names, serviceToIndex, syncResolveAfterInit).Count > 0;
@@ -1497,7 +1497,7 @@ internal static class Emitter
 		builder.AppendLine();
 
 		EmitAsyncBucketDispatch(builder, depth, arms);
-		EmitAsObjectHelper(builder, depth, true);
+		EmitAsObjectHelper(builder, depth);
 	}
 
 	/// <summary>
@@ -1569,16 +1569,11 @@ internal static class Emitter
 
 	/// <summary>
 	///     Emits the <c>__AsObject&lt;T&gt;</c> helper that converts a <c>Task&lt;T&gt;</c> async resolver result to
-	///     the <c>Task&lt;object&gt;</c> the by-type <c>ResolveAsync</c> returns. Emitted only when at least one
+	///     the <c>Task&lt;object&gt;</c> the by-type <c>ResolveAsync</c> returns. Called only when at least one
 	///     async-tainted service exists (otherwise nothing references it).
 	/// </summary>
-	private static void EmitAsObjectHelper(StringBuilder builder, int depth, bool hasAsync)
+	private static void EmitAsObjectHelper(StringBuilder builder, int depth)
 	{
-		if (!hasAsync)
-		{
-			return;
-		}
-
 		const string task = "global::System.Threading.Tasks.Task";
 		builder.AppendLine();
 		Indent(builder, depth).Append("private static async ").Append(task)
