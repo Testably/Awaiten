@@ -143,10 +143,10 @@ public class LifetimeSafetyTests
 			.Because("resolving the withheld type by type off the root throws a guidance exception");
 		await That(source).Contains("typeof(global::Awaiten.Owned<global::MyCode.Widget>)")
 			.Because("Owned<Widget> stays resolvable as the leak-free alternative");
-		await That(source).Contains("instance = ResolveWidget(); return true;")
+		await That(source).Contains("static __s => __s.ResolveWidget()")
 			.Because("under variant C the bare type is still dispatchable - so a child scope can resolve it");
-		await That(source).Contains("this is Root && __rootWithheld[__case]")
-			.Because("the Root withholds the case through the per-case mask, while a child scope resolves it");
+		await That(source).Contains("__b.RootWithheld && this is Root")
+			.Because("the Root withholds the slot through its per-slot flag, while a child scope resolves it");
 	}
 
 	[Fact]
@@ -174,10 +174,10 @@ public class LifetimeSafetyTests
 
 		await That(source).Contains("a plain Func over 'MyCode.Tool' is withheld")
 			.Because("building the non-disposable Tool on demand transitively rebuilds its disposable Spark, so its plain Func accumulates on the root and is withheld there");
-		await That(source).Contains("instance = ResolveTool(); return true;")
+		await That(source).Contains("static __s => __s.ResolveTool()")
 			.Because("the bare non-disposable Tool stays resolvable by type - a single resolution is bounded");
-		await That(source).Contains("instance = new global::System.Func<global::MyCode.Tool>(() => ResolveTool()); return true;")
-			.Because("under variant C the plain Func is dispatchable too - the Root mask withholds it, but a child scope resolves it");
+		await That(source).Contains("() => new global::System.Func<global::MyCode.Tool>(() => ResolveTool());")
+			.Because("under variant C the plain Func is dispatchable too - the Root flag withholds it, but a child scope resolves it");
 		await That(source).Contains("typeof(global::System.Func<global::Awaiten.Owned<global::MyCode.Tool>>)")
 			.Because("Func<Owned<Tool>> remains the leak-free factory that drains the transitive Spark with the handle");
 	}

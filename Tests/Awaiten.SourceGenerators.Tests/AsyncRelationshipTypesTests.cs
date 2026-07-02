@@ -45,7 +45,7 @@ public class AsyncRelationshipTypesTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		await That(source).Contains("{ typeof(global::MyCode.Pool),")
+		await That(source).Contains("new __Bucket(typeof(global::MyCode.Pool),")
 			.Because("Pool is not async-tainted, so it keeps a synchronous by-type dispatch entry");
 		await That(source).Contains("new global::System.Func<global::System.Threading.Tasks.Task<global::MyCode.Connection>>(() => __root.ResolveConnectionAsync(default))");
 		await That(source).Contains("new global::System.Lazy<global::System.Threading.Tasks.Task<global::MyCode.Connection>>(() => __root.ResolveConnectionAsync(default))");

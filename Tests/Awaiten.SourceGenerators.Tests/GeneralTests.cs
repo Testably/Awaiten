@@ -25,12 +25,12 @@ public class GeneralTests
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
 		await That(source)
-			.Contains("private static readonly global::System.Collections.Generic.Dictionary<global::System.Type, int> __dispatch")
-			.Because("resolution is dispatched through a static type-to-case table");
+			.Contains("private static readonly __Bucket[] __buckets")
+			.Because("resolution is dispatched through a static type-to-resolver bucket table");
 		await That(source).Contains("public sealed class Root : Scope")
 			.Because("the root scope is the usable container instance, created with new MyContainer.Root()");
-		await That(source).Contains("__dispatch.TryGetValue(serviceType, out int __case)")
-			.Because("the scope dispatches through the static table that lives on it");
+		await That(source).Contains("(object?)__b.Key == (object?)serviceType")
+			.Because("the scope dispatches by probing the static bucket table that lives on it");
 		await That(source).DoesNotContain("if (serviceType == typeof(")
 			.Because("the linear if-chain is no longer emitted");
 	}
@@ -115,10 +115,10 @@ public class GeneralTests
 
 		await That(source).Contains("new global::MyCode.Consumer(new global::System.Func<global::MyCode.Leaf>(() => ResolveLeaf()))")
 			.Because("the Func parameter is supplied as a factory bound to the owner's resolver");
-		await That(source).Contains("{ typeof(global::System.Func<global::MyCode.Leaf>),")
+		await That(source).Contains("new __Bucket(typeof(global::System.Func<global::MyCode.Leaf>),")
 			.Because("Func<T> is also resolvable directly through the dispatch table");
-		await That(source).Contains("instance = new global::System.Func<global::MyCode.Leaf>(() => ResolveLeaf()); return true;")
-			.Because("its dispatch case builds a fresh factory over the target's resolver");
+		await That(source).Contains("() => new global::System.Func<global::MyCode.Leaf>(() => ResolveLeaf());")
+			.Because("its dispatch slot builds a fresh factory over the target's resolver");
 	}
 
 	[Fact]
@@ -157,10 +157,10 @@ public class GeneralTests
 		await That(source).Contains("return new global::MyCode.Top(__root.ResolveMiddle(), __root.ResolveLeaf());")
 			.Because("transients are constructed on each request, not cached");
 
-		await That(source).Contains("{ typeof(global::MyCode.IMiddle),")
+		await That(source).Contains("new __Bucket(typeof(global::MyCode.IMiddle),")
 			.Because("each service type is a key in the static dispatch table");
-		await That(source).Contains("instance = ResolveMiddle(); return true;")
-			.Because("its dispatch case resolves the registered service");
+		await That(source).Contains("static __s => __s.ResolveMiddle()")
+			.Because("its dispatch slot resolves the registered service");
 	}
 
 	[Fact]
@@ -210,10 +210,10 @@ public class GeneralTests
 
 		await That(source).Contains("new global::MyCode.Consumer(new global::System.Lazy<global::MyCode.Leaf>(() => __root.ResolveLeaf()))")
 			.Because("the Lazy parameter is supplied as a lazy bound to the owner's resolver");
-		await That(source).Contains("{ typeof(global::System.Lazy<global::MyCode.Leaf>),")
+		await That(source).Contains("new __Bucket(typeof(global::System.Lazy<global::MyCode.Leaf>),")
 			.Because("Lazy<T> is also resolvable directly through the dispatch table");
-		await That(source).Contains("instance = new global::System.Lazy<global::MyCode.Leaf>(() => ResolveLeaf()); return true;")
-			.Because("its dispatch case builds a fresh lazy over the target's resolver");
+		await That(source).Contains("() => new global::System.Lazy<global::MyCode.Leaf>(() => ResolveLeaf());")
+			.Because("its dispatch slot builds a fresh lazy over the target's resolver");
 	}
 
 	[Fact]
@@ -241,11 +241,11 @@ public class GeneralTests
 
 		await That(source).Contains("private volatile global::MyCode.Store? _store;")
 			.Because("the implementation is coalesced into one backing field");
-		await That(source).Contains("{ typeof(global::MyCode.IReader),")
+		await That(source).Contains("new __Bucket(typeof(global::MyCode.IReader),")
 			.Because("each service type is a key in the static dispatch table");
-		await That(source).Contains("{ typeof(global::MyCode.IWriter),")
+		await That(source).Contains("new __Bucket(typeof(global::MyCode.IWriter),")
 			.Because("each service type is a key in the static dispatch table");
-		await That(source).Contains("instance = ResolveStore(); return true;")
+		await That(source).Contains("static __s => __s.ResolveStore()")
 			.Because("both service types dispatch to the one shared instance");
 	}
 

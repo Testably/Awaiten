@@ -50,7 +50,7 @@ public class CollectionTests
 			.Because("the collection is publicly resolvable as IEnumerable<T>");
 		await That(source).Contains("typeof(global::MyCode.IPlugin[])")
 			.Because("the collection is publicly resolvable as T[]");
-		await That(source).Contains("instance = new global::MyCode.IPlugin[] { ResolveAlpha(), ResolveBeta() }; return true;")
+		await That(source).Contains("() => new global::MyCode.IPlugin[] { ResolveAlpha(), ResolveBeta() };")
 			.Because("the public collection dispatch returns the same materialized array");
 		await That(source).Contains("typeof(global::MyCode.IPlugin)")
 			.Because("the single IPlugin resolution still dispatches to the winning registration");
@@ -354,7 +354,7 @@ public class CollectionTests
 
 		// The unkeyed collection (publicly resolvable by type) holds only the unkeyed Plain - a keyed member is
 		// never an unkeyed one, so the two buckets stay disjoint.
-		await That(source).Contains("instance = new global::MyCode.IPlugin[] { ResolvePlain() }; return true;")
+		await That(source).Contains("() => new global::MyCode.IPlugin[] { ResolvePlain() };")
 			.Because("the public unkeyed collection resolves only the unkeyed registration");
 	}
 

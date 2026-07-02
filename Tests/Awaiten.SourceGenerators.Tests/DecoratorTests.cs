@@ -45,7 +45,7 @@ public class DecoratorTests
 			.Because("the inner decorator wraps the bare implementation");
 
 		// The public IService dispatch and every consumer reach the outermost decorator, never the bare Real.
-		await That(source).Contains("instance = ResolveD2(); return true;")
+		await That(source).Contains("static __s => __s.ResolveD2()")
 			.Because("the public IService dispatch resolves the outermost decorator");
 		await That(source).Contains("new global::MyCode.Consumer(ResolveD2())")
 			.Because("a consumer of IService receives the outermost decorator");
@@ -53,7 +53,7 @@ public class DecoratorTests
 		// The collection view is decorated too — one element, the full chain, never the bare Real.
 		await That(source).Contains("new global::MyCode.IService[] { ResolveD2() }")
 			.Because("the collection view yields the decorated chain, so the decorator is unbypassable");
-		await That(source).DoesNotContain("instance = ResolveReal(); return true;")
+		await That(source).DoesNotContain("static __s => __s.ResolveReal()")
 			.Because("the bare implementation is no longer publicly dispatched — only the decorator chain is");
 	}
 
