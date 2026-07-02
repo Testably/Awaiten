@@ -179,6 +179,22 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		INamedTypeSymbol? AsyncInitializable);
 
 	/// <summary>
+	///     The container-wide inputs threaded to each per-implementation <see cref="BuildInstance" />: the
+	///     container and compilation being analyzed, the coalesced resolution maps (the single-dispatch winner
+	///     per key, the decorator-chain redirects, and the open generics rejected on a constraint violation),
+	///     the well-known framework/Awaiten types, and the diagnostics sink. Passed together so building one
+	///     instance takes a single context rather than a long parameter list.
+	/// </summary>
+	private sealed record BuildContext(
+		INamedTypeSymbol ContainerSymbol,
+		Compilation Compilation,
+		Dictionary<ServiceKey, string> ServiceToImpl,
+		Dictionary<string, DecoratorInner> DecoratorInner,
+		WellKnownTypes WellKnown,
+		HashSet<string> ConstraintRejected,
+		List<DiagnosticInfo> Diagnostics);
+
+	/// <summary>
 	///     Resolves the container's object graph: coalesces its registrations, builds an
 	///     <see cref="InstanceModel" /> per implementation (selecting constructors / factories / instance
 	///     members) and computes the direct-dependency edges between them. Registration faults discovered on
@@ -199,7 +215,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			AsyncDisposableSupport(compilation),
 			compilation.GetTypeByMetadataName("Awaiten.IAsyncInitializable"));
 
-		List<RawRegistration> raw = ContainerRegistrations.Collect(containerSymbol);
+		(List<RawRegistration> raw, HashSet<string> constraintRejected) = ContainerRegistrations.Collect(containerSymbol, diagnostics);
 		List<DecorateRegistration> decorators = ContainerRegistrations.CollectDecorators(containerSymbol);
 
 		// Coalesce registrations by (service type, key): the first registration per key wins, and
@@ -224,11 +240,13 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		List<LocationInfo?> instanceLocations = new();
 		Dictionary<string, int> implToIndex = new(StringComparer.Ordinal);
 
+		BuildContext buildContext = new(containerSymbol, compilation, serviceToImpl, decoratorInner, wellKnown, constraintRejected, diagnostics);
+
 		// Validate each implementation, select its constructor and build the instance.
 		foreach (ImplInfo info in implOrder)
 		{
 			cancellationToken.ThrowIfCancellationRequested();
-			InstanceModel? instance = BuildInstance(info, containerSymbol, compilation, serviceToImpl, decoratorInner, wellKnown, diagnostics);
+			InstanceModel? instance = BuildInstance(info, buildContext);
 			if (instance is not null)
 			{
 				implToIndex[info.ImplementationType] = instances.Count;
@@ -1023,15 +1041,14 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			=> $"{decoratorType}@{DecoratorKeyPrefix}{service}:{baseIndex}:{link}";
 	}
 
-	private static InstanceModel? BuildInstance(
-		ImplInfo info,
-		INamedTypeSymbol containerSymbol,
-		Compilation compilation,
-		Dictionary<ServiceKey, string> serviceToImpl,
-		Dictionary<string, DecoratorInner> decoratorInner,
-		WellKnownTypes wellKnown,
-		List<DiagnosticInfo> diagnostics)
+	private static InstanceModel? BuildInstance(ImplInfo info, BuildContext context)
 	{
+		INamedTypeSymbol containerSymbol = context.ContainerSymbol;
+		Compilation compilation = context.Compilation;
+		Dictionary<ServiceKey, string> serviceToImpl = context.ServiceToImpl;
+		WellKnownTypes wellKnown = context.WellKnown;
+		List<DiagnosticInfo> diagnostics = context.Diagnostics;
+
 		// A pre-built Instance is handed back from a container member, never constructed here. The
 		// container does not own it, so it is not disposed; the registered type may legitimately be an
 		// interface (so the not-instantiable check is skipped) and it contributes no graph edges.
@@ -1075,7 +1092,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		// A factory's parameters resolve from the graph exactly like a constructor's. An async factory
 		// additionally forwards the resolve-time CancellationToken (the async creator's) into a matching
 		// parameter rather than resolving it from the graph.
-		List<ParameterModel> parameters = ClassifyParameters(producer, info, asyncFactory, serviceToImpl, decoratorInner, diagnostics);
+		List<ParameterModel> parameters = ClassifyParameters(producer, info, asyncFactory, serviceToImpl, context.DecoratorInner, context.ConstraintRejected, diagnostics);
 
 		// Disposability follows the type the container actually owns: a factory's produced type (which may
 		// implement IDisposable behind a non-disposable service interface; for an async factory this is the
@@ -1354,7 +1371,9 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	///     Classifies the producer's parameters (a constructor's or a factory method's) and reports
 	///     <see cref="Diagnostics.MissingDependency">AWT101</see> for any non-<c>[Arg]</c> parameter whose
 	///     service type is not registered. A runtime argument (<c>[Arg]</c>) is supplied at resolve time, so
-	///     it is never a missing dependency.
+	///     it is never a missing dependency. A service in <paramref name="constraintRejected" /> - an open
+	///     generic that could not be closed at the required type argument (AWT126) - is not reported again as
+	///     AWT101: the constraint violation is the one root cause.
 	/// </summary>
 	private static List<ParameterModel> ClassifyParameters(
 		IMethodSymbol producer,
@@ -1362,6 +1381,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		bool asyncFactory,
 		Dictionary<ServiceKey, string> serviceToImpl,
 		Dictionary<string, DecoratorInner> decoratorInner,
+		HashSet<string> constraintRejected,
 		List<DiagnosticInfo> diagnostics)
 	{
 		List<ParameterModel> parameters = new();
@@ -1392,8 +1412,12 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			// with no such registration is not a missing dependency either - it just yields an empty array. (An
 			// unregistered collection type whose synthesis was suppressed above was rewritten to Direct and so is
 			// no longer Enumerable here, and does surface as AWT101.)
+			// A closed generic that expansion refused to synthesize because its type arguments violate the open
+			// implementation's constraints (AWT126) is deliberately absent from serviceToImpl. Reporting AWT101
+			// on top would name the same root cause twice, so suppress it here.
 			if (parameterModel.Kind is not (DependencyKind.Arg or DependencyKind.CancellationToken or DependencyKind.Enumerable)
-			    && !serviceToImpl.ContainsKey(KeyOf(parameterModel)))
+			    && !serviceToImpl.ContainsKey(KeyOf(parameterModel))
+			    && !constraintRejected.Contains(parameterModel.ServiceType))
 			{
 				// Lazy does not unwrap Owned<T> (memoizing a disposal handle is a footgun), so a Lazy<Owned<T>> /
 				// Lazy<Task<Owned<T>>> leaves the handle's Owned<T> type as the service - which is not registered.
@@ -1471,10 +1495,19 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			new EquatableArray<string>([Display(info.OwningServiceOrImpl), info.ProductionMember!,])));
 	}
 
-	private static IMethodSymbol? SelectConstructor(
+	/// <summary>
+	///     Chooses the constructor the container builds <paramref name="implementation" /> through: its single
+	///     accessible constructor, or the greediest whose parameters are all satisfiable (falling back to the
+	///     greediest so unresolved parameters surface as AWT101). <paramref name="additionallySatisfiable" />, when
+	///     supplied, marks parameters the caller can satisfy beyond the registered set - open generic expansion
+	///     passes it so a parameter whose closed generic is expanded on demand does not disqualify a constructor,
+	///     letting the seed scan the same constructor the emitted container resolves.
+	/// </summary>
+	internal static IMethodSymbol? SelectConstructor(
 		INamedTypeSymbol implementation,
 		INamedTypeSymbol containerSymbol,
-		IEnumerable<string> registeredServices)
+		IEnumerable<string> registeredServices,
+		Func<IParameterSymbol, bool>? additionallySatisfiable = null)
 	{
 		List<IMethodSymbol> constructors = implementation.InstanceConstructors
 			.Where(c => IsAccessibleConstructor(c, containerSymbol))
@@ -1493,7 +1526,8 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 				// empty array - so it never disqualifies a constructor.
 				ParameterModel parameter = ClassifyParameter(p, asyncFactory: false);
 				return parameter.Kind is DependencyKind.Arg or DependencyKind.Enumerable
-				       || registered.Contains(parameter.ServiceType);
+				       || registered.Contains(parameter.ServiceType)
+				       || (additionallySatisfiable?.Invoke(p) ?? false);
 			}))
 			.OrderByDescending(c => c.Parameters.Length)
 			.FirstOrDefault();

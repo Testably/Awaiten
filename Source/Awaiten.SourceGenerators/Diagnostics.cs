@@ -356,4 +356,75 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     An open generic registration's implementation and service have different arity, so no closed
+	///     service can be mapped onto the implementation's type parameters (e.g. <c>Repository&lt;,&gt;</c>
+	///     declared for <c>IRepository&lt;&gt;</c>). v1 matches the open form exactly, so the arities must be equal.
+	/// </summary>
+	public static readonly DiagnosticDescriptor OpenGenericArityMismatch = new(
+		"AWT125",
+		"Open generic arity mismatch",
+		"The open generic registration of '{0}' for '{1}' is invalid: the implementation has {2} type parameter(s) but the service has {3}; their arity must match",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A closed generic required from the graph cannot be constructed from an open generic
+	///     registration because its type arguments violate the implementation's type-parameter
+	///     constraints (e.g. <c>Repository&lt;int&gt;</c> where the implementation declares <c>where T : class</c>).
+	/// </summary>
+	public static readonly DiagnosticDescriptor OpenGenericConstraintViolation = new(
+		"AWT126",
+		"Open generic constraint violation",
+		"'{0}' cannot be constructed from the open generic '{1}': the type argument(s) violate its type-parameter constraints",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     The <c>typeof</c>-argument form of a lifetime attribute exists for open generics and must receive an
+	///     unbound generic type (<c>typeof(Repository&lt;&gt;)</c>). A closed generic
+	///     (<c>typeof(Repository&lt;int&gt;)</c>) would be silently reduced to its open definition, and a
+	///     non-generic type would match no closed service, so both are rejected in favor of the generic
+	///     attribute form (<c>[Transient&lt;Repository&lt;int&gt;, IRepository&lt;int&gt;&gt;]</c>).
+	/// </summary>
+	public static readonly DiagnosticDescriptor OpenGenericNotUnbound = new(
+		"AWT127",
+		"Open generic registration is not an unbound generic",
+		"The open generic registration must use an unbound open generic type such as typeof(Repository<>); '{0}' is not an unbound generic type - register a closed or non-generic type with the generic attribute form instead",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A closed service is mapped onto an open generic implementation by applying its type arguments to the
+	///     implementation's type parameters positionally, which is only correct when the implementation exposes
+	///     the service with its own type parameters in declaration order (<c>Repository&lt;T&gt; : IRepository&lt;T&gt;</c>).
+	///     A reordered or remapped implementation (<c>Repository&lt;TKey, TValue&gt; : IRepository&lt;TValue, TKey&gt;</c>)
+	///     would construct a closed type that does not satisfy the requested service, so it is rejected.
+	/// </summary>
+	public static readonly DiagnosticDescriptor OpenGenericServiceRemapped = new(
+		"AWT128",
+		"Open generic type parameters are remapped",
+		"The open generic implementation '{0}' does not expose the service '{1}' with its type parameters in declaration order, so a closed service cannot be mapped onto it by position; the implementation's type parameters must map one-to-one, in order, onto the service's",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     Open generic expansion nested deeper than the supported limit, which almost always means the
+	///     registrations form an unbounded generic recursion - a closed implementation whose constructor
+	///     depends on an ever-larger closed generic of the same open registration
+	///     (<c>Node&lt;T&gt;</c> depending on <c>Node&lt;List&lt;T&gt;&gt;</c>). Expansion is stopped at the
+	///     limit so the generator terminates rather than looping until it exhausts memory.
+	/// </summary>
+	public static readonly DiagnosticDescriptor OpenGenericExpansionTooDeep = new(
+		"AWT129",
+		"Open generic expansion is too deep",
+		"Open generic expansion reached '{0}' at nesting depth {1} and was stopped; the open generic registrations likely form an unbounded recursion (an implementation depending on an ever-larger closed generic of the same registration)",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

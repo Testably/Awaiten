@@ -506,4 +506,170 @@ public class GeneralTests
 		await That(source).DoesNotContain("global::Awaiten.IAwaitenResolver<global::MyCode.Robot>")
 			.Because("a parameterized service has no typed resolution fast path");
 	}
+
+	[Fact]
+	public async Task OpenGeneric_ExpandsToTheClosedImplementationRequiredByAConsumer()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class Order { }
+		                                       public interface IRepository<T> { }
+		                                       public sealed class Repository<T> : IRepository<T> { }
+		                                       public sealed class Root { public Root(IRepository<Order> orders) { } }
+
+		                                       [Container]
+		                                       [Transient(typeof(Repository<>), typeof(IRepository<>))]
+		                                       [Transient<Root>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// The open registration is expanded into the closed Repository<Order>, dispatched under the closed
+		// service IRepository<Order> and constructed for the Root consumer.
+		await That(source).Contains("new global::MyCode.Repository<global::MyCode.Order>()");
+		await That(source).Contains("typeof(global::MyCode.IRepository<global::MyCode.Order>)");
+	}
+
+	[Fact]
+	public async Task OpenGeneric_ExpandsTransitivelyThroughAClosedGenericDependency()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class Order { }
+		                                       public interface IValidator<T> { }
+		                                       public sealed class Validator<T> : IValidator<T> { }
+		                                       public sealed class Handler<T> { public Handler(IValidator<T> validator) { } }
+		                                       public sealed class Root { public Root(Handler<Order> handler) { } }
+
+		                                       [Container]
+		                                       [Transient(typeof(Validator<>), typeof(IValidator<>))]
+		                                       [Transient(typeof(Handler<>))]
+		                                       [Transient<Root>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// Handler<Order> is expanded from the self-registration; its own IValidator<Order> dependency drives a
+		// further expansion of Validator<Order> - the worklist iterates to a fixpoint.
+		await That(source).Contains("new global::MyCode.Validator<global::MyCode.Order>()");
+		await That(source).Contains("new global::MyCode.Handler<global::MyCode.Order>(");
+	}
+
+	[Fact]
+	public async Task OpenGenericCollection_ExpandsEveryOpenRegistrationIntoTheClosedCollection()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class OrderPlaced { }
+		                                       public interface IHandler<T> { }
+		                                       public sealed class AuditHandler<T> : IHandler<T> { }
+		                                       public sealed class ProjectionHandler<T> : IHandler<T> { }
+		                                       public sealed class Dispatcher { public Dispatcher(IEnumerable<IHandler<OrderPlaced>> handlers) { } }
+
+		                                       [Container]
+		                                       [Transient(typeof(AuditHandler<>), typeof(IHandler<>))]
+		                                       [Transient(typeof(ProjectionHandler<>), typeof(IHandler<>))]
+		                                       [Transient<Dispatcher>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// Both open registrations are expanded at OrderPlaced, so the collection of IHandler<OrderPlaced> is a
+		// closed array over both expanded implementations (the winner still takes the single-dispatch slot).
+		await That(source).Contains("new global::MyCode.IHandler<global::MyCode.OrderPlaced>[] {");
+		await That(source).Contains("new global::MyCode.AuditHandler<global::MyCode.OrderPlaced>()");
+		await That(source).Contains("new global::MyCode.ProjectionHandler<global::MyCode.OrderPlaced>()");
+	}
+
+	[Fact]
+	public async Task OpenGeneric_SeedsExpansionFromTheConstructorTheContainerActuallyUses()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class Order { }
+		                                       public interface IRepository<T> { }
+		                                       public sealed class Repository<T> : IRepository<T> { }
+		                                       // Only an internal constructor: the container (same assembly) uses it, so seeding must scan it
+		                                       // too - a public-only seed heuristic would miss IRepository<Order> and report a false AWT101.
+		                                       public sealed class Root { internal Root(IRepository<Order> orders) { } }
+
+		                                       [Container]
+		                                       [Transient(typeof(Repository<>), typeof(IRepository<>))]
+		                                       [Transient<Root>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// The internal constructor's IRepository<Order> dependency seeded expansion of Repository<Order>.
+		await That(source).Contains("new global::MyCode.Repository<global::MyCode.Order>()");
+	}
+
+	[Fact]
+	public async Task OpenGeneric_SelectsTheResolvableConstructorDependingOnAnExpandableOpenGeneric()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class Order { }
+		                                       public interface IRepository<T> { }
+		                                       public sealed class Repository<T> : IRepository<T> { }
+		                                       public sealed class Dep { }
+		                                       public sealed class Unregistered { }
+
+		                                       public sealed class Service
+		                                       {
+		                                           // The greedier constructor is unresolvable (Unregistered has no registration); the container
+		                                           // uses this one. IRepository<Order> appears in no other constructor, so it is expanded only if
+		                                           // the seed recognizes it as satisfiable-via-open-generic and scans this constructor.
+		                                           public Service(IRepository<Order> repository) { }
+		                                           public Service(Dep dep, Unregistered unregistered) { }
+		                                       }
+
+		                                       [Container]
+		                                       [Transient(typeof(Repository<>), typeof(IRepository<>))]
+		                                       [Transient<Dep>]
+		                                       [Transient<Service>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty()
+			.Because("the resolvable constructor's open generic dependency is expandable, so no AWT101 is reported");
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// The seed picked the resolvable one-parameter constructor and expanded its open generic dependency.
+		await That(source).Contains("new global::MyCode.Repository<global::MyCode.Order>()");
+	}
 }
