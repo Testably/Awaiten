@@ -412,31 +412,29 @@ internal static class Emitter
 		// The dispatch table lives on the Scope (the only reader, through TryResolve); it is static, so it is
 		// built once for the whole container, and reached by simple name from this type and its Root subclass.
 		// Every entry is dispatchable; a root-withheld entry additionally appears in the __withheld table (its
-		// guidance, thrown by Resolve on the Root) and is flagged in the __rootWithheld mask (which TryResolve
-		// consults only on the Root), so a child scope resolves it while the Root withholds it.
+		// guidance, thrown by Resolve on the Root) and carries the RootWithheld flag on its bucket slot (which
+		// TryResolve consults only on the Root), so a child scope resolves it while the Root withholds it.
 		List<DispatchEntry> entries = BuildDispatchEntries(instances, names, serviceToIndex, strict, syncResolveAfterInit);
 		List<DispatchEntry> rootWithheld = Withheld(entries);
 		// The __withheld guidance table merges two sources: the root-withheld disposable build-on-demand
 		// services (still dispatchable from a child scope) and the async-tainted services excluded from
 		// synchronous resolution entirely (reachable only through ResolveAsync). Both surface a helpful
 		// message from Resolve instead of the generic "no registration"; only the former needs the
-		// __rootWithheld mask (it gates TryResolve on the Root), so that stays keyed to the dispatch entries.
+		// RootWithheld slot flag (it gates TryResolve on the Root), so that rides on the dispatch entries.
 		List<(string Type, string Guidance)> withheldTypes = WithheldTypes(rootWithheld, instances, names, serviceToIndex, syncResolveAfterInit);
 		if (entries.Count > 0)
 		{
-			EmitDispatchTable(builder, body, entries);
+			// Data-driven by-type dispatch: a hand-tuned open-addressed table (keyed by Type identity hash) whose
+			// slots carry the resolver delegate directly. The table grows in data, never in a single method's IL, so
+			// it cannot exceed the JIT's optimization guards no matter how many registrations there are. The
+			// root-withholding that used to live in a parallel __rootWithheld mask is folded into each slot.
+			EmitBucketDispatch(builder, body, entries);
 			builder.AppendLine();
 		}
 
 		if (withheldTypes.Count > 0)
 		{
 			EmitWithheldTable(builder, body, withheldTypes);
-			builder.AppendLine();
-		}
-
-		if (rootWithheld.Count > 0)
-		{
-			EmitRootWithheldMask(builder, body, entries);
 			builder.AppendLine();
 		}
 
@@ -646,7 +644,7 @@ internal static class Emitter
 		List<DispatchEntry> entries = BuildDispatchEntries(instances, names, serviceToIndex, strict, syncResolveAfterInit);
 		List<DispatchEntry> rootWithheld = Withheld(entries);
 		// hasWithheld gates the __withheld guidance lookup in Resolve (root-withheld disposables plus
-		// async-only services); hasRootWithheld gates the __rootWithheld mask check in TryResolve, which only
+		// async-only services); hasRootWithheld gates the RootWithheld slot-flag check in TryResolve, which only
 		// the dispatchable root-withheld disposables need (async-only services have no dispatch entry).
 		bool hasRootWithheld = rootWithheld.Count > 0;
 		bool hasWithheld = WithheldTypes(rootWithheld, instances, names, serviceToIndex, syncResolveAfterInit).Count > 0;
@@ -686,29 +684,31 @@ internal static class Emitter
 			return;
 		}
 
-		Indent(builder, depth + 1).AppendLine("if (__dispatch.TryGetValue(serviceType, out int __case))");
+		// Open-addressed probe: hash the requested type into its bucket window and scan the (small, fixed-width)
+		// window for an identity match. Each slot carries its resolver delegate directly, so a hit invokes it with
+		// no switch - the dispatch is O(1) and constant-size in IL regardless of the registration count.
+		Indent(builder, depth + 1).AppendLine("int __i = (int)((uint)serviceType.TypeHandle.GetHashCode() % (uint)__bucketCount) * __bucketSize;");
+		Indent(builder, depth + 1).AppendLine("int __end = __i + __bucketSize;");
+		Indent(builder, depth + 1).AppendLine("for (; __i < __end; __i++)");
 		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).AppendLine("ref readonly __Bucket __b = ref __buckets[__i];");
+		Indent(builder, depth + 2).AppendLine("if ((object?)__b.Key == (object?)serviceType)");
+		Indent(builder, depth + 2).AppendLine("{");
 		if (hasRootWithheld)
 		{
-			// Root-only withholding: a child scope resolves the case (its lifetime bounded by the scope), but the
+			// Root-only withholding: a child scope resolves the slot (its lifetime bounded by the scope), but the
 			// Root returns false (and Resolve then throws the guidance), so the root-accumulation leak stays
-			// impossible. The mask is keyed by case number, so it is a bare array index after the dispatch hit.
-			Indent(builder, depth + 2).AppendLine("if (this is Root && __rootWithheld[__case])");
-			Indent(builder, depth + 2).AppendLine("{");
-			Indent(builder, depth + 3).AppendLine("instance = null;");
-			Indent(builder, depth + 3).AppendLine("return false;");
-			Indent(builder, depth + 2).AppendLine("}");
+			// impossible. The flag rides on the slot, so it is a bare field read after the identity match.
+			Indent(builder, depth + 3).AppendLine("if (__b.RootWithheld && this is Root)");
+			Indent(builder, depth + 3).AppendLine("{");
+			Indent(builder, depth + 4).AppendLine("instance = null;");
+			Indent(builder, depth + 4).AppendLine("return false;");
+			Indent(builder, depth + 3).AppendLine("}");
 			builder.AppendLine();
 		}
 
-		Indent(builder, depth + 2).AppendLine("switch (__case)");
-		Indent(builder, depth + 2).AppendLine("{");
-		for (int i = 0; i < entries.Count; i++)
-		{
-			Indent(builder, depth + 3).Append("case ").Append(i).Append(": instance = ")
-				.Append(entries[i].Value).AppendLine("; return true;");
-		}
-
+		Indent(builder, depth + 3).AppendLine("instance = __b.Resolve(this);");
+		Indent(builder, depth + 3).AppendLine("return true;");
 		Indent(builder, depth + 2).AppendLine("}");
 		Indent(builder, depth + 1).AppendLine("}");
 		builder.AppendLine();
@@ -900,8 +900,8 @@ internal static class Emitter
 			// which bounds its lifetime. A non-disposable service is not withheld at the bare type even when its
 			// Func is (its single bare resolution is bounded).
 			entries.Add(bareWithheld
-				? new DispatchEntry(service, resolver + "()", BareWithheldMessage(service))
-				: new DispatchEntry(service, resolver + "()"));
+				? new DispatchEntry(service, resolver + "()", BareWithheldMessage(service), resolver)
+				: new DispatchEntry(service, resolver + "()", directResolver: resolver));
 		}
 	}
 
@@ -1086,21 +1086,132 @@ internal static class Emitter
 	}
 
 	/// <summary>
-	///     Emits the static <c>__dispatch</c> table mapping each resolvable service type to its case number. It
-	///     lives on the base <c>Scope</c> and is <c>static</c>, so it is built once and shared by every scope and
-	///     the <c>Root</c> subclass that inherits it.
+	///     Emits the data-driven by-type dispatch: a nested <c>__Bucket</c> slot type, the static
+	///     <c>__buckets</c> / <c>__bucketSize</c> table (built once in the static constructor and shared by every
+	///     scope and the <c>Root</c>), the <c>__BuildBuckets</c> distributor, and a <c>__R</c> forwarder per
+	///     compound entry. It lives on the base <c>Scope</c>; <c>TryResolve</c> probes the table by Type identity
+	///     hash. The table grows in data, never in a single method's IL, so it cannot hit the JIT optimization
+	///     guards no matter how many registrations there are.
 	/// </summary>
-	private static void EmitDispatchTable(StringBuilder builder, int depth, List<DispatchEntry> entries)
+	private static void EmitBucketDispatch(StringBuilder builder, int depth, List<DispatchEntry> entries)
 	{
-		Indent(builder, depth).AppendLine(
-			"private static readonly global::System.Collections.Generic.Dictionary<global::System.Type, int> __dispatch = new global::System.Collections.Generic.Dictionary<global::System.Type, int>");
-		Indent(builder, depth).AppendLine("{");
-		for (int i = 0; i < entries.Count; i++)
+		int bucketCount = BucketCount(entries.Count);
+
+		// Assign a forwarder to each UNIQUE compound value expression. Identical values share one __R method rather
+		// than emitting a body each - notably the six collection shapes of one element type (IEnumerable<T>,
+		// IReadOnlyList<T>, IReadOnlyCollection<T>, IList<T>, ICollection<T>, T[]) all materialize the very same
+		// array, so they collapse from six method bodies to one. Bare services bind a direct delegate and need none.
+		Dictionary<string, int> forwarderOf = new(StringComparer.Ordinal);
+		List<string> forwarders = new();
+		foreach (DispatchEntry entry in entries.Where(entry => entry.DirectResolver is null && !forwarderOf.ContainsKey(entry.Value)))
 		{
-			Indent(builder, depth + 1).Append("{ typeof(").Append(entries[i].Type).Append("), ").Append(i).AppendLine(" },");
+			forwarderOf[entry.Value] = forwarders.Count;
+			forwarders.Add(entry.Value);
 		}
 
-		Indent(builder, depth).AppendLine("};");
+		// One table slot: the key type, its resolver delegate, and whether the slot is withheld from by-type
+		// resolution on the Root. A default slot (Key == null) is an empty probe cell and never matches a request.
+		Indent(builder, depth).AppendLine("private readonly struct __Bucket");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).AppendLine("public readonly global::System.Type? Key;");
+		Indent(builder, depth + 1).AppendLine("public readonly global::System.Func<Scope, object> Resolve;");
+		Indent(builder, depth + 1).AppendLine("public readonly bool RootWithheld;");
+		Indent(builder, depth + 1).AppendLine("public __Bucket(global::System.Type? key, global::System.Func<Scope, object> resolve, bool rootWithheld)");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).AppendLine("Key = key;");
+		Indent(builder, depth + 2).AppendLine("Resolve = resolve;");
+		Indent(builder, depth + 2).AppendLine("RootWithheld = rootWithheld;");
+		Indent(builder, depth + 1).AppendLine("}");
+		Indent(builder, depth).AppendLine("}");
+		builder.AppendLine();
+
+		Indent(builder, depth).Append("private const int __bucketCount = ").Append(bucketCount).AppendLine(";");
+		Indent(builder, depth).AppendLine("private static readonly __Bucket[] __buckets;");
+		Indent(builder, depth).AppendLine("private static readonly int __bucketSize;");
+		builder.AppendLine();
+
+		// The static ctor lists every entry with its resolver delegate, then distributes them into fixed-width
+		// buckets by the runtime Type identity hash (unknown at generation time). A bare service binds a direct
+		// delegate to its existing virtual resolver; a compound value routes through a __R forwarder that preserves
+		// the expression verbatim, so all owner-context construction (throwaway scopes, __root) is unchanged.
+		Indent(builder, depth).AppendLine("static Scope()");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).AppendLine("__Bucket[] __entries =");
+		Indent(builder, depth + 1).AppendLine("{");
+		for (int i = 0; i < entries.Count; i++)
+		{
+			string resolve = entries[i].DirectResolver is { } direct
+				? $"static __s => __s.{direct}()"
+				: $"static __s => __s.__R{forwarderOf[entries[i].Value]}()";
+			Indent(builder, depth + 2).Append("new __Bucket(typeof(").Append(entries[i].Type).Append("), ")
+				.Append(resolve).Append(", ").Append(entries[i].RootWithheld ? "true" : "false").AppendLine("),");
+		}
+
+		Indent(builder, depth + 1).AppendLine("};");
+		Indent(builder, depth + 1).AppendLine("__buckets = __BuildBuckets(__entries, __bucketCount, out __bucketSize);");
+		Indent(builder, depth).AppendLine("}");
+		builder.AppendLine();
+
+		EmitBucketBuilder(builder, depth);
+
+		// One forwarder per unique compound value, preserving the value expression verbatim. Each is tiny and
+		// individually optimizable; deduplication (above) keeps the six collection shapes of an element type to one.
+		for (int k = 0; k < forwarders.Count; k++)
+		{
+			builder.AppendLine();
+			Indent(builder, depth).Append("private object __R").Append(k).Append("() => ").Append(forwarders[k]).AppendLine(";");
+		}
+	}
+
+	/// <summary>
+	///     Emits <c>__BuildBuckets</c>: distributes the entries into the fixed number of buckets by Type identity
+	///     hash, sizing every bucket to the largest collision count so a lookup probes a small constant window. Runs
+	///     once in the static constructor (the Type hashes are only known at runtime).
+	/// </summary>
+	private static void EmitBucketBuilder(StringBuilder builder, int depth)
+	{
+		Indent(builder, depth).AppendLine("private static __Bucket[] __BuildBuckets(__Bucket[] __entries, int __count, out int __size)");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).AppendLine("int[] __counts = new int[__count];");
+		Indent(builder, depth + 1).AppendLine("foreach (__Bucket __e in __entries)");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).AppendLine("__counts[(int)((uint)__e.Key!.TypeHandle.GetHashCode() % (uint)__count)]++;");
+		Indent(builder, depth + 1).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("int __max = 1;");
+		Indent(builder, depth + 1).AppendLine("foreach (int __c in __counts)");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).AppendLine("if (__c > __max) { __max = __c; }");
+		Indent(builder, depth + 1).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("__size = __max;");
+		Indent(builder, depth + 1).AppendLine("__Bucket[] __arr = new __Bucket[__count * __max];");
+		Indent(builder, depth + 1).AppendLine("int[] __fill = new int[__count];");
+		Indent(builder, depth + 1).AppendLine("foreach (__Bucket __e in __entries)");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).AppendLine("int __b = (int)((uint)__e.Key!.TypeHandle.GetHashCode() % (uint)__count);");
+		Indent(builder, depth + 2).AppendLine("__arr[(__b * __max) + __fill[__b]++] = __e;");
+		Indent(builder, depth + 1).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("return __arr;");
+		Indent(builder, depth).AppendLine("}");
+	}
+
+	/// <summary>
+	///     The bucket count for a table of <paramref name="entryCount" /> entries: the smallest power of two that
+	///     keeps the load factor at or below one half, so collisions - and thus the fixed probe window - stay small.
+	///     A power of two lets the runtime lower the <c>% __bucketCount</c> in the probe to a bitwise-and.
+	/// </summary>
+	private static int BucketCount(int entryCount)
+	{
+		int target = entryCount * 2;
+		int count = 4;
+		while (count < target)
+		{
+			count <<= 1;
+		}
+
+		return count;
 	}
 
 	/// <summary>
@@ -1120,29 +1231,6 @@ internal static class Emitter
 		}
 
 		Indent(builder, depth).AppendLine("};");
-	}
-
-	/// <summary>
-	///     Emits the static <c>__rootWithheld</c> mask: a <c>bool[]</c> indexed by dispatch case number,
-	///     <see langword="true" /> for the cases that leak when bound to the Root (a disposable build-on-demand
-	///     service's bare type, or its plain accumulating <c>Func&lt;…&gt;</c>). <c>TryResolve</c> reads it only
-	///     when <c>this is Root</c>, so the Root withholds those cases while a child scope resolves them (their
-	///     lifetime bounded by the scope). A bare array index is far cheaper than a second Type-keyed lookup.
-	/// </summary>
-	private static void EmitRootWithheldMask(StringBuilder builder, int depth, List<DispatchEntry> entries)
-	{
-		Indent(builder, depth).Append("private static readonly bool[] __rootWithheld = { ");
-		for (int i = 0; i < entries.Count; i++)
-		{
-			if (i > 0)
-			{
-				builder.Append(", ");
-			}
-
-			builder.Append(entries[i].RootWithheld ? "true" : "false");
-		}
-
-		builder.AppendLine(" };");
 	}
 
 	/// <summary>
@@ -1343,12 +1431,11 @@ internal static class Emitter
 	{
 		const string task = "global::System.Threading.Tasks.Task";
 
-		Indent(builder, depth).Append("public ").Append(task)
-			.AppendLine("<object> ResolveAsync(global::System.Type serviceType, global::System.Threading.CancellationToken cancellationToken = default)");
-		Indent(builder, depth).AppendLine("{");
-		EmitDisposedGuard(builder, depth + 1);
-
-		bool hasAsync = false;
+		// Each async-tainted, non-parameterized service contributes one by-type arm per unkeyed service key. They
+		// are collected up front so a large set can be split across chunk methods: a single flat if-chain over
+		// thousands of async services would exceed RyuJIT's optimization guards (~60 KB IL / ~2000 basic blocks)
+		// and be compiled MinOpts for good - the same cliff the synchronous dispatch hit before it was chunked.
+		List<(string Service, string AsyncResolver, bool RootWithheld)> arms = new();
 		for (int i = 0; i < instances.Length; i++)
 		{
 			// A parameterized service is built fresh from its runtime arguments, so it is reached only through
@@ -1359,50 +1446,132 @@ internal static class Emitter
 				continue;
 			}
 
-			hasAsync = true;
 			string asyncResolver = names.AsyncResolver(i);
-			// A disposable async transient is withheld from by-type resolution on the Root, mirroring the
-			// synchronous __rootWithheld mask: each Root resolution would track a fresh disposable on the root
-			// for the container's lifetime (an unbounded leak), so the Root throws guidance toward a child scope
-			// while a child scope still resolves it (its disposal bounds the instance). Injection into a
-			// singleton stays allowed - that is bounded to one instance.
+			// A disposable async transient is withheld from by-type resolution on the Root: each Root resolution
+			// would track a fresh disposable on the root for the container's lifetime (an unbounded leak), so the
+			// Root throws guidance toward a child scope while a child scope still resolves it (its disposal bounds
+			// the instance). Injection into a singleton stays allowed - that is bounded to one instance.
 			bool rootWithheld = IsWithheld(instances[i], strict);
-			foreach (ServiceKey serviceKey in instances[i].Services.AsArray())
+			// Keyed registrations are reached only by [FromKey] injection, never by-type resolution.
+			foreach (ServiceKey serviceKey in instances[i].Services.AsArray().Where(serviceKey => serviceKey.Key is null))
 			{
-				// Keyed registrations are reached only by [FromKey] injection, never by-type resolution.
-				if (serviceKey.Key is not null)
-				{
-					continue;
-				}
-
-				if (rootWithheld)
-				{
-					Indent(builder, depth + 1).Append("if (serviceType == typeof(").Append(serviceKey.Service).AppendLine("))");
-					Indent(builder, depth + 1).AppendLine("{");
-					Indent(builder, depth + 2).Append("if (this is Root) { throw new global::System.InvalidOperationException(")
-						.Append(AsyncRootWithheldMessage(serviceKey.Service)).AppendLine("); }");
-					Indent(builder, depth + 2).Append("return __AsObject(").Append(asyncResolver).AppendLine("(cancellationToken));");
-					Indent(builder, depth + 1).AppendLine("}");
-				}
-				else
-				{
-					Indent(builder, depth + 1).Append("if (serviceType == typeof(").Append(serviceKey.Service)
-						.Append(")) { return __AsObject(").Append(asyncResolver).AppendLine("(cancellationToken)); }");
-				}
+				arms.Add((serviceKey.Service, asyncResolver, rootWithheld));
 			}
 		}
 
-		// Not async-tainted: resolve synchronously and complete immediately. Resolve throws the same
-		// registration / strict-withholding guidance as the synchronous path when the type is unresolvable.
+		Indent(builder, depth).Append("public ").Append(task)
+			.AppendLine("<object> ResolveAsync(global::System.Type serviceType, global::System.Threading.CancellationToken cancellationToken = default)");
+		Indent(builder, depth).AppendLine("{");
+		EmitDisposedGuard(builder, depth + 1);
+
+		if (arms.Count == 0)
+		{
+			// No async-tainted service: everything resolves synchronously and completes immediately. Resolve
+			// throws the same registration / strict-withholding guidance as the synchronous path.
+			Indent(builder, depth + 1).Append("return ").Append(task).AppendLine(".FromResult(Resolve(serviceType));");
+			Indent(builder, depth).AppendLine("}");
+			return;
+		}
+
+		// Bucket probe, mirroring the synchronous dispatch: hash the type into its window and invoke the matched
+		// async resolver delegate. A type with no async arm resolves synchronously and completes immediately.
+		Indent(builder, depth + 1).AppendLine("int __i = (int)((uint)serviceType.TypeHandle.GetHashCode() % (uint)__asyncBucketCount) * __asyncBucketSize;");
+		Indent(builder, depth + 1).AppendLine("int __end = __i + __asyncBucketSize;");
+		Indent(builder, depth + 1).AppendLine("for (; __i < __end; __i++)");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).AppendLine("ref readonly __AsyncBucket __b = ref __asyncBuckets[__i];");
+		Indent(builder, depth + 2).AppendLine("if ((object?)__b.Key == (object?)serviceType)");
+		Indent(builder, depth + 2).AppendLine("{");
+		Indent(builder, depth + 3).AppendLine("return __b.Resolve(this, cancellationToken);");
+		Indent(builder, depth + 2).AppendLine("}");
+		Indent(builder, depth + 1).AppendLine("}");
+		builder.AppendLine();
 		Indent(builder, depth + 1).Append("return ").Append(task).AppendLine(".FromResult(Resolve(serviceType));");
 		Indent(builder, depth).AppendLine("}");
+		builder.AppendLine();
 
-		if (hasAsync)
+		EmitAsyncBucketDispatch(builder, depth, arms);
+		EmitAsObjectHelper(builder, depth);
+	}
+
+	/// <summary>
+	///     Emits the async dispatch table: an <c>__AsyncBucket</c> slot type and the <c>__asyncBuckets</c> /
+	///     <c>__asyncBucketSize</c> table, built once through field initializers (which coexist with the
+	///     synchronous static constructor). Each slot's delegate awaits the async resolver and converts the result
+	///     to <c>Task&lt;object&gt;</c>; a root-withheld arm bakes its guidance throw into the delegate (the Root
+	///     throws, a child scope resolves). No forwarder methods are needed - the delegates are inline lambdas.
+	/// </summary>
+	private static void EmitAsyncBucketDispatch(StringBuilder builder, int depth, List<(string Service, string AsyncResolver, bool RootWithheld)> arms)
+	{
+		const string func = "global::System.Func<Scope, global::System.Threading.CancellationToken, global::System.Threading.Tasks.Task<object>>";
+		int bucketCount = BucketCount(arms.Count);
+
+		Indent(builder, depth).AppendLine("private readonly struct __AsyncBucket");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).AppendLine("public readonly global::System.Type? Key;");
+		Indent(builder, depth + 1).Append("public readonly ").Append(func).AppendLine(" Resolve;");
+		Indent(builder, depth + 1).Append("public __AsyncBucket(global::System.Type? key, ").Append(func).AppendLine(" resolve)");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).AppendLine("Key = key;");
+		Indent(builder, depth + 2).AppendLine("Resolve = resolve;");
+		Indent(builder, depth + 1).AppendLine("}");
+		Indent(builder, depth).AppendLine("}");
+		builder.AppendLine();
+
+		Indent(builder, depth).Append("private const int __asyncBucketCount = ").Append(bucketCount).AppendLine(";");
+		Indent(builder, depth).AppendLine("private static readonly __AsyncBucket[] __asyncBuckets = __BuildAsyncBuckets();");
+		Indent(builder, depth).AppendLine("private static readonly int __asyncBucketSize = __asyncBuckets.Length / __asyncBucketCount;");
+		builder.AppendLine();
+
+		Indent(builder, depth).AppendLine("private static __AsyncBucket[] __BuildAsyncBuckets()");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).AppendLine("__AsyncBucket[] __entries =");
+		Indent(builder, depth + 1).AppendLine("{");
+		foreach ((string service, string asyncResolver, bool rootWithheld) in arms)
 		{
-			builder.AppendLine();
-			Indent(builder, depth).Append("private static async ").Append(task)
-				.AppendLine("<object> __AsObject<T>(global::System.Threading.Tasks.Task<T> __task) => (object)(await __task.ConfigureAwait(false))!;");
+			string resolve = rootWithheld
+				? $"static (__s, __ct) => __s is Root ? throw new global::System.InvalidOperationException({AsyncRootWithheldMessage(service)}) : __AsObject(__s.{asyncResolver}(__ct))"
+				: $"static (__s, __ct) => __AsObject(__s.{asyncResolver}(__ct))";
+			Indent(builder, depth + 2).Append("new __AsyncBucket(typeof(").Append(service).Append("), ").Append(resolve).AppendLine("),");
 		}
+
+		Indent(builder, depth + 1).AppendLine("};");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("int[] __counts = new int[__asyncBucketCount];");
+		Indent(builder, depth + 1).AppendLine("foreach (__AsyncBucket __e in __entries)");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).AppendLine("__counts[(int)((uint)__e.Key!.TypeHandle.GetHashCode() % (uint)__asyncBucketCount)]++;");
+		Indent(builder, depth + 1).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("int __max = 1;");
+		Indent(builder, depth + 1).AppendLine("foreach (int __c in __counts)");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).AppendLine("if (__c > __max) { __max = __c; }");
+		Indent(builder, depth + 1).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("__AsyncBucket[] __arr = new __AsyncBucket[__asyncBucketCount * __max];");
+		Indent(builder, depth + 1).AppendLine("int[] __fill = new int[__asyncBucketCount];");
+		Indent(builder, depth + 1).AppendLine("foreach (__AsyncBucket __e in __entries)");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).AppendLine("int __b = (int)((uint)__e.Key!.TypeHandle.GetHashCode() % (uint)__asyncBucketCount);");
+		Indent(builder, depth + 2).AppendLine("__arr[(__b * __max) + __fill[__b]++] = __e;");
+		Indent(builder, depth + 1).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("return __arr;");
+		Indent(builder, depth).AppendLine("}");
+	}
+
+	/// <summary>
+	///     Emits the <c>__AsObject&lt;T&gt;</c> helper that converts a <c>Task&lt;T&gt;</c> async resolver result to
+	///     the <c>Task&lt;object&gt;</c> the by-type <c>ResolveAsync</c> returns. Called only when at least one
+	///     async-tainted service exists (otherwise nothing references it).
+	/// </summary>
+	private static void EmitAsObjectHelper(StringBuilder builder, int depth)
+	{
+		const string task = "global::System.Threading.Tasks.Task";
+		builder.AppendLine();
+		Indent(builder, depth).Append("private static async ").Append(task)
+			.AppendLine("<object> __AsObject<T>(global::System.Threading.Tasks.Task<T> __task) => (object)(await __task.ConfigureAwait(false))!;");
 	}
 
 	/// <summary>
@@ -2253,13 +2422,19 @@ internal static class Emitter
 	///     message (placed in the <c>__withheld</c> table) - so the root-accumulation leak stays impossible
 	///     while the safe scope-bound resolution is allowed.
 	/// </summary>
-	private readonly struct DispatchEntry(string type, string value, string? guidance = null)
+	private readonly struct DispatchEntry(string type, string value, string? guidance = null, string? directResolver = null)
 	{
 		public string Type { get; } = type;
 
 		public string Value { get; } = value;
 
 		public string? Guidance { get; } = guidance;
+
+		// A bare-service entry's value is a plain `resolver()` call over the current owner; the resolver method name
+		// is kept so the bucket table can bind a direct delegate (__s => __s.ResolveX()) to the existing virtual
+		// resolver instead of routing through a per-entry forwarder. Null for compound values (Func/Lazy/Owned/
+		// collection literals), which need their expression preserved verbatim in a __R forwarder.
+		public string? DirectResolver { get; } = directResolver;
 
 		public bool RootWithheld => Guidance is not null;
 	}
