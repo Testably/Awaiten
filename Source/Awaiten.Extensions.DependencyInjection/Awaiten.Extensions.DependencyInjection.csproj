@@ -2,6 +2,9 @@
 
 	<PropertyGroup>
 		<Description>Microsoft.Extensions.DependencyInjection interop for Awaiten.</Description>
+		<!-- Copy package dependencies next to the output so the public-API approval tool (Mono.Cecil) can
+		     resolve them; it does not change the NuGet package's declared dependencies. -->
+		<CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
 	</PropertyGroup>
 
 	<ItemGroup>

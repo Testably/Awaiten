@@ -7,6 +7,21 @@ namespace Awaiten
     {
         public ArgAttribute() { }
     }
+    public enum AwaitenLifetime
+    {
+        Singleton = 0,
+        Transient = 1,
+        Scoped = 2,
+    }
+    public readonly struct AwaitenRegistration : System.IEquatable<Awaiten.AwaitenRegistration>
+    {
+        public AwaitenRegistration(System.Type serviceType, Awaiten.AwaitenLifetime lifetime) { }
+        public Awaiten.AwaitenLifetime Lifetime { get; }
+        public System.Type ServiceType { get; }
+        public bool Equals(Awaiten.AwaitenRegistration other) { }
+        public override bool Equals(object? obj) { }
+        public override int GetHashCode() { }
+    }
     public static class AwaitenResolverExtensions
     {
         extension(Awaiten.IAwaitenResolver resolver)
@@ -46,6 +61,10 @@ namespace Awaiten
     public interface IAwaitenAsyncResolver : Awaiten.IAwaitenResolver
     {
         System.Threading.Tasks.Task<object> ResolveAsync(System.Type serviceType, System.Threading.CancellationToken cancellationToken = default);
+    }
+    public interface IAwaitenContainerMetadata : Awaiten.IAwaitenAsyncResolver, Awaiten.IAwaitenResolver, Awaiten.IAwaitenRoot, Awaiten.IAwaitenScope, System.IDisposable
+    {
+        System.Collections.Generic.IReadOnlyList<Awaiten.AwaitenRegistration> Registrations { get; }
     }
     public interface IAwaitenResolver
     {

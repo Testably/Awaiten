@@ -40,6 +40,12 @@ public static class Helper
 		}
 	}
 
+	public static IEnumerable<string> GetAssemblyNames()
+	{
+		yield return "Awaiten";
+		yield return "Awaiten.Extensions.DependencyInjection";
+	}
+
 	public static IEnumerable<string> GetTargetFrameworks()
 	{
 		string csproj = CombinedPaths("Source", "Directory.Build.props");

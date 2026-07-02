@@ -37,8 +37,11 @@ public sealed class AwaitenServiceCollectionExtensionsTests
 		await That(type is { IsAbstract: true, IsSealed: true, }).IsTrue();
 	}
 
-	private sealed class DummyContainer : IAwaitenScope
+	private sealed class DummyContainer : IAwaitenContainerMetadata
 	{
+		public System.Collections.Generic.IReadOnlyList<AwaitenRegistration> Registrations
+			=> System.Array.Empty<AwaitenRegistration>();
+
 		public object Resolve(Type serviceType) => throw new NotSupportedException();
 
 		public bool TryResolve(Type serviceType, [NotNullWhen(true)] out object? instance)

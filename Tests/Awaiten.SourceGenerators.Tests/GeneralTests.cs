@@ -82,7 +82,7 @@ public class GeneralTests
 
 		int keyCount = source.Split(new[]
 		{
-			"typeof(global::System.Lazy<global::MyCode.Leaf>)",
+			"new __Bucket(typeof(global::System.Lazy<global::MyCode.Leaf>)",
 		}, StringSplitOptions.None).Length - 1;
 		await That(keyCount).IsEqualTo(1)
 			.Because("the explicit registration and the synthetic relationship must not produce a duplicate dispatch key");

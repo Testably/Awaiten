@@ -1,0 +1,17 @@
+[assembly: System.Reflection.AssemblyMetadata("RepositoryUrl", "https://github.com/Testably/Awaiten.git")]
+[assembly: System.Runtime.Versioning.TargetFramework(".NETCoreApp,Version=v10.0", FrameworkDisplayName=".NET 10.0")]
+namespace Awaiten.Extensions.DependencyInjection
+{
+    public static class AwaitenServiceCollectionExtensions
+    {
+        public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddGeneratedContainer<TRoot>(this Microsoft.Extensions.DependencyInjection.IServiceCollection services)
+            where TRoot :  class, Awaiten.IAwaitenContainerMetadata, new () { }
+    }
+    public sealed class AwaitenServiceProvider : Microsoft.Extensions.DependencyInjection.IServiceScopeFactory, System.IDisposable, System.IServiceProvider
+    {
+        public AwaitenServiceProvider(Awaiten.IAwaitenScope container, bool ownsContainer = true) { }
+        public Microsoft.Extensions.DependencyInjection.IServiceScope CreateScope() { }
+        public void Dispose() { }
+        public object? GetService(System.Type serviceType) { }
+    }
+}

@@ -545,9 +545,10 @@ internal static class Emitter
 		InstanceModel[] instances = context.Instances;
 		Names names = context.Names;
 
-		// The Root is the composition root (IAwaitenRoot): it adds InitializeAsync to warm the singletons. A
+		// The Root is the composition root (IAwaitenContainerMetadata, which is an IAwaitenRoot): it adds
+		// InitializeAsync to warm the singletons and advertises its registrations for the MS.DI bridge. A
 		// child scope is only an IAwaitenScope - it is warmed when created (CreateScopeAsync), never explicitly.
-		Indent(builder, depth).AppendLine("public sealed class Root : Scope, global::Awaiten.IAwaitenRoot");
+		Indent(builder, depth).AppendLine("public sealed class Root : Scope, global::Awaiten.IAwaitenContainerMetadata");
 		Indent(builder, depth).AppendLine("{");
 		int body = depth + 1;
 
@@ -556,6 +557,8 @@ internal static class Emitter
 		Indent(builder, body).AppendLine("public Root() : base()");
 		Indent(builder, body).AppendLine("{");
 		Indent(builder, body).AppendLine("}");
+		builder.AppendLine();
+		EmitRegistrations(builder, body, instances);
 		builder.AppendLine();
 		// The Root override of InitializeAsync warms the async singletons in dependency order (the base
 		// Scope warms only its async scoped services).
@@ -592,6 +595,49 @@ internal static class Emitter
 
 		Indent(builder, depth).AppendLine("}");
 	}
+
+	/// <summary>
+	///     Emits the <c>IAwaitenContainerMetadata.Registrations</c> list on the Root: the compile-time,
+	///     reflection-free surface of public (unkeyed) registrations with their lifetimes. This is what the
+	///     <c>Awaiten.Extensions.DependencyInjection</c> companion projects into a service collection. A
+	///     parameterized service is omitted (it cannot be resolved by service type without its runtime
+	///     arguments, only through its factory), as are keyed registrations (reached solely by <c>[FromKey]</c>
+	///     injection). Open generic registrations contribute only their expanded closed instances, so every
+	///     advertised service type is a concrete, resolvable type.
+	/// </summary>
+	private static void EmitRegistrations(StringBuilder builder, int depth, InstanceModel[] instances)
+	{
+		Indent(builder, depth).Append("public global::System.Collections.Generic.IReadOnlyList<global::Awaiten.AwaitenRegistration> Registrations { get; }")
+			.AppendLine(" = new global::Awaiten.AwaitenRegistration[]");
+		Indent(builder, depth).AppendLine("{");
+		foreach (InstanceModel instance in instances)
+		{
+			if (instance.IsParameterized)
+			{
+				continue;
+			}
+
+			foreach (ServiceKey service in instance.Services.AsArray())
+			{
+				if (service.Key is not null)
+				{
+					continue;
+				}
+
+				Indent(builder, depth + 1).Append("new global::Awaiten.AwaitenRegistration(typeof(").Append(service.Service)
+					.Append("), ").Append(AwaitenLifetimeOf(instance.Lifetime)).AppendLine("),");
+			}
+		}
+
+		Indent(builder, depth).AppendLine("};");
+	}
+
+	private static string AwaitenLifetimeOf(Lifetime lifetime) => lifetime switch
+	{
+		Lifetime.Singleton => "global::Awaiten.AwaitenLifetime.Singleton",
+		Lifetime.Transient => "global::Awaiten.AwaitenLifetime.Transient",
+		_ => "global::Awaiten.AwaitenLifetime.Scoped",
+	};
 
 	/// <summary>
 	///     Emits the volatile cache fields for instances of the given lifetime (reference-type fields are
@@ -2308,10 +2354,10 @@ internal static class Emitter
 		// The container has registration errors, so emit a throwing Root that still satisfies the shape
 		// consumers depend on (new MyContainer.Root(), Resolve, CreateScope, InitializeAsync, Dispose). This
 		// keeps the build focused on the actionable AWT diagnostics rather than cascading "type not found"
-		// errors. It implements IAwaitenRoot (which includes IAwaitenScope), matching the real Root - and, when
-		// IAsyncDisposable is available, that too (the real Root implements it concretely), so `await using` over
-		// the stub compiles the same way.
-		Indent(builder, depth).Append("public sealed class Root : global::Awaiten.IAwaitenRoot");
+		// errors. It implements IAwaitenContainerMetadata (which includes IAwaitenRoot and IAwaitenScope),
+		// matching the real Root - and, when IAsyncDisposable is available, that too (the real Root implements it
+		// concretely), so `await using` over the stub compiles the same way.
+		Indent(builder, depth).Append("public sealed class Root : global::Awaiten.IAwaitenContainerMetadata");
 		if (asyncDisposal)
 		{
 			builder.Append(", global::System.IAsyncDisposable");
@@ -2351,6 +2397,10 @@ internal static class Emitter
 			builder.AppendLine();
 			Indent(builder, depth + 1).AppendLine("public global::System.Threading.Tasks.ValueTask DisposeAsync() => default;");
 		}
+
+		builder.AppendLine();
+		Indent(builder, depth + 1).Append("public global::System.Collections.Generic.IReadOnlyList<global::Awaiten.AwaitenRegistration> Registrations { get; }")
+			.AppendLine(" = global::System.Array.Empty<global::Awaiten.AwaitenRegistration>();");
 
 		Indent(builder, depth).AppendLine("}");
 	}
