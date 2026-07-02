@@ -1103,13 +1103,10 @@ internal static class Emitter
 		// array, so they collapse from six method bodies to one. Bare services bind a direct delegate and need none.
 		Dictionary<string, int> forwarderOf = new(StringComparer.Ordinal);
 		List<string> forwarders = new();
-		foreach (DispatchEntry entry in entries)
+		foreach (DispatchEntry entry in entries.Where(entry => entry.DirectResolver is null && !forwarderOf.ContainsKey(entry.Value)))
 		{
-			if (entry.DirectResolver is null && !forwarderOf.ContainsKey(entry.Value))
-			{
-				forwarderOf[entry.Value] = forwarders.Count;
-				forwarders.Add(entry.Value);
-			}
+			forwarderOf[entry.Value] = forwarders.Count;
+			forwarders.Add(entry.Value);
 		}
 
 		// One table slot: the key type, its resolver delegate, and whether the slot is withheld from by-type
@@ -1455,13 +1452,10 @@ internal static class Emitter
 			// Root throws guidance toward a child scope while a child scope still resolves it (its disposal bounds
 			// the instance). Injection into a singleton stays allowed - that is bounded to one instance.
 			bool rootWithheld = IsWithheld(instances[i], strict);
-			foreach (ServiceKey serviceKey in instances[i].Services.AsArray())
+			// Keyed registrations are reached only by [FromKey] injection, never by-type resolution.
+			foreach (ServiceKey serviceKey in instances[i].Services.AsArray().Where(serviceKey => serviceKey.Key is null))
 			{
-				// Keyed registrations are reached only by [FromKey] injection, never by-type resolution.
-				if (serviceKey.Key is null)
-				{
-					arms.Add((serviceKey.Service, asyncResolver, rootWithheld));
-				}
+				arms.Add((serviceKey.Service, asyncResolver, rootWithheld));
 			}
 		}
 
