@@ -14,4 +14,11 @@ namespace Awaiten.Extensions.DependencyInjection
         public void Dispose() { }
         public object? GetService(System.Type serviceType) { }
     }
+    public sealed class AwaitenServiceProviderFactory<TRoot> : Microsoft.Extensions.DependencyInjection.IServiceProviderFactory<TRoot>
+        where TRoot :  class, Awaiten.IAwaitenScope, new ()
+    {
+        public AwaitenServiceProviderFactory() { }
+        public TRoot CreateBuilder(Microsoft.Extensions.DependencyInjection.IServiceCollection services) { }
+        public System.IServiceProvider CreateServiceProvider(TRoot containerBuilder) { }
+    }
 }

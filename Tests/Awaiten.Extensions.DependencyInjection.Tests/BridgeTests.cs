@@ -1,3 +1,4 @@
+using System.Threading;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Awaiten.Extensions.DependencyInjection.Tests;
@@ -11,6 +12,17 @@ public sealed partial class BridgeTests
 	public sealed class ScopedService;
 
 	public sealed class TransientService;
+
+	public sealed class AsyncService : IAsyncInitializable
+	{
+		public bool Initialized { get; private set; }
+
+		public Task InitializeAsync(CancellationToken cancellationToken)
+		{
+			Initialized = true;
+			return Task.CompletedTask;
+		}
+	}
 
 	public sealed class DisposableSingleton : IDisposable
 	{
@@ -29,6 +41,7 @@ public sealed partial class BridgeTests
 	[Container]
 	[Singleton<SingletonService, IService>]
 	[Singleton<DisposableSingleton>]
+	[Singleton<AsyncService>]
 	[Scoped<ScopedService>]
 	[Scoped<DisposableScoped>]
 	[Transient<TransientService>]
@@ -153,5 +166,73 @@ public sealed partial class BridgeTests
 
 		await That(provider.GetService(typeof(IServiceProvider))).IsSameAs(provider);
 		await That(provider.GetService(typeof(IServiceScopeFactory))).IsSameAs(provider);
+	}
+
+	[Fact]
+	public async Task AwaitenServiceProvider_ScopeExposesScopeFactory()
+	{
+		using BridgeContainer.Root container = new();
+		using AwaitenServiceProvider provider = new(container);
+		using IServiceScope scope = provider.CreateScope();
+
+		// The scope's provider must itself be able to open nested scopes.
+		IServiceScopeFactory factory =
+			(IServiceScopeFactory)scope.ServiceProvider.GetService(typeof(IServiceScopeFactory))!;
+		await That(factory).IsNotNull();
+
+		using IServiceScope nested = factory.CreateScope();
+		await That(nested.ServiceProvider.GetService(typeof(ScopedService))).IsNotNull();
+	}
+
+	[Fact]
+	public async Task AddGeneratedContainer_ResolvesTransientFromRootProvider()
+	{
+		ServiceCollection services = new();
+		services.AddGeneratedContainer<BridgeContainer.Root>();
+		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
+
+		// Resolved directly from the root provider (not a scope), and fresh each time.
+		TransientService first = provider.GetRequiredService<TransientService>();
+		TransientService second = provider.GetRequiredService<TransientService>();
+
+		await That(ReferenceEquals(first, second)).IsFalse();
+	}
+
+	[Fact]
+	public async Task AddGeneratedContainer_ProjectsAsyncServiceAsTask()
+	{
+		ServiceCollection services = new();
+		services.AddGeneratedContainer<BridgeContainer.Root>();
+		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
+
+		// An async-initialized service has no synchronous path, so the bare type is not registered...
+		await That(provider.GetService<AsyncService>()).IsNull();
+
+		// ...only Task<T>, which resolves through ResolveAsync and awaits initialization.
+		AsyncService resolved = await provider.GetRequiredService<Task<AsyncService>>();
+		await That(resolved.Initialized).IsTrue();
+	}
+
+	[Fact]
+	public async Task AwaitenServiceProviderFactory_BuildsProviderFromEmptyCollection()
+	{
+		AwaitenServiceProviderFactory<BridgeContainer.Root> factory = new();
+
+		BridgeContainer.Root root = factory.CreateBuilder(new ServiceCollection());
+		using AwaitenServiceProvider provider = (AwaitenServiceProvider)factory.CreateServiceProvider(root);
+
+		await That(provider.GetService(typeof(IService))).Is<SingletonService>();
+	}
+
+	[Fact]
+	public async Task AwaitenServiceProviderFactory_ThrowsWhenCollectionHasRegistrations()
+	{
+		AwaitenServiceProviderFactory<BridgeContainer.Root> factory = new();
+		ServiceCollection services = new();
+		services.AddSingleton("not-an-awaiten-service");
+
+		void Act() => factory.CreateBuilder(services);
+
+		await That(Act).Throws<NotSupportedException>();
 	}
 }

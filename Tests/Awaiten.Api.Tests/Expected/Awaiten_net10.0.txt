@@ -15,8 +15,9 @@ namespace Awaiten
     }
     public readonly struct AwaitenRegistration : System.IEquatable<Awaiten.AwaitenRegistration>
     {
-        public AwaitenRegistration(System.Type serviceType, Awaiten.AwaitenLifetime lifetime) { }
+        public AwaitenRegistration(System.Type serviceType, Awaiten.AwaitenLifetime lifetime, bool requiresAsync = false) { }
         public Awaiten.AwaitenLifetime Lifetime { get; }
+        public bool RequiresAsync { get; }
         public System.Type ServiceType { get; }
         public bool Equals(Awaiten.AwaitenRegistration other) { }
         public override bool Equals(object? obj) { }

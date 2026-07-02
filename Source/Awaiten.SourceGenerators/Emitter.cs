@@ -558,7 +558,7 @@ internal static class Emitter
 		Indent(builder, body).AppendLine("{");
 		Indent(builder, body).AppendLine("}");
 		builder.AppendLine();
-		EmitRegistrations(builder, body, instances);
+		EmitRegistrations(builder, body, instances, syncResolveAfterInit);
 		builder.AppendLine();
 		// The Root override of InitializeAsync warms the async singletons in dependency order (the base
 		// Scope warms only its async scoped services).
@@ -603,9 +603,12 @@ internal static class Emitter
 	///     parameterized service is omitted (it cannot be resolved by service type without its runtime
 	///     arguments, only through its factory), as are keyed registrations (reached solely by <c>[FromKey]</c>
 	///     injection). Open generic registrations contribute only their expanded closed instances, so every
-	///     advertised service type is a concrete, resolvable type.
+	///     advertised service type is a concrete, resolvable type. An async-tainted service (one with no
+	///     synchronous resolution path) is flagged <c>requiresAsync</c> so the bridge projects it as a
+	///     <c>Task&lt;T&gt;</c>; when <paramref name="syncResolveAfterInit" /> is set the container makes such a
+	///     service synchronously resolvable after warm-up, so it is advertised as an ordinary synchronous service.
 	/// </summary>
-	private static void EmitRegistrations(StringBuilder builder, int depth, InstanceModel[] instances)
+	private static void EmitRegistrations(StringBuilder builder, int depth, InstanceModel[] instances, bool syncResolveAfterInit)
 	{
 		Indent(builder, depth).Append("public global::System.Collections.Generic.IReadOnlyList<global::Awaiten.AwaitenRegistration> Registrations { get; }")
 			.AppendLine(" = new global::Awaiten.AwaitenRegistration[]");
@@ -617,6 +620,7 @@ internal static class Emitter
 				continue;
 			}
 
+			bool requiresAsync = instance.IsAsyncTainted && !syncResolveAfterInit;
 			foreach (ServiceKey service in instance.Services.AsArray())
 			{
 				if (service.Key is not null)
@@ -625,7 +629,13 @@ internal static class Emitter
 				}
 
 				Indent(builder, depth + 1).Append("new global::Awaiten.AwaitenRegistration(typeof(").Append(service.Service)
-					.Append("), ").Append(AwaitenLifetimeOf(instance.Lifetime)).AppendLine("),");
+					.Append("), ").Append(AwaitenLifetimeOf(instance.Lifetime));
+				if (requiresAsync)
+				{
+					builder.Append(", requiresAsync: true");
+				}
+
+				builder.AppendLine("),");
 			}
 		}
 

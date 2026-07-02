@@ -5,42 +5,18 @@ namespace Awaiten.Extensions.DependencyInjection;
 
 /// <summary>
 ///     An <see cref="IServiceScope" /> backed by an <see cref="IAwaitenScope" />. Its
-///     <see cref="ServiceProvider" /> resolves from the scope; disposing it disposes the underlying
-///     Awaiten scope (and the scoped instances and disposable transients it owns).
+///     <see cref="ServiceProvider" /> is an <see cref="AwaitenServiceProvider" /> over that scope, so it
+///     resolves from - and can open nested scopes off (<see cref="IServiceScopeFactory" />) - the Awaiten
+///     scope; disposing it disposes the underlying Awaiten scope (and the scoped instances and disposable
+///     transients it owns).
 /// </summary>
 internal sealed class AwaitenServiceScope : IServiceScope
 {
-	private readonly IAwaitenScope _scope;
+	private readonly AwaitenServiceProvider _provider;
 
-	public AwaitenServiceScope(IAwaitenScope scope)
-	{
-		_scope = scope;
-		ServiceProvider = new AwaitenScopeServiceProvider(scope);
-	}
+	public AwaitenServiceScope(IAwaitenScope scope) => _provider = new AwaitenServiceProvider(scope);
 
-	public IServiceProvider ServiceProvider { get; }
+	public IServiceProvider ServiceProvider => _provider;
 
-	public void Dispose() => _scope.Dispose();
-
-	private sealed class AwaitenScopeServiceProvider : IServiceProvider
-	{
-		private readonly IAwaitenScope _scope;
-
-		public AwaitenScopeServiceProvider(IAwaitenScope scope) => _scope = scope;
-
-		public object? GetService(Type serviceType)
-		{
-			if (serviceType is null)
-			{
-				throw new ArgumentNullException(nameof(serviceType));
-			}
-
-			if (serviceType == typeof(IServiceProvider))
-			{
-				return this;
-			}
-
-			return _scope.TryResolve(serviceType, out object? instance) ? instance : null;
-		}
-	}
+	public void Dispose() => _provider.Dispose();
 }

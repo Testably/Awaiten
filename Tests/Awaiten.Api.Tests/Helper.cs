@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -20,7 +21,23 @@ public static class Helper
 #endif
 		string assemblyFile =
 			CombinedPaths("Source", assemblyName, "bin", configuration, framework, $"{assemblyName}.dll");
-		Assembly assembly = Assembly.LoadFile(assemblyFile);
+
+		// PublicApiGenerator reads the assembly with Mono.Cecil, which resolves the assembly's dependencies
+		// from its own directory. Rather than have the product project copy its package dependencies next to
+		// its output purely for this tool, stage the assembly-under-test next to the dependency assemblies this
+		// test project already carries in its output, and generate from there.
+		string probeDirectory =
+			Path.Combine(Path.GetTempPath(), "Awaiten.Api.Tests", $"{assemblyName}_{framework}");
+		Directory.CreateDirectory(probeDirectory);
+		foreach (string dependency in Directory.EnumerateFiles(AppContext.BaseDirectory, "*.dll"))
+		{
+			File.Copy(dependency, Path.Combine(probeDirectory, Path.GetFileName(dependency)), overwrite: true);
+		}
+
+		string probeAssembly = Path.Combine(probeDirectory, $"{assemblyName}.dll");
+		File.Copy(assemblyFile, probeAssembly, overwrite: true);
+
+		Assembly assembly = Assembly.LoadFile(probeAssembly);
 		string publicApi = assembly.GeneratePublicApi();
 		return publicApi.Replace("\r\n", "\n");
 	}
