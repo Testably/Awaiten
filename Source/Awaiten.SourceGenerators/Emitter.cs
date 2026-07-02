@@ -1103,6 +1103,21 @@ internal static class Emitter
 	{
 		int bucketCount = BucketCount(entries.Count);
 
+		// Assign a forwarder to each UNIQUE compound value expression. Identical values share one __R method rather
+		// than emitting a body each - notably the six collection shapes of one element type (IEnumerable<T>,
+		// IReadOnlyList<T>, IReadOnlyCollection<T>, IList<T>, ICollection<T>, T[]) all materialize the very same
+		// array, so they collapse from six method bodies to one. Bare services bind a direct delegate and need none.
+		Dictionary<string, int> forwarderOf = new(StringComparer.Ordinal);
+		List<string> forwarders = new();
+		foreach (DispatchEntry entry in entries)
+		{
+			if (entry.DirectResolver is null && !forwarderOf.ContainsKey(entry.Value))
+			{
+				forwarderOf[entry.Value] = forwarders.Count;
+				forwarders.Add(entry.Value);
+			}
+		}
+
 		// One table slot: the key type, its resolver delegate, and whether the slot is withheld from by-type
 		// resolution on the Root. A default slot (Key == null) is an empty probe cell and never matches a request.
 		Indent(builder, depth).AppendLine("private readonly struct __Bucket");
@@ -1136,7 +1151,7 @@ internal static class Emitter
 		{
 			string resolve = entries[i].DirectResolver is { } direct
 				? $"static __s => __s.{direct}()"
-				: $"static __s => __s.__R{i}()";
+				: $"static __s => __s.__R{forwarderOf[entries[i].Value]}()";
 			Indent(builder, depth + 2).Append("new __Bucket(typeof(").Append(entries[i].Type).Append("), ")
 				.Append(resolve).Append(", ").Append(entries[i].RootWithheld ? "true" : "false").AppendLine("),");
 		}
@@ -1148,15 +1163,12 @@ internal static class Emitter
 
 		EmitBucketBuilder(builder, depth);
 
-		// A forwarder per compound entry, preserving the value expression verbatim. Bare entries bound a direct
-		// delegate above and need none. Each forwarder is tiny and individually optimizable.
-		for (int i = 0; i < entries.Count; i++)
+		// One forwarder per unique compound value, preserving the value expression verbatim. Each is tiny and
+		// individually optimizable; deduplication (above) keeps the six collection shapes of an element type to one.
+		for (int k = 0; k < forwarders.Count; k++)
 		{
-			if (entries[i].DirectResolver is null)
-			{
-				builder.AppendLine();
-				Indent(builder, depth).Append("private object __R").Append(i).Append("() => ").Append(entries[i].Value).AppendLine(";");
-			}
+			builder.AppendLine();
+			Indent(builder, depth).Append("private object __R").Append(k).Append("() => ").Append(forwarders[k]).AppendLine(";");
 		}
 	}
 
