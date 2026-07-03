@@ -10,6 +10,9 @@
 
 	<ItemGroup>
 		<PackageReference Include="PublicApiGenerator"/>
+		<!-- Carried so the dependency assemblies of Awaiten.Extensions.DependencyInjection land in this test's
+		     output, where CreatePublicApi stages them for Mono.Cecil to resolve. -->
+		<PackageReference Include="Microsoft.Extensions.DependencyInjection"/>
 	</ItemGroup>
 
 	<ItemGroup>

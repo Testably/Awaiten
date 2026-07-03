@@ -8,12 +8,7 @@ public sealed class ApiAcceptance
 	[Fact(Explicit = true)]
 	public async Task AcceptApiChanges()
 	{
-		string[] assemblyNames =
-		[
-			"Awaiten",
-		];
-
-		foreach (string assemblyName in assemblyNames)
+		foreach (string assemblyName in Helper.GetAssemblyNames())
 		{
 			foreach (string framework in Helper.GetTargetFrameworks())
 			{
@@ -23,6 +18,6 @@ public sealed class ApiAcceptance
 			}
 		}
 
-		await That(assemblyNames).IsNotEmpty();
+		await That(Helper.GetAssemblyNames()).IsNotEmpty();
 	}
 }

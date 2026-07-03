@@ -9,22 +9,23 @@ public sealed class ApiApprovalTests
 {
 	[Theory]
 	[MemberData(nameof(TargetFrameworksTheoryData))]
-	public async Task VerifyPublicApiForAwaiten(string framework)
+	public async Task VerifyPublicApi(string assemblyName, string framework)
 	{
-		const string assemblyName = "Awaiten";
-
 		string publicApi = Helper.CreatePublicApi(framework, assemblyName);
 		string expectedApi = Helper.GetExpectedApi(framework, assemblyName);
 
 		await That(publicApi).IsEqualTo(expectedApi);
 	}
 
-	public static TheoryData<string> TargetFrameworksTheoryData()
+	public static TheoryData<string, string> TargetFrameworksTheoryData()
 	{
-		TheoryData<string> theoryData = new();
-		foreach (string targetFramework in Helper.GetTargetFrameworks())
+		TheoryData<string, string> theoryData = new();
+		foreach (string assemblyName in Helper.GetAssemblyNames())
 		{
-			theoryData.Add(targetFramework);
+			foreach (string targetFramework in Helper.GetTargetFrameworks())
+			{
+				theoryData.Add(assemblyName, targetFramework);
+			}
 		}
 
 		return theoryData;
