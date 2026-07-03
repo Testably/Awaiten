@@ -2,6 +2,11 @@
 [assembly: System.Runtime.Versioning.TargetFramework(".NETCoreApp,Version=v10.0", FrameworkDisplayName=".NET 10.0")]
 namespace Awaiten.Extensions.DependencyInjection
 {
+    public static class AwaitenInitializationServiceCollectionExtensions
+    {
+        public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddAwaitenInitialization<TContainer>(this Microsoft.Extensions.DependencyInjection.IServiceCollection services)
+            where TContainer :  class, Awaiten.IAwaitenContainerMetadata { }
+    }
     public static class AwaitenServiceCollectionExtensions
     {
         public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddGeneratedContainer<TRoot>(this Microsoft.Extensions.DependencyInjection.IServiceCollection services)
