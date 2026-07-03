@@ -506,7 +506,7 @@ public partial class PropertyInjectionTests
 
 	public sealed class FlakyDep
 	{
-		public static int Attempts;
+		private static int Attempts;
 
 		public FlakyDep()
 		{

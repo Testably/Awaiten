@@ -112,7 +112,7 @@ internal static partial class Sources
 
 		string scopedSummary = $"Resolves the scoped {XmlTypeRef(type)} (one instance per scope).";
 		string scopedWiredFlag = HasDeferredMembers(instance) ? names.WiredField(index) : string.Empty;
-		EmitCachingResolver(builder, depth, new CachingResolver("internal", type, resolver, names.Field(index), construction, DisposalOf(instance), scopedSummary, scopedWiredFlag), asyncDisposal, DeferredEmitter(builder, instance, names.Field(index), context, asynchronous: false));
+		EmitCachingResolver(builder, depth, new CachingResolver("internal", type, resolver, (names.Field(index), scopedWiredFlag), construction, DisposalOf(instance), scopedSummary), asyncDisposal, DeferredEmitter(builder, instance, names.Field(index), context, asynchronous: false));
 	}
 
 	/// <summary>
@@ -194,7 +194,7 @@ internal static partial class Sources
 		string construction = EmitConstruction(instance, context.Instances, names, context.ServiceToIndex);
 		string singletonSummary = $"Resolves the singleton {XmlTypeRef(type)} (one instance per container).";
 		string singletonWiredFlag = HasDeferredMembers(instance) ? names.WiredField(index) : string.Empty;
-		EmitCachingResolver(builder, depth, new CachingResolver("protected override", type, resolver, names.Field(index), construction, DisposalOf(instance), singletonSummary, singletonWiredFlag), context.AsyncDisposal, DeferredEmitter(builder, instance, names.Field(index), context, asynchronous: false));
+		EmitCachingResolver(builder, depth, new CachingResolver("protected override", type, resolver, (names.Field(index), singletonWiredFlag), construction, DisposalOf(instance), singletonSummary), context.AsyncDisposal, DeferredEmitter(builder, instance, names.Field(index), context, asynchronous: false));
 	}
 
 	/// <summary>
@@ -830,7 +830,7 @@ internal static partial class Sources
 	///     the volatile "wiring complete" flag guarding the fast path of an instance with deferred members (empty
 	///     when the instance has none, so the plain fast path on <see cref="Field" /> alone is emitted).
 	/// </summary>
-	private readonly struct CachingResolver(string modifiers, string type, string method, string field, string construction, DisposalTracking disposal, string summary, string wiredFlag = "")
+	private readonly struct CachingResolver(string modifiers, string type, string method, (string Field, string WiredFlag) cache, string construction, DisposalTracking disposal, string summary)
 	{
 		public string Modifiers { get; } = modifiers;
 
@@ -838,7 +838,7 @@ internal static partial class Sources
 
 		public string Method { get; } = method;
 
-		public string Field { get; } = field;
+		public string Field { get; } = cache.Field;
 
 		public string Construction { get; } = construction;
 
@@ -846,7 +846,7 @@ internal static partial class Sources
 
 		public string Summary { get; } = summary;
 
-		public string WiredFlag { get; } = wiredFlag;
+		public string WiredFlag { get; } = cache.WiredFlag;
 	}
 
 	/// <summary>

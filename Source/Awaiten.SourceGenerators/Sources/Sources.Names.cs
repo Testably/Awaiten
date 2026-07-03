@@ -137,16 +137,16 @@ internal static partial class Sources
 		// any of the four is already taken keeps every derived name unique in both directions.
 		private static bool TryReserve(HashSet<string> used, string name)
 		{
-			string async = name + "Async";
+			string asyncName = name + "Async";
 			string asyncTask = name + "AsyncTask";
 			string wired = name + "Wired";
-			if (used.Contains(name) || used.Contains(async) || used.Contains(asyncTask) || used.Contains(wired))
+			if (used.Contains(name) || used.Contains(asyncName) || used.Contains(asyncTask) || used.Contains(wired))
 			{
 				return false;
 			}
 
 			used.Add(name);
-			used.Add(async);
+			used.Add(asyncName);
 			used.Add(asyncTask);
 			used.Add(wired);
 			return true;

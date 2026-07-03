@@ -252,34 +252,7 @@ internal static partial class Sources
 		builder.AppendLine();
 		EmitGenericResolverImpls(builder, body, instances, names, strict, syncResolveAfterInit);
 
-		for (int i = 0; i < instances.Length; i++)
-		{
-			// The synchronous resolver is suppressed for an async-tainted service in the strict default (where it
-			// is reachable only through ResolveAsync); the async resolver is added for every async-tainted
-			// service, including a parameterized one (reached through its Func<TArg…, Task<T>>).
-			if (EmitsSync(instances[i], syncResolveAfterInit))
-			{
-				builder.AppendLine();
-
-				// In pragmatic mode an async-tainted service is also resolvable synchronously; its synchronous
-				// resolver delegates to the memoizing async one (a parameterized service forwarding its runtime
-				// arguments) rather than constructing a second, uninitialized instance, so there is a single init path.
-				if (instances[i].IsAsyncTainted)
-				{
-					EmitDelegatingSyncResolver(builder, body, i, instances[i], names);
-				}
-				else
-				{
-					EmitScopeResolver(builder, body, i, context);
-				}
-			}
-
-			if (instances[i].IsAsyncTainted)
-			{
-				builder.AppendLine();
-				EmitAsyncScopeResolver(builder, body, i, context);
-			}
-		}
+		EmitInstanceResolvers(builder, body, context, instances, names, syncResolveAfterInit);
 
 		// The async by-type resolver for each async collection (one whose IAsyncEnumerable<T> shape ResolveAsync
 		// serves through the async dispatch arm added in EmitAsyncResolutionApi).
@@ -305,6 +278,38 @@ internal static partial class Sources
 		}
 
 		Indent(builder, depth).AppendLine("}");
+	}
+
+	/// <summary>
+	///     Emits each instance's per-service resolvers into the Scope body: a synchronous resolver - suppressed for
+	///     an async-tainted service in the strict default (reachable only through ResolveAsync), and in pragmatic
+	///     mode delegating to the memoizing async resolver rather than constructing a second, uninitialized instance
+	///     (a parameterized service forwarding its runtime arguments), so there is a single init path - and, for
+	///     every async-tainted service, its async resolver.
+	/// </summary>
+	private static void EmitInstanceResolvers(StringBuilder builder, int depth, EmitContext context, InstanceModel[] instances, Names names, bool syncResolveAfterInit)
+	{
+		for (int i = 0; i < instances.Length; i++)
+		{
+			if (EmitsSync(instances[i], syncResolveAfterInit))
+			{
+				builder.AppendLine();
+				if (instances[i].IsAsyncTainted)
+				{
+					EmitDelegatingSyncResolver(builder, depth, i, instances[i], names);
+				}
+				else
+				{
+					EmitScopeResolver(builder, depth, i, context);
+				}
+			}
+
+			if (instances[i].IsAsyncTainted)
+			{
+				builder.AppendLine();
+				EmitAsyncScopeResolver(builder, depth, i, context);
+			}
+		}
 	}
 
 	/// <summary>

@@ -453,12 +453,12 @@ partial class AwaitenGenerator
 
 			// An injected [Inject] collection member (deferred or not) is materialized through the same
 			// synchronous expression as a constructor parameter, so it is checked the same way.
-			foreach (MemberModel member in instances[i].InjectedMembers.AsArray())
+			foreach (ParameterModel dependency in instances[i].InjectedMembers.AsArray().Select(member => member.Dependency))
 			{
-				if (member.Dependency.Kind == DependencyKind.Enumerable
-				    && byService.TryGetValue(KeyOf(member.Dependency), out ServiceMembers memberCollection))
+				if (dependency.Kind == DependencyKind.Enumerable
+				    && byService.TryGetValue(KeyOf(dependency), out ServiceMembers memberCollection))
 				{
-					ReportAsyncTaintedMembers(i, member.Dependency, memberCollection, instances, implToIndex, instanceLocations, diagnostics);
+					ReportAsyncTaintedMembers(i, dependency, memberCollection, instances, implToIndex, instanceLocations, diagnostics);
 				}
 			}
 		}
@@ -852,6 +852,75 @@ partial class AwaitenGenerator
 		List<DiagnosticInfo> diagnostics)
 	{
 		HashSet<int> members = new(component);
+		ComponentEdges edges = FindComponentEdges(component, members, instances, constructionEdges, combinedEdges);
+
+		// No deferred edge: a pure construction cycle, which AWT102 already reports.
+		if (edges.Deferred is null)
+		{
+			return;
+		}
+
+		// The construction edges alone already close a cycle, which AWT102 reports. The verdicts below assume
+		// every cycle through a construction edge also traverses a deferred edge, so defer to AWT102 here rather
+		// than stacking a second, possibly-spurious deferred verdict onto the same component.
+		if (edges.Construction is not null && HasConstructionCycle(component, members, constructionEdges))
+		{
+			return;
+		}
+
+		if (edges.CachedSourceConstruction is { } duplicating)
+		{
+			Report(Diagnostics.DeferredMixedCycle, duplicating);
+			return;
+		}
+
+		(bool anyCached, int asyncParticipant) = ScanParticipants(component, instances);
+
+		if (!anyCached)
+		{
+			if (edges.Construction is { } mixed)
+			{
+				Report(Diagnostics.DeferredMixedCycle, mixed);
+			}
+			else
+			{
+				Report(Diagnostics.DeferredTransientCycle, edges.Deferred.Value);
+			}
+
+			return;
+		}
+
+		if (asyncParticipant >= 0)
+		{
+			// Demonstrate a cycle through the async participant: its first intra-component edge closes one.
+			foreach (int next in combinedEdges[asyncParticipant].Where(members.Contains))
+			{
+				Report(Diagnostics.DeferredAsyncCycle, (asyncParticipant, next));
+				return;
+			}
+		}
+
+		// Supported: every construction edge starts at a transient and a synchronously-cached participant
+		// terminates the re-entry, so the cycle terminates from every entry point.
+		void Report(DiagnosticDescriptor descriptor, (int Source, int Target) edge)
+		{
+			List<int> cycle = CycleThroughEdge(edge.Source, edge.Target, members, combinedEdges);
+			string rendered = string.Join(" -> ", cycle.Select(index => DisplayInstance(instances[index].ImplementationType)));
+			diagnostics.Add(new DiagnosticInfo(descriptor, containerLocation, new EquatableArray<string>([rendered,])));
+		}
+	}
+
+	// The intra-component edges that drive the classification: the first <see cref="ComponentEdges.Deferred" />
+	// edge (its presence alone marks the component as a deferred cycle), the first <see cref="ComponentEdges.Construction" />
+	// edge, and the first construction edge whose source is cached (a singleton/scoped re-entered before it is
+	// cached - the duplicating case, <see cref="ComponentEdges.CachedSourceConstruction" />). Any may be absent.
+	private static ComponentEdges FindComponentEdges(
+		List<int> component,
+		HashSet<int> members,
+		List<InstanceModel> instances,
+		Dictionary<int, List<int>> constructionEdges,
+		Dictionary<int, List<int>> combinedEdges)
+	{
 		(int Source, int Target)? deferredEdge = null;
 		(int Source, int Target)? constructionEdge = null;
 		(int Source, int Target)? cachedSourceConstructionEdge = null;
@@ -879,26 +948,14 @@ partial class AwaitenGenerator
 			}
 		}
 
-		// No deferred edge: a pure construction cycle, which AWT102 already reports.
-		if (deferredEdge is null)
-		{
-			return;
-		}
+		return new ComponentEdges(deferredEdge, constructionEdge, cachedSourceConstructionEdge);
+	}
 
-		// The construction edges alone already close a cycle, which AWT102 reports. The verdicts below assume
-		// every cycle through a construction edge also traverses a deferred edge, so defer to AWT102 here rather
-		// than stacking a second, possibly-spurious deferred verdict onto the same component.
-		if (constructionEdge is not null && HasConstructionCycle(component, members, constructionEdges))
-		{
-			return;
-		}
-
-		if (cachedSourceConstructionEdge is { } duplicating)
-		{
-			Report(Diagnostics.DeferredMixedCycle, duplicating);
-			return;
-		}
-
+	// Scans the component once for the two participant facts the classification needs: whether any participant is
+	// synchronously cached (a non-transient lifetime, which can terminate the re-entry) and the first async-tainted
+	// participant (-1 when none), whose memoized task publishes too late for a deferred cycle to terminate through.
+	private static (bool AnyCached, int AsyncParticipant) ScanParticipants(List<int> component, List<InstanceModel> instances)
+	{
 		bool anyCached = false;
 		int asyncParticipant = -1;
 		foreach (int node in component)
@@ -910,41 +967,16 @@ partial class AwaitenGenerator
 			}
 		}
 
-		if (!anyCached)
-		{
-			if (constructionEdge is { } mixed)
-			{
-				Report(Diagnostics.DeferredMixedCycle, mixed);
-			}
-			else
-			{
-				Report(Diagnostics.DeferredTransientCycle, deferredEdge.Value);
-			}
+		return (anyCached, asyncParticipant);
+	}
 
-			return;
-		}
+	private readonly struct ComponentEdges((int Source, int Target)? deferred, (int Source, int Target)? construction, (int Source, int Target)? cachedSourceConstruction)
+	{
+		public (int Source, int Target)? Deferred { get; } = deferred;
 
-		if (asyncParticipant >= 0)
-		{
-			// Demonstrate a cycle through the async participant: its first intra-component edge closes one.
-			foreach (int next in combinedEdges[asyncParticipant])
-			{
-				if (members.Contains(next))
-				{
-					Report(Diagnostics.DeferredAsyncCycle, (asyncParticipant, next));
-					return;
-				}
-			}
-		}
+		public (int Source, int Target)? Construction { get; } = construction;
 
-		// Supported: every construction edge starts at a transient and a synchronously-cached participant
-		// terminates the re-entry, so the cycle terminates from every entry point.
-		void Report(DiagnosticDescriptor descriptor, (int Source, int Target) edge)
-		{
-			List<int> cycle = CycleThroughEdge(edge.Source, edge.Target, members, combinedEdges);
-			string rendered = string.Join(" -> ", cycle.Select(index => DisplayInstance(instances[index].ImplementationType)));
-			diagnostics.Add(new DiagnosticInfo(descriptor, containerLocation, new EquatableArray<string>([rendered,])));
-		}
+		public (int Source, int Target)? CachedSourceConstruction { get; } = cachedSourceConstruction;
 	}
 
 	// Whether the construction edges alone close a cycle within the component (a visited/on-stack DFS restricted
@@ -953,9 +985,9 @@ partial class AwaitenGenerator
 	{
 		HashSet<int> visited = new();
 		HashSet<int> onStack = new();
-		foreach (int node in component)
+		foreach (int node in component.Where(node => !visited.Contains(node)))
 		{
-			if (!visited.Contains(node) && Visit(node))
+			if (Visit(node))
 			{
 				return true;
 			}
