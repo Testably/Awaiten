@@ -126,6 +126,8 @@ internal static partial class Sources
 		Dictionary<ServiceKey, int> serviceToIndex = context.ServiceToIndex;
 		bool asyncDisposal = context.AsyncDisposal;
 
+		AppendXmlSummary(builder, depth,
+			"A resolution scope: caches scoped services and disposes the instances it created.");
 		Indent(builder, depth).Append("public class Scope : global::Awaiten.IAwaitenScope, global::Awaiten.IExternalResolverHost");
 		if (asyncDisposal)
 		{
@@ -218,6 +220,8 @@ internal static partial class Sources
 		// singletons), so a child created from a child is no different from one created from the root. A
 		// child scope's lifetime is owned by its caller; the parent does not track it. The concrete return
 		// type spares callers holding a Scope an interface hop; the interface contract is met explicitly.
+		AppendXmlSummary(builder, body,
+			"Opens a child scope; the caller owns and disposes it.");
 		Indent(builder, body).AppendLine("public Scope CreateScope() => new Scope(__root);");
 		Indent(builder, body).AppendLine("global::Awaiten.IAwaitenScope global::Awaiten.IAwaitenScope.CreateScope() => CreateScope();");
 
@@ -302,6 +306,8 @@ internal static partial class Sources
 		// The Root is the composition root (IAwaitenContainerMetadata, which is an IAwaitenRoot): it adds
 		// InitializeAsync to warm the singletons and advertises its registrations for the MS.DI bridge. A
 		// child scope is only an IAwaitenScope - it is warmed when created (CreateScopeAsync), never explicitly.
+		AppendXmlSummary(builder, depth,
+			"The container root: owns the singleton instances and serves as the default scope.");
 		Indent(builder, depth).AppendLine("public sealed class Root : Scope, global::Awaiten.IAwaitenContainerMetadata");
 		Indent(builder, depth).AppendLine("{");
 		int body = depth + 1;
@@ -444,11 +450,9 @@ internal static partial class Sources
 		}
 
 		builder.AppendLine();
-		Indent(builder, depth + 1).Append("public global::System.Collections.Generic.IReadOnlyList<global::Awaiten.AwaitenRegistration> Registrations { get; }")
-			.AppendLine(" = global::System.Array.Empty<global::Awaiten.AwaitenRegistration>();");
+		Indent(builder, depth + 1).AppendLine("global::System.Collections.Generic.IReadOnlyList<global::Awaiten.AwaitenRegistration> global::Awaiten.IAwaitenContainerMetadata.Registrations => global::System.Array.Empty<global::Awaiten.AwaitenRegistration>();");
 		builder.AppendLine();
-		Indent(builder, depth + 1).Append("public global::System.Collections.Generic.IReadOnlyList<global::System.Type> ExternalDependencies { get; }")
-			.AppendLine(" = global::System.Array.Empty<global::System.Type>();");
+		Indent(builder, depth + 1).AppendLine("global::System.Collections.Generic.IReadOnlyList<global::System.Type> global::Awaiten.IAwaitenContainerMetadata.ExternalDependencies => global::System.Array.Empty<global::System.Type>();");
 		builder.AppendLine();
 		Indent(builder, depth + 1).AppendLine("public global::Awaiten.IExternalResolver? ExternalResolver { get; set; }");
 
@@ -464,4 +468,29 @@ internal static partial class Sources
 
 		return builder;
 	}
+
+	/// <summary>
+	///     Appends an XML <c>///</c> summary doc comment over the following generated member, one indented
+	///     line per entry in <paramref name="lines" />.
+	/// </summary>
+	private static void AppendXmlSummary(StringBuilder builder, int depth, params string[] lines)
+	{
+		Indent(builder, depth).AppendLine("/// <summary>");
+		foreach (string line in lines)
+		{
+			Indent(builder, depth).Append("///     ").AppendLine(line);
+		}
+
+		Indent(builder, depth).AppendLine("/// </summary>");
+	}
+
+	/// <summary>
+	///     A doc-comment reference to a type in the generated code: a <c>&lt;see cref="…" /&gt;</c> for a
+	///     plain fully-qualified name, and an escaped <c>&lt;c&gt;…&lt;/c&gt;</c> for a constructed generic
+	///     type (which is not a valid <c>cref</c> target).
+	/// </summary>
+	private static string XmlTypeRef(string type)
+		=> type.IndexOf('<') < 0
+			? $"<see cref=\"{type}\" />"
+			: $"<c>{type.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;")}</c>";
 }

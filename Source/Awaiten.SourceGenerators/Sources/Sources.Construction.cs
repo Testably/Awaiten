@@ -26,6 +26,8 @@ internal static partial class Sources
 	/// </summary>
 	private static void EmitAsyncArrayHelper(StringBuilder builder, int depth)
 	{
+		AppendXmlSummary(builder, depth,
+			"An eagerly materialized <c>IAsyncEnumerable&lt;T&gt;</c> over already-initialized members.");
 		Indent(builder, depth).AppendLine("private sealed class __AsyncArray<T> : global::System.Collections.Generic.IAsyncEnumerable<T>, global::System.Collections.Generic.IAsyncEnumerator<T>");
 		Indent(builder, depth).AppendLine("{");
 		Indent(builder, depth + 1).AppendLine("private readonly T[] __items;");
@@ -460,6 +462,8 @@ internal static partial class Sources
 	/// </summary>
 	private static void EmitOwnedHelper(StringBuilder builder, int depth, bool hasExternal)
 	{
+		AppendXmlSummary(builder, depth,
+			"Resolves <typeparamref name=\"T\" /> in its own child scope, owned by the returned <c>Owned&lt;T&gt;</c>.");
 		Indent(builder, depth).AppendLine("protected global::Awaiten.Owned<T> __Owned<T>(global::System.Func<Scope, T> __resolve)");
 		Indent(builder, depth).AppendLine("{");
 		Indent(builder, depth + 1).AppendLine("Scope __owned = CreateScope();");
@@ -472,6 +476,8 @@ internal static partial class Sources
 		// initialization) of a single T into it, and hand back the Owned<T> over that scope. Disposing the handle
 		// disposes only that scope. Like __Owned<T> it does not roll back the scope if resolution throws (the
 		// synchronous helper does not either); CreateScopeAsync is the warming entry that does.
+		AppendXmlSummary(builder, depth,
+			"The asynchronous counterpart of <c>__Owned&lt;T&gt;</c>.");
 		Indent(builder, depth).AppendLine("protected async global::System.Threading.Tasks.Task<global::Awaiten.Owned<T>> __OwnedAsync<T>(global::System.Func<Scope, global::System.Threading.CancellationToken, global::System.Threading.Tasks.Task<T>> __resolve, global::System.Threading.CancellationToken cancellationToken)");
 		Indent(builder, depth).AppendLine("{");
 		Indent(builder, depth + 1).AppendLine("Scope __owned = CreateScope();");

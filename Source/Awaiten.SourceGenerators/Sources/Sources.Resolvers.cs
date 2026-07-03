@@ -46,6 +46,8 @@ internal static partial class Sources
 	private static void EmitAsyncCollectionResolver(StringBuilder builder, int depth, ServiceMembers collection, string method, Names names, InstanceModel[] instances)
 	{
 		ServiceKey collectionKey = new(collection.Service, collection.Key);
+		AppendXmlSummary(builder, depth,
+			$"Asynchronously materializes the {XmlTypeRef(collection.Service)} collection, awaiting each member.");
 		Indent(builder, depth).Append("internal async global::System.Threading.Tasks.Task<global::System.Collections.Generic.IAsyncEnumerable<")
 			.Append(collection.Service).Append(">> ").Append(method).AppendLine("(global::System.Threading.CancellationToken cancellationToken)");
 		Indent(builder, depth).AppendLine("{");
@@ -74,15 +76,19 @@ internal static partial class Sources
 			string[] argTypes = instance.ArgTypes();
 			string signature = string.Join(", ", argTypes.Select((t, i) => $"{t} a{i}"));
 			string parameterizedConstruction = EmitConstruction(instance, context.Instances, names, context.ServiceToIndex);
+			string parameterizedSummary = $"Resolves {XmlTypeRef(type)} from its <c>[Arg]</c> arguments (a new instance per call).";
 			// Reachable from the Root (a singleton's Func<TArg…, T> binds it there) and from a throwaway
 			// Owned<T> scope built off any owner (__s.ResolveX(args)), so it is internal rather than protected -
 			// protected would not be callable through a base-typed scope reference from the derived Root (CS1540).
-			EmitFreshResolver(builder, depth, new FreshResolver("internal", type, resolver, signature, parameterizedConstruction, DisposalOf(instance)), asyncDisposal);
+			EmitFreshResolver(builder, depth, new FreshResolver("internal", type, resolver, signature, parameterizedConstruction, DisposalOf(instance), parameterizedSummary), asyncDisposal);
 			return;
 		}
 
 		if (instance.Lifetime == Lifetime.Singleton || instance.Production == ProductionKind.Instance)
 		{
+			AppendXmlSummary(builder, depth, instance.Production == ProductionKind.Instance
+				? $"Resolves the pre-built {XmlTypeRef(type)} from the root."
+				: $"Resolves the singleton {XmlTypeRef(type)} from the root.");
 			Indent(builder, depth).Append("protected virtual ").Append(type).Append(' ').Append(resolver).AppendLine("()");
 			Indent(builder, depth).AppendLine("{");
 			EmitDisposedGuard(builder, depth + 1);
@@ -99,11 +105,13 @@ internal static partial class Sources
 		// Internal also covers the case the Root (a subclass) reaches a captured scoped/transient's resolver.
 		if (instance.Lifetime == Lifetime.Transient)
 		{
-			EmitFreshResolver(builder, depth, new FreshResolver("internal", type, resolver, string.Empty, construction, DisposalOf(instance)), asyncDisposal);
+			string transientSummary = $"Resolves the transient {XmlTypeRef(type)} (a new instance per call).";
+			EmitFreshResolver(builder, depth, new FreshResolver("internal", type, resolver, string.Empty, construction, DisposalOf(instance), transientSummary), asyncDisposal);
 			return;
 		}
 
-		EmitCachingResolver(builder, depth, new CachingResolver("internal", type, resolver, names.Field(index), construction, DisposalOf(instance), "// Scoped: one instance per scope."), asyncDisposal);
+		string scopedSummary = $"Resolves the scoped {XmlTypeRef(type)} (one instance per scope).";
+		EmitCachingResolver(builder, depth, new CachingResolver("internal", type, resolver, names.Field(index), construction, DisposalOf(instance), scopedSummary), asyncDisposal);
 	}
 
 	/// <summary>
@@ -116,6 +124,7 @@ internal static partial class Sources
 	{
 		string type = resolver.Type;
 		string construction = resolver.Construction;
+		AppendXmlSummary(builder, depth, resolver.Summary);
 		Indent(builder, depth).Append(resolver.Modifiers).Append(' ').Append(type).Append(' ').Append(resolver.Method)
 			.Append('(').Append(resolver.Signature).AppendLine(")");
 		Indent(builder, depth).AppendLine("{");
@@ -149,6 +158,7 @@ internal static partial class Sources
 
 		if (instance.Production == ProductionKind.Instance)
 		{
+			AppendXmlSummary(builder, depth, $"Returns the pre-built {XmlTypeRef(type)}.");
 			// The container is a static class, so its pre-built instance member is in scope by simple name.
 			Indent(builder, depth).Append("protected override ").Append(type).Append(' ').Append(resolver).AppendLine("()");
 			Indent(builder, depth).AppendLine("{");
@@ -159,7 +169,8 @@ internal static partial class Sources
 		}
 
 		string construction = EmitConstruction(instance, context.Instances, names, context.ServiceToIndex);
-		EmitCachingResolver(builder, depth, new CachingResolver("protected override", type, resolver, names.Field(index), construction, DisposalOf(instance), null), context.AsyncDisposal);
+		string singletonSummary = $"Resolves the singleton {XmlTypeRef(type)} (one instance per container).";
+		EmitCachingResolver(builder, depth, new CachingResolver("protected override", type, resolver, names.Field(index), construction, DisposalOf(instance), singletonSummary), context.AsyncDisposal);
 	}
 
 	/// <summary>
@@ -231,6 +242,8 @@ internal static partial class Sources
 
 		List<(string Service, string AsyncResolver, string? RootWithheldMessage)> arms = BuildAsyncArms(instances, names, serviceToIndex, strict, syncResolveAfterInit);
 
+		AppendXmlSummary(builder, depth,
+			"Asynchronously resolves the service registered for <paramref name=\"serviceType\" />, awaiting any async initialization.");
 		Indent(builder, depth).Append("public ").Append(task)
 			.AppendLine("<object> ResolveAsync(global::System.Type serviceType, global::System.Threading.CancellationToken cancellationToken = default)");
 		Indent(builder, depth).AppendLine("{");
@@ -285,6 +298,7 @@ internal static partial class Sources
 		const string func = "global::System.Func<Scope, global::System.Threading.CancellationToken, global::System.Threading.Tasks.Task<object>>";
 		int bucketCount = BucketCount(arms.Count);
 
+		AppendXmlSummary(builder, depth, "One slot of the async by-type dispatch table.");
 		Indent(builder, depth).AppendLine("private readonly struct __AsyncBucket");
 		Indent(builder, depth).AppendLine("{");
 		Indent(builder, depth + 1).AppendLine("public readonly global::System.Type? Key;");
@@ -302,6 +316,7 @@ internal static partial class Sources
 		Indent(builder, depth).AppendLine("private static readonly int __asyncBucketSize = __asyncBuckets.Length / __asyncBucketCount;");
 		builder.AppendLine();
 
+		AppendXmlSummary(builder, depth, "Builds the async by-type dispatch table.");
 		Indent(builder, depth).AppendLine("private static __AsyncBucket[] __BuildAsyncBuckets()");
 		Indent(builder, depth).AppendLine("{");
 		Indent(builder, depth + 1).AppendLine("__AsyncBucket[] __entries =");
@@ -361,6 +376,8 @@ internal static partial class Sources
 
 		if (instance.Lifetime == Lifetime.Singleton)
 		{
+			AppendXmlSummary(builder, depth,
+				$"Asynchronously resolves the singleton {XmlTypeRef(instance.ConstructedType)} from the root.");
 			Indent(builder, depth).Append("protected virtual ").Append(task).Append('<').Append(instance.ConstructedType)
 				.Append("> ").Append(names.AsyncResolver(index)).Append('(').Append(ct).Append(") => __root.")
 				.Append(names.AsyncResolver(index)).AppendLine("(cancellationToken);");
@@ -395,6 +412,8 @@ internal static partial class Sources
 		string signature = string.Join(", ", argTypes.Select((t, i) => $"{t} a{i}"));
 		string forward = string.Join("", argTypes.Select((_, i) => "a" + i + ", "));
 
+		AppendXmlSummary(builder, depth,
+			$"Resolves {XmlTypeRef(instance.ConstructedType)} by blocking on its async resolver (<c>SyncResolveAfterInit</c>).");
 		Indent(builder, depth).Append("internal ").Append(instance.ConstructedType).Append(' ')
 			.Append(names.Resolver(index)).Append('(').Append(signature).AppendLine(")");
 		Indent(builder, depth).AppendLine("{");
@@ -434,6 +453,10 @@ internal static partial class Sources
 		const string task = "global::System.Threading.Tasks.Task";
 		const string ct = "global::System.Threading.CancellationToken cancellationToken";
 
+		string summary = modifiers == "protected override"
+			? $"Asynchronously resolves the singleton {XmlTypeRef(type)} (one instance per container)."
+			: $"Asynchronously resolves the scoped {XmlTypeRef(type)} (one instance per scope).";
+		AppendXmlSummary(builder, depth, summary);
 		Indent(builder, depth).Append(modifiers).Append(' ').Append(task).Append('<').Append(type).Append("> ")
 			.Append(asyncResolver).Append('(').Append(ct).AppendLine(")");
 		Indent(builder, depth).AppendLine("{");
@@ -485,6 +508,10 @@ internal static partial class Sources
 		const string task = "global::System.Threading.Tasks.Task";
 		const string ct = "global::System.Threading.CancellationToken cancellationToken";
 
+		string summary = argSignature.Length > 0
+			? $"Asynchronously resolves {XmlTypeRef(type)} from its <c>[Arg]</c> arguments (a new instance per call)."
+			: $"Asynchronously resolves the transient {XmlTypeRef(type)} (a new instance per call).";
+		AppendXmlSummary(builder, depth, summary);
 		Indent(builder, depth).Append("internal async ").Append(task).Append('<').Append(type).Append("> ")
 			.Append(names.AsyncResolver(index)).Append('(').Append(argSignature).Append(ct).AppendLine(")");
 		Indent(builder, depth).AppendLine("{");
@@ -539,8 +566,13 @@ internal static partial class Sources
 		const string ctParam = "global::System.Threading.CancellationToken cancellationToken = default";
 		int[] targets = WarmUpTargets(instances, lifetime);
 
+		string summary = lifetime == Lifetime.Singleton
+			? "Eagerly initializes the async-initialized singletons in dependency order."
+			: "Warms this scope's async-initialized scoped services in dependency order.";
+
 		if (targets.Length == 0)
 		{
+			AppendXmlSummary(builder, depth, summary);
 			Indent(builder, depth).Append(modifiers).Append(' ').Append(task).Append(' ').Append(method).Append('(').Append(ctParam).AppendLine(")");
 			Indent(builder, depth).AppendLine("{");
 			EmitDisposedGuard(builder, depth + 1);
@@ -550,6 +582,7 @@ internal static partial class Sources
 		}
 
 		string core = method + "Core";
+		AppendXmlSummary(builder, depth, summary);
 		Indent(builder, depth).Append(modifiers).Append(' ').Append(task).Append(' ').Append(method).Append('(').Append(ctParam).AppendLine(")");
 		Indent(builder, depth).AppendLine("{");
 		EmitDisposedGuard(builder, depth + 1);
@@ -580,6 +613,8 @@ internal static partial class Sources
 		// The disposed-guard runs synchronously (eager state validation, like ResolveAsync) by splitting the
 		// public entry from a private async core: the entry validates and returns the core's task, so a disposed
 		// container throws immediately on the call rather than only when the returned task is awaited.
+		AppendXmlSummary(builder, depth,
+			"Opens a child scope, warming its async-initialized scoped services.");
 		Indent(builder, depth).Append("public ").Append(task)
 			.AppendLine("<global::Awaiten.IAwaitenScope> CreateScopeAsync(global::System.Threading.CancellationToken cancellationToken = default)");
 		Indent(builder, depth).AppendLine("{");
@@ -632,11 +667,7 @@ internal static partial class Sources
 	/// </summary>
 	private static void EmitCachingResolver(StringBuilder builder, int depth, in CachingResolver resolver, bool asyncDisposal)
 	{
-		if (resolver.Comment is not null)
-		{
-			Indent(builder, depth).AppendLine(resolver.Comment);
-		}
-
+		AppendXmlSummary(builder, depth, resolver.Summary);
 		Indent(builder, depth).Append(resolver.Modifiers).Append(' ').Append(resolver.Type).Append(' ').Append(resolver.Method).AppendLine("()");
 		Indent(builder, depth).AppendLine("{");
 		EmitDisposedGuard(builder, depth + 1);
@@ -680,9 +711,9 @@ internal static partial class Sources
 	///     <see cref="Type" />, the resolver <see cref="Method" /> name and backing <see cref="Field" />, the
 	///     <see cref="Construction" /> expression, how the instance is tracked for <see cref="Disposal" /> (not
 	///     at all, by the static type, or by a runtime <c>is IDisposable</c> check on the realized factory
-	///     output), and an optional leading <see cref="Comment" />.
+	///     output), and the XML doc <see cref="Summary" /> emitted over the resolver.
 	/// </summary>
-	private readonly struct CachingResolver(string modifiers, string type, string method, string field, string construction, DisposalTracking disposal, string? comment)
+	private readonly struct CachingResolver(string modifiers, string type, string method, string field, string construction, DisposalTracking disposal, string summary)
 	{
 		public string Modifiers { get; } = modifiers;
 
@@ -696,18 +727,18 @@ internal static partial class Sources
 
 		public DisposalTracking Disposal { get; } = disposal;
 
-		public string? Comment { get; } = comment;
+		public string Summary { get; } = summary;
 	}
 
 	/// <summary>
 	///     The inputs to <see cref="EmitFreshResolver" />: the method <see cref="Modifiers" /> and return
 	///     <see cref="Type" />, the resolver <see cref="Method" /> name, its parameter <see cref="Signature" />
 	///     (empty for a transient, the runtime arguments for a parameterized service), the
-	///     <see cref="Construction" /> expression and how the instance is tracked for <see cref="Disposal" />
+	///     <see cref="Construction" /> expression, how the instance is tracked for <see cref="Disposal" />
 	///     (not at all, by the static type, or by a runtime <c>is IDisposable</c> check on the realized factory
-	///     output).
+	///     output), and the XML doc <see cref="Summary" /> emitted over the resolver.
 	/// </summary>
-	private readonly struct FreshResolver(string modifiers, string type, string method, string signature, string construction, DisposalTracking disposal)
+	private readonly struct FreshResolver(string modifiers, string type, string method, string signature, string construction, DisposalTracking disposal, string summary)
 	{
 		public string Modifiers { get; } = modifiers;
 
@@ -720,5 +751,7 @@ internal static partial class Sources
 		public string Construction { get; } = construction;
 
 		public DisposalTracking Disposal { get; } = disposal;
+
+		public string Summary { get; } = summary;
 	}
 }

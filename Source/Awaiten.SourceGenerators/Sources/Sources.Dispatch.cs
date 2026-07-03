@@ -90,6 +90,7 @@ internal static partial class Sources
 	/// </summary>
 	private static void EmitGenericResolveMethod(StringBuilder builder, int depth)
 	{
+		AppendXmlSummary(builder, depth, "Resolves <typeparamref name=\"T\" />.");
 		Indent(builder, depth).AppendLine("public T Resolve<T>()");
 		Indent(builder, depth).AppendLine("{");
 		Indent(builder, depth + 1).AppendLine("if (this is global::Awaiten.IAwaitenResolver<T> __typed)");
@@ -117,6 +118,8 @@ internal static partial class Sources
 	{
 		// The registrations are compile-time constants for the container type, so they live in one static
 		// array rather than being rebuilt per Root construction.
+		AppendXmlSummary(builder, depth,
+			"The registration metadata advertised through <c>IAwaitenContainerMetadata.Registrations</c>.");
 		Indent(builder, depth).AppendLine("private static readonly global::Awaiten.AwaitenRegistration[] __registrations =");
 		Indent(builder, depth).AppendLine("{");
 		foreach (InstanceModel instance in instances)
@@ -153,7 +156,7 @@ internal static partial class Sources
 
 		Indent(builder, depth).AppendLine("};");
 		builder.AppendLine();
-		Indent(builder, depth).AppendLine("public global::System.Collections.Generic.IReadOnlyList<global::Awaiten.AwaitenRegistration> Registrations => __registrations;");
+		Indent(builder, depth).AppendLine("global::System.Collections.Generic.IReadOnlyList<global::Awaiten.AwaitenRegistration> global::Awaiten.IAwaitenContainerMetadata.Registrations => __registrations;");
 	}
 
 	/// <summary>
@@ -168,7 +171,7 @@ internal static partial class Sources
 		if (external.Length == 0)
 		{
 			Indent(builder, depth).AppendLine(
-				"public global::System.Collections.Generic.IReadOnlyList<global::System.Type> ExternalDependencies => global::System.Array.Empty<global::System.Type>();");
+				"global::System.Collections.Generic.IReadOnlyList<global::System.Type> global::Awaiten.IAwaitenContainerMetadata.ExternalDependencies => global::System.Array.Empty<global::System.Type>();");
 			return;
 		}
 
@@ -182,7 +185,7 @@ internal static partial class Sources
 		Indent(builder, depth).AppendLine("};");
 		builder.AppendLine();
 		Indent(builder, depth).AppendLine(
-			"public global::System.Collections.Generic.IReadOnlyList<global::System.Type> ExternalDependencies => __externalDependencies;");
+			"global::System.Collections.Generic.IReadOnlyList<global::System.Type> global::Awaiten.IAwaitenContainerMetadata.ExternalDependencies => __externalDependencies;");
 	}
 
 	private static string AwaitenLifetimeOf(Lifetime lifetime) => lifetime switch
@@ -211,6 +214,8 @@ internal static partial class Sources
 		bool hasRootWithheld = rootWithheld.Count > 0;
 		bool hasWithheld = WithheldTypes(rootWithheld, instances, names, serviceToIndex, syncResolveAfterInit).Count > 0;
 
+		AppendXmlSummary(builder, depth,
+			"Resolves the service registered for <paramref name=\"serviceType\" />, throwing when it is not resolvable.");
 		Indent(builder, depth).AppendLine("public object Resolve(global::System.Type serviceType)");
 		Indent(builder, depth).AppendLine("{");
 		Indent(builder, depth + 1).AppendLine("if (TryResolve(serviceType, out object? instance))");
@@ -236,6 +241,8 @@ internal static partial class Sources
 		Indent(builder, depth).AppendLine("}");
 		builder.AppendLine();
 
+		AppendXmlSummary(builder, depth,
+			"Attempts to resolve <paramref name=\"serviceType\" />, returning <see langword=\"false\" /> when it is not resolvable.");
 		Indent(builder, depth).AppendLine("public bool TryResolve(global::System.Type serviceType, [global::System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? instance)");
 		Indent(builder, depth).AppendLine("{");
 		if (entries.Count == 0)
@@ -722,14 +729,15 @@ internal static partial class Sources
 		// array, so they collapse from six method bodies to one. Bare services bind a direct delegate and need none.
 		Dictionary<string, int> forwarderOf = new(StringComparer.Ordinal);
 		List<string> forwarders = new();
-		foreach (DispatchEntry entry in entries.Where(entry => entry.DirectResolver is null && !forwarderOf.ContainsKey(entry.Value)))
+		foreach (string value in entries.Where(entry => entry.DirectResolver is null && !forwarderOf.ContainsKey(entry.Value)).Select(entry => entry.Value))
 		{
-			forwarderOf[entry.Value] = forwarders.Count;
-			forwarders.Add(entry.Value);
+			forwarderOf[value] = forwarders.Count;
+			forwarders.Add(value);
 		}
 
 		// One table slot: the key type, its resolver delegate, and whether the slot is withheld from by-type
 		// resolution on the Root. A default slot (Key == null) is an empty probe cell and never matches a request.
+		AppendXmlSummary(builder, depth, "One slot of the by-type dispatch table.");
 		Indent(builder, depth).AppendLine("private readonly struct __Bucket");
 		Indent(builder, depth).AppendLine("{");
 		Indent(builder, depth + 1).AppendLine("public readonly global::System.Type? Key;");
@@ -772,6 +780,7 @@ internal static partial class Sources
 		Indent(builder, depth).AppendLine("}");
 		builder.AppendLine();
 
+		AppendXmlSummary(builder, depth, "Builds the by-type dispatch table.");
 		Indent(builder, depth).AppendLine("private static __Bucket[] __BuildBuckets(__Bucket[] __entries)");
 		Indent(builder, depth).AppendLine("{");
 		EmitBucketDistribution(builder, depth + 1, "__Bucket", "__bucketCount");

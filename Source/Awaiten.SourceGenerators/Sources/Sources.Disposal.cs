@@ -190,6 +190,8 @@ internal static partial class Sources
 
 	private static void EmitDispose(StringBuilder builder, int depth, bool asyncDisposal)
 	{
+		AppendXmlSummary(builder, depth,
+			"Disposes every tracked instance in reverse creation order.");
 		Indent(builder, depth).AppendLine("public void Dispose()");
 		Indent(builder, depth).AppendLine("{");
 		Indent(builder, depth + 1).AppendLine("global::System.Collections.Generic.List<object>? __toDispose;");
@@ -220,6 +222,8 @@ internal static partial class Sources
 	/// </summary>
 	private static void EmitDisposeAsync(StringBuilder builder, int depth)
 	{
+		AppendXmlSummary(builder, depth,
+			"Asynchronously disposes every tracked instance in reverse creation order.");
 		Indent(builder, depth).AppendLine("public async global::System.Threading.Tasks.ValueTask DisposeAsync()");
 		Indent(builder, depth).AppendLine("{");
 		Indent(builder, depth + 1).AppendLine("global::System.Collections.Generic.List<object>? __toDispose;");
