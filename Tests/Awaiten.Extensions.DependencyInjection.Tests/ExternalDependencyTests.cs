@@ -46,7 +46,7 @@ public sealed partial class ExternalDependencyTests
 
 	private sealed class ClockResolver : IExternalResolver
 	{
-		public bool TryResolve(Type serviceType, out object? instance)
+		public bool TryResolve(Type serviceType, object? serviceKey, out object? instance)
 		{
 			if (serviceType == typeof(IClock))
 			{
@@ -112,5 +112,64 @@ public sealed partial class ExternalDependencyTests
 		using ExternalContainer.Root container = new();
 
 		await That(((IAwaitenContainerMetadata)container).ExternalDependencies).Contains(typeof(IClock));
+	}
+
+	public sealed class ScopedReporter
+	{
+		// A scoped Awaiten service whose external dependency is a scoped host service.
+		public ScopedReporter([FromServices] IClock clock) => Clock = clock;
+
+		public IClock Clock { get; }
+	}
+
+	[Container]
+	[Scoped<ScopedReporter>]
+	public static partial class ScopedExternalContainer;
+
+	[Fact]
+	public async Task ScopedExternalDependency_ResolvesFromTheAlignedScope()
+	{
+		ServiceCollection services = new();
+		services.AddScoped<IClock>(_ => new FixedClock());
+		services.AddGeneratedContainer<ScopedExternalContainer.Root>();
+		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
+
+		using IServiceScope scope1 = provider.CreateScope();
+		using IServiceScope scope2 = provider.CreateScope();
+
+		ScopedReporter first = scope1.ServiceProvider.GetRequiredService<ScopedReporter>();
+		ScopedReporter second = scope2.ServiceProvider.GetRequiredService<ScopedReporter>();
+
+		// The scoped host dependency resolves from each aligned MS.DI scope's provider (not the root, which
+		// would throw under validateScopes), so the two scopes see distinct instances.
+		await That(first.Clock).IsNotSameAs(second.Clock);
+		await That(scope1.ServiceProvider.GetRequiredService<IClock>()).IsSameAs(first.Clock);
+	}
+
+	public sealed class KeyedReporter
+	{
+		// The [FromKey] selects the keyed external service; the key is forwarded to the resolver.
+		public KeyedReporter([FromServices] [FromKey("utc")] IClock clock) => Clock = clock;
+
+		public IClock Clock { get; }
+	}
+
+	[Container]
+	[Singleton<KeyedReporter>]
+	public static partial class KeyedExternalContainer;
+
+	[Fact]
+	public async Task KeyedExternalDependency_ResolvesTheKeyedHostService()
+	{
+		FixedClock utc = new();
+		ServiceCollection services = new();
+		services.AddKeyedSingleton<IClock>("local", new FixedClock());
+		services.AddKeyedSingleton<IClock>("utc", utc);
+		services.AddGeneratedContainer<KeyedExternalContainer.Root>();
+		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
+
+		KeyedReporter reporter = provider.GetRequiredService<KeyedReporter>();
+
+		await That(reporter.Clock).IsSameAs(utc);
 	}
 }

@@ -700,8 +700,8 @@ public class GeneralTests
 		await That(result.Diagnostics).IsEmpty()
 			.Because("a [FromServices] parameter is resolved from the external provider, not the Awaiten graph");
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-		await That(source).Contains("protected object __ResolveExternal(global::System.Type serviceType)");
-		await That(source).Contains("new global::MyCode.Service((global::MyCode.ILogger)__ResolveExternal(typeof(global::MyCode.ILogger)))");
+		await That(source).Contains("protected object __ResolveExternal(global::System.Type serviceType, object? serviceKey)");
+		await That(source).Contains("new global::MyCode.Service((global::MyCode.ILogger)__ResolveExternal(typeof(global::MyCode.ILogger), null))");
 		// The external dependency is advertised in the container metadata.
 		await That(source).Contains("public global::System.Collections.Generic.IReadOnlyList<global::System.Type> ExternalDependencies");
 		await That(source).Contains("typeof(global::MyCode.ILogger)");
@@ -729,6 +729,30 @@ public class GeneralTests
 		await That(result.Diagnostics).IsEmpty()
 			.Because("[ImportServices] routes an otherwise-unresolved direct dependency to the external provider");
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-		await That(source).Contains("(global::MyCode.ILogger)__ResolveExternal(typeof(global::MyCode.ILogger))");
+		await That(source).Contains("(global::MyCode.ILogger)__ResolveExternal(typeof(global::MyCode.ILogger), null)");
+	}
+
+	[Fact]
+	public async Task FromServicesWithFromKey_ForwardsTheKeyToTheExternalResolver()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface ILogger { }
+		                                       public sealed class Service { public Service([FromServices] [FromKey("audit")] ILogger logger) { } }
+
+		                                       [Container]
+		                                       [Singleton<Service>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty()
+			.Because("a keyed [FromServices] parameter is resolved from the external provider under its key");
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+		await That(source).Contains("(global::MyCode.ILogger)__ResolveExternal(typeof(global::MyCode.ILogger), \"audit\")");
 	}
 }

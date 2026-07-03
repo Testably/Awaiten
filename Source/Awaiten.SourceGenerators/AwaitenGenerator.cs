@@ -1397,12 +1397,13 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			ParameterModel parameterModel = ClassifyParameter(parameter, asyncFactory);
 
 			// AWT131: a [FromServices] parameter (External) cannot also be an [Arg] runtime argument - it
-			// cannot be both an externally-resolved dependency and a caller-supplied value.
+			// cannot be both an externally-resolved dependency and a caller-supplied value. Point the diagnostic
+			// at the offending parameter, falling back to the registration when its location is unavailable.
 			if (parameterModel.Kind == DependencyKind.External && HasArgAttribute(parameter))
 			{
 				diagnostics.Add(new DiagnosticInfo(
 					Diagnostics.ConflictingExternalParameter,
-					info.Location,
+					parameterModel.Location ?? info.Location,
 					new EquatableArray<string>([parameter.Name, DisplayInstance(info.ImplementationType),])));
 			}
 
@@ -1596,11 +1597,13 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		LocationInfo? location = LocationInfo.From(parameter.Locations.FirstOrDefault());
 
 		// An explicit [FromServices] parameter is resolved from the external provider; its own type is the
-		// external service type. It takes precedence so the parameter is never treated as an Awaiten graph edge
-		// (a [FromServices] together with [Arg] is reported as AWT131 in ClassifyParameters).
+		// external service type, and a [FromKey] on it selects the keyed external service (the key is forwarded
+		// to the resolver). It takes precedence so the parameter is never treated as an Awaiten graph edge (a
+		// [FromServices] together with [Arg] is reported as AWT131 in ClassifyParameters).
 		if (HasFromServices(parameter))
 		{
-			return new ParameterModel(parameter.Type.ToDisplayString(FullyQualified), DependencyKind.External, Location: location);
+			return new ParameterModel(
+				parameter.Type.ToDisplayString(FullyQualified), DependencyKind.External, Key: FromKey(parameter), Location: location);
 		}
 
 		if (HasArgAttribute(parameter))

@@ -25,6 +25,6 @@ namespace Awaiten.Extensions.DependencyInjection
     public sealed class ServiceProviderExternalResolver : Awaiten.IExternalResolver
     {
         public ServiceProviderExternalResolver(System.IServiceProvider provider) { }
-        public bool TryResolve(System.Type serviceType, out object? instance) { }
+        public bool TryResolve(System.Type serviceType, object? serviceKey, out object? instance) { }
     }
 }

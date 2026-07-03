@@ -71,10 +71,9 @@ namespace Awaiten
     {
         System.Threading.Tasks.Task<object> ResolveAsync(System.Type serviceType, System.Threading.CancellationToken cancellationToken = default);
     }
-    public interface IAwaitenContainerMetadata : Awaiten.IAwaitenAsyncResolver, Awaiten.IAwaitenResolver, Awaiten.IAwaitenRoot, Awaiten.IAwaitenScope, System.IDisposable
+    public interface IAwaitenContainerMetadata : Awaiten.IAwaitenAsyncResolver, Awaiten.IAwaitenResolver, Awaiten.IAwaitenRoot, Awaiten.IAwaitenScope, Awaiten.IExternalResolverHost, System.IDisposable
     {
         System.Collections.Generic.IReadOnlyList<System.Type> ExternalDependencies { get; }
-        Awaiten.IExternalResolver? ExternalResolver { get; set; }
         System.Collections.Generic.IReadOnlyList<Awaiten.AwaitenRegistration> Registrations { get; }
     }
     public interface IAwaitenResolver
@@ -97,7 +96,11 @@ namespace Awaiten
     }
     public interface IExternalResolver
     {
-        bool TryResolve(System.Type serviceType, out object? instance);
+        bool TryResolve(System.Type serviceType, object? serviceKey, out object? instance);
+    }
+    public interface IExternalResolverHost
+    {
+        Awaiten.IExternalResolver? ExternalResolver { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=false, Inherited=false)]
     public sealed class ImportServicesAttribute : System.Attribute
