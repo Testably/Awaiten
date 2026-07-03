@@ -39,3 +39,9 @@
  AWT135  | Awaiten   | Error    | A decorator's inner parameter is marked [FromServices]
  AWT136  | Awaiten   | Error    | An [Inject] property has no set or init accessor the container can assign through
  AWT137  | Awaiten   | Error    | An injected property is marked [Arg]
+ AWT138  | Awaiten   | Warning  | A [Scan] matched no concrete type assignable to its marker
+ AWT139  | Awaiten   | Warning  | A [Scan(As = ScanAs.ImplementedInterfaces)] matched a type with no assignable interface
+ AWT140  | Awaiten   | Warning  | A [Scan(InAssembliesOf = …)] named an assembly with no candidate types
+ AWT141  | Awaiten   | Warning  | A [Scan(SkipUnconstructable = true)] match the container cannot construct is skipped
+ AWT142  | Awaiten   | Warning  | Scans register one implementation with conflicting lifetimes
+ AWT143  | Awaiten   | Error    | A [Scan(InAssembliesOf = …)] resolved to no assembly at all

@@ -11,7 +11,11 @@ namespace Awaiten.SourceGenerators;
 ///     <c>Instance</c> argument), the attribute's optional resolution <c>Key</c> (so several
 ///     implementations can share one service type), whether the attribute set both directives at
 ///     once (an error), and - for variance matching - the closed generic service symbol (so a
-///     differently-closed consumer request can be redirected to a variance-compatible registration).
+///     differently-closed consumer request can be redirected to a variance-compatible registration),
+///     whether the registration was contributed by a <c>[Scan]</c> (an overridable registration that
+///     never conflicts with an explicit one over the same implementation), and whether that scan opted
+///     into skipping unconstructable matches (<c>SkipUnconstructable</c>, degrading the AWT101 error to
+///     the AWT141 warning).
 /// </summary>
 /// <remarks>
 ///     <see cref="Location" /> is the live Roslyn location (with its syntax tree), not an equatable
@@ -29,7 +33,9 @@ internal sealed record RawRegistration(
 	string? ProductionMember = null,
 	bool ConflictingDirectives = false,
 	string? Key = null,
-	INamedTypeSymbol? ServiceSymbol = null);
+	INamedTypeSymbol? ServiceSymbol = null,
+	bool IsScan = false,
+	bool ScanSkipsUnconstructable = false);
 
 /// <summary>
 ///     A single <c>[Decorate&lt;TDecorator, TService&gt;]</c> registration read from a container: the
@@ -92,7 +98,8 @@ partial class AwaitenGenerator
 			Lifetime lifetime,
 			LocationInfo? location,
 			ProductionKind production,
-			string? productionMember)
+			string? productionMember,
+			bool isScan = false)
 		{
 			ImplementationType = implementationType;
 			Symbol = symbol;
@@ -100,6 +107,7 @@ partial class AwaitenGenerator
 			Location = location;
 			Production = production;
 			ProductionMember = productionMember;
+			IsScan = isScan;
 			Services = new List<ServiceKey>();
 		}
 
@@ -109,6 +117,10 @@ partial class AwaitenGenerator
 		public LocationInfo? Location { get; }
 		public ProductionKind Production { get; }
 		public string? ProductionMember { get; }
+
+		/// <summary>Whether the first (winning) registration of this implementation came from a <c>[Scan]</c>.</summary>
+		public bool IsScan { get; }
+
 		public List<ServiceKey> Services { get; }
 
 		/// <summary>

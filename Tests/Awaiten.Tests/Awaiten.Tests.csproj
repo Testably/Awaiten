@@ -3,6 +3,7 @@
 	<ItemGroup>
 		<ProjectReference Include="..\..\Source\Awaiten.SourceGenerators\Awaiten.SourceGenerators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
 		<ProjectReference Include="..\..\Source\Awaiten\Awaiten.csproj" />
+		<ProjectReference Include="..\Awaiten.Tests.Support\Awaiten.Tests.Support.csproj" />
 	</ItemGroup>
 
 </Project>

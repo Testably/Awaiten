@@ -160,23 +160,35 @@ partial class AwaitenGenerator
 		List<MemberModel> members,
 		List<DiagnosticInfo> diagnostics)
 	{
+		foreach (IPropertySymbol property in InjectedProperties(info.Symbol))
+		{
+			if (ClassifyInjectedMember(property, info, containerSymbol, serviceToImpl, constraintRejected, diagnostics) is { } member)
+			{
+				members.Add(member);
+			}
+		}
+	}
+
+	/// <summary>
+	///     The <c>[Inject]</c> properties of an implementation. Walks most-derived first, recording every
+	///     instance property (<c>seen</c>) so a base declaration is shadowed by an overriding or <c>new</c> one.
+	///     Property injection is opt-in: only a property marked <c>[Inject]</c> is yielded; a plain
+	///     <c>required</c> property is left to the caller (never auto-injected). The shared walk behind
+	///     <see cref="DiscoverInjectedMembers" /> and the loose-mode scan prune.
+	/// </summary>
+	private static IEnumerable<IPropertySymbol> InjectedProperties(INamedTypeSymbol implementation)
+	{
 		HashSet<string> seen = new(StringComparer.Ordinal);
-		for (INamedTypeSymbol? type = info.Symbol; type is not null; type = type.BaseType)
+		for (INamedTypeSymbol? type = implementation; type is not null; type = type.BaseType)
 		{
 			foreach (IPropertySymbol property in type.GetMembers().OfType<IPropertySymbol>())
 			{
-				// Walk most-derived first, recording every instance property (seen) so a base declaration is
-				// shadowed by an overriding or `new` one. Property injection is opt-in: only a property marked
-				// [Inject] is filled; a plain required property is left to the caller (never auto-injected).
 				if (property.IsStatic || property.IsIndexer || !seen.Add(property.Name) || !HasInject(property.GetAttributes()))
 				{
 					continue;
 				}
 
-				if (ClassifyInjectedMember(property, info, containerSymbol, serviceToImpl, constraintRejected, diagnostics) is { } member)
-				{
-					members.Add(member);
-				}
+				yield return property;
 			}
 		}
 	}
@@ -249,19 +261,19 @@ partial class AwaitenGenerator
 		}
 
 		return new MemberModel(property.Name, dependency);
-
-		// The setter must be reachable from the container's object initializer, which is not a derived context:
-		// mirrors IsAccessibleConstructor - public always, internal/protected-internal only within the container's
-		// own assembly, and protected/private-protected/private never (the container cannot reach them).
-		static bool IsAccessibleSetter(IMethodSymbol setter, INamedTypeSymbol containerSymbol)
-			=> setter.DeclaredAccessibility switch
-			{
-				Accessibility.Public => true,
-				Accessibility.Internal or Accessibility.ProtectedOrInternal =>
-					SymbolEqualityComparer.Default.Equals(setter.ContainingAssembly, containerSymbol.ContainingAssembly),
-				_ => false,
-			};
 	}
+
+	// The setter must be reachable from the container's object initializer, which is not a derived context:
+	// mirrors IsAccessibleConstructor - public always, internal/protected-internal only within the container's
+	// own assembly, and protected/private-protected/private never (the container cannot reach them).
+	private static bool IsAccessibleSetter(IMethodSymbol setter, INamedTypeSymbol containerSymbol)
+		=> setter.DeclaredAccessibility switch
+		{
+			Accessibility.Public => true,
+			Accessibility.Internal or Accessibility.ProtectedOrInternal =>
+				SymbolEqualityComparer.Default.Equals(setter.ContainingAssembly, containerSymbol.ContainingAssembly),
+			_ => false,
+		};
 
 	/// <summary>
 	///     Classifies a constructor parameter as a runtime argument (<c>[Arg]</c>), a deferred relationship

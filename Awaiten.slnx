@@ -14,6 +14,7 @@
 		<Project Path="Tests/Awaiten.Extensions.DependencyInjection.Tests/Awaiten.Extensions.DependencyInjection.Tests.csproj" />
 		<Project Path="Tests/Awaiten.SourceGenerators.Tests/Awaiten.SourceGenerators.Tests.csproj" />
 		<Project Path="Tests/Awaiten.Tests/Awaiten.Tests.csproj" />
+		<Project Path="Tests/Awaiten.Tests.Support/Awaiten.Tests.Support.csproj" />
 	</Folder>
 	<Folder Name="/_/">
 		<File Path=".editorconfig" />

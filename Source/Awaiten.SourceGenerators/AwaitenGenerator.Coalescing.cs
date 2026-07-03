@@ -93,8 +93,27 @@ partial class AwaitenGenerator
 			// A lifetime (AWT107) or production (AWT111) conflict is a property of the implementation, not of any
 			// single service type, so it is checked before the per-service dedup below; otherwise re-registering
 			// the same service type differently would be skipped and the contradiction silently dropped.
-			// Coalescing keeps the first, so the conflicting one is reported rather than ignored.
-			ReportCoalescingConflicts(info, registration, reportedConflicts, reportedProductionConflicts, diagnostics);
+			// Coalescing keeps the first, so the conflicting one is reported rather than ignored. A scan
+			// registration is overridable and yields to whatever an explicit registration (always processed
+			// first) fixed for the implementation, so it is exempt from that check - but two scans that match
+			// the same implementation with different lifetimes contradict each other with nothing explicit to
+			// yield to, so that is surfaced as AWT142 rather than silently resolved by attribute order.
+			if (!registration.IsScan)
+			{
+				ReportCoalescingConflicts(info, registration, reportedConflicts, reportedProductionConflicts, diagnostics);
+			}
+			else if (info is { IsScan: true, } && info.Lifetime != registration.Lifetime
+			         && reportedConflicts.Add(registration.ImplementationType))
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.ScanLifetimeConflict,
+					LocationInfo.From(registration.Location),
+					new EquatableArray<string>([
+						Display(registration.ImplementationType),
+						info.Lifetime.ToString(),
+						registration.Lifetime.ToString(),
+					])));
+			}
 
 			ServiceKey serviceKey = new(registration.ServiceType, registration.Key);
 			bool alreadyChosen = serviceToImpl.TryGetValue(serviceKey, out string? existingImpl);
@@ -131,7 +150,7 @@ partial class AwaitenGenerator
 			{
 				info = new ImplInfo(
 					reg.ImplementationType, reg.Implementation, reg.Lifetime,
-					LocationInfo.From(reg.Location), reg.Production, reg.ProductionMember);
+					LocationInfo.From(reg.Location), reg.Production, reg.ProductionMember, reg.IsScan);
 				implInfos.Add(reg.ImplementationType, info);
 				implOrder.Add(info);
 			}

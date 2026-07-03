@@ -211,7 +211,17 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		// BuildInstance must all scan the same constructor the emitted container builds through.
 		bool importServices = ContainerImportsServices(containerSymbol);
 
-		(List<RawRegistration> raw, HashSet<string> constraintRejected) = Collect(containerSymbol, importServices, diagnostics);
+		// Collect also expands the container's [Scan]s into overridable registrations (IsScan), ordered after
+		// the explicit ones so coalescing lets an explicit registration win single resolution while every match
+		// still joins its service's collection.
+		(List<RawRegistration> raw, HashSet<string> constraintRejected) = Collect(containerSymbol, compilation, importServices, diagnostics);
+
+		// A [Scan(SkipUnconstructable = true)] trades the AWT101 error for a skip-with-warning (AWT141) on
+		// matches the container cannot construct: such a scan sweeps every assignable concrete class, so an
+		// incidental helper type with an unsatisfiable constructor must not break the build. Scans without the
+		// opt-in - and explicit registrations - keep the error.
+		PruneUnconstructableScanMatches(raw, containerSymbol, compilation, importServices, constraintRejected, diagnostics);
+
 		List<DecorateRegistration> decorators = CollectDecorators(containerSymbol);
 		List<CompositeRegistration> composites = CollectComposites(containerSymbol);
 
