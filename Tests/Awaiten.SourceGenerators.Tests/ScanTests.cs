@@ -79,4 +79,67 @@ public class ScanTests
 		await That(betaConstructions).IsEqualTo(1)
 			.Because("the scan match is skipped for a type already registered explicitly, so BetaPlugin is built once");
 	}
+
+	[Fact]
+	public async Task ScanAsImplementedInterfaces_RegistersMatchesUnderTheMarkerAsACollection()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+
+		                                       namespace MyCode;
+
+		                                       public interface IHandler { }
+		                                       public sealed class EmailHandler : IHandler { }
+		                                       public sealed class SmsHandler : IHandler { }
+		                                       public sealed class Dispatcher { public Dispatcher(IEnumerable<IHandler> handlers) { } }
+
+		                                       [Container]
+		                                       [Scan(typeof(IHandler), As = ScanAs.ImplementedInterfaces, Lifetime = AwaitenLifetime.Singleton)]
+		                                       [Singleton<Dispatcher>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// Both matches register under IHandler and become members of its collection, resolved by their concrete
+		// resolvers; the concrete types themselves are not self-registered for single dispatch.
+		await That(source).Contains("new global::MyCode.Dispatcher(new global::MyCode.IHandler[] { ResolveEmailHandler(), ResolveSmsHandler() })");
+		await That(source).DoesNotContain("new __Bucket(typeof(global::MyCode.EmailHandler)")
+			.Because("ImplementedInterfaces registers under the marker interface, not the concrete type");
+	}
+
+	[Fact]
+	public async Task ScanAsSelfAndImplementedInterfaces_RegistersBoth()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+
+		                                       namespace MyCode;
+
+		                                       public interface IReport { }
+		                                       public sealed class SalesReport : IReport { }
+		                                       public sealed class Consumer { public Consumer(SalesReport self, IEnumerable<IReport> all) { } }
+
+		                                       [Container]
+		                                       [Scan(typeof(IReport), As = ScanAs.SelfAndImplementedInterfaces, Lifetime = AwaitenLifetime.Singleton)]
+		                                       [Singleton<Consumer>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// Resolvable both as its own concrete type and as a member of the marker's collection.
+		await That(source).Contains("new __Bucket(typeof(global::MyCode.SalesReport)")
+			.Because("SelfAndImplementedInterfaces keeps the concrete self registration");
+		await That(source).Contains("new global::MyCode.IReport[] { ResolveSalesReport() }")
+			.Because("SelfAndImplementedInterfaces also registers the match under the marker collection");
+	}
 }

@@ -40,3 +40,4 @@
  AWT136  | Awaiten   | Error    | An [Inject] property has no set or init accessor the container can assign through
  AWT137  | Awaiten   | Error    | An injected property is marked [Arg]
  AWT138  | Awaiten   | Warning  | A [Scan] matched no concrete type assignable to its marker
+ AWT139  | Awaiten   | Warning  | A [Scan(As = ScanAs.ImplementedInterfaces)] matched a type with no assignable interface

@@ -131,10 +131,17 @@ namespace Awaiten
         public void Dispose() { }
         public System.Threading.Tasks.ValueTask DisposeAsync() { }
     }
+    public enum ScanAs
+    {
+        Self = 0,
+        ImplementedInterfaces = 1,
+        SelfAndImplementedInterfaces = 2,
+    }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
     public sealed class ScanAttribute : System.Attribute
     {
         public ScanAttribute(System.Type assignableTo) { }
+        public Awaiten.ScanAs As { get; set; }
         public System.Type AssignableTo { get; }
         public Awaiten.AwaitenLifetime Lifetime { get; set; }
     }

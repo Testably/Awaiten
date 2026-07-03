@@ -10,8 +10,10 @@ namespace Awaiten.SourceGenerators;
 ///     constructor by default, or the container member named by the attribute's <c>Factory</c>/
 ///     <c>Instance</c> argument), the attribute's optional resolution <c>Key</c> (so several
 ///     implementations can share one service type), whether the attribute set both directives at
-///     once (an error), and - for variance matching - the closed generic service symbol (so a
-///     differently-closed consumer request can be redirected to a variance-compatible registration).
+///     once (an error), the closed generic service symbol (so a differently-closed consumer request can be
+///     redirected to a variance-compatible registration, for variance matching), and whether the registration
+///     was contributed by a <c>[Scan]</c> (an overridable registration that never conflicts with an explicit
+///     one over the same implementation).
 /// </summary>
 /// <remarks>
 ///     <see cref="Location" /> is the live Roslyn location (with its syntax tree), not an equatable
@@ -29,4 +31,5 @@ internal sealed record RawRegistration(
 	string? ProductionMember = null,
 	bool ConflictingDirectives = false,
 	string? Key = null,
-	INamedTypeSymbol? ServiceSymbol = null);
+	INamedTypeSymbol? ServiceSymbol = null,
+	bool IsScan = false);

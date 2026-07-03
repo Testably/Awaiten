@@ -239,10 +239,11 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 		(List<RawRegistration> raw, HashSet<string> constraintRejected) = ContainerRegistrations.Collect(containerSymbol, importServices, diagnostics);
 
-		// Assembly scanning contributes an overridable self-registration for every concrete type in the
-		// container's assembly assignable to a [Scan] marker. A match whose implementation is already registered
-		// (explicitly, or by an earlier scan) is skipped, so explicit registrations take precedence.
-		raw.AddRange(ContainerRegistrations.CollectScans(containerSymbol, compilation, raw, diagnostics));
+		// Assembly scanning contributes overridable registrations for every concrete type in the container's
+		// assembly assignable to a [Scan] marker - as itself and/or under its implemented interfaces, per ScanAs.
+		// Appended after the explicit registrations so coalescing lets an explicit registration win single
+		// resolution (a scan registration never conflicts), while every match still joins its service's collection.
+		raw.AddRange(ContainerRegistrations.CollectScans(containerSymbol, compilation, diagnostics));
 
 		List<DecorateRegistration> decorators = ContainerRegistrations.CollectDecorators(containerSymbol);
 		List<CompositeRegistration> composites = ContainerRegistrations.CollectComposites(containerSymbol);
@@ -565,8 +566,13 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			// A lifetime (AWT107) or production (AWT111) conflict is a property of the implementation, not of any
 			// single service type, so it is checked before the per-service dedup below; otherwise re-registering
 			// the same service type differently would be skipped and the contradiction silently dropped.
-			// Coalescing keeps the first, so the conflicting one is reported rather than ignored.
-			ReportCoalescingConflicts(info, registration, reportedConflicts, reportedProductionConflicts, diagnostics);
+			// Coalescing keeps the first, so the conflicting one is reported rather than ignored. A scan
+			// registration is overridable and never conflicts: it yields to whatever an explicit registration
+			// (always processed first) fixed for the implementation, so it is exempt from the conflict check.
+			if (!registration.IsScan)
+			{
+				ReportCoalescingConflicts(info, registration, reportedConflicts, reportedProductionConflicts, diagnostics);
+			}
 
 			ServiceKey serviceKey = new(registration.ServiceType, registration.Key);
 			bool alreadyChosen = serviceToImpl.TryGetValue(serviceKey, out string? existingImpl);

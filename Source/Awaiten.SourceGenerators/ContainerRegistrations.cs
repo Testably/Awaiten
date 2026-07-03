@@ -106,27 +106,23 @@ internal static class ContainerRegistrations
 	}
 
 	/// <summary>
-	///     Expands each <c>[Scan]</c> on the container into an overridable self-registration for every concrete
-	///     class in the container's assembly assignable to the scanned marker, skipping abstract/static classes,
-	///     the marker itself, and any implementation already in <paramref name="existing" /> (so an explicit
-	///     registration wins). Reports AWT136 when a scan matches no concrete type.
+	///     Expands each <c>[Scan]</c> on the container into overridable registrations for every concrete class in
+	///     the container's assembly assignable to the scanned marker - as the type itself, under the
+	///     (marker-assignable) interfaces it implements, or both, per <c>ScanAs</c>. Abstract/static classes and
+	///     the marker itself are skipped. Reports AWT138 when a scan matches nothing, and AWT139 when an
+	///     interfaces-only scan matches a type with no assignable interface.
 	/// </summary>
+	/// <remarks>
+	///     The synthesized registrations carry <see cref="RawRegistration.IsScan" />, so coalescing lets an
+	///     explicit registration of the same implementation take precedence for single resolution (a scan never
+	///     conflicts over lifetime or production), while every match still joins its service's collection.
+	/// </remarks>
 	public static List<RawRegistration> CollectScans(
 		INamedTypeSymbol containerSymbol,
 		Compilation compilation,
-		IReadOnlyList<RawRegistration> existing,
 		List<DiagnosticInfo> diagnostics)
 	{
 		List<RawRegistration> result = new();
-
-		// Implementations already registered win over a scan match: an explicit registration takes precedence,
-		// and two scans never register the same type twice. Seeded from the existing registrations and grown as
-		// matches are taken.
-		HashSet<string> registered = new(StringComparer.Ordinal);
-		foreach (RawRegistration registration in existing)
-		{
-			registered.Add(registration.ImplementationType);
-		}
 
 		foreach (AttributeData attribute in containerSymbol.GetAttributes())
 		{
@@ -139,10 +135,13 @@ internal static class ContainerRegistrations
 			}
 
 			Lifetime lifetime = ScanLifetime(attribute);
+			ScanExposure exposure = ScanExposureOf(attribute);
+			bool registerSelf = exposure is ScanExposure.Self or ScanExposure.SelfAndImplementedInterfaces;
+			bool registerInterfaces = exposure is ScanExposure.ImplementedInterfaces or ScanExposure.SelfAndImplementedInterfaces;
 			Location? location = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation();
 
-			// Count every assignable match, even one already registered: an overridden match still means the
-			// scan found something, so AWT136 fires only when the marker truly matches nothing.
+			// Count every assignable match, even one an explicit registration overrides: a matched-but-overridden
+			// type still means the scan found something, so AWT138 fires only when the marker truly matches nothing.
 			int matched = 0;
 			foreach (INamedTypeSymbol type in EnumerateTypes(compilation.Assembly.GlobalNamespace))
 			{
@@ -155,9 +154,41 @@ internal static class ContainerRegistrations
 
 				matched++;
 				string typeName = type.ToDisplayString(FullyQualified);
-				if (registered.Add(typeName))
+
+				if (registerSelf)
 				{
-					result.Add(new RawRegistration(typeName, typeName, lifetime, type, location));
+					result.Add(ScanRegistration(typeName, typeName, lifetime, type, location, type));
+				}
+
+				if (!registerInterfaces)
+				{
+					continue;
+				}
+
+				// Register under each implemented interface assignable to the marker, so a marker interface
+				// registers every match under itself (plus any more-derived service interfaces) without dragging
+				// in unrelated interfaces such as IDisposable.
+				int interfaces = 0;
+				foreach (INamedTypeSymbol contract in type.AllInterfaces)
+				{
+					if (compilation.HasImplicitConversion(contract, marker))
+					{
+						result.Add(ScanRegistration(contract.ToDisplayString(FullyQualified), typeName, lifetime, type, location, contract));
+						interfaces++;
+					}
+				}
+
+				// AWT139: an interfaces-only scan matched a type with nothing to register it under (typically a
+				// base-class marker). SelfAndImplementedInterfaces is exempt - its self registration still covers it.
+				if (interfaces == 0 && exposure == ScanExposure.ImplementedInterfaces)
+				{
+					diagnostics.Add(new DiagnosticInfo(
+						Diagnostics.ScanNoImplementedInterfaces,
+						LocationInfo.From(location),
+						new EquatableArray<string>([
+							AwaitenGenerator.Display(typeName),
+							AwaitenGenerator.Display(marker.ToDisplayString(FullyQualified)),
+						])));
 				}
 			}
 
@@ -175,6 +206,11 @@ internal static class ContainerRegistrations
 		return result;
 	}
 
+	// A single overridable, collection-eligible registration contributed by a [Scan]: IsScan so it never conflicts
+	// with an explicit registration over the same implementation and always joins its service's collection.
+	private static RawRegistration ScanRegistration(string service, string implementation, Lifetime lifetime, INamedTypeSymbol type, Location? location, INamedTypeSymbol serviceSymbol)
+		=> new(service, implementation, lifetime, type, location, ProductionKind.Constructor, null, false, null, serviceSymbol, true);
+
 	// The lifetime named on a [Scan] (Lifetime = AwaitenLifetime.X); its underlying int lines up with the
 	// generator's Lifetime enum. Defaults to Transient when unset, matching the attribute default.
 	private static Lifetime ScanLifetime(AttributeData attribute)
@@ -188,6 +224,21 @@ internal static class ContainerRegistrations
 		}
 
 		return Lifetime.Transient;
+	}
+
+	// The exposure named on a [Scan] (As = ScanAs.X); its underlying int lines up with the generator's
+	// ScanExposure enum. Defaults to Self when unset, matching the attribute default.
+	private static ScanExposure ScanExposureOf(AttributeData attribute)
+	{
+		foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
+		{
+			if (argument.Key == "As" && argument.Value.Value is int value)
+			{
+				return (ScanExposure)value;
+			}
+		}
+
+		return ScanExposure.Self;
 	}
 
 	// Every named type in an assembly, walking nested types and child namespaces, so a [Scan] can consider
