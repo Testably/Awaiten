@@ -72,4 +72,20 @@ internal enum DependencyKind
 	///     external resolver.
 	/// </summary>
 	External,
+
+	/// <summary>
+	///     An awaited collection dependency (<c>Task&lt;C&gt;</c> where <c>C</c> is one of the
+	///     <see cref="Enumerable" /> shapes, e.g. <c>Task&lt;IReadOnlyList&lt;T&gt;&gt;</c> or
+	///     <c>Task&lt;T[]&gt;</c>): resolves to every registration of the element type <c>T</c> under the
+	///     parameter's <c>Key</c>, materialized eagerly in registration order with each async-initialized member
+	///     awaited behind the returned task - the second shape (besides <see cref="AsyncEnumerable" />) through
+	///     which an async-tainted member is legal. Unlike <see cref="AsyncEnumerable" /> it launders the members'
+	///     taint, exactly as the bare <see cref="Task" /> relationship does: the members are awaited inside the
+	///     produced task, not at the consumer's construction, so the consumer stays synchronously constructible.
+	///     The task still starts materializing at construction time, so - again like the bare <see cref="Task" /> -
+	///     it closes cycles (the construction graph) even though it contributes no taint/captive edge.
+	///     <c>ValueTask&lt;C&gt;</c> is deliberately not recognized, for the same reason a bare
+	///     <c>ValueTask&lt;T&gt;</c> is not a relationship type: a stored ValueTask may only be awaited once.
+	/// </summary>
+	AwaitedEnumerable,
 }

@@ -122,6 +122,21 @@ public partial class OpenGenericCollectionTests
 		await That(handler.Describe()).IsEqualTo("Audit<OrderPlaced>");
 	}
 
+	[Fact]
+	public async Task AwaitedCollection_YieldsEveryOpenRegistrationClosedAtTheArgument()
+	{
+		using HandlerContainer.Root container = new();
+
+		// A Task<IReadOnlyList<IHandler<OrderPlaced>>> consumer yields every open registration expanded at the
+		// closed argument, awaited behind the task - the open-generic x awaited-collection intersection.
+		AwaitedDispatcher<OrderPlaced> dispatcher = container.Resolve<AwaitedDispatcher<OrderPlaced>>();
+		IReadOnlyList<IHandler<OrderPlaced>> handlers = await dispatcher.Handlers;
+
+		await That(handlers).HasCount(2);
+		await That(handlers[0].Describe()).IsEqualTo("Audit<OrderPlaced>");
+		await That(handlers[1].Describe()).IsEqualTo("Projection<OrderPlaced>");
+	}
+
 	public sealed class OrderPlaced;
 
 	public sealed class OrderShipped;
@@ -170,6 +185,13 @@ public partial class OpenGenericCollectionTests
 		public Task<IHandler<T>> Handler { get; }
 	}
 
+	public sealed class AwaitedDispatcher<T>
+	{
+		public AwaitedDispatcher(Task<IReadOnlyList<IHandler<T>>> handlers) => Handlers = handlers;
+
+		public Task<IReadOnlyList<IHandler<T>>> Handlers { get; }
+	}
+
 	public sealed class NotifierHost
 	{
 		public NotifierHost(IReadOnlyList<INotifier<OrderPlaced>> notifiers) => Notifiers = notifiers;
@@ -184,6 +206,7 @@ public partial class OpenGenericCollectionTests
 			Dispatcher<OrderPlaced> placed,
 			ReadOnlyDispatcher<OrderPlaced> readOnly,
 			AwaitedHandler<OrderPlaced> awaited,
+			AwaitedDispatcher<OrderPlaced> awaitedCollection,
 			IHandler<OrderShipped>[] shipped,
 			NotifierHost notifiers)
 		{
@@ -196,6 +219,7 @@ public partial class OpenGenericCollectionTests
 	[Transient(typeof(Dispatcher<>))]
 	[Transient(typeof(ReadOnlyDispatcher<>))]
 	[Transient(typeof(AwaitedHandler<>))]
+	[Transient(typeof(AwaitedDispatcher<>))]
 	[Transient<NotifierHost>]
 	[Transient<App>]
 	public static partial class HandlerContainer;

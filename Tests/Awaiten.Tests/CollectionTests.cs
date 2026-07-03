@@ -490,6 +490,189 @@ public partial class CollectionTests
 			.Because("ResolveAsync serves the registered channel, initialized");
 	}
 
+	[Fact]
+	public async Task AwaitedCollection_AwaitsMemberInitializationWithoutTaintingTheConsumer()
+	{
+		using AwaitedStreamContainer.Root container = new();
+
+		// The host injects Task<IReadOnlyList<IPlugin>> over an async-initialized member, yet resolves
+		// SYNCHRONOUSLY in the strict default: the awaited collection launders its members' taint like the bare
+		// Task<T> relationship - the await happens inside the produced task, not at the host's construction.
+		AwaitedPluginHost host = container.Resolve<AwaitedPluginHost>();
+
+		IReadOnlyList<IPlugin> plugins = await host.Plugins;
+
+		await That(plugins).HasCount(2);
+		await That(plugins[0].Name).IsEqualTo("alpha");
+		await That(plugins[1].Name).IsEqualTo("async");
+		await That(plugins.OfType<AsyncPlugin>().Single().Initialized).IsTrue()
+			.Because("awaiting the collection awaited the async member's initialization in registration order");
+	}
+
+	[Fact]
+	public async Task AwaitedCollection_AllSynchronousMembers_IsACompletedTask()
+	{
+		using SyncAwaitedStreamContainer.Root container = new();
+
+		AwaitedPluginHost host = container.Resolve<AwaitedPluginHost>();
+
+		// Every member is synchronous, so the awaited collection is a completed Task.FromResult over the
+		// synchronously materialized array - available without ever leaving the synchronous path.
+		await That(host.Plugins.IsCompleted).IsTrue()
+			.Because("an all-synchronous awaited collection carries no async machinery");
+
+		IReadOnlyList<IPlugin> plugins = await host.Plugins;
+		await That(plugins).HasCount(2);
+		await That(plugins[0].Name).IsEqualTo("alpha");
+		await That(plugins[1].Name).IsEqualTo("beta");
+	}
+
+	[Fact]
+	public async Task AwaitedCollection_NoRegistrations_YieldsACompletedEmptyCollection()
+	{
+		using EmptyAwaitedStreamContainer.Root container = new();
+
+		AwaitedExtensionHost host = container.Resolve<AwaitedExtensionHost>();
+
+		IExtension[] extensions = await host.Extensions;
+		await That(extensions).HasCount(0)
+			.Because("an element type with no registration yields a completed empty awaited collection, not a missing-dependency error");
+	}
+
+	[Fact]
+	public async Task AwaitedCollection_SingletonMembers_AreSharedAcrossResolutions()
+	{
+		using AwaitedStreamContainer.Root container = new();
+
+		AwaitedPluginHost first = container.Resolve<AwaitedPluginHost>();
+		AwaitedPluginHost second = container.Resolve<AwaitedPluginHost>();
+
+		// The transient hosts each materialize their own awaited collection, but the singleton members inside
+		// are shared - each member keeps its own lifetime on the awaited path, exactly as on the synchronous one.
+		await That((await second.Plugins)[0]).IsSameAs((await first.Plugins)[0]);
+		await That((await second.Plugins)[1]).IsSameAs((await first.Plugins)[1]);
+	}
+
+	[Fact]
+	public async Task FromKey_AwaitedCollectionResolvesOnlyTheMembersUnderThatKey()
+	{
+		using KeyedAwaitedStreamContainer.Root container = new();
+
+		KeyedAwaitedPluginHost host = container.Resolve<KeyedAwaitedPluginHost>();
+
+		// Each [FromKey] awaited collection resolves the registration(s) under that key, never the others, and
+		// the unkeyed one only the unkeyed registration - the buckets stay disjoint, as for every other shape.
+		IReadOnlyList<IPlugin> primary = await host.Primary;
+		IReadOnlyList<IPlugin> unkeyed = await host.Unkeyed;
+
+		await That(primary).HasCount(1);
+		await That(primary[0].Name).IsEqualTo("alpha");
+		await That(unkeyed).HasCount(1);
+		await That(unkeyed[0].Name).IsEqualTo("plain");
+	}
+
+	[Fact]
+	public async Task AwaitedCollection_AllShapesArePubliclyResolvableByType()
+	{
+		using SyncAwaitedStreamContainer.Root container = new();
+
+		// The awaited collection joins the by-type dispatch alongside the synchronous shapes and IAsyncEnumerable<T>:
+		// every Task<C> shape is resolvable straight through Resolve, handing back a completed task over the members.
+		await That(await container.Resolve<Task<IEnumerable<IPlugin>>>()).HasCount(2);
+		await That(await container.Resolve<Task<IReadOnlyList<IPlugin>>>()).HasCount(2);
+		await That(await container.Resolve<Task<IReadOnlyCollection<IPlugin>>>()).HasCount(2);
+		await That(await container.Resolve<Task<IList<IPlugin>>>()).HasCount(2);
+		await That(await container.Resolve<Task<ICollection<IPlugin>>>()).HasCount(2);
+		await That(await container.Resolve<Task<IPlugin[]>>()).HasCount(2);
+	}
+
+	[Fact]
+	public async Task AwaitedCollection_WithAnAsyncMember_IsPubliclyResolvableByTypeSynchronously()
+	{
+		using AwaitedStreamContainer.Root container = new();
+
+		// Unlike the synchronous shapes (AWT122) and IAsyncEnumerable<T> (async-only by type), the awaited collection
+		// is obtainable through synchronous Resolve even with an async-tainted member: it hands back a Task that
+		// awaits that member behind it. Awaiting the returned task initializes the async member in registration order.
+		Task<IReadOnlyList<IPlugin>> task = container.Resolve<Task<IReadOnlyList<IPlugin>>>();
+
+		IReadOnlyList<IPlugin> plugins = await task;
+		await That(plugins).HasCount(2);
+		await That(plugins[0].Name).IsEqualTo("alpha");
+		await That(plugins.OfType<AsyncPlugin>().Single().Initialized).IsTrue()
+			.Because("awaiting the by-type awaited collection awaited the async member's initialization");
+	}
+
+	[Fact]
+	public async Task AwaitedCollection_ScopedDisposableMember_ResolvesFromScopeAndIsDisposedWithIt()
+	{
+		using ScopedAsyncStreamContainer.Root container = new();
+
+		DisposableScopedPlugin member;
+		using (IAwaitenScope scope = container.CreateScope())
+		{
+			IReadOnlyList<IPlugin> plugins = await scope.Resolve<Task<IReadOnlyList<IPlugin>>>();
+
+			member = (DisposableScopedPlugin)plugins.Single();
+			await That(member).IsSameAs(scope.Resolve<IPlugin>())
+				.Because("the awaited collection materialized its member off the resolving scope");
+			await That(member.Disposed).IsFalse()
+				.Because("the scope is still alive");
+		}
+
+		await That(member.Disposed).IsTrue()
+			.Because("the scope tracked the member the awaited collection materialized and disposed it with the scope");
+	}
+
+	[Fact]
+	public async Task Strict_AwaitedCollectionOfDisposableTransients_IsWithheldFromTheRoot()
+	{
+		using DisposableCollectionContainer.Root container = new();
+
+		await That(() => container.Resolve<Task<IWidget[]>>()).Throws<InvalidOperationException>()
+			.Because("the awaited collection materializes its members eagerly, so on the root it would accumulate the disposable transients for the container's lifetime - withheld under strict lifetime safety, like the synchronous shapes");
+
+		bool resolved = container.TryResolve<Task<IWidget[]>>(out Task<IWidget[]>? widgets);
+		await That(resolved).IsFalse()
+			.Because("TryResolve is a non-throwing probe; the withheld awaited collection reports false on the root");
+		await That(widgets is null).IsTrue()
+			.Because("a failed TryResolve leaves the awaited collection null");
+	}
+
+	[Fact]
+	public async Task Strict_AwaitedCollectionOfDisposableTransients_ResolvedFromAScope_WorksAndIsDisposedWithTheScope()
+	{
+		using DisposableCollectionContainer.Root container = new();
+
+		DisposableWidget widget;
+		using (IAwaitenScope scope = container.CreateScope())
+		{
+			widget = (DisposableWidget)(await scope.Resolve<Task<IWidget[]>>()).Single();
+			await That(widget.Disposed).IsFalse()
+				.Because("the scope is still alive");
+		}
+
+		await That(widget.Disposed).IsTrue()
+			.Because("a child scope bounds the members the awaited collection materializes and disposes them with the scope - the accumulation the root would suffer is bounded here");
+	}
+
+	[Fact]
+	public async Task AwaitedCollection_BuiltOnTheAsyncPath_ForwardsTheResolveTimeTokenToItsAwaitedMembers()
+	{
+		using AsyncPathAwaitedContainer.Root container = new();
+		using CancellationTokenSource cts = new();
+
+		// The host is itself async-initialized, so it is built on the async path - where the awaited collection
+		// forwards the resolve-time token to each awaited member (rather than the default a synchronously built
+		// consumer supplies). The member captures the token it was initialized with.
+		AsyncAwaitedHost host = await container.ResolveAsync<AsyncAwaitedHost>(cts.Token);
+		IReadOnlyList<IPlugin> plugins = await host.Plugins;
+
+		TokenCapturingPlugin member = plugins.OfType<TokenCapturingPlugin>().Single();
+		await That(member.Received).IsEqualTo(cts.Token)
+			.Because("an awaited collection built on the async path forwards the resolve-time token to its awaited members");
+	}
+
 	public interface IPlugin
 	{
 		string Name { get; }
@@ -561,6 +744,61 @@ public partial class CollectionTests
 		public IAsyncEnumerable<IPlugin> Primary { get; }
 
 		public IAsyncEnumerable<IPlugin> Unkeyed { get; }
+	}
+
+	public sealed class AwaitedPluginHost
+	{
+		public AwaitedPluginHost(Task<IReadOnlyList<IPlugin>> plugins) => Plugins = plugins;
+
+		public Task<IReadOnlyList<IPlugin>> Plugins { get; }
+	}
+
+	public sealed class AwaitedExtensionHost
+	{
+		public AwaitedExtensionHost(Task<IExtension[]> extensions) => Extensions = extensions;
+
+		public Task<IExtension[]> Extensions { get; }
+	}
+
+	public sealed class KeyedAwaitedPluginHost
+	{
+		public KeyedAwaitedPluginHost(
+			[FromKey("primary")] Task<IReadOnlyList<IPlugin>> primary,
+			Task<IReadOnlyList<IPlugin>> unkeyed)
+		{
+			Primary = primary;
+			Unkeyed = unkeyed;
+		}
+
+		public Task<IReadOnlyList<IPlugin>> Primary { get; }
+
+		public Task<IReadOnlyList<IPlugin>> Unkeyed { get; }
+	}
+
+	// Captures the CancellationToken its initialization was handed, so a test can assert which token an awaited
+	// collection forwarded to its awaited members.
+	public sealed class TokenCapturingPlugin : IPlugin, IAsyncInitializable
+	{
+		public string Name => "token";
+
+		public CancellationToken Received { get; private set; }
+
+		public Task InitializeAsync(CancellationToken cancellationToken)
+		{
+			Received = cancellationToken;
+			return Task.CompletedTask;
+		}
+	}
+
+	// A host that is itself async-initialized (so built on the async path) and injects an awaited collection: the
+	// awaited collection is therefore materialized on the async path, where it forwards the host's resolve-time token.
+	public sealed class AsyncAwaitedHost : IAsyncInitializable
+	{
+		public AsyncAwaitedHost(Task<IReadOnlyList<IPlugin>> plugins) => Plugins = plugins;
+
+		public Task<IReadOnlyList<IPlugin>> Plugins { get; }
+
+		public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 	}
 
 	// An opaque IAsyncEnumerable<IPlugin> service in its own right - the explicit registration the synthesized
@@ -792,6 +1030,42 @@ public partial class CollectionTests
 	[Singleton<Alpha, IPlugin>]
 	[Singleton<AsyncPluginChannel, IAsyncEnumerable<IPlugin>>]
 	public static partial class AsyncChannelContainer;
+
+	// The strict default with an async-initialized member consumed as an awaited Task<IReadOnlyList<T>>: the
+	// awaited collection awaits each member behind the produced task, so the async member is legal (no AWT122)
+	// and - unlike the IAsyncEnumerable<T> shape - the members' taint is laundered, so the transient host stays
+	// synchronously resolvable.
+	[Container]
+	[Singleton<Alpha, IPlugin>]
+	[Singleton<AsyncPlugin, IPlugin>]
+	[Transient<AwaitedPluginHost>]
+	public static partial class AwaitedStreamContainer;
+
+	// Every member is synchronous, so the awaited collection is a completed Task.FromResult.
+	[Container]
+	[Singleton<Alpha, IPlugin>]
+	[Singleton<Beta, IPlugin>]
+	[Singleton<AwaitedPluginHost>]
+	public static partial class SyncAwaitedStreamContainer;
+
+	[Container]
+	[Singleton<AwaitedExtensionHost>]
+	public static partial class EmptyAwaitedStreamContainer;
+
+	// Awaited collections under disjoint key buckets: 'primary' (alpha) and unkeyed (plain).
+	[Container]
+	[Singleton<Alpha, IPlugin>(Key = "primary")]
+	[Singleton<Plain, IPlugin>]
+	[Singleton<KeyedAwaitedPluginHost>]
+	public static partial class KeyedAwaitedStreamContainer;
+
+	// The host is async-initialized (built on the async path) and injects an awaited collection whose member is
+	// async-tainted: the awaited collection is materialized on the async path, forwarding the host's resolve-time
+	// token to the awaited member - which captures it, so the test can assert the forwarding.
+	[Container]
+	[Singleton<TokenCapturingPlugin, IPlugin>]
+	[Singleton<AsyncAwaitedHost>]
+	public static partial class AsyncPathAwaitedContainer;
 
 	// IEnumerable<IPlugin> is registered directly (an opaque value); the individual IPlugin registrations would
 	// otherwise synthesize a collection of two, so the counts distinguish which one injection resolves to.
