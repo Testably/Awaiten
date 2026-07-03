@@ -139,7 +139,8 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			strict,
 			syncResolveAfterInit,
 			hasAsyncDisposable,
-			new EquatableArray<ServiceMembers>(graph.Collections.ToArray()));
+			new EquatableArray<ServiceMembers>(graph.Collections.ToArray()),
+			new EquatableArray<string>(graph.VarianceCandidates.ToArray()));
 	}
 
 	/// <summary>
@@ -340,7 +341,16 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			}
 		}
 
-		return new GraphModel(instances, dependencies, constructionDependencies, serviceToImpl, implToIndex, instanceLocations, collections);
+		// The variance candidates' service types (registration order), for the emitter's runtime variance
+		// fallback: an imperative Resolve of a differently-closed generic interface no consumer parameter ever
+		// requested (so no compile-time alias exists) is matched against these at runtime instead of throwing.
+		List<string> varianceCandidateTypes = new(variance.Candidates.Count);
+		foreach ((string serviceType, INamedTypeSymbol _) in variance.Candidates)
+		{
+			varianceCandidateTypes.Add(serviceType);
+		}
+
+		return new GraphModel(instances, dependencies, constructionDependencies, serviceToImpl, implToIndex, instanceLocations, collections, varianceCandidateTypes);
 	}
 
 	/// <summary>
@@ -506,11 +516,12 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		Dictionary<ServiceKey, List<string>> serviceMembers = new();
 		List<ServiceKey> serviceMemberOrder = new();
 
-		// Variance: every unkeyed closed-generic-interface registration's service symbol, keyed by its
-		// fully-qualified string, in registration order. When a consumer requests a closed generic interface
-		// with no exact registration, the request is redirected to a variance-compatible candidate here (a
-		// registered IHandler<DomainEvent> satisfying a requested IHandler<OrderPlaced> via `in T`). Keyed
-		// registrations are reached only through their key, so they are never variance-redirect targets.
+		// Variance: every unkeyed registration of a closed generic interface whose definition declares variance
+		// (in/out), keyed by its fully-qualified string, in registration order. When a consumer requests a closed
+		// generic interface with no exact registration, the request is redirected to a variance-compatible
+		// candidate here (a registered IHandler<DomainEvent> satisfying a requested IHandler<OrderPlaced> via
+		// `in T`). Keyed registrations are reached only through their key, so they are never variance-redirect
+		// targets; an invariant interface can never satisfy a different closure, so it is not a candidate.
 		List<(string ServiceType, INamedTypeSymbol Symbol)> varianceCandidates = new();
 		HashSet<string> varianceSeen = new(StringComparer.Ordinal);
 
@@ -521,6 +532,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			// single-resolution slot to an earlier registration, since it stays reachable through its resolver.
 			if (registration.Key is null
 			    && registration.ServiceSymbol is { IsGenericType: true, TypeKind: TypeKind.Interface, } variantService
+			    && HasDeclaredVariance(variantService)
 			    && varianceSeen.Add(registration.ServiceType))
 			{
 				varianceCandidates.Add((registration.ServiceType, variantService));
@@ -1911,20 +1923,29 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 				serviceMemberOrder.Add(requestedKey);
 			}
 
-			foreach ((string ServiceType, INamedTypeSymbol Symbol) match in matches)
-			{
-				if (!serviceMembers.TryGetValue(new ServiceKey(match.ServiceType, null), out List<string>? candidateMembers))
-				{
-					continue;
-				}
+			UnionMatchedMembers(members, matches, serviceMembers);
+		}
+	}
 
-				foreach (string member in candidateMembers)
-				{
-					if (!members.Contains(member))
-					{
-						members.Add(member);
-					}
-				}
+	/// <summary>
+	///     Appends each matched candidate's members to <paramref name="members" /> in candidate order, deduped by
+	///     implementation (a candidate whose members were all pruned, or that failed to build, contributes none).
+	/// </summary>
+	private static void UnionMatchedMembers(
+		List<string> members,
+		List<(string ServiceType, INamedTypeSymbol Symbol)> matches,
+		Dictionary<ServiceKey, List<string>> serviceMembers)
+	{
+		foreach ((string ServiceType, INamedTypeSymbol Symbol) match in matches)
+		{
+			if (!serviceMembers.TryGetValue(new ServiceKey(match.ServiceType, null), out List<string>? candidateMembers))
+			{
+				continue;
+			}
+
+			foreach (string member in candidateMembers.Where(member => !members.Contains(member)))
+			{
+				members.Add(member);
 			}
 		}
 	}
@@ -2036,17 +2057,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 		// The interface must declare at least one variant (in/out) type parameter; an invariant interface
 		// (IStore<T> with no in/out) never matches a differently-closed registration.
-		bool hasVariance = false;
-		foreach (ITypeParameterSymbol parameter in requestedDefinition.TypeParameters)
-		{
-			if (parameter.Variance is VarianceKind.In or VarianceKind.Out)
-			{
-				hasVariance = true;
-				break;
-			}
-		}
-
-		if (!hasVariance)
+		if (!HasDeclaredVariance(requested))
 		{
 			return matches;
 		}
@@ -2070,6 +2081,13 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 		return matches;
 	}
+
+	/// <summary>
+	///     Whether the generic interface's definition declares at least one variant (<c>in</c>/<c>out</c>) type
+	///     parameter - the precondition for any differently-closed construction of it to be convertible.
+	/// </summary>
+	private static bool HasDeclaredVariance(INamedTypeSymbol service)
+		=> service.OriginalDefinition.TypeParameters.Any(parameter => parameter.Variance is VarianceKind.In or VarianceKind.Out);
 
 	/// <summary>
 	///     The single registered service that best satisfies a requested closed generic interface through declared

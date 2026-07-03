@@ -733,6 +733,52 @@ public class GeneralTests
 	}
 
 	[Fact]
+	public async Task Variance_EmitsTheRuntimeFallbackOnlyWhenAVariantCandidateExists()
+	{
+		GeneratorResult variant = Generator.Run("""
+			using Awaiten;
+
+			namespace MyCode;
+
+			public class DomainEvent { }
+			public interface IHandler<in T> { }
+			public sealed class DomainEventHandler : IHandler<DomainEvent> { }
+
+			[Container]
+			[Transient<DomainEventHandler, IHandler<DomainEvent>>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		GeneratorResult invariant = Generator.Run("""
+			using Awaiten;
+
+			namespace MyCode;
+
+			public sealed class Order { }
+			public interface IStore<T> { }
+			public sealed class OrderStore : IStore<Order> { }
+
+			[Container]
+			[Transient<OrderStore, IStore<Order>>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		await That(variant.Diagnostics).IsEmpty();
+		await That(invariant.Diagnostics).IsEmpty();
+
+		// A registered variant closed generic interface makes the by-type dispatch fall back to runtime variance
+		// matching on a miss, so a purely imperative Resolve of a differently-closed request (which no consumer
+		// parameter turned into a compile-time alias) still routes. An invariant interface can never satisfy a
+		// different closure, so such a container emits no fallback machinery at all.
+		await That(variant.Sources["Awaiten.MyCode.MyContainer.g.cs"]).Contains("__TryResolveVariant");
+		await That(invariant.Sources["Awaiten.MyCode.MyContainer.g.cs"]).DoesNotContain("__TryResolveVariant");
+	}
+
+	[Fact]
 	public async Task OpenGeneric_SeedsExpansionFromTheConstructorTheContainerActuallyUses()
 	{
 		GeneratorResult result = Generator.Run("""

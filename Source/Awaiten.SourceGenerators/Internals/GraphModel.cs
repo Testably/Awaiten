@@ -12,6 +12,9 @@ namespace Awaiten.SourceGenerators.Internals;
 ///     each instance's source <see cref="InstanceLocations" />. <see cref="Collections" /> is the
 ///     collection-resolvable membership (each (service type, key) and the instances registered under it, in
 ///     registration order), which the emitter materializes as <c>IEnumerable&lt;T&gt;</c> / <c>T[]</c>.
+///     <see cref="VarianceCandidates" /> is every unkeyed registered service type that is a closed generic
+///     interface with declared variance (in registration order) - the candidates a differently-closed request
+///     can be satisfied by, which the emitter bakes into the runtime variance fallback of the by-type dispatch.
 ///     Produced by <c>AwaitenGenerator.BuildGraph</c> and shared by the generator (which emits the container
 ///     from it) and <c>AwaitenAnalyzer</c> (which walks it for AWT118).
 /// </summary>
@@ -22,4 +25,5 @@ internal sealed record GraphModel(
 	Dictionary<ServiceKey, string> ServiceToImpl,
 	Dictionary<string, int> ImplToIndex,
 	List<LocationInfo?> InstanceLocations,
-	List<ServiceMembers> Collections);
+	List<ServiceMembers> Collections,
+	List<string> VarianceCandidates);

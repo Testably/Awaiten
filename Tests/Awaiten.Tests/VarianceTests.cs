@@ -137,6 +137,120 @@ public partial class VarianceTests
 	}
 
 	[Fact]
+	public async Task ImperativeResolve_Contravariance_ResolvesVarianceCompatibleRegistration()
+	{
+		using ImperativeContravariantContainer.Root container = new();
+
+		// No consumer parameter ever requests IHandler<OrderPlaced>, so no compile-time dispatch alias exists;
+		// the runtime variance fallback matches the registered IHandler<DomainEvent> (in T) on the first request.
+		IHandler<OrderPlaced> handler = container.Resolve<IHandler<OrderPlaced>>();
+
+		await That(handler).Is<DomainEventHandler>();
+	}
+
+	[Fact]
+	public async Task ImperativeResolve_Covariance_ResolvesVarianceCompatibleRegistration()
+	{
+		using ImperativeCovariantContainer.Root container = new();
+
+		IFactory<DomainEvent> factory = container.Resolve<IFactory<DomainEvent>>();
+
+		await That(factory).Is<OrderPlacedFactory>();
+	}
+
+	[Fact]
+	public async Task ImperativeResolve_NearestCandidateWins()
+	{
+		using ImperativeNearestContainer.Root container = new();
+
+		// Both IHandler<object> and IHandler<DomainEvent> satisfy the request; the runtime fallback picks the
+		// nearest closure, mirroring the compile-time rule, not the first-registered IHandler<object>.
+		IHandler<OrderPlaced> handler = container.Resolve<IHandler<OrderPlaced>>();
+
+		await That(handler).Is<DomainEventHandler>();
+	}
+
+	[Fact]
+	public async Task ImperativeResolve_RepeatedRequestsFollowTheMemoizedRoute()
+	{
+		using ImperativeNearestContainer.Root container = new();
+
+		// The second request takes the memoized route (requested type -> matched service) instead of
+		// re-scanning the candidates; both land on the same registration.
+		IHandler<OrderPlaced> first = container.Resolve<IHandler<OrderPlaced>>();
+		IHandler<OrderPlaced> second = container.Resolve<IHandler<OrderPlaced>>();
+
+		await That(first).Is<DomainEventHandler>();
+		await That(second).Is<DomainEventHandler>();
+	}
+
+	[Fact]
+	public async Task ImperativeResolve_ScopedRegistration_ResolvesOnTheRequestingScope()
+	{
+		using ImperativeScopedContainer.Root container = new();
+		using IAwaitenScope scope1 = container.CreateScope();
+		using IAwaitenScope scope2 = container.CreateScope();
+
+		// The fallback reuses the matched registration's resolver on the requesting scope: the variance-routed
+		// request and the exact request share the scope's single instance, and another scope gets its own.
+		IHandler<OrderPlaced> routed = scope1.Resolve<IHandler<OrderPlaced>>();
+
+		await That(routed).IsSameAs(scope1.Resolve<IHandler<DomainEvent>>());
+		await That(routed).IsSameAs(scope1.Resolve<IHandler<OrderPlaced>>());
+		await That(routed).IsNotSameAs(scope2.Resolve<IHandler<OrderPlaced>>());
+	}
+
+	[Fact]
+	public async Task ImperativeResolve_ExactRegistrationWinsOverVariance()
+	{
+		using ExactWinsContainer.Root container = new();
+
+		// The exact IHandler<OrderPlaced> bucket hits before any variance fallback runs.
+		IHandler<OrderPlaced> handler = container.Resolve<IHandler<OrderPlaced>>();
+
+		await That(handler).Is<OrderPlacedHandler>();
+	}
+
+	[Fact]
+	public async Task ImperativeResolve_KeyedRegistrationIsNeverACandidate()
+	{
+		using ImperativeKeyedContainer.Root container = new();
+
+		// The only variance-compatible registration is keyed, and keyed registrations are reached solely
+		// through their key - so the imperative request still throws the standard resolution failure.
+		await That(() => container.Resolve<IHandler<OrderPlaced>>()).Throws<InvalidOperationException>();
+	}
+
+	[Fact]
+	public async Task ImperativeResolve_ValueTypeClosureThrows()
+	{
+		using ImperativeNearestContainer.Root container = new();
+
+		// int converts to object only by boxing, never by a reference conversion, so IHandler<object> does not
+		// satisfy IHandler<int> - exactly as at compile time.
+		await That(() => container.Resolve<IHandler<int>>()).Throws<InvalidOperationException>();
+	}
+
+	[Fact]
+	public async Task ImperativeResolve_UnboundGenericThrows()
+	{
+		using ImperativeNearestContainer.Root container = new();
+
+		// An unbound generic is not a constructed type, so the fallback never considers it.
+		await That(() => container.Resolve(typeof(IHandler<>))).Throws<InvalidOperationException>();
+	}
+
+	[Fact]
+	public async Task ImperativeResolve_InvariantInterfaceThrows()
+	{
+		using InvariantContainer.Root container = new();
+
+		// IStore<T> declares no in/out, so no registration is a variance candidate and an unregistered closure
+		// still throws.
+		await That(() => container.Resolve<IStore<SpecialDomainEvent>>()).Throws<InvalidOperationException>();
+	}
+
+	[Fact]
 	public async Task Contravariance_NearestCandidateWins()
 	{
 		using NearestContravariantContainer.Root container = new();
@@ -401,4 +515,27 @@ public partial class VarianceTests
 	[Transient<DomainEventHandler, IHandler<DomainEvent>>]
 	[Transient<FuncOrderConsumer>]
 	public static partial class FuncRelationshipContainer;
+
+	// No consumer requests a differently-closed IHandler<T>, so only the runtime fallback can variance-route.
+	[Container]
+	[Transient<DomainEventHandler, IHandler<DomainEvent>>]
+	public static partial class ImperativeContravariantContainer;
+
+	[Container]
+	[Transient<OrderPlacedFactory, IFactory<OrderPlaced>>]
+	public static partial class ImperativeCovariantContainer;
+
+	// The farther IHandler<object> is registered first, so registration order alone would pick it.
+	[Container]
+	[Transient<ObjectHandler, IHandler<object>>]
+	[Transient<DomainEventHandler, IHandler<DomainEvent>>]
+	public static partial class ImperativeNearestContainer;
+
+	[Container]
+	[Scoped<DomainEventHandler, IHandler<DomainEvent>>]
+	public static partial class ImperativeScopedContainer;
+
+	[Container]
+	[Transient<DomainEventHandler, IHandler<DomainEvent>>(Key = "k")]
+	public static partial class ImperativeKeyedContainer;
 }

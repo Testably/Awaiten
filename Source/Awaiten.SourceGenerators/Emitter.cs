@@ -187,7 +187,7 @@ internal static class Emitter
 		// the sealed Root subclass owns the singletons and is the usable instance (new MyContainer.Root()).
 		EmitRootClass(builder, depth, context, model.SyncResolveAfterInit);
 		builder.AppendLine();
-		EmitScopeBaseClass(builder, depth, context, model.Strict, model.SyncResolveAfterInit);
+		EmitScopeBaseClass(builder, depth, context, model.Strict, model.SyncResolveAfterInit, model.VarianceCandidates.AsArray());
 
 		// The __AsyncArray<T> backing type for IAsyncEnumerable<T> collections is emitted on the container (a
 		// private nested type reachable from both Scope and Root) only when the async collection materialization is
@@ -473,7 +473,7 @@ internal static class Emitter
 	///     itself, constructs transients, and resolves singletons through <c>protected virtual</c> delegators
 	///     that the <c>Root</c> subclass overrides. Child (request) scopes are instances of this type.
 	/// </summary>
-	private static void EmitScopeBaseClass(StringBuilder builder, int depth, EmitContext context, bool strict, bool syncResolveAfterInit)
+	private static void EmitScopeBaseClass(StringBuilder builder, int depth, EmitContext context, bool strict, bool syncResolveAfterInit, string[] varianceCandidates)
 	{
 		InstanceModel[] instances = context.Instances;
 		Names names = context.Names;
@@ -555,7 +555,7 @@ internal static class Emitter
 		Indent(builder, body + 1).AppendLine("__root = root;");
 		Indent(builder, body).AppendLine("}");
 		builder.AppendLine();
-		EmitResolutionApi(builder, body, instances, names, serviceToIndex, strict, syncResolveAfterInit);
+		EmitResolutionApi(builder, body, context, strict, syncResolveAfterInit, varianceCandidates);
 		builder.AppendLine();
 		EmitGenericResolveMethod(builder, body);
 		builder.AppendLine();
@@ -845,9 +845,18 @@ internal static class Emitter
 		Indent(builder, depth).AppendLine("}");
 	}
 
-	private static void EmitResolutionApi(StringBuilder builder, int depth, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool strict, bool syncResolveAfterInit)
+	private static void EmitResolutionApi(StringBuilder builder, int depth, EmitContext context, bool strict, bool syncResolveAfterInit, string[] varianceCandidates)
 	{
+		InstanceModel[] instances = context.Instances;
+		Names names = context.Names;
+		Dictionary<ServiceKey, int> serviceToIndex = context.ServiceToIndex;
+
 		List<DispatchEntry> entries = BuildDispatchEntries(instances, names, serviceToIndex, strict, syncResolveAfterInit);
+		// The runtime variance-fallback candidates: the registered variant closed-generic-interface service
+		// types that are actually by-type dispatchable, in registration order. A candidate excluded from the
+		// synchronous dispatch (async-tainted under the strict default, or failed to build) is dropped - the
+		// fallback can only route a request to an existing bucket.
+		List<string> varianceEntries = VarianceDispatchTypes(varianceCandidates, entries);
 		List<DispatchEntry> rootWithheld = Withheld(entries);
 		// hasWithheld gates the __withheld guidance lookup in Resolve (root-withheld disposables plus
 		// async-only services); hasRootWithheld gates the RootWithheld slot-flag check in TryResolve, which only
@@ -927,8 +936,114 @@ internal static class Emitter
 		Indent(builder, depth + 2).AppendLine("}");
 		Indent(builder, depth + 1).AppendLine("}");
 		builder.AppendLine();
+		if (varianceEntries.Count > 0)
+		{
+			// The exact-match probe missed: hand the request to the variance fallback, which satisfies a
+			// differently-closed generic interface request through a variance-compatible registration. The
+			// exact-match fast path above is untouched - the fallback only ever runs on what would otherwise
+			// be a failed resolution.
+			Indent(builder, depth + 1).AppendLine("return __TryResolveVariant(serviceType, out instance);");
+			Indent(builder, depth).AppendLine("}");
+			builder.AppendLine();
+			EmitVarianceFallback(builder, depth, varianceEntries, hasWithheld);
+			return;
+		}
+
 		Indent(builder, depth + 1).AppendLine("instance = null;");
 		Indent(builder, depth + 1).AppendLine("return false;");
+		Indent(builder, depth).AppendLine("}");
+	}
+
+	/// <summary>
+	///     The variance candidates that have a by-type dispatch entry (in candidate registration order): the
+	///     service types the runtime variance fallback may route a differently-closed request to. Empty when the
+	///     container registers no variant closed generic interface, so typical containers emit no fallback at all.
+	/// </summary>
+	private static List<string> VarianceDispatchTypes(string[] varianceCandidates, List<DispatchEntry> entries)
+	{
+		if (varianceCandidates.Length == 0)
+		{
+			return new List<string>();
+		}
+
+		HashSet<string> dispatchable = new(entries.Select(entry => entry.Type), StringComparer.Ordinal);
+		return varianceCandidates.Where(dispatchable.Contains).ToList();
+	}
+
+	/// <summary>
+	///     Emits the runtime variance fallback consulted by <c>TryResolve</c> after the exact-match probe missed:
+	///     an imperative <c>Resolve&lt;T&gt;()</c> / <c>Resolve(Type)</c> of a closed generic interface with no
+	///     bucket entry is satisfied by the nearest variance-compatible registered service - the same candidates,
+	///     conversion rule (identity or implicit reference conversion; value-type arguments never convert) and
+	///     nearest-wins selection as the compile-time redirect, so imperative and injected resolution agree even
+	///     for a closed type no consumer parameter ever requested (which a compile-time dispatch alias cannot
+	///     cover). A successful route is memoized in <c>__varianceRoutes</c>, so repeated requests pay one
+	///     dictionary hit plus the target's O(1) probe instead of re-scanning; failures are not memoized (they
+	///     throw from <c>Resolve</c> anyway, and unbounded junk types must not grow the cache). A type with
+	///     withheld guidance keeps its targeted error instead of being silently variance-routed.
+	/// </summary>
+	private static void EmitVarianceFallback(StringBuilder builder, int depth, List<string> candidates, bool hasWithheld)
+	{
+		// The candidate service types, in registration order - mirroring the compile-time candidate order so
+		// the registration-order tie-break picks the same target at runtime.
+		Indent(builder, depth).AppendLine("private static readonly global::System.Type[] __varianceCandidates = new global::System.Type[]");
+		Indent(builder, depth).AppendLine("{");
+		foreach (string candidate in candidates)
+		{
+			Indent(builder, depth + 1).Append("typeof(").Append(candidate).AppendLine("),");
+		}
+
+		Indent(builder, depth).AppendLine("};");
+		builder.AppendLine();
+		Indent(builder, depth).AppendLine(
+			"private static readonly global::System.Collections.Concurrent.ConcurrentDictionary<global::System.Type, global::System.Type> __varianceRoutes = new global::System.Collections.Concurrent.ConcurrentDictionary<global::System.Type, global::System.Type>();");
+		builder.AppendLine();
+
+		Indent(builder, depth).AppendLine("private bool __TryResolveVariant(global::System.Type serviceType, out object? instance)");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).AppendLine("if (__varianceRoutes.TryGetValue(serviceType, out global::System.Type? __route))");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).AppendLine("return TryResolve(__route, out instance);");
+		Indent(builder, depth + 1).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("instance = null;");
+		// Only a constructed generic interface can be variance-satisfied. A type with withheld guidance (a
+		// root-withheld disposable on the Root, an async-only service) keeps its targeted error from Resolve.
+		Indent(builder, depth + 1).Append("if (!serviceType.IsConstructedGenericType || !serviceType.IsInterface")
+			.AppendLine(hasWithheld ? " || __withheld.ContainsKey(serviceType))" : ")");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).AppendLine("return false;");
+		Indent(builder, depth + 1).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("global::System.Type __definition = serviceType.GetGenericTypeDefinition();");
+		Indent(builder, depth + 1).AppendLine("global::System.Type? __match = null;");
+		Indent(builder, depth + 1).AppendLine("foreach (global::System.Type __candidate in __varianceCandidates)");
+		Indent(builder, depth + 1).AppendLine("{");
+		// A candidate satisfies the request when it is a different closure of the same generic interface
+		// definition and an instance of it IS-A the request - IsAssignableFrom is exactly the identity-or-
+		// implicit-reference-conversion check C# variance defines (a value-type argument never converts).
+		Indent(builder, depth + 2).AppendLine("if ((object)__candidate == (object)serviceType");
+		Indent(builder, depth + 2).AppendLine("    || __candidate.GetGenericTypeDefinition() != __definition");
+		Indent(builder, depth + 2).AppendLine("    || !serviceType.IsAssignableFrom(__candidate))");
+		Indent(builder, depth + 2).AppendLine("{");
+		Indent(builder, depth + 3).AppendLine("continue;");
+		Indent(builder, depth + 2).AppendLine("}");
+		builder.AppendLine();
+		// Nearest candidate wins - replace the current best when it converts to the candidate - falling back
+		// to registration order, mirroring the generator's FindVarianceMatch.
+		Indent(builder, depth + 2).AppendLine("if (__match is null || __candidate.IsAssignableFrom(__match))");
+		Indent(builder, depth + 2).AppendLine("{");
+		Indent(builder, depth + 3).AppendLine("__match = __candidate;");
+		Indent(builder, depth + 2).AppendLine("}");
+		Indent(builder, depth + 1).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("if (__match is null || !TryResolve(__match, out instance))");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).AppendLine("return false;");
+		Indent(builder, depth + 1).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("__varianceRoutes.TryAdd(serviceType, __match);");
+		Indent(builder, depth + 1).AppendLine("return true;");
 		Indent(builder, depth).AppendLine("}");
 	}
 
