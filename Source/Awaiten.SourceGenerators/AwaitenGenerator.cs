@@ -1093,102 +1093,167 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		{
 			string compositeType = composite.Composite.ToDisplayString(FullyQualified);
 
-			// AWT132: a service can have at most one composite façade. The first-declared composite wins; a later
-			// one of a DIFFERENT type is an error, while the same type declared twice is idempotent (not reported).
-			if (compositeByService.TryGetValue(composite.Service, out string? firstComposite))
+			// AWT132: a service can have at most one composite façade; a later composite for it is skipped.
+			if (IsDuplicateComposite(composite, compositeType, compositeByService, diagnostics))
 			{
-				if (firstComposite != compositeType)
-				{
-					diagnostics.Add(new DiagnosticInfo(
-						Diagnostics.MultipleCompositesForService,
-						LocationInfo.From(composite.Location),
-						new EquatableArray<string>([Display(composite.Service),])));
-				}
-
 				continue;
 			}
 
+			// AWT130/AWT133: the composite must fan out over a collection of exactly the composed service.
+			if (!ValidateCompositeCollection(composite, compositeType, containerSymbol, compilation, serviceToImpl, diagnostics))
+			{
+				continue;
+			}
+
+			ImplInfo compositeInfo = EnsureCompositeInstance(composite, compositeType, byImpl, implOrder);
+			DropRedundantSelfMembership(composite, compositeType, serviceMembers, diagnostics);
+			MakeCompositeThePublicWinner(composite, compositeType, compositeInfo, serviceToImpl, byImpl);
+		}
+	}
+
+	// AWT132: whether this composite duplicates one already chosen for its service (so the caller skips it),
+	// recording the first composite per service. A second composite of a DIFFERENT type is reported; the same
+	// type declared twice is idempotent and left silent.
+	private static bool IsDuplicateComposite(
+		CompositeRegistration composite,
+		string compositeType,
+		Dictionary<string, string> compositeByService,
+		List<DiagnosticInfo> diagnostics)
+	{
+		if (!compositeByService.TryGetValue(composite.Service, out string? firstComposite))
+		{
 			compositeByService.Add(composite.Service, compositeType);
+			return false;
+		}
 
-			// AWT130/AWT133: the composite must fan out over a collection of exactly the composed service. A missing
-			// collection parameter is AWT130; a collection of a base type of the service (which would resolve a
-			// different collection, since collections are keyed by exact element type) is AWT133.
-			switch (ClassifyCompositeCollection(composite.Composite, composite.ServiceSymbol, containerSymbol, compilation, serviceToImpl, out string? relatedElement))
-			{
-				case CompositeCollectionKind.Missing:
-					diagnostics.Add(new DiagnosticInfo(
-						Diagnostics.CompositeMissingCollectionParameter,
-						LocationInfo.From(composite.Location),
-						new EquatableArray<string>([
-							Display(compositeType),
-							Display(composite.Service),
-						])));
-					continue;
+		if (firstComposite != compositeType)
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.MultipleCompositesForService,
+				LocationInfo.From(composite.Location),
+				new EquatableArray<string>([Display(composite.Service),])));
+		}
 
-				case CompositeCollectionKind.RelatedElement:
-					diagnostics.Add(new DiagnosticInfo(
-						Diagnostics.CompositeCollectionNotOfComposedService,
-						LocationInfo.From(composite.Location),
-						new EquatableArray<string>([
-							Display(compositeType),
-							Display(relatedElement!),
-							Display(composite.Service),
-						])));
-					continue;
-			}
+		return true;
+	}
 
-			// Register the composite as an ordinary instance (idempotent if the same type is named twice, or was
-			// already registered as a normal service).
-			if (!byImpl.TryGetValue(compositeType, out ImplInfo? compositeInfo))
-			{
-				compositeInfo = new ImplInfo(
-					compositeType, composite.Composite, composite.Lifetime,
-					LocationInfo.From(composite.Location), ProductionKind.Constructor, null);
-				byImpl.Add(compositeType, compositeInfo);
-				implOrder.Add(compositeInfo);
-			}
-
-			// AWT131: the composite type is also registered as a bare member of the service it composes (e.g. a
-			// [Transient<C, S>] alongside [Composite<C, S>]). A composite is excluded from its own fan-out, so drop
-			// it from every collection of the composed service and warn - without the removal its own collection
-			// edge would include itself and surface as a confusing AWT102 dependency cycle.
-			bool wasMember = false;
-			foreach (KeyValuePair<ServiceKey, List<string>> entry in serviceMembers)
-			{
-				if (entry.Key.Service == composite.Service && entry.Value.Remove(compositeType))
-				{
-					wasMember = true;
-				}
-			}
-
-			if (wasMember)
-			{
+	// Whether the composite's collection parameter is valid (the caller proceeds), reporting AWT130 for a missing
+	// collection parameter and AWT133 for a collection of a base type of the service (which, since collections are
+	// keyed by exact element type, would resolve a different collection than the composed service's registrations).
+	private static bool ValidateCompositeCollection(
+		CompositeRegistration composite,
+		string compositeType,
+		INamedTypeSymbol containerSymbol,
+		Compilation compilation,
+		Dictionary<ServiceKey, string> serviceToImpl,
+		List<DiagnosticInfo> diagnostics)
+	{
+		switch (ClassifyCompositeCollection(composite.Composite, composite.ServiceSymbol, containerSymbol, compilation, serviceToImpl, out string? relatedElement))
+		{
+			case CompositeCollectionKind.Missing:
 				diagnostics.Add(new DiagnosticInfo(
-					Diagnostics.CompositeAlsoRegisteredAsMember,
+					Diagnostics.CompositeMissingCollectionParameter,
 					LocationInfo.From(composite.Location),
 					new EquatableArray<string>([
 						Display(compositeType),
 						Display(composite.Service),
 					])));
-			}
+				return false;
 
-			// The composite becomes the public single-dispatch winner: take the unkeyed service off whatever impl
-			// currently holds it (a former winner stays a collection member, just no longer the façade) and hand
-			// it to the composite. The composite is never a serviceMembers entry, so it is excluded from its own
-			// collection parameter and from any other IEnumerable<TService> consumer.
-			ServiceKey publicKey = new(composite.Service, null);
-			if (serviceToImpl.TryGetValue(publicKey, out string? previousWinner)
-			    && previousWinner != compositeType
-			    && byImpl.TryGetValue(previousWinner, out ImplInfo? previousInfo))
-			{
-				previousInfo.Services.Remove(publicKey);
-			}
+			case CompositeCollectionKind.RelatedElement:
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.CompositeCollectionNotOfComposedService,
+					LocationInfo.From(composite.Location),
+					new EquatableArray<string>([
+						Display(compositeType),
+						Display(relatedElement!),
+						Display(composite.Service),
+					])));
+				return false;
 
-			serviceToImpl[publicKey] = compositeType;
-			if (!compositeInfo.Services.Contains(publicKey))
+			default:
+				return true;
+		}
+	}
+
+	// Registers the composite as an ordinary instance (constructed, cached and disposed by index) and returns its
+	// ImplInfo, reusing the existing one if the type was already registered (idempotent when named twice or when
+	// the composite type is also a normal service).
+	private static ImplInfo EnsureCompositeInstance(
+		CompositeRegistration composite,
+		string compositeType,
+		Dictionary<string, ImplInfo> byImpl,
+		List<ImplInfo> implOrder)
+	{
+		if (byImpl.TryGetValue(compositeType, out ImplInfo? compositeInfo))
+		{
+			return compositeInfo;
+		}
+
+		compositeInfo = new ImplInfo(
+			compositeType, composite.Composite, composite.Lifetime,
+			LocationInfo.From(composite.Location), ProductionKind.Constructor, null);
+		byImpl.Add(compositeType, compositeInfo);
+		implOrder.Add(compositeInfo);
+		return compositeInfo;
+	}
+
+	// AWT131: the composite type is also registered as a bare member of the service it composes (e.g. a
+	// [Transient<C, S>] alongside [Composite<C, S>]). A composite is excluded from its own fan-out, so drop it from
+	// every collection of the composed service and warn - without the removal its own collection edge would include
+	// itself and surface as a confusing AWT102 dependency cycle.
+	private static void DropRedundantSelfMembership(
+		CompositeRegistration composite,
+		string compositeType,
+		Dictionary<ServiceKey, List<string>> serviceMembers,
+		List<DiagnosticInfo> diagnostics)
+	{
+		bool wasMember = false;
+		foreach (KeyValuePair<ServiceKey, List<string>> entry in serviceMembers)
+		{
+			if (entry.Key.Service == composite.Service && entry.Value.Remove(compositeType))
 			{
-				compositeInfo.Services.Add(publicKey);
+				wasMember = true;
 			}
+		}
+
+		if (!wasMember)
+		{
+			return;
+		}
+
+		diagnostics.Add(new DiagnosticInfo(
+			Diagnostics.CompositeAlsoRegisteredAsMember,
+			LocationInfo.From(composite.Location),
+			new EquatableArray<string>([
+				Display(compositeType),
+				Display(composite.Service),
+			])));
+	}
+
+	// Makes the composite the public single-dispatch winner: takes the unkeyed service off whatever impl currently
+	// holds it (a former winner stays a collection member, just no longer the façade) and hands it to the composite.
+	// The composite is never a serviceMembers entry, so it stays excluded from its own - and every other consumer's -
+	// IEnumerable<TService>.
+	private static void MakeCompositeThePublicWinner(
+		CompositeRegistration composite,
+		string compositeType,
+		ImplInfo compositeInfo,
+		Dictionary<ServiceKey, string> serviceToImpl,
+		Dictionary<string, ImplInfo> byImpl)
+	{
+		ServiceKey publicKey = new(composite.Service, null);
+		if (serviceToImpl.TryGetValue(publicKey, out string? previousWinner)
+		    && previousWinner != compositeType
+		    && byImpl.TryGetValue(previousWinner, out ImplInfo? previousInfo))
+		{
+			previousInfo.Services.Remove(publicKey);
+		}
+
+		serviceToImpl[publicKey] = compositeType;
+		if (!compositeInfo.Services.Contains(publicKey))
+		{
+			compositeInfo.Services.Add(publicKey);
 		}
 	}
 
