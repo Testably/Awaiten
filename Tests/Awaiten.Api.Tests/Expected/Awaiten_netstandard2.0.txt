@@ -129,6 +129,7 @@ namespace Awaiten
     public sealed class InjectAttribute : System.Attribute
     {
         public InjectAttribute() { }
+        public bool Deferred { get; set; }
     }
     public enum LifetimeSafety
     {

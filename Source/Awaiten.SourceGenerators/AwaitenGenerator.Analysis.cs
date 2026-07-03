@@ -126,25 +126,29 @@ partial class AwaitenGenerator
 	}
 
 	// The direct-dependency graph over instance indices (resolvable edges to built instances): the edge set
-	// for async-taint and captive-dependency analysis. The relationship types (Func<T>/Lazy<T>/…) and the
-	// bare eager relationships (Owned<T>/Task<T>) all defer or launder, so only direct dependencies
-	// contribute edges here. Cycle detection uses the wider BuildConstructionGraph instead.
+	// for captive-dependency analysis (AWT105), async-taint propagation, and the synchronous-async checks
+	// (AWT119/AWT120). The relationship types (Func<T>/Lazy<T>/…) and the bare eager relationships
+	// (Owned<T>/Task<T>) all defer or launder, so only direct (and eager collection) dependencies contribute
+	// edges here. A deferred [Inject(Deferred = true)] member is included: its post-construction assignment still
+	// captures its target for the owner's lifetime (captive) and awaits an async target (taint), so for every use
+	// but cycle detection it behaves exactly like a constructor edge. Only cycle detection excludes it (that
+	// exclusion is what lets it break a mutual constructor cycle - AWT102), which uses BuildConstructionGraph.
 	private static Dictionary<int, List<int>> BuildDependencyGraph(
 		List<InstanceModel> instances,
 		Dictionary<ServiceKey, string> serviceToImpl,
 		Dictionary<string, int> implToIndex,
 		Dictionary<ServiceKey, List<string>> serviceMembers)
-		=> BuildEdges(instances, serviceToImpl, implToIndex, serviceMembers, includeEagerBare: false);
+		=> BuildEdges(instances, serviceToImpl, implToIndex, serviceMembers, includeEagerBare: false, includeDeferredMembers: true);
 
-	// The construction graph over instance indices: a superset of BuildDependencyGraph that additionally
-	// includes the bare eager relationships Owned<T> and Task<T> (the latter also covering Task<Owned<T>>).
-	// Unlike their deferred Func/Lazy wrappers - which are stored as a closure and invoked later - these
-	// resolve their target during the owner's construction: synchronously for a synchronous target, and in
-	// the synchronous prefix (before the first await, and before the memoized task is published) of an async
-	// resolver. A cycle closed through one of them therefore re-enters an as-yet-uncached resolver and
-	// overflows the stack at runtime rather than being broken, so it is reported as a dependency cycle
-	// (AWT102). The narrower direct-only graph stays the edge set for taint/captive analysis, which the
-	// deferrals correctly launder.
+	// The construction graph over instance indices, for cycle detection (AWT102): the direct edges plus the bare
+	// eager relationships Owned<T> and Task<T> (the latter also covering Task<Owned<T>>). Unlike their deferred
+	// Func/Lazy wrappers - which are stored as a closure and invoked later - these resolve their target during the
+	// owner's construction: synchronously for a synchronous target, and in the synchronous prefix (before the
+	// first await, and before the memoized task is published) of an async resolver. A cycle closed through one of
+	// them therefore re-enters an as-yet-uncached resolver and overflows the stack at runtime rather than being
+	// broken, so it is reported as a dependency cycle (AWT102). Deferred [Inject(Deferred = true)] members are
+	// excluded here (that exclusion is what lets them break a cycle); unlike BuildDependencyGraph, which includes
+	// them for captive/taint, so neither graph is a strict superset of the other.
 	private static Dictionary<int, List<int>> BuildConstructionGraph(
 		List<InstanceModel> instances,
 		Dictionary<ServiceKey, string> serviceToImpl,
@@ -152,18 +156,59 @@ partial class AwaitenGenerator
 		Dictionary<ServiceKey, List<string>> serviceMembers)
 		=> BuildEdges(instances, serviceToImpl, implToIndex, serviceMembers, includeEagerBare: true);
 
+	// The combined construction-plus-deferred graph over instance indices, for the deferred-cycle analysis
+	// (AWT145/AWT146/AWT147): the construction edges plus the edges a deferred [Inject(Deferred = true)] member
+	// contributes when its post-construction assignment runs. Deferred members are excluded from the cycle
+	// (AWT102) and captive (AWT105) graphs - that exclusion is what lets a deferred property break a mutual
+	// constructor cycle - so cycles that involve them are vetted over this union instead. Uses construction-graph
+	// semantics (includeEagerBare) because a deferred assignment resolves its target during the owner's
+	// construction episode, exactly like a construction edge.
+	private static Dictionary<int, List<int>> BuildCombinedGraph(
+		List<InstanceModel> instances,
+		Dictionary<ServiceKey, string> serviceToImpl,
+		Dictionary<string, int> implToIndex,
+		Dictionary<ServiceKey, List<string>> serviceMembers)
+		=> BuildEdges(instances, serviceToImpl, implToIndex, serviceMembers, includeEagerBare: true, includeDeferredMembers: true);
+
+	/// <summary>
+	///     Whether any built instance has a deferred (<c>[Inject(Deferred = true)]</c>) member - the gate for
+	///     building and walking the combined construction-plus-deferred graph at all (without one, that graph is
+	///     the construction graph and every cycle in it is AWT102's business).
+	/// </summary>
+	internal static bool AnyDeferredMember(List<InstanceModel> instances)
+	{
+		foreach (InstanceModel instance in instances)
+		{
+			foreach (MemberModel member in instance.InjectedMembers.AsArray())
+			{
+				if (member.Deferred)
+				{
+					return true;
+				}
+			}
+		}
+
+		return false;
+	}
+
 	// Builds the edge set over instance indices, keeping only the parameters that contribute an edge and that
 	// resolve to a built instance. A direct dependency always contributes; the bare eager relationships
 	// Owned<T> and Task<T> contribute only when <paramref name="includeEagerBare" /> is set (the construction
 	// graph), since they resolve eagerly and so close cycles even though they launder async taint. A collection
 	// (Enumerable) contributes an edge to each of its members in both graphs: it materializes them eagerly into
 	// an array, so it captures them (taint/captive) and closes cycles through them just like a direct dependency.
+	// A deferred [Inject(Deferred = true)] member contributes only when <paramref name="includeDeferredMembers" />
+	// is set (the taint graph): its assignment is excluded from cycle (AWT102) and captive (AWT105) analysis - that
+	// exclusion is what lets it break a mutual constructor cycle - but a deferred Direct/collection member to an
+	// async-tainted target is awaited at assignment time, so its taint must still reach the owner (otherwise a
+	// synchronous owner would emit a synchronous resolve of an async-only service and fail to compile).
 	private static Dictionary<int, List<int>> BuildEdges(
 		List<InstanceModel> instances,
 		Dictionary<ServiceKey, string> serviceToImpl,
 		Dictionary<string, int> implToIndex,
 		Dictionary<ServiceKey, List<string>> serviceMembers,
-		bool includeEagerBare)
+		bool includeEagerBare,
+		bool includeDeferredMembers = false)
 	{
 		Dictionary<int, List<int>> edges = new();
 		for (int i = 0; i < instances.Count; i++)
@@ -180,6 +225,11 @@ partial class AwaitenGenerator
 			// classifies it identically to a constructor edge.
 			foreach (MemberModel member in instances[i].InjectedMembers.AsArray())
 			{
+				if (member.Deferred && !includeDeferredMembers)
+				{
+					continue;
+				}
+
 				AddParameterEdges(member.Dependency, serviceToImpl, implToIndex, serviceMembers, includeEagerBare, nodeEdges);
 			}
 
@@ -292,7 +342,10 @@ partial class AwaitenGenerator
 	///     async-initialized; AWT120 fires when it only reaches one transitively, and reports the dependency
 	///     path. (The prototype checked only <c>Func</c>/<c>Lazy</c>; <c>Owned</c> is included here because
 	///     it is the same synchronous deferral and an async-tainted service emits no synchronous resolver
-	///     for the <c>Owned</c> handle to build into.)
+	///     for the <c>Owned</c> handle to build into.) An injected <c>[Inject]</c> member resolves through
+	///     the same synchronous expression as a constructor parameter - and a deferred one still resolves
+	///     synchronously at wiring time, while its <c>Func</c>/<c>Lazy</c>/<c>Owned</c> wrapper launders the
+	///     async taint off the owner - so member relationships are checked exactly like parameters here.
 	/// </summary>
 	private static void DetectSynchronousAsyncResolution(
 		List<InstanceModel> instances,
@@ -306,46 +359,56 @@ partial class AwaitenGenerator
 		{
 			foreach (ParameterModel parameter in instances[i].ConstructorParameters.AsArray())
 			{
-				// Guard the implToIndex lookup: serviceToImpl can name an implementation whose BuildInstance
-				// failed (so it is absent from implToIndex), and an unguarded indexer would crash the generator
-				// (KeyNotFoundException) instead of surfacing the real registration error. Mirrors the guard in
-				// BuildDependencyGraph / ValidateRuntimeArguments.
-				if (parameter.Kind is not (DependencyKind.Func or DependencyKind.Lazy or DependencyKind.Owned)
-				    || !serviceToImpl.TryGetValue(KeyOf(parameter), out string? targetImpl)
-				    || !implToIndex.TryGetValue(targetImpl, out int target))
-				{
-					continue;
-				}
+				CheckDependency(i, parameter);
+			}
 
-				if (!instances[target].IsAsyncTainted)
-				{
-					continue;
-				}
+			foreach (MemberModel member in instances[i].InjectedMembers.AsArray())
+			{
+				CheckDependency(i, member.Dependency);
+			}
+		}
 
-				// Point the diagnostic at the offending parameter; fall back to the consumer's registration.
-				LocationInfo? location = parameter.Location ?? instanceLocations[i];
-				if (instances[target].IsAsyncSource)
-				{
-					diagnostics.Add(new DiagnosticInfo(
-						Diagnostics.SynchronousAsyncResolution,
-						location,
-						new EquatableArray<string>([
-							DisplayInstance(instances[i].ImplementationType),
-							parameter.Kind.ToString(),
-							DisplayInstance(instances[target].ImplementationType),
-						])));
-				}
-				else
-				{
-					string path = AsyncTaintPath(instances, dependencies, target);
-					diagnostics.Add(new DiagnosticInfo(
-						Diagnostics.AsyncDependencyOnSyncPath,
-						location,
-						new EquatableArray<string>([
-							DisplayInstance(instances[i].ImplementationType),
-							path,
-						])));
-				}
+		void CheckDependency(int consumer, ParameterModel parameter)
+		{
+			// Guard the implToIndex lookup: serviceToImpl can name an implementation whose BuildInstance
+			// failed (so it is absent from implToIndex), and an unguarded indexer would crash the generator
+			// (KeyNotFoundException) instead of surfacing the real registration error. Mirrors the guard in
+			// BuildDependencyGraph / ValidateRuntimeArguments.
+			if (parameter.Kind is not (DependencyKind.Func or DependencyKind.Lazy or DependencyKind.Owned)
+			    || !serviceToImpl.TryGetValue(KeyOf(parameter), out string? targetImpl)
+			    || !implToIndex.TryGetValue(targetImpl, out int target))
+			{
+				return;
+			}
+
+			if (!instances[target].IsAsyncTainted)
+			{
+				return;
+			}
+
+			// Point the diagnostic at the offending parameter; fall back to the consumer's registration.
+			LocationInfo? location = parameter.Location ?? instanceLocations[consumer];
+			if (instances[target].IsAsyncSource)
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.SynchronousAsyncResolution,
+					location,
+					new EquatableArray<string>([
+						DisplayInstance(instances[consumer].ImplementationType),
+						parameter.Kind.ToString(),
+						DisplayInstance(instances[target].ImplementationType),
+					])));
+			}
+			else
+			{
+				string path = AsyncTaintPath(instances, dependencies, target);
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.AsyncDependencyOnSyncPath,
+					location,
+					new EquatableArray<string>([
+						DisplayInstance(instances[consumer].ImplementationType),
+						path,
+					])));
 			}
 		}
 	}
@@ -385,6 +448,17 @@ partial class AwaitenGenerator
 				    && byService.TryGetValue(KeyOf(parameter), out ServiceMembers members))
 				{
 					ReportAsyncTaintedMembers(i, parameter, members, instances, implToIndex, instanceLocations, diagnostics);
+				}
+			}
+
+			// An injected [Inject] collection member (deferred or not) is materialized through the same
+			// synchronous expression as a constructor parameter, so it is checked the same way.
+			foreach (ParameterModel dependency in instances[i].InjectedMembers.AsArray().Select(member => member.Dependency))
+			{
+				if (dependency.Kind == DependencyKind.Enumerable
+				    && byService.TryGetValue(KeyOf(dependency), out ServiceMembers memberCollection))
+				{
+					ReportAsyncTaintedMembers(i, dependency, memberCollection, instances, implToIndex, instanceLocations, diagnostics);
 				}
 			}
 		}
@@ -716,6 +790,337 @@ partial class AwaitenGenerator
 				Diagnostics.DependencyCycle,
 				containerLocation,
 				new EquatableArray<string>([rendered,])));
+		}
+	}
+
+	/// <summary>
+	///     AWT145/AWT146/AWT147: a deferred property breaks a mutual cycle only because the owning instance is
+	///     cached before its deferred members are wired, so a re-entrant resolve returns the cached instance. Any
+	///     cycle that involves a deferred edge escapes AWT102 (which walks only the construction graph, from which
+	///     deferred edges are absent), so it must be vetted here. The verdict is computed per strongly connected
+	///     component of the combined construction-plus-deferred graph rather than per DFS-enumerated cycle: a DFS
+	///     enumerates only some of a component's cycles (a cycle closing through an already-finished node is never
+	///     seen), and unlike AWT102 - where any one found cycle suffices to reject - a component here can mix
+	///     supported and faulty cycles, so a complete verdict must come from the component's whole edge set (every
+	///     intra-component edge lies on some cycle). See <see cref="ClassifyDeferredComponent" /> for the faults.
+	/// </summary>
+	private static void DetectNonTerminatingDeferredCycles(
+		List<InstanceModel> instances,
+		Dictionary<int, List<int>> constructionEdges,
+		Dictionary<int, List<int>> combinedEdges,
+		LocationInfo? containerLocation,
+		List<DiagnosticInfo> diagnostics)
+	{
+		// Without a deferred member the combined graph IS the construction graph and every cycle in it is
+		// AWT102's business - the (common) deferred-free container pays one member scan and no graph walk.
+		if (!AnyDeferredMember(instances))
+		{
+			return;
+		}
+
+		foreach (List<int> component in StronglyConnectedComponents(instances.Count, combinedEdges))
+		{
+			// Only a non-trivial component (more than one node, or a self-loop) contains a cycle at all.
+			if (component.Count > 1 || combinedEdges[component[0]].Contains(component[0]))
+			{
+				ClassifyDeferredComponent(component, instances, constructionEdges, combinedEdges, containerLocation, diagnostics);
+			}
+		}
+	}
+
+	// Classifies one non-trivial strongly connected component of the combined construction-plus-deferred graph
+	// and reports its fault, if any (one diagnostic per component, rendering a concrete demonstrating cycle):
+	// - A construction edge whose source is cached (singleton/scoped) re-enters that source before it is cached
+	//   when resolution flows around the cycle, constructing a duplicate of it (AWT147).
+	// - With no cached participant at all nothing terminates the re-entry, so the cycle recurses forever: AWT147
+	//   when a construction edge remains in the mix, AWT145 for the all-deferred all-transient cycle.
+	// - An async-tainted participant publishes its memoized task only after the re-entrant resolve has already
+	//   returned, so a deferred cycle through it cannot terminate either (AWT146).
+	// What remains - every construction edge sourced at a transient, no async participant, and at least one
+	// synchronously-cached participant whose cache terminates the re-entry - is the supported case: the cycle
+	// terminates from every entry point (transients are merely rebuilt a bounded number of times), so nothing is
+	// reported. A component with no deferred edge is a pure construction cycle and is left to AWT102; a component
+	// whose construction edges already close a cycle on their own is also left to AWT102 (the verdicts above
+	// assume every cycle through a construction edge also traverses a deferred edge), and is re-vetted here once
+	// the developer has broken that pure construction cycle.
+	private static void ClassifyDeferredComponent(
+		List<int> component,
+		List<InstanceModel> instances,
+		Dictionary<int, List<int>> constructionEdges,
+		Dictionary<int, List<int>> combinedEdges,
+		LocationInfo? containerLocation,
+		List<DiagnosticInfo> diagnostics)
+	{
+		HashSet<int> members = new(component);
+		ComponentEdges edges = FindComponentEdges(component, members, instances, constructionEdges, combinedEdges);
+
+		// No deferred edge: a pure construction cycle, which AWT102 already reports.
+		if (edges.Deferred is null)
+		{
+			return;
+		}
+
+		// The construction edges alone already close a cycle, which AWT102 reports. The verdicts below assume
+		// every cycle through a construction edge also traverses a deferred edge, so defer to AWT102 here rather
+		// than stacking a second, possibly-spurious deferred verdict onto the same component.
+		if (edges.Construction is not null && HasConstructionCycle(component, members, constructionEdges))
+		{
+			return;
+		}
+
+		if (edges.CachedSourceConstruction is { } duplicating)
+		{
+			Report(Diagnostics.DeferredMixedCycle, duplicating);
+			return;
+		}
+
+		(bool anyCached, int asyncParticipant) = ScanParticipants(component, instances);
+
+		if (!anyCached)
+		{
+			if (edges.Construction is { } mixed)
+			{
+				Report(Diagnostics.DeferredMixedCycle, mixed);
+			}
+			else
+			{
+				Report(Diagnostics.DeferredTransientCycle, edges.Deferred.Value);
+			}
+
+			return;
+		}
+
+		if (asyncParticipant >= 0)
+		{
+			// Demonstrate a cycle through the async participant: its first intra-component edge closes one (a
+			// participant of a non-trivial strongly connected component always has one).
+			int closing = combinedEdges[asyncParticipant].First(members.Contains);
+			Report(Diagnostics.DeferredAsyncCycle, (asyncParticipant, closing));
+			return;
+		}
+
+		// Supported: every construction edge starts at a transient and a synchronously-cached participant
+		// terminates the re-entry, so the cycle terminates from every entry point.
+		void Report(DiagnosticDescriptor descriptor, (int Source, int Target) edge)
+		{
+			List<int> cycle = CycleThroughEdge(edge.Source, edge.Target, members, combinedEdges);
+			string rendered = string.Join(" -> ", cycle.Select(index => DisplayInstance(instances[index].ImplementationType)));
+			diagnostics.Add(new DiagnosticInfo(descriptor, containerLocation, new EquatableArray<string>([rendered,])));
+		}
+	}
+
+	// The intra-component edges that drive the classification: the first <see cref="ComponentEdges.Deferred" />
+	// edge (its presence alone marks the component as a deferred cycle), the first <see cref="ComponentEdges.Construction" />
+	// edge, and the first construction edge whose source is cached (a singleton/scoped re-entered before it is
+	// cached - the duplicating case, <see cref="ComponentEdges.CachedSourceConstruction" />). Any may be absent.
+	private static ComponentEdges FindComponentEdges(
+		List<int> component,
+		HashSet<int> members,
+		List<InstanceModel> instances,
+		Dictionary<int, List<int>> constructionEdges,
+		Dictionary<int, List<int>> combinedEdges)
+	{
+		(int Source, int Target)? deferredEdge = null;
+		(int Source, int Target)? constructionEdge = null;
+		(int Source, int Target)? cachedSourceConstructionEdge = null;
+		foreach (int node in component)
+		{
+			foreach (int next in combinedEdges[node])
+			{
+				if (!members.Contains(next))
+				{
+					continue;
+				}
+
+				if (constructionEdges[node].Contains(next))
+				{
+					constructionEdge ??= (node, next);
+					if (instances[node].Lifetime != Lifetime.Transient)
+					{
+						cachedSourceConstructionEdge ??= (node, next);
+					}
+				}
+				else
+				{
+					deferredEdge ??= (node, next);
+				}
+			}
+		}
+
+		return new ComponentEdges(deferredEdge, constructionEdge, cachedSourceConstructionEdge);
+	}
+
+	// Scans the component once for the two participant facts the classification needs: whether any participant is
+	// synchronously cached (a non-transient lifetime, which can terminate the re-entry) and the first async-tainted
+	// participant (-1 when none), whose memoized task publishes too late for a deferred cycle to terminate through.
+	private static (bool AnyCached, int AsyncParticipant) ScanParticipants(List<int> component, List<InstanceModel> instances)
+	{
+		bool anyCached = false;
+		int asyncParticipant = -1;
+		foreach (int node in component)
+		{
+			anyCached |= instances[node].Lifetime != Lifetime.Transient;
+			if (asyncParticipant < 0 && instances[node].IsAsyncTainted)
+			{
+				asyncParticipant = node;
+			}
+		}
+
+		return (anyCached, asyncParticipant);
+	}
+
+	private readonly struct ComponentEdges((int Source, int Target)? deferred, (int Source, int Target)? construction, (int Source, int Target)? cachedSourceConstruction)
+	{
+		public (int Source, int Target)? Deferred { get; } = deferred;
+
+		public (int Source, int Target)? Construction { get; } = construction;
+
+		public (int Source, int Target)? CachedSourceConstruction { get; } = cachedSourceConstruction;
+	}
+
+	// Whether the construction edges alone close a cycle within the component (a visited/on-stack DFS restricted
+	// to the component's nodes).
+	private static bool HasConstructionCycle(List<int> component, HashSet<int> members, Dictionary<int, List<int>> constructionEdges)
+	{
+		HashSet<int> visited = new();
+		HashSet<int> onStack = new();
+		return component.Where(node => !visited.Contains(node)).Any(Visit);
+
+		bool Visit(int node)
+		{
+			visited.Add(node);
+			onStack.Add(node);
+			foreach (int next in constructionEdges[node])
+			{
+				if (members.Contains(next) && (onStack.Contains(next) || (!visited.Contains(next) && Visit(next))))
+				{
+					return true;
+				}
+			}
+
+			onStack.Remove(node);
+			return false;
+		}
+	}
+
+	// A concrete cycle through the intra-component edge source -> target, for a diagnostic message: the edge
+	// followed by the shortest path (over the component's edges) from the target back to the source, rendered
+	// head-first with the head repeated at the tail ("A -> B -> A"). The path exists because source and target
+	// share a strongly connected component.
+	private static List<int> CycleThroughEdge(int source, int target, HashSet<int> members, Dictionary<int, List<int>> edges)
+	{
+		List<int> cycle = new() { source, };
+		cycle.AddRange(PathBetween(target, source, members, edges));
+		return cycle;
+	}
+
+	// The shortest path from one component node to another (inclusive on both ends) over the component's edges,
+	// by breadth-first search; a from == to path is the single node.
+	private static List<int> PathBetween(int from, int to, HashSet<int> members, Dictionary<int, List<int>> edges)
+	{
+		if (from == to)
+		{
+			return new List<int> { from, };
+		}
+
+		Dictionary<int, int> previous = new();
+		HashSet<int> visited = new() { from, };
+		Queue<int> queue = new();
+		queue.Enqueue(from);
+		while (queue.Count > 0)
+		{
+			int node = queue.Dequeue();
+			foreach (int next in edges[node])
+			{
+				if (!members.Contains(next) || !visited.Add(next))
+				{
+					continue;
+				}
+
+				previous[next] = node;
+				if (next == to)
+				{
+					queue.Clear();
+					break;
+				}
+
+				queue.Enqueue(next);
+			}
+		}
+
+		List<int> path = new();
+		for (int node = to; ; node = previous[node])
+		{
+			path.Insert(0, node);
+			if (node == from)
+			{
+				break;
+			}
+		}
+
+		return path;
+	}
+
+	/// <summary>
+	///     Tarjan's strongly connected components over the instance indices <c>[0, count)</c>, in a
+	///     deterministic order (the graph and iteration order are deterministic, so the emitted diagnostics
+	///     are cacheable by the incremental pipeline).
+	/// </summary>
+	private static List<List<int>> StronglyConnectedComponents(int count, Dictionary<int, List<int>> edges)
+	{
+		// index[v] holds the 1-based discovery index (0 = unvisited); low[v] the smallest index reachable from
+		// v's DFS subtree through at most one back-edge. A node whose low-link equals its own index roots a
+		// strongly connected component, which is popped off the stack as a unit.
+		int[] index = new int[count];
+		int[] low = new int[count];
+		bool[] onStack = new bool[count];
+		Stack<int> stack = new();
+		List<List<int>> components = new();
+		int nextIndex = 0;
+
+		for (int i = 0; i < count; i++)
+		{
+			if (index[i] == 0)
+			{
+				Connect(i);
+			}
+		}
+
+		return components;
+
+		void Connect(int node)
+		{
+			index[node] = low[node] = ++nextIndex;
+			stack.Push(node);
+			onStack[node] = true;
+
+			foreach (int next in edges[node])
+			{
+				if (index[next] == 0)
+				{
+					Connect(next);
+					low[node] = Math.Min(low[node], low[next]);
+				}
+				else if (onStack[next])
+				{
+					low[node] = Math.Min(low[node], index[next]);
+				}
+			}
+
+			if (low[node] == index[node])
+			{
+				List<int> component = new();
+				int popped;
+				do
+				{
+					popped = stack.Pop();
+					onStack[popped] = false;
+					component.Add(popped);
+				}
+				while (popped != node);
+
+				components.Add(component);
+			}
 		}
 	}
 

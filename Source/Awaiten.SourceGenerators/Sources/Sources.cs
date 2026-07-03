@@ -182,6 +182,15 @@ internal static partial class Sources
 		Indent(builder, body).AppendLine("protected readonly object __gate = new object();");
 		Indent(builder, body).AppendLine("protected volatile bool __disposed;");
 		Indent(builder, body).AppendLine("protected global::System.Collections.Generic.List<object>? __disposables;");
+		if (NeedsWiringSupport(instances))
+		{
+			// The nesting depth of the wiring episode in progress on this owner (touched only under __gate; the
+			// re-entrant resolves of a deferred cycle nest). The outermost frame commits every wiring flag - or
+			// rolls a failed episode back - exactly once, so a nested participant is never flagged as wired while
+			// an outer participant that references it is still half-wired.
+			Indent(builder, body).AppendLine("protected int __wiring;");
+		}
+
 		EmitCacheFields(builder, body, instances, names, Lifetime.Scoped);
 		builder.AppendLine();
 		// The external resolver this scope routes its [FromServices] / [ImportServices] dependencies through
@@ -243,34 +252,7 @@ internal static partial class Sources
 		builder.AppendLine();
 		EmitGenericResolverImpls(builder, body, instances, names, strict, syncResolveAfterInit);
 
-		for (int i = 0; i < instances.Length; i++)
-		{
-			// The synchronous resolver is suppressed for an async-tainted service in the strict default (where it
-			// is reachable only through ResolveAsync); the async resolver is added for every async-tainted
-			// service, including a parameterized one (reached through its Func<TArg…, Task<T>>).
-			if (EmitsSync(instances[i], syncResolveAfterInit))
-			{
-				builder.AppendLine();
-
-				// In pragmatic mode an async-tainted service is also resolvable synchronously; its synchronous
-				// resolver delegates to the memoizing async one (a parameterized service forwarding its runtime
-				// arguments) rather than constructing a second, uninitialized instance, so there is a single init path.
-				if (instances[i].IsAsyncTainted)
-				{
-					EmitDelegatingSyncResolver(builder, body, i, instances[i], names);
-				}
-				else
-				{
-					EmitScopeResolver(builder, body, i, context);
-				}
-			}
-
-			if (instances[i].IsAsyncTainted)
-			{
-				builder.AppendLine();
-				EmitAsyncScopeResolver(builder, body, i, context);
-			}
-		}
+		EmitInstanceResolvers(builder, body, context, instances, names, syncResolveAfterInit);
 
 		// The async by-type resolver for each async collection (one whose IAsyncEnumerable<T> shape ResolveAsync
 		// serves through the async dispatch arm added in EmitAsyncResolutionApi).
@@ -280,6 +262,12 @@ internal static partial class Sources
 			EmitAsyncCollectionResolver(builder, body, collection, method, names, instances);
 		}
 
+		if (NeedsWiringSupport(instances))
+		{
+			builder.AppendLine();
+			EmitWiringSupport(builder, body, instances, names, root: false);
+		}
+
 		builder.AppendLine();
 		EmitDispose(builder, body, asyncDisposal);
 
@@ -287,6 +275,121 @@ internal static partial class Sources
 		{
 			builder.AppendLine();
 			EmitDisposeAsync(builder, body);
+		}
+
+		Indent(builder, depth).AppendLine("}");
+	}
+
+	/// <summary>
+	///     Emits each instance's per-service resolvers into the Scope body: a synchronous resolver - suppressed for
+	///     an async-tainted service in the strict default (reachable only through ResolveAsync), and in pragmatic
+	///     mode delegating to the memoizing async resolver rather than constructing a second, uninitialized instance
+	///     (a parameterized service forwarding its runtime arguments), so there is a single init path - and, for
+	///     every async-tainted service, its async resolver.
+	/// </summary>
+	private static void EmitInstanceResolvers(StringBuilder builder, int depth, EmitContext context, InstanceModel[] instances, Names names, bool syncResolveAfterInit)
+	{
+		for (int i = 0; i < instances.Length; i++)
+		{
+			if (EmitsSync(instances[i], syncResolveAfterInit))
+			{
+				builder.AppendLine();
+				if (instances[i].IsAsyncTainted)
+				{
+					EmitDelegatingSyncResolver(builder, depth, i, instances[i], names);
+				}
+				else
+				{
+					EmitScopeResolver(builder, depth, i, context);
+				}
+			}
+
+			if (instances[i].IsAsyncTainted)
+			{
+				builder.AppendLine();
+				EmitAsyncScopeResolver(builder, depth, i, context);
+			}
+		}
+	}
+
+	/// <summary>
+	///     Whether the container needs the deferred-wiring episode machinery (the <c>__wiring</c> depth counter
+	///     and the <c>__CommitWiring</c>/<c>__RollbackWiring</c> pair): some synchronously-cached instance has a
+	///     deferred (<c>[Inject(Deferred = true)]</c>) member, so its cache-miss block runs a wiring episode.
+	/// </summary>
+	private static bool NeedsWiringSupport(InstanceModel[] instances)
+		=> instances.Any(instance => IsSyncCachedDeferred(instance, Lifetime.Singleton) || IsSyncCachedDeferred(instance, Lifetime.Scoped));
+
+	/// <summary>
+	///     Whether the instance is cached by a synchronous caching resolver of the given lifetime <em>and</em> has
+	///     deferred members - exactly the instances that get a volatile wiring flag (see
+	///     <see cref="EmitCacheFields" />) and participate in wiring episodes.
+	/// </summary>
+	private static bool IsSyncCachedDeferred(InstanceModel instance, Lifetime lifetime)
+		=> instance.Lifetime == lifetime
+		   && instance.Production != ProductionKind.Instance
+		   && !instance.IsParameterized
+		   && !instance.IsAsyncTainted
+		   && HasDeferredMembers(instance);
+
+	/// <summary>
+	///     Emits the wiring-episode commit/rollback pair over the owner's deferred-member instances (the scoped
+	///     ones on the base <c>Scope</c>, plus the singletons in the <c>Root</c> override). The outermost frame of
+	///     a wiring episode calls <c>__CommitWiring</c> on success - flagging every instance the episode published
+	///     as fully wired, so the lock-free fast paths may hand them out - and <c>__RollbackWiring</c> on failure,
+	///     unpublishing every instance the failed episode left half-wired so the next resolve rebuilds it. The pair
+	///     is virtual because an episode on the <c>Root</c> can span its inherited scoped instances and its
+	///     singletons under the same gate, so the Root override must flush both sets.
+	/// </summary>
+	private static void EmitWiringSupport(StringBuilder builder, int depth, InstanceModel[] instances, Names names, bool root)
+	{
+		string modifiers = root ? "private protected override" : "private protected virtual";
+		Lifetime lifetime = root ? Lifetime.Singleton : Lifetime.Scoped;
+
+		AppendXmlSummary(builder, depth,
+			"Marks every published deferred-member instance as fully wired: called by the outermost frame of a",
+			"successful wiring episode, so a half-wired instance is never observable through the lock-free fast",
+			"path - not even transitively through an already-published peer.");
+		Indent(builder, depth).Append(modifiers).AppendLine(" void __CommitWiring()");
+		Indent(builder, depth).AppendLine("{");
+		if (root)
+		{
+			Indent(builder, depth + 1).AppendLine("base.__CommitWiring();");
+		}
+
+		for (int i = 0; i < instances.Length; i++)
+		{
+			if (IsSyncCachedDeferred(instances[i], lifetime))
+			{
+				Indent(builder, depth + 1).Append("if (").Append(names.Field(i)).AppendLine(" is not null)");
+				Indent(builder, depth + 1).AppendLine("{");
+				Indent(builder, depth + 2).Append(names.WiredField(i)).AppendLine(" = true;");
+				Indent(builder, depth + 1).AppendLine("}");
+			}
+		}
+
+		Indent(builder, depth).AppendLine("}");
+		builder.AppendLine();
+
+		AppendXmlSummary(builder, depth,
+			"Unpublishes every instance a failed wiring episode left half-wired (published, wiring flag still",
+			"false), so the next resolve rebuilds it instead of silently returning a half-wired instance.");
+		Indent(builder, depth).Append(modifiers).AppendLine(" void __RollbackWiring()");
+		Indent(builder, depth).AppendLine("{");
+		if (root)
+		{
+			Indent(builder, depth + 1).AppendLine("base.__RollbackWiring();");
+		}
+
+		for (int i = 0; i < instances.Length; i++)
+		{
+			if (IsSyncCachedDeferred(instances[i], lifetime))
+			{
+				Indent(builder, depth + 1).Append("if (!").Append(names.WiredField(i)).AppendLine(")");
+				Indent(builder, depth + 1).AppendLine("{");
+				Indent(builder, depth + 2).Append(names.Field(i)).AppendLine(" = null;");
+				Indent(builder, depth + 1).AppendLine("}");
+			}
 		}
 
 		Indent(builder, depth).AppendLine("}");
@@ -327,6 +430,15 @@ internal static partial class Sources
 		// The Root override of InitializeAsync warms the async singletons in dependency order (the base
 		// Scope warms only its async scoped services).
 		EmitRootInitializeAsync(builder, body, instances, names);
+
+		// The Root's wiring commit/rollback override adds the deferred singletons to the base Scope's scoped
+		// set: an episode on the Root (whose gate its singleton resolvers and inherited scoped resolvers share)
+		// can publish both kinds, so the outermost frame must flush both.
+		if (instances.Any(instance => IsSyncCachedDeferred(instance, Lifetime.Singleton)))
+		{
+			builder.AppendLine();
+			EmitWiringSupport(builder, body, instances, names, root: true);
+		}
 
 		for (int i = 0; i < instances.Length; i++)
 		{
@@ -386,6 +498,19 @@ internal static partial class Sources
 				string modifier = instance.IsReferenceType ? "private volatile " : "private ";
 				Indent(builder, depth).Append(modifier).Append(instance.ConstructedType)
 					.Append("? ").Append(names.Field(i)).AppendLine(";");
+
+				// A deferred ([Inject(Deferred = true)]) member is wired after the cache field is published, so a
+				// separate volatile flag marks when wiring has completed. The lock-free fast path gates on it (rather
+				// than on the field alone) so a concurrent caller never returns a published-but-half-wired instance,
+				// while the mid-wiring re-entrant resolve sees it still false, skips the fast path and terminates the
+				// cycle through the reentrant lock. It is committed by the outermost frame of the wiring episode
+				// (__CommitWiring), so a cycle peer is never flagged while a participant that references it is still
+				// half-wired. Volatile: its release-write happens-after every deferred write of the episode, so a
+				// reader that acquire-reads it as true sees fully-wired instances only.
+				if (HasDeferredMembers(instance))
+				{
+					Indent(builder, depth).Append("private volatile bool ").Append(names.WiredField(i)).AppendLine(";");
+				}
 			}
 
 			// The async cache memoizes the construction-and-initialization Task so it is awaited exactly

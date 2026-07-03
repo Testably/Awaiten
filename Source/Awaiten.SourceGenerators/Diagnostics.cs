@@ -616,4 +616,70 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A property marked <c>[Inject(Deferred = true)]</c> has only an <c>init</c> accessor, or is
+	///     <c>required</c>. A deferred property is assigned after construction (to break a cycle), which an
+	///     <c>init</c>-only accessor forbids, and it is omitted from the emitted object initializer, which a
+	///     <c>required</c> member does not allow (the generated construction would fail with CS9035 inside
+	///     generated code). Give it a plain <c>set</c> accessor and drop <c>required</c>.
+	/// </summary>
+	public static readonly DiagnosticDescriptor DeferredPropertyIsInitOnly = new(
+		"AWT144",
+		"Deferred property is init-only or required",
+		"The property '{0}' on '{1}' is marked [Inject(Deferred = true)] but is {2}; a deferred property is assigned after construction and omitted from the object initializer, so it needs a plain set accessor and must not be required (init accessors and required members can only be satisfied inside an object initializer)",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     Every participant in a cycle of <c>[Inject(Deferred = true)]</c> properties is a transient. A deferred
+	///     property breaks a cycle only because a participant is cached before it is wired, so a re-entrant resolve
+	///     returns that cached instance; when every participant is a transient nothing is cached anywhere, so each
+	///     lap rebuilds the participants and the cycle recurses forever at runtime. Make at least one participant
+	///     singleton or scoped, or break the cycle.
+	/// </summary>
+	public static readonly DiagnosticDescriptor DeferredTransientCycle = new(
+		"AWT145",
+		"Non-terminating deferred transient cycle",
+		"Deferred property cycle in which every participant is a transient detected: {0}. A deferred property breaks a cycle only when a participant is cached (singleton or scoped) before it is wired, so a re-entrant resolve returns that cached instance; when every participant is a transient nothing is cached anywhere, so this cycle would recurse forever. Make at least one participant singleton or scoped, or break the cycle.",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A cycle of <c>[Inject(Deferred = true)]</c> properties includes an async-tainted participant (one that
+	///     is <c>IAsyncInitializable</c>, produced by an async factory, or reaches one). A deferred property
+	///     breaks a cycle only when a re-entrant resolve returns the already-cached instance; an async resolver
+	///     publishes its memoized task only after that re-entrant resolve has returned, so the cycle overflows the
+	///     stack or deadlocks at runtime rather than terminating. Break the cycle, or make its participants
+	///     synchronous.
+	/// </summary>
+	public static readonly DiagnosticDescriptor DeferredAsyncCycle = new(
+		"AWT146",
+		"Non-terminating deferred async cycle",
+		"Deferred property cycle through an async-initialized service detected: {0}. A deferred property breaks a cycle only when a re-entrant resolve returns the already-cached instance; an async resolver publishes its memoized task only after that re-entrant resolve has returned, so this cycle would overflow the stack or deadlock at runtime. Break the cycle, or make its participants synchronous (not IAsyncInitializable and not dependent on an async service).",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A cycle that involves at least one <c>[Inject(Deferred = true)]</c> property is only partly broken: it
+	///     still traverses a construction-time edge (a constructor parameter, a plain <c>[Inject]</c> property, or a
+	///     bare eager <c>Owned&lt;T&gt;</c>/<c>Task&lt;T&gt;</c>) that misbehaves at runtime. A construction edge
+	///     whose source is a cached (singleton/scoped) participant resolves its target - and, around the cycle, the
+	///     source itself again - <em>before</em> the source is cached, so the source is constructed twice (a
+	///     duplicate of a cached instance). When every participant is a transient, nothing is ever cached and the
+	///     re-entry recurses forever instead. Only a construction edge that starts at a <em>transient</em> in a
+	///     cycle that also has a synchronously-cached participant terminates (the cached participant's re-entrant
+	///     resolve returns the cached instance), and that shape is supported and not reported. Turn the offending
+	///     construction edge into an <c>[Inject(Deferred = true)]</c> property, or break the cycle another way.
+	/// </summary>
+	public static readonly DiagnosticDescriptor DeferredMixedCycle = new(
+		"AWT147",
+		"Deferred cycle retains a construction edge",
+		"The cycle {0} is only partly broken by a deferred property: it still has at least one construction-time edge (a constructor parameter, a plain [Inject] property, or an eager Owned<T>/Task<T>). Resolution that traverses that edge re-enters a participant before it is cached, so it constructs a duplicate of a cached (singleton/scoped) participant - or recurses forever when every participant is a transient. To fix it, turn the remaining constructor parameter (or plain [Inject] property) into an [Inject(Deferred = true)] property, or remove one of the dependencies to break the cycle.",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

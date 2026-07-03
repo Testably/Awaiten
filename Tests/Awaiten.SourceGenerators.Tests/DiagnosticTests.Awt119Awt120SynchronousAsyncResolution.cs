@@ -37,6 +37,72 @@ public partial class DiagnosticTests
 		}
 
 		[Fact]
+		public async Task Awt119_ReportsForAnInjectedFuncMember()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+			                                       using System;
+			                                       using System.Threading;
+			                                       using System.Threading.Tasks;
+
+			                                       namespace MyCode;
+
+			                                       public sealed class Connection : IAsyncInitializable
+			                                       {
+			                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+			                                       }
+
+			                                       // An injected member resolves through the same synchronous expression as a constructor
+			                                       // parameter, and the Func wrapper launders the async taint off the owner - so without the
+			                                       // member check the generated closure would call a synchronous resolver strict mode never emits.
+			                                       public sealed class Consumer { [Inject] public Func<Connection> Connection { get; set; } }
+
+			                                       [Container]
+			                                       [Singleton<Consumer>]
+			                                       [Singleton<Connection>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT119*").AsWildcard()
+				.Because("an injected Func member over an async-initialized service is the same synchronous-resolution fault as a Func constructor parameter");
+		}
+
+		[Fact]
+		public async Task Awt119_ReportsForADeferredFuncMember()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+			                                       using System;
+			                                       using System.Threading;
+			                                       using System.Threading.Tasks;
+
+			                                       namespace MyCode;
+
+			                                       public sealed class Connection : IAsyncInitializable
+			                                       {
+			                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+			                                       }
+
+			                                       // A deferred Func member is still built synchronously at wiring time; the Func launders the
+			                                       // taint, so the owner stays synchronous and its wiring would call a synchronous resolver that
+			                                       // strict mode never generates for the async-tainted target.
+			                                       public sealed class Consumer { [Inject(Deferred = true)] public Func<Connection> Connection { get; set; } }
+
+			                                       [Container]
+			                                       [Singleton<Consumer>]
+			                                       [Singleton<Connection>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT119*").AsWildcard()
+				.Because("a deferred Func member over an async-initialized service escapes the taint fixpoint but still resolves synchronously, so it must be reported instead of failing to compile in generated code");
+		}
+
+		[Fact]
 		public async Task Awt119_ReportsForALazyRelationship()
 		{
 			GeneratorResult result = Generator.Run("""

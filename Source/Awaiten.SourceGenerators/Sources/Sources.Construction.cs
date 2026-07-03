@@ -239,18 +239,64 @@ internal static partial class Sources
 		}
 
 		StringBuilder assignments = new();
+		bool first = true;
 		for (int m = 0; m < members.Length; m++)
 		{
-			if (m > 0)
+			// A deferred member ([Inject(Deferred = true)]) is assigned after construction and caching, not in the
+			// object initializer, so it can break a mutual constructor cycle. It is emitted by EmitDeferredAssignments.
+			if (members[m].Deferred)
+			{
+				continue;
+			}
+
+			if (!first)
 			{
 				assignments.Append(", ");
 			}
 
+			first = false;
 			assignments.Append(members[m].MemberName).Append(" = ")
 				.Append(DependencyValue(members[m].Dependency, instances, names, serviceToIndex, asynchronous));
 		}
 
-		return $" {{ {assignments} }}";
+		return first ? string.Empty : $" {{ {assignments} }}";
+	}
+
+	/// <summary>
+	///     Emits the post-construction assignment of an instance's deferred members
+	///     (<c>[Inject(Deferred = true)]</c>): <c>variable.Invoice = ResolveInvoiceService();</c>. Emitted
+	///     <em>after</em> the instance is stored in its cache, so a re-entrant resolve of the same service (the
+	///     other side of a mutual cycle) returns the already-cached instance instead of recursing - this is what
+	///     lets a deferred property break a constructor cycle. It runs only on the construction path (inside the
+	///     cache-miss block), so a cache hit never reassigns. On the async path a deferred async-tainted member is
+	///     awaited exactly like an async-tainted constructor argument.
+	/// </summary>
+	private static void EmitDeferredAssignments(StringBuilder builder, int depth, InstanceModel instance, string variable, EmitContext context, bool asynchronous)
+	{
+		foreach (MemberModel member in instance.InjectedMembers.AsArray())
+		{
+			if (!member.Deferred)
+			{
+				continue;
+			}
+
+			string value = DependencyValue(member.Dependency, context.Instances, context.Names, context.ServiceToIndex, asynchronous);
+			Indent(builder, depth).Append(variable).Append('.').Append(member.MemberName).Append(" = ").Append(value).AppendLine(";");
+		}
+	}
+
+	/// <summary>Whether an instance has any deferred ([Inject(Deferred = true)]) member to wire after construction.</summary>
+	private static bool HasDeferredMembers(InstanceModel instance)
+	{
+		foreach (MemberModel member in instance.InjectedMembers.AsArray())
+		{
+			if (member.Deferred)
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/// <summary>

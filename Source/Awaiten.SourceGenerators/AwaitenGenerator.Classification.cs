@@ -225,6 +225,28 @@ partial class AwaitenGenerator
 			return null;
 		}
 
+		// A deferred property ([Inject(Deferred = true)]) is assigned after construction and caching rather than
+		// inside the object initializer, so it contributes no graph edge and can break a mutual constructor cycle.
+		bool deferred = IsInjectDeferred(property.GetAttributes());
+
+		// AWT144: a deferred property is assigned after construction and omitted from the emitted object
+		// initializer, so it needs a real set accessor and must not be `required` - an init-only accessor can
+		// only be assigned inside an object initializer (exactly the construction-time path a deferred property
+		// must avoid to break a cycle), and a required member omitted from the initializer would surface as an
+		// opaque CS9035 inside the generated container instead of a targeted diagnostic here.
+		if (deferred && (setter.IsInitOnly || property.IsRequired))
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.DeferredPropertyIsInitOnly,
+				location,
+				new EquatableArray<string>([
+					property.Name,
+					DisplayInstance(info.ImplementationType),
+					setter.IsInitOnly ? "init-only" : "required",
+				])));
+			return null;
+		}
+
 		ParameterModel dependency = ClassifyDependency(
 			property.Type, property.GetAttributes(), asyncFactory: false, location);
 
@@ -260,7 +282,7 @@ partial class AwaitenGenerator
 				])));
 		}
 
-		return new MemberModel(property.Name, dependency);
+		return new MemberModel(property.Name, dependency, deferred);
 	}
 
 	// The setter must be reachable from the container's object initializer, which is not a derived context:
@@ -594,6 +616,26 @@ partial class AwaitenGenerator
 
 	private static bool HasInject(ImmutableArray<AttributeData> attributes)
 		=> HasAwaitenAttribute(attributes, "InjectAttribute");
+
+	// Whether an [Inject] attribute sets Deferred = true, so the member is assigned after construction and
+	// caching (breaking a mutual constructor cycle) rather than filled inside the object initializer.
+	private static bool IsInjectDeferred(ImmutableArray<AttributeData> attributes)
+	{
+		if (!TryGetAwaitenAttribute(attributes, "InjectAttribute", out AttributeData? attribute) || attribute is null)
+		{
+			return false;
+		}
+
+		foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
+		{
+			if (argument.Key == "Deferred" && argument.Value.Value is bool value)
+			{
+				return value;
+			}
+		}
+
+		return false;
+	}
 
 	/// <summary>
 	///     Whether <paramref name="attributes" /> carries the Awaiten attribute named

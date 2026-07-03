@@ -60,6 +60,12 @@ internal static partial class Sources
 
 		public string AsyncField(int index) => _fields[index] + "AsyncTask";
 
+		// The "wiring complete" flag for a synchronously-cached instance with deferred ([Inject(Deferred = true)])
+		// members: _foo -> _fooWired. It gates the lock-free fast path so a concurrent caller returns the cached
+		// instance only once its deferred members are wired, while the mid-wiring re-entrant resolve (which sees it
+		// still false) skips the fast path and terminates the cycle through the lock instead.
+		public string WiredField(int index) => _fields[index] + "Wired";
+
 		public static Names Build(InstanceModel[] instances, ServiceMembers[] collections, bool syncResolveAfterInit)
 		{
 			string[] resolvers = new string[instances.Length];
@@ -74,7 +80,7 @@ internal static partial class Sources
 				string baseName = Sanitize(instances[i].Name);
 				string name = baseName;
 				int suffix = 2;
-				while (!used.Add(name))
+				while (!TryReserve(used, name))
 				{
 					name = baseName + suffix;
 					suffix++;
@@ -121,6 +127,29 @@ internal static partial class Sources
 			}
 
 			return new Names(resolvers, fields, collections, collectionResolvers, collectionMemberIndices, syncCollections);
+		}
+
+		// Reserves a base name together with the derived member names generated off it (the async resolver's
+		// 'Async', the async cache field's 'AsyncTask' and the wiring flag's 'Wired' suffixes). The base names
+		// alone are not enough: a service type literally named e.g. 'FooWired' would otherwise collide with the
+		// '_fooWired' wiring flag derived for a deferred-member service named 'Foo' (CS0102 in the generated
+		// container), and likewise for 'FooAsync'/'FooAsyncTask' against the async members. Rejecting a name when
+		// any of the four is already taken keeps every derived name unique in both directions.
+		private static bool TryReserve(HashSet<string> used, string name)
+		{
+			string asyncName = name + "Async";
+			string asyncTask = name + "AsyncTask";
+			string wired = name + "Wired";
+			if (used.Contains(name) || used.Contains(asyncName) || used.Contains(asyncTask) || used.Contains(wired))
+			{
+				return false;
+			}
+
+			used.Add(name);
+			used.Add(asyncName);
+			used.Add(asyncTask);
+			used.Add(wired);
+			return true;
 		}
 
 		private static string Sanitize(string name)

@@ -95,6 +95,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		LocationInfo? containerLocation = LocationInfo.From(containerSymbol.Locations.FirstOrDefault());
 		DetectCycles(graph.Instances, graph.ConstructionDependencies, containerLocation, diagnostics);
 		DetectCaptiveDependencies(graph.Instances, graph.Dependencies, graph.InstanceLocations, diagnostics);
+		DetectNonTerminatingDeferredCycles(graph.Instances, graph.ConstructionDependencies, graph.CombinedDependencies, containerLocation, diagnostics);
 
 		// AWT119/AWT120 (strict only): a synchronous Func<T>/Lazy<T>/Owned<T> relationship resolves its
 		// target without awaiting initialization, so it may not target an async-tainted service. The
@@ -297,6 +298,13 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		Dictionary<int, List<int>> dependencies = BuildDependencyGraph(instances, serviceToImpl, implToIndex, serviceMembers);
 		Dictionary<int, List<int>> constructionDependencies = BuildConstructionGraph(instances, serviceToImpl, implToIndex, serviceMembers);
 
+		// The combined construction-plus-deferred graph vets deferred cycles (AWT145-147). Deferred members are
+		// its only addition over the construction graph, so when none exists it IS the construction graph and the
+		// extra pass is skipped (DetectNonTerminatingDeferredCycles early-exits on the same condition).
+		Dictionary<int, List<int>> combinedDependencies = AnyDeferredMember(instances)
+			? BuildCombinedGraph(instances, serviceToImpl, implToIndex, serviceMembers)
+			: constructionDependencies;
+
 		// Async taint: an instance is tainted if its implementation is async-initialized, or if it reaches
 		// one through non-deferred (Direct) edges. Relationship types (Func/Lazy/Owned/Task/Arg) launder the
 		// taint - even the bare eager Owned<T>/Task<T>, which hand back a handle/awaitable rather than the
@@ -334,6 +342,6 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			varianceCandidateTypes.Add(serviceType);
 		}
 
-		return new GraphModel(instances, dependencies, constructionDependencies, serviceToImpl, implToIndex, instanceLocations, collections, varianceCandidateTypes);
+		return new GraphModel(instances, dependencies, constructionDependencies, combinedDependencies, serviceToImpl, implToIndex, instanceLocations, collections, varianceCandidateTypes);
 	}
 }
