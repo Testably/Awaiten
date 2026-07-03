@@ -7,6 +7,17 @@ namespace Awaiten
     {
         public ArgAttribute() { }
     }
+    public readonly struct AwaitenExternalDependency : System.IEquatable<Awaiten.AwaitenExternalDependency>
+    {
+        public AwaitenExternalDependency(System.Type serviceType, object? key = null) { }
+        public object? Key { get; }
+        public System.Type ServiceType { get; }
+        public bool Equals(Awaiten.AwaitenExternalDependency other) { }
+        public override bool Equals(object? obj) { }
+        public override int GetHashCode() { }
+        public static bool operator !=(Awaiten.AwaitenExternalDependency left, Awaiten.AwaitenExternalDependency right) { }
+        public static bool operator ==(Awaiten.AwaitenExternalDependency left, Awaiten.AwaitenExternalDependency right) { }
+    }
     public enum AwaitenLifetime
     {
         Singleton = 0,
@@ -80,7 +91,7 @@ namespace Awaiten
     }
     public interface IAwaitenContainerMetadata : Awaiten.IAwaitenAsyncResolver, Awaiten.IAwaitenResolver, Awaiten.IAwaitenRoot, Awaiten.IAwaitenScope, Awaiten.IExternalResolverHost, System.IDisposable
     {
-        System.Collections.Generic.IReadOnlyList<System.Type> ExternalDependencies { get; }
+        System.Collections.Generic.IReadOnlyList<Awaiten.AwaitenExternalDependency> ExternalDependencies { get; }
         System.Collections.Generic.IReadOnlyList<Awaiten.AwaitenRegistration> Registrations { get; }
     }
     public interface IAwaitenResolver

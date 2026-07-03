@@ -111,7 +111,17 @@ public sealed partial class ExternalDependencyTests
 	{
 		using ExternalContainer.Root container = new();
 
-		await That(((IAwaitenContainerMetadata)container).ExternalDependencies).Contains(typeof(IClock));
+		await That(((IAwaitenContainerMetadata)container).ExternalDependencies)
+			.Contains(new AwaitenExternalDependency(typeof(IClock)));
+	}
+
+	[Fact]
+	public async Task Container_AdvertisesTheKeyOfAKeyedExternalDependency()
+	{
+		using KeyedExternalContainer.Root container = new();
+
+		await That(((IAwaitenContainerMetadata)container).ExternalDependencies)
+			.Contains(new AwaitenExternalDependency(typeof(IClock), "utc"));
 	}
 
 	private sealed class DisposableClock : IClock, IDisposable

@@ -42,8 +42,8 @@ public sealed class AwaitenServiceCollectionExtensionsTests
 		public System.Collections.Generic.IReadOnlyList<AwaitenRegistration> Registrations
 			=> System.Array.Empty<AwaitenRegistration>();
 
-		public System.Collections.Generic.IReadOnlyList<Type> ExternalDependencies
-			=> System.Array.Empty<Type>();
+		public System.Collections.Generic.IReadOnlyList<AwaitenExternalDependency> ExternalDependencies
+			=> System.Array.Empty<AwaitenExternalDependency>();
 
 		public IExternalResolver? ExternalResolver { get; set; }
 

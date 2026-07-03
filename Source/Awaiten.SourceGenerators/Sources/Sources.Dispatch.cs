@@ -167,25 +167,26 @@ internal static partial class Sources
 	/// </summary>
 	private static void EmitExternalMetadata(StringBuilder builder, int depth, InstanceModel[] instances)
 	{
-		string[] external = ExternalDependencies(instances);
+		(string Type, string? Key)[] external = ExternalDependencies(instances);
 		if (external.Length == 0)
 		{
 			Indent(builder, depth).AppendLine(
-				"global::System.Collections.Generic.IReadOnlyList<global::System.Type> global::Awaiten.IAwaitenContainerMetadata.ExternalDependencies => global::System.Array.Empty<global::System.Type>();");
+				"global::System.Collections.Generic.IReadOnlyList<global::Awaiten.AwaitenExternalDependency> global::Awaiten.IAwaitenContainerMetadata.ExternalDependencies => global::System.Array.Empty<global::Awaiten.AwaitenExternalDependency>();");
 			return;
 		}
 
-		Indent(builder, depth).AppendLine("private static readonly global::System.Type[] __externalDependencies =");
+		Indent(builder, depth).AppendLine("private static readonly global::Awaiten.AwaitenExternalDependency[] __externalDependencies =");
 		Indent(builder, depth).AppendLine("{");
-		foreach (string type in external)
+		foreach ((string type, string? key) in external)
 		{
-			Indent(builder, depth + 1).Append("typeof(").Append(type).AppendLine("),");
+			Indent(builder, depth + 1).Append("new global::Awaiten.AwaitenExternalDependency(typeof(").Append(type).Append("), ")
+				.Append(ExternalKeyLiteral(key)).AppendLine("),");
 		}
 
 		Indent(builder, depth).AppendLine("};");
 		builder.AppendLine();
 		Indent(builder, depth).AppendLine(
-			"global::System.Collections.Generic.IReadOnlyList<global::System.Type> global::Awaiten.IAwaitenContainerMetadata.ExternalDependencies => __externalDependencies;");
+			"global::System.Collections.Generic.IReadOnlyList<global::Awaiten.AwaitenExternalDependency> global::Awaiten.IAwaitenContainerMetadata.ExternalDependencies => __externalDependencies;");
 	}
 
 	private static string AwaitenLifetimeOf(Lifetime lifetime) => lifetime switch
@@ -874,17 +875,17 @@ internal static partial class Sources
 	///     instance's constructor parameters, in first-seen order - advertised by the Root as
 	///     <c>ExternalDependencies</c> and used to decide whether the external-resolution surface is emitted.
 	/// </summary>
-	private static string[] ExternalDependencies(InstanceModel[] instances)
+	private static (string Type, string? Key)[] ExternalDependencies(InstanceModel[] instances)
 	{
-		List<string> external = new();
-		HashSet<string> seen = new(StringComparer.Ordinal);
+		List<(string Type, string? Key)> external = new();
+		HashSet<(string, string?)> seen = new();
 		foreach (InstanceModel instance in instances)
 		{
 			foreach (ParameterModel parameter in instance.ConstructorParameters.AsArray())
 			{
-				if (parameter.Kind == DependencyKind.External && seen.Add(parameter.ServiceType))
+				if (parameter.Kind == DependencyKind.External && seen.Add((parameter.ServiceType, parameter.Key)))
 				{
-					external.Add(parameter.ServiceType);
+					external.Add((parameter.ServiceType, parameter.Key));
 				}
 			}
 		}

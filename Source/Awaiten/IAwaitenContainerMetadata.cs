@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 
 namespace Awaiten;
@@ -18,10 +17,11 @@ public interface IAwaitenContainerMetadata : IAwaitenRoot, IExternalResolverHost
 	IReadOnlyList<AwaitenRegistration> Registrations { get; }
 
 	/// <summary>
-	///     The service types the container expects to resolve from an external provider (the
-	///     <c>[FromServices]</c> / <c>[ImportServices]</c> dependencies). A host satisfies these through
+	///     The dependencies the container expects to resolve from an external provider (the
+	///     <c>[FromServices]</c> / <c>[ImportServices]</c> dependencies), each carrying its service type and
+	///     optional <c>[FromKey]</c> resolution key. A host satisfies these through
 	///     <see cref="IExternalResolverHost.ExternalResolver" />; the list is empty when the container has no
 	///     external dependencies.
 	/// </summary>
-	IReadOnlyList<Type> ExternalDependencies { get; }
+	IReadOnlyList<AwaitenExternalDependency> ExternalDependencies { get; }
 }
