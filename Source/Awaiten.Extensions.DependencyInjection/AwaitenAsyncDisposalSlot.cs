@@ -62,10 +62,13 @@ internal sealed class AwaitenAsyncDisposalSlot : IDisposable, IAsyncDisposable
 
 			if (_instance is IAsyncDisposable && _instance is not IDisposable)
 			{
-				// Mirrors the generated scope's synchronous drain. The slot stays filled, so a follow-up
-				// DisposeAsync can still tear the instance down.
+				// Mirrors the generated scope's synchronous drain: a sync Dispose over an async-only-disposable
+				// service throws (matching MS.DI) rather than blocking on async disposal. The slot stays filled,
+				// so a follow-up DisposeAsync can still tear the instance down.
+#pragma warning disable S3877 // Exceptions should not be thrown from unexpected methods - deliberate, matches MS.DI.
 				throw new InvalidOperationException(
 					"Awaiten: a service resolved through the Task<T> projection requires asynchronous disposal (it implements IAsyncDisposable but not IDisposable); dispose the provider or scope with DisposeAsync ('await using') instead of a synchronous Dispose().");
+#pragma warning restore S3877
 			}
 
 			_disposed = true;

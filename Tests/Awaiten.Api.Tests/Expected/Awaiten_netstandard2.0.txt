@@ -23,6 +23,8 @@ namespace Awaiten
         public bool Equals(Awaiten.AwaitenRegistration other) { }
         public override bool Equals(object? obj) { }
         public override int GetHashCode() { }
+        public static bool operator !=(Awaiten.AwaitenRegistration left, Awaiten.AwaitenRegistration right) { }
+        public static bool operator ==(Awaiten.AwaitenRegistration left, Awaiten.AwaitenRegistration right) { }
     }
     public static class AwaitenResolverExtensions
     {

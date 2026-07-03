@@ -72,6 +72,16 @@ public readonly struct AwaitenRegistration : IEquatable<AwaitenRegistration>
 	/// <inheritdoc />
 	public override bool Equals(object? obj) => obj is AwaitenRegistration other && Equals(other);
 
+	/// <summary>
+	///     Determines whether two <see cref="AwaitenRegistration" /> values are equal.
+	/// </summary>
+	public static bool operator ==(AwaitenRegistration left, AwaitenRegistration right) => left.Equals(right);
+
+	/// <summary>
+	///     Determines whether two <see cref="AwaitenRegistration" /> values are unequal.
+	/// </summary>
+	public static bool operator !=(AwaitenRegistration left, AwaitenRegistration right) => !left.Equals(right);
+
 	/// <inheritdoc />
 	public override int GetHashCode()
 		=> unchecked((((ServiceType.GetHashCode() * 397) ^ (int)Lifetime) * 397 ^ (RequiresAsync ? 1 : 0)) * 397

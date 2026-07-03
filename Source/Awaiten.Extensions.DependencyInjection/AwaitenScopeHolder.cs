@@ -15,7 +15,9 @@ namespace Awaiten.Extensions.DependencyInjection;
 ///     the <see cref="AwaitenAsyncDisposalSlot" /> captured with its resolution). The Awaiten scope itself is
 ///     collected with the holder when the MS.DI scope is torn down.
 /// </remarks>
+#pragma warning disable S2326 // 'TRoot' is not used - it is a marker giving each root its own closed holder type, so MS.DI keeps a separate scoped registration per bridged container.
 internal sealed class AwaitenScopeHolder<TRoot>
+#pragma warning restore S2326
 	where TRoot : class, IAwaitenContainerMetadata, new()
 {
 	public AwaitenScopeHolder(IAwaitenScope scope) => Scope = scope;

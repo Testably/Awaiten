@@ -9,8 +9,6 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<!-- The full package (not only .Abstractions): AwaitenServiceProviderFactory builds the MS.DI
-		     provider itself via BuildServiceProvider. -->
 		<PackageReference Include="Microsoft.Extensions.DependencyInjection" />
 	</ItemGroup>
 
