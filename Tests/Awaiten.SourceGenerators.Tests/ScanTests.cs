@@ -263,6 +263,124 @@ public class ScanTests
 	}
 
 	[Fact]
+	public async Task Scan_SkipsOpenGenericImplementers()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface IHandler { }
+		                                       public sealed class LoggingHandler<T> : IHandler { }
+		                                       public sealed class PlainHandler : IHandler { }
+
+		                                       [Container]
+		                                       [Scan(typeof(IHandler))]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty()
+			.Because("an open generic implementer has no closed form to construct and must not break the generated code");
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+		await That(source).Contains("new global::MyCode.PlainHandler()");
+		await That(source).DoesNotContain("LoggingHandler")
+			.Because("a generic type definition is skipped by the scan");
+	}
+
+	[Fact]
+	public async Task ScanClosedTypesOf_SkipsOpenGenericImplementers()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface IView<T> { }
+		                                       public sealed class GenericView<T> : IView<T> { }
+		                                       public sealed class ViewModel { }
+		                                       public sealed class ClosedView : IView<ViewModel> { }
+
+		                                       [Container]
+		                                       [Scan(typeof(IView<>), As = ScanAs.ImplementedInterfaces)]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty()
+			.Because("a generic view closing the marker over its own type parameter is not a closed form");
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+		await That(source).Contains("new __Bucket(typeof(global::MyCode.IView<global::MyCode.ViewModel>)");
+		await That(source).DoesNotContain("GenericView")
+			.Because("a generic type definition is skipped by the scan");
+	}
+
+	[Fact]
+	public async Task Scan_SkipsTypesTheContainerCannotAccess()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class VisiblePlugin : IPlugin { }
+
+		                                       public sealed class Host
+		                                       {
+		                                           private sealed class HiddenPlugin : IPlugin { }
+		                                       }
+
+		                                       [Container]
+		                                       [Scan(typeof(IPlugin))]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty()
+			.Because("a private nested match cannot be referenced from the generated code and must be skipped");
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+		await That(source).Contains("new global::MyCode.VisiblePlugin()");
+		await That(source).DoesNotContain("HiddenPlugin");
+	}
+
+	[Fact]
+	public async Task Scan_SeedsOpenGenericExpansionForScannedDependencies()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface IRepository<T> { }
+		                                       public sealed class Repository<T> : IRepository<T> { }
+		                                       public sealed class Order { }
+
+		                                       public interface IPlugin { }
+		                                       public sealed class OrderPlugin : IPlugin
+		                                       {
+		                                           public OrderPlugin(IRepository<Order> repository) { }
+		                                       }
+
+		                                       [Container]
+		                                       [Scan(typeof(IPlugin))]
+		                                       [Transient(typeof(Repository<>), typeof(IRepository<>))]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty()
+			.Because("a scanned implementation's closed generic dependency is expanded from the open registration");
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+		await That(source).Contains("new global::MyCode.Repository<global::MyCode.Order>()")
+			.Because("the scanned OrderPlugin's IRepository<Order> dependency seeds open generic expansion");
+	}
+
+	[Fact]
 	public async Task GenericScan_HonorsInAssembliesOfAndSelfExposure()
 	{
 		GeneratorResult result = Generator.Run("""

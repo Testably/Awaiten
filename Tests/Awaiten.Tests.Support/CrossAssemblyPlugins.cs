@@ -15,6 +15,19 @@ public sealed class DeltaPlugin : ICrossAssemblyPlugin;
 /// <summary>An abstract type assignable to the marker; a scan must skip it.</summary>
 public abstract class PluginBase : ICrossAssemblyPlugin;
 
+/// <summary>
+///     An internal type assignable to the marker; a cross-assembly scan must skip it (without
+///     <c>InternalsVisibleTo</c>, the scanning assembly's generated code could not reference it).
+/// </summary>
+internal sealed class InternalPlugin : ICrossAssemblyPlugin;
+
+/// <summary>A generic type definition assignable to the marker; a scan must skip it (no closed form to construct).</summary>
+public sealed class GenericPlugin<T> : ICrossAssemblyPlugin
+{
+	/// <summary>The payload distinguishing the closed forms.</summary>
+	public T? Value { get; set; }
+}
+
 // S2326: TViewModel is a marker type parameter - a container scans for closed implementers of this open generic
 // via [Scan(typeof(ICrossAssemblyView<>))], so it is intentionally not referenced in the interface body.
 #pragma warning disable S2326

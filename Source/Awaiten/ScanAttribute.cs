@@ -17,10 +17,12 @@ namespace Awaiten;
 ///     can provide bulk defaults that specific registrations refine. Multiple matches of the same service coexist
 ///     as members of that service's collection - scanning is meant to collect, so siblings do not displace each
 ///     other. A scan that matches no concrete type reports AWT138, so a typo or an empty marker surfaces at build
-///     time.
+///     time. A match the container cannot construct (a dependency with no registration, or no accessible
+///     constructor) is an error by default; set <see cref="SkipUnconstructable" /> to skip such matches with a
+///     warning (AWT141) instead.
 ///     <para>
-///         Scanning reads the container's own assembly through Roslyn symbols at compile time, so the generated
-///         container stays reflection-free and AOT-clean. Referenced assemblies are not walked.
+///         Scanning reads assembly metadata through Roslyn symbols at compile time, so the generated container
+///         stays reflection-free and AOT-clean - no assembly is walked at runtime.
 ///     </para>
 /// </remarks>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
@@ -49,6 +51,15 @@ public sealed class ScanAttribute : Attribute
 	///     example, <c>IEnumerable&lt;IHandler&gt;</c>).
 	/// </summary>
 	public ScanAs As { get; set; } = ScanAs.Self;
+
+	/// <summary>
+	///     When set, a match the container cannot construct - a dependency with no registration, or no
+	///     accessible constructor - is skipped with a warning (AWT141) instead of failing the build with
+	///     AWT101. Off by default: a scan match's missing dependency is an error like any other. A match that is
+	///     also registered explicitly is never skipped - asking for a type by name makes its missing dependency
+	///     a real fault again.
+	/// </summary>
+	public bool SkipUnconstructable { get; set; }
 
 	/// <summary>
 	///     Widens the scan to the assemblies that contain the listed types, instead of the container's own
@@ -91,6 +102,15 @@ public sealed class ScanAttribute<TMarker> : Attribute
 	///     example, <c>IEnumerable&lt;IHandler&gt;</c>).
 	/// </summary>
 	public ScanAs As { get; set; } = ScanAs.Self;
+
+	/// <summary>
+	///     When set, a match the container cannot construct - a dependency with no registration, or no
+	///     accessible constructor - is skipped with a warning (AWT141) instead of failing the build with
+	///     AWT101. Off by default: a scan match's missing dependency is an error like any other. A match that is
+	///     also registered explicitly is never skipped - asking for a type by name makes its missing dependency
+	///     a real fault again.
+	/// </summary>
+	public bool SkipUnconstructable { get; set; }
 
 	/// <summary>
 	///     Widens the scan to the assemblies that contain the listed types, instead of the container's own

@@ -145,6 +145,7 @@ namespace Awaiten
         public System.Type AssignableTo { get; }
         public System.Type[]? InAssembliesOf { get; set; }
         public Awaiten.AwaitenLifetime Lifetime { get; set; }
+        public bool SkipUnconstructable { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
     public sealed class ScanAttribute<TMarker> : System.Attribute
@@ -153,6 +154,7 @@ namespace Awaiten
         public Awaiten.ScanAs As { get; set; }
         public System.Type[]? InAssembliesOf { get; set; }
         public Awaiten.AwaitenLifetime Lifetime { get; set; }
+        public bool SkipUnconstructable { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
     public sealed class ScopedAttribute : System.Attribute

@@ -573,4 +573,47 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Warning,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A <c>[Scan(SkipUnconstructable = true)]</c> matched a concrete type the container cannot construct -
+	///     a dependency with no registration, or no accessible constructor - so the match is skipped instead of
+	///     failing the build. A scan sweeps every assignable concrete class, so the opt-in degrades an
+	///     incidental unconstructable match to this warning; without it the match stays the AWT101 error.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ScanMatchSkipped = new(
+		"AWT141",
+		"Assembly scan skipped an unconstructable match",
+		"'{0}' matched the scan but cannot be constructed ({1}), so it is not registered",
+		"Awaiten",
+		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     Two <c>[Scan]</c> attributes match the same implementation with different lifetimes; the first
+	///     scan's lifetime wins (coalescing keeps the first registration), so the contradiction is surfaced
+	///     rather than silently resolved by attribute order. An explicit registration of the implementation is
+	///     not reported: a scan is overridable and deliberately yields to it.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ScanLifetimeConflict = new(
+		"AWT142",
+		"Scans register one implementation with conflicting lifetimes",
+		"'{0}' is matched by scans with conflicting lifetimes ({1} and {2}); the first scan's {1} is used",
+		"Awaiten",
+		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A <c>[Scan(InAssembliesOf = …)]</c> resolved to no assembly at all (an empty array, or entries that
+	///     name no type), so the scan can register nothing. An error rather than a warning: unlike a marker that
+	///     merely matches nothing (AWT138), an empty assembly list means the scan cannot even look anywhere, so
+	///     the attribute itself is malformed. Reported instead of silently falling back to the container's own
+	///     assembly, which is what an unset <c>InAssembliesOf</c> means.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ScanAssembliesEmpty = new(
+		"AWT143",
+		"Assembly scan names no assembly",
+		"This scan's InAssembliesOf names no assembly to scan, so the scan registers nothing; list one type from each assembly to scan",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

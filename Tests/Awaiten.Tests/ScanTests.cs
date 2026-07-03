@@ -137,10 +137,40 @@ public partial class ScanTests
 
 		IReadOnlyList<ICrossAssemblyPlugin> plugins = container.Resolve<CrossAssemblyHub>().Plugins;
 
+		// Exactly the two concrete, public, non-generic plugins: the support assembly's abstract PluginBase,
+		// internal InternalPlugin and generic GenericPlugin<T> are all skipped by the scan.
 		await That(plugins).HasCount(2);
 		await That(plugins.Select(p => p.GetType()))
 			.Contains(typeof(GammaPlugin)).And.Contains(typeof(DeltaPlugin));
 	}
+
+	[Fact]
+	public async Task Scan_SeedsOpenGenericExpansionForScannedDependencies()
+	{
+		using OpenGenericSeedScanContainer.Root container = new();
+
+		// OrderPlugin is discovered by the scan and its IRepository<Order> dependency is synthesized from the
+		// open [Transient(typeof(Repository<>), typeof(IRepository<>))] registration.
+		await That(container.Resolve<OrderPlugin>().Repository).IsNotNull();
+	}
+
+	public interface IRepository<T>;
+
+	public sealed class Repository<T> : IRepository<T>;
+
+	public sealed class Order;
+
+	public interface IOrderPlugin;
+
+	public sealed class OrderPlugin(IRepository<Order> repository) : IOrderPlugin
+	{
+		public IRepository<Order> Repository { get; } = repository;
+	}
+
+	[Container]
+	[Scan(typeof(IOrderPlugin), Lifetime = AwaitenLifetime.Singleton)]
+	[Transient(typeof(Repository<>), typeof(IRepository<>))]
+	public static partial class OpenGenericSeedScanContainer;
 
 	[Fact]
 	public async Task ScanInAssembliesOf_IsOverriddenByAnExplicitRegistration()

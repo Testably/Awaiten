@@ -11,9 +11,10 @@ namespace Awaiten.SourceGenerators;
 ///     <c>Instance</c> argument), the attribute's optional resolution <c>Key</c> (so several
 ///     implementations can share one service type), whether the attribute set both directives at
 ///     once (an error), the closed generic service symbol (so a differently-closed consumer request can be
-///     redirected to a variance-compatible registration, for variance matching), and whether the registration
+///     redirected to a variance-compatible registration, for variance matching), whether the registration
 ///     was contributed by a <c>[Scan]</c> (an overridable registration that never conflicts with an explicit
-///     one over the same implementation).
+///     one over the same implementation), and whether that scan opted into skipping unconstructable matches
+///     (<c>SkipUnconstructable</c>, degrading the AWT101 error to the AWT141 warning).
 /// </summary>
 /// <remarks>
 ///     <see cref="Location" /> is the live Roslyn location (with its syntax tree), not an equatable
@@ -32,4 +33,5 @@ internal sealed record RawRegistration(
 	bool ConflictingDirectives = false,
 	string? Key = null,
 	INamedTypeSymbol? ServiceSymbol = null,
-	bool IsScan = false);
+	bool IsScan = false,
+	bool ScanSkipsUnconstructable = false);

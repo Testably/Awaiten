@@ -237,13 +237,16 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		// BuildInstance must all scan the same constructor the emitted container builds through.
 		bool importServices = ContainerImportsServices(containerSymbol);
 
-		(List<RawRegistration> raw, HashSet<string> constraintRejected) = ContainerRegistrations.Collect(containerSymbol, importServices, diagnostics);
+		// Collect also expands the container's [Scan]s into overridable registrations (IsScan), ordered after
+		// the explicit ones so coalescing lets an explicit registration win single resolution while every match
+		// still joins its service's collection.
+		(List<RawRegistration> raw, HashSet<string> constraintRejected) = ContainerRegistrations.Collect(containerSymbol, compilation, importServices, diagnostics);
 
-		// Assembly scanning contributes overridable registrations for every concrete type in the container's
-		// assembly assignable to a [Scan] marker - as itself and/or under its implemented interfaces, per ScanAs.
-		// Appended after the explicit registrations so coalescing lets an explicit registration win single
-		// resolution (a scan registration never conflicts), while every match still joins its service's collection.
-		raw.AddRange(ContainerRegistrations.CollectScans(containerSymbol, compilation, diagnostics));
+		// A [Scan(SkipUnconstructable = true)] trades the AWT101 error for a skip-with-warning (AWT141) on
+		// matches the container cannot construct: such a scan sweeps every assignable concrete class, so an
+		// incidental helper type with an unsatisfiable constructor must not break the build. Scans without the
+		// opt-in - and explicit registrations - keep the error.
+		PruneUnconstructableScanMatches(raw, containerSymbol, compilation, importServices, constraintRejected, diagnostics);
 
 		List<DecorateRegistration> decorators = ContainerRegistrations.CollectDecorators(containerSymbol);
 		List<CompositeRegistration> composites = ContainerRegistrations.CollectComposites(containerSymbol);
@@ -386,6 +389,156 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			members.RemoveAll(parameterized.Contains);
 		}
 	}
+
+	/// <summary>
+	///     Drops every implementation contributed by a <c>[Scan(SkipUnconstructable = true)]</c> that the
+	///     container cannot construct - one with no accessible constructor, or with a constructor parameter or
+	///     <c>[Inject]</c> member whose service has no registration - reporting the skip as a warning (AWT141)
+	///     where the default keeps the AWT101 error. Such a scan sweeps every concrete class assignable to its
+	///     marker, so an incidentally-matched helper type must not break the build. An implementation that is
+	///     also registered explicitly, or matched by a scan without the opt-in, is never dropped (asking for a
+	///     type by name - or scanning without opting in - makes its missing dependency a real fault). Iterates
+	///     to a fixpoint, because dropping one match can orphan another scanned match that depended on one of
+	///     its services.
+	/// </summary>
+	private static void PruneUnconstructableScanMatches(
+		List<RawRegistration> raw,
+		INamedTypeSymbol containerSymbol,
+		Compilation compilation,
+		bool importServices,
+		HashSet<string> constraintRejected,
+		List<DiagnosticInfo> diagnostics)
+	{
+		if (!raw.Any(registration => registration.ScanSkipsUnconstructable))
+		{
+			return;
+		}
+
+		bool dropped = true;
+		while (dropped)
+		{
+			dropped = false;
+
+			// The satisfiable surface as of this round: every registered (service, key), plus the variance
+			// candidates a Direct/Func parameter could be redirected to. Both shrink as matches are dropped,
+			// which is why each round re-derives them. An implementation with any registration that did not
+			// opt in - an explicit one, or a scan without SkipUnconstructable - is pinned to error semantics.
+			HashSet<ServiceKey> services = new();
+			HashSet<string> pinnedImpls = new(StringComparer.Ordinal);
+			List<(string ServiceType, INamedTypeSymbol Symbol)> varianceCandidates = new();
+			HashSet<string> varianceSeen = new(StringComparer.Ordinal);
+			foreach (RawRegistration registration in raw)
+			{
+				services.Add(new ServiceKey(registration.ServiceType, registration.Key));
+				if (!registration.ScanSkipsUnconstructable)
+				{
+					pinnedImpls.Add(registration.ImplementationType);
+				}
+
+				if (registration.Key is null
+				    && registration.ServiceSymbol is { IsGenericType: true, TypeKind: TypeKind.Interface, } variantService
+				    && HasDeclaredVariance(variantService)
+				    && varianceSeen.Add(registration.ServiceType))
+				{
+					varianceCandidates.Add((registration.ServiceType, variantService));
+				}
+			}
+
+			VarianceState variance = new(varianceCandidates, compilation);
+
+			// Check each opted-in implementation once per round (its registrations share symbol and location).
+			// The services set is a snapshot from the round's start, so a drop mid-round can leave a stale
+			// verdict for a later implementation - the next round re-checks against the shrunk surface.
+			HashSet<string> checkedImpls = new(StringComparer.Ordinal);
+			foreach (RawRegistration registration in raw.Where(r => r.ScanSkipsUnconstructable).ToList())
+			{
+				if (pinnedImpls.Contains(registration.ImplementationType)
+				    || !checkedImpls.Add(registration.ImplementationType)
+				    || FirstUnconstructableReason(registration.Implementation, containerSymbol, services, constraintRejected, importServices, variance) is not { } reason)
+				{
+					continue;
+				}
+
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.ScanMatchSkipped,
+					LocationInfo.From(registration.Location),
+					new EquatableArray<string>([DisplayInstance(registration.ImplementationType), reason,])));
+				raw.RemoveAll(r => r.IsScan && r.ImplementationType == registration.ImplementationType);
+				dropped = true;
+			}
+		}
+	}
+
+	/// <summary>
+	///     The reason a scanned implementation cannot be constructed - a human-readable fragment for AWT141 - or
+	///     <see langword="null" /> when every dependency is satisfiable. Mirrors the checks that would otherwise
+	///     surface as AWT101 in <see cref="BuildInstance" />: the always-satisfiable kinds (a runtime argument, a
+	///     collection - empty is legal - and an external <c>[FromServices]</c> dependency), the
+	///     <c>[ImportServices]</c> fall-through, the registered service set, constraint-rejected services (their
+	///     AWT126 already errors) and variance redirection. A not-settable or <c>[Arg]</c>-marked injected member
+	///     is not a reason: those stay the targeted AWT136/AWT137 errors - real faults in the type, not a scan
+	///     having swept in a type the graph cannot satisfy.
+	/// </summary>
+	private static string? FirstUnconstructableReason(
+		INamedTypeSymbol implementation,
+		INamedTypeSymbol containerSymbol,
+		HashSet<ServiceKey> services,
+		HashSet<string> constraintRejected,
+		bool importServices,
+		VarianceState variance)
+	{
+		IMethodSymbol? constructor = SelectConstructor(
+			implementation, containerSymbol, services.Select(service => service.Service), importServices: importServices);
+		if (constructor is null)
+		{
+			return "it has no constructor accessible to the container";
+		}
+
+		foreach (IParameterSymbol parameter in constructor.Parameters)
+		{
+			ParameterModel model = ClassifyParameter(parameter, asyncFactory: false);
+			bool satisfiable =
+				model.Kind is DependencyKind.Arg or DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.AwaitedEnumerable or DependencyKind.External
+				|| (importServices && model is { Kind: DependencyKind.Direct, Key: null, })
+				|| services.Contains(KeyOf(model))
+				|| constraintRejected.Contains(model.ServiceType)
+				|| IsVarianceSatisfiable(model, parameter.Type, variance);
+			if (!satisfiable)
+			{
+				return $"it requires '{DisplayKeyed(model.ServiceType, model.Key)}', which is not registered";
+			}
+		}
+
+		foreach (IPropertySymbol property in InjectedProperties(implementation))
+		{
+			// An [Inject] member resolves from the graph like a Direct constructor parameter (no external
+			// fall-through, no variance redirect - mirroring ClassifyInjectedMember).
+			ParameterModel member = ClassifyDependency(property.Type, property.GetAttributes(), asyncFactory: false, location: null);
+			if (property.SetMethod is not { } setter || !IsAccessibleSetter(setter, containerSymbol) || member.Kind == DependencyKind.Arg)
+			{
+				continue;
+			}
+
+			if (member.Kind is not (DependencyKind.Enumerable or DependencyKind.AsyncEnumerable)
+			    && !services.Contains(KeyOf(member))
+			    && !constraintRejected.Contains(member.ServiceType))
+			{
+				return $"its injected member '{property.Name}' requires '{DisplayKeyed(member.ServiceType, member.Key)}', which is not registered";
+			}
+		}
+
+		return null;
+	}
+
+	// Whether a Direct/Func dependency with no exact registration would be satisfied by variance redirection
+	// (mirroring RedirectVariance): the declared type unwraps to the classified service and a
+	// variance-compatible registration exists.
+	private static bool IsVarianceSatisfiable(ParameterModel model, ITypeSymbol declaredType, VarianceState variance)
+		=> model.Key is null
+		   && model.Kind is DependencyKind.Direct or DependencyKind.Func
+		   && UnderlyingServiceType(declaredType) is { } requested
+		   && requested.ToDisplayString(FullyQualified) == model.ServiceType
+		   && FindVarianceMatch(requested, model.ServiceType, variance) is not null;
 
 	/// <summary>
 	///     The instance indices of every collection-resolvable service's members, keyed by the collection's
@@ -567,11 +720,25 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			// single service type, so it is checked before the per-service dedup below; otherwise re-registering
 			// the same service type differently would be skipped and the contradiction silently dropped.
 			// Coalescing keeps the first, so the conflicting one is reported rather than ignored. A scan
-			// registration is overridable and never conflicts: it yields to whatever an explicit registration
-			// (always processed first) fixed for the implementation, so it is exempt from the conflict check.
+			// registration is overridable and yields to whatever an explicit registration (always processed
+			// first) fixed for the implementation, so it is exempt from that check - but two scans that match
+			// the same implementation with different lifetimes contradict each other with nothing explicit to
+			// yield to, so that is surfaced as AWT142 rather than silently resolved by attribute order.
 			if (!registration.IsScan)
 			{
 				ReportCoalescingConflicts(info, registration, reportedConflicts, reportedProductionConflicts, diagnostics);
+			}
+			else if (info is { IsScan: true, } && info.Lifetime != registration.Lifetime
+			         && reportedConflicts.Add(registration.ImplementationType))
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.ScanLifetimeConflict,
+					LocationInfo.From(registration.Location),
+					new EquatableArray<string>([
+						Display(registration.ImplementationType),
+						info.Lifetime.ToString(),
+						registration.Lifetime.ToString(),
+					])));
 			}
 
 			ServiceKey serviceKey = new(registration.ServiceType, registration.Key);
@@ -609,7 +776,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			{
 				info = new ImplInfo(
 					reg.ImplementationType, reg.Implementation, reg.Lifetime,
-					LocationInfo.From(reg.Location), reg.Production, reg.ProductionMember);
+					LocationInfo.From(reg.Location), reg.Production, reg.ProductionMember, reg.IsScan);
 				implInfos.Add(reg.ImplementationType, info);
 				implOrder.Add(info);
 			}
@@ -2360,23 +2527,35 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		List<MemberModel> members,
 		List<DiagnosticInfo> diagnostics)
 	{
+		foreach (IPropertySymbol property in InjectedProperties(info.Symbol))
+		{
+			if (ClassifyInjectedMember(property, info, containerSymbol, serviceToImpl, constraintRejected, diagnostics) is { } member)
+			{
+				members.Add(member);
+			}
+		}
+	}
+
+	/// <summary>
+	///     The <c>[Inject]</c> properties of an implementation. Walks most-derived first, recording every
+	///     instance property (<c>seen</c>) so a base declaration is shadowed by an overriding or <c>new</c> one.
+	///     Property injection is opt-in: only a property marked <c>[Inject]</c> is yielded; a plain
+	///     <c>required</c> property is left to the caller (never auto-injected). The shared walk behind
+	///     <see cref="DiscoverInjectedMembers" /> and the loose-mode scan prune.
+	/// </summary>
+	private static IEnumerable<IPropertySymbol> InjectedProperties(INamedTypeSymbol implementation)
+	{
 		HashSet<string> seen = new(StringComparer.Ordinal);
-		for (INamedTypeSymbol? type = info.Symbol; type is not null; type = type.BaseType)
+		for (INamedTypeSymbol? type = implementation; type is not null; type = type.BaseType)
 		{
 			foreach (IPropertySymbol property in type.GetMembers().OfType<IPropertySymbol>())
 			{
-				// Walk most-derived first, recording every instance property (seen) so a base declaration is
-				// shadowed by an overriding or `new` one. Property injection is opt-in: only a property marked
-				// [Inject] is filled; a plain required property is left to the caller (never auto-injected).
 				if (property.IsStatic || property.IsIndexer || !seen.Add(property.Name) || !HasInject(property.GetAttributes()))
 				{
 					continue;
 				}
 
-				if (ClassifyInjectedMember(property, info, containerSymbol, serviceToImpl, constraintRejected, diagnostics) is { } member)
-				{
-					members.Add(member);
-				}
+				yield return property;
 			}
 		}
 	}
@@ -2449,19 +2628,19 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		}
 
 		return new MemberModel(property.Name, dependency);
-
-		// The setter must be reachable from the container's object initializer, which is not a derived context:
-		// mirrors IsAccessibleConstructor - public always, internal/protected-internal only within the container's
-		// own assembly, and protected/private-protected/private never (the container cannot reach them).
-		static bool IsAccessibleSetter(IMethodSymbol setter, INamedTypeSymbol containerSymbol)
-			=> setter.DeclaredAccessibility switch
-			{
-				Accessibility.Public => true,
-				Accessibility.Internal or Accessibility.ProtectedOrInternal =>
-					SymbolEqualityComparer.Default.Equals(setter.ContainingAssembly, containerSymbol.ContainingAssembly),
-				_ => false,
-			};
 	}
+
+	// The setter must be reachable from the container's object initializer, which is not a derived context:
+	// mirrors IsAccessibleConstructor - public always, internal/protected-internal only within the container's
+	// own assembly, and protected/private-protected/private never (the container cannot reach them).
+	private static bool IsAccessibleSetter(IMethodSymbol setter, INamedTypeSymbol containerSymbol)
+		=> setter.DeclaredAccessibility switch
+		{
+			Accessibility.Public => true,
+			Accessibility.Internal or Accessibility.ProtectedOrInternal =>
+				SymbolEqualityComparer.Default.Equals(setter.ContainingAssembly, containerSymbol.ContainingAssembly),
+			_ => false,
+		};
 
 	/// <summary>
 	///     Resolves a <c>Factory</c> registration to the container method that produces it. No accessible
@@ -3526,7 +3705,8 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			Lifetime lifetime,
 			LocationInfo? location,
 			ProductionKind production,
-			string? productionMember)
+			string? productionMember,
+			bool isScan = false)
 		{
 			ImplementationType = implementationType;
 			Symbol = symbol;
@@ -3534,6 +3714,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			Location = location;
 			Production = production;
 			ProductionMember = productionMember;
+			IsScan = isScan;
 			Services = new List<ServiceKey>();
 		}
 
@@ -3543,6 +3724,10 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		public LocationInfo? Location { get; }
 		public ProductionKind Production { get; }
 		public string? ProductionMember { get; }
+
+		/// <summary>Whether the first (winning) registration of this implementation came from a <c>[Scan]</c>.</summary>
+		public bool IsScan { get; }
+
 		public List<ServiceKey> Services { get; }
 
 		/// <summary>

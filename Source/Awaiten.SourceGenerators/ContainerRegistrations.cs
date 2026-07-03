@@ -26,6 +26,7 @@ internal static class ContainerRegistrations
 
 	public static (List<RawRegistration> Raw, HashSet<string> ConstraintRejectedServices) Collect(
 		INamedTypeSymbol containerSymbol,
+		Compilation compilation,
 		bool importServices,
 		List<DiagnosticInfo> diagnostics)
 	{
@@ -94,12 +95,26 @@ internal static class ContainerRegistrations
 				service as INamedTypeSymbol));
 		}
 
+		// Assembly scanning contributes overridable registrations for every concrete type assignable to a
+		// [Scan] marker. Appended before open generic expansion so scanned implementations seed it - their
+		// constructors may require closed generics only an open registration can provide.
+		List<RawRegistration> scans = CollectScans(containerSymbol, compilation, diagnostics);
+		result.AddRange(scans);
+
 		// Expand open generic registrations: for every closed generic service required from the graph
 		// whose open form is registered but which has no concrete registration, synthesize the closed
 		// implementation (iterating to a fixpoint over its own generic dependencies).
 		if (open.Count > 0)
 		{
 			ExpandOpenGenerics(result, open, containerSymbol, importServices, diagnostics, constraintRejected);
+		}
+
+		// ...then moved back to the end: coalescing is first-wins per service, so the explicit registrations
+		// and the closed registrations expansion synthesized from them must precede the overridable scan ones.
+		if (scans.Count > 0)
+		{
+			result.RemoveAll(registration => registration.IsScan);
+			result.AddRange(scans);
 		}
 
 		return (result, constraintRejected);
@@ -112,16 +127,18 @@ internal static class ContainerRegistrations
 	///     a match is a concrete type implementing a <em>closed</em> form of it, registered under that closed
 	///     interface (Autofac's <c>AsClosedTypesOf</c>). The scan covers the container's own assembly by default, or
 	///     the assemblies named by <c>InAssembliesOf</c>; matches register in a deterministic order (by
-	///     fully-qualified name) so generated output is reproducible. Abstract/static classes and the marker itself
-	///     are skipped. Reports AWT138 when a scan matches nothing, AWT139 when an interfaces-only scan matches a
-	///     type with no assignable interface, and AWT140 when an <c>InAssembliesOf</c> assembly has no candidate types.
+	///     fully-qualified name) so generated output is reproducible. Abstract/static classes, generic type
+	///     definitions, types the container's assembly cannot access, and the marker itself are skipped. Reports
+	///     AWT138 when a scan matches nothing, AWT139 when an interfaces-only scan matches a type with no
+	///     assignable interface, AWT140 when an <c>InAssembliesOf</c> assembly has no candidate types, and AWT143
+	///     when <c>InAssembliesOf</c> resolves to no assembly at all.
 	/// </summary>
 	/// <remarks>
 	///     The synthesized registrations carry <see cref="RawRegistration.IsScan" />, so coalescing lets an
 	///     explicit registration of the same implementation take precedence for single resolution (a scan never
 	///     conflicts over lifetime or production), while every match still joins its service's collection.
 	/// </remarks>
-	public static List<RawRegistration> CollectScans(
+	private static List<RawRegistration> CollectScans(
 		INamedTypeSymbol containerSymbol,
 		Compilation compilation,
 		List<DiagnosticInfo> diagnostics)
@@ -153,13 +170,24 @@ internal static class ContainerRegistrations
 		List<DiagnosticInfo> diagnostics)
 	{
 		Location? location = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation();
-		ScanMatch match = new(ScanExposureOf(attribute), ScanLifetime(attribute), location);
+
+		// AWT143: an InAssembliesOf that resolves to no assembly at all (an empty array, or entries naming no
+		// type) is reported and the scan registers nothing - not silently redirected to the container's own
+		// assembly, which is what an unset InAssembliesOf means.
+		List<IAssemblySymbol>? assemblies = ScanAssemblies(attribute);
+		if (assemblies is { Count: 0, })
+		{
+			diagnostics.Add(new DiagnosticInfo(Diagnostics.ScanAssembliesEmpty, LocationInfo.From(location), new EquatableArray<string>([])));
+			return;
+		}
+
+		ScanMatch match = new(ScanExposureOf(attribute), ScanLifetime(attribute), location, ScanSkipsUnconstructable(attribute));
 		bool openMarker = IsOpenGenericMarker(marker);
 		INamedTypeSymbol markerDefinition = marker.OriginalDefinition;
 		string markerDisplay = (openMarker ? markerDefinition : marker).ToDisplayString(FullyQualified);
 
 		int matched = 0;
-		foreach (INamedTypeSymbol type in ScanCandidates(attribute, compilation, marker, location, diagnostics))
+		foreach (INamedTypeSymbol type in ScanCandidates(assemblies, compilation, marker, location, diagnostics))
 		{
 			matched++;
 			List<INamedTypeSymbol> contracts = openMarker
@@ -192,7 +220,7 @@ internal static class ContainerRegistrations
 
 		if (match.RegisterSelf)
 		{
-			result.Add(ScanRegistration(typeName, typeName, match.Lifetime, type, match.Location, type));
+			result.Add(ScanRegistration(typeName, typeName, type, type, match));
 		}
 
 		if (!match.RegisterInterfaces)
@@ -202,7 +230,7 @@ internal static class ContainerRegistrations
 
 		foreach (INamedTypeSymbol contract in contracts)
 		{
-			result.Add(ScanRegistration(contract.ToDisplayString(FullyQualified), typeName, match.Lifetime, type, match.Location, contract));
+			result.Add(ScanRegistration(contract.ToDisplayString(FullyQualified), typeName, type, contract, match));
 		}
 
 		if (contracts.Count == 0 && match.Exposure == ScanExposure.ImplementedInterfaces)
@@ -228,9 +256,10 @@ internal static class ContainerRegistrations
 	private static List<INamedTypeSymbol> ClosedMarkerInterfaces(INamedTypeSymbol type, INamedTypeSymbol markerDefinition)
 		=> ClosedMarkerForms(type, markerDefinition).Where(contract => contract.TypeKind == TypeKind.Interface).ToList();
 
-	// The per-scan settings shared by every match of one [Scan]: how matches are exposed, the lifetime applied, and
-	// the attribute location for diagnostics. Bundled so the per-match registration takes one handle.
-	private sealed record ScanMatch(ScanExposure Exposure, Lifetime Lifetime, Location? Location)
+	// The per-scan settings shared by every match of one [Scan]: how matches are exposed, the lifetime applied,
+	// the attribute location for diagnostics, and whether an unconstructable match is skipped with a warning
+	// (SkipUnconstructable) instead of erroring. Bundled so the per-match registration takes one handle.
+	private sealed record ScanMatch(ScanExposure Exposure, Lifetime Lifetime, Location? Location, bool SkipUnconstructable)
 	{
 		public bool RegisterSelf => Exposure is ScanExposure.Self or ScanExposure.SelfAndImplementedInterfaces;
 
@@ -284,23 +313,22 @@ internal static class ContainerRegistrations
 	}
 
 	/// <summary>
-	///     The concrete-type candidates a <c>[Scan]</c> enumerates: the container's own assembly by default, or
-	///     the assemblies that contain the types named by <c>InAssembliesOf</c>. Filtered to concrete classes
-	///     assignable to the marker and sorted by fully-qualified name so the resulting registrations are
-	///     reproducible across builds. Reports AWT140 for any <c>InAssembliesOf</c> assembly that holds no such
-	///     type (a likely missing <c>ProjectReference</c>).
+	///     The concrete-type candidates a <c>[Scan]</c> enumerates: the container's own assembly when
+	///     <paramref name="assemblies" /> is <see langword="null" /> (<c>InAssembliesOf</c> unset), or the listed
+	///     assemblies. Filtered to concrete classes assignable to the marker and sorted by fully-qualified name so
+	///     the resulting registrations are reproducible across builds. Reports AWT140 for any
+	///     <c>InAssembliesOf</c> assembly that holds no such type (a likely missing <c>ProjectReference</c>).
 	/// </summary>
 	private static List<INamedTypeSymbol> ScanCandidates(
-		AttributeData attribute,
+		List<IAssemblySymbol>? assemblies,
 		Compilation compilation,
 		INamedTypeSymbol marker,
 		Location? location,
 		List<DiagnosticInfo> diagnostics)
 	{
-		List<IAssemblySymbol> assemblies = ScanAssemblies(attribute);
 		List<INamedTypeSymbol> candidates = new();
 
-		if (assemblies.Count == 0)
+		if (assemblies is null)
 		{
 			candidates.AddRange(EnumerateTypes(compilation.Assembly.GlobalNamespace)
 				.Where(type => IsScanCandidate(type, marker, compilation)));
@@ -321,18 +349,20 @@ internal static class ContainerRegistrations
 		return candidates;
 	}
 
-	// The assemblies named by InAssembliesOf (each entry's containing assembly, deduped); empty when unset, which
-	// means the container's own assembly is scanned instead.
-	private static List<IAssemblySymbol> ScanAssemblies(AttributeData attribute)
+	// The assemblies named by InAssembliesOf (each entry's containing assembly, deduped). Null when the argument
+	// is unset (or explicitly null), which means the container's own assembly is scanned instead; an empty list
+	// means the argument was set but resolved to no assembly (AWT143).
+	private static List<IAssemblySymbol>? ScanAssemblies(AttributeData attribute)
 	{
-		List<IAssemblySymbol> assemblies = new();
+		List<IAssemblySymbol>? assemblies = null;
 		foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
 		{
-			if (argument.Key != "InAssembliesOf" || argument.Value.Kind != TypedConstantKind.Array)
+			if (argument.Key != "InAssembliesOf" || argument.Value.Kind != TypedConstantKind.Array || argument.Value.IsNull)
 			{
 				continue;
 			}
 
+			assemblies ??= new List<IAssemblySymbol>();
 			foreach (TypedConstant element in argument.Value.Values)
 			{
 				if (element.Value is INamedTypeSymbol markerType
@@ -371,11 +401,17 @@ internal static class ContainerRegistrations
 
 	// Whether a type is a concrete class assignable to the scanned marker (and not the marker itself) - the
 	// per-type predicate shared by candidate gathering and the AWT140 emptiness check. For an unbound generic
-	// marker (typeof(IView<>)) the type must implement a closed form of it instead.
+	// marker (typeof(IView<>)) the type must implement a closed form of it instead. A generic type definition
+	// (Handler<T>, or a type nested inside one) has no closed form to construct, and a type the container's
+	// assembly cannot access (a private nested class, or an internal class in a referenced assembly without
+	// InternalsVisibleTo) cannot be referenced from the generated code - both are skipped rather than emitted
+	// as uncompilable registrations.
 	private static bool IsScanCandidate(INamedTypeSymbol type, INamedTypeSymbol marker, Compilation compilation)
 	{
 		if (type is not { TypeKind: TypeKind.Class, IsAbstract: false, IsStatic: false, IsImplicitClass: false, }
-		    || SymbolEqualityComparer.Default.Equals(type, marker))
+		    || SymbolEqualityComparer.Default.Equals(type, marker)
+		    || HasOpenTypeParameters(type)
+		    || !compilation.IsSymbolAccessibleWithin(type, compilation.Assembly))
 		{
 			return false;
 		}
@@ -385,10 +421,26 @@ internal static class ContainerRegistrations
 			: compilation.HasImplicitConversion(type, marker);
 	}
 
+	// Whether a type declares type parameters of its own or is nested inside a type that does - either way there
+	// is no single closed type the generated container could construct.
+	private static bool HasOpenTypeParameters(INamedTypeSymbol type)
+	{
+		for (INamedTypeSymbol? current = type; current is not null; current = current.ContainingType)
+		{
+			if (current.Arity > 0)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	// A single overridable, collection-eligible registration contributed by a [Scan]: IsScan so it never conflicts
-	// with an explicit registration over the same implementation and always joins its service's collection.
-	private static RawRegistration ScanRegistration(string service, string implementation, Lifetime lifetime, INamedTypeSymbol type, Location? location, INamedTypeSymbol serviceSymbol)
-		=> new(service, implementation, lifetime, type, location, ProductionKind.Constructor, null, false, null, serviceSymbol, true);
+	// with an explicit registration over the same implementation and always joins its service's collection, and
+	// carrying the scan's SkipUnconstructable opt-in for the unconstructable-match prune.
+	private static RawRegistration ScanRegistration(string service, string implementation, INamedTypeSymbol type, INamedTypeSymbol serviceSymbol, ScanMatch match)
+		=> new(service, implementation, match.Lifetime, type, match.Location, ProductionKind.Constructor, null, false, null, serviceSymbol, true, match.SkipUnconstructable);
 
 	// The scanned marker: the type argument of the generic [Scan<TMarker>], or the typeof(...) constructor
 	// argument of the non-generic [Scan(typeof(TMarker))]. Null when the attribute is malformed.
@@ -419,6 +471,21 @@ internal static class ContainerRegistrations
 		}
 
 		return Lifetime.Transient;
+	}
+
+	// The SkipUnconstructable flag named on a [Scan]: when set, a match the container cannot construct is
+	// skipped with AWT141 instead of erroring. Defaults to false when unset, matching the attribute default.
+	private static bool ScanSkipsUnconstructable(AttributeData attribute)
+	{
+		foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
+		{
+			if (argument.Key == "SkipUnconstructable" && argument.Value.Value is bool value)
+			{
+				return value;
+			}
+		}
+
+		return false;
 	}
 
 	// The exposure named on a [Scan] (As = ScanAs.X); its underlying int lines up with the generator's
