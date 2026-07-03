@@ -490,6 +490,15 @@ internal static class Emitter
 			EmitOwnedHelper(builder, body);
 		}
 
+		// The __ResolveExternal helper is emitted on the base Scope (reached from the Root through __root) only
+		// when the container actually has [FromServices] / [ImportServices] dependencies, so a container without
+		// them carries no unused helper.
+		if (HasExternalDependencies(instances))
+		{
+			builder.AppendLine();
+			EmitResolveExternal(builder, body);
+		}
+
 		builder.AppendLine();
 		EmitGenericResolverImpls(builder, body, instances, names, strict, syncResolveAfterInit);
 
@@ -559,6 +568,10 @@ internal static class Emitter
 		Indent(builder, body).AppendLine("}");
 		builder.AppendLine();
 		EmitRegistrations(builder, body, instances, syncResolveAfterInit);
+		builder.AppendLine();
+		// The external-dependency metadata (advertised list + the host-settable resolver) that the
+		// IAwaitenContainerMetadata surface requires; the list is empty when the container has none.
+		EmitExternalMetadata(builder, body, instances);
 		builder.AppendLine();
 		// The Root override of InitializeAsync warms the async singletons in dependency order (the base
 		// Scope warms only its async scoped services).
@@ -649,6 +662,39 @@ internal static class Emitter
 		Indent(builder, depth).AppendLine("};");
 		builder.AppendLine();
 		Indent(builder, depth).AppendLine("public global::System.Collections.Generic.IReadOnlyList<global::Awaiten.AwaitenRegistration> Registrations => __registrations;");
+	}
+
+	/// <summary>
+	///     Emits the external-dependency members of <c>IAwaitenContainerMetadata</c> on the Root: the advertised
+	///     <c>ExternalDependencies</c> list (the distinct <c>[FromServices]</c> / <c>[ImportServices]</c> service
+	///     types, empty when there are none) and the host-settable <c>ExternalResolver</c> the container routes
+	///     those dependencies through.
+	/// </summary>
+	private static void EmitExternalMetadata(StringBuilder builder, int depth, InstanceModel[] instances)
+	{
+		string[] external = ExternalDependencies(instances);
+		if (external.Length == 0)
+		{
+			Indent(builder, depth).AppendLine(
+				"public global::System.Collections.Generic.IReadOnlyList<global::System.Type> ExternalDependencies => global::System.Array.Empty<global::System.Type>();");
+		}
+		else
+		{
+			Indent(builder, depth).AppendLine("private static readonly global::System.Type[] __externalDependencies =");
+			Indent(builder, depth).AppendLine("{");
+			foreach (string type in external)
+			{
+				Indent(builder, depth + 1).Append("typeof(").Append(type).AppendLine("),");
+			}
+
+			Indent(builder, depth).AppendLine("};");
+			builder.AppendLine();
+			Indent(builder, depth).AppendLine(
+				"public global::System.Collections.Generic.IReadOnlyList<global::System.Type> ExternalDependencies => __externalDependencies;");
+		}
+
+		builder.AppendLine();
+		Indent(builder, depth).AppendLine("public global::Awaiten.IExternalResolver? ExternalResolver { get; set; }");
 	}
 
 	private static string AwaitenLifetimeOf(Lifetime lifetime) => lifetime switch
@@ -2073,6 +2119,13 @@ internal static class Emitter
 	/// </summary>
 	private static string ResolveExpression(ParameterModel parameter, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex)
 	{
+		// An external dependency is not in the Awaiten graph, so it has no resolver of its own (and no entry in
+		// serviceToIndex); it is routed through the container's external resolver instead.
+		if (parameter.Kind == DependencyKind.External)
+		{
+			return $"({parameter.ServiceType})__ResolveExternal(typeof({parameter.ServiceType}))";
+		}
+
 		int targetIndex = serviceToIndex[new ServiceKey(parameter.ServiceType, parameter.Key)];
 		string resolver = names.Resolver(targetIndex);
 		InstanceModel target = instances[targetIndex];
@@ -2256,6 +2309,52 @@ internal static class Emitter
 	///     returns an <c>Owned&lt;T&gt;</c> over that scope. Disposing the handle disposes only that scope,
 	///     draining what was built for this one resolution while shared singletons live on.
 	/// </summary>
+	/// <summary>
+	///     Emits the <c>__ResolveExternal</c> helper that routes a <c>[FromServices]</c> / <c>[ImportServices]</c>
+	///     dependency through the container's external resolver, throwing a clear message when no resolver is
+	///     wired or the service is unavailable. Emitted on the base <c>Scope</c> and inherited by the <c>Root</c>;
+	///     both reach the resolver through <c>__root.ExternalResolver</c> (on the Root, <c>__root</c> is itself).
+	/// </summary>
+	private static void EmitResolveExternal(StringBuilder builder, int depth)
+	{
+		Indent(builder, depth).AppendLine("protected object __ResolveExternal(global::System.Type serviceType)");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).AppendLine("global::Awaiten.IExternalResolver? resolver = __root.ExternalResolver;");
+		Indent(builder, depth + 1).AppendLine("if (resolver != null && resolver.TryResolve(serviceType, out object? instance) && instance != null)");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).AppendLine("return instance;");
+		Indent(builder, depth + 1).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine(
+			"throw new global::System.InvalidOperationException($\"Awaiten: the external dependency '{serviceType}' is not available; register it in the host provider or set ExternalResolver.\");");
+		Indent(builder, depth).AppendLine("}");
+	}
+
+	/// <summary>
+	///     The distinct external (<c>[FromServices]</c> / <c>[ImportServices]</c>) service types across every
+	///     instance's constructor parameters, in first-seen order - advertised by the Root as
+	///     <c>ExternalDependencies</c> and used to decide whether the external-resolution surface is emitted.
+	/// </summary>
+	private static string[] ExternalDependencies(InstanceModel[] instances)
+	{
+		List<string> external = new();
+		HashSet<string> seen = new(StringComparer.Ordinal);
+		foreach (InstanceModel instance in instances)
+		{
+			foreach (ParameterModel parameter in instance.ConstructorParameters.AsArray())
+			{
+				if (parameter.Kind == DependencyKind.External && seen.Add(parameter.ServiceType))
+				{
+					external.Add(parameter.ServiceType);
+				}
+			}
+		}
+
+		return external.ToArray();
+	}
+
+	private static bool HasExternalDependencies(InstanceModel[] instances) => ExternalDependencies(instances).Length > 0;
+
 	private static void EmitOwnedHelper(StringBuilder builder, int depth)
 	{
 		Indent(builder, depth).AppendLine("protected global::Awaiten.Owned<T> __Owned<T>(global::System.Func<Scope, T> __resolve)");
@@ -2418,6 +2517,11 @@ internal static class Emitter
 		builder.AppendLine();
 		Indent(builder, depth + 1).Append("public global::System.Collections.Generic.IReadOnlyList<global::Awaiten.AwaitenRegistration> Registrations { get; }")
 			.AppendLine(" = global::System.Array.Empty<global::Awaiten.AwaitenRegistration>();");
+		builder.AppendLine();
+		Indent(builder, depth + 1).Append("public global::System.Collections.Generic.IReadOnlyList<global::System.Type> ExternalDependencies { get; }")
+			.AppendLine(" = global::System.Array.Empty<global::System.Type>();");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("public global::Awaiten.IExternalResolver? ExternalResolver { get; set; }");
 
 		Indent(builder, depth).AppendLine("}");
 	}

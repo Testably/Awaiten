@@ -192,6 +192,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		Dictionary<string, DecoratorInner> DecoratorInner,
 		WellKnownTypes WellKnown,
 		HashSet<string> ConstraintRejected,
+		bool ImportServices,
 		List<DiagnosticInfo> Diagnostics);
 
 	/// <summary>
@@ -240,7 +241,11 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		List<LocationInfo?> instanceLocations = new();
 		Dictionary<string, int> implToIndex = new(StringComparer.Ordinal);
 
-		BuildContext buildContext = new(containerSymbol, compilation, serviceToImpl, decoratorInner, wellKnown, constraintRejected, diagnostics);
+		// [ImportServices]: any otherwise-unresolved direct dependency falls through to the external provider
+		// instead of being reported as missing (AWT101), the blanket form of per-parameter [FromServices].
+		bool importServices = ContainerImportsServices(containerSymbol);
+
+		BuildContext buildContext = new(containerSymbol, compilation, serviceToImpl, decoratorInner, wellKnown, constraintRejected, importServices, diagnostics);
 
 		// Validate each implementation, select its constructor and build the instance.
 		foreach (ImplInfo info in implOrder)
@@ -1077,7 +1082,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 		// Select the producer: a container method (Factory) or the implementation's constructor (the
 		// default). A null result means the registration is unusable and a diagnostic was already reported.
-		IMethodSymbol? producer = SelectProducer(info, containerSymbol, compilation, serviceToImpl, diagnostics);
+		IMethodSymbol? producer = SelectProducer(info, containerSymbol, compilation, serviceToImpl, context.ImportServices, diagnostics);
 		if (producer is null)
 		{
 			return null;
@@ -1092,7 +1097,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		// A factory's parameters resolve from the graph exactly like a constructor's. An async factory
 		// additionally forwards the resolve-time CancellationToken (the async creator's) into a matching
 		// parameter rather than resolving it from the graph.
-		List<ParameterModel> parameters = ClassifyParameters(producer, info, asyncFactory, serviceToImpl, context.DecoratorInner, context.ConstraintRejected, diagnostics);
+		List<ParameterModel> parameters = ClassifyParameters(producer, info, asyncFactory, serviceToImpl, context.DecoratorInner, context.ConstraintRejected, context.ImportServices, diagnostics);
 
 		// Disposability follows the type the container actually owns: a factory's produced type (which may
 		// implement IDisposable behind a non-disposable service interface; for an async factory this is the
@@ -1190,6 +1195,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		INamedTypeSymbol containerSymbol,
 		Compilation compilation,
 		Dictionary<ServiceKey, string> serviceToImpl,
+		bool importServices,
 		List<DiagnosticInfo> diagnostics)
 	{
 		if (info.Production == ProductionKind.Factory)
@@ -1208,7 +1214,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			return null;
 		}
 
-		IMethodSymbol? constructor = SelectConstructor(info.Symbol, containerSymbol, serviceToImpl.Keys.Select(k => k.Service));
+		IMethodSymbol? constructor = SelectConstructor(info.Symbol, containerSymbol, serviceToImpl.Keys.Select(k => k.Service), importServices: importServices);
 		if (constructor is null)
 		{
 			diagnostics.Add(new DiagnosticInfo(
@@ -1382,12 +1388,24 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		Dictionary<ServiceKey, string> serviceToImpl,
 		Dictionary<string, DecoratorInner> decoratorInner,
 		HashSet<string> constraintRejected,
+		bool importServices,
 		List<DiagnosticInfo> diagnostics)
 	{
 		List<ParameterModel> parameters = new();
 		foreach (IParameterSymbol parameter in producer.Parameters)
 		{
 			ParameterModel parameterModel = ClassifyParameter(parameter, asyncFactory);
+
+			// AWT131: a [FromServices] parameter (External) cannot also be an [Arg] runtime argument - it
+			// cannot be both an externally-resolved dependency and a caller-supplied value.
+			if (parameterModel.Kind == DependencyKind.External && HasArgAttribute(parameter))
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.ConflictingExternalParameter,
+					info.Location,
+					new EquatableArray<string>([parameter.Name, DisplayInstance(info.ImplementationType),])));
+			}
+
 			parameterModel = RedirectDecoratorInner(parameterModel, info, decoratorInner);
 
 			// A collection type (IEnumerable<T> and friends, or T[]) is normally synthesized from the registrations
@@ -1404,6 +1422,16 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 				parameterModel = parameterModel with { ServiceType = collectionType, Kind = DependencyKind.Direct };
 			}
 
+			// [ImportServices]: an otherwise-unresolved direct dependency (unkeyed) is satisfied from the
+			// external provider rather than reported as missing. Only direct dependencies fall through; an
+			// unregistered relationship type still surfaces as AWT101 below.
+			if (importServices
+			    && parameterModel is { Kind: DependencyKind.Direct, Key: null, }
+			    && !serviceToImpl.ContainsKey(KeyOf(parameterModel)))
+			{
+				parameterModel = parameterModel with { Kind = DependencyKind.External, };
+			}
+
 			parameters.Add(parameterModel);
 
 			// A CancellationToken is forwarded from the resolve-time token, not resolved from the graph (like
@@ -1415,7 +1443,9 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			// A closed generic that expansion refused to synthesize because its type arguments violate the open
 			// implementation's constraints (AWT126) is deliberately absent from serviceToImpl. Reporting AWT101
 			// on top would name the same root cause twice, so suppress it here.
-			if (parameterModel.Kind is not (DependencyKind.Arg or DependencyKind.CancellationToken or DependencyKind.Enumerable)
+			// An External dependency (a [FromServices] parameter, or an [ImportServices] fall-through above) is
+			// resolved from the external provider, not the Awaiten graph, so it is never a missing dependency.
+			if (parameterModel.Kind is not (DependencyKind.Arg or DependencyKind.CancellationToken or DependencyKind.Enumerable or DependencyKind.External)
 			    && !serviceToImpl.ContainsKey(KeyOf(parameterModel))
 			    && !constraintRejected.Contains(parameterModel.ServiceType))
 			{
@@ -1507,7 +1537,8 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		INamedTypeSymbol implementation,
 		INamedTypeSymbol containerSymbol,
 		IEnumerable<string> registeredServices,
-		Func<IParameterSymbol, bool>? additionallySatisfiable = null)
+		Func<IParameterSymbol, bool>? additionallySatisfiable = null,
+		bool importServices = false)
 	{
 		List<IMethodSymbol> constructors = implementation.InstanceConstructors
 			.Where(c => IsAccessibleConstructor(c, containerSymbol))
@@ -1523,9 +1554,12 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			{
 				// Selecting a constructor, never an async factory, so no CancellationToken forwarding applies.
 				// A collection (Enumerable) is always satisfiable - an unregistered element type just yields an
-				// empty array - so it never disqualifies a constructor.
+				// empty array - so it never disqualifies a constructor. An [FromServices] (External) parameter is
+				// always satisfiable too; with [ImportServices] any direct dependency can fall through to the
+				// external provider, so it does not disqualify a constructor either.
 				ParameterModel parameter = ClassifyParameter(p, asyncFactory: false);
-				return parameter.Kind is DependencyKind.Arg or DependencyKind.Enumerable
+				return parameter.Kind is DependencyKind.Arg or DependencyKind.Enumerable or DependencyKind.External
+				       || (importServices && parameter.Kind == DependencyKind.Direct)
 				       || registered.Contains(parameter.ServiceType)
 				       || (additionallySatisfiable?.Invoke(p) ?? false);
 			}))
@@ -1560,6 +1594,14 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	private static ParameterModel ClassifyParameter(IParameterSymbol parameter, bool asyncFactory)
 	{
 		LocationInfo? location = LocationInfo.From(parameter.Locations.FirstOrDefault());
+
+		// An explicit [FromServices] parameter is resolved from the external provider; its own type is the
+		// external service type. It takes precedence so the parameter is never treated as an Awaiten graph edge
+		// (a [FromServices] together with [Arg] is reported as AWT131 in ClassifyParameters).
+		if (HasFromServices(parameter))
+		{
+			return new ParameterModel(parameter.Type.ToDisplayString(FullyQualified), DependencyKind.External, Location: location);
+		}
 
 		if (HasArgAttribute(parameter))
 		{
@@ -2051,6 +2093,38 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		foreach (AttributeData attribute in parameter.GetAttributes())
 		{
 			if (attribute.AttributeClass is { Name: "ArgAttribute", } attributeClass
+			    && attributeClass.ContainingNamespace?.ToDisplayString() == ContainerRegistrations.AttributeNamespace)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	// Whether a parameter is marked [FromServices], so it is resolved from the container's external provider
+	// rather than the Awaiten graph.
+	private static bool HasFromServices(IParameterSymbol parameter)
+	{
+		foreach (AttributeData attribute in parameter.GetAttributes())
+		{
+			if (attribute.AttributeClass is { Name: "FromServicesAttribute", } attributeClass
+			    && attributeClass.ContainingNamespace?.ToDisplayString() == ContainerRegistrations.AttributeNamespace)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	// Whether the container is marked [ImportServices], so every otherwise-unresolved direct dependency is
+	// satisfied from the external provider rather than reported as missing.
+	private static bool ContainerImportsServices(INamedTypeSymbol containerSymbol)
+	{
+		foreach (AttributeData attribute in containerSymbol.GetAttributes())
+		{
+			if (attribute.AttributeClass is { Name: "ImportServicesAttribute", } attributeClass
 			    && attributeClass.ContainingNamespace?.ToDisplayString() == ContainerRegistrations.AttributeNamespace)
 			{
 				return true;

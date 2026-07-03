@@ -427,4 +427,16 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A constructor parameter is marked both <c>[FromServices]</c> and <c>[Arg]</c>: it cannot be both
+	///     an externally-resolved dependency and a caller-supplied runtime argument.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ConflictingExternalParameter = new(
+		"AWT131",
+		"Conflicting external parameter",
+		"The parameter '{0}' of '{1}' is marked both [FromServices] and [Arg]; it cannot be both an external dependency and a runtime argument",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

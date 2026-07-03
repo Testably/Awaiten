@@ -58,6 +58,11 @@ namespace Awaiten
         public FromKeyAttribute(string key) { }
         public string Key { get; }
     }
+    [System.AttributeUsage(System.AttributeTargets.Parameter, AllowMultiple=false, Inherited=false)]
+    public sealed class FromServicesAttribute : System.Attribute
+    {
+        public FromServicesAttribute() { }
+    }
     public interface IAsyncInitializable
     {
         System.Threading.Tasks.Task InitializeAsync(System.Threading.CancellationToken cancellationToken);
@@ -68,6 +73,8 @@ namespace Awaiten
     }
     public interface IAwaitenContainerMetadata : Awaiten.IAwaitenAsyncResolver, Awaiten.IAwaitenResolver, Awaiten.IAwaitenRoot, Awaiten.IAwaitenScope, System.IDisposable
     {
+        System.Collections.Generic.IReadOnlyList<System.Type> ExternalDependencies { get; }
+        Awaiten.IExternalResolver? ExternalResolver { get; set; }
         System.Collections.Generic.IReadOnlyList<Awaiten.AwaitenRegistration> Registrations { get; }
     }
     public interface IAwaitenResolver
@@ -87,6 +94,15 @@ namespace Awaiten
     {
         Awaiten.IAwaitenScope CreateScope();
         System.Threading.Tasks.Task<Awaiten.IAwaitenScope> CreateScopeAsync(System.Threading.CancellationToken cancellationToken = default);
+    }
+    public interface IExternalResolver
+    {
+        bool TryResolve(System.Type serviceType, out object? instance);
+    }
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=false, Inherited=false)]
+    public sealed class ImportServicesAttribute : System.Attribute
+    {
+        public ImportServicesAttribute() { }
     }
     public enum LifetimeSafety
     {
