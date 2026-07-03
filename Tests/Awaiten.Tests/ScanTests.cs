@@ -104,6 +104,21 @@ public partial class ScanTests
 	public static partial class SelfAndInterfaceScanContainer;
 
 	[Fact]
+	public async Task GenericScan_RegistersMatchesLikeTheTypeofForm()
+	{
+		using GenericScanContainer.Root container = new();
+
+		// [Scan<IReport>] is the generic spelling of [Scan(typeof(IReport))] - resolvable both as the concrete
+		// type and as a member of the marker's collection.
+		await That(container.Resolve<SalesReport>()).IsNotNull();
+		await That(container.Resolve<IEnumerable<IReport>>().Count()).IsEqualTo(1);
+	}
+
+	[Container]
+	[Scan<IReport>(As = ScanAs.SelfAndImplementedInterfaces, Lifetime = AwaitenLifetime.Singleton)]
+	public static partial class GenericScanContainer;
+
+	[Fact]
 	public async Task ScanInAssembliesOf_RegistersMatchesFromTheReferencedAssembly()
 	{
 		using CrossAssemblyScanContainer.Root container = new();

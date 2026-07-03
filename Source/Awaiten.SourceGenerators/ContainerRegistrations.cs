@@ -132,8 +132,7 @@ internal static class ContainerRegistrations
 		{
 			if (attribute.AttributeClass is not { Name: "ScanAttribute", } attributeClass
 			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace
-			    || attribute.ConstructorArguments.Length != 1
-			    || attribute.ConstructorArguments[0].Value is not INamedTypeSymbol marker)
+			    || ScanMarker(attribute, attributeClass) is not { } marker)
 			{
 				continue;
 			}
@@ -409,6 +408,22 @@ internal static class ContainerRegistrations
 	// with an explicit registration over the same implementation and always joins its service's collection.
 	private static RawRegistration ScanRegistration(string service, string implementation, Lifetime lifetime, INamedTypeSymbol type, Location? location, INamedTypeSymbol serviceSymbol)
 		=> new(service, implementation, lifetime, type, location, ProductionKind.Constructor, null, false, null, serviceSymbol, true);
+
+	// The scanned marker: the type argument of the generic [Scan<TMarker>], or the typeof(...) constructor
+	// argument of the non-generic [Scan(typeof(TMarker))]. Null when the attribute is malformed.
+	private static INamedTypeSymbol? ScanMarker(AttributeData attribute, INamedTypeSymbol attributeClass)
+	{
+		if (attributeClass.IsGenericType)
+		{
+			return attributeClass.TypeArguments.Length == 1
+				? attributeClass.TypeArguments[0] as INamedTypeSymbol
+				: null;
+		}
+
+		return attribute.ConstructorArguments.Length == 1
+			? attribute.ConstructorArguments[0].Value as INamedTypeSymbol
+			: null;
+	}
 
 	// The lifetime named on a [Scan] (Lifetime = AwaitenLifetime.X); its underlying int lines up with the
 	// generator's Lifetime enum. Defaults to Transient when unset, matching the attribute default.

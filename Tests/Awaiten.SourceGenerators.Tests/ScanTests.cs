@@ -228,4 +228,61 @@ public class ScanTests
 		await That(source).DoesNotContain("new __Bucket(typeof(global::MyCode.ViewOne)")
 			.Because("ImplementedInterfaces registers under the closed marker interface, not the concrete view");
 	}
+
+	[Fact]
+	public async Task GenericScan_ProducesTheSameRegistrationsAsTheTypeofForm()
+	{
+		const string body = """
+		                    using Awaiten;
+		                    using System.Collections.Generic;
+
+		                    namespace MyCode;
+
+		                    public interface IHandler { }
+		                    public sealed class EmailHandler : IHandler { }
+		                    public sealed class SmsHandler : IHandler { }
+		                    public sealed class Dispatcher { public Dispatcher(IEnumerable<IHandler> handlers) { } }
+
+		                    [Container]
+		                    {0}
+		                    [Singleton<Dispatcher>]
+		                    public static partial class MyContainer
+		                    {
+		                    }
+		                    """;
+
+		string typeofForm = Generator.Run(
+				body.Replace("{0}", "[Scan(typeof(IHandler), As = ScanAs.ImplementedInterfaces, Lifetime = AwaitenLifetime.Singleton)]"))
+			.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+		string genericForm = Generator.Run(
+				body.Replace("{0}", "[Scan<IHandler>(As = ScanAs.ImplementedInterfaces, Lifetime = AwaitenLifetime.Singleton)]"))
+			.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(genericForm).IsEqualTo(typeofForm)
+			.Because("[Scan<IHandler>] is the generic spelling of [Scan(typeof(IHandler))] and generates identically");
+	}
+
+	[Fact]
+	public async Task GenericScan_HonorsInAssembliesOfAndSelfExposure()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using Awaiten.Tests.Support;
+
+		                                       namespace MyCode;
+
+		                                       [Container]
+		                                       [Scan<ICrossAssemblyPlugin>(InAssembliesOf = new[] { typeof(ICrossAssemblyPlugin) }, Lifetime = AwaitenLifetime.Singleton)]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """, typeof(global::Awaiten.Tests.Support.ICrossAssemblyPlugin));
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// The generic form threads through InAssembliesOf exactly like the typeof form.
+		await That(source).Contains("new __Bucket(typeof(global::Awaiten.Tests.Support.GammaPlugin)");
+		await That(source).Contains("new __Bucket(typeof(global::Awaiten.Tests.Support.DeltaPlugin)");
+	}
 }

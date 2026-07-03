@@ -58,3 +58,47 @@ public sealed class ScanAttribute : Attribute
 	/// </summary>
 	public Type[]? InAssembliesOf { get; set; }
 }
+
+// S2326: the type parameter is the Awaiten source generator's input - it reads the marker from the attribute's
+// type argument via Roslyn symbols, so it is intentionally not referenced in the attribute body.
+#pragma warning disable S2326
+
+/// <summary>
+///     The generic form of <see cref="ScanAttribute" />: registers every concrete class assignable to
+///     <typeparamref name="TMarker" /> with the chosen <see cref="Lifetime" />, exposed as configured by
+///     <see cref="As" />. Equivalent to <c>[Scan(typeof(TMarker))]</c> for a closed marker, matching the generic
+///     lifetime attributes (<c>[Transient&lt;T&gt;]</c> and friends). An unbound generic marker
+///     (<c>typeof(IView&lt;&gt;)</c>) cannot be written as a type argument, so use the non-generic
+///     <see cref="ScanAttribute" /> for the <c>AsClosedTypesOf</c> case.
+/// </summary>
+/// <remarks>
+///     Scanned registrations are overridable and multiple matches of the same service coexist as members of that
+///     service's collection, exactly as for the non-generic <see cref="ScanAttribute" />.
+/// </remarks>
+/// <typeparam name="TMarker">The marker interface or base type that discovered implementations must be assignable to.</typeparam>
+[AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
+public sealed class ScanAttribute<TMarker> : Attribute
+{
+	/// <summary>
+	///     The lifetime applied to each discovered implementation. Defaults to
+	///     <see cref="AwaitenLifetime.Transient" />.
+	/// </summary>
+	public AwaitenLifetime Lifetime { get; set; } = AwaitenLifetime.Transient;
+
+	/// <summary>
+	///     How each match is exposed: as itself (the default), under its implemented interfaces, or both.
+	///     Registering under the scanned marker interface makes the matches resolvable as a collection (for
+	///     example, <c>IEnumerable&lt;IHandler&gt;</c>).
+	/// </summary>
+	public ScanAs As { get; set; } = ScanAs.Self;
+
+	/// <summary>
+	///     Widens the scan to the assemblies that contain the listed types, instead of the container's own
+	///     assembly. Each entry names one type whose <see cref="System.Reflection.Assembly" /> is searched
+	///     (typically a marker type in each referenced project). Matches are discovered from referenced-assembly
+	///     metadata at compile time - no runtime reflection - and registered in a deterministic order.
+	/// </summary>
+	public Type[]? InAssembliesOf { get; set; }
+}
+
+#pragma warning restore S2326
