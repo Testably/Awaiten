@@ -452,8 +452,10 @@ partial class AwaitenGenerator
 
 		// Iterate to a fixpoint: each round re-derives the shrinking satisfiable surface, because dropping one
 		// match can orphan another scanned match that depended on one of its services.
-		while (PruneUnconstructableScanRound(raw, containerSymbol, compilation, importServices, constraintRejected, diagnostics))
+		bool dropped = true;
+		while (dropped)
 		{
+			dropped = PruneUnconstructableScanRound(raw, containerSymbol, compilation, importServices, constraintRejected, diagnostics);
 		}
 	}
 
