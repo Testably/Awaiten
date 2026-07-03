@@ -2754,20 +2754,11 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		=> key is null ? Display(serviceType) : $"{Display(serviceType)} (key: {key})";
 
 	private static string? FromKey(ImmutableArray<AttributeData> attributes)
-	{
-		foreach (AttributeData attribute in attributes)
-		{
-			if (attribute.AttributeClass is { Name: "FromKeyAttribute", } attributeClass
-			    && attributeClass.ContainingNamespace?.ToDisplayString() == ContainerRegistrations.AttributeNamespace
-			    && attribute.ConstructorArguments.Length == 1
-			    && attribute.ConstructorArguments[0].Value is string key)
-			{
-				return key;
-			}
-		}
-
-		return null;
-	}
+		=> TryGetAwaitenAttribute(attributes, "FromKeyAttribute", out AttributeData? attribute)
+		   && attribute!.ConstructorArguments.Length == 1
+		   && attribute.ConstructorArguments[0].Value is string key
+			? key
+			: null;
 
 	/// <summary>
 	///     Reads the container's <c>LifetimeSafety</c> from its <c>[Container]</c> attribute. Strict (the
@@ -2775,14 +2766,9 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	/// </summary>
 	internal static bool ReadStrict(INamedTypeSymbol containerSymbol)
 	{
-		foreach (AttributeData attribute in containerSymbol.GetAttributes())
+		if (TryGetAwaitenAttribute(containerSymbol.GetAttributes(), "ContainerAttribute", out AttributeData? attribute))
 		{
-			if (attribute.AttributeClass?.ToDisplayString() != ContainerAttributeName)
-			{
-				continue;
-			}
-
-			foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
+			foreach (KeyValuePair<string, TypedConstant> argument in attribute!.NamedArguments)
 			{
 				// LifetimeSafety is an enum; its TypedConstant value is the underlying int (Strict = 0, Loose = 1).
 				if (argument.Key == "LifetimeSafety" && argument.Value.Value is int value)
@@ -2802,14 +2788,9 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	/// </summary>
 	internal static bool ReadSyncResolveAfterInit(INamedTypeSymbol containerSymbol)
 	{
-		foreach (AttributeData attribute in containerSymbol.GetAttributes())
+		if (TryGetAwaitenAttribute(containerSymbol.GetAttributes(), "ContainerAttribute", out AttributeData? attribute))
 		{
-			if (attribute.AttributeClass?.ToDisplayString() != ContainerAttributeName)
-			{
-				continue;
-			}
-
-			foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
+			foreach (KeyValuePair<string, TypedConstant> argument in attribute!.NamedArguments)
 			{
 				if (argument.Key == "SyncResolveAfterInit" && argument.Value.Value is bool value)
 				{
@@ -3161,52 +3142,44 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	private static bool HasInject(ImmutableArray<AttributeData> attributes)
 		=> HasAwaitenAttribute(attributes, "InjectAttribute");
 
+	/// <summary>
+	///     Whether <paramref name="attributes" /> carries the Awaiten attribute named
+	///     <paramref name="attributeName" /> (matched by simple type name within the <c>Awaiten</c> namespace).
+	/// </summary>
 	private static bool HasAwaitenAttribute(ImmutableArray<AttributeData> attributes, string attributeName)
+		=> TryGetAwaitenAttribute(attributes, attributeName, out _);
+
+	/// <summary>
+	///     Locates the Awaiten attribute named <paramref name="attributeName" /> in an attribute list, if
+	///     present, so its named/constructor arguments can be read. Matches by simple type name within the
+	///     <c>Awaiten</c> namespace, so it ignores same-named attributes from other namespaces.
+	/// </summary>
+	private static bool TryGetAwaitenAttribute(ImmutableArray<AttributeData> attributes, string attributeName, out AttributeData? attribute)
 	{
-		foreach (AttributeData attribute in attributes)
+		foreach (AttributeData candidate in attributes)
 		{
-			if (attribute.AttributeClass is { } attributeClass
+			if (candidate.AttributeClass is { } attributeClass
 			    && attributeClass.Name == attributeName
 			    && attributeClass.ContainingNamespace?.ToDisplayString() == ContainerRegistrations.AttributeNamespace)
 			{
+				attribute = candidate;
 				return true;
 			}
 		}
 
+		attribute = null;
 		return false;
 	}
 
 	// Whether a parameter is marked [FromServices], so it is resolved from the container's external provider
 	// rather than the Awaiten graph.
 	private static bool HasFromServices(IParameterSymbol parameter)
-	{
-		foreach (AttributeData attribute in parameter.GetAttributes())
-		{
-			if (attribute.AttributeClass is { Name: "FromServicesAttribute", } attributeClass
-			    && attributeClass.ContainingNamespace?.ToDisplayString() == ContainerRegistrations.AttributeNamespace)
-			{
-				return true;
-			}
-		}
-
-		return false;
-	}
+		=> HasAwaitenAttribute(parameter.GetAttributes(), "FromServicesAttribute");
 
 	// Whether the container is marked [ImportServices], so every otherwise-unresolved direct dependency is
 	// satisfied from the external provider rather than reported as missing.
 	private static bool ContainerImportsServices(INamedTypeSymbol containerSymbol)
-	{
-		foreach (AttributeData attribute in containerSymbol.GetAttributes())
-		{
-			if (attribute.AttributeClass is { Name: "ImportServicesAttribute", } attributeClass
-			    && attributeClass.ContainingNamespace?.ToDisplayString() == ContainerRegistrations.AttributeNamespace)
-			{
-				return true;
-			}
-		}
-
-		return false;
-	}
+		=> HasAwaitenAttribute(containerSymbol.GetAttributes(), "ImportServicesAttribute");
 
 	private static bool IsRelationshipType(ITypeSymbol type)
 		=> type is INamedTypeSymbol { IsGenericType: true, TypeArguments.Length: 1, Name: "Func" or "Lazy", } named
