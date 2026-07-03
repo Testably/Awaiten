@@ -2,7 +2,7 @@ namespace Awaiten.SourceGenerators.Tests;
 
 public partial class DiagnosticTests
 {
-	public class Awt131ConflictingExternalParameter
+	public class Awt134ConflictingExternalParameter
 	{
 		[Fact]
 		public async Task ReportsWhenAParameterIsMarkedBothFromServicesAndArg()
@@ -21,7 +21,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics).Contains("*AWT131*").AsWildcard()
+			await That(result.Diagnostics).Contains("*AWT134*").AsWildcard()
 				.And.Contains("*[FromServices]*").AsWildcard()
 				.Because("a parameter cannot be both an external dependency and a runtime argument");
 		}

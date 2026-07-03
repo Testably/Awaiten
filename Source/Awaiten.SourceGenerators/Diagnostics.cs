@@ -429,11 +429,65 @@ internal static class Diagnostics
 		isEnabledByDefault: true);
 
 	/// <summary>
+	///     A <c>[Composite&lt;TComposite, TService&gt;]</c> implementation has no constructor parameter that is a
+	///     collection (<c>IEnumerable&lt;TService&gt;</c>, <c>IReadOnlyList&lt;TService&gt;</c>, <c>TService[]</c>, …)
+	///     of the composed service, so there is nothing for the composite to fan out to.
+	/// </summary>
+	public static readonly DiagnosticDescriptor CompositeMissingCollectionParameter = new(
+		"AWT130",
+		"Composite has no collection parameter",
+		"The composite '{0}' must have a constructor parameter that is a collection of the composed service '{1}'; it has none",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     The composite type is also registered as an ordinary member of the service it composes (e.g. a
+	///     <c>[Transient&lt;C, S&gt;]</c> alongside <c>[Composite&lt;C, S&gt;]</c>). A composite is excluded from
+	///     its own fan-out, so that bare registration has no effect and is dropped; a warning rather than an error
+	///     because the resulting graph is well-defined (the composite simply never appears in its own collection).
+	/// </summary>
+	public static readonly DiagnosticDescriptor CompositeAlsoRegisteredAsMember = new(
+		"AWT131",
+		"Composite is also registered as a member of its own service",
+		"The composite '{0}' is also registered as a member of the composed service '{1}'; a composite is excluded from its own fan-out, so that registration has no effect and is ignored",
+		"Awaiten",
+		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     More than one <c>[Composite&lt;_, TService&gt;]</c> names the same service. A service can have at most
+	///     one composite (the single public façade), so the first-declared composite wins and the rest are
+	///     reported. Declaring the same composite type twice for one service is idempotent and not reported.
+	/// </summary>
+	public static readonly DiagnosticDescriptor MultipleCompositesForService = new(
+		"AWT132",
+		"Multiple composites for one service",
+		"The service '{0}' has more than one composite; a service can have at most one composite façade, so all but the first are ignored",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A <c>[Composite&lt;TComposite, TService&gt;]</c> has a collection constructor parameter, but its element
+	///     type is a base (or otherwise related) type of the composed service rather than the composed service
+	///     itself. Collections are resolved by exact element type, so such a parameter would fan out over a
+	///     different collection than <c>TService</c>'s registrations - never the intended members.
+	/// </summary>
+	public static readonly DiagnosticDescriptor CompositeCollectionNotOfComposedService = new(
+		"AWT133",
+		"Composite collection parameter is not of the composed service",
+		"The composite '{0}' fans out over a collection of '{1}', not the composed service '{2}'; its collection parameter's element type must be exactly the composed service",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
 	///     A constructor parameter is marked both <c>[FromServices]</c> and <c>[Arg]</c>: it cannot be both
 	///     an externally-resolved dependency and a caller-supplied runtime argument.
 	/// </summary>
 	public static readonly DiagnosticDescriptor ConflictingExternalParameter = new(
-		"AWT131",
+		"AWT134",
 		"Conflicting external parameter",
 		"The parameter '{0}' of '{1}' is marked both [FromServices] and [Arg]; it cannot be both an external dependency and a runtime argument",
 		"Awaiten",

@@ -5,7 +5,8 @@ namespace Awaiten.SourceGenerators.Tests;
 ///     <c>IEnumerable&lt;T&gt;</c> and friends, or <c>T[]</c>) is materialized as an array of every unkeyed
 ///     registration of <c>T</c>, in registration order, and <c>IEnumerable&lt;T&gt;</c> / <c>T[]</c> are
 ///     added to the public dispatch table. Every member is a real instance (the "losing" registration is not
-///     dropped), an empty collection is a legal empty array, and an async-tainted member is rejected.
+///     dropped), an empty collection is a legal empty array, and an async-tainted member is rejected on the
+///     synchronous shapes (AWT122) but legal - awaited - through the <c>IAsyncEnumerable&lt;T&gt;</c> shape.
 /// </summary>
 public class CollectionTests
 {
@@ -384,6 +385,334 @@ public class CollectionTests
 
 		await That(source).DoesNotContain("has a build-on-demand disposable member")
 			.Because("a collection whose members are not build-on-demand disposables leaks nothing on the Root, so it stays resolvable there");
+	}
+
+	[Fact]
+	public async Task AsyncEnumerableDependency_MaterializesMembersIntoTheAsyncArrayHelper()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class Alpha : IPlugin { }
+		                                       public sealed class Beta : IPlugin { }
+		                                       public sealed class Host { public Host(IAsyncEnumerable<IPlugin> plugins) { } }
+
+		                                       [Container]
+		                                       [Singleton<Alpha, IPlugin>]
+		                                       [Singleton<Beta, IPlugin>]
+		                                       [Singleton<Host>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// Every member is synchronous, so the async collection is a synchronous expression: the members are
+		// materialized into a T[] in registration order and wrapped in the __AsyncArray<T> helper.
+		await That(source).Contains("new __AsyncArray<global::MyCode.IPlugin>(new global::MyCode.IPlugin[] { ResolveAlpha(), ResolveBeta() })")
+			.Because("an async collection materializes every registration in registration order, wrapped as an IAsyncEnumerable<T>");
+		await That(source).Contains("private sealed class __AsyncArray<T> : global::System.Collections.Generic.IAsyncEnumerable<T>, global::System.Collections.Generic.IAsyncEnumerator<T>")
+			.Because("the __AsyncArray<T> backing type is emitted when an async collection is injected");
+	}
+
+	[Fact]
+	public async Task AsyncEnumerableWithAnAsyncMember_AwaitsItInsteadOfReportingAwt122()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+		                                       using System.Threading;
+		                                       using System.Threading.Tasks;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class Alpha : IPlugin { }
+		                                       public sealed class AsyncPlugin : IPlugin, IAsyncInitializable
+		                                       {
+		                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+		                                       }
+		                                       public sealed class Host { public Host(IAsyncEnumerable<IPlugin> plugins) { } }
+
+		                                       [Container]
+		                                       [Singleton<Alpha, IPlugin>]
+		                                       [Singleton<AsyncPlugin, IPlugin>]
+		                                       [Singleton<Host>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).DoesNotContain("*AWT122*").AsWildcard()
+			.Because("IAsyncEnumerable<T> awaits its members, so an async-tainted member is legal through it");
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// The host captured an async-tainted member, so it is built on the async path: the async member is awaited
+		// through its async resolver (in registration order), the synchronous member resolved directly.
+		await That(source).Contains("new __AsyncArray<global::MyCode.IPlugin>(new global::MyCode.IPlugin[] { ResolveAlpha(), await ResolveAsyncPluginAsync(cancellationToken).ConfigureAwait(false) })")
+			.Because("the async-tainted member is awaited while materializing the collection, the synchronous member resolved directly");
+	}
+
+	[Fact]
+	public async Task EmptyAsyncEnumerable_MaterializesAnEmptyAsyncArrayWithoutAwt101()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class Host { public Host(IAsyncEnumerable<IPlugin> plugins) { } }
+
+		                                       [Container]
+		                                       [Singleton<Host>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty()
+			.Because("an unregistered element type resolves to an empty async collection, not a missing-dependency error");
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("new __AsyncArray<global::MyCode.IPlugin>(new global::MyCode.IPlugin[] {  })")
+			.Because("an element type with no registration materializes an empty async collection");
+	}
+
+	[Fact]
+	public async Task ExplicitlyRegisteredAsyncEnumerable_WinsOverSynthesisOnInjection()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+		                                       using System.Threading;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class Alpha : IPlugin { }
+		                                       public sealed class Channel : IAsyncEnumerable<IPlugin>
+		                                       {
+		                                           public IAsyncEnumerator<IPlugin> GetAsyncEnumerator(CancellationToken cancellationToken = default) => null;
+		                                       }
+		                                       public sealed class Host { public Host(IAsyncEnumerable<IPlugin> plugins) { } }
+
+		                                       [Container]
+		                                       [Singleton<Alpha, IPlugin>]
+		                                       [Singleton<Channel, IAsyncEnumerable<IPlugin>>]
+		                                       [Singleton<Host>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// IAsyncEnumerable<IPlugin> is itself a registered service (an opaque channel), so the parameter is a direct
+		// dependency on that registration - not the async collection synthesized from the IPlugin members.
+		await That(source).Contains("new global::MyCode.Host(__root.ResolveChannel())")
+			.Because("an explicitly registered IAsyncEnumerable<T> wins over the synthesized async collection on injection");
+	}
+
+	[Fact]
+	public async Task ExplicitlyRegisteredSyncCollectionShape_SuppressesTheAsyncEnumerableViewOnInjectionToo()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class Alpha : IPlugin { }
+		                                       public sealed class Config : IReadOnlyList<IPlugin>
+		                                       {
+		                                           public IPlugin this[int i] => null;
+		                                           public int Count => 0;
+		                                           public IEnumerator<IPlugin> GetEnumerator() => null;
+		                                           System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => null;
+		                                       }
+		                                       public sealed class Host { public Host(IAsyncEnumerable<IPlugin> plugins) { } }
+
+		                                       [Container]
+		                                       [Singleton<Alpha, IPlugin>]
+		                                       [Singleton<Config, IReadOnlyList<IPlugin>>]
+		                                       [Singleton<Host>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		// An explicitly registered synchronous shape (IReadOnlyList<IPlugin>) makes the whole IPlugin collection an
+		// opaque value, all-or-nothing. By type the IAsyncEnumerable<IPlugin> view is suppressed (SynthesisSuppressed),
+		// so injecting the unregistered async shape is AWT101 - the same missing-dependency outcome - rather than a
+		// second collection silently synthesized from the members behind the opaque IReadOnlyList<IPlugin>.
+		await That(result.Diagnostics).Contains("*AWT101*").AsWildcard()
+			.Because("a registered synchronous collection shape suppresses the IAsyncEnumerable<T> view on injection too, matching the by-type SynthesisSuppressed gate");
+		await That(result.Sources.TryGetValue("Awaiten.MyCode.MyContainer.g.cs", out string? source) ? source : string.Empty)
+			.DoesNotContain("new __AsyncArray<global::MyCode.IPlugin>")
+			.Because("the suppressed async view is not synthesized behind the opaque registration");
+	}
+
+	[Fact]
+	public async Task SynchronousCollection_IsAlsoResolvableByTypeAsIAsyncEnumerable()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class Alpha : IPlugin { }
+		                                       public sealed class Beta : IPlugin { }
+
+		                                       [Container]
+		                                       [Singleton<Alpha, IPlugin>]
+		                                       [Singleton<Beta, IPlugin>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// Every member is synchronous, so IAsyncEnumerable<T> joins the synchronous shapes in the by-type dispatch,
+		// wrapping the same materialized members in the __AsyncArray<T> replay enumerator.
+		await That(source).Contains("typeof(global::System.Collections.Generic.IAsyncEnumerable<global::MyCode.IPlugin>)")
+			.Because("a synchronous collection is also publicly resolvable as IAsyncEnumerable<T>");
+		await That(source).Contains("new __AsyncArray<global::MyCode.IPlugin>(new global::MyCode.IPlugin[] { ResolveAlpha(), ResolveBeta() })")
+			.Because("the IAsyncEnumerable<T> dispatch wraps the synchronously materialized members");
+	}
+
+	[Fact]
+	public async Task AsyncCollection_IsResolvableByTypeAsIAsyncEnumerableThroughResolveAsync()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Threading;
+		                                       using System.Threading.Tasks;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class AsyncPlugin : IPlugin, IAsyncInitializable
+		                                       {
+		                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+		                                       }
+
+		                                       [Container]
+		                                       [Singleton<AsyncPlugin, IPlugin>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// The collection holds an async-tainted member, so its IAsyncEnumerable<T> shape is served by an async
+		// dispatch arm routed to a generated async collection resolver that awaits each member.
+		await That(source).Contains("typeof(global::System.Collections.Generic.IAsyncEnumerable<global::MyCode.IPlugin>), static (__s, __ct) => __AsObject(__s.__ResolveAsyncCollection0(__ct))")
+			.Because("the async collection is resolvable by type through ResolveAsync");
+		await That(source).Contains("return new __AsyncArray<global::MyCode.IPlugin>(new global::MyCode.IPlugin[] { await ResolveAsyncPluginAsync(cancellationToken).ConfigureAwait(false) });")
+			.Because("the generated async collection resolver materializes the stream, awaiting the async member");
+
+		// Its synchronous Resolve steers to ResolveAsync rather than surfacing a generic no-registration error.
+		await That(source).Contains("the async collection 'System.Collections.Generic.IAsyncEnumerable<MyCode.IPlugin>' has a member that requires asynchronous initialization")
+			.Because("synchronous Resolve of the async collection shape throws guidance toward ResolveAsync");
+	}
+
+	[Fact]
+	public async Task ExplicitlyRegisteredAsyncEnumerable_ClaimsTheByTypeSlotOnBothSurfaces()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+		                                       using System.Threading;
+		                                       using System.Threading.Tasks;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class AsyncPlugin : IPlugin, IAsyncInitializable
+		                                       {
+		                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+		                                       }
+		                                       public sealed class Channel : IAsyncEnumerable<IPlugin>
+		                                       {
+		                                           public IAsyncEnumerator<IPlugin> GetAsyncEnumerator(CancellationToken cancellationToken = default) => null;
+		                                       }
+
+		                                       [Container]
+		                                       [Singleton<AsyncPlugin, IPlugin>]
+		                                       [Singleton<Channel, IAsyncEnumerable<IPlugin>>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// The registered channel owns typeof(IAsyncEnumerable<IPlugin>) on the synchronous dispatch, and no async
+		// arm is synthesized behind it: ResolveAsync falls through to the same synchronous resolution, so Resolve
+		// and ResolveAsync hand back the same registered service rather than two disagreeing collections.
+		await That(source).Contains("typeof(global::System.Collections.Generic.IAsyncEnumerable<global::MyCode.IPlugin>), static __s => __s.ResolveChannel()")
+			.Because("the explicitly registered IAsyncEnumerable<T> is dispatched as an ordinary service");
+		await That(source).DoesNotContain("__ResolveAsyncCollection")
+			.Because("no async collection arm is synthesized behind the registered async shape");
+		await That(source).DoesNotContain("the async collection 'System.Collections.Generic.IAsyncEnumerable<MyCode.IPlugin>'")
+			.Because("the synthesized view's guidance does not shadow a slot the registration owns");
+	}
+
+	[Fact]
+	public async Task AsyncTaintedRegisteredAsyncEnumerable_IsNotShadowedByTheSynthesizedViewOnTheSyncDispatch()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+		                                       using System.Threading;
+		                                       using System.Threading.Tasks;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class Alpha : IPlugin { }
+		                                       public sealed class Channel : IAsyncEnumerable<IPlugin>, IAsyncInitializable
+		                                       {
+		                                           public IAsyncEnumerator<IPlugin> GetAsyncEnumerator(CancellationToken cancellationToken = default) => null;
+		                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+		                                       }
+
+		                                       [Container]
+		                                       [Singleton<Alpha, IPlugin>]
+		                                       [Singleton<Channel, IAsyncEnumerable<IPlugin>>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// The registered channel is async-tainted, so it is absent from the synchronous dispatch - the synthesized
+		// IPlugin view (whose members are all synchronous) must not claim its vacated slot: synchronous Resolve
+		// throws the channel's own steer-to-ResolveAsync guidance, and ResolveAsync serves the channel.
+		await That(source).DoesNotContain("new __AsyncArray<global::MyCode.IPlugin>")
+			.Because("the synthesized async view is not emitted behind the registered async shape");
+		await That(source).Contains("typeof(global::System.Collections.Generic.IAsyncEnumerable<global::MyCode.IPlugin>), static (__s, __ct) => __AsObject(__s.ResolveChannelAsync(__ct))")
+			.Because("ResolveAsync serves the registered channel through its own async resolver");
+		await That(source).Contains("'System.Collections.Generic.IAsyncEnumerable<MyCode.IPlugin>' requires asynchronous initialization")
+			.Because("synchronous Resolve throws the registered service's guidance, not the synthesized view's");
 	}
 
 	[Fact]

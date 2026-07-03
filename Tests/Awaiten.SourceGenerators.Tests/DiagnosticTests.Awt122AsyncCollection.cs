@@ -90,5 +90,35 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).DoesNotContain("*AWT122*").AsWildcard()
 				.Because("SyncResolveAfterInit permits synchronous resolution of an async-tainted member after warm-up");
 		}
+
+		[Fact]
+		public async Task DoesNotReportWhenTheAsyncMemberIsConsumedAsIAsyncEnumerable()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+			                                       using System.Collections.Generic;
+			                                       using System.Threading;
+			                                       using System.Threading.Tasks;
+
+			                                       namespace MyCode;
+
+			                                       public interface IPlugin { }
+			                                       public sealed class AsyncPlugin : IPlugin, IAsyncInitializable
+			                                       {
+			                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+			                                       }
+			                                       public sealed class Host { public Host(IAsyncEnumerable<IPlugin> plugins) { } }
+
+			                                       [Container]
+			                                       [Singleton<AsyncPlugin, IPlugin>]
+			                                       [Singleton<Host>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).DoesNotContain("*AWT122*").AsWildcard()
+				.Because("IAsyncEnumerable<T> awaits each member's initialization, so an async-tainted member is legal through that shape - AWT122 stays specific to the synchronous collection shapes");
+		}
 	}
 }

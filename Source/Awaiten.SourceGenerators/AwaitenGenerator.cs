@@ -218,6 +218,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 		(List<RawRegistration> raw, HashSet<string> constraintRejected) = ContainerRegistrations.Collect(containerSymbol, diagnostics);
 		List<DecorateRegistration> decorators = ContainerRegistrations.CollectDecorators(containerSymbol);
+		List<CompositeRegistration> composites = ContainerRegistrations.CollectComposites(containerSymbol);
 
 		// Coalesce registrations by (service type, key): the first registration per key wins, and
 		// registrations of the same implementation share one instance. Declaring one implementation with
@@ -235,6 +236,15 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		{
 			new DecoratorChainBuilder(containerSymbol, compilation, serviceToImpl, implOrder, serviceMembers, decoratorInner, diagnostics)
 				.Build(decorators);
+		}
+
+		// Composites: each [Composite<TComposite, TService>] registers the composite as an ordinary instance,
+		// makes it the public single-dispatch winner for TService, and leaves the existing members untouched -
+		// the composite is excluded from its own collection, so its collection parameter fans out to the OTHER
+		// registrations. Runs after decorator chains so a composite fronts the decorated members.
+		if (composites.Count > 0)
+		{
+			BuildComposites(composites, compilation, containerSymbol, serviceToImpl, implOrder, serviceMembers, diagnostics);
 		}
 
 		List<InstanceModel> instances = new();
@@ -409,7 +419,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	{
 		foreach (ParameterModel parameter in instance.ConstructorParameters.AsArray())
 		{
-			if (parameter.Kind == DependencyKind.Enumerable)
+			if (parameter.Kind is DependencyKind.Enumerable or DependencyKind.AsyncEnumerable)
 			{
 				PushTransientCollectionMembers(KeyOf(parameter), instances, collectionMembers, stack);
 			}
@@ -678,9 +688,11 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		return edges;
 	}
 
-	// Appends the edge(s) a single parameter contributes to its node's edge list. A collection (Enumerable)
-	// edges to each of its members; a direct dependency (and, in the construction graph, a bare eager
-	// Owned<T>/Task<T>) edges to its single resolved instance; everything else defers and contributes nothing.
+	// Appends the edge(s) a single parameter contributes to its node's edge list. A collection - synchronous
+	// (Enumerable) or asynchronous (AsyncEnumerable) - edges to each of its members; a direct dependency (and, in
+	// the construction graph, a bare eager Owned<T>/Task<T>) edges to its single resolved instance; everything else
+	// defers and contributes nothing. Both collection kinds materialize their members eagerly, so both capture them
+	// (taint/captive) and close cycles through them; they differ only in that AsyncEnumerable awaits its members.
 	private static void AddParameterEdges(
 		ParameterModel parameter,
 		Dictionary<ServiceKey, string> serviceToImpl,
@@ -689,7 +701,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		bool includeEagerBare,
 		List<int> nodeEdges)
 	{
-		if (parameter.Kind == DependencyKind.Enumerable)
+		if (parameter.Kind is DependencyKind.Enumerable or DependencyKind.AsyncEnumerable)
 		{
 			AddCollectionMemberEdges(KeyOf(parameter), serviceMembers, implToIndex, nodeEdges);
 			return;
@@ -1046,6 +1058,301 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			=> $"{decoratorType}@{DecoratorKeyPrefix}{service}:{baseIndex}:{link}";
 	}
 
+	/// <summary>
+	///     Builds the composites after coalescing (and after decorator chains, so a composite fronts the
+	///     decorated members). For each <c>[Composite&lt;TComposite, TService&gt;]</c> it registers the composite
+	///     as an ordinary instance (constructed, cached and disposed by index) with the chosen lifetime and
+	///     rewrites the public unkeyed winner of <c>TService</c> to the composite, so a plain <c>TService</c>
+	///     parameter and <c>Resolve&lt;TService&gt;()</c> both get the composite. The composite is deliberately
+	///     NOT added to <c>serviceMembers</c>: it is excluded from its own - and everyone else's - collection
+	///     membership, so its own collection parameter (and any separate <c>IEnumerable&lt;TService&gt;</c>
+	///     consumer) resolves to the OTHER registrations, never the composite. With no self-edge the cycle
+	///     (AWT102) and captive (AWT105) analysis works unchanged over the composite's eager collection edges. An
+	///     empty member set is legal (the composite fans out to an empty collection). Reports AWT130 when the
+	///     composite has no collection parameter of the composed service, AWT133 when that collection is of a base
+	///     type rather than the service itself, AWT132 for a second composite over an already-composed service, and
+	///     AWT131 (a warning) when the composite type is also registered as a bare member of its own service - in
+	///     which case that membership is dropped, keeping the no-self-edge invariant that would otherwise be
+	///     violated (and surface as a confusing AWT102 cycle).
+	/// </summary>
+	private static void BuildComposites(
+		List<CompositeRegistration> composites,
+		Compilation compilation,
+		INamedTypeSymbol containerSymbol,
+		Dictionary<ServiceKey, string> serviceToImpl,
+		List<ImplInfo> implOrder,
+		Dictionary<ServiceKey, List<string>> serviceMembers,
+		List<DiagnosticInfo> diagnostics)
+	{
+		// The coalesced implementations by identity (including decorator chain links), so the composite's
+		// ImplInfo can be appended for BuildInstance to build and a former winner's public key removed.
+		Dictionary<string, ImplInfo> byImpl = new(StringComparer.Ordinal);
+		foreach (ImplInfo info in implOrder)
+		{
+			byImpl[info.ImplementationType] = info;
+		}
+
+		// The composite type chosen for each composed service, so a second composite for the same service is
+		// caught (AWT132) rather than silently overwriting the first and leaving it as a dead built instance.
+		Dictionary<string, string> compositeByService = new(StringComparer.Ordinal);
+
+		foreach (CompositeRegistration composite in composites)
+		{
+			string compositeType = composite.Composite.ToDisplayString(FullyQualified);
+
+			// AWT132: a service can have at most one composite façade; a later composite for it is skipped.
+			if (IsDuplicateComposite(composite, compositeType, compositeByService, diagnostics))
+			{
+				continue;
+			}
+
+			// AWT130/AWT133: the composite must fan out over a collection of exactly the composed service.
+			if (!ValidateCompositeCollection(composite, compositeType, containerSymbol, compilation, serviceToImpl, diagnostics))
+			{
+				continue;
+			}
+
+			ImplInfo compositeInfo = EnsureCompositeInstance(composite, compositeType, byImpl, implOrder);
+			DropRedundantSelfMembership(composite, compositeType, serviceMembers, diagnostics);
+			MakeCompositeThePublicWinner(composite, compositeType, compositeInfo, serviceToImpl, byImpl);
+		}
+	}
+
+	// AWT132: whether this composite duplicates one already chosen for its service (so the caller skips it),
+	// recording the first composite per service. A second composite of a DIFFERENT type is reported; the same
+	// type declared twice is idempotent and left silent.
+	private static bool IsDuplicateComposite(
+		CompositeRegistration composite,
+		string compositeType,
+		Dictionary<string, string> compositeByService,
+		List<DiagnosticInfo> diagnostics)
+	{
+		if (!compositeByService.TryGetValue(composite.Service, out string? firstComposite))
+		{
+			compositeByService.Add(composite.Service, compositeType);
+			return false;
+		}
+
+		if (firstComposite != compositeType)
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.MultipleCompositesForService,
+				LocationInfo.From(composite.Location),
+				new EquatableArray<string>([Display(composite.Service),])));
+		}
+
+		return true;
+	}
+
+	// Whether the composite's collection parameter is valid (the caller proceeds), reporting AWT130 for a missing
+	// collection parameter and AWT133 for a collection of a base type of the service (which, since collections are
+	// keyed by exact element type, would resolve a different collection than the composed service's registrations).
+	private static bool ValidateCompositeCollection(
+		CompositeRegistration composite,
+		string compositeType,
+		INamedTypeSymbol containerSymbol,
+		Compilation compilation,
+		Dictionary<ServiceKey, string> serviceToImpl,
+		List<DiagnosticInfo> diagnostics)
+	{
+		switch (ClassifyCompositeCollection(composite.Composite, composite.ServiceSymbol, containerSymbol, compilation, serviceToImpl, out string? relatedElement))
+		{
+			case CompositeCollectionKind.Missing:
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.CompositeMissingCollectionParameter,
+					LocationInfo.From(composite.Location),
+					new EquatableArray<string>([
+						Display(compositeType),
+						Display(composite.Service),
+					])));
+				return false;
+
+			case CompositeCollectionKind.RelatedElement:
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.CompositeCollectionNotOfComposedService,
+					LocationInfo.From(composite.Location),
+					new EquatableArray<string>([
+						Display(compositeType),
+						Display(relatedElement!),
+						Display(composite.Service),
+					])));
+				return false;
+
+			default:
+				return true;
+		}
+	}
+
+	// Registers the composite as an ordinary instance (constructed, cached and disposed by index) and returns its
+	// ImplInfo, reusing the existing one if the type was already registered (idempotent when named twice or when
+	// the composite type is also a normal service).
+	private static ImplInfo EnsureCompositeInstance(
+		CompositeRegistration composite,
+		string compositeType,
+		Dictionary<string, ImplInfo> byImpl,
+		List<ImplInfo> implOrder)
+	{
+		if (byImpl.TryGetValue(compositeType, out ImplInfo? compositeInfo))
+		{
+			return compositeInfo;
+		}
+
+		compositeInfo = new ImplInfo(
+			compositeType, composite.Composite, composite.Lifetime,
+			LocationInfo.From(composite.Location), ProductionKind.Constructor, null);
+		byImpl.Add(compositeType, compositeInfo);
+		implOrder.Add(compositeInfo);
+		return compositeInfo;
+	}
+
+	// AWT131: the composite type is also registered as a bare member of the service it composes (e.g. a
+	// [Transient<C, S>] alongside [Composite<C, S>]). A composite is excluded from its own fan-out, so drop it from
+	// every collection of the composed service and warn - without the removal its own collection edge would include
+	// itself and surface as a confusing AWT102 dependency cycle.
+	private static void DropRedundantSelfMembership(
+		CompositeRegistration composite,
+		string compositeType,
+		Dictionary<ServiceKey, List<string>> serviceMembers,
+		List<DiagnosticInfo> diagnostics)
+	{
+		bool wasMember = false;
+		foreach (KeyValuePair<ServiceKey, List<string>> entry in serviceMembers)
+		{
+			if (entry.Key.Service == composite.Service && entry.Value.Remove(compositeType))
+			{
+				wasMember = true;
+			}
+		}
+
+		if (!wasMember)
+		{
+			return;
+		}
+
+		diagnostics.Add(new DiagnosticInfo(
+			Diagnostics.CompositeAlsoRegisteredAsMember,
+			LocationInfo.From(composite.Location),
+			new EquatableArray<string>([
+				Display(compositeType),
+				Display(composite.Service),
+			])));
+	}
+
+	// Makes the composite the public single-dispatch winner: takes the unkeyed service off whatever impl currently
+	// holds it (a former winner stays a collection member, just no longer the façade) and hands it to the composite.
+	// The composite is never a serviceMembers entry, so it stays excluded from its own - and every other consumer's -
+	// IEnumerable<TService>.
+	private static void MakeCompositeThePublicWinner(
+		CompositeRegistration composite,
+		string compositeType,
+		ImplInfo compositeInfo,
+		Dictionary<ServiceKey, string> serviceToImpl,
+		Dictionary<string, ImplInfo> byImpl)
+	{
+		ServiceKey publicKey = new(composite.Service, null);
+		if (serviceToImpl.TryGetValue(publicKey, out string? previousWinner)
+		    && previousWinner != compositeType
+		    && byImpl.TryGetValue(previousWinner, out ImplInfo? previousInfo))
+		{
+			previousInfo.Services.Remove(publicKey);
+		}
+
+		serviceToImpl[publicKey] = compositeType;
+		if (!compositeInfo.Services.Contains(publicKey))
+		{
+			compositeInfo.Services.Add(publicKey);
+		}
+	}
+
+	/// <summary>Which collection-parameter shape a composite offers for its composed service.</summary>
+	private enum CompositeCollectionKind
+	{
+		/// <summary>A collection parameter whose element type is exactly the composed service - valid.</summary>
+		Exact,
+
+		/// <summary>
+		///     A collection parameter of a base (or otherwise related) type of the composed service. Collections
+		///     resolve by exact element type, so it would fan out over a different collection - reported as AWT133.
+		/// </summary>
+		RelatedElement,
+
+		/// <summary>No collection parameter of the composed service at all - reported as AWT130.</summary>
+		Missing,
+	}
+
+	/// <summary>
+	///     Classifies the collection constructor parameter <paramref name="composite" /> offers for its composed
+	///     <paramref name="service" /> - what it fans out over. <see cref="CompositeCollectionKind.Exact" /> when a
+	///     collection parameter (<c>IEnumerable&lt;TService&gt;</c>, <c>IReadOnlyList&lt;TService&gt;</c>,
+	///     <c>TService[]</c>, …) has element type exactly the service; <see cref="CompositeCollectionKind.RelatedElement" />
+	///     (yielding the offending element type in <paramref name="relatedElement" />) when a collection parameter's
+	///     element is a base type the service is assignable to but is not the service itself - collections resolve
+	///     by exact element type, so it would fan out over a different collection; otherwise
+	///     <see cref="CompositeCollectionKind.Missing" />. An exact match wins over a related one. The constructor
+	///     is chosen by the same <see cref="SelectConstructor" /> the container builds the composite through, so
+	///     this validation can never inspect a different constructor than the one constructed.
+	/// </summary>
+	private static CompositeCollectionKind ClassifyCompositeCollection(
+		INamedTypeSymbol composite,
+		INamedTypeSymbol service,
+		INamedTypeSymbol containerSymbol,
+		Compilation compilation,
+		Dictionary<ServiceKey, string> serviceToImpl,
+		out string? relatedElement)
+	{
+		relatedElement = null;
+		IMethodSymbol? constructor = SelectConstructor(composite, containerSymbol, serviceToImpl.Keys.Select(k => k.Service));
+		if (constructor is null)
+		{
+			return CompositeCollectionKind.Missing;
+		}
+
+		foreach (IParameterSymbol parameter in constructor.Parameters)
+		{
+			if (!TryGetCompositeCollectionElement(parameter.Type, out ITypeSymbol? element))
+			{
+				continue;
+			}
+
+			if (SymbolEqualityComparer.Default.Equals(element, service))
+			{
+				return CompositeCollectionKind.Exact;
+			}
+
+			if (relatedElement is null && compilation.HasImplicitConversion(service, element!))
+			{
+				relatedElement = element!.ToDisplayString(FullyQualified);
+			}
+		}
+
+		return relatedElement is null ? CompositeCollectionKind.Missing : CompositeCollectionKind.RelatedElement;
+	}
+
+	/// <summary>
+	///     The element type of a collection parameter (the rank-1 array element, or the single type argument of
+	///     one of the standard generic collection interfaces), mirroring <see cref="TryGetCollectionElement" />
+	///     but yielding the element symbol so the composed service's convertibility to it can be checked.
+	/// </summary>
+	private static bool TryGetCompositeCollectionElement(ITypeSymbol type, out ITypeSymbol? element)
+	{
+		if (type is IArrayTypeSymbol { Rank: 1, } array)
+		{
+			element = array.ElementType;
+			return true;
+		}
+
+		if (type is INamedTypeSymbol { IsGenericType: true, TypeArguments.Length: 1, } named
+		    && named.ContainingNamespace?.ToDisplayString() == "System.Collections.Generic"
+		    && named.Name is "IEnumerable" or "IReadOnlyList" or "IReadOnlyCollection" or "IList" or "ICollection")
+		{
+			element = named.TypeArguments[0];
+			return true;
+		}
+
+		element = null;
+		return false;
+	}
+
 	private static InstanceModel? BuildInstance(ImplInfo info, BuildContext context)
 	{
 		INamedTypeSymbol containerSymbol = context.ContainerSymbol;
@@ -1374,6 +1681,39 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	}
 
 	/// <summary>
+	///     Rewrites a collection parameter to an ordinary direct dependency when its collection shape is claimed by
+	///     an explicit registration. A collection type (<c>IEnumerable&lt;T&gt;</c> and friends, <c>T[]</c>, or
+	///     <c>IAsyncEnumerable&lt;T&gt;</c>) is normally synthesized from the registrations of its element type under
+	///     the parameter's key. But if that collection shape is itself registered as a service under the same key - a
+	///     legitimate opaque value such as a <c>string[]</c> of command-line arguments, an
+	///     <c>IReadOnlyList&lt;T&gt;</c> of config or an <c>IAsyncEnumerable&lt;T&gt;</c> channel - synthesis steps
+	///     aside entirely (all-or-nothing): the registered shape resolves to that opaque value as an ordinary direct
+	///     dependency, and an unregistered sibling shape is a plain missing dependency (AWT101) rather than a
+	///     silently synthesized second collection that could disagree with the registered one. A registered
+	///     synchronous shape claims the whole collection - including the <c>IAsyncEnumerable&lt;T&gt;</c> view, so
+	///     injecting it is AWT101 rather than a second collection synthesized behind the opaque one - mirroring the
+	///     by-type SynthesisSuppressed gate; a registered <c>IAsyncEnumerable&lt;T&gt;</c> claims only its own async
+	///     shape.
+	/// </summary>
+	private static ParameterModel SuppressRegisteredCollectionSynthesis(
+		ParameterModel parameterModel,
+		IParameterSymbol parameter,
+		Dictionary<ServiceKey, string> serviceToImpl)
+	{
+		bool syncShapeRegistered = parameterModel.Kind is (DependencyKind.Enumerable or DependencyKind.AsyncEnumerable)
+		                           && CollectionShapeTypes(parameterModel.ServiceType).Any(shape => serviceToImpl.ContainsKey(new ServiceKey(shape, parameterModel.Key)));
+		bool asyncShapeRegistered = parameterModel.Kind == DependencyKind.AsyncEnumerable
+		                            && serviceToImpl.ContainsKey(new ServiceKey(AsyncEnumerableShapeType(parameterModel.ServiceType), parameterModel.Key));
+		if (syncShapeRegistered || asyncShapeRegistered)
+		{
+			string collectionType = parameter.Type.ToDisplayString(FullyQualified);
+			return parameterModel with { ServiceType = collectionType, Kind = DependencyKind.Direct };
+		}
+
+		return parameterModel;
+	}
+
+	/// <summary>
 	///     Classifies the producer's parameters (a constructor's or a factory method's) and reports
 	///     <see cref="Diagnostics.MissingDependency">AWT101</see> for any non-<c>[Arg]</c> parameter whose
 	///     service type is not registered. A runtime argument (<c>[Arg]</c>) is supplied at resolve time, so
@@ -1409,19 +1749,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 			parameterModel = RedirectDecoratorInner(parameterModel, info, decoratorInner);
 
-			// A collection type (IEnumerable<T> and friends, or T[]) is normally synthesized from the registrations
-			// of its element type under the parameter's key. But if any collection shape of that element type is
-			// itself registered as a service under the same key - a legitimate opaque value such as a string[] of
-			// command-line arguments or an IReadOnlyList<T> of config - synthesis steps aside entirely (all-or-
-			// nothing): the registered shape resolves to that opaque value as an ordinary direct dependency, and an
-			// unregistered sibling shape is a plain missing dependency (AWT101) rather than a silently synthesized
-			// second collection that could disagree with the registered one.
-			if (parameterModel.Kind == DependencyKind.Enumerable
-			    && CollectionShapeTypes(parameterModel.ServiceType).Any(shape => serviceToImpl.ContainsKey(new ServiceKey(shape, parameterModel.Key))))
-			{
-				string collectionType = parameter.Type.ToDisplayString(FullyQualified);
-				parameterModel = parameterModel with { ServiceType = collectionType, Kind = DependencyKind.Direct };
-			}
+			parameterModel = SuppressRegisteredCollectionSynthesis(parameterModel, parameter, serviceToImpl);
 
 			// [ImportServices]: an otherwise-unresolved direct dependency (unkeyed) is satisfied from the
 			// external provider rather than reported as missing. Only direct dependencies fall through; an
@@ -1436,17 +1764,17 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			parameters.Add(parameterModel);
 
 			// A CancellationToken is forwarded from the resolve-time token, not resolved from the graph (like
-			// [Arg]), so it is never a missing dependency. A collection (Enumerable) resolves to every registration
-			// of its element type under the parameter's key and an empty collection is legal, so an element type
-			// with no such registration is not a missing dependency either - it just yields an empty array. (An
-			// unregistered collection type whose synthesis was suppressed above was rewritten to Direct and so is
-			// no longer Enumerable here, and does surface as AWT101.)
+			// [Arg]), so it is never a missing dependency. A collection (Enumerable or AsyncEnumerable) resolves to
+			// every registration of its element type under the parameter's key and an empty collection is legal, so
+			// an element type with no such registration is not a missing dependency either - it just yields an empty
+			// collection. (An unregistered collection type whose synthesis was suppressed above was rewritten to
+			// Direct and so is no longer a collection kind here, and does surface as AWT101.)
 			// A closed generic that expansion refused to synthesize because its type arguments violate the open
 			// implementation's constraints (AWT126) is deliberately absent from serviceToImpl. Reporting AWT101
 			// on top would name the same root cause twice, so suppress it here.
 			// An External dependency (a [FromServices] parameter, or an [ImportServices] fall-through above) is
 			// resolved from the external provider, not the Awaiten graph, so it is never a missing dependency.
-			if (parameterModel.Kind is not (DependencyKind.Arg or DependencyKind.CancellationToken or DependencyKind.Enumerable or DependencyKind.External)
+			if (parameterModel.Kind is not (DependencyKind.Arg or DependencyKind.CancellationToken or DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.External)
 			    && !serviceToImpl.ContainsKey(KeyOf(parameterModel))
 			    && !constraintRejected.Contains(parameterModel.ServiceType))
 			{
@@ -1554,12 +1882,12 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			.Where(c => c.Parameters.All(p =>
 			{
 				// Selecting a constructor, never an async factory, so no CancellationToken forwarding applies.
-				// A collection (Enumerable) is always satisfiable - an unregistered element type just yields an
-				// empty array - so it never disqualifies a constructor. An [FromServices] (External) parameter is
-				// always satisfiable too; with [ImportServices] any direct dependency can fall through to the
-				// external provider, so it does not disqualify a constructor either.
+				// A collection - synchronous (Enumerable) or asynchronous (AsyncEnumerable) - is always satisfiable:
+				// an unregistered element type just yields an empty collection, so it never disqualifies a constructor.
+				// A [FromServices] (External) parameter is always satisfiable too; with [ImportServices] any direct
+				// dependency can fall through to the external provider, so it does not disqualify a constructor either.
 				ParameterModel parameter = ClassifyParameter(p, asyncFactory: false);
-				return parameter.Kind is DependencyKind.Arg or DependencyKind.Enumerable or DependencyKind.External
+				return parameter.Kind is DependencyKind.Arg or DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.External
 				       || (importServices && parameter.Kind == DependencyKind.Direct)
 				       || registered.Contains(parameter.ServiceType)
 				       || (additionallySatisfiable?.Invoke(p) ?? false);
@@ -1629,6 +1957,15 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		// directly, deferred behind a Func<T>/Lazy<T>, wrapped in an Owned<T> handle, or a collection - the
 		// service type is the same, only the delivery differs.
 		string? key = FromKey(parameter);
+
+		// An asynchronous collection (IAsyncEnumerable<T>) resolves to every registration of its element type, like
+		// the synchronous collection shapes below, but awaits each member's initialization - so it is the one shape
+		// through which an async-tainted member is legal. Recognized before the synchronous shapes (both live in
+		// System.Collections.Generic) and before the relationship gate.
+		if (IsAsyncEnumerable(parameter.Type, out string? asyncElementType))
+		{
+			return new ParameterModel(asyncElementType!, DependencyKind.AsyncEnumerable, Key: key, Location: location);
+		}
 
 		// A collection dependency resolves to every registration of its element type under the parameter's
 		// [FromKey] key (unkeyed by default). Recognized before the relationship types so IEnumerable<T> and T[]
@@ -2062,6 +2399,29 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		elementType = null;
 		return false;
 	}
+
+	// Whether a type is a System.Collections.Generic.IAsyncEnumerable<T> asynchronous collection, yielding its
+	// fully-qualified element type T. The one collection shape that awaits its members, so it is classified apart
+	// from the synchronous shapes in TryGetCollectionElement (which materialize eagerly into an array).
+	private static bool IsAsyncEnumerable(ITypeSymbol type, out string? elementType)
+	{
+		if (type is INamedTypeSymbol { IsGenericType: true, Name: "IAsyncEnumerable", TypeArguments.Length: 1, } named
+		    && named.ContainingNamespace?.ToDisplayString() == "System.Collections.Generic")
+		{
+			elementType = named.TypeArguments[0].ToDisplayString(FullyQualified);
+			return true;
+		}
+
+		elementType = null;
+		return false;
+	}
+
+	// The fully-qualified IAsyncEnumerable<T> shape of <paramref name="elementType" />, in the exact form
+	// registrations are stored under, so a membership check against serviceToImpl recognizes an explicitly
+	// registered async-collection type (the async analogue of CollectionShapeTypes). Its own shape, so a single
+	// string rather than a set.
+	internal static string AsyncEnumerableShapeType(string elementType)
+		=> $"global::System.Collections.Generic.IAsyncEnumerable<{elementType}>";
 
 	// The fully-qualified type strings of every collection shape of <paramref name="elementType" /> - the five
 	// generic collection interfaces and the rank-1 array - in the exact form registrations are stored under, so a
