@@ -857,7 +857,7 @@ internal static partial class Sources
 	{
 		Indent(builder, depth).AppendLine("protected object __ResolveExternal(global::System.Type serviceType, object? serviceKey)");
 		Indent(builder, depth).AppendLine("{");
-		Indent(builder, depth + 1).AppendLine("global::Awaiten.IExternalResolver? resolver = ExternalResolver ?? __root.ExternalResolver;");
+		Indent(builder, depth + 1).AppendLine("global::Awaiten.IExternalResolver? resolver = __externalResolver ?? __root.__externalResolver;");
 		Indent(builder, depth + 1).AppendLine("if (resolver != null && resolver.TryResolve(serviceType, serviceKey, out object? instance) && instance != null)");
 		Indent(builder, depth + 1).AppendLine("{");
 		Indent(builder, depth + 2).AppendLine("return instance;");

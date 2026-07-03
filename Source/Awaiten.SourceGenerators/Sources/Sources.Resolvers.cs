@@ -574,12 +574,13 @@ internal static partial class Sources
 	}
 
 	/// <summary>
-	///     Emits the base <c>Scope</c>'s internal <c>__WarmAsync</c>: it eagerly warms this scope's
-	///     async-initialized scoped services in dependency order. It is internal (not on <c>IAwaitenScope</c>)
-	///     because a child scope is warmed only at creation, through <c>CreateScopeAsync</c>, which calls this.
+	///     Emits the base <c>Scope</c>'s private <c>__WarmAsync</c>: it eagerly warms this scope's
+	///     async-initialized scoped services in dependency order. It is private (not on <c>IAwaitenScope</c>)
+	///     because a child scope is warmed only at creation, through <c>CreateScopeAsync</c> - its sole caller,
+	///     declared on the same <c>Scope</c> - so nothing outside the type ever reaches it.
 	/// </summary>
 	private static void EmitScopeInitializeAsync(StringBuilder builder, int depth, InstanceModel[] instances, Names names)
-		=> EmitWarmUp(builder, depth, instances, names, "internal", "__WarmAsync", Lifetime.Scoped);
+		=> EmitWarmUp(builder, depth, instances, names, "private", "__WarmAsync", Lifetime.Scoped);
 
 	/// <summary>
 	///     Emits the <c>Root</c>'s <c>InitializeAsync</c> (the <c>IAwaitenRoot</c> member): it eagerly warms
