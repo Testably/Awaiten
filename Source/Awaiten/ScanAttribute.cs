@@ -3,10 +3,10 @@ using System;
 namespace Awaiten;
 
 /// <summary>
-///     Registers every concrete class in the container's own assembly that is assignable to
-///     <see cref="AssignableTo" /> (a marker interface or base type) with the chosen <see cref="Lifetime" />,
-///     exposed as configured by <see cref="As" />. Abstract and static classes, and the marker type itself, are
-///     skipped.
+///     Registers every concrete class assignable to <see cref="AssignableTo" /> (a marker interface or base
+///     type) with the chosen <see cref="Lifetime" />, exposed as configured by <see cref="As" />. By default the
+///     scan covers the container's own assembly; set <see cref="InAssembliesOf" /> to scan referenced assemblies
+///     instead. Abstract and static classes, and the marker type itself, are skipped.
 /// </summary>
 /// <remarks>
 ///     Scanned registrations are overridable: an explicit registration of the same implementation type (via
@@ -46,4 +46,12 @@ public sealed class ScanAttribute : Attribute
 	///     example, <c>IEnumerable&lt;IHandler&gt;</c>).
 	/// </summary>
 	public ScanAs As { get; set; } = ScanAs.Self;
+
+	/// <summary>
+	///     Widens the scan to the assemblies that contain the listed types, instead of the container's own
+	///     assembly. Each entry names one type whose <see cref="System.Reflection.Assembly" /> is searched
+	///     (typically a marker type in each referenced project). Matches are discovered from referenced-assembly
+	///     metadata at compile time - no runtime reflection - and registered in a deterministic order.
+	/// </summary>
+	public Type[]? InAssembliesOf { get; set; }
 }

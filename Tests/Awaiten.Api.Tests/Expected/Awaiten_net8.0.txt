@@ -143,6 +143,7 @@ namespace Awaiten
         public ScanAttribute(System.Type assignableTo) { }
         public Awaiten.ScanAs As { get; set; }
         public System.Type AssignableTo { get; }
+        public System.Type[]? InAssembliesOf { get; set; }
         public Awaiten.AwaitenLifetime Lifetime { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]

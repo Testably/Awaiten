@@ -106,11 +106,13 @@ internal static class ContainerRegistrations
 	}
 
 	/// <summary>
-	///     Expands each <c>[Scan]</c> on the container into overridable registrations for every concrete class in
-	///     the container's assembly assignable to the scanned marker - as the type itself, under the
-	///     (marker-assignable) interfaces it implements, or both, per <c>ScanAs</c>. Abstract/static classes and
-	///     the marker itself are skipped. Reports AWT138 when a scan matches nothing, and AWT139 when an
-	///     interfaces-only scan matches a type with no assignable interface.
+	///     Expands each <c>[Scan]</c> on the container into overridable registrations for every concrete class
+	///     assignable to the scanned marker - as the type itself, under the (marker-assignable) interfaces it
+	///     implements, or both, per <c>ScanAs</c>. The scan covers the container's own assembly by default, or the
+	///     assemblies named by <c>InAssembliesOf</c>; matches register in a deterministic order (by fully-qualified
+	///     name) so generated output is reproducible. Abstract/static classes and the marker itself are skipped.
+	///     Reports AWT138 when a scan matches nothing, AWT139 when an interfaces-only scan matches a type with no
+	///     assignable interface, and AWT140 when an <c>InAssembliesOf</c> assembly has no candidate types.
 	/// </summary>
 	/// <remarks>
 	///     The synthesized registrations carry <see cref="RawRegistration.IsScan" />, so coalescing lets an
@@ -143,15 +145,8 @@ internal static class ContainerRegistrations
 			// Count every assignable match, even one an explicit registration overrides: a matched-but-overridden
 			// type still means the scan found something, so AWT138 fires only when the marker truly matches nothing.
 			int matched = 0;
-			foreach (INamedTypeSymbol type in EnumerateTypes(compilation.Assembly.GlobalNamespace))
+			foreach (INamedTypeSymbol type in ScanCandidates(attribute, compilation, marker, location, diagnostics))
 			{
-				if (type is not { TypeKind: TypeKind.Class, IsAbstract: false, IsStatic: false, IsImplicitClass: false, }
-				    || SymbolEqualityComparer.Default.Equals(type, marker)
-				    || !compilation.HasImplicitConversion(type, marker))
-				{
-					continue;
-				}
-
 				matched++;
 				string typeName = type.ToDisplayString(FullyQualified);
 
@@ -205,6 +200,88 @@ internal static class ContainerRegistrations
 
 		return result;
 	}
+
+	/// <summary>
+	///     The concrete-type candidates a <c>[Scan]</c> enumerates: the container's own assembly by default, or
+	///     the assemblies that contain the types named by <c>InAssembliesOf</c>. Filtered to concrete classes
+	///     assignable to the marker and sorted by fully-qualified name so the resulting registrations are
+	///     reproducible across builds. Reports AWT140 for any <c>InAssembliesOf</c> assembly that holds no such
+	///     type (a likely missing <c>ProjectReference</c>).
+	/// </summary>
+	private static List<INamedTypeSymbol> ScanCandidates(
+		AttributeData attribute,
+		Compilation compilation,
+		INamedTypeSymbol marker,
+		Location? location,
+		List<DiagnosticInfo> diagnostics)
+	{
+		List<IAssemblySymbol> assemblies = new();
+		foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
+		{
+			if (argument.Key != "InAssembliesOf" || argument.Value.Kind != TypedConstantKind.Array)
+			{
+				continue;
+			}
+
+			foreach (TypedConstant element in argument.Value.Values)
+			{
+				if (element.Value is INamedTypeSymbol markerType
+				    && !assemblies.Contains(markerType.ContainingAssembly, SymbolEqualityComparer.Default))
+				{
+					assemblies.Add(markerType.ContainingAssembly);
+				}
+			}
+		}
+
+		List<INamedTypeSymbol> candidates = new();
+		if (assemblies.Count == 0)
+		{
+			foreach (INamedTypeSymbol type in EnumerateTypes(compilation.Assembly.GlobalNamespace))
+			{
+				if (IsScanCandidate(type, marker, compilation))
+				{
+					candidates.Add(type);
+				}
+			}
+		}
+		else
+		{
+			foreach (IAssemblySymbol assembly in assemblies)
+			{
+				int contributed = candidates.Count;
+				foreach (INamedTypeSymbol type in EnumerateTypes(assembly.GlobalNamespace))
+				{
+					if (IsScanCandidate(type, marker, compilation))
+					{
+						candidates.Add(type);
+					}
+				}
+
+				// AWT140: a named assembly holds nothing to scan - almost always a missing ProjectReference.
+				if (candidates.Count == contributed)
+				{
+					diagnostics.Add(new DiagnosticInfo(
+						Diagnostics.ScanAssemblyHasNoCandidates,
+						LocationInfo.From(location),
+						new EquatableArray<string>([assembly.Name,])));
+				}
+			}
+		}
+
+		// Cross-assembly enumeration order is not guaranteed stable; sort by fully-qualified name so the
+		// generated output (and any snapshot) is reproducible across builds.
+		candidates.Sort((left, right) => string.CompareOrdinal(
+			left.ToDisplayString(FullyQualified),
+			right.ToDisplayString(FullyQualified)));
+		return candidates;
+	}
+
+	// Whether a type is a concrete class assignable to the scanned marker (and not the marker itself) - the
+	// per-type predicate shared by candidate gathering and the AWT140 emptiness check.
+	private static bool IsScanCandidate(INamedTypeSymbol type, INamedTypeSymbol marker, Compilation compilation)
+		=> type is { TypeKind: TypeKind.Class, IsAbstract: false, IsStatic: false, IsImplicitClass: false, }
+		   && !SymbolEqualityComparer.Default.Equals(type, marker)
+		   && compilation.HasImplicitConversion(type, marker);
 
 	// A single overridable, collection-eligible registration contributed by a [Scan]: IsScan so it never conflicts
 	// with an explicit registration over the same implementation and always joins its service's collection.

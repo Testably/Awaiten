@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using Awaiten.Tests.Support;
 
 namespace Awaiten.Tests;
 
@@ -101,4 +102,52 @@ public partial class ScanTests
 	[Container]
 	[Scan(typeof(IReport), As = ScanAs.SelfAndImplementedInterfaces, Lifetime = AwaitenLifetime.Singleton)]
 	public static partial class SelfAndInterfaceScanContainer;
+
+	[Fact]
+	public async Task ScanInAssembliesOf_RegistersMatchesFromTheReferencedAssembly()
+	{
+		using CrossAssemblyScanContainer.Root container = new();
+
+		// GammaPlugin and DeltaPlugin live in the referenced Awaiten.Tests.Support assembly, not this one.
+		await That(container.Resolve<GammaPlugin>()).IsNotNull();
+		await That(container.Resolve<DeltaPlugin>()).IsNotNull();
+		// Registered as singletons, so each resolve returns the same instance.
+		await That(container.Resolve<GammaPlugin>()).IsSameAs(container.Resolve<GammaPlugin>());
+	}
+
+	[Fact]
+	public async Task ScanInAssembliesOf_AsImplementedInterfaces_MakesMatchesACollectionOfTheMarker()
+	{
+		using CrossAssemblyInterfaceScanContainer.Root container = new();
+
+		IReadOnlyList<ICrossAssemblyPlugin> plugins = container.Resolve<CrossAssemblyHub>().Plugins;
+
+		await That(plugins).HasCount(2);
+		await That(plugins.Select(p => p.GetType()))
+			.Contains(typeof(GammaPlugin)).And.Contains(typeof(DeltaPlugin));
+	}
+
+	[Fact]
+	public async Task ScanInAssembliesOf_IsOverriddenByAnExplicitRegistration()
+	{
+		using CrossAssemblyScanContainer.Root container = new();
+
+		// The explicit transient registration of DeltaPlugin wins over the scanned singleton.
+		await That(container.Resolve<DeltaPlugin>()).IsNotSameAs(container.Resolve<DeltaPlugin>());
+	}
+
+	public sealed class CrossAssemblyHub(IReadOnlyList<ICrossAssemblyPlugin> plugins)
+	{
+		public IReadOnlyList<ICrossAssemblyPlugin> Plugins { get; } = plugins;
+	}
+
+	[Container]
+	[Scan(typeof(ICrossAssemblyPlugin), InAssembliesOf = new[] { typeof(ICrossAssemblyPlugin) }, Lifetime = AwaitenLifetime.Singleton)]
+	[Transient<DeltaPlugin>]
+	public static partial class CrossAssemblyScanContainer;
+
+	[Container]
+	[Scan(typeof(ICrossAssemblyPlugin), InAssembliesOf = new[] { typeof(ICrossAssemblyPlugin) }, As = ScanAs.ImplementedInterfaces, Lifetime = AwaitenLifetime.Singleton)]
+	[Singleton<CrossAssemblyHub>]
+	public static partial class CrossAssemblyInterfaceScanContainer;
 }

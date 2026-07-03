@@ -560,4 +560,17 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Warning,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A <c>[Scan(InAssembliesOf = …)]</c> names an assembly that holds no concrete type assignable to the
+	///     scanned marker, so the scan of that assembly contributes nothing - most often a missing
+	///     <c>ProjectReference</c> or the wrong marker type.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ScanAssemblyHasNoCandidates = new(
+		"AWT140",
+		"Assembly scan target has no candidate types",
+		"The assembly '{0}' named by InAssembliesOf has no concrete type to scan for this marker; check that the project is referenced and the marker type is correct",
+		"Awaiten",
+		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true);
 }

@@ -142,4 +142,54 @@ public class ScanTests
 		await That(source).Contains("new global::MyCode.IReport[] { ResolveSalesReport() }")
 			.Because("SelfAndImplementedInterfaces also registers the match under the marker collection");
 	}
+
+	[Fact]
+	public async Task ScanInAssembliesOf_RegistersConcreteTypesFromTheReferencedAssembly()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using Awaiten.Tests.Support;
+
+		                                       namespace MyCode;
+
+		                                       [Container]
+		                                       [Scan(typeof(ICrossAssemblyPlugin), InAssembliesOf = new[] { typeof(ICrossAssemblyPlugin) }, Lifetime = AwaitenLifetime.Singleton)]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """, typeof(global::Awaiten.Tests.Support.ICrossAssemblyPlugin));
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// Both concrete plugins from the referenced support assembly are registered; the abstract base is skipped.
+		await That(source).Contains("new __Bucket(typeof(global::Awaiten.Tests.Support.GammaPlugin)");
+		await That(source).Contains("new __Bucket(typeof(global::Awaiten.Tests.Support.DeltaPlugin)");
+		await That(source).DoesNotContain("PluginBase")
+			.Because("the abstract base in the referenced assembly is skipped");
+	}
+
+	[Fact]
+	public async Task ScanInAssembliesOf_RegistersMatchesInADeterministicOrder()
+	{
+		string Generate() => Generator.Run("""
+		                                   using Awaiten;
+		                                   using Awaiten.Tests.Support;
+
+		                                   namespace MyCode;
+
+		                                   [Container]
+		                                   [Scan(typeof(ICrossAssemblyPlugin), InAssembliesOf = new[] { typeof(ICrossAssemblyPlugin) }, Lifetime = AwaitenLifetime.Singleton)]
+		                                   public static partial class MyContainer
+		                                   {
+		                                   }
+		                                   """, typeof(global::Awaiten.Tests.Support.ICrossAssemblyPlugin))
+			.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// Sorted by fully-qualified name, so DeltaPlugin precedes GammaPlugin, and two builds match byte-for-byte.
+		string first = Generate();
+		await That(first).IsEqualTo(Generate());
+		await That(first.IndexOf("ResolveDeltaPlugin", System.StringComparison.Ordinal))
+			.IsLessThan(first.IndexOf("ResolveGammaPlugin", System.StringComparison.Ordinal));
+	}
 }
