@@ -414,59 +414,75 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			return;
 		}
 
-		bool dropped = true;
-		while (dropped)
+		// Iterate to a fixpoint: each round re-derives the shrinking satisfiable surface, because dropping one
+		// match can orphan another scanned match that depended on one of its services.
+		while (PruneUnconstructableScanRound(raw, containerSymbol, compilation, importServices, constraintRejected, diagnostics))
 		{
-			dropped = false;
+		}
+	}
 
-			// The satisfiable surface as of this round: every registered (service, key), plus the variance
-			// candidates a Direct/Func parameter could be redirected to. Both shrink as matches are dropped,
-			// which is why each round re-derives them. An implementation with any registration that did not
-			// opt in - an explicit one, or a scan without SkipUnconstructable - is pinned to error semantics.
-			HashSet<ServiceKey> services = new();
-			HashSet<string> pinnedImpls = new(StringComparer.Ordinal);
-			List<(string ServiceType, INamedTypeSymbol Symbol)> varianceCandidates = new();
-			HashSet<string> varianceSeen = new(StringComparer.Ordinal);
-			foreach (RawRegistration registration in raw)
+	/// <summary>
+	///     One prune pass over the opted-in scan matches: drops each implementation unconstructable against the
+	///     round's satisfiable surface (every registered service, plus the variance candidates a Direct/Func
+	///     parameter could be redirected to), reporting AWT141, and returns whether anything was dropped so the
+	///     caller can iterate to a fixpoint. The surface is a snapshot from the round's start, so a drop mid-round
+	///     can leave a stale verdict for a later implementation - the next round re-checks against the shrunk surface.
+	/// </summary>
+	private static bool PruneUnconstructableScanRound(
+		List<RawRegistration> raw,
+		INamedTypeSymbol containerSymbol,
+		Compilation compilation,
+		bool importServices,
+		HashSet<string> constraintRejected,
+		List<DiagnosticInfo> diagnostics)
+	{
+		// The satisfiable surface as of this round: every registered (service, key), plus the variance candidates
+		// a Direct/Func parameter could be redirected to. An implementation with any registration that did not opt
+		// in - an explicit one, or a scan without SkipUnconstructable - is pinned to error semantics.
+		HashSet<ServiceKey> services = new();
+		HashSet<string> pinnedImpls = new(StringComparer.Ordinal);
+		List<(string ServiceType, INamedTypeSymbol Symbol)> varianceCandidates = new();
+		HashSet<string> varianceSeen = new(StringComparer.Ordinal);
+		foreach (RawRegistration registration in raw)
+		{
+			services.Add(new ServiceKey(registration.ServiceType, registration.Key));
+			if (!registration.ScanSkipsUnconstructable)
 			{
-				services.Add(new ServiceKey(registration.ServiceType, registration.Key));
-				if (!registration.ScanSkipsUnconstructable)
-				{
-					pinnedImpls.Add(registration.ImplementationType);
-				}
-
-				if (registration.Key is null
-				    && registration.ServiceSymbol is { IsGenericType: true, TypeKind: TypeKind.Interface, } variantService
-				    && HasDeclaredVariance(variantService)
-				    && varianceSeen.Add(registration.ServiceType))
-				{
-					varianceCandidates.Add((registration.ServiceType, variantService));
-				}
+				pinnedImpls.Add(registration.ImplementationType);
 			}
 
-			VarianceState variance = new(varianceCandidates, compilation);
-
-			// Check each opted-in implementation once per round (its registrations share symbol and location).
-			// The services set is a snapshot from the round's start, so a drop mid-round can leave a stale
-			// verdict for a later implementation - the next round re-checks against the shrunk surface.
-			HashSet<string> checkedImpls = new(StringComparer.Ordinal);
-			foreach (RawRegistration registration in raw.Where(r => r.ScanSkipsUnconstructable).ToList())
+			if (registration.Key is null
+			    && registration.ServiceSymbol is { IsGenericType: true, TypeKind: TypeKind.Interface, } variantService
+			    && HasDeclaredVariance(variantService)
+			    && varianceSeen.Add(registration.ServiceType))
 			{
-				if (pinnedImpls.Contains(registration.ImplementationType)
-				    || !checkedImpls.Add(registration.ImplementationType)
-				    || FirstUnconstructableReason(registration.Implementation, containerSymbol, services, constraintRejected, importServices, variance) is not { } reason)
-				{
-					continue;
-				}
-
-				diagnostics.Add(new DiagnosticInfo(
-					Diagnostics.ScanMatchSkipped,
-					LocationInfo.From(registration.Location),
-					new EquatableArray<string>([DisplayInstance(registration.ImplementationType), reason,])));
-				raw.RemoveAll(r => r.IsScan && r.ImplementationType == registration.ImplementationType);
-				dropped = true;
+				varianceCandidates.Add((registration.ServiceType, variantService));
 			}
 		}
+
+		VarianceState variance = new(varianceCandidates, compilation);
+
+		// Check each opted-in implementation once (its registrations share symbol and location).
+		bool dropped = false;
+		HashSet<string> checkedImpls = new(StringComparer.Ordinal);
+		foreach (RawRegistration registration in raw.Where(r => r.ScanSkipsUnconstructable).ToList())
+		{
+			if (pinnedImpls.Contains(registration.ImplementationType)
+			    || !checkedImpls.Add(registration.ImplementationType)
+			    || FirstUnconstructableReason(registration.Implementation, containerSymbol, services, constraintRejected, importServices, variance) is not { } reason)
+			{
+				continue;
+			}
+
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.ScanMatchSkipped,
+				LocationInfo.From(registration.Location),
+				new EquatableArray<string>([DisplayInstance(registration.ImplementationType), reason,])));
+			raw.RemoveAll(r => r.IsScan && r.ImplementationType == registration.ImplementationType);
+			dropped = true;
+		}
+
+		return dropped;
 	}
 
 	/// <summary>
