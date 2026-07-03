@@ -779,6 +779,39 @@ public class GeneralTests
 	}
 
 	[Fact]
+	public async Task Variance_WinsOverTheImportServicesFallThrough()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace MyCode;
+
+			public class DomainEvent { }
+			public sealed class OrderPlaced : DomainEvent { }
+			public interface IHandler<in T> { }
+			public sealed class DomainEventHandler : IHandler<DomainEvent> { }
+			public sealed class OrderConsumer { public OrderConsumer(IHandler<OrderPlaced> handler) { } }
+
+			[Container]
+			[ImportServices]
+			[Transient<DomainEventHandler, IHandler<DomainEvent>>]
+			[Transient<OrderConsumer>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// A variance match makes the dependency container-resolved, so it is not "otherwise-unresolved" and
+		// never falls through to the external provider: the redirect to the registered IHandler<DomainEvent>
+		// wins over [ImportServices].
+		await That(source).Contains("return new global::MyCode.OrderConsumer(ResolveDomainEventHandler());");
+		await That(source).DoesNotContain("__ResolveExternal(typeof(global::MyCode.IHandler<global::MyCode.OrderPlaced>)");
+	}
+
+	[Fact]
 	public async Task OpenGeneric_SeedsExpansionFromTheConstructorTheContainerActuallyUses()
 	{
 		GeneratorResult result = Generator.Run("""
