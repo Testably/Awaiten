@@ -51,4 +51,15 @@ internal enum DependencyKind
 	///     graph edge to each of them (for cycle, captive and async-taint analysis) and never launders their taint.
 	/// </summary>
 	Enumerable,
+
+	/// <summary>
+	///     An asynchronous collection dependency (<c>IAsyncEnumerable&lt;T&gt;</c>): like <see cref="Enumerable" />
+	///     it resolves to every registration of the element type <c>T</c> under the parameter's <c>Key</c> and
+	///     materializes them eagerly in registration order, but it <em>awaits</em> each async-initialized member -
+	///     so, unlike <see cref="Enumerable" />, an async-tainted member is legal (and does not trip AWT122). It
+	///     captures its members exactly like <see cref="Enumerable" />, contributing the same graph edge to each of
+	///     them (cycle, captive and async-taint analysis) and never laundering their taint: a consumer that injects
+	///     an async-tainted async-collection is itself async-tainted and is built through its asynchronous resolver.
+	/// </summary>
+	AsyncEnumerable,
 }

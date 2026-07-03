@@ -414,7 +414,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	{
 		foreach (ParameterModel parameter in instance.ConstructorParameters.AsArray())
 		{
-			if (parameter.Kind == DependencyKind.Enumerable)
+			if (parameter.Kind is DependencyKind.Enumerable or DependencyKind.AsyncEnumerable)
 			{
 				PushTransientCollectionMembers(KeyOf(parameter), instances, collectionMembers, stack);
 			}
@@ -683,9 +683,11 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		return edges;
 	}
 
-	// Appends the edge(s) a single parameter contributes to its node's edge list. A collection (Enumerable)
-	// edges to each of its members; a direct dependency (and, in the construction graph, a bare eager
-	// Owned<T>/Task<T>) edges to its single resolved instance; everything else defers and contributes nothing.
+	// Appends the edge(s) a single parameter contributes to its node's edge list. A collection - synchronous
+	// (Enumerable) or asynchronous (AsyncEnumerable) - edges to each of its members; a direct dependency (and, in
+	// the construction graph, a bare eager Owned<T>/Task<T>) edges to its single resolved instance; everything else
+	// defers and contributes nothing. Both collection kinds materialize their members eagerly, so both capture them
+	// (taint/captive) and close cycles through them; they differ only in that AsyncEnumerable awaits its members.
 	private static void AddParameterEdges(
 		ParameterModel parameter,
 		Dictionary<ServiceKey, string> serviceToImpl,
@@ -694,7 +696,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		bool includeEagerBare,
 		List<int> nodeEdges)
 	{
-		if (parameter.Kind == DependencyKind.Enumerable)
+		if (parameter.Kind is DependencyKind.Enumerable or DependencyKind.AsyncEnumerable)
 		{
 			AddCollectionMemberEdges(KeyOf(parameter), serviceMembers, implToIndex, nodeEdges);
 			return;
@@ -1673,6 +1675,39 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	}
 
 	/// <summary>
+	///     Rewrites a collection parameter to an ordinary direct dependency when its collection shape is claimed by
+	///     an explicit registration. A collection type (<c>IEnumerable&lt;T&gt;</c> and friends, <c>T[]</c>, or
+	///     <c>IAsyncEnumerable&lt;T&gt;</c>) is normally synthesized from the registrations of its element type under
+	///     the parameter's key. But if that collection shape is itself registered as a service under the same key - a
+	///     legitimate opaque value such as a <c>string[]</c> of command-line arguments, an
+	///     <c>IReadOnlyList&lt;T&gt;</c> of config or an <c>IAsyncEnumerable&lt;T&gt;</c> channel - synthesis steps
+	///     aside entirely (all-or-nothing): the registered shape resolves to that opaque value as an ordinary direct
+	///     dependency, and an unregistered sibling shape is a plain missing dependency (AWT101) rather than a
+	///     silently synthesized second collection that could disagree with the registered one. A registered
+	///     synchronous shape claims the whole collection - including the <c>IAsyncEnumerable&lt;T&gt;</c> view, so
+	///     injecting it is AWT101 rather than a second collection synthesized behind the opaque one - mirroring the
+	///     by-type SynthesisSuppressed gate; a registered <c>IAsyncEnumerable&lt;T&gt;</c> claims only its own async
+	///     shape.
+	/// </summary>
+	private static ParameterModel SuppressRegisteredCollectionSynthesis(
+		ParameterModel parameterModel,
+		IParameterSymbol parameter,
+		Dictionary<ServiceKey, string> serviceToImpl)
+	{
+		bool syncShapeRegistered = parameterModel.Kind is (DependencyKind.Enumerable or DependencyKind.AsyncEnumerable)
+		                           && CollectionShapeTypes(parameterModel.ServiceType).Any(shape => serviceToImpl.ContainsKey(new ServiceKey(shape, parameterModel.Key)));
+		bool asyncShapeRegistered = parameterModel.Kind == DependencyKind.AsyncEnumerable
+		                            && serviceToImpl.ContainsKey(new ServiceKey(AsyncEnumerableShapeType(parameterModel.ServiceType), parameterModel.Key));
+		if (syncShapeRegistered || asyncShapeRegistered)
+		{
+			string collectionType = parameter.Type.ToDisplayString(FullyQualified);
+			return parameterModel with { ServiceType = collectionType, Kind = DependencyKind.Direct };
+		}
+
+		return parameterModel;
+	}
+
+	/// <summary>
 	///     Classifies the producer's parameters (a constructor's or a factory method's) and reports
 	///     <see cref="Diagnostics.MissingDependency">AWT101</see> for any non-<c>[Arg]</c> parameter whose
 	///     service type is not registered. A runtime argument (<c>[Arg]</c>) is supplied at resolve time, so
@@ -1694,33 +1729,19 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		{
 			ParameterModel parameterModel = ClassifyParameter(parameter, asyncFactory);
 			parameterModel = RedirectDecoratorInner(parameterModel, info, decoratorInner);
-
-			// A collection type (IEnumerable<T> and friends, or T[]) is normally synthesized from the registrations
-			// of its element type under the parameter's key. But if any collection shape of that element type is
-			// itself registered as a service under the same key - a legitimate opaque value such as a string[] of
-			// command-line arguments or an IReadOnlyList<T> of config - synthesis steps aside entirely (all-or-
-			// nothing): the registered shape resolves to that opaque value as an ordinary direct dependency, and an
-			// unregistered sibling shape is a plain missing dependency (AWT101) rather than a silently synthesized
-			// second collection that could disagree with the registered one.
-			if (parameterModel.Kind == DependencyKind.Enumerable
-			    && CollectionShapeTypes(parameterModel.ServiceType).Any(shape => serviceToImpl.ContainsKey(new ServiceKey(shape, parameterModel.Key))))
-			{
-				string collectionType = parameter.Type.ToDisplayString(FullyQualified);
-				parameterModel = parameterModel with { ServiceType = collectionType, Kind = DependencyKind.Direct };
-			}
-
+			parameterModel = SuppressRegisteredCollectionSynthesis(parameterModel, parameter, serviceToImpl);
 			parameters.Add(parameterModel);
 
 			// A CancellationToken is forwarded from the resolve-time token, not resolved from the graph (like
-			// [Arg]), so it is never a missing dependency. A collection (Enumerable) resolves to every registration
-			// of its element type under the parameter's key and an empty collection is legal, so an element type
-			// with no such registration is not a missing dependency either - it just yields an empty array. (An
-			// unregistered collection type whose synthesis was suppressed above was rewritten to Direct and so is
-			// no longer Enumerable here, and does surface as AWT101.)
+			// [Arg]), so it is never a missing dependency. A collection (Enumerable or AsyncEnumerable) resolves to
+			// every registration of its element type under the parameter's key and an empty collection is legal, so
+			// an element type with no such registration is not a missing dependency either - it just yields an empty
+			// collection. (An unregistered collection type whose synthesis was suppressed above was rewritten to
+			// Direct and so is no longer a collection kind here, and does surface as AWT101.)
 			// A closed generic that expansion refused to synthesize because its type arguments violate the open
 			// implementation's constraints (AWT126) is deliberately absent from serviceToImpl. Reporting AWT101
 			// on top would name the same root cause twice, so suppress it here.
-			if (parameterModel.Kind is not (DependencyKind.Arg or DependencyKind.CancellationToken or DependencyKind.Enumerable)
+			if (parameterModel.Kind is not (DependencyKind.Arg or DependencyKind.CancellationToken or DependencyKind.Enumerable or DependencyKind.AsyncEnumerable)
 			    && !serviceToImpl.ContainsKey(KeyOf(parameterModel))
 			    && !constraintRejected.Contains(parameterModel.ServiceType))
 			{
@@ -1827,10 +1848,10 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			.Where(c => c.Parameters.All(p =>
 			{
 				// Selecting a constructor, never an async factory, so no CancellationToken forwarding applies.
-				// A collection (Enumerable) is always satisfiable - an unregistered element type just yields an
-				// empty array - so it never disqualifies a constructor.
+				// A collection - synchronous (Enumerable) or asynchronous (AsyncEnumerable) - is always satisfiable:
+				// an unregistered element type just yields an empty collection, so it never disqualifies a constructor.
 				ParameterModel parameter = ClassifyParameter(p, asyncFactory: false);
-				return parameter.Kind is DependencyKind.Arg or DependencyKind.Enumerable
+				return parameter.Kind is DependencyKind.Arg or DependencyKind.Enumerable or DependencyKind.AsyncEnumerable
 				       || registered.Contains(parameter.ServiceType)
 				       || (additionallySatisfiable?.Invoke(p) ?? false);
 			}))
@@ -1889,6 +1910,15 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		// directly, deferred behind a Func<T>/Lazy<T>, wrapped in an Owned<T> handle, or a collection - the
 		// service type is the same, only the delivery differs.
 		string? key = FromKey(parameter);
+
+		// An asynchronous collection (IAsyncEnumerable<T>) resolves to every registration of its element type, like
+		// the synchronous collection shapes below, but awaits each member's initialization - so it is the one shape
+		// through which an async-tainted member is legal. Recognized before the synchronous shapes (both live in
+		// System.Collections.Generic) and before the relationship gate.
+		if (IsAsyncEnumerable(parameter.Type, out string? asyncElementType))
+		{
+			return new ParameterModel(asyncElementType!, DependencyKind.AsyncEnumerable, Key: key, Location: location);
+		}
 
 		// A collection dependency resolves to every registration of its element type under the parameter's
 		// [FromKey] key (unkeyed by default). Recognized before the relationship types so IEnumerable<T> and T[]
@@ -2322,6 +2352,29 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		elementType = null;
 		return false;
 	}
+
+	// Whether a type is a System.Collections.Generic.IAsyncEnumerable<T> asynchronous collection, yielding its
+	// fully-qualified element type T. The one collection shape that awaits its members, so it is classified apart
+	// from the synchronous shapes in TryGetCollectionElement (which materialize eagerly into an array).
+	private static bool IsAsyncEnumerable(ITypeSymbol type, out string? elementType)
+	{
+		if (type is INamedTypeSymbol { IsGenericType: true, Name: "IAsyncEnumerable", TypeArguments.Length: 1, } named
+		    && named.ContainingNamespace?.ToDisplayString() == "System.Collections.Generic")
+		{
+			elementType = named.TypeArguments[0].ToDisplayString(FullyQualified);
+			return true;
+		}
+
+		elementType = null;
+		return false;
+	}
+
+	// The fully-qualified IAsyncEnumerable<T> shape of <paramref name="elementType" />, in the exact form
+	// registrations are stored under, so a membership check against serviceToImpl recognizes an explicitly
+	// registered async-collection type (the async analogue of CollectionShapeTypes). Its own shape, so a single
+	// string rather than a set.
+	internal static string AsyncEnumerableShapeType(string elementType)
+		=> $"global::System.Collections.Generic.IAsyncEnumerable<{elementType}>";
 
 	// The fully-qualified type strings of every collection shape of <paramref name="elementType" /> - the five
 	// generic collection interfaces and the rank-1 array - in the exact form registrations are stored under, so a
