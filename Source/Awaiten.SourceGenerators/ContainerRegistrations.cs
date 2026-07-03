@@ -177,9 +177,9 @@ internal static class ContainerRegistrations
 		}
 	}
 
-	// Registers one scan match per ScanAs: as its own concrete type and/or under each contract interface, reporting
-	// AWT139 when an interfaces-only scan found no contract to register under (typically a base-type marker;
-	// SelfAndImplementedInterfaces is exempt because its self registration still covers the type).
+	// Registers one scan match per ScanAs: as its own concrete type and under each contract interface. An
+	// interfaces-only scan that found no contract to register under reports AWT139 - the usual cause is a
+	// base-type marker. SelfAndImplementedInterfaces is exempt, since its self registration still covers the type.
 	private static void RegisterScanMatch(
 		INamedTypeSymbol type,
 		List<INamedTypeSymbol> contracts,
