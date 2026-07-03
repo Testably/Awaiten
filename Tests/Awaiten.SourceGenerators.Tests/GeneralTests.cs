@@ -610,6 +610,72 @@ public class GeneralTests
 	}
 
 	[Fact]
+	public async Task Variance_RedirectsASingleServiceRequestToTheVarianceCompatibleRegistration()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace MyCode;
+
+			public class DomainEvent { }
+			public sealed class OrderPlaced : DomainEvent { }
+			public interface IHandler<in T> { }
+			public sealed class DomainEventHandler : IHandler<DomainEvent> { }
+			public sealed class OrderConsumer { public OrderConsumer(IHandler<OrderPlaced> handler) { } }
+
+			[Container]
+			[Transient<DomainEventHandler, IHandler<DomainEvent>>]
+			[Transient<OrderConsumer>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// IHandler<OrderPlaced> has no exact registration; the contravariant IHandler<DomainEvent> (in T) is
+		// redirected to, reusing its resolver in the consumer's construction.
+		await That(source).Contains("return new global::MyCode.OrderConsumer(ResolveDomainEventHandler());");
+		// The requested closed type is a top-level dispatch alias on the same target (Part B): Resolve(typeof(
+		// IHandler<OrderPlaced>)) routes to the DomainEventHandler resolver too.
+		await That(source).Contains("new __Bucket(typeof(global::MyCode.IHandler<global::MyCode.OrderPlaced>), static __s => __s.ResolveDomainEventHandler(), false)");
+	}
+
+	[Fact]
+	public async Task Variance_UnionsVarianceCompatibleRegistrationsIntoAClosedGenericCollection()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+			using System.Collections.Generic;
+
+			namespace MyCode;
+
+			public class DomainEvent { }
+			public sealed class OrderPlaced : DomainEvent { }
+			public interface IHandler<in T> { }
+			public sealed class OrderPlacedHandler : IHandler<OrderPlaced> { }
+			public sealed class DomainEventHandler : IHandler<DomainEvent> { }
+			public sealed class Dispatcher { public Dispatcher(IEnumerable<IHandler<OrderPlaced>> handlers) { } }
+
+			[Container]
+			[Transient<OrderPlacedHandler, IHandler<OrderPlaced>>]
+			[Transient<DomainEventHandler, IHandler<DomainEvent>>]
+			[Transient<Dispatcher>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// The collection of IHandler<OrderPlaced> unions the exact OrderPlacedHandler (leading) with the
+		// contravariant IHandler<DomainEvent> registration (following).
+		await That(source).Contains("new global::MyCode.IHandler<global::MyCode.OrderPlaced>[] { ResolveOrderPlacedHandler(), ResolveDomainEventHandler() }");
+	}
+
+	[Fact]
 	public async Task OpenGeneric_SeedsExpansionFromTheConstructorTheContainerActuallyUses()
 	{
 		GeneratorResult result = Generator.Run("""
