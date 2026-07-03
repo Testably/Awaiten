@@ -196,6 +196,17 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		List<DiagnosticInfo> Diagnostics);
 
 	/// <summary>
+	///     The mutable coalesced graph state the decorator-chain and composite builders rewrite in place: the
+	///     single-dispatch winner per service key, the coalesced implementations in declaration order, and the
+	///     collection membership per service. Grouped so the rewriting steps take one handle rather than the
+	///     three maps separately.
+	/// </summary>
+	private sealed record CoalescedGraph(
+		Dictionary<ServiceKey, string> ServiceToImpl,
+		List<ImplInfo> ImplOrder,
+		Dictionary<ServiceKey, List<string>> ServiceMembers);
+
+	/// <summary>
 	///     Resolves the container's object graph: coalesces its registrations, builds an
 	///     <see cref="InstanceModel" /> per implementation (selecting constructors / factories / instance
 	///     members) and computes the direct-dependency edges between them. Registration faults discovered on
@@ -233,6 +244,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		// key as AWT117.
 		(List<ImplInfo> implOrder, Dictionary<ServiceKey, string> serviceToImpl, Dictionary<ServiceKey, List<string>> serviceMembers, List<ServiceKey> serviceMemberOrder) =
 			CoalesceByImplementation(raw, diagnostics);
+		CoalescedGraph graph = new(serviceToImpl, implOrder, serviceMembers);
 
 		// Decorator chains: for each [Decorate]d service, move the base implementation(s) onto a synthetic key
 		// and register each decorator as a chain link whose inner parameter is redirected to the next-lower key,
@@ -241,7 +253,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		Dictionary<string, DecoratorInner> decoratorInner = new(StringComparer.Ordinal);
 		if (decorators.Count > 0)
 		{
-			new DecoratorChainBuilder(containerSymbol, compilation, serviceToImpl, implOrder, serviceMembers, decoratorInner, importServices, diagnostics)
+			new DecoratorChainBuilder(containerSymbol, compilation, graph, decoratorInner, importServices, diagnostics)
 				.Build(decorators);
 		}
 
@@ -251,7 +263,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		// registrations. Runs after decorator chains so a composite fronts the decorated members.
 		if (composites.Count > 0)
 		{
-			BuildComposites(composites, compilation, containerSymbol, serviceToImpl, implOrder, serviceMembers, importServices, diagnostics);
+			BuildComposites(composites, compilation, containerSymbol, graph, importServices, diagnostics);
 		}
 
 		List<InstanceModel> instances = new();
@@ -780,24 +792,22 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		public DecoratorChainBuilder(
 			INamedTypeSymbol containerSymbol,
 			Compilation compilation,
-			Dictionary<ServiceKey, string> serviceToImpl,
-			List<ImplInfo> implOrder,
-			Dictionary<ServiceKey, List<string>> serviceMembers,
+			CoalescedGraph graph,
 			Dictionary<string, DecoratorInner> decoratorInner,
 			bool importServices,
 			List<DiagnosticInfo> diagnostics)
 		{
 			_containerSymbol = containerSymbol;
 			_compilation = compilation;
-			_serviceToImpl = serviceToImpl;
-			_implOrder = implOrder;
-			_serviceMembers = serviceMembers;
+			_serviceToImpl = graph.ServiceToImpl;
+			_implOrder = graph.ImplOrder;
+			_serviceMembers = graph.ServiceMembers;
 			_decoratorInner = decoratorInner;
 			_importServices = importServices;
 			_diagnostics = diagnostics;
 
 			_byImpl = new Dictionary<string, ImplInfo>(StringComparer.Ordinal);
-			foreach (ImplInfo info in implOrder)
+			foreach (ImplInfo info in _implOrder)
 			{
 				_byImpl[info.ImplementationType] = info;
 			}
@@ -878,19 +888,33 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			}
 		}
 
-		// Each decorator's inner-parameter type in chain order, or null (having reported AWT124) when any
-		// decorator has no single constructor parameter that can receive the inner instance.
+		// Each decorator's inner-parameter type in chain order, or null (having reported AWT124, or AWT135 when
+		// the would-be inner is marked [FromServices]) when any decorator has no single constructor parameter
+		// that can receive the inner instance.
 		private List<string>? ResolveInnerParameterTypes(string service, List<DecorateRegistration> ordered)
 		{
 			List<string> innerParameterTypes = new();
 			bool valid = true;
 			foreach (DecorateRegistration decorator in ordered)
 			{
-				string? innerType = SingleInnerParameterType(decorator.Decorator, decorator.ServiceSymbol);
+				string? innerType = SingleInnerParameterType(decorator.Decorator, decorator.ServiceSymbol, out IParameterSymbol? externalInner);
 				if (innerType is null)
 				{
-					Report(Diagnostics.DecoratorMissingInnerParameter, decorator.Location,
-						decorator.Decorator.ToDisplayString(FullyQualified), service);
+					// The would-be inner is marked [FromServices]: point at the offending parameter (falling back
+					// to the [Decorate] registration when its location is unavailable) rather than reporting the
+					// generic missing-inner AWT124, whose "add a parameter" guidance would mislead here.
+					if (externalInner is not null)
+					{
+						Report(Diagnostics.ExternalDecoratorInner,
+							externalInner.Locations.FirstOrDefault() ?? decorator.Location,
+							externalInner.Name, decorator.Decorator.ToDisplayString(FullyQualified));
+					}
+					else
+					{
+						Report(Diagnostics.DecoratorMissingInnerParameter, decorator.Location,
+							decorator.Decorator.ToDisplayString(FullyQualified), service);
+					}
+
 					valid = false;
 					continue;
 				}
@@ -1008,15 +1032,18 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 		/// <summary>
 		///     The fully-qualified type of a decorator's single constructor parameter that receives the inner
-		///     instance, or <see langword="null" /> when there is none or it is ambiguous (AWT124). The constructor
-		///     is chosen by the same <see cref="SelectConstructor" /> the container uses to build the decorator, so
-		///     this validation can never inspect a different constructor than the one constructed - a divergence
-		///     would leave the inner parameter un-redirected and the link resolving itself. The returned type string
-		///     is what <see cref="ClassifyParameter" /> produces for that parameter, so the inner-parameter redirect
-		///     in <see cref="ClassifyParameters" /> can match it.
+		///     instance, or <see langword="null" /> when there is none or it is ambiguous (AWT124) - or when the
+		///     would-be inner is marked <c>[FromServices]</c>, yielded through
+		///     <paramref name="externalInner" /> so the caller reports the specific conflict (AWT135) instead. The
+		///     constructor is chosen by the same <see cref="SelectConstructor" /> the container uses to build the
+		///     decorator, so this validation can never inspect a different constructor than the one constructed - a
+		///     divergence would leave the inner parameter un-redirected and the link resolving itself. The returned
+		///     type string is what <see cref="ClassifyParameter" /> produces for that parameter, so the
+		///     inner-parameter redirect in <see cref="ClassifyParameters" /> can match it.
 		/// </summary>
-		private string? SingleInnerParameterType(INamedTypeSymbol decorator, INamedTypeSymbol service)
+		private string? SingleInnerParameterType(INamedTypeSymbol decorator, INamedTypeSymbol service, out IParameterSymbol? externalInner)
 		{
+			externalInner = null;
 			IMethodSymbol? constructor = SelectConstructor(decorator, _containerSymbol, _serviceToImpl.Keys.Select(k => k.Service), importServices: _importServices);
 			if (constructor is null)
 			{
@@ -1027,14 +1054,26 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			// implicitly convertible to the parameter's type (the parameter is the service, or a base of it). A
 			// [FromKey] parameter is excluded - it deliberately selects a specific keyed registration, so it is a
 			// separate dependency, never the chain inner (which is redirected by key and would ignore the [FromKey]
-			// anyway). More than one parameter can be assignable at once - e.g. a plain `object` state parameter
-			// alongside the inner - so the inner is the most-derived of them: the one every other assignable
-			// parameter is a base of. Exactly one such maximum makes the inner unambiguous; a tie (two
-			// equally-derived assignable parameters, e.g. two `IService`) is genuinely ambiguous and reported as
-			// AWT124, as is a decorator whose only service-assignable parameter is [FromKey]-ed.
+			// anyway). A [FromServices] parameter is excluded for the same reason: it deliberately resolves from
+			// the external provider, so it is a separate dependency, never the chain inner. More than one parameter
+			// can be assignable at once - e.g. a plain `object` state parameter alongside the inner - so the inner
+			// is the most-derived of them: the one every other assignable parameter is a base of. Exactly one such
+			// maximum makes the inner unambiguous; a tie (two equally-derived assignable parameters, e.g. two
+			// `IService`) is genuinely ambiguous and reported as AWT124, as is a decorator whose only
+			// service-assignable parameter is [FromKey]-ed.
 			List<IParameterSymbol> assignable = constructor.Parameters
-				.Where(p => FromKey(p) is null && _compilation.HasImplicitConversion(service, p.Type))
+				.Where(p => FromKey(p) is null && !HasFromServices(p) && _compilation.HasImplicitConversion(service, p.Type))
 				.ToList();
+
+			// AWT135: nothing is left to receive the inner instance, but a [FromServices] parameter of the
+			// service is present - the would-be inner was marked external, which would silently bypass the
+			// decorator chain. Yield it so the caller reports that specific conflict instead of a generic AWT124.
+			if (assignable.Count == 0)
+			{
+				externalInner = constructor.Parameters
+					.FirstOrDefault(p => HasFromServices(p) && _compilation.HasImplicitConversion(service, p.Type));
+				return null;
+			}
 
 			IParameterSymbol? inner = null;
 			foreach (IParameterSymbol candidate in assignable)
@@ -1085,12 +1124,12 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		List<CompositeRegistration> composites,
 		Compilation compilation,
 		INamedTypeSymbol containerSymbol,
-		Dictionary<ServiceKey, string> serviceToImpl,
-		List<ImplInfo> implOrder,
-		Dictionary<ServiceKey, List<string>> serviceMembers,
+		CoalescedGraph graph,
 		bool importServices,
 		List<DiagnosticInfo> diagnostics)
 	{
+		(Dictionary<ServiceKey, string> serviceToImpl, List<ImplInfo> implOrder, Dictionary<ServiceKey, List<string>> serviceMembers) = graph;
+
 		// The coalesced implementations by identity (including decorator chain links), so the composite's
 		// ImplInfo can be appended for BuildInstance to build and a former winner's public key removed.
 		Dictionary<string, ImplInfo> byImpl = new(StringComparer.Ordinal);
@@ -1413,7 +1452,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		// A factory's parameters resolve from the graph exactly like a constructor's. An async factory
 		// additionally forwards the resolve-time CancellationToken (the async creator's) into a matching
 		// parameter rather than resolving it from the graph.
-		List<ParameterModel> parameters = ClassifyParameters(producer, info, asyncFactory, serviceToImpl, context.DecoratorInner, context.ConstraintRejected, context.ImportServices, diagnostics);
+		List<ParameterModel> parameters = ClassifyParameters(producer, info, asyncFactory, context);
 
 		// Disposability follows the type the container actually owns: a factory's produced type (which may
 		// implement IDisposable behind a non-disposable service interface; for an async factory this is the
@@ -1726,7 +1765,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	///     Classifies the producer's parameters (a constructor's or a factory method's) and reports
 	///     <see cref="Diagnostics.MissingDependency">AWT101</see> for any non-<c>[Arg]</c> parameter whose
 	///     service type is not registered. A runtime argument (<c>[Arg]</c>) is supplied at resolve time, so
-	///     it is never a missing dependency. A service in <paramref name="constraintRejected" /> - an open
+	///     it is never a missing dependency. A service in the context's <c>ConstraintRejected</c> set - an open
 	///     generic that could not be closed at the required type argument (AWT126) - is not reported again as
 	///     AWT101: the constraint violation is the one root cause.
 	/// </summary>
@@ -1734,11 +1773,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		IMethodSymbol producer,
 		ImplInfo info,
 		bool asyncFactory,
-		Dictionary<ServiceKey, string> serviceToImpl,
-		Dictionary<string, DecoratorInner> decoratorInner,
-		HashSet<string> constraintRejected,
-		bool importServices,
-		List<DiagnosticInfo> diagnostics)
+		BuildContext context)
 	{
 		List<ParameterModel> parameters = new();
 		foreach (IParameterSymbol parameter in producer.Parameters)
@@ -1750,61 +1785,72 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			// at the offending parameter, falling back to the registration when its location is unavailable.
 			if (parameterModel.Kind == DependencyKind.External && HasArgAttribute(parameter))
 			{
-				diagnostics.Add(new DiagnosticInfo(
+				context.Diagnostics.Add(new DiagnosticInfo(
 					Diagnostics.ConflictingExternalParameter,
 					parameterModel.Location ?? info.Location,
 					new EquatableArray<string>([parameter.Name, DisplayInstance(info.ImplementationType),])));
 			}
 
-			parameterModel = RedirectDecoratorInner(parameterModel, info, decoratorInner);
+			parameterModel = RedirectDecoratorInner(parameterModel, info, context.DecoratorInner);
 
-			parameterModel = SuppressRegisteredCollectionSynthesis(parameterModel, parameter, serviceToImpl);
+			parameterModel = SuppressRegisteredCollectionSynthesis(parameterModel, parameter, context.ServiceToImpl);
 
 			// [ImportServices]: an otherwise-unresolved direct dependency (unkeyed) is satisfied from the
 			// external provider rather than reported as missing. Only direct dependencies fall through; an
 			// unregistered relationship type still surfaces as AWT101 below.
-			if (importServices
+			if (context.ImportServices
 			    && parameterModel is { Kind: DependencyKind.Direct, Key: null, }
-			    && !serviceToImpl.ContainsKey(KeyOf(parameterModel)))
+			    && !context.ServiceToImpl.ContainsKey(KeyOf(parameterModel)))
 			{
 				parameterModel = parameterModel with { Kind = DependencyKind.External, };
 			}
 
 			parameters.Add(parameterModel);
-
-			// A CancellationToken is forwarded from the resolve-time token, not resolved from the graph (like
-			// [Arg]), so it is never a missing dependency. A collection (Enumerable or AsyncEnumerable) resolves to
-			// every registration of its element type under the parameter's key and an empty collection is legal, so
-			// an element type with no such registration is not a missing dependency either - it just yields an empty
-			// collection. (An unregistered collection type whose synthesis was suppressed above was rewritten to
-			// Direct and so is no longer a collection kind here, and does surface as AWT101.)
-			// A closed generic that expansion refused to synthesize because its type arguments violate the open
-			// implementation's constraints (AWT126) is deliberately absent from serviceToImpl. Reporting AWT101
-			// on top would name the same root cause twice, so suppress it here.
-			// An External dependency (a [FromServices] parameter, or an [ImportServices] fall-through above) is
-			// resolved from the external provider, not the Awaiten graph, so it is never a missing dependency.
-			if (parameterModel.Kind is not (DependencyKind.Arg or DependencyKind.CancellationToken or DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.External)
-			    && !serviceToImpl.ContainsKey(KeyOf(parameterModel))
-			    && !constraintRejected.Contains(parameterModel.ServiceType))
-			{
-				// Lazy does not unwrap Owned<T> (memoizing a disposal handle is a footgun), so a Lazy<Owned<T>> /
-				// Lazy<Task<Owned<T>>> leaves the handle's Owned<T> type as the service - which is not registered.
-				// Report that with the supported owned forms rather than a bare "missing Owned<T>" (AWT101).
-				bool ownedThroughLazy = parameterModel.Kind is DependencyKind.Lazy or DependencyKind.LazyTask
-				                        && parameterModel.ServiceType.StartsWith("global::Awaiten.Owned<", StringComparison.Ordinal);
-
-				diagnostics.Add(new DiagnosticInfo(
-					ownedThroughLazy ? Diagnostics.OwnedThroughLazy : Diagnostics.MissingDependency,
-					info.Location,
-					new EquatableArray<string>([
-						Display(info.OwningServiceOrImpl),
-						DisplayInstance(info.ImplementationType),
-						DisplayKeyed(parameterModel.ServiceType, parameterModel.Key),
-					])));
-			}
+			ReportWhenUnregistered(parameterModel, info, context);
 		}
 
 		return parameters;
+	}
+
+	/// <summary>
+	///     Reports <see cref="Diagnostics.MissingDependency">AWT101</see> (or
+	///     <see cref="Diagnostics.OwnedThroughLazy">AWT121</see> for an <c>Owned&lt;T&gt;</c> reached through a
+	///     <c>Lazy</c>) for a classified parameter whose service type has no registration. A CancellationToken is
+	///     forwarded from the resolve-time token, not resolved from the graph (like <c>[Arg]</c>), so it is never
+	///     a missing dependency. A collection (Enumerable or AsyncEnumerable) resolves to every registration of
+	///     its element type under the parameter's key and an empty collection is legal, so an element type with no
+	///     such registration is not a missing dependency either - it just yields an empty collection. (An
+	///     unregistered collection type whose synthesis was suppressed was rewritten to Direct and so is no longer
+	///     a collection kind here, and does surface as AWT101.) A closed generic that expansion refused to
+	///     synthesize because its type arguments violate the open implementation's constraints (AWT126) is
+	///     deliberately absent from <c>ServiceToImpl</c>; reporting AWT101 on top would name the same root cause
+	///     twice, so it is suppressed here. An External dependency (a <c>[FromServices]</c> parameter, or an
+	///     <c>[ImportServices]</c> fall-through) is resolved from the external provider, not the Awaiten graph, so
+	///     it is never a missing dependency.
+	/// </summary>
+	private static void ReportWhenUnregistered(ParameterModel parameterModel, ImplInfo info, BuildContext context)
+	{
+		if (parameterModel.Kind is DependencyKind.Arg or DependencyKind.CancellationToken or DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.External
+		    || context.ServiceToImpl.ContainsKey(KeyOf(parameterModel))
+		    || context.ConstraintRejected.Contains(parameterModel.ServiceType))
+		{
+			return;
+		}
+
+		// Lazy does not unwrap Owned<T> (memoizing a disposal handle is a footgun), so a Lazy<Owned<T>> /
+		// Lazy<Task<Owned<T>>> leaves the handle's Owned<T> type as the service - which is not registered.
+		// Report that with the supported owned forms rather than a bare "missing Owned<T>" (AWT101).
+		bool ownedThroughLazy = parameterModel.Kind is DependencyKind.Lazy or DependencyKind.LazyTask
+		                        && parameterModel.ServiceType.StartsWith("global::Awaiten.Owned<", StringComparison.Ordinal);
+
+		context.Diagnostics.Add(new DiagnosticInfo(
+			ownedThroughLazy ? Diagnostics.OwnedThroughLazy : Diagnostics.MissingDependency,
+			info.Location,
+			new EquatableArray<string>([
+				Display(info.OwningServiceOrImpl),
+				DisplayInstance(info.ImplementationType),
+				DisplayKeyed(parameterModel.ServiceType, parameterModel.Key),
+			])));
 	}
 
 	/// <summary>

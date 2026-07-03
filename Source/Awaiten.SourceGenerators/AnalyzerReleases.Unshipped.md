@@ -36,3 +36,4 @@
  AWT132  | Awaiten   | Error    | More than one [Composite] names the same service
  AWT133  | Awaiten   | Error    | A [Composite]'s collection parameter is of a base type of the composed service, not the composed service itself
  AWT134  | Awaiten   | Error    | A constructor parameter is marked both [FromServices] and [Arg]
+ AWT135  | Awaiten   | Error    | A decorator's inner parameter is marked [FromServices]

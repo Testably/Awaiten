@@ -493,4 +493,17 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     The parameter of a decorator that would receive the decorated inner instance is marked
+	///     <c>[FromServices]</c>: the inner is supplied by the decorator chain, not the external provider, so
+	///     the attribute would silently bypass the chain.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ExternalDecoratorInner = new(
+		"AWT135",
+		"External decorator inner parameter",
+		"The parameter '{0}' of the decorator '{1}' is marked [FromServices]; the decorated inner instance is supplied by the decorator chain and cannot be resolved from the external provider",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }
