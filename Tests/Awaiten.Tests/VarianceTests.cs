@@ -136,6 +136,66 @@ public partial class VarianceTests
 		await That(factory).Is<OrderPlacedFactory>();
 	}
 
+	[Fact]
+	public async Task Contravariance_NearestCandidateWins()
+	{
+		using NearestContravariantContainer.Root container = new();
+
+		// Both IHandler<object> and IHandler<DomainEvent> satisfy IHandler<OrderPlaced>; the nearest closure wins
+		// (the most-derived argument under contravariance), not the first-registered IHandler<object>.
+		OrderConsumer consumer = container.Resolve<OrderConsumer>();
+
+		await That(consumer.Handler).Is<DomainEventHandler>();
+	}
+
+	[Fact]
+	public async Task Covariance_NearestCandidateWins()
+	{
+		using NearestCovariantContainer.Root container = new();
+
+		// Both IFactory<SpecialOrderPlaced> and IFactory<SpecialDomainEvent> satisfy IFactory<DomainEvent>; the
+		// nearest closure wins (the most-general argument under covariance), not the first-registered deeper one.
+		BaseConsumer consumer = container.Resolve<BaseConsumer>();
+
+		await That(consumer.Factory).Is<SpecialDomainEventFactory>();
+	}
+
+	[Fact]
+	public async Task Contravariance_NestedVariantArgumentMatches()
+	{
+		using NestedVarianceContainer.Root container = new();
+
+		// The variance conversion composes: IEnumerable<OrderPlaced> converts to IEnumerable<DomainEvent> (out T),
+		// so IHandler<IEnumerable<DomainEvent>> satisfies the requested IHandler<IEnumerable<OrderPlaced>> (in T).
+		NestedOrderConsumer consumer = container.Resolve<NestedOrderConsumer>();
+
+		await That(consumer.Handler).Is<EnumerableEventHandler>();
+	}
+
+	[Fact]
+	public async Task Covariance_InterfaceArgumentSatisfiesObjectRequest()
+	{
+		using ObjectRequestContainer.Root container = new();
+
+		// An interface argument converts to object by an implicit reference conversion, so the covariant
+		// IProvider<IHandler<DomainEvent>> satisfies the requested IProvider<object>.
+		ObjectProviderConsumer consumer = container.Resolve<ObjectProviderConsumer>();
+
+		await That(consumer.Provider).Is<HandlerProvider>();
+	}
+
+	[Fact]
+	public async Task Contravariance_FuncRelationshipResolvesVarianceCompatibleRegistration()
+	{
+		using FuncRelationshipContainer.Root container = new();
+
+		// A Func<T> relationship defers the same redirected resolver: Func is covariant in its result, so the
+		// emitted Func<IHandler<DomainEvent>> converts to the declared Func<IHandler<OrderPlaced>>.
+		FuncOrderConsumer consumer = container.Resolve<FuncOrderConsumer>();
+
+		await That(consumer.HandlerFactory()).Is<DomainEventHandler>();
+	}
+
 	public class DomainEvent;
 
 	public sealed class OrderPlaced : DomainEvent;
@@ -156,6 +216,32 @@ public partial class VarianceTests
 		public string Name => nameof(OrderPlacedHandler);
 	}
 
+	public sealed class ObjectHandler : IHandler<object>
+	{
+		public string Name => nameof(ObjectHandler);
+	}
+
+	// Handles any collection of domain events; its closure's nested argument is itself variant (IEnumerable's
+	// out T), so it satisfies a requested IHandler<IEnumerable<OrderPlaced>> through the composed conversion.
+	public sealed class EnumerableEventHandler : IHandler<System.Collections.Generic.IEnumerable<DomainEvent>>
+	{
+		public string Name => nameof(EnumerableEventHandler);
+	}
+
+	public sealed class NestedOrderConsumer
+	{
+		public NestedOrderConsumer(IHandler<System.Collections.Generic.IEnumerable<OrderPlaced>> handler) => Handler = handler;
+
+		public IHandler<System.Collections.Generic.IEnumerable<OrderPlaced>> Handler { get; }
+	}
+
+	public sealed class FuncOrderConsumer
+	{
+		public FuncOrderConsumer(Func<IHandler<OrderPlaced>> handlerFactory) => HandlerFactory = handlerFactory;
+
+		public Func<IHandler<OrderPlaced>> HandlerFactory { get; }
+	}
+
 	public sealed class OrderConsumer
 	{
 		public OrderConsumer(IHandler<OrderPlaced> handler) => Handler = handler;
@@ -173,6 +259,32 @@ public partial class VarianceTests
 	public sealed class OrderPlacedFactory : IFactory<OrderPlaced>
 	{
 		public OrderPlaced Create() => new();
+	}
+
+	public class SpecialDomainEvent : DomainEvent;
+
+	public sealed class SpecialOrderPlaced : SpecialDomainEvent;
+
+	public sealed class SpecialDomainEventFactory : IFactory<SpecialDomainEvent>
+	{
+		public SpecialDomainEvent Create() => new();
+	}
+
+	public sealed class SpecialOrderPlacedFactory : IFactory<SpecialOrderPlaced>
+	{
+		public SpecialOrderPlaced Create() => new();
+	}
+
+	// Covariant without a constraint, so an interface argument can be requested as plain object.
+	public interface IProvider<out T>;
+
+	public sealed class HandlerProvider : IProvider<IHandler<DomainEvent>>;
+
+	public sealed class ObjectProviderConsumer
+	{
+		public ObjectProviderConsumer(IProvider<object> provider) => Provider = provider;
+
+		public IProvider<object> Provider { get; }
 	}
 
 	public sealed class BaseConsumer
@@ -260,4 +372,33 @@ public partial class VarianceTests
 	[Transient<OrderPlacedStore, IStore<OrderPlaced>>]
 	[Transient<StoreCollectionConsumer>]
 	public static partial class InvariantCollectionContainer;
+
+	// The farther IHandler<object> is registered first, so registration order alone would pick it.
+	[Container]
+	[Transient<ObjectHandler, IHandler<object>>]
+	[Transient<DomainEventHandler, IHandler<DomainEvent>>]
+	[Transient<OrderConsumer>]
+	public static partial class NearestContravariantContainer;
+
+	// The farther IFactory<SpecialOrderPlaced> is registered first, so registration order alone would pick it.
+	[Container]
+	[Transient<SpecialOrderPlacedFactory, IFactory<SpecialOrderPlaced>>]
+	[Transient<SpecialDomainEventFactory, IFactory<SpecialDomainEvent>>]
+	[Transient<BaseConsumer>]
+	public static partial class NearestCovariantContainer;
+
+	[Container]
+	[Transient<EnumerableEventHandler, IHandler<System.Collections.Generic.IEnumerable<DomainEvent>>>]
+	[Transient<NestedOrderConsumer>]
+	public static partial class NestedVarianceContainer;
+
+	[Container]
+	[Transient<HandlerProvider, IProvider<IHandler<DomainEvent>>>]
+	[Transient<ObjectProviderConsumer>]
+	public static partial class ObjectRequestContainer;
+
+	[Container]
+	[Transient<DomainEventHandler, IHandler<DomainEvent>>]
+	[Transient<FuncOrderConsumer>]
+	public static partial class FuncRelationshipContainer;
 }

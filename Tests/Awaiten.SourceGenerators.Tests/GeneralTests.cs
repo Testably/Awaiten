@@ -676,6 +676,63 @@ public class GeneralTests
 	}
 
 	[Fact]
+	public async Task Variance_DoesNotRedirectThroughAnInvariantLazyOrTaskWrapper()
+	{
+		GeneratorResult result = Generator.Run("""
+			using System;
+			using System.Threading.Tasks;
+			using Awaiten;
+
+			namespace MyCode;
+
+			public class DomainEvent { }
+			public sealed class OrderPlaced : DomainEvent { }
+			public interface IHandler<in T> { }
+			public sealed class DomainEventHandler : IHandler<DomainEvent> { }
+			public sealed class LazyConsumer { public LazyConsumer(Lazy<IHandler<OrderPlaced>> handler) { } }
+			public sealed class TaskConsumer { public TaskConsumer(Task<IHandler<OrderPlaced>> handler) { } }
+
+			[Container]
+			[Transient<DomainEventHandler, IHandler<DomainEvent>>]
+			[Transient<LazyConsumer>]
+			[Transient<TaskConsumer>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		// Lazy<T> and Task<T> are invariant in T: no conversion exists from a wrapper over the registered
+		// IHandler<DomainEvent> to the declared wrapper over IHandler<OrderPlaced>, so redirecting would emit an
+		// argument the parameter cannot accept. The wrapped request stays a plain missing dependency instead.
+		await That(result.Diagnostics).Contains("*AWT101*").AsWildcard();
+	}
+
+	[Fact]
+	public async Task Variance_ValueTypeArgumentIsNeverVarianceConvertible()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace MyCode;
+
+			public interface IHandler<in T> { }
+			public sealed class ObjectHandler : IHandler<object> { }
+			public sealed class IntConsumer { public IntConsumer(IHandler<int> handler) { } }
+
+			[Container]
+			[Transient<ObjectHandler, IHandler<object>>]
+			[Transient<IntConsumer>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		// int converts to object only by boxing, not by a reference conversion, so C# variance does not apply:
+		// IHandler<object> never satisfies IHandler<int>, and the request is a plain missing dependency.
+		await That(result.Diagnostics).Contains("*AWT101*").AsWildcard();
+	}
+
+	[Fact]
 	public async Task OpenGeneric_SeedsExpansionFromTheConstructorTheContainerActuallyUses()
 	{
 		GeneratorResult result = Generator.Run("""

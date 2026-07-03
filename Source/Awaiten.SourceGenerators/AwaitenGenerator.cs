@@ -275,7 +275,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		// Variance state: the candidate registrations, plus the accumulators BuildInstance fills as it redirects
 		// consumer parameters - the top-level dispatch aliases (Part B) and the requested collection elements
 		// (Part C) - both drained after the instance loop below.
-		VarianceState variance = new(varianceCandidates);
+		VarianceState variance = new(varianceCandidates, compilation);
 
 		BuildContext buildContext = new(containerSymbol, compilation, serviceToImpl, decoratorInner, wellKnown, constraintRejected, importServices, variance, diagnostics);
 
@@ -1815,7 +1815,12 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	///     are out of scope. The redirect reuses the target registration's resolver by rewriting the parameter's
 	///     service type - no new instance is synthesized, exactly as decorator/collection redirection does - and
 	///     records the requested closed type as a top-level dispatch alias (Part B) so an imperative
-	///     <c>Resolve&lt;T&gt;()</c> / <c>Resolve(T)</c> routes to the same target.
+	///     <c>Resolve&lt;T&gt;()</c> / <c>Resolve(T)</c> routes to the same target. Only the delivery shapes whose
+	///     emitted expression still converts after the rewrite are redirected: a direct dependency (the resolved
+	///     instance converts by the very variance that matched) and a <c>Func&lt;…, T&gt;</c> (covariant in its
+	///     result). The <c>Lazy&lt;T&gt;</c> / <c>Task&lt;T&gt;</c> wrappers are invariant in <c>T</c>, so a
+	///     differently-closed wrapped request has no conversion to the parameter's declared type and stays a
+	///     missing dependency (AWT101).
 	/// </summary>
 	private static ParameterModel RedirectVariance(
 		ParameterModel parameterModel,
@@ -1825,11 +1830,15 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	{
 		if (variance.Candidates.Count == 0
 		    || parameterModel.Key is not null
-		    || parameterModel.Kind is not (DependencyKind.Direct or DependencyKind.Func or DependencyKind.Lazy
-			    or DependencyKind.Task or DependencyKind.LazyTask or DependencyKind.FuncTask)
+		    || parameterModel.Kind is not (DependencyKind.Direct or DependencyKind.Func)
 		    || serviceToImpl.ContainsKey(KeyOf(parameterModel))
 		    || UnderlyingServiceType(parameter.Type) is not { } requested
-		    || FindVarianceMatch(requested, parameterModel.ServiceType, variance.Candidates) is not { } variantMatch)
+		    // The unwrapped symbol must denote the classified service type: a shape the classification treats as
+		    // an opaque direct dependency (ValueTask<T>, a nested relationship like Func<Lazy<T>>) unwraps to a
+		    // different type here, and redirecting it would emit an argument the declared parameter type cannot
+		    // accept. Likewise Func<…, Owned<T>>, whose classified service is the inner T, not the Owned<T> handle.
+		    || requested.ToDisplayString(FullyQualified) != parameterModel.ServiceType
+		    || FindVarianceMatch(requested, parameterModel.ServiceType, variance) is not { } variantMatch)
 		{
 			return parameterModel;
 		}
@@ -1837,7 +1846,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		// Record the requested closed type as a top-level dispatch alias (Part B) before the redirect rewrites
 		// ServiceType. The same requested type always picks the same nearest target, so first-seen wins keeps the
 		// alias stable across consumers.
-		string requestedType = requested.ToDisplayString(FullyQualified);
+		string requestedType = parameterModel.ServiceType;
 		if (serviceToImpl.TryGetValue(new ServiceKey(variantMatch, null), out string? variantImpl)
 		    && !variance.Aliases.ContainsKey(requestedType))
 		{
@@ -1888,7 +1897,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		foreach ((string ServiceType, INamedTypeSymbol Symbol) requested in variance.CollectionElements)
 		{
 			List<(string ServiceType, INamedTypeSymbol Symbol)> matches =
-				VarianceMatches(requested.Symbol, requested.ServiceType, variance.Candidates);
+				VarianceMatches(requested.Symbol, requested.ServiceType, variance);
 			if (matches.Count == 0)
 			{
 				continue;
@@ -1956,43 +1965,29 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	}
 
 	/// <summary>
-	///     The single service type a parameter resolves, unwrapping one relationship layer - <c>Func&lt;T&gt;</c>
-	///     (and <c>Func&lt;TArg…, T&gt;</c>), <c>Lazy&lt;T&gt;</c>, and <c>Task&lt;T&gt;</c>/<c>ValueTask&lt;T&gt;</c> -
-	///     to the closed generic interface it ultimately requests, so the variance redirect can compare it against
-	///     the registered service symbols. Returns the named type itself for a plain dependency, or
-	///     <see langword="null" /> for a non-named element type.
+	///     The single service type a parameter resolves, as a symbol - the result of a <c>Func&lt;T&gt;</c> /
+	///     <c>Func&lt;TArg…, T&gt;</c> relationship, or the parameter type itself for a direct dependency - so the
+	///     variance redirect can compare it against the registered service symbols. Returns <see langword="null" />
+	///     for a non-named type. The caller cross-checks the display string against the classified
+	///     <c>ServiceType</c>, so a shape the classification treats differently never redirects.
 	/// </summary>
 	private static INamedTypeSymbol? UnderlyingServiceType(ITypeSymbol type)
 	{
-		if (type is not INamedTypeSymbol { IsGenericType: true, } named)
+		if (type is INamedTypeSymbol { IsGenericType: true, Name: "Func", TypeArguments.Length: >= 1, } named
+		    && named.ContainingNamespace?.ToDisplayString() == "System")
 		{
-			return type as INamedTypeSymbol;
+			return named.TypeArguments[named.TypeArguments.Length - 1] as INamedTypeSymbol;
 		}
 
-		string? container = named.ContainingNamespace?.ToDisplayString();
-		if (container == "System.Threading.Tasks" && named.Name is "Task" or "ValueTask" && named.TypeArguments.Length == 1)
-		{
-			return UnderlyingServiceType(named.TypeArguments[0]);
-		}
-
-		if (container == "System" && named.Name == "Lazy" && named.TypeArguments.Length == 1)
-		{
-			return UnderlyingServiceType(named.TypeArguments[0]);
-		}
-
-		if (container == "System" && named.Name == "Func" && named.TypeArguments.Length >= 1)
-		{
-			return UnderlyingServiceType(named.TypeArguments[named.TypeArguments.Length - 1]);
-		}
-
-		return named;
+		return type as INamedTypeSymbol;
 	}
 
 	/// <summary>
 	///     The element type symbol of a collection dependency - a synchronous shape (<c>T[]</c>,
-	///     <c>IEnumerable&lt;T&gt;</c> and friends), an asynchronous one (<c>IAsyncEnumerable&lt;T&gt;</c>) or an
-	///     awaited one (<c>Task&lt;IReadOnlyList&lt;T&gt;&gt;</c>, <c>ValueTask&lt;T[]&gt;</c>) - when that element
-	///     is a named type, or <see langword="null" /> otherwise. Used to variance-match a requested collection
+	///     <c>IEnumerable&lt;T&gt;</c> and friends) or an asynchronous one (<c>IAsyncEnumerable&lt;T&gt;</c>) -
+	///     when that element is a named type, or <see langword="null" /> otherwise. Exactly the shapes
+	///     classification maps to <see cref="DependencyKind.Enumerable" /> / <see cref="DependencyKind.AsyncEnumerable" />
+	///     (the caller's kind gate), so no other wrapper reaches here. Used to variance-match a requested collection
 	///     element against the registered service symbols (the string-only element in the parameter model is enough
 	///     for membership, but variance needs the symbol).
 	/// </summary>
@@ -2003,22 +1998,11 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			return array.ElementType as INamedTypeSymbol;
 		}
 
-		if (type is not INamedTypeSymbol { IsGenericType: true, TypeArguments.Length: 1, } named)
-		{
-			return null;
-		}
-
-		string? container = named.ContainingNamespace?.ToDisplayString();
-		if (container == "System.Collections.Generic"
+		if (type is INamedTypeSymbol { IsGenericType: true, TypeArguments.Length: 1, } named
+		    && named.ContainingNamespace?.ToDisplayString() == "System.Collections.Generic"
 		    && named.Name is "IEnumerable" or "IReadOnlyList" or "IReadOnlyCollection" or "IList" or "ICollection" or "IAsyncEnumerable")
 		{
 			return named.TypeArguments[0] as INamedTypeSymbol;
-		}
-
-		// An awaited collection wraps a collection shape in Task<…>/ValueTask<…>; recurse into the inner type.
-		if (container == "System.Threading.Tasks" && named.Name is "Task" or "ValueTask")
-		{
-			return CollectionElementSymbol(named.TypeArguments[0]);
 		}
 
 		return null;
@@ -2037,7 +2021,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	private static List<(string ServiceType, INamedTypeSymbol Symbol)> VarianceMatches(
 		INamedTypeSymbol requested,
 		string requestedServiceType,
-		List<(string ServiceType, INamedTypeSymbol Symbol)> candidates)
+		VarianceState variance)
 	{
 		List<(string ServiceType, INamedTypeSymbol Symbol)> matches = new();
 
@@ -2067,7 +2051,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			return matches;
 		}
 
-		foreach ((string ServiceType, INamedTypeSymbol Symbol) candidate in candidates)
+		foreach ((string ServiceType, INamedTypeSymbol Symbol) candidate in variance.Candidates)
 		{
 			// Skip the exact request (handled by the normal lookup) and any candidate of a different interface.
 			if (candidate.ServiceType == requestedServiceType
@@ -2078,7 +2062,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 			// The candidate satisfies the request when an instance of the candidate's service IS-A the requested
 			// service - exactly the implicit reference conversion C# variance defines.
-			if (VarianceCompatible(candidate.Symbol, requested))
+			if (VarianceCompatible(candidate.Symbol, requested, variance.Compilation))
 			{
 				matches.Add(candidate);
 			}
@@ -2089,21 +2073,27 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 	/// <summary>
 	///     The single registered service that best satisfies a requested closed generic interface through declared
-	///     C# variance (Part A). When several candidates match, the nearest one wins - the one whose service is
-	///     itself assignable from every other matching candidate's service (the most-derived under covariance, the
-	///     most-general under contravariance) - falling back to registration order, so the result is deterministic.
-	///     Returns the matching candidate's service-type string (the existing resolver to reuse), or
+	///     C# variance (Part A). When several candidates match, the nearest one wins - the one whose service every
+	///     other matching candidate's service is itself assignable to (the most-derived argument under
+	///     contravariance, the most-general under covariance): a registered <c>IHandler&lt;DomainEvent&gt;</c>
+	///     beats a registered <c>IHandler&lt;object&gt;</c> for a requested <c>IHandler&lt;OrderPlaced&gt;</c> -
+	///     falling back to registration order for unordered candidates, so the result is deterministic. Returns
+	///     the matching candidate's service-type string (the existing resolver to reuse), or
 	///     <see langword="null" /> when there is no variance match.
 	/// </summary>
 	private static string? FindVarianceMatch(
 		INamedTypeSymbol requested,
 		string requestedServiceType,
-		List<(string ServiceType, INamedTypeSymbol Symbol)> candidates)
+		VarianceState variance)
 	{
 		(string ServiceType, INamedTypeSymbol Symbol)? best = null;
-		foreach ((string ServiceType, INamedTypeSymbol Symbol) candidate in VarianceMatches(requested, requestedServiceType, candidates))
+		foreach ((string ServiceType, INamedTypeSymbol Symbol) candidate in VarianceMatches(requested, requestedServiceType, variance))
 		{
-			if (best is not { } current || VarianceCompatible(candidate.Symbol, current.Symbol))
+			// The candidate is nearer the request than the current best when the best's service converts to it:
+			// under contravariance the more-derived closure sits between the request and the more-general one
+			// (IHandler<object> IS-A IHandler<DomainEvent> IS-A IHandler<OrderPlaced>), and under covariance the
+			// more-general closure does - in both cases the conversion target is the better pick.
+			if (best is not { } current || VarianceCompatible(current.Symbol, candidate.Symbol, variance.Compilation))
 			{
 				best = candidate;
 			}
@@ -2120,7 +2110,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	///     requires the reverse, and an invariant position requires identical arguments. Reference conversions
 	///     only (a value-type argument at a variant position is never variance-convertible in C#).
 	/// </summary>
-	private static bool VarianceCompatible(INamedTypeSymbol from, INamedTypeSymbol to)
+	private static bool VarianceCompatible(INamedTypeSymbol from, INamedTypeSymbol to, Compilation compilation)
 	{
 		if (!SymbolEqualityComparer.Default.Equals(from.OriginalDefinition, to.OriginalDefinition))
 		{
@@ -2144,8 +2134,8 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 			switch (parameters[i].Variance)
 			{
-				case VarianceKind.Out when fromArg.IsReferenceType && toArg.IsReferenceType && IsReferenceAssignable(fromArg, toArg):
-				case VarianceKind.In when fromArg.IsReferenceType && toArg.IsReferenceType && IsReferenceAssignable(toArg, fromArg):
+				case VarianceKind.Out when fromArg.IsReferenceType && toArg.IsReferenceType && IsReferenceAssignable(fromArg, toArg, compilation):
+				case VarianceKind.In when fromArg.IsReferenceType && toArg.IsReferenceType && IsReferenceAssignable(toArg, fromArg, compilation):
 					continue;
 				default:
 					return false;
@@ -2156,41 +2146,35 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	}
 
 	/// <summary>
-	///     True when <paramref name="from" /> is <paramref name="to" />, derives from it, or implements it - the
-	///     implicit reference conversion a variant type-argument position requires.
+	///     True when an identity or implicit reference conversion exists from <paramref name="from" /> to
+	///     <paramref name="to" /> - exactly what a variant type-argument position requires. Classified by the
+	///     compiler rather than re-derived, so it covers every reference conversion, including an interface to
+	///     <c>object</c>, array covariance, and the variance conversions a nested variant position needs
+	///     (<c>IEnumerable&lt;OrderPlaced&gt;</c> to <c>IEnumerable&lt;DomainEvent&gt;</c>).
 	/// </summary>
-	private static bool IsReferenceAssignable(ITypeSymbol from, ITypeSymbol to)
+	private static bool IsReferenceAssignable(ITypeSymbol from, ITypeSymbol to, Compilation compilation)
 	{
-		if (SymbolEqualityComparer.Default.Equals(from, to))
-		{
-			return true;
-		}
-
-		for (INamedTypeSymbol? baseType = from.BaseType; baseType is not null; baseType = baseType.BaseType)
-		{
-			if (SymbolEqualityComparer.Default.Equals(baseType, to))
-			{
-				return true;
-			}
-		}
-
-		return from.AllInterfaces.Any(@interface => SymbolEqualityComparer.Default.Equals(@interface, to));
+		Microsoft.CodeAnalysis.Operations.CommonConversion conversion = compilation.ClassifyCommonConversion(from, to);
+		return conversion.IsIdentity || (conversion.IsImplicit && conversion.IsReference);
 	}
 
 	/// <summary>
 	///     The mutable variance state threaded through instance building: the candidate registrations (every
-	///     unkeyed closed-generic-interface registration, from coalescing), and the accumulators the redirect
-	///     fills - the top-level dispatch aliases (Part B) and the requested collection elements (Part C) - drained
-	///     after the instance loop. Empty <see cref="Candidates" /> short-circuits every variance step.
+	///     unkeyed closed-generic-interface registration, from coalescing), the compilation (whose conversion
+	///     classification decides variance compatibility), and the accumulators the redirect fills - the top-level
+	///     dispatch aliases (Part B) and the requested collection elements (Part C) - drained after the instance
+	///     loop. Empty <see cref="Candidates" /> short-circuits every variance step.
 	/// </summary>
 	private sealed class VarianceState
 	{
-		public VarianceState(List<(string ServiceType, INamedTypeSymbol Symbol)> candidates)
+		public VarianceState(List<(string ServiceType, INamedTypeSymbol Symbol)> candidates, Compilation compilation)
 		{
 			Candidates = candidates;
+			Compilation = compilation;
 		}
 
 		public List<(string ServiceType, INamedTypeSymbol Symbol)> Candidates { get; }
+		public Compilation Compilation { get; }
 		public Dictionary<string, string> Aliases { get; } = new(StringComparer.Ordinal);
 		public List<string> AliasOrder { get; } = new();
 		public List<(string ServiceType, INamedTypeSymbol Symbol)> CollectionElements { get; } = new();
