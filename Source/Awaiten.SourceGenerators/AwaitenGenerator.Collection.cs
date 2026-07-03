@@ -9,6 +9,7 @@ partial class AwaitenGenerator
 {
 	private static (List<RawRegistration> Raw, HashSet<string> ConstraintRejectedServices) Collect(
 		INamedTypeSymbol containerSymbol,
+		List<INamedTypeSymbol> modules,
 		Compilation compilation,
 		bool importServices,
 		List<DiagnosticInfo> diagnostics)
@@ -29,7 +30,7 @@ partial class AwaitenGenerator
 		// [Import(typeof(Module))] pulls a module's registrations in after the container's own, so the
 		// container wins ties and a module's overridable defaults (Default/TryAdd) only fill the gaps it
 		// leaves. Resolved one level deep - a module's own [Import] is not followed.
-		foreach (INamedTypeSymbol module in CollectImportedModules(containerSymbol, diagnostics))
+		foreach (INamedTypeSymbol module in modules)
 		{
 			CollectLifetimeRegistrations(module, result, open, diagnostics, origin: module);
 		}
@@ -200,6 +201,17 @@ partial class AwaitenGenerator
 					Diagnostics.NestedModuleImport, location, new EquatableArray<string>([moduleName,])));
 			}
 
+			// AWT154: [Scan] sweeps an assembly relative to the container and is not collected from modules,
+			// so a module-declared scan would be silently ignored; reject it instead. Reported at the module's
+			// own [Scan] attribute when it is in source, else at the container's [Import].
+			if (TryGetAwaitenAttribute(moduleAttributes, "ScanAttribute", out AttributeData? scan))
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.ScanOnModule,
+					LocationInfo.From(scan?.ApplicationSyntaxReference?.GetSyntax().GetLocation()) ?? location,
+					new EquatableArray<string>([moduleName,])));
+			}
+
 			// AWT151: a module that declares no lifetime registrations imports nothing useful.
 			if (!DeclaresAnyRegistration(moduleAttributes))
 			{
@@ -214,9 +226,11 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     Whether an attribute list carries any <c>[Singleton]</c>/<c>[Transient]</c>/<c>[Scoped]</c> lifetime
-	///     registration (in either the generic or the open <c>typeof</c> form), used to detect a module that
-	///     declares nothing to import (AWT151).
+	///     Whether an attribute list carries anything a module contributes to an importing container: a
+	///     <c>[Singleton]</c>/<c>[Transient]</c>/<c>[Scoped]</c> lifetime registration (in either the generic
+	///     or the open <c>typeof</c> form), a <c>[Decorate]</c>, a <c>[Composite]</c>, or
+	///     <c>[ImportServices]</c>. Used to detect a module that declares nothing to import (AWT151); a
+	///     module-declared <c>[Scan]</c> does not count - it is not collected and is its own error (AWT154).
 	/// </summary>
 	private static bool DeclaresAnyRegistration(ImmutableArray<AttributeData> attributes)
 	{
@@ -224,13 +238,36 @@ partial class AwaitenGenerator
 		{
 			if (attribute.AttributeClass is { } attributeClass
 			    && attributeClass.ContainingNamespace?.ToDisplayString() == AttributeNamespace
-			    && attributeClass.Name is "SingletonAttribute" or "TransientAttribute" or "ScopedAttribute")
+			    && attributeClass.Name is "SingletonAttribute" or "TransientAttribute" or "ScopedAttribute"
+				    or "DecorateAttribute" or "CompositeAttribute" or "ImportServicesAttribute")
 			{
 				return true;
 			}
 		}
 
 		return false;
+	}
+
+	/// <summary>
+	///     The attributes of the container followed by those of its imported modules, in import order - the
+	///     shared enumeration for readers that accept module contributions (<c>[Decorate]</c>,
+	///     <c>[Composite]</c>), so the container's declarations always precede a module's and an earlier
+	///     import's precede a later one's.
+	/// </summary>
+	private static IEnumerable<AttributeData> AttributesOf(INamedTypeSymbol containerSymbol, List<INamedTypeSymbol> modules)
+	{
+		foreach (AttributeData attribute in containerSymbol.GetAttributes())
+		{
+			yield return attribute;
+		}
+
+		foreach (INamedTypeSymbol module in modules)
+		{
+			foreach (AttributeData attribute in module.GetAttributes())
+			{
+				yield return attribute;
+			}
+		}
 	}
 
 	/// <summary>
@@ -251,15 +288,17 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     Reads the <c>[Decorate&lt;TDecorator, TService&gt;]</c> registrations declared on a container, in
-	///     declaration order. Each carries its declaration index so equal <c>Order</c> values fall back to
-	///     declaration order when the chain is built. Collected apart from the lifetime registrations because a
-	///     decorator wraps an existing registration after coalescing rather than introducing a new service.
+	///     Reads the <c>[Decorate&lt;TDecorator, TService&gt;]</c> registrations declared on a container and
+	///     its imported modules, in declaration order (container first, then modules in import order, so the
+	///     container's decorators keep the lower declaration indices). Each carries its declaration index so
+	///     equal <c>Order</c> values fall back to declaration order when the chain is built. Collected apart
+	///     from the lifetime registrations because a decorator wraps an existing registration after coalescing
+	///     rather than introducing a new service.
 	/// </summary>
-	private static List<DecorateRegistration> CollectDecorators(INamedTypeSymbol containerSymbol)
+	private static List<DecorateRegistration> CollectDecorators(INamedTypeSymbol containerSymbol, List<INamedTypeSymbol> modules)
 	{
 		List<DecorateRegistration> result = new();
-		foreach (AttributeData attribute in containerSymbol.GetAttributes())
+		foreach (AttributeData attribute in AttributesOf(containerSymbol, modules))
 		{
 			if (attribute.AttributeClass is not { Name: "DecorateAttribute", IsGenericType: true, TypeArguments.Length: 2, } attributeClass
 			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace
@@ -298,10 +337,10 @@ partial class AwaitenGenerator
 	///     type parameters are ordered composite-first to match <c>[Decorate&lt;TDecorator, TService&gt;]</c> and
 	///     the lifetime attributes.
 	/// </summary>
-	private static List<CompositeRegistration> CollectComposites(INamedTypeSymbol containerSymbol)
+	private static List<CompositeRegistration> CollectComposites(INamedTypeSymbol containerSymbol, List<INamedTypeSymbol> modules)
 	{
 		List<CompositeRegistration> result = new();
-		foreach (AttributeData attribute in containerSymbol.GetAttributes())
+		foreach (AttributeData attribute in AttributesOf(containerSymbol, modules))
 		{
 			if (attribute.AttributeClass is not { Name: "CompositeAttribute", IsGenericType: true, TypeArguments.Length: 2, } attributeClass
 			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace

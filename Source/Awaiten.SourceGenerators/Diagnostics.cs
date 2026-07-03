@@ -768,4 +768,18 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     An imported <c>[Module]</c> carries a <c>[Scan]</c>. Assembly scanning is a container concern (it
+	///     sweeps assemblies relative to the container) and is not collected from modules, so a module-declared
+	///     scan would contribute nothing; an error rather than a warning so the scan is not silently dropped -
+	///     move it onto the container.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ScanOnModule = new(
+		"AWT154",
+		"Scan on module not supported",
+		"The imported module '{0}' declares a [Scan], which is not collected from modules and contributes nothing; move the [Scan] onto the container",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

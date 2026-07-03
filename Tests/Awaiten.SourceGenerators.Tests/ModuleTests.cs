@@ -300,4 +300,136 @@ public class ModuleTests
 		await That(source).Contains("Repo<global::MyCode.Foo>")
 			.Because("a default that wins its service is built, so its constructor dependencies drive the expansion");
 	}
+
+	[Fact]
+	public async Task Module_Decorate_WrapsAServiceLikeAContainerDeclaredDecorator()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface IService { }
+		                                       public sealed class Real : IService { }
+		                                       public sealed class LoggingDecorator : IService
+		                                       {
+		                                           public LoggingDecorator(IService inner) { }
+		                                       }
+
+		                                       [Module]
+		                                       [Singleton<Real, IService>]
+		                                       [Decorate<LoggingDecorator, IService>]
+		                                       public static class ServiceModule { }
+
+		                                       [Container]
+		                                       [Import(typeof(ServiceModule))]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("global::MyCode.LoggingDecorator")
+			.Because("a module's [Decorate] wraps the service exactly like one declared on the container");
+	}
+
+	[Fact]
+	public async Task Module_Composite_FrontsAServiceLikeAContainerDeclaredComposite()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+
+		                                       namespace MyCode;
+
+		                                       public interface INotifier { }
+		                                       public sealed class Email : INotifier { }
+		                                       public sealed class Sms : INotifier { }
+		                                       public sealed class CompositeNotifier : INotifier
+		                                       {
+		                                           public CompositeNotifier(IEnumerable<INotifier> notifiers) { }
+		                                       }
+
+		                                       [Module]
+		                                       [Transient<Email, INotifier>]
+		                                       [Transient<Sms, INotifier>]
+		                                       [Composite<CompositeNotifier, INotifier>]
+		                                       public static class NotifierModule { }
+
+		                                       [Container]
+		                                       [Import(typeof(NotifierModule))]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("global::MyCode.CompositeNotifier")
+			.Because("a module's [Composite] fronts the service exactly like one declared on the container");
+	}
+
+	[Fact]
+	public async Task Module_ImportServices_LetsUnresolvedDependenciesFallThroughToTheExternalProvider()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface IExternal { }
+		                                       public sealed class Consumer
+		                                       {
+		                                           public Consumer(IExternal external) { }
+		                                       }
+
+		                                       [Module]
+		                                       [ImportServices]
+		                                       [Singleton<Consumer>]
+		                                       public static class ExternalModule { }
+
+		                                       [Container]
+		                                       [Import(typeof(ExternalModule))]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty()
+			.Because("a module's [ImportServices] lets its registrations' unresolved dependencies fall through instead of raising AWT101");
+	}
+
+	[Fact]
+	public async Task Module_WithOnlyADecorator_IsNotReportedAsEmpty()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface IService { }
+		                                       public sealed class Real : IService { }
+		                                       public sealed class LoggingDecorator : IService
+		                                       {
+		                                           public LoggingDecorator(IService inner) { }
+		                                       }
+
+		                                       [Module]
+		                                       [Decorate<LoggingDecorator, IService>]
+		                                       public static class DecoratorModule { }
+
+		                                       [Container]
+		                                       [Import(typeof(DecoratorModule))]
+		                                       [Singleton<Real, IService>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty()
+			.Because("a [Decorate] is a contribution, so a decorator-only module is not empty (no AWT151)");
+	}
 }
