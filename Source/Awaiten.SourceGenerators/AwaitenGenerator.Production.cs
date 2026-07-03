@@ -38,7 +38,7 @@ partial class AwaitenGenerator
 				false,
 				info.Symbol.IsReferenceType,
 				ProductionKind.Instance,
-				info.ProductionMember);
+				QualifiedProductionMember(info));
 		}
 
 		// Select the producer: a container method (Factory) or the implementation's constructor (the
@@ -130,7 +130,7 @@ partial class AwaitenGenerator
 			disposable,
 			info.Symbol.IsReferenceType,
 			info.Production,
-			info.ProductionMember,
+			QualifiedProductionMember(info),
 			asyncInit,
 			IsAsyncFactory: asyncFactory,
 			RuntimeDisposalCheck: runtimeDisposalCheck,
@@ -322,9 +322,12 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     Resolves a <c>Factory</c> registration to the container method that produces it. No accessible
-	///     method of that name returns the registered type → <see cref="Diagnostics.InvalidFactory">AWT108</see>;
-	///     more than one (an overload) → <see cref="Diagnostics.AmbiguousFactory">AWT112</see>.
+	///     Resolves a <c>Factory</c> registration to the method that produces it - a container method, or a
+	///     module method for a registration imported from a module (never falling back to the container). No
+	///     method of that name returns the registered type → <see cref="Diagnostics.InvalidFactory">AWT108</see>
+	///     naming the owner; a module method that matches but is not accessible from the generated container →
+	///     <see cref="Diagnostics.InaccessibleModuleMember">AWT153</see>; more than one accessible match (an
+	///     overload) → <see cref="Diagnostics.AmbiguousFactory">AWT112</see>.
 	/// </summary>
 	private static IMethodSymbol? ResolveFactory(
 		INamedTypeSymbol containerSymbol,
@@ -332,8 +335,28 @@ partial class AwaitenGenerator
 		Compilation compilation,
 		List<DiagnosticInfo> diagnostics)
 	{
+		INamedTypeSymbol owner = info.Origin ?? containerSymbol;
 		List<IMethodSymbol> candidates = FindFactoryCandidates(
-			containerSymbol, info.ProductionMember!, info.Symbol, compilation);
+			owner, info.ProductionMember!, info.Symbol, compilation);
+
+		// A container's own members are reachable by the generated partial at any accessibility, but a
+		// module's members are called from outside the module, so only those the container can actually see
+		// qualify; a match that exists on the module but is hidden from the container is its own error
+		// (AWT153) rather than a confusing not-found AWT108.
+		if (info.Origin is not null && candidates.Count > 0)
+		{
+			List<IMethodSymbol> accessible = candidates
+				.Where(candidate => compilation.IsSymbolAccessibleWithin(candidate, containerSymbol))
+				.ToList();
+			if (accessible.Count == 0)
+			{
+				ReportInaccessibleModuleMember(info, diagnostics);
+				return null;
+			}
+
+			candidates = accessible;
+		}
+
 		if (candidates.Count == 1)
 		{
 			return candidates[0];
@@ -342,14 +365,17 @@ partial class AwaitenGenerator
 		diagnostics.Add(new DiagnosticInfo(
 			candidates.Count == 0 ? Diagnostics.InvalidFactory : Diagnostics.AmbiguousFactory,
 			info.Location,
-			new EquatableArray<string>([Display(info.OwningServiceOrImpl), info.ProductionMember!,])));
+			new EquatableArray<string>([Display(info.OwningServiceOrImpl), info.ProductionMember!, DescribeOwner(info),])));
 		return null;
 	}
 
 	/// <summary>
-	///     Validates an <c>Instance</c> registration against the named container member, reporting
-	///     <see cref="Diagnostics.InvalidInstance">AWT109</see> when no accessible field or property of
-	///     that name (on the container or an accessible base type) holds the registered type.
+	///     Validates an <c>Instance</c> registration against the named member of its owner - the container,
+	///     or the declaring module for an imported registration (never falling back to the container) -
+	///     reporting <see cref="Diagnostics.InvalidInstance">AWT109</see> when no field or property of that
+	///     name (on the owner or an accessible base type) holds the registered type, and
+	///     <see cref="Diagnostics.InaccessibleModuleMember">AWT153</see> when a module member matches but is
+	///     not accessible from the generated container.
 	/// </summary>
 	private static void ValidateInstanceMember(
 		INamedTypeSymbol containerSymbol,
@@ -357,7 +383,8 @@ partial class AwaitenGenerator
 		Compilation compilation,
 		List<DiagnosticInfo> diagnostics)
 	{
-		foreach (ISymbol member in AccessibleMembers(containerSymbol, info.ProductionMember!))
+		bool inaccessibleMatch = false;
+		foreach (ISymbol member in AccessibleMembers(info.Origin ?? containerSymbol, info.ProductionMember!))
 		{
 			ITypeSymbol? memberType = member switch
 			{
@@ -367,15 +394,51 @@ partial class AwaitenGenerator
 			};
 			if (memberType is not null && compilation.HasImplicitConversion(memberType, info.Symbol))
 			{
-				return;
+				if (info.Origin is null || compilation.IsSymbolAccessibleWithin(member, containerSymbol))
+				{
+					return;
+				}
+
+				inaccessibleMatch = true;
 			}
+		}
+
+		if (inaccessibleMatch)
+		{
+			ReportInaccessibleModuleMember(info, diagnostics);
+			return;
 		}
 
 		diagnostics.Add(new DiagnosticInfo(
 			Diagnostics.InvalidInstance,
 			info.Location,
-			new EquatableArray<string>([Display(info.OwningServiceOrImpl), info.ProductionMember!,])));
+			new EquatableArray<string>([Display(info.OwningServiceOrImpl), info.ProductionMember!, DescribeOwner(info),])));
 	}
+
+	// AWT153: the module declares a member that matches the Factory/Instance registration, but the generated
+	// container cannot access it (private, or internal in another assembly without InternalsVisibleTo).
+	private static void ReportInaccessibleModuleMember(ImplInfo info, List<DiagnosticInfo> diagnostics)
+		=> diagnostics.Add(new DiagnosticInfo(
+			Diagnostics.InaccessibleModuleMember,
+			info.Location,
+			new EquatableArray<string>([
+				Display(info.OwningServiceOrImpl),
+				Display(info.Origin!.ToDisplayString(FullyQualified)),
+				info.ProductionMember!,
+			])));
+
+	// Names the owner of a Factory/Instance member in a diagnostic: the module that declared the
+	// registration, or the container for its own registrations.
+	private static string DescribeOwner(ImplInfo info)
+		=> info.Origin is { } origin ? $"the module '{Display(origin.ToDisplayString(FullyQualified))}'" : "the container";
+
+	// A module's Factory/Instance member is emitted qualified with the module type (the generated container
+	// is another class, so the simple name would not bind); the container's own members stay unqualified -
+	// they are in scope inside the generated partial.
+	private static string? QualifiedProductionMember(ImplInfo info)
+		=> info.ProductionMember is null || info.Origin is null
+			? info.ProductionMember
+			: $"{info.Origin.ToDisplayString(FullyQualified)}.{info.ProductionMember}";
 
 	/// <summary>
 	///     Chooses the constructor the container builds <paramref name="implementation" /> through: its single

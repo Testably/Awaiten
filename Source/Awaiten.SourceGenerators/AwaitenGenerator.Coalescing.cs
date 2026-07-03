@@ -188,7 +188,7 @@ partial class AwaitenGenerator
 			{
 				info = new ImplInfo(
 					reg.ImplementationType, reg.Implementation, reg.Lifetime,
-					LocationInfo.From(reg.Location), reg.Production, reg.ProductionMember, reg.IsScan);
+					LocationInfo.From(reg.Location), reg.Production, reg.ProductionMember, reg.IsScan, reg.Origin);
 				implInfos.Add(reg.ImplementationType, info);
 				implOrder.Add(info);
 			}
@@ -275,11 +275,15 @@ partial class AwaitenGenerator
 	}
 
 	// Two registrations of the same implementation conflict when they produce it differently: a different
-	// kind (constructor vs factory vs instance), or the same kind naming a different container member.
-	// Coalescing keeps the first, so the second would otherwise be dropped without a trace.
+	// kind (constructor vs factory vs instance), the same kind naming a different member, or the same
+	// member name declared by different owners (a container member and a module member of the same name
+	// are different methods). Coalescing keeps the first, so the second would otherwise be dropped
+	// without a trace.
 	private static bool ConflictsWith(ImplInfo info, RawRegistration registration)
 		=> info.Production != registration.Production
-		   || !string.Equals(info.ProductionMember, registration.ProductionMember, StringComparison.Ordinal);
+		   || !string.Equals(info.ProductionMember, registration.ProductionMember, StringComparison.Ordinal)
+		   || (registration.Production != ProductionKind.Constructor
+		       && !SymbolEqualityComparer.Default.Equals(info.Origin, registration.Origin));
 
 	private static string DescribeProduction(ProductionKind production, string? member)
 		=> production switch

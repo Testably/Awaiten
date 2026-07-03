@@ -53,6 +53,22 @@ public partial class ModuleTests
 		await That(clocks[0]).Is<AppClock>();
 	}
 
+	[Fact]
+	public async Task ModuleFactory_ProducesTheServiceThroughTheModuleMethod()
+	{
+		using ProductionContainer.Root container = new();
+
+		await That(container.Resolve<IClock>()).Is<ModuleClock>();
+	}
+
+	[Fact]
+	public async Task ModuleInstance_ExposesTheModulesPreBuiltMember()
+	{
+		using ProductionContainer.Root container = new();
+
+		await That(container.Resolve<ICache>()).IsSameAs(ProductionModule.Cache);
+	}
+
 	public interface IClock;
 
 	public sealed class ModuleClock : IClock;
@@ -71,6 +87,16 @@ public partial class ModuleTests
 	[Singleton<MemoryCache, ICache>(TryAdd = true)]
 	public static class InfrastructureModule;
 
+	[Module]
+	[Singleton<ModuleClock, IClock>(Factory = nameof(ProductionModule.CreateClock))]
+	[Singleton<MemoryCache, ICache>(Instance = nameof(ProductionModule.Cache))]
+	public static class ProductionModule
+	{
+		public static MemoryCache Cache { get; } = new();
+
+		public static ModuleClock CreateClock() => new();
+	}
+
 	[Container]
 	[Import(typeof(InfrastructureModule))]
 	[Singleton<AppClock, IClock>]
@@ -80,4 +106,7 @@ public partial class ModuleTests
 	[Import(typeof(InfrastructureModule))]
 	public static partial class DefaultsContainer;
 
+	[Container]
+	[Import(typeof(ProductionModule))]
+	public static partial class ProductionContainer;
 }

@@ -24,14 +24,14 @@ partial class AwaitenGenerator
 		// expanded into concrete closed registrations on demand (see ExpandOpenGenerics).
 		List<OpenRegistration> open = new();
 
-		CollectLifetimeRegistrations(containerSymbol, result, open, diagnostics);
+		CollectLifetimeRegistrations(containerSymbol, result, open, diagnostics, origin: null);
 
 		// [Import(typeof(Module))] pulls a module's registrations in after the container's own, so the
 		// container wins ties and a module's overridable defaults (Default/TryAdd) only fill the gaps it
 		// leaves. Resolved one level deep - a module's own [Import] is not followed.
 		foreach (INamedTypeSymbol module in CollectImportedModules(containerSymbol, diagnostics))
 		{
-			CollectLifetimeRegistrations(module, result, open, diagnostics);
+			CollectLifetimeRegistrations(module, result, open, diagnostics, origin: module);
 		}
 
 		// Assembly scanning contributes overridable registrations for every concrete type assignable to a
@@ -65,12 +65,16 @@ partial class AwaitenGenerator
 	///     <c>typeof</c>-form ones into <paramref name="open" /> for later expansion. A module carries the same
 	///     attributes as a container, so a single reader serves both; the <c>Default</c>/<c>TryAdd</c> named
 	///     flags mark a registration as an overridable module default (<see cref="RawRegistration.Weak" />).
+	///     <paramref name="origin" /> is the imported module being read (<see langword="null" /> for the
+	///     container itself), recorded on each registration so a module's <c>Factory</c>/<c>Instance</c>
+	///     member resolves against the module rather than the container.
 	/// </summary>
 	private static void CollectLifetimeRegistrations(
 		INamedTypeSymbol symbol,
 		List<RawRegistration> result,
 		List<OpenRegistration> open,
-		List<DiagnosticInfo> diagnostics)
+		List<DiagnosticInfo> diagnostics,
+		INamedTypeSymbol? origin)
 	{
 		foreach (AttributeData attribute in symbol.GetAttributes())
 		{
@@ -130,7 +134,8 @@ partial class AwaitenGenerator
 				NamedArgument(attribute, "Key"),
 				service as INamedTypeSymbol,
 				Weak: weak,
-				IsDefault: isDefault));
+				IsDefault: isDefault,
+				Origin: origin));
 		}
 	}
 

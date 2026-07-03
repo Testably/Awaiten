@@ -54,3 +54,4 @@
  AWT150  | Awaiten   | Error    | An imported module has its own [Import], which is not followed
  AWT151  | Awaiten   | Warning  | An imported module declares no registrations
  AWT152  | Awaiten   | Error    | An imported [Module] class is not declared static
+ AWT153  | Awaiten   | Error    | A module Factory/Instance member is not accessible from the generated container

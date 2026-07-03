@@ -99,25 +99,27 @@ internal static class Diagnostics
 		isEnabledByDefault: true);
 
 	/// <summary>
-	///     A <c>Factory</c> registration names a member that is not a usable factory method on the
-	///     container (it is missing, is not a method, or does not return the registered service type).
+	///     A <c>Factory</c> registration names a member that is not a usable factory method on its owner -
+	///     the container, or the declaring module for an imported registration (it is missing, is not a
+	///     method, or does not return the registered service type).
 	/// </summary>
 	public static readonly DiagnosticDescriptor InvalidFactory = new(
 		"AWT108",
 		"Invalid factory",
-		"'{0}' cannot be produced: the container has no accessible method '{1}' returning '{0}'",
+		"'{0}' cannot be produced: {2} has no accessible method '{1}' returning '{0}'",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
 
 	/// <summary>
-	///     An <c>Instance</c> registration names a member that is not a usable instance member on the
-	///     container (it is missing, is not a field or property, or is not assignable to the service type).
+	///     An <c>Instance</c> registration names a member that is not a usable instance member on its owner -
+	///     the container, or the declaring module for an imported registration (it is missing, is not a field
+	///     or property, or is not assignable to the service type).
 	/// </summary>
 	public static readonly DiagnosticDescriptor InvalidInstance = new(
 		"AWT109",
 		"Invalid instance member",
-		"'{0}' cannot be exposed: the container has no accessible field or property '{1}' of type '{0}'",
+		"'{0}' cannot be exposed: {2} has no accessible field or property '{1}' of type '{0}'",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
@@ -154,7 +156,7 @@ internal static class Diagnostics
 	public static readonly DiagnosticDescriptor AmbiguousFactory = new(
 		"AWT112",
 		"Ambiguous factory",
-		"'{0}' has an ambiguous factory: the container has more than one accessible method '{1}' returning '{0}'. Give the factory method a unique name.",
+		"'{0}' has an ambiguous factory: {2} has more than one accessible method '{1}' returning '{0}'. Give the factory method a unique name.",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
@@ -748,6 +750,21 @@ internal static class Diagnostics
 		"AWT152",
 		"Module must be static",
 		"'{0}' must be a static class. A [Module] class is a definition whose factory and instance members are static; it is imported, never instantiated.",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A module registration's <c>Factory</c>/<c>Instance</c> member exists on the module but is not
+	///     accessible from the generated container (it is private, or internal in another assembly without
+	///     <c>InternalsVisibleTo</c>). Unlike the container's own members - which the generated partial can
+	///     reach at any accessibility - a module's members are called from outside the module, so they must
+	///     be public, or internal within the container's assembly (or an assembly granting it internals).
+	/// </summary>
+	public static readonly DiagnosticDescriptor InaccessibleModuleMember = new(
+		"AWT153",
+		"Module production member not accessible",
+		"'{0}' cannot be produced: the member '{2}' exists on the module '{1}' but is not accessible from the generated container; make it public, or internal within a visible assembly",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);

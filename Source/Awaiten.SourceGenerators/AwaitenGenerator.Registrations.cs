@@ -17,8 +17,11 @@ namespace Awaiten.SourceGenerators;
 ///     into skipping unconstructable matches (<c>SkipUnconstructable</c>, degrading the AWT101 error to
 ///     the AWT141 warning), whether the registration is an overridable module default (<c>Weak</c>:
 ///     <c>Default</c> or <c>TryAdd</c>, contributing its service only when nothing stronger claimed it),
-///     and whether that default was a <c>Default</c> specifically (<c>IsDefault</c>, so two colliding
-///     <c>Default</c>s can be surfaced as AWT148 while <c>TryAdd</c> stays silent).
+///     whether that default was a <c>Default</c> specifically (<c>IsDefault</c>, so two colliding
+///     <c>Default</c>s can be surfaced as AWT148 while <c>TryAdd</c> stays silent), and the imported
+///     module that declared the registration (<c>Origin</c>, <see langword="null" /> for the container's
+///     own registrations - a module's <c>Factory</c>/<c>Instance</c> member is resolved against and
+///     emitted qualified with the module type, not the container).
 /// </summary>
 /// <remarks>
 ///     <see cref="Location" /> is the live Roslyn location (with its syntax tree), not an equatable
@@ -40,7 +43,8 @@ internal sealed record RawRegistration(
 	bool IsScan = false,
 	bool ScanSkipsUnconstructable = false,
 	bool Weak = false,
-	bool IsDefault = false);
+	bool IsDefault = false,
+	INamedTypeSymbol? Origin = null);
 
 /// <summary>
 ///     A single <c>[Decorate&lt;TDecorator, TService&gt;]</c> registration read from a container: the
@@ -104,7 +108,8 @@ partial class AwaitenGenerator
 			LocationInfo? location,
 			ProductionKind production,
 			string? productionMember,
-			bool isScan = false)
+			bool isScan = false,
+			INamedTypeSymbol? origin = null)
 		{
 			ImplementationType = implementationType;
 			Symbol = symbol;
@@ -113,6 +118,7 @@ partial class AwaitenGenerator
 			Production = production;
 			ProductionMember = productionMember;
 			IsScan = isScan;
+			Origin = origin;
 			Services = new List<ServiceKey>();
 		}
 
@@ -125,6 +131,13 @@ partial class AwaitenGenerator
 
 		/// <summary>Whether the first (winning) registration of this implementation came from a <c>[Scan]</c>.</summary>
 		public bool IsScan { get; }
+
+		/// <summary>
+		///     The imported module that declared the winning registration, or <see langword="null" /> for the
+		///     container's own (or a scan's). A module's <c>Factory</c>/<c>Instance</c> member is resolved
+		///     against and emitted qualified with this type rather than the container.
+		/// </summary>
+		public INamedTypeSymbol? Origin { get; }
 
 		public List<ServiceKey> Services { get; }
 
