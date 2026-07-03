@@ -39,7 +39,13 @@
  AWT135  | Awaiten   | Error    | A decorator's inner parameter is marked [FromServices]
  AWT136  | Awaiten   | Error    | An [Inject] property has no set or init accessor the container can assign through
  AWT137  | Awaiten   | Error    | An injected property is marked [Arg]
- AWT138  | Awaiten   | Error    | An [Inject(Deferred = true)] property is init-only rather than settable
- AWT139  | Awaiten   | Error    | A deferred property cycle consists entirely of transients and cannot terminate
- AWT140  | Awaiten   | Error    | A deferred property cycle includes an async-initialized service and cannot terminate
- AWT141  | Awaiten   | Error    | A deferred property cycle still traverses a construction-time edge and cannot terminate
+ AWT138  | Awaiten   | Warning  | A [Scan] matched no concrete type assignable to its marker
+ AWT139  | Awaiten   | Warning  | A [Scan(As = ScanAs.ImplementedInterfaces)] matched a type with no assignable interface
+ AWT140  | Awaiten   | Warning  | A [Scan(InAssembliesOf = …)] named an assembly with no candidate types
+ AWT141  | Awaiten   | Warning  | A [Scan(SkipUnconstructable = true)] match the container cannot construct is skipped
+ AWT142  | Awaiten   | Warning  | Scans register one implementation with conflicting lifetimes
+ AWT143  | Awaiten   | Error    | A [Scan(InAssembliesOf = …)] resolved to no assembly at all
+ AWT144  | Awaiten   | Error    | An [Inject(Deferred = true)] property is init-only rather than settable
+ AWT145  | Awaiten   | Error    | A deferred property cycle consists entirely of transients and cannot terminate
+ AWT146  | Awaiten   | Error    | A deferred property cycle includes an async-initialized service and cannot terminate
+ AWT147  | Awaiten   | Error    | A deferred property cycle still traverses a construction-time edge and cannot terminate

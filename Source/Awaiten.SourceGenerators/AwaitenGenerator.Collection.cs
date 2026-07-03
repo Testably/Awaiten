@@ -7,6 +7,7 @@ partial class AwaitenGenerator
 {
 	private static (List<RawRegistration> Raw, HashSet<string> ConstraintRejectedServices) Collect(
 		INamedTypeSymbol containerSymbol,
+		Compilation compilation,
 		bool importServices,
 		List<DiagnosticInfo> diagnostics)
 	{
@@ -75,12 +76,26 @@ partial class AwaitenGenerator
 				service as INamedTypeSymbol));
 		}
 
+		// Assembly scanning contributes overridable registrations for every concrete type assignable to a
+		// [Scan] marker. Appended before open generic expansion so scanned implementations seed it - their
+		// constructors may require closed generics only an open registration can provide.
+		List<RawRegistration> scans = CollectScans(containerSymbol, compilation, diagnostics);
+		result.AddRange(scans);
+
 		// Expand open generic registrations: for every closed generic service required from the graph
 		// whose open form is registered but which has no concrete registration, synthesize the closed
 		// implementation (iterating to a fixpoint over its own generic dependencies).
 		if (open.Count > 0)
 		{
 			ExpandOpenGenerics(result, open, containerSymbol, importServices, diagnostics, constraintRejected);
+		}
+
+		// ...then moved back to the end: coalescing is first-wins per service, so the explicit registrations
+		// and the closed registrations expansion synthesized from them must precede the overridable scan ones.
+		if (scans.Count > 0)
+		{
+			result.RemoveAll(registration => registration.IsScan);
+			result.AddRange(scans);
 		}
 
 		return (result, constraintRejected);

@@ -131,6 +131,31 @@ namespace Awaiten
         public T Value { get; }
         public void Dispose() { }
     }
+    public enum ScanAs
+    {
+        Self = 0,
+        ImplementedInterfaces = 1,
+        SelfAndImplementedInterfaces = 2,
+    }
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
+    public sealed class ScanAttribute : System.Attribute
+    {
+        public ScanAttribute(System.Type assignableTo) { }
+        public Awaiten.ScanAs As { get; set; }
+        public System.Type AssignableTo { get; }
+        public System.Type[]? InAssembliesOf { get; set; }
+        public Awaiten.AwaitenLifetime Lifetime { get; set; }
+        public bool SkipUnconstructable { get; set; }
+    }
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
+    public sealed class ScanAttribute<TMarker> : System.Attribute
+    {
+        public ScanAttribute() { }
+        public Awaiten.ScanAs As { get; set; }
+        public System.Type[]? InAssembliesOf { get; set; }
+        public Awaiten.AwaitenLifetime Lifetime { get; set; }
+        public bool SkipUnconstructable { get; set; }
+    }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
     public sealed class ScopedAttribute : System.Attribute
     {

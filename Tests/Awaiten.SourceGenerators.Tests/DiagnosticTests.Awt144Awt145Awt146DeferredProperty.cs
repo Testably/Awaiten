@@ -4,10 +4,10 @@ namespace Awaiten.SourceGenerators.Tests;
 
 public partial class DiagnosticTests
 {
-	public class Awt138Awt139Awt140DeferredProperty
+	public class Awt144Awt145Awt146DeferredProperty
 	{
 		[Fact]
-		public async Task ReportsAwt138WhenDeferredPropertyIsInitOnly()
+		public async Task ReportsAwt144WhenDeferredPropertyIsInitOnly()
 		{
 			GeneratorResult result = Generator.Run("""
 			                                       using Awaiten;
@@ -29,12 +29,12 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT138"))).IsTrue()
+			await That(result.Diagnostics.Any(d => d.Contains("AWT144"))).IsTrue()
 				.Because("a deferred property is assigned after construction, so it needs a set accessor - an init-only accessor can only be assigned in an object initializer");
 		}
 
 		[Fact]
-		public async Task ReportsAwt139WhenADeferredCycleIncludesATransient()
+		public async Task ReportsAwt145WhenADeferredCycleIncludesATransient()
 		{
 			GeneratorResult result = Generator.Run("""
 			                                       using Awaiten;
@@ -53,12 +53,12 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT139"))).IsTrue()
+			await That(result.Diagnostics.Any(d => d.Contains("AWT145"))).IsTrue()
 				.Because("a deferred property breaks a cycle only when the owning instance is cached; a transient is rebuilt on each resolve, so the cycle would recurse forever");
 		}
 
 		[Fact]
-		public async Task ReportsAwt139ForASelfReferentialTransientDeferredProperty()
+		public async Task ReportsAwt145ForASelfReferentialTransientDeferredProperty()
 		{
 			GeneratorResult result = Generator.Run("""
 			                                       using Awaiten;
@@ -76,12 +76,12 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT139"))).IsTrue()
+			await That(result.Diagnostics.Any(d => d.Contains("AWT145"))).IsTrue()
 				.Because("a self-referential deferred property on a transient is a one-node cycle with nothing cached, so it cannot terminate");
 		}
 
 		[Fact]
-		public async Task ASelfReferentialSingletonDeferredProperty_DoesNotReportAwt139OrAwt140()
+		public async Task ASelfReferentialSingletonDeferredProperty_DoesNotReportAwt145OrAwt146()
 		{
 			GeneratorResult result = Generator.Run("""
 			                                       using Awaiten;
@@ -104,7 +104,7 @@ public partial class DiagnosticTests
 		}
 
 		[Fact]
-		public async Task ReportsAwt139WhenADeferredCycleClosesThroughACollectionMember()
+		public async Task ReportsAwt145WhenADeferredCycleClosesThroughACollectionMember()
 		{
 			GeneratorResult result = Generator.Run("""
 			                                       using System.Collections.Generic;
@@ -125,12 +125,12 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT139"))).IsTrue()
+			await That(result.Diagnostics.Any(d => d.Contains("AWT145"))).IsTrue()
 				.Because("a deferred collection member is materialized eagerly, so a transient cycle closed through it recurses forever exactly like a direct member");
 		}
 
 		[Fact]
-		public async Task ASynchronousSingletonDeferredCycle_DoesNotReportAwt139OrAwt140()
+		public async Task ASynchronousSingletonDeferredCycle_DoesNotReportAwt145OrAwt146()
 		{
 			GeneratorResult result = Generator.Run("""
 			                                       using Awaiten;
@@ -149,12 +149,12 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT139") || d.Contains("AWT140"))).IsFalse()
+			await That(result.Diagnostics.Any(d => d.Contains("AWT145") || d.Contains("AWT146"))).IsFalse()
 				.Because("a synchronous singleton (or scoped) deferred cycle is cached before it is wired, so it terminates and is supported");
 		}
 
 		[Fact]
-		public async Task AMixedLifetimeDeferredCycle_WithOneCachedParticipant_DoesNotReportAwt139()
+		public async Task AMixedLifetimeDeferredCycle_WithOneCachedParticipant_DoesNotReportAwt145()
 		{
 			GeneratorResult result = Generator.Run("""
 			                                       using Awaiten;
@@ -163,7 +163,7 @@ public partial class DiagnosticTests
 
 			                                       // Left is a singleton, Right a transient, both deferred. The singleton is cached before it is wired,
 			                                       // so a re-entrant resolve returns the cached Left and the cycle terminates from any entry point - the
-			                                       // transient is merely rebuilt a bounded number of times. AWT139 fires only when *every* participant is
+			                                       // transient is merely rebuilt a bounded number of times. AWT145 fires only when *every* participant is
 			                                       // a transient (nothing cached anywhere), so it must not fire here.
 			                                       public sealed class Left { [Inject(Deferred = true)] public Right Right { get; set; } }
 			                                       public sealed class Right { [Inject(Deferred = true)] public Left Left { get; set; } }
@@ -176,14 +176,14 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT139"))).IsFalse()
-				.Because("a cached singleton participant breaks the recursion, so a mixed-lifetime deferred cycle terminates and is not the all-transient AWT139 fault");
+			await That(result.Diagnostics.Any(d => d.Contains("AWT145"))).IsFalse()
+				.Because("a cached singleton participant breaks the recursion, so a mixed-lifetime deferred cycle terminates and is not the all-transient AWT145 fault");
 			await That(result.Diagnostics).IsEmpty()
-				.Because("the mixed cycle is supported: no AWT102 (deferred edges are absent from the construction graph), AWT140 (nothing async) or AWT141 (no construction edge) either");
+				.Because("the mixed cycle is supported: no AWT102 (deferred edges are absent from the construction graph), AWT146 (nothing async) or AWT147 (no construction edge) either");
 		}
 
 		[Fact]
-		public async Task ReportsAwt140WhenADeferredCycleIncludesAnAsyncService()
+		public async Task ReportsAwt146WhenADeferredCycleIncludesAnAsyncService()
 		{
 			GeneratorResult result = Generator.Run("""
 			                                       using System.Threading;
@@ -213,14 +213,14 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT140"))).IsTrue()
+			await That(result.Diagnostics.Any(d => d.Contains("AWT146"))).IsTrue()
 				.Because("a deferred property cannot break a cycle through an async service - its memoized task is published only after the re-entrant resolve returns, so the cycle cannot terminate");
-			await That(result.Diagnostics.Any(d => d.Contains("AWT139"))).IsFalse()
-				.Because("both participants are singletons, so the fault is the async one (AWT140), not the transient one (AWT139)");
+			await That(result.Diagnostics.Any(d => d.Contains("AWT145"))).IsFalse()
+				.Because("both participants are singletons, so the fault is the async one (AWT146), not the transient one (AWT145)");
 		}
 
 		[Fact]
-		public async Task AnAsyncNonCyclicDeferredProperty_DoesNotReportAwt140()
+		public async Task AnAsyncNonCyclicDeferredProperty_DoesNotReportAwt146()
 		{
 			GeneratorResult result = Generator.Run("""
 			                                       using System.Threading;
@@ -249,12 +249,12 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT140"))).IsFalse()
+			await That(result.Diagnostics.Any(d => d.Contains("AWT146"))).IsFalse()
 				.Because("a deferred member is only rejected when it closes a cycle through an async service, not for any async deferred member");
 		}
 
 		[Fact]
-		public async Task ReportsAwt141WhenAMixedCycleStillTraversesAConstructorEdge()
+		public async Task ReportsAwt147WhenAMixedCycleStillTraversesAConstructorEdge()
 		{
 			GeneratorResult result = Generator.Run("""
 			                                       using Awaiten;
@@ -275,14 +275,14 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT141"))).IsTrue()
+			await That(result.Diagnostics.Any(d => d.Contains("AWT147"))).IsTrue()
 				.Because("a deferred property breaks a cycle only when every edge is deferred; a surviving constructor edge re-enters an uncached participant, so the cycle is only partly broken");
 			await That(result.Diagnostics.Any(d => d.Contains("AWT102"))).IsFalse()
-				.Because("the deferred edge is absent from the construction graph, so AWT102 does not fire - AWT141 is the diagnostic that catches this");
+				.Because("the deferred edge is absent from the construction graph, so AWT102 does not fire - AWT147 is the diagnostic that catches this");
 		}
 
 		[Fact]
-		public async Task ReportsAwt141ForAMixedCycleThroughAPlainInjectProperty_RegardlessOfLifetime()
+		public async Task ReportsAwt147ForAMixedCycleThroughAPlainInjectProperty_RegardlessOfLifetime()
 		{
 			GeneratorResult result = Generator.Run("""
 			                                       using Awaiten;
@@ -290,8 +290,8 @@ public partial class DiagnosticTests
 			                                       namespace MyCode;
 
 			                                       // Left defers Right, but Right holds Left through a plain [Inject] property (a Direct construction-time
-			                                       // edge). A transient is never cached, so without AWT141 this compiles clean and stack-overflows at runtime;
-			                                       // the mixed-edge fault applies regardless of lifetime, so AWT141 - not AWT139 - is the reason.
+			                                       // edge). A transient is never cached, so without AWT147 this compiles clean and stack-overflows at runtime;
+			                                       // the mixed-edge fault applies regardless of lifetime, so AWT147 - not AWT145 - is the reason.
 			                                       public sealed class Left { [Inject(Deferred = true)] public Right Right { get; set; } }
 			                                       public sealed class Right { [Inject] public Left Left { get; set; } }
 
@@ -303,14 +303,14 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT141"))).IsTrue()
+			await That(result.Diagnostics.Any(d => d.Contains("AWT147"))).IsTrue()
 				.Because("a mixed cycle through a plain [Inject] property still traverses a construction-time edge, so a deferred property cannot break it");
 			await That(result.Diagnostics.Any(d => d.Contains("AWT102"))).IsFalse()
 				.Because("the deferred edge keeps the cycle out of the construction graph, so AWT102 does not fire");
 		}
 
 		[Fact]
-		public async Task ReportsAwt141WhenAMixedCycleTraversesAnEagerOwned()
+		public async Task ReportsAwt147WhenAMixedCycleTraversesAnEagerOwned()
 		{
 			GeneratorResult result = Generator.Run("""
 			                                       using Awaiten;
@@ -331,7 +331,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT141"))).IsTrue()
+			await That(result.Diagnostics.Any(d => d.Contains("AWT147"))).IsTrue()
 				.Because("a bare Owned<T> resolves its target at construction time, so it is a construction edge that leaves the deferred cycle only partly broken");
 			await That(result.Diagnostics.Any(d => d.Contains("AWT102"))).IsFalse()
 				.Because("the construction graph has only the Right -> Left edge (the deferred Left -> Right edge is absent), so it holds no cycle for AWT102");

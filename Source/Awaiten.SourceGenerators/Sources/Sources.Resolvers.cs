@@ -138,7 +138,7 @@ internal static partial class Sources
 		Indent(builder, depth).AppendLine("{");
 		EmitDisposedGuard(builder, depth + 1);
 
-		// A transient is not cached, so its deferred members never participate in a terminating cycle (AWT139
+		// A transient is not cached, so its deferred members never participate in a terminating cycle (AWT145
 		// rejects a transient deferred cycle); they are still wired after construction here. Deferred members also
 		// force the `created` variable form so there is an instance to assign through.
 		if (resolver.Disposal != DisposalTracking.None || emitDeferred is not null)

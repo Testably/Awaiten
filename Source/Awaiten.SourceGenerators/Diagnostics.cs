@@ -536,12 +536,94 @@ internal static class Diagnostics
 		isEnabledByDefault: true);
 
 	/// <summary>
+	///     A <c>[Scan]</c> matched no concrete type assignable to its marker in the container's assembly, so
+	///     the scan contributes nothing - usually a typo in the marker or an empty marker.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ScanMatchedNothing = new(
+		"AWT138",
+		"Assembly scan matched nothing",
+		"No concrete types assignable to '{0}' were found in this assembly to register",
+		"Awaiten",
+		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A <c>[Scan(As = ScanAs.ImplementedInterfaces)]</c> matched a concrete type that implements no
+	///     interface assignable to the scanned marker, so the match contributes no registration - typically a
+	///     base-class marker. Use a marker interface, or <c>ScanAs.SelfAndImplementedInterfaces</c> to keep the
+	///     self registration.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ScanNoImplementedInterfaces = new(
+		"AWT139",
+		"Assembly scan matched a type with no implemented interfaces",
+		"'{0}' matched the scan but implements no interface assignable to '{1}', so it is not registered; scan a marker interface or use ScanAs.SelfAndImplementedInterfaces",
+		"Awaiten",
+		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A <c>[Scan(InAssembliesOf = …)]</c> names an assembly that holds no concrete type assignable to the
+	///     scanned marker, so the scan of that assembly contributes nothing - most often a missing
+	///     <c>ProjectReference</c> or the wrong marker type.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ScanAssemblyHasNoCandidates = new(
+		"AWT140",
+		"Assembly scan target has no candidate types",
+		"The assembly '{0}' named by InAssembliesOf has no concrete type to scan for this marker; check that the project is referenced and the marker type is correct",
+		"Awaiten",
+		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A <c>[Scan(SkipUnconstructable = true)]</c> matched a concrete type the container cannot construct -
+	///     a dependency with no registration, or no accessible constructor - so the match is skipped instead of
+	///     failing the build. A scan sweeps every assignable concrete class, so the opt-in degrades an
+	///     incidental unconstructable match to this warning; without it the match stays the AWT101 error.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ScanMatchSkipped = new(
+		"AWT141",
+		"Assembly scan skipped an unconstructable match",
+		"'{0}' matched the scan but cannot be constructed ({1}), so it is not registered",
+		"Awaiten",
+		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     Two <c>[Scan]</c> attributes match the same implementation with different lifetimes; the first
+	///     scan's lifetime wins (coalescing keeps the first registration), so the contradiction is surfaced
+	///     rather than silently resolved by attribute order. An explicit registration of the implementation is
+	///     not reported: a scan is overridable and deliberately yields to it.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ScanLifetimeConflict = new(
+		"AWT142",
+		"Scans register one implementation with conflicting lifetimes",
+		"'{0}' is matched by scans with conflicting lifetimes ({1} and {2}); the first scan's {1} is used",
+		"Awaiten",
+		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A <c>[Scan(InAssembliesOf = …)]</c> resolved to no assembly at all (an empty array, or entries that
+	///     name no type), so the scan can register nothing. An error rather than a warning: unlike a marker that
+	///     merely matches nothing (AWT138), an empty assembly list means the scan cannot even look anywhere, so
+	///     the attribute itself is malformed. Reported instead of silently falling back to the container's own
+	///     assembly, which is what an unset <c>InAssembliesOf</c> means.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ScanAssembliesEmpty = new(
+		"AWT143",
+		"Assembly scan names no assembly",
+		"This scan's InAssembliesOf names no assembly to scan, so the scan registers nothing; list one type from each assembly to scan",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
 	///     A property marked <c>[Inject(Deferred = true)]</c> has only an <c>init</c> accessor. A deferred
 	///     property is assigned after construction (to break a cycle), which an <c>init</c>-only accessor
 	///     forbids - it can be set only inside an object initializer. Give it a <c>set</c> accessor.
 	/// </summary>
 	public static readonly DiagnosticDescriptor DeferredPropertyIsInitOnly = new(
-		"AWT138",
+		"AWT144",
 		"Deferred property is init-only",
 		"The property '{0}' on '{1}' is marked [Inject(Deferred = true)] but is init-only; a deferred property is assigned after construction, so it needs a set accessor (init can only be assigned in an object initializer)",
 		"Awaiten",
@@ -556,7 +638,7 @@ internal static class Diagnostics
 	///     singleton or scoped, or break the cycle.
 	/// </summary>
 	public static readonly DiagnosticDescriptor DeferredTransientCycle = new(
-		"AWT139",
+		"AWT145",
 		"Non-terminating deferred transient cycle",
 		"Deferred property cycle in which every participant is a transient detected: {0}. A deferred property breaks a cycle only when a participant is cached (singleton or scoped) before it is wired, so a re-entrant resolve returns that cached instance; when every participant is a transient nothing is cached anywhere, so this cycle would recurse forever. Make at least one participant singleton or scoped, or break the cycle.",
 		"Awaiten",
@@ -572,7 +654,7 @@ internal static class Diagnostics
 	///     synchronous.
 	/// </summary>
 	public static readonly DiagnosticDescriptor DeferredAsyncCycle = new(
-		"AWT140",
+		"AWT146",
 		"Non-terminating deferred async cycle",
 		"Deferred property cycle through an async-initialized service detected: {0}. A deferred property breaks a cycle only when a re-entrant resolve returns the already-cached instance; an async resolver publishes its memoized task only after that re-entrant resolve has returned, so this cycle would overflow the stack or deadlock at runtime. Break the cycle, or make its participants synchronous (not IAsyncInitializable and not dependent on an async service).",
 		"Awaiten",
@@ -591,7 +673,7 @@ internal static class Diagnostics
 	///     cycle another way.
 	/// </summary>
 	public static readonly DiagnosticDescriptor DeferredMixedCycle = new(
-		"AWT141",
+		"AWT147",
 		"Deferred cycle retains a construction edge",
 		"The cycle {0} is only partly broken by a deferred property and cannot terminate: it still has at least one construction-time edge (a constructor parameter, a plain [Inject] property, or an eager Owned<T>/Task<T>), and a deferred property breaks a cycle only when every edge around it is deferred. To fix it, turn the remaining constructor parameter (or plain [Inject] property) into an [Inject(Deferred = true)] property so both directions of the cycle are deferred, or remove one of the dependencies to break the cycle.",
 		"Awaiten",

@@ -159,7 +159,7 @@ partial class AwaitenGenerator
 	// The deferred-edge graph over instance indices: the edges a deferred [Inject(Deferred = true)] member
 	// contributes when its post-construction assignment runs. Deferred members are excluded from the cycle
 	// (AWT102) and captive (AWT105) graphs - that exclusion is what lets a deferred property break a mutual
-	// constructor cycle - so this is a dedicated graph walked only by AWT139/AWT140 (the taint graph also follows
+	// constructor cycle - so this is a dedicated graph walked only by AWT145/AWT146 (the taint graph also follows
 	// them, since the assignment awaits an async target). A deferred Direct member edges to its target and a
 	// deferred collection (Enumerable/AsyncEnumerable/AwaitedEnumerable) edges to each of its members, because
 	// the assignment materializes them eagerly; a deferred Func<T>/Lazy<T> defers and contributes nothing. Uses
@@ -790,15 +790,15 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     AWT139/AWT140/AWT141: a deferred property breaks a mutual cycle only because the owning instance is
+	///     AWT145/AWT146/AWT147: a deferred property breaks a mutual cycle only because the owning instance is
 	///     cached before its deferred members are wired, so a re-entrant resolve returns the cached instance. Any
 	///     cycle that involves a deferred edge escapes AWT102 (which walks only the construction graph, from which
 	///     deferred edges are absent), so it must be vetted here. This walks the combined construction-plus-deferred
 	///     graph and, for each cycle that involves at least one deferred edge, reports the fault that prevents it
-	///     from terminating: a construction-time edge still in the cycle leaves it only partly broken (AWT141); a
+	///     from terminating: a construction-time edge still in the cycle leaves it only partly broken (AWT147); a
 	///     cycle whose every participant is a transient is never cached anywhere, so each lap reconstructs the
-	///     participants and it recurses forever (AWT139); an async-tainted participant publishes its memoized task
-	///     only after the re-entrant resolve has already returned (AWT140). A pure construction cycle is left to
+	///     participants and it recurses forever (AWT145); an async-tainted participant publishes its memoized task
+	///     only after the re-entrant resolve has already returned (AWT146). A pure construction cycle is left to
 	///     AWT102, and an all-deferred synchronous cycle with at least one singleton/scoped participant is supported
 	///     and not reported.
 	/// </summary>
@@ -873,9 +873,9 @@ partial class AwaitenGenerator
 	// cached instance and terminates the cycle). A cycle hop is a construction edge when the target is in the
 	// construction graph, otherwise it is a deferred edge (the combined walk follows only construction or deferred
 	// edges). A cycle that still traverses a construction edge is only partly broken and cannot terminate from every
-	// entry point regardless of lifetime (AWT141); an all-deferred cycle whose every participant is a transient is
-	// never cached anywhere (AWT139); an all-deferred cycle through an async-tainted participant publishes its
-	// memoized task only after the re-entrant resolve has returned (AWT140).
+	// entry point regardless of lifetime (AWT147); an all-deferred cycle whose every participant is a transient is
+	// never cached anywhere (AWT145); an all-deferred cycle through an async-tainted participant publishes its
+	// memoized task only after the re-entrant resolve has returned (AWT146).
 	private static DiagnosticDescriptor? DeferredCycleFault(
 		List<int> cycle,
 		List<InstanceModel> instances,

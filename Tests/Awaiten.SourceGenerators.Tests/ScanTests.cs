@@ -1,0 +1,406 @@
+namespace Awaiten.SourceGenerators.Tests;
+
+/// <summary>
+///     The generated shape of assembly scanning: <c>[Scan(typeof(TMarker))]</c> synthesizes an overridable
+///     self-registration for every concrete class in the container's assembly assignable to the marker, skipping
+///     abstract/static classes and the marker itself. The synthesized registrations are ordinary self
+///     registrations, so the existing dispatch, construction and lifetime plumbing emits them — no new emission
+///     is introduced. An explicit registration of the same type takes precedence over the scan.
+/// </summary>
+public class ScanTests
+{
+	[Fact]
+	public async Task Scan_SelfRegistersEveryConcreteImplementationOfTheMarker()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class AlphaPlugin : IPlugin { }
+		                                       public sealed class BetaPlugin : IPlugin { }
+		                                       public abstract class PluginBase : IPlugin { }
+
+		                                       [Container]
+		                                       [Scan(typeof(IPlugin), Lifetime = AwaitenLifetime.Singleton)]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// Both concrete plugins are registered and dispatched as themselves.
+		await That(source).Contains("new __Bucket(typeof(global::MyCode.AlphaPlugin)")
+			.Because("the concrete AlphaPlugin is self-registered by the scan");
+		await That(source).Contains("new __Bucket(typeof(global::MyCode.BetaPlugin)")
+			.Because("the concrete BetaPlugin is self-registered by the scan");
+		await That(source).Contains("new global::MyCode.AlphaPlugin()")
+			.And.Contains("new global::MyCode.BetaPlugin()");
+
+		// The abstract base and the marker interface itself are not instantiable and must not be registered.
+		await That(source).DoesNotContain("PluginBase")
+			.Because("an abstract class is skipped by the scan");
+	}
+
+	[Fact]
+	public async Task Scan_IsOverriddenByAnExplicitRegistrationOfTheSameType()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class AlphaPlugin : IPlugin { }
+		                                       public sealed class BetaPlugin : IPlugin { }
+
+		                                       [Container]
+		                                       [Scan(typeof(IPlugin), Lifetime = AwaitenLifetime.Singleton)]
+		                                       [Transient<BetaPlugin>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// The explicit transient BetaPlugin wins the single-dispatch slot, so it is not cached as a singleton
+		// while the scanned AlphaPlugin is - a scan provides bulk defaults that a specific registration refines.
+		await That(source).Contains("new __Bucket(typeof(global::MyCode.BetaPlugin)")
+			.And.Contains("new __Bucket(typeof(global::MyCode.AlphaPlugin)");
+		int betaConstructions = source.Split(new[]
+		{
+			"new global::MyCode.BetaPlugin()",
+		}, System.StringSplitOptions.None).Length - 1;
+		await That(betaConstructions).IsEqualTo(1)
+			.Because("the scan match is skipped for a type already registered explicitly, so BetaPlugin is built once");
+	}
+
+	[Fact]
+	public async Task ScanAsImplementedInterfaces_RegistersMatchesUnderTheMarkerAsACollection()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+
+		                                       namespace MyCode;
+
+		                                       public interface IHandler { }
+		                                       public sealed class EmailHandler : IHandler { }
+		                                       public sealed class SmsHandler : IHandler { }
+		                                       public sealed class Dispatcher { public Dispatcher(IEnumerable<IHandler> handlers) { } }
+
+		                                       [Container]
+		                                       [Scan(typeof(IHandler), As = ScanAs.ImplementedInterfaces, Lifetime = AwaitenLifetime.Singleton)]
+		                                       [Singleton<Dispatcher>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// Both matches register under IHandler and become members of its collection, resolved by their concrete
+		// resolvers; the concrete types themselves are not self-registered for single dispatch.
+		await That(source).Contains("new global::MyCode.Dispatcher(new global::MyCode.IHandler[] { ResolveEmailHandler(), ResolveSmsHandler() })");
+		await That(source).DoesNotContain("new __Bucket(typeof(global::MyCode.EmailHandler)")
+			.Because("ImplementedInterfaces registers under the marker interface, not the concrete type");
+	}
+
+	[Fact]
+	public async Task ScanAsSelfAndImplementedInterfaces_RegistersBoth()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+
+		                                       namespace MyCode;
+
+		                                       public interface IReport { }
+		                                       public sealed class SalesReport : IReport { }
+		                                       public sealed class Consumer { public Consumer(SalesReport self, IEnumerable<IReport> all) { } }
+
+		                                       [Container]
+		                                       [Scan(typeof(IReport), As = ScanAs.SelfAndImplementedInterfaces, Lifetime = AwaitenLifetime.Singleton)]
+		                                       [Singleton<Consumer>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// Resolvable both as its own concrete type and as a member of the marker's collection.
+		await That(source).Contains("new __Bucket(typeof(global::MyCode.SalesReport)")
+			.Because("SelfAndImplementedInterfaces keeps the concrete self registration");
+		await That(source).Contains("new global::MyCode.IReport[] { ResolveSalesReport() }")
+			.Because("SelfAndImplementedInterfaces also registers the match under the marker collection");
+	}
+
+	[Fact]
+	public async Task ScanInAssembliesOf_RegistersConcreteTypesFromTheReferencedAssembly()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using Awaiten.Tests.Support;
+
+		                                       namespace MyCode;
+
+		                                       [Container]
+		                                       [Scan(typeof(ICrossAssemblyPlugin), InAssembliesOf = new[] { typeof(ICrossAssemblyPlugin) }, Lifetime = AwaitenLifetime.Singleton)]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """, typeof(global::Awaiten.Tests.Support.ICrossAssemblyPlugin));
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// Both concrete plugins from the referenced support assembly are registered; the abstract base is skipped.
+		await That(source).Contains("new __Bucket(typeof(global::Awaiten.Tests.Support.GammaPlugin)");
+		await That(source).Contains("new __Bucket(typeof(global::Awaiten.Tests.Support.DeltaPlugin)");
+		await That(source).DoesNotContain("PluginBase")
+			.Because("the abstract base in the referenced assembly is skipped");
+	}
+
+	[Fact]
+	public async Task ScanInAssembliesOf_RegistersMatchesInADeterministicOrder()
+	{
+		string Generate() => Generator.Run("""
+		                                   using Awaiten;
+		                                   using Awaiten.Tests.Support;
+
+		                                   namespace MyCode;
+
+		                                   [Container]
+		                                   [Scan(typeof(ICrossAssemblyPlugin), InAssembliesOf = new[] { typeof(ICrossAssemblyPlugin) }, Lifetime = AwaitenLifetime.Singleton)]
+		                                   public static partial class MyContainer
+		                                   {
+		                                   }
+		                                   """, typeof(global::Awaiten.Tests.Support.ICrossAssemblyPlugin))
+			.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// Sorted by fully-qualified name, so DeltaPlugin precedes GammaPlugin, and two builds match byte-for-byte.
+		string first = Generate();
+		await That(first).IsEqualTo(Generate());
+		await That(first.IndexOf("ResolveDeltaPlugin", System.StringComparison.Ordinal))
+			.IsLessThan(first.IndexOf("ResolveGammaPlugin", System.StringComparison.Ordinal));
+	}
+
+	[Fact]
+	public async Task ScanClosedTypesOf_RegistersEachMatchUnderItsClosedMarkerInterface()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using System.Collections.Generic;
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface IView<TViewModel> { }
+		                                       public sealed class ViewModelOne { }
+		                                       public sealed class ViewModelTwo { }
+		                                       public sealed class ViewOne : IView<ViewModelOne> { }
+		                                       public sealed class ViewTwo : IView<ViewModelTwo> { }
+		                                       public sealed class DualView : IView<ViewModelOne>, IView<ViewModelTwo> { }
+
+		                                       [Container]
+		                                       [Scan(typeof(IView<>), As = ScanAs.ImplementedInterfaces, Lifetime = AwaitenLifetime.Singleton)]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// Each view registers under the closed marker interface(s) it implements (not its concrete type); a view
+		// closing the marker at two type arguments registers under both, and each closed form is a collection.
+		await That(source).Contains("new __Bucket(typeof(global::MyCode.IView<global::MyCode.ViewModelOne>)");
+		await That(source).Contains("new __Bucket(typeof(global::MyCode.IView<global::MyCode.ViewModelTwo>)");
+		await That(source).Contains("new global::MyCode.IView<global::MyCode.ViewModelOne>[] { ResolveDualView(), ResolveViewOne() }");
+		await That(source).Contains("new global::MyCode.IView<global::MyCode.ViewModelTwo>[] { ResolveDualView(), ResolveViewTwo() }");
+		await That(source).DoesNotContain("new __Bucket(typeof(global::MyCode.ViewOne)")
+			.Because("ImplementedInterfaces registers under the closed marker interface, not the concrete view");
+	}
+
+	[Fact]
+	public async Task GenericScan_ProducesTheSameRegistrationsAsTheTypeofForm()
+	{
+		const string body = """
+		                    using Awaiten;
+		                    using System.Collections.Generic;
+
+		                    namespace MyCode;
+
+		                    public interface IHandler { }
+		                    public sealed class EmailHandler : IHandler { }
+		                    public sealed class SmsHandler : IHandler { }
+		                    public sealed class Dispatcher { public Dispatcher(IEnumerable<IHandler> handlers) { } }
+
+		                    [Container]
+		                    {0}
+		                    [Singleton<Dispatcher>]
+		                    public static partial class MyContainer
+		                    {
+		                    }
+		                    """;
+
+		string typeofForm = Generator.Run(
+				body.Replace("{0}", "[Scan(typeof(IHandler), As = ScanAs.ImplementedInterfaces, Lifetime = AwaitenLifetime.Singleton)]"))
+			.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+		string genericForm = Generator.Run(
+				body.Replace("{0}", "[Scan<IHandler>(As = ScanAs.ImplementedInterfaces, Lifetime = AwaitenLifetime.Singleton)]"))
+			.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(genericForm).IsEqualTo(typeofForm)
+			.Because("[Scan<IHandler>] is the generic spelling of [Scan(typeof(IHandler))] and generates identically");
+	}
+
+	[Fact]
+	public async Task Scan_SkipsOpenGenericImplementers()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface IHandler { }
+		                                       public sealed class LoggingHandler<T> : IHandler { }
+		                                       public sealed class PlainHandler : IHandler { }
+
+		                                       [Container]
+		                                       [Scan(typeof(IHandler))]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty()
+			.Because("an open generic implementer has no closed form to construct and must not break the generated code");
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+		await That(source).Contains("new global::MyCode.PlainHandler()");
+		await That(source).DoesNotContain("LoggingHandler")
+			.Because("a generic type definition is skipped by the scan");
+	}
+
+	[Fact]
+	public async Task ScanClosedTypesOf_SkipsOpenGenericImplementers()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface IView<T> { }
+		                                       public sealed class GenericView<T> : IView<T> { }
+		                                       public sealed class ViewModel { }
+		                                       public sealed class ClosedView : IView<ViewModel> { }
+
+		                                       [Container]
+		                                       [Scan(typeof(IView<>), As = ScanAs.ImplementedInterfaces)]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty()
+			.Because("a generic view closing the marker over its own type parameter is not a closed form");
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+		await That(source).Contains("new __Bucket(typeof(global::MyCode.IView<global::MyCode.ViewModel>)");
+		await That(source).DoesNotContain("GenericView")
+			.Because("a generic type definition is skipped by the scan");
+	}
+
+	[Fact]
+	public async Task Scan_SkipsTypesTheContainerCannotAccess()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class VisiblePlugin : IPlugin { }
+
+		                                       public sealed class Host
+		                                       {
+		                                           private sealed class HiddenPlugin : IPlugin { }
+		                                       }
+
+		                                       [Container]
+		                                       [Scan(typeof(IPlugin))]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty()
+			.Because("a private nested match cannot be referenced from the generated code and must be skipped");
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+		await That(source).Contains("new global::MyCode.VisiblePlugin()");
+		await That(source).DoesNotContain("HiddenPlugin");
+	}
+
+	[Fact]
+	public async Task Scan_SeedsOpenGenericExpansionForScannedDependencies()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface IRepository<T> { }
+		                                       public sealed class Repository<T> : IRepository<T> { }
+		                                       public sealed class Order { }
+
+		                                       public interface IPlugin { }
+		                                       public sealed class OrderPlugin : IPlugin
+		                                       {
+		                                           public OrderPlugin(IRepository<Order> repository) { }
+		                                       }
+
+		                                       [Container]
+		                                       [Scan(typeof(IPlugin))]
+		                                       [Transient(typeof(Repository<>), typeof(IRepository<>))]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty()
+			.Because("a scanned implementation's closed generic dependency is expanded from the open registration");
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+		await That(source).Contains("new global::MyCode.Repository<global::MyCode.Order>()")
+			.Because("the scanned OrderPlugin's IRepository<Order> dependency seeds open generic expansion");
+	}
+
+	[Fact]
+	public async Task GenericScan_HonorsInAssembliesOfAndSelfExposure()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using Awaiten.Tests.Support;
+
+		                                       namespace MyCode;
+
+		                                       [Container]
+		                                       [Scan<ICrossAssemblyPlugin>(InAssembliesOf = new[] { typeof(ICrossAssemblyPlugin) }, Lifetime = AwaitenLifetime.Singleton)]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """, typeof(global::Awaiten.Tests.Support.ICrossAssemblyPlugin));
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// The generic form threads through InAssembliesOf exactly like the typeof form.
+		await That(source).Contains("new __Bucket(typeof(global::Awaiten.Tests.Support.GammaPlugin)");
+		await That(source).Contains("new __Bucket(typeof(global::Awaiten.Tests.Support.DeltaPlugin)");
+	}
+}
