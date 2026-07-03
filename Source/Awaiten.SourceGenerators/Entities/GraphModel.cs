@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace Awaiten.SourceGenerators.Internals;
+namespace Awaiten.SourceGenerators.Entities;
 
 /// <summary>
 ///     The resolved object graph of a container: the built <see cref="Instances" />, the direct-dependency

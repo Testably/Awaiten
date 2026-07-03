@@ -1,5 +1,5 @@
 using System.Text;
-using Awaiten.SourceGenerators.Internals;
+using Awaiten.SourceGenerators.Entities;
 using Microsoft.CodeAnalysis.CSharp;
 
 namespace Awaiten.SourceGenerators;

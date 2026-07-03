@@ -1,4 +1,4 @@
-namespace Awaiten.SourceGenerators.Internals;
+namespace Awaiten.SourceGenerators.Entities;
 
 /// <summary>
 ///     The resolution key of a registration: the service type plus an optional <c>Key</c>. Keyed

@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Text;
+using Awaiten.SourceGenerators.Entities;
 using Awaiten.SourceGenerators.Internals;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;

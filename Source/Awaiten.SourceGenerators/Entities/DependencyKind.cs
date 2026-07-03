@@ -1,4 +1,4 @@
-namespace Awaiten.SourceGenerators.Internals;
+namespace Awaiten.SourceGenerators.Entities;
 
 /// <summary>
 ///     How a constructor parameter is satisfied from the graph. <see cref="Direct" /> resolves the
