@@ -185,14 +185,36 @@ partial class AwaitenGenerator
 			openServices.Add(registration.Service);
 		}
 
+		// An overridable default (Default/TryAdd) whose service key a stronger (or earlier) registration
+		// claims is dropped in full by coalescing - not built and not a collection member - so it must not
+		// seed the expansion either; otherwise an overridden default's constructor would synthesize (and the
+		// container would emit) closed registrations nothing in the surviving graph needs. Mirrors the
+		// coalescing precedence: strong explicit registrations, then defaults, then scans - a losing strong
+		// or scan registration still seeds, since it stays a collection member and is built.
+		HashSet<ServiceKey> claimed = new();
+		HashSet<int> droppedWeak = new();
+		foreach ((RawRegistration registration, int index) in raw
+			.Select(static (registration, index) => (registration, index))
+			.Where(static entry => !entry.registration.IsScan)
+			.OrderBy(static entry => entry.registration.Weak))
+		{
+			if (!claimed.Add(new ServiceKey(registration.ServiceType, registration.Key)) && registration.Weak)
+			{
+				droppedWeak.Add(index);
+			}
+		}
+
 		// The constructor parameters to scan for closed generic dependencies, each carried with the expansion
-		// depth that reached it. Seeded from every known implementation at depth 0; grows as closed impls are
-		// synthesized, each one depth deeper than the closed service that produced it.
+		// depth that reached it. Seeded from every known surviving implementation at depth 0; grows as closed
+		// impls are synthesized, each one depth deeper than the closed service that produced it.
 		Queue<(INamedTypeSymbol Impl, int Depth)> worklist = new();
 		HashSet<INamedTypeSymbol> seen = new(SymbolEqualityComparer.Default);
-		foreach (RawRegistration registration in raw.Where(registration => seen.Add(registration.Implementation)))
+		for (int index = 0; index < raw.Count; index++)
 		{
-			worklist.Enqueue((registration.Implementation, 0));
+			if (!droppedWeak.Contains(index) && seen.Add(raw[index].Implementation))
+			{
+				worklist.Enqueue((raw[index].Implementation, 0));
+			}
 		}
 
 		ExpansionContext context = new(raw, open, worklist, seen, diagnostics, constraintRejected);

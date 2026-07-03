@@ -254,4 +254,78 @@ public class ModuleTests
 		await That(source).Contains("__Bucket(typeof(global::MyCode.IClock), static __s => __s.ResolveZzDefaultClock()")
 			.Because("Default = true on the container itself also beats a scan match");
 	}
+
+	[Fact]
+	public async Task Module_OverriddenDefault_DoesNotSeedOpenGenericExpansion()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface IClock { }
+		                                       public interface IRepo<T> { }
+		                                       public sealed class Repo<T> : IRepo<T> { }
+		                                       public sealed class Foo { }
+		                                       public sealed class ModuleClock : IClock
+		                                       {
+		                                           public ModuleClock(IRepo<Foo> repo) { }
+		                                       }
+		                                       public sealed class AppClock : IClock { }
+
+		                                       [Module]
+		                                       [Singleton<ModuleClock, IClock>(Default = true)]
+		                                       public sealed class ClockModule { }
+
+		                                       [Container]
+		                                       [Import(typeof(ClockModule))]
+		                                       [Singleton<AppClock, IClock>]
+		                                       [Singleton(typeof(Repo<>), typeof(IRepo<>))]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).DoesNotContain("Repo<global::MyCode.Foo>")
+			.Because("a dropped (overridden) default is not built, so its constructor must not synthesize closed registrations either");
+	}
+
+	[Fact]
+	public async Task Module_SurvivingDefault_StillSeedsOpenGenericExpansion()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface IClock { }
+		                                       public interface IRepo<T> { }
+		                                       public sealed class Repo<T> : IRepo<T> { }
+		                                       public sealed class Foo { }
+		                                       public sealed class ModuleClock : IClock
+		                                       {
+		                                           public ModuleClock(IRepo<Foo> repo) { }
+		                                       }
+
+		                                       [Module]
+		                                       [Singleton<ModuleClock, IClock>(Default = true)]
+		                                       public sealed class ClockModule { }
+
+		                                       [Container]
+		                                       [Import(typeof(ClockModule))]
+		                                       [Singleton(typeof(Repo<>), typeof(IRepo<>))]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("Repo<global::MyCode.Foo>")
+			.Because("a default that wins its service is built, so its constructor dependencies drive the expansion");
+	}
 }
