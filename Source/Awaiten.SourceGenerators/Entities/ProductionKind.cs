@@ -1,4 +1,4 @@
-namespace Awaiten.SourceGenerators.Internals;
+namespace Awaiten.SourceGenerators.Entities;
 
 /// <summary>
 ///     How an instance is produced. <see cref="Constructor" /> calls a selected constructor;

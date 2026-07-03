@@ -1,4 +1,6 @@
-namespace Awaiten.SourceGenerators.Internals;
+using Awaiten.SourceGenerators.Internals;
+
+namespace Awaiten.SourceGenerators.Entities;
 
 /// <summary>
 ///     A single constructor parameter: the underlying service type it resolves (the <c>T</c> inside a

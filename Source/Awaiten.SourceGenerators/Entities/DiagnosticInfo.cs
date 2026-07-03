@@ -1,6 +1,7 @@
+using Awaiten.SourceGenerators.Internals;
 using Microsoft.CodeAnalysis;
 
-namespace Awaiten.SourceGenerators.Internals;
+namespace Awaiten.SourceGenerators.Entities;
 
 /// <summary>
 ///     An equatable description of a diagnostic to report, deferred until the source-output stage.
