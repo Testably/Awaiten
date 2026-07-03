@@ -1,3 +1,5 @@
+using System.Linq;
+
 namespace Awaiten.SourceGenerators.Tests;
 
 /// <summary>
@@ -431,5 +433,173 @@ public class ModuleTests
 
 		await That(result.Diagnostics).IsEmpty()
 			.Because("a [Decorate] is a contribution, so a decorator-only module is not empty (no AWT151)");
+	}
+	[Fact]
+	public async Task Module_KeyedDefault_IsOverriddenOnlyByTheSameKey()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface IClock { }
+		                                       public sealed class ModuleClockA : IClock { }
+		                                       public sealed class ModuleClockB : IClock { }
+		                                       public sealed class AppClock : IClock { }
+
+		                                       [Module]
+		                                       [Singleton<ModuleClockA, IClock>(Default = true, Key = "a")]
+		                                       [Singleton<ModuleClockB, IClock>(Default = true, Key = "b")]
+		                                       public static class ClockModule { }
+
+		                                       [Container]
+		                                       [Import(typeof(ClockModule))]
+		                                       [Singleton<AppClock, IClock>(Key = "a")]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).DoesNotContain("ModuleClockA")
+			.Because("the container overrides the module default under the same key, dropping it in full");
+		await That(source).Contains("global::MyCode.ModuleClockB")
+			.Because("a default under a different key is not overridden");
+	}
+
+	[Fact]
+	public async Task Container_OwnDefault_YieldsToItsOwnStrongRegistration_RegardlessOfDeclarationOrder()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface IClock { }
+		                                       public sealed class DefaultClock : IClock { }
+		                                       public sealed class AppClock : IClock { }
+
+		                                       [Container]
+		                                       [Singleton<DefaultClock, IClock>(Default = true)]
+		                                       [Singleton<AppClock, IClock>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("global::MyCode.AppClock")
+			.Because("Default/TryAdd work on the container itself, yielding to strong registrations even when declared first");
+		await That(source).DoesNotContain("DefaultClock")
+			.Because("the container's own overridden default is dropped in full, like a module's");
+	}
+
+	[Fact]
+	public async Task Module_OpenGenericTypeofRegistration_IsImportedAndExpanded()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface IRepo<T> { }
+		                                       public sealed class Repo<T> : IRepo<T> { }
+		                                       public sealed class Order { }
+		                                       public sealed class Consumer
+		                                       {
+		                                           public Consumer(IRepo<Order> repo) { }
+		                                       }
+
+		                                       [Module]
+		                                       [Singleton(typeof(Repo<>), typeof(IRepo<>))]
+		                                       public static class RepositoryModule { }
+
+		                                       [Container]
+		                                       [Import(typeof(RepositoryModule))]
+		                                       [Singleton<Consumer>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("Repo<global::MyCode.Order>")
+			.Because("a module's open generic typeof registration is imported and expanded on demand like the container's own");
+	}
+
+	[Fact]
+	public async Task Module_ImportedTwice_IsHarmless()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface IClock { }
+		                                       public sealed class ModuleClock : IClock { }
+
+		                                       [Module]
+		                                       [Singleton<ModuleClock, IClock>]
+		                                       public static class ClockModule { }
+
+		                                       [Container]
+		                                       [Import(typeof(ClockModule))]
+		                                       [Import(typeof(ClockModule))]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty()
+			.Because("re-registering the same implementation coalesces into one instance without conflicts");
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("new global::MyCode.IClock[] { ResolveModuleClock() }")
+			.Because("the duplicate import does not duplicate the collection membership either");
+	}
+
+	[Fact]
+	public async Task Module_WithOwnImport_StillContributesItsRegistrationsDespiteTheError()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class Logger { }
+		                                       public sealed class SystemClock { }
+		                                       public sealed class Consumer
+		                                       {
+		                                           public Consumer(SystemClock clock) { }
+		                                       }
+
+		                                       [Module]
+		                                       [Singleton<Logger>]
+		                                       public static class LoggingModule { }
+
+		                                       [Module]
+		                                       [Import(typeof(LoggingModule))]
+		                                       [Singleton<SystemClock>]
+		                                       public static class InfrastructureModule { }
+
+		                                       [Container]
+		                                       [Import(typeof(InfrastructureModule))]
+		                                       [Singleton<Consumer>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		// The nested import is rejected (AWT150), but the erroring module's own registrations are still
+		// imported so they do not additionally cascade as AWT101 missing dependencies.
+		await That(result.Diagnostics).Contains("*AWT150*InfrastructureModule*").AsWildcard();
+		await That(result.Diagnostics.Any(d => d.Contains("AWT101"))).IsFalse()
+			.Because("the module's own registrations are imported despite its rejected nested [Import]");
 	}
 }

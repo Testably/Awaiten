@@ -6,7 +6,8 @@ namespace Awaiten;
 ///     Imports a <see cref="ModuleAttribute">module</see>'s registrations into the container. The
 ///     container's own registrations take precedence over imported ones, and an imported overridable
 ///     <c>Default</c> / <c>TryAdd</c> registration is used only when nothing else provides the service.
-///     Imports are resolved one level deep - a module's own <see cref="ImportAttribute" /> is not followed.
+///     Imports are resolved one level deep: a module carrying its own <see cref="ImportAttribute" /> is
+///     rejected as an error (AWT150) - import the nested module on the container directly.
 /// </summary>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
 public sealed class ImportAttribute : Attribute

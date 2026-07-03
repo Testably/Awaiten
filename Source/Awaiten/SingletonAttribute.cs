@@ -13,6 +13,8 @@ namespace Awaiten;
 ///     argument. Resolving a closed service (<c>IRepository&lt;Order&gt;</c>) constructs the matching
 ///     closed implementation (<c>Repository&lt;Order&gt;</c>) once and caches a single instance per
 ///     closed type argument for the lifetime of the container.
+///     Unlike the generic forms, the open <c>typeof</c> form has no <c>Default</c>/<c>TryAdd</c>: an open
+///     generic registration cannot be declared as an overridable default.
 /// </summary>
 /// <example><c>[Singleton(typeof(Repository&lt;&gt;), typeof(IRepository&lt;&gt;))]</c></example>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]

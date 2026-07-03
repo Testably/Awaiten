@@ -12,6 +12,8 @@ namespace Awaiten;
 ///     arguments because an unbound generic (<c>typeof(Repository&lt;&gt;)</c>) cannot be a type
 ///     argument. Resolving a closed service (<c>IRepository&lt;Order&gt;</c>) constructs a fresh
 ///     matching closed implementation (<c>Repository&lt;Order&gt;</c>) on every request.
+///     Unlike the generic forms, the open <c>typeof</c> form has no <c>Default</c>/<c>TryAdd</c>: an open
+///     generic registration cannot be declared as an overridable default.
 /// </summary>
 /// <example><c>[Transient(typeof(Repository&lt;&gt;), typeof(IRepository&lt;&gt;))]</c></example>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
