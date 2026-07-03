@@ -31,6 +31,10 @@ public class GeneralTests
 			.Because("the root scope is the usable container instance, created with new MyContainer.Root()");
 		await That(source).Contains("(object?)__b.Key == (object?)serviceType")
 			.Because("the scope dispatches by probing the static bucket table that lives on it");
+		await That(source).Contains("if (__b.Key is null)")
+			.Because("the windows fill front-first, so a miss stops at the first empty slot");
+		await That(source).Contains("private static readonly global::Awaiten.AwaitenRegistration[] __registrations")
+			.Because("the registration metadata is a static array, not rebuilt per Root construction");
 		await That(source).DoesNotContain("if (serviceType == typeof(")
 			.Because("the linear if-chain is no longer emitted");
 	}
@@ -463,6 +467,8 @@ public class GeneralTests
 			.Because("an Instance registration is never constructed by the container");
 		await That(source).DoesNotContain("__disposables.Add")
 			.Because("the container does not own a pre-built Instance, so it never registers it for disposal");
+		await That(source).Contains("externallyOwned: true")
+			.Because("the registration metadata advertises the container's non-ownership, so a bridging host does not assume disposal either");
 	}
 
 	[Fact]

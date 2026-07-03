@@ -27,12 +27,17 @@ public readonly struct AwaitenRegistration : IEquatable<AwaitenRegistration>
 	///     Whether the service must be resolved asynchronously (through <c>ResolveAsync</c>) - it is
 	///     <c>IAsyncInitializable</c>, produced by an async factory, or depends on one.
 	/// </param>
+	/// <param name="externallyOwned">
+	///     Whether the instance is a pre-built member of the container that the container exposes but does
+	///     not own - it neither constructs nor disposes it.
+	/// </param>
 	/// <exception cref="ArgumentNullException"><paramref name="serviceType" /> is <see langword="null" />.</exception>
-	public AwaitenRegistration(Type serviceType, AwaitenLifetime lifetime, bool requiresAsync = false)
+	public AwaitenRegistration(Type serviceType, AwaitenLifetime lifetime, bool requiresAsync = false, bool externallyOwned = false)
 	{
 		ServiceType = serviceType ?? throw new ArgumentNullException(nameof(serviceType));
 		Lifetime = lifetime;
 		RequiresAsync = requiresAsync;
+		ExternallyOwned = externallyOwned;
 	}
 
 	/// <summary>
@@ -52,14 +57,23 @@ public readonly struct AwaitenRegistration : IEquatable<AwaitenRegistration>
 	/// </summary>
 	public bool RequiresAsync { get; }
 
+	/// <summary>
+	///     Whether the instance is a pre-built member of the container (registered with <c>Instance</c>)
+	///     that the container exposes but does not own - it neither constructs nor disposes it, so a host
+	///     projecting the registration must not assume ownership of its disposal either.
+	/// </summary>
+	public bool ExternallyOwned { get; }
+
 	/// <inheritdoc />
 	public bool Equals(AwaitenRegistration other)
-		=> ServiceType == other.ServiceType && Lifetime == other.Lifetime && RequiresAsync == other.RequiresAsync;
+		=> ServiceType == other.ServiceType && Lifetime == other.Lifetime && RequiresAsync == other.RequiresAsync
+		   && ExternallyOwned == other.ExternallyOwned;
 
 	/// <inheritdoc />
 	public override bool Equals(object? obj) => obj is AwaitenRegistration other && Equals(other);
 
 	/// <inheritdoc />
 	public override int GetHashCode()
-		=> unchecked(((ServiceType.GetHashCode() * 397) ^ (int)Lifetime) * 397 ^ (RequiresAsync ? 1 : 0));
+		=> unchecked((((ServiceType.GetHashCode() * 397) ^ (int)Lifetime) * 397 ^ (RequiresAsync ? 1 : 0)) * 397
+		             ^ (ExternallyOwned ? 1 : 0));
 }

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -12,7 +13,18 @@ namespace Awaiten.Api.Tests;
 
 public static class Helper
 {
+	// Assembly.LoadFile locks the staged file for the process lifetime (and caches by path), so the staging
+	// directory is unique per test process (no collision with a lingering previous host) and the generated
+	// API is memoized per (assembly, framework) so a pair is never staged - or loaded - twice in one process.
+	private static readonly ConcurrentDictionary<string, string> PublicApiCache = new();
+
+	private static readonly string ProbeRoot =
+		Path.Combine(Path.GetTempPath(), "Awaiten.Api.Tests", Guid.NewGuid().ToString("N"));
+
 	public static string CreatePublicApi(string framework, string assemblyName)
+		=> PublicApiCache.GetOrAdd($"{assemblyName}|{framework}", _ => GeneratePublicApi(framework, assemblyName));
+
+	private static string GeneratePublicApi(string framework, string assemblyName)
 	{
 #if DEBUG
 		string configuration = "Debug";
@@ -26,8 +38,7 @@ public static class Helper
 		// from its own directory. Rather than have the product project copy its package dependencies next to
 		// its output purely for this tool, stage the assembly-under-test next to the dependency assemblies this
 		// test project already carries in its output, and generate from there.
-		string probeDirectory =
-			Path.Combine(Path.GetTempPath(), "Awaiten.Api.Tests", $"{assemblyName}_{framework}");
+		string probeDirectory = Path.Combine(ProbeRoot, $"{assemblyName}_{framework}");
 		Directory.CreateDirectory(probeDirectory);
 		foreach (string dependency in Directory.EnumerateFiles(AppContext.BaseDirectory, "*.dll"))
 		{

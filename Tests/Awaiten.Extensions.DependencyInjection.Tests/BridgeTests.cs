@@ -13,6 +13,15 @@ public sealed partial class BridgeTests
 
 	public sealed class TransientService;
 
+	// A transient consuming a scoped dependency: resolved inside an MS.DI scope it must share that scope's
+	// instance, not the container root's.
+	public sealed class TransientConsumer
+	{
+		public TransientConsumer(ScopedService scoped) => Scoped = scoped;
+
+		public ScopedService Scoped { get; }
+	}
+
 	public sealed class AsyncService : IAsyncInitializable
 	{
 		public bool Initialized { get; private set; }
@@ -45,7 +54,14 @@ public sealed partial class BridgeTests
 	[Scoped<ScopedService>]
 	[Scoped<DisposableScoped>]
 	[Transient<TransientService>]
+	[Transient<TransientConsumer>]
 	public static partial class BridgeContainer;
+
+	public sealed class SecondScopedService;
+
+	[Container]
+	[Scoped<SecondScopedService>]
+	public static partial class SecondContainer;
 
 	[Fact]
 	public async Task AddGeneratedContainer_ResolvesSingletonThroughMsDi()
@@ -234,5 +250,64 @@ public sealed partial class BridgeTests
 		void Act() => factory.CreateBuilder(services);
 
 		await That(Act).Throws<NotSupportedException>();
+	}
+
+	[Fact]
+	public async Task AddGeneratedContainer_TransientSharesScopedDependenciesWithItsScope()
+	{
+		ServiceCollection services = new();
+		services.AddGeneratedContainer<BridgeContainer.Root>();
+		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
+		using IServiceScope scope = provider.CreateScope();
+
+		ScopedService scoped = scope.ServiceProvider.GetRequiredService<ScopedService>();
+		TransientConsumer consumer = scope.ServiceProvider.GetRequiredService<TransientConsumer>();
+
+		await That(consumer.Scoped).IsSameAs(scoped)
+			.Because("a transient resolved inside an MS.DI scope resolves from the Awaiten scope aligned to it, so it shares that scope's instances");
+	}
+
+	[Fact]
+	public async Task AddGeneratedContainer_TwoContainers_KeepSeparateScopeAlignment()
+	{
+		ServiceCollection services = new();
+		services.AddGeneratedContainer<BridgeContainer.Root>();
+		services.AddGeneratedContainer<SecondContainer.Root>();
+		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
+		using IServiceScope scope = provider.CreateScope();
+
+		// Each bridged container aligns its own Awaiten scope to the MS.DI scope; the second registration
+		// must not shadow the first container's alignment.
+		await That(scope.ServiceProvider.GetRequiredService<ScopedService>()).IsNotNull();
+		await That(scope.ServiceProvider.GetRequiredService<SecondScopedService>()).IsNotNull();
+	}
+
+	[Fact]
+	public async Task AwaitenServiceProvider_ServesAsyncServiceAsTask()
+	{
+		using BridgeContainer.Root container = new();
+		using AwaitenServiceProvider provider = new(container);
+
+		// An async-initialized service has no synchronous path, so the bare type is not resolvable...
+		await That(provider.GetService(typeof(AsyncService))).IsNull();
+
+		// ...but the registration metadata advertises it, so Task<T> resolves through ResolveAsync.
+		AsyncService resolved = await (Task<AsyncService>)provider.GetService(typeof(Task<AsyncService>))!;
+		await That(resolved.Initialized).IsTrue();
+
+		// A Task<T> over a type the container does not advertise stays unresolved.
+		await That(provider.GetService(typeof(Task<string>))).IsNull();
+	}
+
+	[Fact]
+	public async Task AwaitenServiceProvider_ScopeServesAsyncServiceAsTask()
+	{
+		using BridgeContainer.Root container = new();
+		using AwaitenServiceProvider provider = new(container);
+		using IServiceScope scope = provider.CreateScope();
+
+		// The registration metadata flows into scope providers, so async services stay reachable there.
+		AsyncService resolved = await (Task<AsyncService>)scope.ServiceProvider.GetService(typeof(Task<AsyncService>))!;
+		await That(resolved.Initialized).IsTrue();
 	}
 }

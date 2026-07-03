@@ -610,8 +610,9 @@ internal static class Emitter
 	/// </summary>
 	private static void EmitRegistrations(StringBuilder builder, int depth, InstanceModel[] instances, bool syncResolveAfterInit)
 	{
-		Indent(builder, depth).Append("public global::System.Collections.Generic.IReadOnlyList<global::Awaiten.AwaitenRegistration> Registrations { get; }")
-			.AppendLine(" = new global::Awaiten.AwaitenRegistration[]");
+		// The registrations are compile-time constants for the container type, so they live in one static
+		// array rather than being rebuilt per Root construction.
+		Indent(builder, depth).AppendLine("private static readonly global::Awaiten.AwaitenRegistration[] __registrations =");
 		Indent(builder, depth).AppendLine("{");
 		foreach (InstanceModel instance in instances)
 		{
@@ -621,6 +622,7 @@ internal static class Emitter
 			}
 
 			bool requiresAsync = instance.IsAsyncTainted && !syncResolveAfterInit;
+			bool externallyOwned = instance.Production == ProductionKind.Instance;
 			foreach (ServiceKey service in instance.Services.AsArray())
 			{
 				if (service.Key is not null)
@@ -635,11 +637,18 @@ internal static class Emitter
 					builder.Append(", requiresAsync: true");
 				}
 
+				if (externallyOwned)
+				{
+					builder.Append(", externallyOwned: true");
+				}
+
 				builder.AppendLine("),");
 			}
 		}
 
 		Indent(builder, depth).AppendLine("};");
+		builder.AppendLine();
+		Indent(builder, depth).AppendLine("public global::System.Collections.Generic.IReadOnlyList<global::Awaiten.AwaitenRegistration> Registrations => __registrations;");
 	}
 
 	private static string AwaitenLifetimeOf(Lifetime lifetime) => lifetime switch
@@ -742,7 +751,9 @@ internal static class Emitter
 
 		// Open-addressed probe: hash the requested type into its bucket window and scan the (small, fixed-width)
 		// window for an identity match. Each slot carries its resolver delegate directly, so a hit invokes it with
-		// no switch - the dispatch is O(1) and constant-size in IL regardless of the registration count.
+		// no switch - the dispatch is O(1) and constant-size in IL regardless of the registration count. Matching
+		// is by runtime Type identity (the contract of this dispatch): a Type wrapper such as TypeDelegator, or a
+		// Type without a runtime handle, does not dispatch.
 		Indent(builder, depth + 1).AppendLine("int __i = (int)((uint)serviceType.TypeHandle.GetHashCode() % (uint)__bucketCount) * __bucketSize;");
 		Indent(builder, depth + 1).AppendLine("int __end = __i + __bucketSize;");
 		Indent(builder, depth + 1).AppendLine("for (; __i < __end; __i++)");
@@ -765,6 +776,13 @@ internal static class Emitter
 
 		Indent(builder, depth + 3).AppendLine("instance = __b.Resolve(this);");
 		Indent(builder, depth + 3).AppendLine("return true;");
+		Indent(builder, depth + 2).AppendLine("}");
+		builder.AppendLine();
+		// __BuildBuckets fills each window front-first, so an empty slot ends the window: a miss stops at the
+		// first empty slot instead of always paying the full (global-max) window width.
+		Indent(builder, depth + 2).AppendLine("if (__b.Key is null)");
+		Indent(builder, depth + 2).AppendLine("{");
+		Indent(builder, depth + 3).AppendLine("break;");
 		Indent(builder, depth + 2).AppendLine("}");
 		Indent(builder, depth + 1).AppendLine("}");
 		builder.AppendLine();
@@ -1204,11 +1222,15 @@ internal static class Emitter
 		}
 
 		Indent(builder, depth + 1).AppendLine("};");
-		Indent(builder, depth + 1).AppendLine("__buckets = __BuildBuckets(__entries, __bucketCount, out __bucketSize);");
+		Indent(builder, depth + 1).AppendLine("__buckets = __BuildBuckets(__entries);");
+		Indent(builder, depth + 1).AppendLine("__bucketSize = __buckets.Length / __bucketCount;");
 		Indent(builder, depth).AppendLine("}");
 		builder.AppendLine();
 
-		EmitBucketBuilder(builder, depth);
+		Indent(builder, depth).AppendLine("private static __Bucket[] __BuildBuckets(__Bucket[] __entries)");
+		Indent(builder, depth).AppendLine("{");
+		EmitBucketDistribution(builder, depth + 1, "__Bucket", "__bucketCount");
+		Indent(builder, depth).AppendLine("}");
 
 		// One forwarder per unique compound value, preserving the value expression verbatim. Each is tiny and
 		// individually optimizable; deduplication (above) keeps the six collection shapes of an element type to one.
@@ -1220,37 +1242,35 @@ internal static class Emitter
 	}
 
 	/// <summary>
-	///     Emits <c>__BuildBuckets</c>: distributes the entries into the fixed number of buckets by Type identity
-	///     hash, sizing every bucket to the largest collision count so a lookup probes a small constant window. Runs
-	///     once in the static constructor (the Type hashes are only known at runtime).
+	///     Emits the shared bucket-distribution body used by both the synchronous and the async table builders:
+	///     distributes the local <c>__entries</c> into the fixed number of buckets by Type identity hash, sizing
+	///     every bucket to the largest collision count so a lookup probes a small constant window, and returns the
+	///     table. Runs once at static initialization (the Type hashes are only known at runtime). The window size
+	///     is derived by the caller as table length / bucket count.
 	/// </summary>
-	private static void EmitBucketBuilder(StringBuilder builder, int depth)
+	private static void EmitBucketDistribution(StringBuilder builder, int depth, string slotType, string countConst)
 	{
-		Indent(builder, depth).AppendLine("private static __Bucket[] __BuildBuckets(__Bucket[] __entries, int __count, out int __size)");
+		Indent(builder, depth).Append("int[] __counts = new int[").Append(countConst).AppendLine("];");
+		Indent(builder, depth).Append("foreach (").Append(slotType).AppendLine(" __e in __entries)");
 		Indent(builder, depth).AppendLine("{");
-		Indent(builder, depth + 1).AppendLine("int[] __counts = new int[__count];");
-		Indent(builder, depth + 1).AppendLine("foreach (__Bucket __e in __entries)");
-		Indent(builder, depth + 1).AppendLine("{");
-		Indent(builder, depth + 2).AppendLine("__counts[(int)((uint)__e.Key!.TypeHandle.GetHashCode() % (uint)__count)]++;");
-		Indent(builder, depth + 1).AppendLine("}");
-		builder.AppendLine();
-		Indent(builder, depth + 1).AppendLine("int __max = 1;");
-		Indent(builder, depth + 1).AppendLine("foreach (int __c in __counts)");
-		Indent(builder, depth + 1).AppendLine("{");
-		Indent(builder, depth + 2).AppendLine("if (__c > __max) { __max = __c; }");
-		Indent(builder, depth + 1).AppendLine("}");
-		builder.AppendLine();
-		Indent(builder, depth + 1).AppendLine("__size = __max;");
-		Indent(builder, depth + 1).AppendLine("__Bucket[] __arr = new __Bucket[__count * __max];");
-		Indent(builder, depth + 1).AppendLine("int[] __fill = new int[__count];");
-		Indent(builder, depth + 1).AppendLine("foreach (__Bucket __e in __entries)");
-		Indent(builder, depth + 1).AppendLine("{");
-		Indent(builder, depth + 2).AppendLine("int __b = (int)((uint)__e.Key!.TypeHandle.GetHashCode() % (uint)__count);");
-		Indent(builder, depth + 2).AppendLine("__arr[(__b * __max) + __fill[__b]++] = __e;");
-		Indent(builder, depth + 1).AppendLine("}");
-		builder.AppendLine();
-		Indent(builder, depth + 1).AppendLine("return __arr;");
+		Indent(builder, depth + 1).Append("__counts[(int)((uint)__e.Key!.TypeHandle.GetHashCode() % (uint)").Append(countConst).AppendLine(")]++;");
 		Indent(builder, depth).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, depth).AppendLine("int __max = 1;");
+		Indent(builder, depth).AppendLine("foreach (int __c in __counts)");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).AppendLine("if (__c > __max) { __max = __c; }");
+		Indent(builder, depth).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, depth).Append(slotType).Append("[] __arr = new ").Append(slotType).Append("[").Append(countConst).AppendLine(" * __max];");
+		Indent(builder, depth).Append("int[] __fill = new int[").Append(countConst).AppendLine("];");
+		Indent(builder, depth).Append("foreach (").Append(slotType).AppendLine(" __e in __entries)");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).Append("int __b = (int)((uint)__e.Key!.TypeHandle.GetHashCode() % (uint)").Append(countConst).AppendLine(");");
+		Indent(builder, depth + 1).AppendLine("__arr[(__b * __max) + __fill[__b]++] = __e;");
+		Indent(builder, depth).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, depth).AppendLine("return __arr;");
 	}
 
 	/// <summary>
@@ -1540,6 +1560,13 @@ internal static class Emitter
 		Indent(builder, depth + 2).AppendLine("{");
 		Indent(builder, depth + 3).AppendLine("return __b.Resolve(this, cancellationToken);");
 		Indent(builder, depth + 2).AppendLine("}");
+		builder.AppendLine();
+		// The distributor fills each window front-first, so an empty slot ends the window: the (common) miss of
+		// a synchronously-resolvable type stops at the first empty slot instead of scanning the full width.
+		Indent(builder, depth + 2).AppendLine("if (__b.Key is null)");
+		Indent(builder, depth + 2).AppendLine("{");
+		Indent(builder, depth + 3).AppendLine("break;");
+		Indent(builder, depth + 2).AppendLine("}");
 		Indent(builder, depth + 1).AppendLine("}");
 		builder.AppendLine();
 		Indent(builder, depth + 1).Append("return ").Append(task).AppendLine(".FromResult(Resolve(serviceType));");
@@ -1593,27 +1620,7 @@ internal static class Emitter
 
 		Indent(builder, depth + 1).AppendLine("};");
 		builder.AppendLine();
-		Indent(builder, depth + 1).AppendLine("int[] __counts = new int[__asyncBucketCount];");
-		Indent(builder, depth + 1).AppendLine("foreach (__AsyncBucket __e in __entries)");
-		Indent(builder, depth + 1).AppendLine("{");
-		Indent(builder, depth + 2).AppendLine("__counts[(int)((uint)__e.Key!.TypeHandle.GetHashCode() % (uint)__asyncBucketCount)]++;");
-		Indent(builder, depth + 1).AppendLine("}");
-		builder.AppendLine();
-		Indent(builder, depth + 1).AppendLine("int __max = 1;");
-		Indent(builder, depth + 1).AppendLine("foreach (int __c in __counts)");
-		Indent(builder, depth + 1).AppendLine("{");
-		Indent(builder, depth + 2).AppendLine("if (__c > __max) { __max = __c; }");
-		Indent(builder, depth + 1).AppendLine("}");
-		builder.AppendLine();
-		Indent(builder, depth + 1).AppendLine("__AsyncBucket[] __arr = new __AsyncBucket[__asyncBucketCount * __max];");
-		Indent(builder, depth + 1).AppendLine("int[] __fill = new int[__asyncBucketCount];");
-		Indent(builder, depth + 1).AppendLine("foreach (__AsyncBucket __e in __entries)");
-		Indent(builder, depth + 1).AppendLine("{");
-		Indent(builder, depth + 2).AppendLine("int __b = (int)((uint)__e.Key!.TypeHandle.GetHashCode() % (uint)__asyncBucketCount);");
-		Indent(builder, depth + 2).AppendLine("__arr[(__b * __max) + __fill[__b]++] = __e;");
-		Indent(builder, depth + 1).AppendLine("}");
-		builder.AppendLine();
-		Indent(builder, depth + 1).AppendLine("return __arr;");
+		EmitBucketDistribution(builder, depth + 1, "__AsyncBucket", "__asyncBucketCount");
 		Indent(builder, depth).AppendLine("}");
 	}
 
