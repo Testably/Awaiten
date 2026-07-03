@@ -918,8 +918,12 @@ public class CollectionTests
 		// A registered synchronous shape makes the whole IPlugin collection an opaque value, all-or-nothing:
 		// the awaited Task<IReadOnlyList<IPlugin>> view is suppressed alongside the sibling shapes, so injecting
 		// the unregistered awaited shape is AWT101 rather than a second collection synthesized behind the opaque one.
-		await That(result.Diagnostics).Contains("*AWT101*").AsWildcard()
-			.Because("a registered synchronous collection shape suppresses the awaited Task<C> view on injection too");
+		// The AWT101 names the awaited Task<C> parameter itself (not some other missing dependency): the awaited
+		// view is suppressed to a direct dependency on the full Task<IReadOnlyList<IPlugin>> type, which is not
+		// registered - and, notably, no bare-Task fallback resolves it through the registered IReadOnlyList<IPlugin>.
+		await That(result.Diagnostics)
+			.Contains("*AWT101*requires 'System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<MyCode.IPlugin>>', which is not registered*").AsWildcard()
+			.Because("suppressing the awaited view rewrites the parameter to a direct dependency on the full Task<IReadOnlyList<IPlugin>> type, so that exact awaited shape is the missing dependency - the registered IReadOnlyList<IPlugin> does not serve it through a bare Task relationship");
 		await That(result.Sources.TryGetValue("Awaiten.MyCode.MyContainer.g.cs", out string? source) ? source : string.Empty)
 			.DoesNotContain("Task.FromResult<global::System.Collections.Generic.IReadOnlyList<global::MyCode.IPlugin>>")
 			.Because("the suppressed awaited view is not synthesized behind the opaque registration");
@@ -999,5 +1003,116 @@ public class CollectionTests
 			.Because("the first open registration is expanded at the closed argument");
 		await That(source).Contains("new global::MyCode.ProjectionHandler<global::MyCode.OrderPlaced>()")
 			.Because("the second open registration is expanded at the closed argument");
+	}
+
+	[Fact]
+	public async Task AwaitedCollection_EveryTaskShape_JoinsTheByTypeDispatch()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+		                                       using System.Threading.Tasks;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class Alpha : IPlugin { }
+		                                       public sealed class Beta : IPlugin { }
+
+		                                       [Container]
+		                                       [Singleton<Alpha, IPlugin>]
+		                                       [Singleton<Beta, IPlugin>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// The awaited collection joins the by-type dispatch alongside the synchronous shapes and IAsyncEnumerable<T>:
+		// every Task<C> shape gets a dispatch slot, so Resolve<Task<IReadOnlyList<T>>>() (and every sibling) works.
+		await That(source).Contains("typeof(global::System.Threading.Tasks.Task<global::System.Collections.Generic.IReadOnlyList<global::MyCode.IPlugin>>)")
+			.Because("the awaited IReadOnlyList<T> shape is publicly resolvable by type");
+		await That(source).Contains("typeof(global::System.Threading.Tasks.Task<global::System.Collections.Generic.IEnumerable<global::MyCode.IPlugin>>)")
+			.Because("the awaited IEnumerable<T> shape is publicly resolvable by type");
+		await That(source).Contains("typeof(global::System.Threading.Tasks.Task<global::MyCode.IPlugin[]>)")
+			.Because("the awaited array shape is publicly resolvable by type");
+	}
+
+	[Fact]
+	public async Task AwaitedCollectionWithAnAsyncMember_JoinsTheSynchronousByTypeDispatch()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+		                                       using System.Threading;
+		                                       using System.Threading.Tasks;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class Alpha : IPlugin { }
+		                                       public sealed class AsyncPlugin : IPlugin, IAsyncInitializable
+		                                       {
+		                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+		                                       }
+
+		                                       [Container]
+		                                       [Singleton<Alpha, IPlugin>]
+		                                       [Singleton<AsyncPlugin, IPlugin>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// Unlike the synchronous shapes (withheld with AWT122-style guidance) and IAsyncEnumerable<T> (served by an
+		// async arm), the awaited collection stays on the SYNCHRONOUS by-type dispatch even with an async-tainted
+		// member: its forwarder hands back an already-started task (default token - no ambient token by type) that
+		// awaits the async member behind it.
+		await That(source).Contains("typeof(global::System.Threading.Tasks.Task<global::System.Collections.Generic.IReadOnlyList<global::MyCode.IPlugin>>), static __s => __s.__R")
+			.Because("the awaited collection is a synchronous by-type dispatch entry even with an async member");
+		await That(source).Contains("await ResolveAsyncPluginAsync(default).ConfigureAwait(false)")
+			.Because("the by-type awaited collection awaits its async member with the default token");
+	}
+
+	[Fact]
+	public async Task ExplicitlyRegisteredAwaitedShape_ClaimsOnlyItsOwnByTypeSlot()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+		                                       using System.Threading.Tasks;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class Alpha : IPlugin { }
+		                                       public sealed class PluginTask : Task<IReadOnlyList<IPlugin>>
+		                                       {
+		                                           public PluginTask() : base(() => null) { }
+		                                       }
+
+		                                       [Container]
+		                                       [Singleton<Alpha, IPlugin>]
+		                                       [Singleton<PluginTask, Task<IReadOnlyList<IPlugin>>>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// The registered Task<IReadOnlyList<IPlugin>> owns its own by-type slot (its bare resolver), and no awaited
+		// collection is synthesized behind it - but the sibling awaited shapes still synthesize, exactly as on the
+		// injection side (the awaitedShapeRegistered gate claims only the exact shape).
+		await That(source).Contains("typeof(global::System.Threading.Tasks.Task<global::System.Collections.Generic.IReadOnlyList<global::MyCode.IPlugin>>), static __s => __s.ResolvePluginTask()")
+			.Because("the registered awaited shape is served by its own resolver, not a synthesized awaited collection");
+		await That(source).Contains("typeof(global::System.Threading.Tasks.Task<global::MyCode.IPlugin[]>)")
+			.Because("a sibling awaited shape that was not registered still synthesizes an awaited collection");
 	}
 }

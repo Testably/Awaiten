@@ -328,6 +328,19 @@ internal static class Emitter
 	}
 
 	/// <summary>
+	///     The guidance thrown by Resolve(Type) on the Root for an awaited collection (<c>Task&lt;C&gt;</c>) that
+	///     holds a build-on-demand disposable member: the produced task materializes its members eagerly, so
+	///     resolving it by type on the Root would accumulate those disposables for the container's lifetime. The
+	///     awaited counterpart of <see cref="CollectionWithheldMessage" />; like it, there is no <c>Owned&lt;T&gt;</c>
+	///     form for a collection, so the guidance steers to a child scope, direct injection, or <c>LifetimeSafety.Loose</c>.
+	/// </summary>
+	private static string AwaitedCollectionWithheldMessage(string collection)
+	{
+		string display = collection.Replace("global::", string.Empty);
+		return $"\"Awaiten: the awaited collection '{display}' has a build-on-demand disposable member and is withheld from by-type resolution on the container root under strict lifetime safety; resolve it from a child scope, inject it directly, or set LifetimeSafety.Loose on the [Container].\"";
+	}
+
+	/// <summary>
 	///     The guidance thrown by Resolve(Type) for a collection (<c>IEnumerable&lt;T&gt;</c> / <c>T[]</c>) that
 	///     holds an async-tainted member: a collection is materialized synchronously (built eagerly into an array,
 	///     with no place to await an initialization), so there is no synchronous - and no asynchronous - resolution
@@ -978,6 +991,11 @@ internal static class Emitter
 		// explicit registration already claimed.
 		AddCollectionEntries(instances, names, serviceToIndex, collectionMembers, strict, entries, seen);
 
+		// The awaited-collection view (every Task<C> shape) joins the synchronous dispatch too: it always hands
+		// back a Task synchronously, even for a collection whose members are async-tainted (it awaits them behind
+		// the task), so it is offered by type alongside the synchronous shapes rather than through an async arm.
+		AddAwaitedCollectionEntries(instances, names, serviceToIndex, collectionMembers, strict, entries, seen);
+
 		return entries;
 	}
 
@@ -1033,6 +1051,65 @@ internal static class Emitter
 			{
 				string asyncArray = AsyncCollectionExpression(collectionKey, names, instances, asynchronous: false);
 				AddCollectionShape(AwaitenGenerator.AsyncEnumerableShapeType(collection.Service), asyncArray, rootWithheld, entries, seen);
+			}
+		}
+	}
+
+	/// <summary>
+	///     Adds the public dispatch entries for the awaited-collection view - every <c>Task&lt;C&gt;</c> shape - of
+	///     each unkeyed, non-synthesis-suppressed collection. Unlike the synchronous shapes and the
+	///     <c>IAsyncEnumerable&lt;T&gt;</c> view, the awaited collection is ALWAYS synchronously obtainable: it
+	///     produces a <c>Task&lt;C&gt;</c> (a completed <c>Task.FromResult</c> when every member is synchronous, an
+	///     already-started task that awaits its async-tainted members otherwise), laundering their taint exactly as
+	///     an injected awaited collection does - so it joins the synchronous dispatch even for a collection whose
+	///     members are async-tainted, and <see cref="Names.IsSyncCollection" /> is not consulted. By-type resolution
+	///     has no ambient token, so awaited async members receive <c>default</c> (mirroring an awaited collection
+	///     injected into a synchronously built consumer). An explicitly registered <c>Task&lt;C&gt;</c> shape owns
+	///     its own slot (the <paramref name="seen" /> guard, seeded from the explicit registrations); a registered
+	///     synchronous shape suppresses the whole element, all-or-nothing, exactly as on the injection side. The
+	///     root-withholding of a build-on-demand disposable member applies here too: materializing the awaited
+	///     collection by type off the Root would accumulate its members for the container's lifetime, so it is
+	///     withheld from the Root (resolvable from a child scope, which bounds them).
+	/// </summary>
+	private static void AddAwaitedCollectionEntries(
+		InstanceModel[] instances,
+		Names names,
+		Dictionary<ServiceKey, int> serviceToIndex,
+		IReadOnlyDictionary<ServiceKey, List<int>> collectionMembers,
+		bool strict,
+		List<DispatchEntry> entries,
+		HashSet<string> seen)
+	{
+		foreach (ServiceMembers collection in names.Collections)
+		{
+			ServiceKey collectionKey = new(collection.Service, collection.Key);
+
+			// A keyed collection has no by-type surface; a synthesis-suppressed element is served by its explicit
+			// registration. An async-tainted member does NOT withhold the awaited view (it awaits that member behind
+			// the returned task), so - unlike AddCollectionEntries - IsSyncCollection is deliberately not consulted.
+			if (collection.Key is not null || SynthesisSuppressed(serviceToIndex, collection.Service))
+			{
+				continue;
+			}
+
+			bool rootWithheld = collectionMembers.TryGetValue(collectionKey, out List<int>? members)
+			                    && members.Any(member => IsFuncWithheld(instances, member, serviceToIndex, collectionMembers, strict));
+
+			foreach (string shape in AwaitenGenerator.CollectionShapeTypes(collection.Service))
+			{
+				string awaitedType = $"global::System.Threading.Tasks.Task<{shape}>";
+
+				// A registered Task<C> of this exact shape (its bare entry seeded 'seen') owns the slot; the sibling
+				// shapes still synthesize, matching the injection-side awaitedShapeRegistered gate.
+				if (!seen.Add(awaitedType))
+				{
+					continue;
+				}
+
+				string value = AwaitedCollectionExpression(collectionKey, shape, names, instances, asynchronous: false);
+				entries.Add(rootWithheld
+					? new DispatchEntry(awaitedType, value, AwaitedCollectionWithheldMessage(awaitedType))
+					: new DispatchEntry(awaitedType, value));
 			}
 		}
 	}
@@ -1113,9 +1190,15 @@ internal static class Emitter
 	///     An empty membership yields a completed empty array.
 	/// </summary>
 	private static string AwaitedCollectionExpression(ParameterModel parameter, Names names, InstanceModel[] instances, bool asynchronous)
+		=> AwaitedCollectionExpression(new ServiceKey(parameter.ServiceType, parameter.Key), parameter.AwaitedCollectionType!, names, instances, asynchronous);
+
+	/// <summary>
+	///     The <c>Task&lt;C&gt;</c> expression for the collection under <paramref name="collection" /> cast to the
+	///     inner collection shape <paramref name="shape" /> - shared by the injection path (which supplies the
+	///     parameter's exact shape) and the by-type dispatch (which offers every shape). See the parameter overload.
+	/// </summary>
+	private static string AwaitedCollectionExpression(ServiceKey collection, string shape, Names names, InstanceModel[] instances, bool asynchronous)
 	{
-		ServiceKey collection = new(parameter.ServiceType, parameter.Key);
-		string shape = parameter.AwaitedCollectionType!;
 		string[] resolvers = names.CollectionResolvers(collection);
 		int[] indices = names.CollectionMemberIndices(collection);
 
@@ -1128,7 +1211,7 @@ internal static class Emitter
 		if (!anyAsync)
 		{
 			string syncItems = string.Join(", ", resolvers.Select(resolver => resolver + "()"));
-			return $"global::System.Threading.Tasks.Task.FromResult<{shape}>(new {parameter.ServiceType}[] {{ {syncItems} }})";
+			return $"global::System.Threading.Tasks.Task.FromResult<{shape}>(new {collection.Service}[] {{ {syncItems} }})";
 		}
 
 		string token = asynchronous ? "cancellationToken" : "default";
@@ -1140,7 +1223,7 @@ internal static class Emitter
 				: resolvers[m] + "()";
 		}
 
-		string array = $"({shape})new {parameter.ServiceType}[] {{ {string.Join(", ", items)} }}";
+		string array = $"({shape})new {collection.Service}[] {{ {string.Join(", ", items)} }}";
 		return $"((global::System.Func<global::System.Threading.Tasks.Task<{shape}>>)(async () => {array}))()";
 	}
 
