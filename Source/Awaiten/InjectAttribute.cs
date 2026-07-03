@@ -33,16 +33,17 @@ public sealed class InjectAttribute : Attribute
     ///     cycle: two singletons that each reference the other through a deferred property are both
     ///     constructed and cached first, then wired up. It still participates in captive (<c>AWT105</c>) and
     ///     async-initialization analysis, since its assignment captures the target for the owner's lifetime
-    ///     and awaits an async-initialized target just like a constructor parameter. Requires an accessible
-    ///     <c>set</c> accessor (post-construction assignment cannot use an <c>init</c>-only accessor,
-    ///     which is <c>AWT144</c>). A cycle-breaking deferred property applies only to synchronous singleton
-    ///     and scoped registrations, and only when <em>every</em> edge in the cycle is deferred: a cycle whose
-    ///     participants are all transients has no cache anywhere to terminate it (an all-transient deferred cycle is
-    ///     <c>AWT145</c>), an async-initialized
+    ///     and awaits an async-initialized target just like a constructor parameter. Requires an accessible plain
+    ///     <c>set</c> accessor: post-construction assignment cannot use an <c>init</c>-only accessor, and a
+    ///     <c>required</c> member cannot be omitted from the construction-time object initializer (either is
+    ///     <c>AWT144</c>). A cycle-breaking deferred property needs a synchronous singleton or scoped participant
+    ///     whose cache terminates the re-entrant resolve: a cycle whose participants are all transients has no cache
+    ///     anywhere to terminate it (an all-transient deferred cycle is <c>AWT145</c>), an async-initialized
     ///     participant publishes its memoized task only after the re-entrant resolve has returned (a deferred cycle
-    ///     through one is <c>AWT146</c>), and a cycle that still traverses a constructor parameter or plain
-    ///     <c>[Inject]</c> property re-enters an as-yet-uncached participant when resolution begins there, so it is
-    ///     only partly broken (a mixed cycle is <c>AWT147</c>) - break such a cycle by deferring both sides.
+    ///     through one is <c>AWT146</c>), and a constructor parameter or plain <c>[Inject]</c> edge that leaves a
+    ///     cached participant re-enters it before it is cached and constructs a duplicate (a mixed cycle is
+    ///     <c>AWT147</c>) - such an edge is supported only when it starts at a transient and the cycle has a cached
+    ///     participant; otherwise break the cycle by deferring both sides.
     /// </summary>
     public bool Deferred { get; set; }
 }

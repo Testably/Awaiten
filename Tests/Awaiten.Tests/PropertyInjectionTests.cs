@@ -450,4 +450,118 @@ public partial class PropertyInjectionTests
 	[Singleton<Ring2>]
 	[Singleton<Ring3>]
 	public static partial class ThreeNodeCycleContainer;
+
+	[Fact]
+	public async Task DeferredProperty_OverATransientConstructorBackEdge_TerminatesFromBothEntryPoints()
+	{
+		using CtorSpokeContainer.Root container = new();
+
+		// The singleton hub is cached before it is wired, so the transient spoke's constructor edge resolves the
+		// already-cached hub: the mixed cycle terminates whether resolution starts at the hub or at the spoke.
+		CtorHub hub = container.Resolve<CtorHub>();
+		CtorSpoke spoke = container.Resolve<CtorSpoke>();
+
+		await That(hub.Spoke).IsNotNull();
+		await That(hub.Spoke!.Hub).IsSameAs(hub);
+		await That(spoke.Hub).IsSameAs(hub)
+			.Because("the spoke's constructor edge resolves the cached hub instead of re-entering its construction");
+	}
+
+	public sealed class CtorHub
+	{
+		[Inject(Deferred = true)]
+		public CtorSpoke? Spoke { get; set; }
+	}
+
+	public sealed class CtorSpoke
+	{
+		public CtorSpoke(CtorHub hub)
+		{
+			Hub = hub;
+		}
+
+		public CtorHub Hub { get; }
+	}
+
+	[Container]
+	[Singleton<CtorHub>]
+	[Transient<CtorSpoke>]
+	public static partial class CtorSpokeContainer;
+
+	[Fact]
+	public async Task DeferredProperty_WhenWiringThrows_TheCacheIsRolledBack_AndTheNextResolveRetries()
+	{
+		using FlakyContainer.Root container = new();
+
+		// The first resolve fails while wiring the deferred member; the half-wired owner must not stay published,
+		// or every later resolve would silently return it with the member still null.
+		await That(() => container.Resolve<FlakyOwner>()).Throws<InvalidOperationException>()
+			.Because("the wiring failure surfaces to the resolving caller");
+
+		FlakyOwner owner = container.Resolve<FlakyOwner>();
+
+		await That(owner.Dep).IsNotNull()
+			.Because("the failed wiring episode unpublished the owner, so the retry rebuilds and wires it completely");
+	}
+
+	public sealed class FlakyDep
+	{
+		public static int Attempts;
+
+		public FlakyDep()
+		{
+			if (Attempts++ == 0)
+			{
+				throw new InvalidOperationException("first construction fails");
+			}
+		}
+	}
+
+	public sealed class FlakyOwner
+	{
+		[Inject(Deferred = true)]
+		public FlakyDep? Dep { get; set; }
+	}
+
+	[Container]
+	[Singleton<FlakyOwner>]
+	[Transient<FlakyDep>]
+	public static partial class FlakyContainer;
+
+	[Fact]
+	public async Task DeferredProperty_ADependencyFirstBuiltDuringWiring_IsDisposedAfterItsOwner()
+	{
+		DisposeOrder.Clear();
+		DisposingWriter writer;
+		using (DisposalOrderContainer.Root container = new())
+		{
+			writer = container.Resolve<DisposingWriter>();
+		}
+
+		// The dependency was first materialized while wiring the owner's deferred member, so it registers for
+		// disposal before the owner; reverse-order teardown then disposes the owner first and the dependency
+		// after it - the owner's Dispose can still use the dependency, like with plain constructor injection.
+		await That(writer.Dep).IsNotNull();
+		await That(DisposeOrder).IsEqualTo(new[] { "Writer", "Dep", });
+	}
+
+	internal static readonly List<string> DisposeOrder = new();
+
+	public sealed class DisposingDep : IDisposable
+	{
+		public void Dispose() => DisposeOrder.Add("Dep");
+	}
+
+	public sealed class DisposingWriter : IDisposable
+	{
+		[Inject(Deferred = true)]
+		public DisposingDep? Dep { get; set; }
+
+		public void Dispose() => DisposeOrder.Add("Writer");
+	}
+
+	[Container]
+	[Singleton<DisposingWriter>]
+	[Singleton<DisposingDep>]
+	public static partial class DisposalOrderContainer;
 }

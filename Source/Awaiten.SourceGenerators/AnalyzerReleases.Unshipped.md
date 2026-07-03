@@ -45,7 +45,7 @@
  AWT141  | Awaiten   | Warning  | A [Scan(SkipUnconstructable = true)] match the container cannot construct is skipped
  AWT142  | Awaiten   | Warning  | Scans register one implementation with conflicting lifetimes
  AWT143  | Awaiten   | Error    | A [Scan(InAssembliesOf = …)] resolved to no assembly at all
- AWT144  | Awaiten   | Error    | An [Inject(Deferred = true)] property is init-only rather than settable
+ AWT144  | Awaiten   | Error    | An [Inject(Deferred = true)] property is init-only or required rather than assignable after construction
  AWT145  | Awaiten   | Error    | A deferred property cycle consists entirely of transients and cannot terminate
  AWT146  | Awaiten   | Error    | A deferred property cycle includes an async-initialized service and cannot terminate
- AWT147  | Awaiten   | Error    | A deferred property cycle still traverses a construction-time edge and cannot terminate
+ AWT147  | Awaiten   | Error    | A deferred property cycle still traverses a construction-time edge that duplicates a cached participant or recurses forever

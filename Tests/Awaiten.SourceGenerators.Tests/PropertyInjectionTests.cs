@@ -138,6 +138,34 @@ public class PropertyInjectionTests
 	}
 
 	[Fact]
+	public async Task DeferredProperty_WiringFlagField_DoesNotCollideWithAServiceNamedLikeIt()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class Bus { }
+		                                       // Reader gets a '_readerWired' wiring flag for its deferred member; a service type literally
+		                                       // named 'ReaderWired' would claim the same '_readerWired' cache field if derived names were not
+		                                       // part of the name uniquification (CS0102 in the generated container).
+		                                       public sealed class Reader { [Inject(Deferred = true)] public Bus Bus { get; set; } }
+		                                       public sealed class ReaderWired { }
+
+		                                       [Container]
+		                                       [Singleton<Bus>]
+		                                       [Singleton<Reader>]
+		                                       [Singleton<ReaderWired>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty()
+			.Because("the name table reserves the derived 'Wired' suffix, so a service named like another service's wiring flag is renamed instead of colliding");
+	}
+
+	[Fact]
 	public async Task DeferredProperty_TheSameCycleWithoutDeferred_StillReportsAwt102()
 	{
 		GeneratorResult result = Generator.Run("""

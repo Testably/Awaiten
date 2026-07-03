@@ -618,14 +618,16 @@ internal static class Diagnostics
 		isEnabledByDefault: true);
 
 	/// <summary>
-	///     A property marked <c>[Inject(Deferred = true)]</c> has only an <c>init</c> accessor. A deferred
-	///     property is assigned after construction (to break a cycle), which an <c>init</c>-only accessor
-	///     forbids - it can be set only inside an object initializer. Give it a <c>set</c> accessor.
+	///     A property marked <c>[Inject(Deferred = true)]</c> has only an <c>init</c> accessor, or is
+	///     <c>required</c>. A deferred property is assigned after construction (to break a cycle), which an
+	///     <c>init</c>-only accessor forbids, and it is omitted from the emitted object initializer, which a
+	///     <c>required</c> member does not allow (the generated construction would fail with CS9035 inside
+	///     generated code). Give it a plain <c>set</c> accessor and drop <c>required</c>.
 	/// </summary>
 	public static readonly DiagnosticDescriptor DeferredPropertyIsInitOnly = new(
 		"AWT144",
-		"Deferred property is init-only",
-		"The property '{0}' on '{1}' is marked [Inject(Deferred = true)] but is init-only; a deferred property is assigned after construction, so it needs a set accessor (init can only be assigned in an object initializer)",
+		"Deferred property is init-only or required",
+		"The property '{0}' on '{1}' is marked [Inject(Deferred = true)] but is {2}; a deferred property is assigned after construction and omitted from the object initializer, so it needs a plain set accessor and must not be required (init accessors and required members can only be satisfied inside an object initializer)",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
@@ -664,18 +666,19 @@ internal static class Diagnostics
 	/// <summary>
 	///     A cycle that involves at least one <c>[Inject(Deferred = true)]</c> property is only partly broken: it
 	///     still traverses a construction-time edge (a constructor parameter, a plain <c>[Inject]</c> property, or a
-	///     bare eager <c>Owned&lt;T&gt;</c>/<c>Task&lt;T&gt;</c>). A deferred property breaks a cycle only when
-	///     <em>every</em> edge in the cycle is deferred, because the container may begin resolving at any
-	///     participant and an instance is cached only after its constructor (and object initializer) completes.
-	///     Entering the cycle at the participant whose remaining cycle edge is a construction dependency re-enters
-	///     that participant before it is cached, so it is reconstructed (a duplicate singleton) or recurses forever
-	///     (a transient), regardless of lifetime. Make every edge in the cycle a deferred property, or break the
-	///     cycle another way.
+	///     bare eager <c>Owned&lt;T&gt;</c>/<c>Task&lt;T&gt;</c>) that misbehaves at runtime. A construction edge
+	///     whose source is a cached (singleton/scoped) participant resolves its target - and, around the cycle, the
+	///     source itself again - <em>before</em> the source is cached, so the source is constructed twice (a
+	///     duplicate of a cached instance). When every participant is a transient, nothing is ever cached and the
+	///     re-entry recurses forever instead. Only a construction edge that starts at a <em>transient</em> in a
+	///     cycle that also has a synchronously-cached participant terminates (the cached participant's re-entrant
+	///     resolve returns the cached instance), and that shape is supported and not reported. Turn the offending
+	///     construction edge into an <c>[Inject(Deferred = true)]</c> property, or break the cycle another way.
 	/// </summary>
 	public static readonly DiagnosticDescriptor DeferredMixedCycle = new(
 		"AWT147",
 		"Deferred cycle retains a construction edge",
-		"The cycle {0} is only partly broken by a deferred property and cannot terminate: it still has at least one construction-time edge (a constructor parameter, a plain [Inject] property, or an eager Owned<T>/Task<T>), and a deferred property breaks a cycle only when every edge around it is deferred. To fix it, turn the remaining constructor parameter (or plain [Inject] property) into an [Inject(Deferred = true)] property so both directions of the cycle are deferred, or remove one of the dependencies to break the cycle.",
+		"The cycle {0} is only partly broken by a deferred property: it still has at least one construction-time edge (a constructor parameter, a plain [Inject] property, or an eager Owned<T>/Task<T>). Resolution that traverses that edge re-enters a participant before it is cached, so it constructs a duplicate of a cached (singleton/scoped) participant - or recurses forever when every participant is a transient. To fix it, turn the remaining constructor parameter (or plain [Inject] property) into an [Inject(Deferred = true)] property, or remove one of the dependencies to break the cycle.",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);

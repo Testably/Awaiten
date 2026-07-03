@@ -229,15 +229,21 @@ partial class AwaitenGenerator
 		// inside the object initializer, so it contributes no graph edge and can break a mutual constructor cycle.
 		bool deferred = IsInjectDeferred(property.GetAttributes());
 
-		// AWT144: a deferred property is assigned after construction, so it needs a real set accessor - an
-		// init-only accessor can only be assigned inside an object initializer, which is exactly the
-		// construction-time path a deferred property must avoid to break a cycle.
-		if (deferred && setter.IsInitOnly)
+		// AWT144: a deferred property is assigned after construction and omitted from the emitted object
+		// initializer, so it needs a real set accessor and must not be `required` - an init-only accessor can
+		// only be assigned inside an object initializer (exactly the construction-time path a deferred property
+		// must avoid to break a cycle), and a required member omitted from the initializer would surface as an
+		// opaque CS9035 inside the generated container instead of a targeted diagnostic here.
+		if (deferred && (setter.IsInitOnly || property.IsRequired))
 		{
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.DeferredPropertyIsInitOnly,
 				location,
-				new EquatableArray<string>([property.Name, DisplayInstance(info.ImplementationType),])));
+				new EquatableArray<string>([
+					property.Name,
+					DisplayInstance(info.ImplementationType),
+					setter.IsInitOnly ? "init-only" : "required",
+				])));
 			return null;
 		}
 

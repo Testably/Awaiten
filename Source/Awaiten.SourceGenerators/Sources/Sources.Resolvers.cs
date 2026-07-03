@@ -71,13 +71,6 @@ internal static partial class Sources
 		string type = instance.ConstructedType;
 		string resolver = names.Resolver(index);
 
-		// A deferred [Inject(Deferred = true)] member is wired after the instance is constructed (a scoped instance
-		// after it is cached, so a mutual cycle terminates; a transient right after construction). Null when the
-		// instance has no deferred member, so a plain resolver's emitted code is unchanged.
-		Action<int>? DeferredFor(string variable) => HasDeferredMembers(instance)
-			? d => EmitDeferredAssignments(builder, d, instance, variable, context, asynchronous: false)
-			: null;
-
 		if (instance.IsParameterized)
 		{
 			string[] argTypes = instance.ArgTypes();
@@ -87,7 +80,7 @@ internal static partial class Sources
 			// Reachable from the Root (a singleton's Func<TArg…, T> binds it there) and from a throwaway
 			// Owned<T> scope built off any owner (__s.ResolveX(args)), so it is internal rather than protected -
 			// protected would not be callable through a base-typed scope reference from the derived Root (CS1540).
-			EmitFreshResolver(builder, depth, new FreshResolver("internal", type, resolver, signature, parameterizedConstruction, DisposalOf(instance), parameterizedSummary), asyncDisposal, DeferredFor("created"));
+			EmitFreshResolver(builder, depth, new FreshResolver("internal", type, resolver, signature, parameterizedConstruction, DisposalOf(instance), parameterizedSummary), asyncDisposal, DeferredEmitter(builder, instance, "created", context, asynchronous: false));
 			return;
 		}
 
@@ -113,14 +106,25 @@ internal static partial class Sources
 		if (instance.Lifetime == Lifetime.Transient)
 		{
 			string transientSummary = $"Resolves the transient {XmlTypeRef(type)} (a new instance per call).";
-			EmitFreshResolver(builder, depth, new FreshResolver("internal", type, resolver, string.Empty, construction, DisposalOf(instance), transientSummary), asyncDisposal, DeferredFor("created"));
+			EmitFreshResolver(builder, depth, new FreshResolver("internal", type, resolver, string.Empty, construction, DisposalOf(instance), transientSummary), asyncDisposal, DeferredEmitter(builder, instance, "created", context, asynchronous: false));
 			return;
 		}
 
 		string scopedSummary = $"Resolves the scoped {XmlTypeRef(type)} (one instance per scope).";
 		string scopedWiredFlag = HasDeferredMembers(instance) ? names.WiredField(index) : string.Empty;
-		EmitCachingResolver(builder, depth, new CachingResolver("internal", type, resolver, names.Field(index), construction, DisposalOf(instance), scopedSummary, scopedWiredFlag), asyncDisposal, DeferredFor(names.Field(index)));
+		EmitCachingResolver(builder, depth, new CachingResolver("internal", type, resolver, names.Field(index), construction, DisposalOf(instance), scopedSummary, scopedWiredFlag), asyncDisposal, DeferredEmitter(builder, instance, names.Field(index), context, asynchronous: false));
 	}
+
+	/// <summary>
+	///     The deferred-wiring emitter for an instance - the callback a resolver shape invokes after
+	///     construction to assign the instance's <c>[Inject(Deferred = true)]</c> members - or
+	///     <see langword="null" /> when it has none, so a plain resolver's emitted code is unchanged. Shared by
+	///     every resolver shape (sync/async, fresh/caching) so the hookup cannot drift per emission site.
+	/// </summary>
+	private static Action<int>? DeferredEmitter(StringBuilder builder, InstanceModel instance, string variable, EmitContext context, bool asynchronous)
+		=> HasDeferredMembers(instance)
+			? d => EmitDeferredAssignments(builder, d, instance, variable, context, asynchronous)
+			: null;
 
 	/// <summary>
 	///     Emits a resolver that constructs a fresh instance on every call (a transient, or a parameterized
@@ -139,18 +143,20 @@ internal static partial class Sources
 		EmitDisposedGuard(builder, depth + 1);
 
 		// A transient is not cached, so its deferred members never participate in a terminating cycle (AWT145
-		// rejects a transient deferred cycle); they are still wired after construction here. Deferred members also
-		// force the `created` variable form so there is an instance to assign through.
+		// rejects a transient deferred cycle); they are still wired after construction here - before the owner's
+		// own disposal registration, so a dependency first built during wiring registers earlier and is disposed
+		// later than this owner. Deferred members also force the `created` variable form so there is an instance
+		// to assign through.
 		if (resolver.Disposal != DisposalTracking.None || emitDeferred is not null)
 		{
 			Indent(builder, depth + 1).Append(type).Append(" created = ").Append(construction).AppendLine(";");
+			emitDeferred?.Invoke(depth + 1);
 			if (resolver.Disposal != DisposalTracking.None)
 			{
 				EmitFreshDisposalTracking(builder, depth + 1, resolver.Disposal == DisposalTracking.Runtime, asyncDisposal, asyncContext: false);
 				builder.AppendLine();
 			}
 
-			emitDeferred?.Invoke(depth + 1);
 			Indent(builder, depth + 1).AppendLine("return created;");
 		}
 		else
@@ -187,13 +193,8 @@ internal static partial class Sources
 
 		string construction = EmitConstruction(instance, context.Instances, names, context.ServiceToIndex);
 		string singletonSummary = $"Resolves the singleton {XmlTypeRef(type)} (one instance per container).";
-		// A deferred [Inject(Deferred = true)] member is wired after the singleton is stored in its field, so a
-		// mutual cycle terminates (the re-entrant resolve returns this cached instance). Null when there is none.
-		Action<int>? emitDeferred = HasDeferredMembers(instance)
-			? d => EmitDeferredAssignments(builder, d, instance, names.Field(index), context, asynchronous: false)
-			: null;
 		string singletonWiredFlag = HasDeferredMembers(instance) ? names.WiredField(index) : string.Empty;
-		EmitCachingResolver(builder, depth, new CachingResolver("protected override", type, resolver, names.Field(index), construction, DisposalOf(instance), singletonSummary, singletonWiredFlag), context.AsyncDisposal, emitDeferred);
+		EmitCachingResolver(builder, depth, new CachingResolver("protected override", type, resolver, names.Field(index), construction, DisposalOf(instance), singletonSummary, singletonWiredFlag), context.AsyncDisposal, DeferredEmitter(builder, instance, names.Field(index), context, asynchronous: false));
 	}
 
 	/// <summary>
@@ -386,9 +387,7 @@ internal static partial class Sources
 
 		// A deferred [Inject(Deferred = true)] member is wired after the instance is constructed, awaiting an
 		// async-tainted member exactly like an async-tainted constructor argument. Null when there is none.
-		Action<int>? emitDeferred = HasDeferredMembers(instance)
-			? d => EmitDeferredAssignments(builder, d, instance, "created", context, asynchronous: true)
-			: null;
+		Action<int>? emitDeferred = DeferredEmitter(builder, instance, "created", context, asynchronous: true);
 
 		// A parameterized async service is built fresh per call from its runtime arguments AND awaits
 		// initialization, so it is reached only through Func<TArg…, Task<T>>. Its async resolver takes the
@@ -463,9 +462,7 @@ internal static partial class Sources
 		string construction = EmitConstruction(instance, context.Instances, context.Names, context.ServiceToIndex, asynchronous: true);
 		// A deferred [Inject(Deferred = true)] member is wired in the creator after construction (awaiting an
 		// async-tainted member like an async-tainted constructor argument). Null when there is none.
-		Action<int>? emitDeferred = HasDeferredMembers(instance)
-			? d => EmitDeferredAssignments(builder, d, instance, "created", context, asynchronous: true)
-			: null;
+		Action<int>? emitDeferred = DeferredEmitter(builder, instance, "created", context, asynchronous: true);
 		EmitAsyncCachingResolver(builder, depth, index, context, construction, "protected override", emitDeferred);
 	}
 
@@ -523,8 +520,11 @@ internal static partial class Sources
 			.Append(creator).Append('(').Append(ct).AppendLine(")");
 		Indent(builder, depth).AppendLine("{");
 		Indent(builder, depth + 1).Append(type).Append(" created = ").Append(construction).AppendLine(";");
-		EmitAsyncDisposableRegistration(builder, depth + 1, instance, context.AsyncDisposal);
+		// Deferred members are wired before the owner's own disposal registration, so a dependency first built
+		// during wiring registers earlier and is disposed later than this owner (reverse teardown order). A failed
+		// wiring faults the memoized task, which the resolver evicts, so a later call retries.
 		emitDeferred?.Invoke(depth + 1);
+		EmitAsyncDisposableRegistration(builder, depth + 1, instance, context.AsyncDisposal);
 		EmitAsyncInitialization(builder, depth + 1, instance, "created");
 		Indent(builder, depth + 1).AppendLine("return created;");
 		Indent(builder, depth).AppendLine("}");
@@ -699,10 +699,21 @@ internal static partial class Sources
 
 	/// <summary>
 	///     Emits a lock-free-read, lock-on-write cached resolver: return the cached field if set, otherwise
-	///     construct once under <c>lock (__gate)</c>, registering a disposable instance for teardown.
+	///     construct once under <c>lock (__gate)</c>, registering a disposable instance for teardown. An instance
+	///     with deferred (<c>[Inject(Deferred = true)]</c>) members additionally wraps its cache-miss block in a
+	///     wiring episode (see the emitted comments): the field is published before wiring so a re-entrant resolve
+	///     can terminate a cycle, the wiring flags of everything the episode published are committed only by the
+	///     outermost frame (so another thread's fast path never observes a half-wired instance, not even
+	///     transitively through a peer), and a failed episode unpublishes what it built so a later resolve retries
+	///     instead of silently returning a half-wired instance forever.
 	/// </summary>
 	private static void EmitCachingResolver(StringBuilder builder, int depth, in CachingResolver resolver, bool asyncDisposal, Action<int>? emitDeferred = null)
 	{
+		string field = resolver.Field;
+		string construction = resolver.Construction;
+		DisposalTracking disposal = resolver.Disposal;
+		bool deferred = resolver.WiredFlag.Length != 0;
+
 		AppendXmlSummary(builder, depth, resolver.Summary);
 		Indent(builder, depth).Append(resolver.Modifiers).Append(' ').Append(resolver.Type).Append(' ').Append(resolver.Method).AppendLine("()");
 		Indent(builder, depth).AppendLine("{");
@@ -711,61 +722,103 @@ internal static partial class Sources
 		// The lock-free fast path returns the cached field without taking the lock. When the instance has deferred
 		// ([Inject(Deferred = true)]) members it also tests the volatile wiring flag: those members are wired only
 		// after the field is published (inside the lock, below), so gating on the field alone could hand a concurrent
-		// caller a published-but-half-wired instance. The flag is set last, so a caller sees it true only once wiring
-		// has completed (and its acquire-read makes the deferred writes visible). The re-entrant same-thread resolve
-		// that breaks a mutual cycle still works: mid-wiring the flag is still false, so the re-entrant call falls
-		// through to the lock (__gate is a reentrant monitor), finds the field already set, skips the miss block, and
-		// returns the mid-wiring instance - which is exactly what terminates the cycle.
-		string fastPathGuard = resolver.WiredFlag.Length == 0
-			? $"{resolver.Field} is not null"
-			: $"{resolver.Field} is not null && {resolver.WiredFlag}";
+		// caller a published-but-half-wired instance. The flag is committed by the outermost frame of the wiring
+		// episode, so a caller sees it true only once every instance the episode published is fully wired (and its
+		// acquire-read makes the deferred writes visible). The re-entrant same-thread resolve that breaks a mutual
+		// cycle still works: mid-wiring the flag is still false, so the re-entrant call falls through to the lock
+		// (__gate is a reentrant monitor), finds the field already set, skips the miss block, and returns the
+		// mid-wiring instance - which is exactly what terminates the cycle.
+		string fastPathGuard = deferred
+			? $"{field} is not null && {resolver.WiredFlag}"
+			: $"{field} is not null";
 		Indent(builder, depth + 1).Append("if (").Append(fastPathGuard).AppendLine(")");
 		Indent(builder, depth + 1).AppendLine("{");
-		Indent(builder, depth + 2).Append("return ").Append(resolver.Field).AppendLine(";");
+		Indent(builder, depth + 2).Append("return ").Append(field).AppendLine(";");
 		Indent(builder, depth + 1).AppendLine("}");
 		builder.AppendLine();
 
 		Indent(builder, depth + 1).AppendLine("lock (__gate)");
 		Indent(builder, depth + 1).AppendLine("{");
 		EmitDisposedGuard(builder, depth + 2);
-		Indent(builder, depth + 2).Append("if (").Append(resolver.Field).AppendLine(" is null)");
+		Indent(builder, depth + 2).Append("if (").Append(field).AppendLine(" is null)");
 		Indent(builder, depth + 2).AppendLine("{");
-		Indent(builder, depth + 3).Append(resolver.Field).Append(" = ").Append(resolver.Construction).AppendLine(";");
-		if (resolver.Disposal == DisposalTracking.Runtime)
+		if (!deferred)
 		{
-			// A factory's declared return type may hide a concrete disposable, so retain the realized instance
-			// only when it genuinely is one. The add stays under the lock that guards the field assignment.
-			string test = asyncDisposal
-				? " is global::System.IDisposable or global::System.IAsyncDisposable)"
-				: " is global::System.IDisposable)";
-			Indent(builder, depth + 3).Append("if (").Append(resolver.Field).AppendLine(test);
+			Indent(builder, depth + 3).Append(field).Append(" = ").Append(construction).AppendLine(";");
+			EmitCachedDisposalRegistration(builder, depth + 3, field, disposal, asyncDisposal);
+		}
+		else
+		{
+			// The wiring episode: everything published while __wiring is non-zero is still being wired (possibly
+			// re-entrantly, across a cycle). The instance is published before its deferred members are wired - that
+			// is what lets the re-entrant resolve of a mutual cycle return it - and registered for disposal after
+			// them, so a dependency first built during wiring registers earlier and is disposed later than this
+			// owner (reverse teardown order preserves dependency-outlives-dependent).
+			Indent(builder, depth + 3).AppendLine("__wiring++;");
+			Indent(builder, depth + 3).AppendLine("try");
 			Indent(builder, depth + 3).AppendLine("{");
-			Indent(builder, depth + 4).Append("(__disposables ??= new global::System.Collections.Generic.List<object>()).Add(").Append(resolver.Field).AppendLine(");");
+			Indent(builder, depth + 4).Append(field).Append(" = ").Append(construction).AppendLine(";");
+			emitDeferred?.Invoke(depth + 4);
+			EmitCachedDisposalRegistration(builder, depth + 4, field, disposal, asyncDisposal);
 			Indent(builder, depth + 3).AppendLine("}");
-		}
-		else if (resolver.Disposal == DisposalTracking.Static)
-		{
-			Indent(builder, depth + 3).Append("(__disposables ??= new global::System.Collections.Generic.List<object>()).Add(").Append(resolver.Field).AppendLine(");");
-		}
-
-		// Deferred members are wired after the instance is cached (still inside the cache-miss block, so it runs
-		// exactly once), which is what lets a mutual cycle terminate: the re-entrant resolve returns this cached
-		// instance instead of recursing. The wiring flag is set last (a volatile release-write), so the lock-free
-		// fast path publishes the instance to other threads only once it is fully wired.
-		if (emitDeferred is not null)
-		{
-			emitDeferred.Invoke(depth + 3);
-			if (resolver.WiredFlag.Length != 0)
-			{
-				Indent(builder, depth + 3).Append(resolver.WiredFlag).AppendLine(" = true;");
-			}
+			Indent(builder, depth + 3).AppendLine("catch");
+			Indent(builder, depth + 3).AppendLine("{");
+			// A failed wiring episode must not leave a half-wired instance published: a later resolve would skip
+			// the miss block (field non-null) and silently return it forever. Unpublish this field and - from the
+			// outermost frame - every other instance the failed episode published (their flags are still false),
+			// so the next resolve rebuilds instead. Peers cached in the failed episode may keep a reference to an
+			// unpublished instance; they are unpublished with it, so nothing published survives half-consistent.
+			Indent(builder, depth + 4).Append(field).AppendLine(" = null;");
+			Indent(builder, depth + 4).AppendLine("if (__wiring == 1)");
+			Indent(builder, depth + 4).AppendLine("{");
+			Indent(builder, depth + 5).AppendLine("__RollbackWiring();");
+			Indent(builder, depth + 4).AppendLine("}");
+			builder.AppendLine();
+			Indent(builder, depth + 4).AppendLine("throw;");
+			Indent(builder, depth + 3).AppendLine("}");
+			Indent(builder, depth + 3).AppendLine("finally");
+			Indent(builder, depth + 3).AppendLine("{");
+			// Only the outermost frame commits the wiring flags: a nested (re-entrant) frame's instance may still
+			// be referenced by a half-wired outer participant, so flagging it early would let another thread's
+			// fast path observe that half-wired participant transitively. After a rollback the commit is a no-op
+			// (everything unwired was unpublished).
+			Indent(builder, depth + 4).AppendLine("__wiring--;");
+			Indent(builder, depth + 4).AppendLine("if (__wiring == 0)");
+			Indent(builder, depth + 4).AppendLine("{");
+			Indent(builder, depth + 5).AppendLine("__CommitWiring();");
+			Indent(builder, depth + 4).AppendLine("}");
+			Indent(builder, depth + 3).AppendLine("}");
 		}
 
 		Indent(builder, depth + 2).AppendLine("}");
 		Indent(builder, depth + 1).AppendLine("}");
 		builder.AppendLine();
-		Indent(builder, depth + 1).Append("return ").Append(resolver.Field).AppendLine(";");
+		Indent(builder, depth + 1).Append("return ").Append(field).AppendLine(";");
 		Indent(builder, depth).AppendLine("}");
+	}
+
+	/// <summary>
+	///     Emits the disposal registration of a freshly cached instance, inside the cache-miss block (under the
+	///     lock that guards the field assignment). With <see cref="DisposalTracking.Runtime" /> (a factory output,
+	///     whose declared return type may hide a concrete disposable) the add is gated on a runtime test so only
+	///     genuinely-disposable outputs are retained.
+	/// </summary>
+	private static void EmitCachedDisposalRegistration(StringBuilder builder, int depth, string field, DisposalTracking disposal, bool asyncDisposal)
+	{
+		if (disposal == DisposalTracking.Runtime)
+		{
+			string test = asyncDisposal
+				? " is global::System.IDisposable or global::System.IAsyncDisposable)"
+				: " is global::System.IDisposable)";
+			Indent(builder, depth).Append("if (").Append(field).AppendLine(test);
+			Indent(builder, depth).AppendLine("{");
+			Indent(builder, depth + 1).Append("(__disposables ??= new global::System.Collections.Generic.List<object>()).Add(").Append(field).AppendLine(");");
+			Indent(builder, depth).AppendLine("}");
+		}
+		else if (disposal == DisposalTracking.Static)
+		{
+			Indent(builder, depth).Append("(__disposables ??= new global::System.Collections.Generic.List<object>()).Add(").Append(field).AppendLine(");");
+		}
 	}
 
 	/// <summary>

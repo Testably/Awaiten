@@ -34,6 +34,34 @@ public partial class DiagnosticTests
 		}
 
 		[Fact]
+		public async Task ReportsAwt144WhenDeferredPropertyIsRequired()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public sealed class Bus { }
+			                                       public sealed class Consumer
+			                                       {
+			                                           // A deferred property is omitted from the emitted object initializer, which a required member
+			                                           // does not allow - without AWT144 the generated `new Consumer()` fails with an opaque CS9035.
+			                                           [Inject(Deferred = true)] public required Bus Bus { get; set; }
+			                                       }
+
+			                                       [Container]
+			                                       [Singleton<Bus>]
+			                                       [Singleton<Consumer>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics.Any(d => d.Contains("AWT144"))).IsTrue()
+				.Because("a required member can only be satisfied inside an object initializer, which is exactly the construction-time path a deferred property must avoid - it deserves the targeted diagnostic, not CS9035 in generated code");
+		}
+
+		[Fact]
 		public async Task ReportsAwt145WhenADeferredCycleIncludesATransient()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -335,6 +363,71 @@ public partial class DiagnosticTests
 				.Because("a bare Owned<T> resolves its target at construction time, so it is a construction edge that leaves the deferred cycle only partly broken");
 			await That(result.Diagnostics.Any(d => d.Contains("AWT102"))).IsFalse()
 				.Because("the construction graph has only the Right -> Left edge (the deferred Left -> Right edge is absent), so it holds no cycle for AWT102");
+		}
+
+		[Fact]
+		public async Task ReportsAwt147WhenAFaultyMixedCycleOverlapsASupportedDeferredCycle()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       // Two cycles share the strongly connected component {Alpha, Beta, Gamma}: the all-deferred
+			                                       // Alpha <-> Gamma cycle is supported, but Alpha -> Beta -> Gamma -> Alpha keeps Beta's
+			                                       // constructor edge to Gamma. A per-cycle DFS that dismisses the supported cycle first never
+			                                       // enumerates the faulty one (Gamma is already off the stack when Beta is visited), so the
+			                                       // verdict must come from the component's whole edge set: Beta is a cached (singleton) source
+			                                       // of a construction edge, so resolving Beta re-enters it mid-construction and duplicates it.
+			                                       public sealed class Alpha
+			                                       {
+			                                           [Inject(Deferred = true)] public Gamma Gamma { get; set; }
+			                                           [Inject(Deferred = true)] public Beta Beta { get; set; }
+			                                       }
+			                                       public sealed class Beta { public Beta(Gamma gamma) { } }
+			                                       public sealed class Gamma { [Inject(Deferred = true)] public Alpha Alpha { get; set; } }
+
+			                                       [Container]
+			                                       [Singleton<Alpha>]
+			                                       [Singleton<Beta>]
+			                                       [Singleton<Gamma>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics.Any(d => d.Contains("AWT147"))).IsTrue()
+				.Because("the construction edge Beta -> Gamma survives in a cycle with deferred edges, so resolving Beta re-enters it before it is cached and constructs a duplicate singleton - even though the same component also contains a supported all-deferred cycle");
+			await That(result.Diagnostics.Any(d => d.Contains("AWT102"))).IsFalse()
+				.Because("the construction graph holds only Beta -> Gamma, which is acyclic, so AWT102 stays silent - AWT147 is the diagnostic that must catch this");
+		}
+
+		[Fact]
+		public async Task AConstructionEdgeFromATransient_WithACachedParticipant_IsSupported()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       // The classic hub-and-spoke break: the singleton hub defers its spoke, and the transient
+			                                       // spoke's constructor takes the hub. The hub is cached before it is wired, so the spoke's
+			                                       // constructor edge resolves the already-cached hub and the cycle terminates from both entry
+			                                       // points (entering at the spoke merely builds one extra transient spoke for the hub, which is
+			                                       // normal transient semantics). This must not be rejected as AWT147.
+			                                       public sealed class Hub { [Inject(Deferred = true)] public Spoke Spoke { get; set; } }
+			                                       public sealed class Spoke { public Spoke(Hub hub) { } }
+
+			                                       [Container]
+			                                       [Singleton<Hub>]
+			                                       [Transient<Spoke>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("a construction edge that starts at a transient in a cycle with a synchronously-cached participant terminates from every entry point, so the supported hub-and-spoke break must compile clean");
 		}
 	}
 }
