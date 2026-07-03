@@ -38,8 +38,11 @@ public static class AwaitenServiceCollectionExtensions
 	///         <b>not</b> dispose instances Awaiten builds only as nested dependencies (an MS.DI-captured
 	///         top-level instance is disposed; a disposable it depends on that is never resolved on its own is
 	///         not), and an implementation exposed under several service types is disposed once per resolved
-	///         service type. When the Awaiten container should be the single owner of disposal end to end, make
-	///         it the provider with <see cref="AwaitenServiceProvider" /> instead of projecting it here.
+	///         service type. Teardown order follows MS.DI's capture position, not Awaiten's creation order, so
+	///         resolving a shared dependency <b>after</b> its dependent at the top level can dispose the
+	///         dependency before the dependent. When the Awaiten container should be the single owner of disposal
+	///         end to end, make it the provider with <see cref="AwaitenServiceProvider" /> instead of projecting
+	///         it here.
 	///         Collection resolution
 	///         (<c>IEnumerable&lt;T&gt;</c> of every registration of a service) is not projected; only the
 	///         single-resolution winner of each service type is bridged.
@@ -74,10 +77,13 @@ public static class AwaitenServiceCollectionExtensions
 	internal static IServiceCollection AddGeneratedContainer<TRoot>(IServiceCollection services, TRoot root)
 		where TRoot : class, IAwaitenContainerMetadata, new()
 	{
-		// The container root and the per-scope holders are registered so MS.DI does not dispose the relayed
-		// synchronous instances twice: those are disposed by the MS.DI scope they were resolved from. An
-		// instance awaited through the Task<T> projection is disposed by the transient slot captured by
-		// MS.DI at the position of its resolution.
+		// The root is exposed as a resolvable service under its own type and the two container-facing
+		// interfaces so a host can reach it - e.g. to warm a SyncResolveAfterInit container by resolving
+		// IAwaitenContainerMetadata and awaiting InitializeAsync. It is registered as a pre-built instance
+		// (a constant, not a factory), which MS.DI never captures for disposal, so exposing it does not add
+		// a second disposal of the instances relayed below: a synchronously relayed instance is disposed by
+		// the MS.DI scope it was resolved from, and an instance awaited through the Task<T> projection is
+		// disposed by the transient slot captured by MS.DI at the position of its resolution.
 		services.AddSingleton(root);
 		services.AddSingleton<IAwaitenScope>(root);
 		services.AddSingleton<IAwaitenContainerMetadata>(root);
