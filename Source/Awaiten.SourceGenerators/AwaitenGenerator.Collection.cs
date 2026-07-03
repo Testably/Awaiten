@@ -147,9 +147,18 @@ partial class AwaitenGenerator
 		foreach (AttributeData attribute in containerSymbol.GetAttributes())
 		{
 			if (attribute.AttributeClass is not { Name: "ImportAttribute", } attributeClass
-			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace
-			    || attribute.ConstructorArguments.Length != 1
-			    || attribute.ConstructorArguments[0].Value is not INamedTypeSymbol module)
+			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace)
+			{
+				continue;
+			}
+
+			// [Import<TModule>] carries the module as a type argument; [Import(typeof(Module))] as its single
+			// constructor argument. Both name a closed module type - a module is never open generic, so the
+			// generic form needs no typeof.
+			INamedTypeSymbol? module = attributeClass.IsGenericType
+				? attributeClass.TypeArguments.Length == 1 ? attributeClass.TypeArguments[0] as INamedTypeSymbol : null
+				: attribute.ConstructorArguments.Length == 1 ? attribute.ConstructorArguments[0].Value as INamedTypeSymbol : null;
+			if (module is null)
 			{
 				continue;
 			}

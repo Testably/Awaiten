@@ -75,4 +75,32 @@ public class ModuleTests
 		await That(source).Contains("global::MyCode.ModuleClock")
 			.Because("an imported default fills the gap when the container provides no IClock of its own");
 	}
+
+	[Fact]
+	public async Task Module_GenericImportForm_ImportsTheSameAsTheTypeofForm()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class Logger { }
+
+		                                       [Module]
+		                                       [Singleton<Logger>]
+		                                       public sealed class InfrastructureModule { }
+
+		                                       [Container]
+		                                       [Import<InfrastructureModule>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("global::MyCode.Logger")
+			.Because("[Import<TModule>] pulls in the module's registrations like [Import(typeof(TModule))]");
+	}
 }
