@@ -523,6 +523,46 @@ public class CollectionTests
 	}
 
 	[Fact]
+	public async Task ExplicitlyRegisteredSyncCollectionShape_SuppressesTheAsyncEnumerableViewOnInjectionToo()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class Alpha : IPlugin { }
+		                                       public sealed class Config : IReadOnlyList<IPlugin>
+		                                       {
+		                                           public IPlugin this[int i] => null;
+		                                           public int Count => 0;
+		                                           public IEnumerator<IPlugin> GetEnumerator() => null;
+		                                           System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => null;
+		                                       }
+		                                       public sealed class Host { public Host(IAsyncEnumerable<IPlugin> plugins) { } }
+
+		                                       [Container]
+		                                       [Singleton<Alpha, IPlugin>]
+		                                       [Singleton<Config, IReadOnlyList<IPlugin>>]
+		                                       [Singleton<Host>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		// An explicitly registered synchronous shape (IReadOnlyList<IPlugin>) makes the whole IPlugin collection an
+		// opaque value, all-or-nothing. By type the IAsyncEnumerable<IPlugin> view is suppressed (SynthesisSuppressed),
+		// so injecting the unregistered async shape is AWT101 - the same missing-dependency outcome - rather than a
+		// second collection silently synthesized from the members behind the opaque IReadOnlyList<IPlugin>.
+		await That(result.Diagnostics).Contains("*AWT101*").AsWildcard()
+			.Because("a registered synchronous collection shape suppresses the IAsyncEnumerable<T> view on injection too, matching the by-type SynthesisSuppressed gate");
+		await That(result.Sources.TryGetValue("Awaiten.MyCode.MyContainer.g.cs", out string? source) ? source : string.Empty)
+			.DoesNotContain("new __AsyncArray<global::MyCode.IPlugin>")
+			.Because("the suppressed async view is not synthesized behind the opaque registration");
+	}
+
+	[Fact]
 	public async Task SynchronousCollection_IsAlsoResolvableByTypeAsIAsyncEnumerable()
 	{
 		GeneratorResult result = Generator.Run("""

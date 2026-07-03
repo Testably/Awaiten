@@ -1704,7 +1704,10 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			// steps aside entirely (all-or-nothing): the registered shape resolves to that opaque value as an
 			// ordinary direct dependency, and an unregistered sibling shape is a plain missing dependency (AWT101)
 			// rather than a silently synthesized second collection that could disagree with the registered one.
-			bool syncShapeRegistered = parameterModel.Kind == DependencyKind.Enumerable
+			// A registered synchronous shape claims the whole collection - including the IAsyncEnumerable<T> view, so
+			// injecting it is AWT101 rather than a second collection synthesized behind the opaque one - mirroring the
+			// by-type SynthesisSuppressed gate; a registered IAsyncEnumerable<T> claims only its own async shape.
+			bool syncShapeRegistered = parameterModel.Kind is (DependencyKind.Enumerable or DependencyKind.AsyncEnumerable)
 			                           && CollectionShapeTypes(parameterModel.ServiceType).Any(shape => serviceToImpl.ContainsKey(new ServiceKey(shape, parameterModel.Key)));
 			bool asyncShapeRegistered = parameterModel.Kind == DependencyKind.AsyncEnumerable
 			                            && serviceToImpl.ContainsKey(new ServiceKey(AsyncEnumerableShapeType(parameterModel.ServiceType), parameterModel.Key));

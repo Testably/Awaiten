@@ -371,6 +371,44 @@ public partial class CollectionTests
 			.Because("the async collection awaits its members, so it has no synchronous materialization - synchronous Resolve steers to ResolveAsync");
 	}
 
+	[Fact]
+	public async Task AsyncEnumerable_RootWithheldDisposableMember_ResolveAsyncFromTheRootThrowsGuidance()
+	{
+		using AsyncDisposableCollectionContainer.Root container = new();
+
+		// The member is a build-on-demand disposable, so materializing the async collection by type on the root
+		// would accumulate the transients for the container's lifetime - withheld under strict lifetime safety,
+		// mirroring the synchronous shapes and the singular resolution of such a member.
+		Func<Task> resolveOnRoot = () => container.ResolveAsync<IAsyncEnumerable<IWidget>>(TestContext.Current.CancellationToken);
+		await That(resolveOnRoot).Throws<InvalidOperationException>()
+			.Because("the async collection of a build-on-demand disposable is withheld from by-type ResolveAsync on the root");
+	}
+
+	[Fact]
+	public async Task AsyncEnumerable_RootWithheldDisposableMember_ResolveAsyncFromAScope_WorksAndIsDisposedWithTheScope()
+	{
+		using AsyncDisposableCollectionContainer.Root container = new();
+
+		AsyncDisposableWidget member;
+		using (IAwaitenScope scope = container.CreateScope())
+		{
+			IAsyncEnumerable<IWidget> stream = await scope.ResolveAsync<IAsyncEnumerable<IWidget>>(TestContext.Current.CancellationToken);
+
+			List<IWidget> widgets = new();
+			await foreach (IWidget widget in stream.WithCancellation(TestContext.Current.CancellationToken))
+			{
+				widgets.Add(widget);
+			}
+
+			member = (AsyncDisposableWidget)widgets.Single();
+			await That(member.Disposed).IsFalse()
+				.Because("the scope is still alive");
+		}
+
+		await That(member.Disposed).IsTrue()
+			.Because("a child scope bounds the members the async collection materializes and disposes them with the scope - the accumulation the root would suffer is bounded here");
+	}
+
 	public interface IPlugin
 	{
 		string Name { get; }
@@ -472,6 +510,18 @@ public partial class CollectionTests
 	public sealed class DisposableWidget : IWidget, IDisposable
 	{
 		public bool Disposed { get; private set; }
+
+		public void Dispose() => Disposed = true;
+	}
+
+	// A disposable transient that is also async-initialized: as a collection member it makes the collection both
+	// non-sync-materializable (so its IAsyncEnumerable<T> shape is served by the async arm) and root-withheld (a
+	// build-on-demand disposable would accumulate on the root), exercising the async collection's root-withholding.
+	public sealed class AsyncDisposableWidget : IWidget, IAsyncInitializable, IDisposable
+	{
+		public bool Disposed { get; private set; }
+
+		public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
 		public void Dispose() => Disposed = true;
 	}
@@ -583,6 +633,13 @@ public partial class CollectionTests
 	[Container(LifetimeSafety = LifetimeSafety.Loose)]
 	[Transient<DisposableWidget, IWidget>]
 	public static partial class LooseCollectionContainer;
+
+	// The async analogue of DisposableCollectionContainer: the member is async-tainted, so the IAsyncEnumerable<T>
+	// collection is served by the async by-type resolver, and it is a build-on-demand disposable, so that resolver
+	// is withheld on the root (materializing it there would accumulate the transients for the container's lifetime).
+	[Container]
+	[Transient<AsyncDisposableWidget, IWidget>]
+	public static partial class AsyncDisposableCollectionContainer;
 
 	// IEnumerable<IPlugin> is registered directly (an opaque value); the individual IPlugin registrations would
 	// otherwise synthesize a collection of two, so the counts distinguish which one injection resolves to.
