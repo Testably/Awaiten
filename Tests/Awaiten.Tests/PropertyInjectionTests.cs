@@ -105,6 +105,57 @@ public partial class PropertyInjectionTests
 		await That(consumer.Connection!.Initialized).IsTrue();
 	}
 
+	[Fact]
+	public async Task DeferredProperty_BreaksAMutualSingletonCycle_AndWiresBothBackReferences()
+	{
+		using DeferredCycleContainer.Root container = new();
+
+		OrderService order = container.Resolve<OrderService>();
+		InvoiceService invoice = container.Resolve<InvoiceService>();
+
+		// Both deferred back-references are wired after construction, and each points at the shared singleton.
+		await That(order.Invoice).IsSameAs(invoice);
+		await That(invoice.Order).IsSameAs(order);
+		await That(order.Invoice!.Order).IsSameAs(order);
+	}
+
+	[Fact]
+	public async Task DeferredProperty_IsAssignedExactlyOnce_AndACacheHitDoesNotReassign()
+	{
+		using DeferredCycleContainer.Root container = new();
+
+		OrderService first = container.Resolve<OrderService>();
+		// A second resolve returns the cached singleton; the deferred assignment ran only on construction.
+		OrderService second = container.Resolve<OrderService>();
+
+		await That(second).IsSameAs(first);
+		await That(first.WiredCount).IsEqualTo(1)
+			.Because("the deferred assignment runs once inside the cache-miss block, so a cache hit never reassigns");
+	}
+
+	[Fact]
+	public async Task DeferredProperty_InANonCyclicGraph_IsStillFilled()
+	{
+		using DeferredNonCyclicContainer.Root container = new();
+
+		Reader reader = container.Resolve<Reader>();
+
+		await That(reader.Bus).Is<Bus>();
+	}
+
+	[Fact]
+	public async Task DeferredProperty_OnAScopedCycle_ResolvesPerScope()
+	{
+		using ScopedDeferredCycleContainer.Root container = new();
+
+		using IAwaitenScope scope = container.CreateScope();
+		ScopedLeft left = scope.Resolve<ScopedLeft>();
+		ScopedRight right = scope.Resolve<ScopedRight>();
+
+		await That(left.Right).IsSameAs(right);
+		await That(right.Left).IsSameAs(left);
+	}
+
 	public sealed class Bus;
 
 	public sealed class Logger
@@ -224,4 +275,61 @@ public partial class PropertyInjectionTests
 	[Singleton<Connection>]
 	[Singleton<AsyncConsumer>]
 	public static partial class AsyncContainer;
+
+	public sealed class OrderService
+	{
+		private InvoiceService? _invoice;
+
+		[Inject(Deferred = true)]
+		public InvoiceService? Invoice
+		{
+			get => _invoice;
+			set
+			{
+				_invoice = value;
+				WiredCount++;
+			}
+		}
+
+		public int WiredCount { get; private set; }
+	}
+
+	public sealed class InvoiceService
+	{
+		[Inject(Deferred = true)]
+		public OrderService? Order { get; set; }
+	}
+
+	[Container]
+	[Singleton<OrderService>]
+	[Singleton<InvoiceService>]
+	public static partial class DeferredCycleContainer;
+
+	public sealed class Reader
+	{
+		[Inject(Deferred = true)]
+		public Bus? Bus { get; set; }
+	}
+
+	[Container]
+	[Singleton<Bus>]
+	[Singleton<Reader>]
+	public static partial class DeferredNonCyclicContainer;
+
+	public sealed class ScopedLeft
+	{
+		[Inject(Deferred = true)]
+		public ScopedRight? Right { get; set; }
+	}
+
+	public sealed class ScopedRight
+	{
+		[Inject(Deferred = true)]
+		public ScopedLeft? Left { get; set; }
+	}
+
+	[Container]
+	[Scoped<ScopedLeft>]
+	[Scoped<ScopedRight>]
+	public static partial class ScopedDeferredCycleContainer;
 }

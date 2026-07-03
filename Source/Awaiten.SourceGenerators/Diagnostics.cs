@@ -534,4 +534,31 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A property marked <c>[Inject(Deferred = true)]</c> has only an <c>init</c> accessor. A deferred
+	///     property is assigned after construction (to break a cycle), which an <c>init</c>-only accessor
+	///     forbids - it can be set only inside an object initializer. Give it a <c>set</c> accessor.
+	/// </summary>
+	public static readonly DiagnosticDescriptor DeferredPropertyIsInitOnly = new(
+		"AWT138",
+		"Deferred property is init-only",
+		"The property '{0}' on '{1}' is marked [Inject(Deferred = true)] but is init-only; a deferred property is assigned after construction, so it needs a set accessor (init can only be assigned in an object initializer)",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A cycle of <c>[Inject(Deferred = true)]</c> properties includes a transient. A deferred property
+	///     breaks a cycle only because the owning instance is cached before it is wired; a transient is not
+	///     cached, so the cycle would recurse forever at runtime. Make the participants singleton or scoped,
+	///     or break the cycle.
+	/// </summary>
+	public static readonly DiagnosticDescriptor DeferredTransientCycle = new(
+		"AWT139",
+		"Non-terminating deferred transient cycle",
+		"Deferred property cycle through a transient detected: {0}. A deferred property breaks a cycle only when the owning instance is cached (singleton or scoped) before it is wired; a transient is rebuilt on each resolve, so this cycle would recurse forever. Make the participants singleton or scoped, or break the cycle.",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

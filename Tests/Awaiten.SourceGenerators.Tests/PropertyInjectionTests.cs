@@ -97,4 +97,59 @@ public class PropertyInjectionTests
 
 		await That(result.Diagnostics.Any(d => d.Contains("AWT102"))).IsTrue();
 	}
+
+	[Fact]
+	public async Task DeferredProperty_BreaksAMutualSingletonCycle_NoAwt102_AndAssignsAfterCaching()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       // Two singletons that reference each other through a deferred property - a deferred edge
+		                                       // contributes no graph edge, so it breaks the mutual cycle that a plain [Inject] would close.
+		                                       public sealed class OrderService { [Inject(Deferred = true)] public InvoiceService Invoice { get; set; } }
+		                                       public sealed class InvoiceService { [Inject(Deferred = true)] public OrderService Order { get; set; } }
+
+		                                       [Container]
+		                                       [Singleton<OrderService>]
+		                                       [Singleton<InvoiceService>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// The deferred property is assigned after the instance is stored in its cache field - not inside the object
+		// initializer - so a re-entrant resolve returns the cached instance and the cycle terminates.
+		await That(source).Contains("_orderService = new global::MyCode.OrderService();");
+		await That(source).Contains("_orderService.Invoice = __root.ResolveInvoiceService();");
+		// The constructor call carries no object initializer for the deferred member.
+		await That(source).DoesNotContain("new global::MyCode.OrderService() { Invoice");
+	}
+
+	[Fact]
+	public async Task DeferredProperty_TheSameCycleWithoutDeferred_StillReportsAwt102()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       // The same mutual reference with a plain [Inject] property is a Direct edge, so it closes the cycle.
+		                                       public sealed class OrderService { [Inject] public InvoiceService Invoice { get; set; } }
+		                                       public sealed class InvoiceService { [Inject] public OrderService Order { get; set; } }
+
+		                                       [Container]
+		                                       [Singleton<OrderService>]
+		                                       [Singleton<InvoiceService>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics.Any(d => d.Contains("AWT102"))).IsTrue();
+	}
 }

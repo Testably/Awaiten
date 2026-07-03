@@ -39,3 +39,5 @@
  AWT135  | Awaiten   | Error    | A decorator's inner parameter is marked [FromServices]
  AWT136  | Awaiten   | Error    | An [Inject] property has no set or init accessor the container can assign through
  AWT137  | Awaiten   | Error    | An injected property is marked [Arg]
+ AWT138  | Awaiten   | Error    | An [Inject(Deferred = true)] property is init-only rather than settable
+ AWT139  | Awaiten   | Error    | A deferred property cycle includes a transient and cannot terminate

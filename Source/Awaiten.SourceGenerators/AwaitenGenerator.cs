@@ -96,6 +96,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		LocationInfo? containerLocation = LocationInfo.From(containerSymbol.Locations.FirstOrDefault());
 		DetectCycles(graph.Instances, graph.ConstructionDependencies, containerLocation, diagnostics);
 		DetectCaptiveDependencies(graph.Instances, graph.Dependencies, graph.InstanceLocations, diagnostics);
+		DetectDeferredTransientCycles(graph.Instances, graph.ServiceToImpl, graph.ImplToIndex, containerLocation, diagnostics);
 
 		// AWT119/AWT120 (strict only): a synchronous Func<T>/Lazy<T>/Owned<T> relationship resolves its
 		// target without awaiting initialization, so it may not target an async-tainted service. The
@@ -753,6 +754,15 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			// classifies it identically to a constructor edge.
 			foreach (MemberModel member in instances[i].InjectedMembers.AsArray())
 			{
+				// A deferred [Inject(Deferred = true)] member is assigned after the owning instance is constructed
+				// and cached, so - like a Func<T>/Lazy<T> relationship - it contributes no graph edge: it is excluded
+				// from cycle (AWT102), captive (AWT105) and async-taint analysis. That exclusion is what lets it break
+				// a mutual constructor cycle.
+				if (member.Deferred)
+				{
+					continue;
+				}
+
 				AddParameterEdges(member.Dependency, serviceToImpl, implToIndex, serviceMembers, includeEagerBare, nodeEdges);
 			}
 
@@ -2401,6 +2411,22 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			return null;
 		}
 
+		// A deferred property ([Inject(Deferred = true)]) is assigned after construction and caching rather than
+		// inside the object initializer, so it contributes no graph edge and can break a mutual constructor cycle.
+		bool deferred = IsInjectDeferred(property.GetAttributes());
+
+		// AWT138: a deferred property is assigned after construction, so it needs a real set accessor - an
+		// init-only accessor can only be assigned inside an object initializer, which is exactly the
+		// construction-time path a deferred property must avoid to break a cycle.
+		if (deferred && setter.IsInitOnly)
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.DeferredPropertyIsInitOnly,
+				location,
+				new EquatableArray<string>([property.Name, DisplayInstance(info.ImplementationType),])));
+			return null;
+		}
+
 		ParameterModel dependency = ClassifyDependency(
 			property.Type, property.GetAttributes(), asyncFactory: false, location);
 
@@ -2436,7 +2462,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 				])));
 		}
 
-		return new MemberModel(property.Name, dependency);
+		return new MemberModel(property.Name, dependency, deferred);
 
 		// The setter must be reachable from the container's object initializer, which is not a derived context:
 		// mirrors IsAccessibleConstructor - public always, internal/protected-internal only within the container's
@@ -3161,6 +3187,28 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	private static bool HasInject(ImmutableArray<AttributeData> attributes)
 		=> HasAwaitenAttribute(attributes, "InjectAttribute");
 
+	// Whether an [Inject] attribute sets Deferred = true, so the member is assigned after construction and
+	// caching (breaking a mutual constructor cycle) rather than filled inside the object initializer.
+	private static bool IsInjectDeferred(ImmutableArray<AttributeData> attributes)
+	{
+		foreach (AttributeData attribute in attributes)
+		{
+			if (attribute.AttributeClass is { Name: "InjectAttribute", } attributeClass
+			    && attributeClass.ContainingNamespace?.ToDisplayString() == ContainerRegistrations.AttributeNamespace)
+			{
+				foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
+				{
+					if (argument.Key == "Deferred" && argument.Value.Value is bool value)
+					{
+						return value;
+					}
+				}
+			}
+		}
+
+		return false;
+	}
+
 	private static bool HasAwaitenAttribute(ImmutableArray<AttributeData> attributes, string attributeName)
 	{
 		foreach (AttributeData attribute in attributes)
@@ -3328,6 +3376,109 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	// mismatch against a service with no [Arg] parameters (or a Func that supplies none) is not an empty "()".
 	private static string FormatTypeList(string[] types)
 		=> types.Length == 0 ? "none" : string.Join(", ", types.Select(Display));
+
+	/// <summary>
+	///     AWT139: a deferred property breaks a mutual cycle only because the owning instance is cached before
+	///     its deferred members are wired, so a re-entrant resolve returns the cached instance. A transient has
+	///     no cache, so a cycle formed of deferred edges in which a transient participates would recurse forever
+	///     at runtime - its deferred assignment reconstructs an instance already under construction. The deferred
+	///     edges are absent from the main dependency graph (that absence is what lets them escape AWT102), so this
+	///     walks a dedicated deferred-edge graph and reports any cycle that touches a transient. A
+	///     singleton/scoped-only deferred cycle is supported and not reported.
+	/// </summary>
+	private static void DetectDeferredTransientCycles(
+		List<InstanceModel> instances,
+		Dictionary<ServiceKey, string> serviceToImpl,
+		Dictionary<string, int> implToIndex,
+		LocationInfo? containerLocation,
+		List<DiagnosticInfo> diagnostics)
+	{
+		// Direct deferred member edges only: a deferred relationship/collection member resolves through its own
+		// deferral at use time and cannot recurse through construction.
+		Dictionary<int, List<int>> deferredEdges = new();
+		bool any = false;
+		for (int i = 0; i < instances.Count; i++)
+		{
+			List<int> edges = new();
+			foreach (MemberModel member in instances[i].InjectedMembers.AsArray())
+			{
+				if (member.Deferred
+				    && member.Dependency.Kind == DependencyKind.Direct
+				    && serviceToImpl.TryGetValue(KeyOf(member.Dependency), out string? targetImpl)
+				    && implToIndex.TryGetValue(targetImpl, out int targetIndex))
+				{
+					edges.Add(targetIndex);
+					any = true;
+				}
+			}
+
+			deferredEdges[i] = edges;
+		}
+
+		if (!any)
+		{
+			return;
+		}
+
+		HashSet<int> visited = new();
+		HashSet<int> onStack = new();
+		List<int> path = new();
+		HashSet<string> reported = new(StringComparer.Ordinal);
+
+		for (int i = 0; i < instances.Count; i++)
+		{
+			Visit(i);
+		}
+
+		void Visit(int node)
+		{
+			visited.Add(node);
+			onStack.Add(node);
+			path.Add(node);
+
+			foreach (int next in deferredEdges[node])
+			{
+				if (onStack.Contains(next))
+				{
+					ReportCycle(next);
+				}
+				else if (!visited.Contains(next))
+				{
+					Visit(next);
+				}
+			}
+
+			onStack.Remove(node);
+			path.RemoveAt(path.Count - 1);
+		}
+
+		void ReportCycle(int cycleStart)
+		{
+			int startIndex = path.LastIndexOf(cycleStart);
+			List<int> cycle = path.GetRange(startIndex, path.Count - startIndex);
+
+			// Only a cycle in which a transient participates cannot terminate; a singleton/scoped cycle is cached
+			// and is the supported case.
+			if (!cycle.Any(index => instances[index].Lifetime == Lifetime.Transient))
+			{
+				return;
+			}
+
+			// Dedupe on the set of nodes so the same cycle is not reported once per back-edge.
+			string signature = string.Join("|", cycle.OrderBy(x => x));
+			if (!reported.Add(signature))
+			{
+				return;
+			}
+
+			cycle.Add(cycleStart);
+			string rendered = string.Join(" -> ", cycle.Select(index => DisplayInstance(instances[index].ImplementationType)));
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.DeferredTransientCycle,
+				containerLocation,
+				new EquatableArray<string>([rendered,])));
+		}
+	}
 
 	private static void DetectCaptiveDependencies(
 		List<InstanceModel> instances,

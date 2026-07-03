@@ -1794,6 +1794,13 @@ internal static class Emitter
 		string type = instance.ConstructedType;
 		string resolver = names.Resolver(index);
 
+		// A deferred [Inject(Deferred = true)] member is wired after the instance is constructed (a scoped instance
+		// after it is cached, so a mutual cycle terminates; a transient right after construction). Null when the
+		// instance has no deferred member, so a plain resolver's emitted code is unchanged.
+		Action<int>? DeferredFor(string variable) => HasDeferredMembers(instance)
+			? d => EmitDeferredAssignments(builder, d, instance, variable, context.Instances, names, context.ServiceToIndex, asynchronous: false)
+			: null;
+
 		if (instance.IsParameterized)
 		{
 			string[] argTypes = instance.ArgTypes();
@@ -1802,7 +1809,7 @@ internal static class Emitter
 			// Reachable from the Root (a singleton's Func<TArg…, T> binds it there) and from a throwaway
 			// Owned<T> scope built off any owner (__s.ResolveX(args)), so it is internal rather than protected -
 			// protected would not be callable through a base-typed scope reference from the derived Root (CS1540).
-			EmitFreshResolver(builder, depth, new FreshResolver("internal", type, resolver, signature, parameterizedConstruction, DisposalOf(instance)), asyncDisposal);
+			EmitFreshResolver(builder, depth, new FreshResolver("internal", type, resolver, signature, parameterizedConstruction, DisposalOf(instance)), asyncDisposal, DeferredFor("created"));
 			return;
 		}
 
@@ -1824,11 +1831,11 @@ internal static class Emitter
 		// Internal also covers the case the Root (a subclass) reaches a captured scoped/transient's resolver.
 		if (instance.Lifetime == Lifetime.Transient)
 		{
-			EmitFreshResolver(builder, depth, new FreshResolver("internal", type, resolver, string.Empty, construction, DisposalOf(instance)), asyncDisposal);
+			EmitFreshResolver(builder, depth, new FreshResolver("internal", type, resolver, string.Empty, construction, DisposalOf(instance)), asyncDisposal, DeferredFor("created"));
 			return;
 		}
 
-		EmitCachingResolver(builder, depth, new CachingResolver("internal", type, resolver, names.Field(index), construction, DisposalOf(instance), "// Scoped: one instance per scope."), asyncDisposal);
+		EmitCachingResolver(builder, depth, new CachingResolver("internal", type, resolver, names.Field(index), construction, DisposalOf(instance), "// Scoped: one instance per scope."), asyncDisposal, DeferredFor(names.Field(index)));
 	}
 
 	/// <summary>
@@ -1837,7 +1844,7 @@ internal static class Emitter
 	///     registered for teardown on the owner under the lock, re-checking <c>__disposed</c> so one built
 	///     during a concurrent dispose is disposed here rather than leaked.
 	/// </summary>
-	private static void EmitFreshResolver(StringBuilder builder, int depth, in FreshResolver resolver, bool asyncDisposal)
+	private static void EmitFreshResolver(StringBuilder builder, int depth, in FreshResolver resolver, bool asyncDisposal, Action<int>? emitDeferred = null)
 	{
 		string type = resolver.Type;
 		string construction = resolver.Construction;
@@ -1845,11 +1852,20 @@ internal static class Emitter
 			.Append('(').Append(resolver.Signature).AppendLine(")");
 		Indent(builder, depth).AppendLine("{");
 		EmitDisposedGuard(builder, depth + 1);
-		if (resolver.Disposal != DisposalTracking.None)
+
+		// A transient is not cached, so its deferred members never participate in a terminating cycle (AWT139
+		// rejects a transient deferred cycle); they are still wired after construction here. Deferred members also
+		// force the `created` variable form so there is an instance to assign through.
+		if (resolver.Disposal != DisposalTracking.None || emitDeferred is not null)
 		{
 			Indent(builder, depth + 1).Append(type).Append(" created = ").Append(construction).AppendLine(";");
-			EmitFreshDisposalTracking(builder, depth + 1, resolver.Disposal == DisposalTracking.Runtime, asyncDisposal, asyncContext: false);
-			builder.AppendLine();
+			if (resolver.Disposal != DisposalTracking.None)
+			{
+				EmitFreshDisposalTracking(builder, depth + 1, resolver.Disposal == DisposalTracking.Runtime, asyncDisposal, asyncContext: false);
+				builder.AppendLine();
+			}
+
+			emitDeferred?.Invoke(depth + 1);
 			Indent(builder, depth + 1).AppendLine("return created;");
 		}
 		else
@@ -1962,7 +1978,12 @@ internal static class Emitter
 		}
 
 		string construction = EmitConstruction(instance, context.Instances, names, context.ServiceToIndex);
-		EmitCachingResolver(builder, depth, new CachingResolver("protected override", type, resolver, names.Field(index), construction, DisposalOf(instance), null), context.AsyncDisposal);
+		// A deferred [Inject(Deferred = true)] member is wired after the singleton is stored in its field, so a
+		// mutual cycle terminates (the re-entrant resolve returns this cached instance). Null when there is none.
+		Action<int>? emitDeferred = HasDeferredMembers(instance)
+			? d => EmitDeferredAssignments(builder, d, instance, names.Field(index), context.Instances, names, context.ServiceToIndex, asynchronous: false)
+			: null;
+		EmitCachingResolver(builder, depth, new CachingResolver("protected override", type, resolver, names.Field(index), construction, DisposalOf(instance), null), context.AsyncDisposal, emitDeferred);
 	}
 
 	/// <summary>
@@ -2149,6 +2170,12 @@ internal static class Emitter
 		const string task = "global::System.Threading.Tasks.Task";
 		const string ct = "global::System.Threading.CancellationToken cancellationToken";
 
+		// A deferred [Inject(Deferred = true)] member is wired after the instance is constructed, awaiting an
+		// async-tainted member exactly like an async-tainted constructor argument. Null when there is none.
+		Action<int>? emitDeferred = HasDeferredMembers(instance)
+			? d => EmitDeferredAssignments(builder, d, instance, "created", context.Instances, names, context.ServiceToIndex, asynchronous: true)
+			: null;
+
 		// A parameterized async service is built fresh per call from its runtime arguments AND awaits
 		// initialization, so it is reached only through Func<TArg…, Task<T>>. Its async resolver takes the
 		// arguments alongside the token; like the synchronous parameterized resolver it lives on the base Scope
@@ -2158,7 +2185,7 @@ internal static class Emitter
 			string[] argTypes = instance.ArgTypes();
 			string argSignature = string.Join("", argTypes.Select((t, i) => $"{t} a{i}, "));
 			string parameterizedConstruction = EmitConstruction(instance, context.Instances, names, context.ServiceToIndex, asynchronous: true);
-			EmitAsyncFreshResolver(builder, depth, index, context, parameterizedConstruction, argSignature);
+			EmitAsyncFreshResolver(builder, depth, index, context, parameterizedConstruction, argSignature, emitDeferred);
 			return;
 		}
 
@@ -2173,12 +2200,12 @@ internal static class Emitter
 		string construction = EmitConstruction(instance, context.Instances, names, context.ServiceToIndex, asynchronous: true);
 		if (instance.Lifetime == Lifetime.Transient)
 		{
-			EmitAsyncFreshResolver(builder, depth, index, context, construction);
+			EmitAsyncFreshResolver(builder, depth, index, context, construction, emitDeferred: emitDeferred);
 			return;
 		}
 
 		// Scoped: a memoized Task on the scope guards construction-and-initialization.
-		EmitAsyncCachingResolver(builder, depth, index, context, construction, "internal");
+		EmitAsyncCachingResolver(builder, depth, index, context, construction, "internal", emitDeferred);
 	}
 
 	/// <summary>
@@ -2216,7 +2243,12 @@ internal static class Emitter
 	{
 		InstanceModel instance = context.Instances[index];
 		string construction = EmitConstruction(instance, context.Instances, context.Names, context.ServiceToIndex, asynchronous: true);
-		EmitAsyncCachingResolver(builder, depth, index, context, construction, "protected override");
+		// A deferred [Inject(Deferred = true)] member is wired in the creator after construction (awaiting an
+		// async-tainted member like an async-tainted constructor argument). Null when there is none.
+		Action<int>? emitDeferred = HasDeferredMembers(instance)
+			? d => EmitDeferredAssignments(builder, d, instance, "created", context.Instances, context.Names, context.ServiceToIndex, asynchronous: true)
+			: null;
+		EmitAsyncCachingResolver(builder, depth, index, context, construction, "protected override", emitDeferred);
 	}
 
 	/// <summary>
@@ -2226,7 +2258,7 @@ internal static class Emitter
 	///     canceled is evicted from the cache so a later call retries rather than replaying the same failure
 	///     (and so one caller's cancellation does not permanently poison a shared singleton).
 	/// </summary>
-	private static void EmitAsyncCachingResolver(StringBuilder builder, int depth, int index, EmitContext context, string construction, string modifiers)
+	private static void EmitAsyncCachingResolver(StringBuilder builder, int depth, int index, EmitContext context, string construction, string modifiers, Action<int>? emitDeferred = null)
 	{
 		InstanceModel instance = context.Instances[index];
 		Names names = context.Names;
@@ -2270,6 +2302,7 @@ internal static class Emitter
 		Indent(builder, depth).AppendLine("{");
 		Indent(builder, depth + 1).Append(type).Append(" created = ").Append(construction).AppendLine(";");
 		EmitAsyncDisposableRegistration(builder, depth + 1, instance, context.AsyncDisposal);
+		emitDeferred?.Invoke(depth + 1);
 		EmitAsyncInitialization(builder, depth + 1, instance, "created");
 		Indent(builder, depth + 1).AppendLine("return created;");
 		Indent(builder, depth).AppendLine("}");
@@ -2280,7 +2313,7 @@ internal static class Emitter
 	///     transient, or a parameterized service that additionally takes the runtime arguments named in
 	///     <paramref name="argSignature" />). A disposable instance is registered for teardown on the owner.
 	/// </summary>
-	private static void EmitAsyncFreshResolver(StringBuilder builder, int depth, int index, EmitContext context, string construction, string argSignature = "")
+	private static void EmitAsyncFreshResolver(StringBuilder builder, int depth, int index, EmitContext context, string construction, string argSignature = "", Action<int>? emitDeferred = null)
 	{
 		InstanceModel instance = context.Instances[index];
 		Names names = context.Names;
@@ -2294,6 +2327,7 @@ internal static class Emitter
 		EmitDisposedGuard(builder, depth + 1);
 		Indent(builder, depth + 1).Append(type).Append(" created = ").Append(construction).AppendLine(";");
 		EmitAsyncDisposableRegistration(builder, depth + 1, instance, context.AsyncDisposal);
+		emitDeferred?.Invoke(depth + 1);
 		EmitAsyncInitialization(builder, depth + 1, instance, "created");
 		Indent(builder, depth + 1).AppendLine("return created;");
 		Indent(builder, depth).AppendLine("}");
@@ -2450,7 +2484,7 @@ internal static class Emitter
 	///     Emits a lock-free-read, lock-on-write cached resolver: return the cached field if set, otherwise
 	///     construct once under <c>lock (__gate)</c>, registering a disposable instance for teardown.
 	/// </summary>
-	private static void EmitCachingResolver(StringBuilder builder, int depth, in CachingResolver resolver, bool asyncDisposal)
+	private static void EmitCachingResolver(StringBuilder builder, int depth, in CachingResolver resolver, bool asyncDisposal, Action<int>? emitDeferred = null)
 	{
 		if (resolver.Comment is not null)
 		{
@@ -2487,6 +2521,11 @@ internal static class Emitter
 		{
 			Indent(builder, depth + 3).Append("(__disposables ??= new global::System.Collections.Generic.List<object>()).Add(").Append(resolver.Field).AppendLine(");");
 		}
+
+		// Deferred members are wired after the instance is cached (still inside the cache-miss block, so it runs
+		// exactly once), which is what lets a mutual cycle terminate: the re-entrant resolve returns this cached
+		// instance instead of recursing.
+		emitDeferred?.Invoke(depth + 3);
 
 		Indent(builder, depth + 2).AppendLine("}");
 		Indent(builder, depth + 1).AppendLine("}");
@@ -2599,18 +2638,64 @@ internal static class Emitter
 		}
 
 		StringBuilder assignments = new();
+		bool first = true;
 		for (int m = 0; m < members.Length; m++)
 		{
-			if (m > 0)
+			// A deferred member ([Inject(Deferred = true)]) is assigned after construction and caching, not in the
+			// object initializer, so it can break a mutual constructor cycle. It is emitted by EmitDeferredAssignments.
+			if (members[m].Deferred)
+			{
+				continue;
+			}
+
+			if (!first)
 			{
 				assignments.Append(", ");
 			}
 
+			first = false;
 			assignments.Append(members[m].MemberName).Append(" = ")
 				.Append(DependencyValue(members[m].Dependency, instances, names, serviceToIndex, asynchronous));
 		}
 
-		return $" {{ {assignments} }}";
+		return first ? string.Empty : $" {{ {assignments} }}";
+	}
+
+	/// <summary>
+	///     Emits the post-construction assignment of an instance's deferred members
+	///     (<c>[Inject(Deferred = true)]</c>): <c>variable.Invoice = ResolveInvoiceService();</c>. Emitted
+	///     <em>after</em> the instance is stored in its cache, so a re-entrant resolve of the same service (the
+	///     other side of a mutual cycle) returns the already-cached instance instead of recursing - this is what
+	///     lets a deferred property break a constructor cycle. It runs only on the construction path (inside the
+	///     cache-miss block), so a cache hit never reassigns. On the async path a deferred async-tainted member is
+	///     awaited exactly like an async-tainted constructor argument.
+	/// </summary>
+	private static void EmitDeferredAssignments(StringBuilder builder, int depth, InstanceModel instance, string variable, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool asynchronous)
+	{
+		foreach (MemberModel member in instance.InjectedMembers.AsArray())
+		{
+			if (!member.Deferred)
+			{
+				continue;
+			}
+
+			string value = DependencyValue(member.Dependency, instances, names, serviceToIndex, asynchronous);
+			Indent(builder, depth).Append(variable).Append('.').Append(member.MemberName).Append(" = ").Append(value).AppendLine(";");
+		}
+	}
+
+	/// <summary>Whether an instance has any deferred ([Inject(Deferred = true)]) member to wire after construction.</summary>
+	private static bool HasDeferredMembers(InstanceModel instance)
+	{
+		foreach (MemberModel member in instance.InjectedMembers.AsArray())
+		{
+			if (member.Deferred)
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/// <summary>
