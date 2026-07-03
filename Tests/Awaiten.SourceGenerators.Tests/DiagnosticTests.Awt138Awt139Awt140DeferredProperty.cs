@@ -177,5 +177,61 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics.Any(d => d.Contains("AWT140"))).IsFalse()
 				.Because("a deferred member is only rejected when it closes a cycle through an async service, not for any async deferred member");
 		}
+
+		[Fact]
+		public async Task ReportsAwt141WhenAMixedCycleStillTraversesAConstructorEdge()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       // Only one side is deferred: Left defers Right, but Right's constructor still takes Left. The deferred
+			                                       // edge escapes AWT102, yet the surviving constructor edge re-enters an as-yet-uncached participant when
+			                                       // resolution begins at Right, so the cycle is only partly broken and cannot terminate from every entry.
+			                                       public sealed class Left { [Inject(Deferred = true)] public Right Right { get; set; } }
+			                                       public sealed class Right { public Right(Left left) { } }
+
+			                                       [Container]
+			                                       [Singleton<Left>]
+			                                       [Singleton<Right>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics.Any(d => d.Contains("AWT141"))).IsTrue()
+				.Because("a deferred property breaks a cycle only when every edge is deferred; a surviving constructor edge re-enters an uncached participant, so the cycle is only partly broken");
+			await That(result.Diagnostics.Any(d => d.Contains("AWT102"))).IsFalse()
+				.Because("the deferred edge is absent from the construction graph, so AWT102 does not fire - AWT141 is the diagnostic that catches this");
+		}
+
+		[Fact]
+		public async Task ReportsAwt141ForAMixedCycleThroughAPlainInjectProperty_RegardlessOfLifetime()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       // Left defers Right, but Right holds Left through a plain [Inject] property (a Direct construction-time
+			                                       // edge). A transient is never cached, so without AWT141 this compiles clean and stack-overflows at runtime;
+			                                       // the mixed-edge fault applies regardless of lifetime, so AWT141 - not AWT139 - is the reason.
+			                                       public sealed class Left { [Inject(Deferred = true)] public Right Right { get; set; } }
+			                                       public sealed class Right { [Inject] public Left Left { get; set; } }
+
+			                                       [Container]
+			                                       [Transient<Left>]
+			                                       [Transient<Right>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics.Any(d => d.Contains("AWT141"))).IsTrue()
+				.Because("a mixed cycle through a plain [Inject] property still traverses a construction-time edge, so a deferred property cannot break it");
+			await That(result.Diagnostics.Any(d => d.Contains("AWT102"))).IsFalse()
+				.Because("the deferred edge keeps the cycle out of the construction graph, so AWT102 does not fire");
+		}
 	}
 }

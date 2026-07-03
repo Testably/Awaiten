@@ -577,4 +577,23 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A cycle that involves at least one <c>[Inject(Deferred = true)]</c> property is only partly broken: it
+	///     still traverses a construction-time edge (a constructor parameter, a plain <c>[Inject]</c> property, or a
+	///     bare eager <c>Owned&lt;T&gt;</c>/<c>Task&lt;T&gt;</c>). A deferred property breaks a cycle only when
+	///     <em>every</em> edge in the cycle is deferred, because the container may begin resolving at any
+	///     participant and an instance is cached only after its constructor (and object initializer) completes.
+	///     Entering the cycle at the participant whose remaining cycle edge is a construction dependency re-enters
+	///     that participant before it is cached, so it is reconstructed (a duplicate singleton) or recurses forever
+	///     (a transient), regardless of lifetime. Make every edge in the cycle a deferred property, or break the
+	///     cycle another way.
+	/// </summary>
+	public static readonly DiagnosticDescriptor DeferredMixedCycle = new(
+		"AWT141",
+		"Deferred cycle retains a construction edge",
+		"The cycle {0} is only partly broken by a deferred property and cannot terminate: it still has at least one construction-time edge (a constructor parameter, a plain [Inject] property, or an eager Owned<T>/Task<T>), and a deferred property breaks a cycle only when every edge around it is deferred. To fix it, turn the remaining constructor parameter (or plain [Inject] property) into an [Inject(Deferred = true)] property so both directions of the cycle are deferred, or remove one of the dependencies to break the cycle.",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

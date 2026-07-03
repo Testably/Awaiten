@@ -42,3 +42,4 @@
  AWT138  | Awaiten   | Error    | An [Inject(Deferred = true)] property is init-only rather than settable
  AWT139  | Awaiten   | Error    | A deferred property cycle includes a transient and cannot terminate
  AWT140  | Awaiten   | Error    | A deferred property cycle includes an async-initialized service and cannot terminate
+ AWT141  | Awaiten   | Error    | A deferred property cycle still traverses a construction-time edge and cannot terminate
