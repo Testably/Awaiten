@@ -216,6 +216,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Jul 3 22:26:26 2026 \u002B0200",
         "message": "feat: break mutual constructor cycles with \u0060[Inject(Deferred = true)]\u0060 property injection (#51)"
+      },
+      {
+        "sha": "7d84c0dffd385fe028bec6781084df091ca5a0de",
+        "author": "Valentin Breu\u00DF",
+        "date": "Fri Jul 3 22:52:17 2026 \u002B0200",
+        "message": "refactor: hide generated container plumbing from the consumer surface (#57)"
       }
     ],
     "labels": [
@@ -254,7 +260,8 @@ window.BENCHMARK_DATA = {
       "eb8e5d5c",
       "7e530a73",
       "9faa7520",
-      "5e7a43f8"
+      "5e7a43f8",
+      "7d84c0df"
     ],
     "datasets": [
       {
@@ -296,7 +303,8 @@ window.BENCHMARK_DATA = {
           8.101936337138925,
           7.479166207568986,
           8.695678719878197,
-          9.616795565400805
+          9.616795565400805,
+          7.7908197561135655
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -308,6 +316,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -393,7 +402,8 @@ window.BENCHMARK_DATA = {
           7.255279671687346,
           7.400580288125918,
           6.8378140985965725,
-          8.349084044496218
+          8.349084044496218,
+          7.381969719060829
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -405,6 +415,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -490,7 +501,8 @@ window.BENCHMARK_DATA = {
           140.82394967079162,
           130.39027963365828,
           136.56806921958923,
-          127.9063835314342
+          127.9063835314342,
+          137.1952716668447
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -502,6 +514,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -587,7 +600,8 @@ window.BENCHMARK_DATA = {
           2.729293005168438,
           2.6573949748916283,
           3.5921567628781,
-          2.6265068277716637
+          2.6265068277716637,
+          2.8262224588543177
         ],
         "borderColor": "#4A6FA5",
         "backgroundColor": "#4A6FA5",
@@ -599,6 +613,7 @@ window.BENCHMARK_DATA = {
         "label": "Jab memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -684,7 +699,8 @@ window.BENCHMARK_DATA = {
           5.425567201205662,
           5.423205614089966,
           5.499167322048119,
-          5.460529403044627
+          5.460529403044627,
+          5.425752820713179
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
@@ -696,6 +712,7 @@ window.BENCHMARK_DATA = {
         "label": "PureDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -777,7 +794,8 @@ window.BENCHMARK_DATA = {
           9.174157497073923,
           9.081070431073506,
           9.932873675227166,
-          8.721562606947762
+          8.721562606947762,
+          8.758451577808176
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -789,6 +807,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -866,7 +885,8 @@ window.BENCHMARK_DATA = {
           11.233295178661743,
           10.965610031570707,
           12.349435129335948,
-          10.740279293977297
+          10.740279293977297,
+          10.894613930583
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -878,6 +898,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -1306,6 +1327,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Jul 3 22:26:26 2026 \u002B0200",
         "message": "feat: break mutual constructor cycles with \u0060[Inject(Deferred = true)]\u0060 property injection (#51)"
+      },
+      {
+        "sha": "7d84c0dffd385fe028bec6781084df091ca5a0de",
+        "author": "Valentin Breu\u00DF",
+        "date": "Fri Jul 3 22:52:17 2026 \u002B0200",
+        "message": "refactor: hide generated container plumbing from the consumer surface (#57)"
       }
     ],
     "labels": [
@@ -1344,7 +1371,8 @@ window.BENCHMARK_DATA = {
       "eb8e5d5c",
       "7e530a73",
       "9faa7520",
-      "5e7a43f8"
+      "5e7a43f8",
+      "7d84c0df"
     ],
     "datasets": [
       {
@@ -1386,7 +1414,8 @@ window.BENCHMARK_DATA = {
           8.756706106875624,
           8.461443409323692,
           10.030507186055184,
-          8.40353779069015
+          8.40353779069015,
+          8.457653061619826
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -1398,6 +1427,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -1483,7 +1513,8 @@ window.BENCHMARK_DATA = {
           7.217703149716059,
           7.240496630852039,
           6.94242152372996,
-          9.014361703395844
+          9.014361703395844,
+          7.209249636956623
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -1495,6 +1526,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -1580,7 +1612,8 @@ window.BENCHMARK_DATA = {
           137.80211997032166,
           118.87652710505894,
           132.9851656300681,
-          125.72559920946757
+          125.72559920946757,
+          146.44289774894713
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -1592,6 +1625,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -1677,7 +1711,8 @@ window.BENCHMARK_DATA = {
           42.67573416233063,
           42.76663256608523,
           51.06654112614118,
-          42.71264756222566
+          42.71264756222566,
+          42.67369720569024
         ],
         "borderColor": "#4A6FA5",
         "backgroundColor": "#4A6FA5",
@@ -1689,6 +1724,7 @@ window.BENCHMARK_DATA = {
         "label": "Jab memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -1774,7 +1810,8 @@ window.BENCHMARK_DATA = {
           7.344777272297786,
           8.263694147651012,
           10.258469045162201,
-          8.233179820435387
+          8.233179820435387,
+          7.32795876952318
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
@@ -1786,6 +1823,7 @@ window.BENCHMARK_DATA = {
         "label": "PureDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -1867,7 +1905,8 @@ window.BENCHMARK_DATA = {
           9.205223999344385,
           9.030191681037346,
           9.911472735802333,
-          8.751303137413093
+          8.751303137413093,
+          8.727543545762698
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -1879,6 +1918,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -1956,7 +1996,8 @@ window.BENCHMARK_DATA = {
           14.91190920372804,
           14.361143018190678,
           12.406647043568748,
-          14.350476634043913
+          14.350476634043913,
+          14.347768160700799
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -1968,6 +2009,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -2229,6 +2271,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Jul 3 22:26:26 2026 \u002B0200",
         "message": "feat: break mutual constructor cycles with \u0060[Inject(Deferred = true)]\u0060 property injection (#51)"
+      },
+      {
+        "sha": "7d84c0dffd385fe028bec6781084df091ca5a0de",
+        "author": "Valentin Breu\u00DF",
+        "date": "Fri Jul 3 22:52:17 2026 \u002B0200",
+        "message": "refactor: hide generated container plumbing from the consumer surface (#57)"
       }
     ],
     "labels": [
@@ -2267,7 +2315,8 @@ window.BENCHMARK_DATA = {
       "eb8e5d5c",
       "7e530a73",
       "9faa7520",
-      "5e7a43f8"
+      "5e7a43f8",
+      "7d84c0df"
     ],
     "datasets": [
       {
@@ -2309,7 +2358,8 @@ window.BENCHMARK_DATA = {
           16.92396361552752,
           17.802891575373135,
           17.10545718272527,
-          17.10423951347669
+          17.10423951347669,
+          16.906078831354776
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -2348,6 +2398,7 @@ window.BENCHMARK_DATA = {
           136,
           136,
           136,
+          144,
           144,
           144,
           144,
@@ -2406,7 +2457,8 @@ window.BENCHMARK_DATA = {
           1466.7357083834136,
           1422.39306640625,
           1400.8768259684246,
-          1447.309695652553
+          1447.309695652553,
+          1465.8615861256917
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -2418,6 +2470,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          5688,
           5688,
           5688,
           5688,
@@ -2503,7 +2556,8 @@ window.BENCHMARK_DATA = {
           30289.028170072117,
           29860.176286969865,
           33297.911840820314,
-          29559.008845402645
+          29559.008845402645,
+          30722.354291643416
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -2544,6 +2598,7 @@ window.BENCHMARK_DATA = {
           33098,
           33098,
           33093,
+          33098,
           33098,
           33098,
           33098,
@@ -2600,7 +2655,8 @@ window.BENCHMARK_DATA = {
           10.679099982338291,
           8.891876295208931,
           8.498009517788887,
-          12.767876513799031
+          12.767876513799031,
+          10.825870100657145
         ],
         "borderColor": "#4A6FA5",
         "backgroundColor": "#4A6FA5",
@@ -2634,6 +2690,7 @@ window.BENCHMARK_DATA = {
           96,
           96,
           32,
+          96,
           96,
           96,
           96,
@@ -2697,7 +2754,8 @@ window.BENCHMARK_DATA = {
           14.998647052049638,
           14.71971846314577,
           15.50194228887558,
-          16.384014290571212
+          16.384014290571212,
+          14.696387799722809
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
@@ -2709,6 +2767,7 @@ window.BENCHMARK_DATA = {
         "label": "PureDI memory",
         "unit": "b",
         "data": [
+          128,
           128,
           128,
           128,
@@ -2790,7 +2849,8 @@ window.BENCHMARK_DATA = {
           710.4854126657758,
           681.6281898938693,
           770.330858484904,
-          800.5736126581828
+          800.5736126581828,
+          688.0905519485474
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -2820,6 +2880,7 @@ window.BENCHMARK_DATA = {
           1472,
           1472,
           1472,
+          1528,
           1528,
           1528,
           1528,
@@ -2879,7 +2940,8 @@ window.BENCHMARK_DATA = {
           11682.789873395648,
           11467.033352661132,
           10951.856477590707,
-          12556.14046936035
+          12556.14046936035,
+          11988.280810764858
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -2922,7 +2984,8 @@ window.BENCHMARK_DATA = {
           24761,
           24760,
           24761,
-          24761
+          24761,
+          24760
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -3319,6 +3382,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Jul 3 22:26:26 2026 \u002B0200",
         "message": "feat: break mutual constructor cycles with \u0060[Inject(Deferred = true)]\u0060 property injection (#51)"
+      },
+      {
+        "sha": "7d84c0dffd385fe028bec6781084df091ca5a0de",
+        "author": "Valentin Breu\u00DF",
+        "date": "Fri Jul 3 22:52:17 2026 \u002B0200",
+        "message": "refactor: hide generated container plumbing from the consumer surface (#57)"
       }
     ],
     "labels": [
@@ -3357,7 +3426,8 @@ window.BENCHMARK_DATA = {
       "eb8e5d5c",
       "7e530a73",
       "9faa7520",
-      "5e7a43f8"
+      "5e7a43f8",
+      "7d84c0df"
     ],
     "datasets": [
       {
@@ -3399,7 +3469,8 @@ window.BENCHMARK_DATA = {
           91.23861277103424,
           86.48047379084996,
           79.97789798333095,
-          93.75987981160482
+          93.75987981160482,
+          86.51675604922431
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -3438,6 +3509,7 @@ window.BENCHMARK_DATA = {
           2120,
           2120,
           2120,
+          2128,
           2128,
           2128,
           2128,
@@ -3496,7 +3568,8 @@ window.BENCHMARK_DATA = {
           14595.251426696777,
           14317.066957746234,
           13163.20690213717,
-          14705.325358799526
+          14705.325358799526,
+          14458.829811096191
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -3508,6 +3581,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          61016,
           61016,
           61016,
           61016,
@@ -3593,7 +3667,8 @@ window.BENCHMARK_DATA = {
           718091.5227050781,
           721911.0707682292,
           799503.0176532452,
-          729344.3635416667
+          729344.3635416667,
+          731437.5808293269
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -3640,7 +3715,8 @@ window.BENCHMARK_DATA = {
           740921,
           737592,
           740772,
-          738966
+          738966,
+          737594
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -3690,7 +3766,8 @@ window.BENCHMARK_DATA = {
           75.44767308235168,
           71.90921493087497,
           65.50371107688316,
-          75.84125110081264
+          75.84125110081264,
+          72.94437700112661
         ],
         "borderColor": "#4A6FA5",
         "backgroundColor": "#4A6FA5",
@@ -3724,6 +3801,7 @@ window.BENCHMARK_DATA = {
           2080,
           2080,
           32,
+          2080,
           2080,
           2080,
           2080,
@@ -3787,7 +3865,8 @@ window.BENCHMARK_DATA = {
           80.39158844947815,
           79.97005768616994,
           73.5910068324634,
-          85.17988215287527
+          85.17988215287527,
+          81.07635039942605
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
@@ -3799,6 +3878,7 @@ window.BENCHMARK_DATA = {
         "label": "PureDI memory",
         "unit": "b",
         "data": [
+          2112,
           2112,
           2112,
           2112,
@@ -3880,7 +3960,8 @@ window.BENCHMARK_DATA = {
           42146.85501970564,
           42621.32954624721,
           44447.5764444987,
-          44112.247684733076
+          44112.247684733076,
+          43028.059856708234
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -3923,7 +4004,8 @@ window.BENCHMARK_DATA = {
           80673,
           81163,
           80647,
-          80643
+          80643,
+          81165
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -3969,7 +4051,8 @@ window.BENCHMARK_DATA = {
           353132.0852050781,
           338892.0697265625,
           335039.2208909255,
-          361001.15901692706
+          361001.15901692706,
+          365871.5115792411
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -4012,7 +4095,8 @@ window.BENCHMARK_DATA = {
           573122,
           572995,
           573076,
-          573040
+          573040,
+          573012
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -4218,6 +4302,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Jul 3 22:26:26 2026 \u002B0200",
         "message": "feat: break mutual constructor cycles with \u0060[Inject(Deferred = true)]\u0060 property injection (#51)"
+      },
+      {
+        "sha": "7d84c0dffd385fe028bec6781084df091ca5a0de",
+        "author": "Valentin Breu\u00DF",
+        "date": "Fri Jul 3 22:52:17 2026 \u002B0200",
+        "message": "refactor: hide generated container plumbing from the consumer surface (#57)"
       }
     ],
     "labels": [
@@ -4252,7 +4342,8 @@ window.BENCHMARK_DATA = {
       "eb8e5d5c",
       "7e530a73",
       "9faa7520",
-      "5e7a43f8"
+      "5e7a43f8",
+      "7d84c0df"
     ],
     "datasets": [
       {
@@ -4290,7 +4381,8 @@ window.BENCHMARK_DATA = {
           267.3582457224528,
           228.37149212910577,
           255.30223727226257,
-          251.51683100064596
+          251.51683100064596,
+          253.32819150288898
         ],
         "borderColor": "#3949AB",
         "backgroundColor": "#3949AB",
@@ -4325,6 +4417,7 @@ window.BENCHMARK_DATA = {
           560,
           560,
           560,
+          568,
           568,
           568,
           568,
@@ -4379,7 +4472,8 @@ window.BENCHMARK_DATA = {
           616.5212088993618,
           566.8366261262161,
           570.1750837734768,
-          623.2415586880276
+          623.2415586880276,
+          595.7995035988944
         ],
         "borderColor": "#512BD4",
         "backgroundColor": "#512BD4",
@@ -4391,6 +4485,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          1104,
           1104,
           1104,
           1104,
@@ -4468,7 +4563,8 @@ window.BENCHMARK_DATA = {
           8508.844764200847,
           8028.863298688616,
           8095.360070364816,
-          8422.455730692545
+          8422.455730692545,
+          8236.38019510905
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -4480,6 +4576,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          13696,
           13696,
           13696,
           13696,
@@ -4556,7 +4653,8 @@ window.BENCHMARK_DATA = {
           205.46287468274434,
           168.20808371475763,
           195.01588186195917,
-          185.54830791155499
+          185.54830791155499,
+          177.26395365397136
         ],
         "borderColor": "#D9534F",
         "backgroundColor": "#D9534F",
@@ -4568,6 +4666,7 @@ window.BENCHMARK_DATA = {
         "label": "Jab memory",
         "unit": "b",
         "data": [
+          432,
           432,
           432,
           432,
@@ -4644,7 +4743,8 @@ window.BENCHMARK_DATA = {
           447.59799824442183,
           384.19064831733704,
           422.377708085378,
-          409.02405568531583
+          409.02405568531583,
+          454.87166908809115
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -4656,6 +4756,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          944,
           944,
           944,
           944,
@@ -4733,7 +4834,8 @@ window.BENCHMARK_DATA = {
           721.0556169509888,
           701.467676671346,
           680.7774905424851,
-          746.0042526381357
+          746.0042526381357,
+          685.1534918376377
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -4745,6 +4847,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          1096,
           1096,
           1096,
           1096,
@@ -4822,7 +4925,8 @@ window.BENCHMARK_DATA = {
           196.45073316891987,
           173.70715244611105,
           188.6977706750234,
-          190.42440508206684
+          190.42440508206684,
+          167.72610222498577
         ],
         "borderColor": "#F0AD4E",
         "backgroundColor": "#F0AD4E",
@@ -4834,6 +4938,7 @@ window.BENCHMARK_DATA = {
         "label": "PureDI memory",
         "unit": "b",
         "data": [
+          632,
           632,
           632,
           632,
