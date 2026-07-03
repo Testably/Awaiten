@@ -187,6 +187,48 @@ internal static class Emitter
 		EmitRootClass(builder, depth, context, model.SyncResolveAfterInit);
 		builder.AppendLine();
 		EmitScopeBaseClass(builder, depth, context, model.Strict, model.SyncResolveAfterInit);
+
+		// The __AsyncArray<T> backing type for IAsyncEnumerable<T> collections is emitted on the container (a
+		// private nested type reachable from both Scope and Root) only when some instance injects one.
+		if (AnyAsyncCollection(context.Instances))
+		{
+			builder.AppendLine();
+			EmitAsyncArrayHelper(builder, depth);
+		}
+	}
+
+	// Whether any instance injects an asynchronous collection (IAsyncEnumerable<T>), so the __AsyncArray<T> helper
+	// backing that shape is emitted only when it is actually used.
+	private static bool AnyAsyncCollection(InstanceModel[] instances)
+		=> instances.Any(instance => instance.ConstructorParameters.AsArray().Any(p => p.Kind == DependencyKind.AsyncEnumerable));
+
+	/// <summary>
+	///     Emits the <c>__AsyncArray&lt;T&gt;</c> helper: a minimal <c>IAsyncEnumerable&lt;T&gt;</c> /
+	///     <c>IAsyncEnumerator&lt;T&gt;</c> over an eagerly-materialized array. The async collection resolves (and
+	///     awaits) its members up front, then hands them back through this replay enumerator - so each iteration
+	///     completes synchronously over already-initialized instances. Written by hand rather than as an <c>async</c>
+	///     iterator so it needs only the async-stream interfaces and <c>ValueTask</c>, never the async-iterator state
+	///     machine builder (which is absent on net48 / netstandard2.0 even with Microsoft.Bcl.AsyncInterfaces).
+	/// </summary>
+	private static void EmitAsyncArrayHelper(StringBuilder builder, int depth)
+	{
+		Indent(builder, depth).AppendLine("private sealed class __AsyncArray<T> : global::System.Collections.Generic.IAsyncEnumerable<T>, global::System.Collections.Generic.IAsyncEnumerator<T>");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).AppendLine("private readonly T[] __items;");
+		Indent(builder, depth + 1).AppendLine("private int __index = -1;");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("public __AsyncArray(T[] items) => __items = items;");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("public global::System.Collections.Generic.IAsyncEnumerator<T> GetAsyncEnumerator(global::System.Threading.CancellationToken cancellationToken = default)");
+		Indent(builder, depth + 2).AppendLine("=> new __AsyncArray<T>(__items);");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("public T Current => __items[__index];");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("public global::System.Threading.Tasks.ValueTask<bool> MoveNextAsync()");
+		Indent(builder, depth + 2).AppendLine("=> new global::System.Threading.Tasks.ValueTask<bool>(++__index < __items.Length);");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("public global::System.Threading.Tasks.ValueTask DisposeAsync() => default;");
+		Indent(builder, depth).AppendLine("}");
 	}
 
 	/// <summary>
@@ -929,6 +971,30 @@ internal static class Emitter
 	{
 		string items = string.Join(", ", names.CollectionResolvers(collection).Select(resolver => resolver + "()"));
 		return $"new {collection.Service}[] {{ {items} }}";
+	}
+
+	/// <summary>
+	///     A <c>new __AsyncArray&lt;T&gt;(new T[] { … })</c> expression producing an
+	///     <c>IAsyncEnumerable&lt;T&gt;</c> over every registration of the collection's (element type, key). The
+	///     members are materialized eagerly in registration order into the backing array - each async-tainted member
+	///     awaited through its async resolver when <paramref name="asynchronous" /> is set (the consumer is built on
+	///     the async path), a synchronous member resolved directly - and the array is wrapped in the
+	///     <c>__AsyncArray&lt;T&gt;</c> helper, whose enumerator replays the already-initialized members. An empty
+	///     membership yields an empty stream.
+	/// </summary>
+	private static string AsyncCollectionExpression(ServiceKey collection, Names names, InstanceModel[] instances, bool asynchronous)
+	{
+		string[] resolvers = names.CollectionResolvers(collection);
+		int[] indices = names.CollectionMemberIndices(collection);
+		string[] items = new string[resolvers.Length];
+		for (int m = 0; m < resolvers.Length; m++)
+		{
+			items[m] = asynchronous && instances[indices[m]].IsAsyncTainted
+				? $"await {names.AsyncResolver(indices[m])}(cancellationToken).ConfigureAwait(false)"
+				: resolvers[m] + "()";
+		}
+
+		return $"new __AsyncArray<{collection.Service}>(new {collection.Service}[] {{ {string.Join(", ", items)} }})";
 	}
 
 	/// <summary>
@@ -2024,6 +2090,14 @@ internal static class Emitter
 				// error outside SyncResolveAfterInit, so none reaches emission there).
 				arguments.Append(CollectionLiteral(new ServiceKey(parameters[p].ServiceType, parameters[p].Key), names));
 			}
+			else if (parameters[p].Kind == DependencyKind.AsyncEnumerable)
+			{
+				// An asynchronous collection materializes into an IAsyncEnumerable<T> over the same members, awaiting
+				// each async-tainted member's initialization when this instance is built on the async path - which it
+				// is whenever a member is async-tainted, since capturing that member taints this consumer too. A
+				// collection whose members are all synchronous stays a synchronous expression and serves a sync one.
+				arguments.Append(AsyncCollectionExpression(new ServiceKey(parameters[p].ServiceType, parameters[p].Key), names, instances, asynchronous));
+			}
 			else if (parameters[p].Kind == DependencyKind.CancellationToken)
 			{
 				// Forward the resolve-time token: the async creator's cancellationToken is in scope here. Only an
@@ -2517,14 +2591,16 @@ internal static class Emitter
 		private readonly string[] _resolvers;
 		private readonly ServiceMembers[] _collections;
 		private readonly Dictionary<ServiceKey, string[]> _collectionResolvers;
+		private readonly Dictionary<ServiceKey, int[]> _collectionMemberIndices;
 		private readonly HashSet<ServiceKey> _syncCollections;
 
-		private Names(string[] resolvers, string[] fields, ServiceMembers[] collections, Dictionary<ServiceKey, string[]> collectionResolvers, HashSet<ServiceKey> syncCollections)
+		private Names(string[] resolvers, string[] fields, ServiceMembers[] collections, Dictionary<ServiceKey, string[]> collectionResolvers, Dictionary<ServiceKey, int[]> collectionMemberIndices, HashSet<ServiceKey> syncCollections)
 		{
 			_resolvers = resolvers;
 			_fields = fields;
 			_collections = collections;
 			_collectionResolvers = collectionResolvers;
+			_collectionMemberIndices = collectionMemberIndices;
 			_syncCollections = syncCollections;
 		}
 
@@ -2540,6 +2616,11 @@ internal static class Emitter
 		// has no registration, which materializes an empty array).
 		public string[] CollectionResolvers(ServiceKey collection)
 			=> _collectionResolvers.TryGetValue(collection, out string[]? resolvers) ? resolvers : System.Array.Empty<string>();
+
+		// The instance indices of a collection's members, in the same registration order as CollectionResolvers, so
+		// the async-collection materialization can test each member's async taint and pick its resolver accordingly.
+		public int[] CollectionMemberIndices(ServiceKey collection)
+			=> _collectionMemberIndices.TryGetValue(collection, out int[]? indices) ? indices : System.Array.Empty<int>();
 
 		// Whether a collection can be materialized synchronously - i.e. every member has a synchronous resolver.
 		// A collection with an async-tainted member (strict mode) is omitted from the public sync dispatch, so no
@@ -2559,6 +2640,7 @@ internal static class Emitter
 			string[] resolvers = new string[instances.Length];
 			string[] fields = new string[instances.Length];
 			Dictionary<string, string> implToResolver = new(StringComparer.Ordinal);
+			Dictionary<string, int> implToIndex = new(StringComparer.Ordinal);
 			HashSet<string> syncImpls = new(StringComparer.Ordinal);
 			HashSet<string> used = new(StringComparer.OrdinalIgnoreCase);
 
@@ -2576,6 +2658,7 @@ internal static class Emitter
 				resolvers[i] = "Resolve" + name;
 				fields[i] = "_" + char.ToLowerInvariant(name[0]) + name.Substring(1);
 				implToResolver[instances[i].ImplementationType] = resolvers[i];
+				implToIndex[instances[i].ImplementationType] = i;
 
 				// A member is synchronously resolvable unless it is async-tainted in strict mode (in pragmatic
 				// SyncResolveAfterInit mode every service has a synchronous resolver, delegating to the async one).
@@ -2588,27 +2671,31 @@ internal static class Emitter
 			// Map each collection's member implementations to their resolvers, preserving registration order; a
 			// collection is sync-materializable only when every member has a synchronous resolver.
 			Dictionary<ServiceKey, string[]> collectionResolvers = new();
+			Dictionary<ServiceKey, int[]> collectionMemberIndices = new();
 			HashSet<ServiceKey> syncCollections = new();
 			foreach (ServiceMembers members in collections)
 			{
 				string[] memberImpls = members.Implementations.AsArray();
 				string[] memberResolvers = new string[memberImpls.Length];
+				int[] memberIndices = new int[memberImpls.Length];
 				bool allSync = true;
 				for (int m = 0; m < memberImpls.Length; m++)
 				{
 					memberResolvers[m] = implToResolver[memberImpls[m]];
+					memberIndices[m] = implToIndex[memberImpls[m]];
 					allSync &= syncImpls.Contains(memberImpls[m]);
 				}
 
 				ServiceKey collectionKey = new(members.Service, members.Key);
 				collectionResolvers[collectionKey] = memberResolvers;
+				collectionMemberIndices[collectionKey] = memberIndices;
 				if (allSync)
 				{
 					syncCollections.Add(collectionKey);
 				}
 			}
 
-			return new Names(resolvers, fields, collections, collectionResolvers, syncCollections);
+			return new Names(resolvers, fields, collections, collectionResolvers, collectionMemberIndices, syncCollections);
 		}
 
 		private static string Sanitize(string name)

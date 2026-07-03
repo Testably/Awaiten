@@ -234,6 +234,93 @@ public partial class CollectionTests
 			.Because("the publicly resolved collection returns the same warmed singleton member");
 	}
 
+	[Fact]
+	public async Task AsyncEnumerable_AwaitsMemberInitializationAndYieldsInRegistrationOrder()
+	{
+		using AsyncStreamContainer.Root container = new();
+
+		// The host captures an async-tainted async-collection, so it is itself async-tainted and resolved through
+		// ResolveAsync. In the strict default this is legal precisely because the collection is IAsyncEnumerable<T>
+		// (a synchronous IEnumerable<T> of the same members would be AWT122).
+		AsyncStreamHost host = await container.ResolveAsync<AsyncStreamHost>(TestContext.Current.CancellationToken);
+
+		List<IPlugin> plugins = new();
+		await foreach (IPlugin plugin in host.Plugins.WithCancellation(TestContext.Current.CancellationToken))
+		{
+			plugins.Add(plugin);
+		}
+
+		await That(plugins).HasCount(2);
+		await That(plugins[0].Name).IsEqualTo("alpha");
+		await That(plugins[1].Name).IsEqualTo("async");
+		await That(plugins.OfType<AsyncPlugin>().Single().Initialized).IsTrue()
+			.Because("materializing the IAsyncEnumerable<T> awaited the async member's initialization in registration order");
+	}
+
+	[Fact]
+	public async Task AsyncEnumerable_AllSynchronousMembers_IsSynchronouslyResolvable()
+	{
+		using SyncAsyncStreamContainer.Root container = new();
+
+		// Every member is synchronous, so the async collection is a synchronous expression and the host is not
+		// async-tainted: it resolves synchronously, and iterating the stream yields the members in registration order.
+		AsyncStreamHost host = container.Resolve<AsyncStreamHost>();
+
+		List<IPlugin> plugins = new();
+		await foreach (IPlugin plugin in host.Plugins.WithCancellation(TestContext.Current.CancellationToken))
+		{
+			plugins.Add(plugin);
+		}
+
+		await That(plugins).HasCount(2);
+		await That(plugins[0].Name).IsEqualTo("alpha");
+		await That(plugins[1].Name).IsEqualTo("beta");
+	}
+
+	[Fact]
+	public async Task AsyncEnumerable_NoRegistrations_YieldsAnEmptyStream()
+	{
+		using EmptyAsyncStreamContainer.Root container = new();
+
+		AsyncExtensionHost host = container.Resolve<AsyncExtensionHost>();
+
+		int count = 0;
+		await foreach (IExtension _ in host.Extensions.WithCancellation(TestContext.Current.CancellationToken))
+		{
+			count++;
+		}
+
+		await That(count).IsEqualTo(0)
+			.Because("an element type with no registration yields an empty async collection, not a missing-dependency error");
+	}
+
+	[Fact]
+	public async Task AsyncEnumerable_ScopedDisposableMember_ResolvesFromScopeAndIsDisposedWithIt()
+	{
+		using ScopedAsyncStreamContainer.Root container = new();
+
+		DisposableScopedPlugin member;
+		using (IAwaitenScope scope = container.CreateScope())
+		{
+			AsyncStreamHost host = scope.Resolve<AsyncStreamHost>();
+
+			List<IPlugin> plugins = new();
+			await foreach (IPlugin plugin in host.Plugins.WithCancellation(TestContext.Current.CancellationToken))
+			{
+				plugins.Add(plugin);
+			}
+
+			member = (DisposableScopedPlugin)plugins.Single();
+			await That(member).IsSameAs(scope.Resolve<IPlugin>())
+				.Because("the async collection materialized its member off the resolving scope");
+			await That(member.Disposed).IsFalse()
+				.Because("the scope is still alive");
+		}
+
+		await That(member.Disposed).IsTrue()
+			.Because("the scope tracked the member the async collection materialized and disposed it with the scope");
+	}
+
 	public interface IPlugin
 	{
 		string Name { get; }
@@ -267,6 +354,29 @@ public partial class CollectionTests
 		public AsyncPluginHost(IEnumerable<IPlugin> plugins) => Plugins = plugins.ToArray();
 
 		public IReadOnlyList<IPlugin> Plugins { get; }
+	}
+
+	public sealed class AsyncStreamHost
+	{
+		public AsyncStreamHost(IAsyncEnumerable<IPlugin> plugins) => Plugins = plugins;
+
+		public IAsyncEnumerable<IPlugin> Plugins { get; }
+	}
+
+	public sealed class AsyncExtensionHost
+	{
+		public AsyncExtensionHost(IAsyncEnumerable<IExtension> extensions) => Extensions = extensions;
+
+		public IAsyncEnumerable<IExtension> Extensions { get; }
+	}
+
+	public sealed class DisposableScopedPlugin : IPlugin, IDisposable
+	{
+		public string Name => "scoped";
+
+		public bool Disposed { get; private set; }
+
+		public void Dispose() => Disposed = true;
 	}
 
 	public sealed class PluginHost
@@ -384,6 +494,34 @@ public partial class CollectionTests
 	[Singleton<AsyncPlugin, IPlugin>]
 	[Singleton<AsyncPluginHost>]
 	public static partial class PragmaticCollectionContainer;
+
+	// The strict default with an async-initialized collection member consumed as IAsyncEnumerable<T>: the async
+	// shape awaits each member, so the async member is legal (no AWT122) and the host that captures it is
+	// async-tainted, resolved through ResolveAsync.
+	[Container]
+	[Singleton<Alpha, IPlugin>]
+	[Singleton<AsyncPlugin, IPlugin>]
+	[Singleton<AsyncStreamHost>]
+	public static partial class AsyncStreamContainer;
+
+	// Every member is synchronous, so the async collection is a synchronous expression and its host stays
+	// synchronously resolvable - the IAsyncEnumerable<T> shape does not by itself force the async path.
+	[Container]
+	[Singleton<Alpha, IPlugin>]
+	[Singleton<Beta, IPlugin>]
+	[Singleton<AsyncStreamHost>]
+	public static partial class SyncAsyncStreamContainer;
+
+	[Container]
+	[Singleton<AsyncExtensionHost>]
+	public static partial class EmptyAsyncStreamContainer;
+
+	// A disposable scoped member consumed through an async collection: the member resolves off the scope and is
+	// tracked for disposal there, so the async-collection materialization respects scoping and disposal.
+	[Container]
+	[Scoped<DisposableScopedPlugin, IPlugin>]
+	[Scoped<AsyncStreamHost>]
+	public static partial class ScopedAsyncStreamContainer;
 
 	// A collection whose member is a disposable transient: materializing it by type on the root would
 	// accumulate the transients for the container's lifetime, so under strict lifetime safety the collection is
