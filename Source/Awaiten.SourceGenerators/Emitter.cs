@@ -1682,9 +1682,9 @@ internal static class Emitter
 			// the instance). Injection into a singleton stays allowed - that is bounded to one instance.
 			bool rootWithheld = IsWithheld(instances[i], strict);
 			// Keyed registrations are reached only by [FromKey] injection, never by-type resolution.
-			foreach (ServiceKey serviceKey in instances[i].Services.AsArray().Where(serviceKey => serviceKey.Key is null))
+			foreach (string service in instances[i].Services.AsArray().Where(serviceKey => serviceKey.Key is null).Select(serviceKey => serviceKey.Service))
 			{
-				arms.Add((serviceKey.Service, asyncResolver, rootWithheld ? AsyncRootWithheldMessage(serviceKey.Service) : null));
+				arms.Add((service, asyncResolver, rootWithheld ? AsyncRootWithheldMessage(service) : null));
 			}
 		}
 
