@@ -49,3 +49,4 @@
  AWT145  | Awaiten   | Error    | A deferred property cycle consists entirely of transients and cannot terminate
  AWT146  | Awaiten   | Error    | A deferred property cycle includes an async-initialized service and cannot terminate
  AWT147  | Awaiten   | Error    | A deferred property cycle still traverses a construction-time edge that duplicates a cached participant or recurses forever
+ AWT148  | Awaiten   | Warning  | Two overridable default registrations provide the same service ambiguously

@@ -13,9 +13,12 @@ namespace Awaiten.SourceGenerators;
 ///     once (an error), and - for variance matching - the closed generic service symbol (so a
 ///     differently-closed consumer request can be redirected to a variance-compatible registration),
 ///     whether the registration was contributed by a <c>[Scan]</c> (an overridable registration that
-///     never conflicts with an explicit one over the same implementation), and whether that scan opted
+///     never conflicts with an explicit one over the same implementation), whether that scan opted
 ///     into skipping unconstructable matches (<c>SkipUnconstructable</c>, degrading the AWT101 error to
-///     the AWT141 warning).
+///     the AWT141 warning), whether the registration is an overridable module default (<c>Weak</c>:
+///     <c>Default</c> or <c>TryAdd</c>, contributing its service only when nothing stronger claimed it),
+///     and whether that default was a <c>Default</c> specifically (<c>IsDefault</c>, so two colliding
+///     <c>Default</c>s can be surfaced as AWT148 while <c>TryAdd</c> stays silent).
 /// </summary>
 /// <remarks>
 ///     <see cref="Location" /> is the live Roslyn location (with its syntax tree), not an equatable
@@ -35,7 +38,9 @@ internal sealed record RawRegistration(
 	string? Key = null,
 	INamedTypeSymbol? ServiceSymbol = null,
 	bool IsScan = false,
-	bool ScanSkipsUnconstructable = false);
+	bool ScanSkipsUnconstructable = false,
+	bool Weak = false,
+	bool IsDefault = false);
 
 /// <summary>
 ///     A single <c>[Decorate&lt;TDecorator, TService&gt;]</c> registration read from a container: the

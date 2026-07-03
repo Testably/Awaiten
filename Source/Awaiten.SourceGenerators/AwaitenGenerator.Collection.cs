@@ -22,7 +22,55 @@ partial class AwaitenGenerator
 		// expanded into concrete closed registrations on demand (see ExpandOpenGenerics).
 		List<OpenRegistration> open = new();
 
-		foreach (AttributeData attribute in containerSymbol.GetAttributes())
+		CollectLifetimeRegistrations(containerSymbol, result, open, diagnostics);
+
+		// [Import(typeof(Module))] pulls a module's registrations in after the container's own, so the
+		// container wins ties and a module's overridable defaults (Default/TryAdd) only fill the gaps it
+		// leaves. Resolved one level deep - a module's own [Import] is not followed.
+		foreach (INamedTypeSymbol module in CollectImportedModules(containerSymbol))
+		{
+			CollectLifetimeRegistrations(module, result, open, diagnostics);
+		}
+
+		// Assembly scanning contributes overridable registrations for every concrete type assignable to a
+		// [Scan] marker. Appended before open generic expansion so scanned implementations seed it - their
+		// constructors may require closed generics only an open registration can provide.
+		List<RawRegistration> scans = CollectScans(containerSymbol, compilation, diagnostics);
+		result.AddRange(scans);
+
+		// Expand open generic registrations: for every closed generic service required from the graph
+		// whose open form is registered but which has no concrete registration, synthesize the closed
+		// implementation (iterating to a fixpoint over its own generic dependencies).
+		if (open.Count > 0)
+		{
+			ExpandOpenGenerics(result, open, containerSymbol, importServices, diagnostics, constraintRejected);
+		}
+
+		// ...then moved back to the end: coalescing is first-wins per service, so the explicit registrations
+		// and the closed registrations expansion synthesized from them must precede the overridable scan ones.
+		if (scans.Count > 0)
+		{
+			result.RemoveAll(registration => registration.IsScan);
+			result.AddRange(scans);
+		}
+
+		return (result, constraintRejected);
+	}
+
+	/// <summary>
+	///     Reads the <c>[Singleton]</c>/<c>[Transient]</c>/<c>[Scoped]</c> lifetime registrations declared on
+	///     a symbol (a container or an imported module) into <paramref name="result" />, and the open generic
+	///     <c>typeof</c>-form ones into <paramref name="open" /> for later expansion. A module carries the same
+	///     attributes as a container, so a single reader serves both; the <c>Default</c>/<c>TryAdd</c> named
+	///     flags mark a registration as an overridable module default (<see cref="RawRegistration.Weak" />).
+	/// </summary>
+	private static void CollectLifetimeRegistrations(
+		INamedTypeSymbol symbol,
+		List<RawRegistration> result,
+		List<OpenRegistration> open,
+		List<DiagnosticInfo> diagnostics)
+	{
+		foreach (AttributeData attribute in symbol.GetAttributes())
 		{
 			if (attribute.AttributeClass is not { } attributeClass
 			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace)
@@ -62,6 +110,11 @@ partial class AwaitenGenerator
 			(ProductionKind production, string? productionMember, bool conflictingDirectives) =
 				ReadProduction(attribute);
 
+			// Default and TryAdd both mark an overridable default that only fills a gap; Default additionally
+			// opts into the AWT148 warning when two Defaults collide with nothing stronger to resolve them.
+			bool isDefault = NamedFlag(attribute, "Default");
+			bool weak = isDefault || NamedFlag(attribute, "TryAdd");
+
 			Location? location = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation();
 			result.Add(new RawRegistration(
 				service.ToDisplayString(FullyQualified),
@@ -73,32 +126,49 @@ partial class AwaitenGenerator
 				productionMember,
 				conflictingDirectives,
 				NamedArgument(attribute, "Key"),
-				service as INamedTypeSymbol));
+				service as INamedTypeSymbol,
+				Weak: weak,
+				IsDefault: isDefault));
 		}
+	}
 
-		// Assembly scanning contributes overridable registrations for every concrete type assignable to a
-		// [Scan] marker. Appended before open generic expansion so scanned implementations seed it - their
-		// constructors may require closed generics only an open registration can provide.
-		List<RawRegistration> scans = CollectScans(containerSymbol, compilation, diagnostics);
-		result.AddRange(scans);
-
-		// Expand open generic registrations: for every closed generic service required from the graph
-		// whose open form is registered but which has no concrete registration, synthesize the closed
-		// implementation (iterating to a fixpoint over its own generic dependencies).
-		if (open.Count > 0)
+	/// <summary>
+	///     Reads the module types a container pulls in with <c>[Import(typeof(Module))]</c>, in declaration
+	///     order. Only the container's own imports are read (one level deep); a module's own
+	///     <c>[Import]</c> is not followed.
+	/// </summary>
+	private static List<INamedTypeSymbol> CollectImportedModules(INamedTypeSymbol containerSymbol)
+	{
+		List<INamedTypeSymbol> modules = new();
+		foreach (AttributeData attribute in containerSymbol.GetAttributes())
 		{
-			ExpandOpenGenerics(result, open, containerSymbol, importServices, diagnostics, constraintRejected);
+			if (attribute.AttributeClass is { Name: "ImportAttribute", } attributeClass
+			    && attributeClass.ContainingNamespace?.ToDisplayString() == AttributeNamespace
+			    && attribute.ConstructorArguments.Length == 1
+			    && attribute.ConstructorArguments[0].Value is INamedTypeSymbol module)
+			{
+				modules.Add(module);
+			}
 		}
 
-		// ...then moved back to the end: coalescing is first-wins per service, so the explicit registrations
-		// and the closed registrations expansion synthesized from them must precede the overridable scan ones.
-		if (scans.Count > 0)
+		return modules;
+	}
+
+	/// <summary>
+	///     Reads a boolean named argument off an attribute, treating anything but an explicit <c>true</c>
+	///     (including its absence) as <see langword="false" />.
+	/// </summary>
+	private static bool NamedFlag(AttributeData attribute, string name)
+	{
+		foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
 		{
-			result.RemoveAll(registration => registration.IsScan);
-			result.AddRange(scans);
+			if (argument.Key == name && argument.Value.Value is true)
+			{
+				return true;
+			}
 		}
 
-		return (result, constraintRejected);
+		return false;
 	}
 
 	/// <summary>

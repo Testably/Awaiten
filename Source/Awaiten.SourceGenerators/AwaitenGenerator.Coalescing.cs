@@ -59,7 +59,16 @@ partial class AwaitenGenerator
 		List<(string ServiceType, INamedTypeSymbol Symbol)> varianceCandidates = new();
 		HashSet<string> varianceSeen = new(StringComparer.Ordinal);
 
-		foreach (RawRegistration registration in raw)
+		// Whether the registration that currently owns a service key was chosen as an overridable Default,
+		// so a later Default losing to it can be surfaced as an ambiguous-default warning (AWT148) while a
+		// Default correctly overridden by a strong registration is not.
+		Dictionary<ServiceKey, bool> chosenByDefault = new();
+
+		// Strong registrations claim their service first; overridable defaults (Default/TryAdd) are processed
+		// afterwards so they only fill the gaps left over. Within each group declaration order is preserved, so
+		// the container's own registrations still win over an imported module's. A losing default is dropped
+		// entirely below (not built, not a collection member), so a container or module replaces it transparently.
+		foreach (RawRegistration registration in raw.Where(r => !r.Weak).Concat(raw.Where(r => r.Weak)))
 		{
 			// Record an unkeyed closed-generic-interface registration as a variance candidate, so a
 			// differently-closed consumer request can be redirected to it. Recorded even when it loses the
@@ -98,7 +107,10 @@ partial class AwaitenGenerator
 			// first) fixed for the implementation, so it is exempt from that check - but two scans that match
 			// the same implementation with different lifetimes contradict each other with nothing explicit to
 			// yield to, so that is surfaced as AWT142 rather than silently resolved by attribute order.
-			if (!registration.IsScan)
+			// An overridable default is meant to be replaced transparently - possibly by a strong registration
+			// of the same implementation with a different lifetime - so, like a scan, it yields rather than
+			// reporting an AWT107/AWT111 conflict against whatever a strong registration fixed for it.
+			if (!registration.IsScan && !registration.Weak)
 			{
 				ReportCoalescingConflicts(info, registration, reportedConflicts, reportedProductionConflicts, diagnostics);
 			}
@@ -118,6 +130,24 @@ partial class AwaitenGenerator
 			ServiceKey serviceKey = new(registration.ServiceType, registration.Key);
 			bool alreadyChosen = serviceToImpl.TryGetValue(serviceKey, out string? existingImpl);
 
+			// An overridable default whose service is already claimed is dropped in full - not built and not a
+			// collection member - so the stronger (or earlier) registration replaces it transparently. When both
+			// the loser and the current winner are Defaults, which one applies is left to declaration order, so
+			// AWT148 warns; a TryAdd default (or a default correctly overridden by a strong registration) is silent.
+			if (registration.Weak && alreadyChosen)
+			{
+				if (registration.IsDefault && existingImpl != registration.ImplementationType
+				    && chosenByDefault.TryGetValue(serviceKey, out bool existingWasDefault) && existingWasDefault)
+				{
+					diagnostics.Add(new DiagnosticInfo(
+						Diagnostics.AmbiguousDefault,
+						LocationInfo.From(registration.Location),
+						new EquatableArray<string>([Display(registration.ServiceType),])));
+				}
+
+				continue;
+			}
+
 			// Every registration is a member of the collection for its (service type, key): an unkeyed
 			// IEnumerable<T> resolves the unkeyed registrations, a [FromKey("k")] IEnumerable<T> the ones under
 			// "k". A member is built even when it loses the single-resolution slot to an earlier registration,
@@ -134,6 +164,7 @@ partial class AwaitenGenerator
 			ImplInfo chosen = EnsureImpl(implInfos, implOrder, registration);
 			serviceToImpl[serviceKey] = registration.ImplementationType;
 			chosen.Services.Add(serviceKey);
+			chosenByDefault[serviceKey] = registration.IsDefault;
 		}
 
 		return (implOrder, serviceToImpl, serviceMembers, serviceMemberOrder, varianceCandidates);

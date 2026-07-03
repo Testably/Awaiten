@@ -682,4 +682,19 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     Two overridable <c>Default</c> registrations provide the same service and neither is overridden by a
+	///     strong (non-default) registration, so which default applies is decided only by declaration order. A
+	///     warning rather than an error: the graph still resolves (the first-declared default wins), but the
+	///     ambiguity is likely unintended - mark one as the winner with a strong registration, or use
+	///     <c>TryAdd</c> to opt out of the warning.
+	/// </summary>
+	public static readonly DiagnosticDescriptor AmbiguousDefault = new(
+		"AWT148",
+		"Ambiguous default registration",
+		"'{0}' has more than one overridable default registration and none overrides the others; the first declared wins",
+		"Awaiten",
+		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true);
 }
