@@ -523,6 +523,75 @@ public class CollectionTests
 	}
 
 	[Fact]
+	public async Task SynchronousCollection_IsAlsoResolvableByTypeAsIAsyncEnumerable()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class Alpha : IPlugin { }
+		                                       public sealed class Beta : IPlugin { }
+
+		                                       [Container]
+		                                       [Singleton<Alpha, IPlugin>]
+		                                       [Singleton<Beta, IPlugin>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// Every member is synchronous, so IAsyncEnumerable<T> joins the synchronous shapes in the by-type dispatch,
+		// wrapping the same materialized members in the __AsyncArray<T> replay enumerator.
+		await That(source).Contains("typeof(global::System.Collections.Generic.IAsyncEnumerable<global::MyCode.IPlugin>)")
+			.Because("a synchronous collection is also publicly resolvable as IAsyncEnumerable<T>");
+		await That(source).Contains("new __AsyncArray<global::MyCode.IPlugin>(new global::MyCode.IPlugin[] { ResolveAlpha(), ResolveBeta() })")
+			.Because("the IAsyncEnumerable<T> dispatch wraps the synchronously materialized members");
+	}
+
+	[Fact]
+	public async Task AsyncCollection_IsResolvableByTypeAsIAsyncEnumerableThroughResolveAsync()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Threading;
+		                                       using System.Threading.Tasks;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class AsyncPlugin : IPlugin, IAsyncInitializable
+		                                       {
+		                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+		                                       }
+
+		                                       [Container]
+		                                       [Singleton<AsyncPlugin, IPlugin>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// The collection holds an async-tainted member, so its IAsyncEnumerable<T> shape is served by an async
+		// dispatch arm routed to a generated async collection resolver that awaits each member.
+		await That(source).Contains("typeof(global::System.Collections.Generic.IAsyncEnumerable<global::MyCode.IPlugin>), static (__s, __ct) => __AsObject(__s.__ResolveAsyncCollection0(__ct))")
+			.Because("the async collection is resolvable by type through ResolveAsync");
+		await That(source).Contains("return new __AsyncArray<global::MyCode.IPlugin>(new global::MyCode.IPlugin[] { await ResolveAsyncPluginAsync(cancellationToken).ConfigureAwait(false) });")
+			.Because("the generated async collection resolver materializes the stream, awaiting the async member");
+
+		// Its synchronous Resolve steers to ResolveAsync rather than surfacing a generic no-registration error.
+		await That(source).Contains("the async collection 'System.Collections.Generic.IAsyncEnumerable<MyCode.IPlugin>' has a member that requires asynchronous initialization")
+			.Because("synchronous Resolve of the async collection shape throws guidance toward ResolveAsync");
+	}
+
+	[Fact]
 	public async Task PubliclyRequestedAsyncCollection_ThrowsGuidanceRatherThanBeingSilentlyUnresolvable()
 	{
 		GeneratorResult result = Generator.Run("""

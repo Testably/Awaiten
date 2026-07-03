@@ -321,6 +321,56 @@ public partial class CollectionTests
 			.Because("the scope tracked the member the async collection materialized and disposed it with the scope");
 	}
 
+	[Fact]
+	public async Task AsyncEnumerable_SynchronousMembers_IsResolvableByTypeSynchronously()
+	{
+		using SyncAsyncStreamContainer.Root container = new();
+
+		// A collection whose members are all synchronous is publicly resolvable as IAsyncEnumerable<T> straight
+		// through Resolve - it wraps the synchronously materialized members.
+		IAsyncEnumerable<IPlugin> stream = container.Resolve<IAsyncEnumerable<IPlugin>>();
+
+		List<IPlugin> plugins = new();
+		await foreach (IPlugin plugin in stream.WithCancellation(TestContext.Current.CancellationToken))
+		{
+			plugins.Add(plugin);
+		}
+
+		await That(plugins).HasCount(2);
+		await That(plugins[0].Name).IsEqualTo("alpha");
+		await That(plugins[1].Name).IsEqualTo("beta");
+	}
+
+	[Fact]
+	public async Task AsyncEnumerable_WithAnAsyncMember_IsResolvableByTypeThroughResolveAsync()
+	{
+		using AsyncStreamContainer.Root container = new();
+
+		// The collection holds an async-initialized member, so its IAsyncEnumerable<T> shape is resolvable by type
+		// only asynchronously - ResolveAsync materializes it, awaiting each member's initialization.
+		IAsyncEnumerable<IPlugin> stream = await container.ResolveAsync<IAsyncEnumerable<IPlugin>>(TestContext.Current.CancellationToken);
+
+		List<IPlugin> plugins = new();
+		await foreach (IPlugin plugin in stream.WithCancellation(TestContext.Current.CancellationToken))
+		{
+			plugins.Add(plugin);
+		}
+
+		await That(plugins).HasCount(2);
+		await That(plugins[0].Name).IsEqualTo("alpha");
+		await That(plugins.OfType<AsyncPlugin>().Single().Initialized).IsTrue()
+			.Because("ResolveAsync materialized the async collection, awaiting the async member's initialization");
+	}
+
+	[Fact]
+	public async Task AsyncEnumerable_WithAnAsyncMember_SynchronousResolveThrowsGuidance()
+	{
+		using AsyncStreamContainer.Root container = new();
+
+		await That(() => container.Resolve<IAsyncEnumerable<IPlugin>>()).Throws<InvalidOperationException>()
+			.Because("the async collection awaits its members, so it has no synchronous materialization - synchronous Resolve steers to ResolveAsync");
+	}
+
 	public interface IPlugin
 	{
 		string Name { get; }

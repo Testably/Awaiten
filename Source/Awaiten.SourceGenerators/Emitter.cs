@@ -189,18 +189,21 @@ internal static class Emitter
 		EmitScopeBaseClass(builder, depth, context, model.Strict, model.SyncResolveAfterInit);
 
 		// The __AsyncArray<T> backing type for IAsyncEnumerable<T> collections is emitted on the container (a
-		// private nested type reachable from both Scope and Root) only when some instance injects one.
-		if (AnyAsyncCollection(context.Instances))
+		// private nested type reachable from both Scope and Root) only when the async collection materialization is
+		// actually used - by an injection or by a by-type IAsyncEnumerable<T> dispatch entry / async resolver.
+		if (NeedsAsyncArrayHelper(context.Instances, names, serviceToIndex))
 		{
 			builder.AppendLine();
 			EmitAsyncArrayHelper(builder, depth);
 		}
 	}
 
-	// Whether any instance injects an asynchronous collection (IAsyncEnumerable<T>), so the __AsyncArray<T> helper
-	// backing that shape is emitted only when it is actually used.
-	private static bool AnyAsyncCollection(InstanceModel[] instances)
-		=> instances.Any(instance => instance.ConstructorParameters.AsArray().Any(p => p.Kind == DependencyKind.AsyncEnumerable));
+	// Whether the __AsyncArray<T> helper is used: some instance injects an IAsyncEnumerable<T>, or some unkeyed,
+	// non-suppressed collection is offered by type as IAsyncEnumerable<T> (a synchronous dispatch entry when
+	// sync-materializable, an async resolver otherwise) - both materialize through the helper.
+	private static bool NeedsAsyncArrayHelper(InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex)
+		=> instances.Any(instance => instance.ConstructorParameters.AsArray().Any(p => p.Kind == DependencyKind.AsyncEnumerable))
+		   || names.Collections.Any(collection => collection.Key is null && !SynthesisSuppressed(serviceToIndex, collection.Service));
 
 	/// <summary>
 	///     Emits the <c>__AsyncArray&lt;T&gt;</c> helper: a minimal <c>IAsyncEnumerable&lt;T&gt;</c> /
@@ -330,7 +333,30 @@ internal static class Emitter
 	private static string CollectionAsyncMessage(string collection)
 	{
 		string display = collection.Replace("global::", string.Empty);
-		return $"\"Awaiten: the collection '{display}' has an async-tainted member and cannot be materialized synchronously (a collection is built eagerly, with no place to await an initialization); set SyncResolveAfterInit on the [Container] and resolve it after InitializeAsync, or remove the async member from the collection.\"";
+		return $"\"Awaiten: the collection '{display}' has an async-tainted member and cannot be materialized synchronously (a collection is built eagerly, with no place to await an initialization); consume it as IAsyncEnumerable<T> and resolve it through ResolveAsync, set SyncResolveAfterInit on the [Container] and resolve it after InitializeAsync, or remove the async member from the collection.\"";
+	}
+
+	/// <summary>
+	///     The guidance thrown by Resolve(Type) for an <c>IAsyncEnumerable&lt;T&gt;</c> collection that holds an
+	///     async-tainted member: unlike the synchronous shapes it is resolvable - it awaits each member - but only
+	///     asynchronously, so synchronous resolution steers to <c>ResolveAsync</c> (the async counterpart of
+	///     <see cref="AsyncWithheldMessage" /> for the collection shape).
+	/// </summary>
+	private static string AsyncCollectionAsyncMessage(string collection)
+	{
+		string display = collection.Replace("global::", string.Empty);
+		return $"\"Awaiten: the async collection '{display}' has a member that requires asynchronous initialization, so it awaits its members and cannot be materialized synchronously; resolve it through ResolveAsync (or warm it through InitializeAsync / CreateScopeAsync), or set SyncResolveAfterInit on the [Container].\"";
+	}
+
+	/// <summary>
+	///     The guidance thrown by ResolveAsync(Type) on the Root for an <c>IAsyncEnumerable&lt;T&gt;</c> collection
+	///     that holds a build-on-demand disposable member: materializing it on the Root would accumulate those
+	///     disposables for the container's lifetime. The async counterpart of <see cref="CollectionWithheldMessage" />.
+	/// </summary>
+	private static string CollectionAsyncRootWithheldMessage(string collection)
+	{
+		string display = collection.Replace("global::", string.Empty);
+		return $"\"Awaiten: the async collection '{display}' has a build-on-demand disposable member and is withheld from by-type resolution on the container root under strict lifetime safety; resolve it from a child scope (await CreateScopeAsync(), ResolveAsync from that scope, then dispose the scope), inject it directly, or set LifetimeSafety.Loose on the [Container].\"";
 	}
 
 	/// <summary>
@@ -513,7 +539,7 @@ internal static class Emitter
 		// The asynchronous surface: ResolveAsync(Type) on every owner, plus the IAwaitenScope members
 		// InitializeAsync (the base warms this scope's async scoped services; the Root overrides it to warm
 		// the singletons) and CreateScopeAsync. The Root's per-singleton async resolvers are emitted there.
-		EmitAsyncResolutionApi(builder, body, instances, names, strict);
+		EmitAsyncResolutionApi(builder, body, instances, names, serviceToIndex, strict, syncResolveAfterInit);
 		builder.AppendLine();
 		EmitScopeInitializeAsync(builder, body, instances, names);
 		builder.AppendLine();
@@ -562,6 +588,14 @@ internal static class Emitter
 				builder.AppendLine();
 				EmitAsyncScopeResolver(builder, body, i, context);
 			}
+		}
+
+		// The async by-type resolver for each async collection (one whose IAsyncEnumerable<T> shape ResolveAsync
+		// serves through the async dispatch arm added in EmitAsyncResolutionApi).
+		foreach ((ServiceMembers collection, string method) in AsyncByTypeCollections(names, serviceToIndex, syncResolveAfterInit))
+		{
+			builder.AppendLine();
+			EmitAsyncCollectionResolver(builder, body, collection, method, names, instances);
 		}
 
 		builder.AppendLine();
@@ -936,6 +970,13 @@ internal static class Emitter
 			{
 				AddCollectionShape(shape, array, rootWithheld, entries, seen);
 			}
+
+			// The async view of the same collection: every member is synchronous, so IAsyncEnumerable<T> is also
+			// synchronously constructible (it wraps the same members in the __AsyncArray<T> replay enumerator), and
+			// is offered by type alongside the synchronous shapes. An async-member collection has no synchronous
+			// materialization - its IAsyncEnumerable<T> shape is an asynchronous arm instead (AsyncByTypeCollections).
+			string asyncArray = AsyncCollectionExpression(collectionKey, names, instances, asynchronous: false);
+			AddCollectionShape(AwaitenGenerator.AsyncEnumerableShapeType(collection.Service), asyncArray, rootWithheld, entries, seen);
 		}
 	}
 
@@ -1184,7 +1225,57 @@ internal static class Emitter
 			{
 				yield return (shape, CollectionAsyncMessage(shape));
 			}
+
+			// The IAsyncEnumerable<T> shape IS resolvable - it awaits its members - but only asynchronously, so its
+			// synchronous Resolve throws guidance toward ResolveAsync (an async arm serves ResolveAsync itself).
+			string asyncShape = AwaitenGenerator.AsyncEnumerableShapeType(collection.Service);
+			yield return (asyncShape, AsyncCollectionAsyncMessage(asyncShape));
 		}
+	}
+
+	/// <summary>
+	///     The async collections resolvable by type through <c>ResolveAsync</c>: each unkeyed, non-synthesis-
+	///     suppressed collection that is not synchronously materializable (it holds an async-tainted member) - outside
+	///     pragmatic <c>SyncResolveAfterInit</c> mode, where every collection is synchronously materializable and so
+	///     served by the synchronous dispatch. Each is paired with the async resolver method that materializes it,
+	///     named by the collection's position in <see cref="Names.Collections" /> so the method emission and the
+	///     async dispatch arm derive the same name.
+	/// </summary>
+	private static IEnumerable<(ServiceMembers Collection, string Method)> AsyncByTypeCollections(
+		Names names, Dictionary<ServiceKey, int> serviceToIndex, bool syncResolveAfterInit)
+	{
+		if (syncResolveAfterInit)
+		{
+			yield break;
+		}
+
+		ServiceMembers[] collections = names.Collections;
+		for (int i = 0; i < collections.Length; i++)
+		{
+			ServiceMembers collection = collections[i];
+			if (collection.Key is null
+			    && !SynthesisSuppressed(serviceToIndex, collection.Service)
+			    && !names.IsSyncCollection(new ServiceKey(collection.Service, collection.Key)))
+			{
+				yield return (collection, "__ResolveAsyncCollection" + i);
+			}
+		}
+	}
+
+	/// <summary>
+	///     Emits the async by-type resolver for one async collection: it materializes the
+	///     <c>IAsyncEnumerable&lt;T&gt;</c> exactly as an injected async collection is built - awaiting each
+	///     async-tainted member off the scope the resolver runs on, resolving each synchronous member directly - so
+	///     <c>ResolveAsync(typeof(IAsyncEnumerable&lt;T&gt;))</c> hands back the initialized stream.
+	/// </summary>
+	private static void EmitAsyncCollectionResolver(StringBuilder builder, int depth, ServiceMembers collection, string method, Names names, InstanceModel[] instances)
+	{
+		ServiceKey collectionKey = new(collection.Service, collection.Key);
+		Indent(builder, depth).Append("internal async global::System.Threading.Tasks.Task<global::System.Collections.Generic.IAsyncEnumerable<")
+			.Append(collection.Service).Append(">> ").Append(method).AppendLine("(global::System.Threading.CancellationToken cancellationToken)");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).Append("return ").Append(AsyncCollectionExpression(collectionKey, names, instances, asynchronous: true)).AppendLine(";");
+		Indent(builder, depth).AppendLine("}");
 	}
 
 	/// <summary>
@@ -1563,21 +1654,17 @@ internal static class Emitter
 	}
 
 	/// <summary>
-	///     Emits the asynchronous <c>ResolveAsync(Type)</c> on the base <c>Scope</c> (inherited by the
-	///     <c>Root</c>): async-tainted services are routed to their memoizing async resolver and converted to
-	///     <c>Task&lt;object&gt;</c>, while everything that needs no asynchronous initialization resolves
-	///     synchronously and completes immediately (deferring to <c>Resolve</c> for the same registration /
-	///     withholding errors as the synchronous path).
+	///     The by-type async dispatch arms: one per unkeyed service key of each async-tainted, non-parameterized
+	///     service (routed to its memoizing async resolver), plus one <c>IAsyncEnumerable&lt;T&gt;</c> arm per async
+	///     collection (routed to its generated async collection resolver). Each carries the guidance a root-withheld
+	///     arm throws off the Root (null when not withheld). They are collected up front so a large set can be split
+	///     across chunk methods, staying under RyuJIT's optimization guards - the same cliff the synchronous dispatch
+	///     hit before it was chunked.
 	/// </summary>
-	private static void EmitAsyncResolutionApi(StringBuilder builder, int depth, InstanceModel[] instances, Names names, bool strict)
+	private static List<(string Service, string AsyncResolver, string? RootWithheldMessage)> BuildAsyncArms(
+		InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool strict, bool syncResolveAfterInit)
 	{
-		const string task = "global::System.Threading.Tasks.Task";
-
-		// Each async-tainted, non-parameterized service contributes one by-type arm per unkeyed service key. They
-		// are collected up front so a large set can be split across chunk methods: a single flat if-chain over
-		// thousands of async services would exceed RyuJIT's optimization guards (~60 KB IL / ~2000 basic blocks)
-		// and be compiled MinOpts for good - the same cliff the synchronous dispatch hit before it was chunked.
-		List<(string Service, string AsyncResolver, bool RootWithheld)> arms = new();
+		List<(string Service, string AsyncResolver, string? RootWithheldMessage)> arms = new();
 		for (int i = 0; i < instances.Length; i++)
 		{
 			// A parameterized service is built fresh from its runtime arguments, so it is reached only through
@@ -1597,9 +1684,43 @@ internal static class Emitter
 			// Keyed registrations are reached only by [FromKey] injection, never by-type resolution.
 			foreach (ServiceKey serviceKey in instances[i].Services.AsArray().Where(serviceKey => serviceKey.Key is null))
 			{
-				arms.Add((serviceKey.Service, asyncResolver, rootWithheld));
+				arms.Add((serviceKey.Service, asyncResolver, rootWithheld ? AsyncRootWithheldMessage(serviceKey.Service) : null));
 			}
 		}
+
+		// The IAsyncEnumerable<T> arm of each async collection, materialized through its generated async collection
+		// resolver. A collection with a build-on-demand disposable member is root-withheld, mirroring the sync side.
+		Dictionary<string, int> implToIndex = new(StringComparer.Ordinal);
+		for (int i = 0; i < instances.Length; i++)
+		{
+			implToIndex[instances[i].ImplementationType] = i;
+		}
+
+		Dictionary<ServiceKey, List<int>> collectionMembers = AwaitenGenerator.CollectionMemberIndices(names.Collections, implToIndex);
+		foreach ((ServiceMembers collection, string method) in AsyncByTypeCollections(names, serviceToIndex, syncResolveAfterInit))
+		{
+			ServiceKey collectionKey = new(collection.Service, collection.Key);
+			string shape = AwaitenGenerator.AsyncEnumerableShapeType(collection.Service);
+			bool rootWithheld = collectionMembers.TryGetValue(collectionKey, out List<int>? members)
+			                    && members.Any(member => IsFuncWithheld(instances, member, serviceToIndex, collectionMembers, strict));
+			arms.Add((shape, method, rootWithheld ? CollectionAsyncRootWithheldMessage(shape) : null));
+		}
+
+		return arms;
+	}
+
+	/// <summary>
+	///     Emits the asynchronous <c>ResolveAsync(Type)</c> on the base <c>Scope</c> (inherited by the
+	///     <c>Root</c>): async-tainted services are routed to their memoizing async resolver and converted to
+	///     <c>Task&lt;object&gt;</c>, while everything that needs no asynchronous initialization resolves
+	///     synchronously and completes immediately (deferring to <c>Resolve</c> for the same registration /
+	///     withholding errors as the synchronous path).
+	/// </summary>
+	private static void EmitAsyncResolutionApi(StringBuilder builder, int depth, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool strict, bool syncResolveAfterInit)
+	{
+		const string task = "global::System.Threading.Tasks.Task";
+
+		List<(string Service, string AsyncResolver, string? RootWithheldMessage)> arms = BuildAsyncArms(instances, names, serviceToIndex, strict, syncResolveAfterInit);
 
 		Indent(builder, depth).Append("public ").Append(task)
 			.AppendLine("<object> ResolveAsync(global::System.Type serviceType, global::System.Threading.CancellationToken cancellationToken = default)");
@@ -1650,7 +1771,7 @@ internal static class Emitter
 	///     to <c>Task&lt;object&gt;</c>; a root-withheld arm bakes its guidance throw into the delegate (the Root
 	///     throws, a child scope resolves). No forwarder methods are needed - the delegates are inline lambdas.
 	/// </summary>
-	private static void EmitAsyncBucketDispatch(StringBuilder builder, int depth, List<(string Service, string AsyncResolver, bool RootWithheld)> arms)
+	private static void EmitAsyncBucketDispatch(StringBuilder builder, int depth, List<(string Service, string AsyncResolver, string? RootWithheldMessage)> arms)
 	{
 		const string func = "global::System.Func<Scope, global::System.Threading.CancellationToken, global::System.Threading.Tasks.Task<object>>";
 		int bucketCount = BucketCount(arms.Count);
@@ -1676,10 +1797,10 @@ internal static class Emitter
 		Indent(builder, depth).AppendLine("{");
 		Indent(builder, depth + 1).AppendLine("__AsyncBucket[] __entries =");
 		Indent(builder, depth + 1).AppendLine("{");
-		foreach ((string service, string asyncResolver, bool rootWithheld) in arms)
+		foreach ((string service, string asyncResolver, string? rootWithheldMessage) in arms)
 		{
-			string resolve = rootWithheld
-				? $"static (__s, __ct) => __s is Root ? throw new global::System.InvalidOperationException({AsyncRootWithheldMessage(service)}) : __AsObject(__s.{asyncResolver}(__ct))"
+			string resolve = rootWithheldMessage is not null
+				? $"static (__s, __ct) => __s is Root ? throw new global::System.InvalidOperationException({rootWithheldMessage}) : __AsObject(__s.{asyncResolver}(__ct))"
 				: $"static (__s, __ct) => __AsObject(__s.{asyncResolver}(__ct))";
 			Indent(builder, depth + 2).Append("new __AsyncBucket(typeof(").Append(service).Append("), ").Append(resolve).AppendLine("),");
 		}
