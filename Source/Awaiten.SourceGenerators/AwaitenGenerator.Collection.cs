@@ -152,12 +152,12 @@ partial class AwaitenGenerator
 				continue;
 			}
 
-			// [Import<TModule>] carries the module as a type argument; [Import(typeof(Module))] as its single
-			// constructor argument. Both name a closed module type - a module is never open generic, so the
-			// generic form needs no typeof.
-			INamedTypeSymbol? module = attributeClass.IsGenericType
-				? attributeClass.TypeArguments.Length == 1 ? attributeClass.TypeArguments[0] as INamedTypeSymbol : null
-				: attribute.ConstructorArguments.Length == 1 ? attribute.ConstructorArguments[0].Value as INamedTypeSymbol : null;
+			// [Import(typeof(Module))] names the module as the attribute's single constructor argument. There
+			// is deliberately no generic [Import<TModule>] form: a module must be a static class, and C#
+			// forbids a static class as a generic type argument (CS0718).
+			INamedTypeSymbol? module = attribute.ConstructorArguments.Length == 1
+				? attribute.ConstructorArguments[0].Value as INamedTypeSymbol
+				: null;
 			if (module is null)
 			{
 				continue;

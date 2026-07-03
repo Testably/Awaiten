@@ -60,31 +60,6 @@ public partial class DiagnosticTests
 		}
 
 		[Fact]
-		public async Task ReportsForTheGenericImportFormToo()
-		{
-			GeneratorResult result = Generator.Run("""
-			                                       using Awaiten;
-
-			                                       namespace MyCode;
-
-			                                       public interface IClock { }
-			                                       public sealed class SystemClock : IClock { }
-
-			                                       [Singleton<SystemClock, IClock>]
-			                                       public sealed class NotAModule { }
-
-			                                       [Container]
-			                                       [Import<NotAModule>]
-			                                       public static partial class MyContainer
-			                                       {
-			                                       }
-			                                       """);
-
-			await That(result.Diagnostics).Contains("*AWT149*NotAModule*").AsWildcard()
-				.Because("the [Module] requirement applies to [Import<T>] as well as [Import(typeof(T))]");
-		}
-
-		[Fact]
 		public async Task DoesNotReportWhenTheImportNamesAProperModule()
 		{
 			GeneratorResult result = Generator.Run("""

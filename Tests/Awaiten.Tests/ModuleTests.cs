@@ -53,16 +53,6 @@ public partial class ModuleTests
 		await That(clocks[0]).Is<AppClock>();
 	}
 
-	[Fact]
-	public async Task GenericImportForm_BehavesTheSameAsTheTypeofForm()
-	{
-		using GenericImportContainer.Root container = new();
-
-		// [Import<InfrastructureModule>] imports exactly like [Import(typeof(InfrastructureModule))].
-		await That(container.Resolve<Logger>()).IsNotNull();
-		await That(container.Resolve<IClock>()).Is<AppClock>();
-	}
-
 	public interface IClock;
 
 	public sealed class ModuleClock : IClock;
@@ -90,8 +80,4 @@ public partial class ModuleTests
 	[Import(typeof(InfrastructureModule))]
 	public static partial class DefaultsContainer;
 
-	[Container]
-	[Import<InfrastructureModule>]
-	[Singleton<AppClock, IClock>]
-	public static partial class GenericImportContainer;
 }
