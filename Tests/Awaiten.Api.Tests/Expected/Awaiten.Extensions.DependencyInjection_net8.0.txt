@@ -27,6 +27,11 @@ namespace Awaiten.Extensions.DependencyInjection
         public TRoot CreateBuilder(Microsoft.Extensions.DependencyInjection.IServiceCollection services) { }
         public System.IServiceProvider CreateServiceProvider(TRoot containerBuilder) { }
     }
+    public static class AwaitenVerificationExtensions
+    {
+        public static void VerifyAgainst(this Awaiten.IAwaitenContainerMetadata container, System.IServiceProvider provider) { }
+        public static System.IServiceProvider VerifyAwaitenContainers(this System.IServiceProvider provider) { }
+    }
     public sealed class ServiceProviderExternalResolver : Awaiten.IExternalResolver
     {
         public ServiceProviderExternalResolver(System.IServiceProvider provider) { }
