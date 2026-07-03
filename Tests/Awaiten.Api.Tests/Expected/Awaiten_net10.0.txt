@@ -2,7 +2,7 @@
 [assembly: System.Runtime.Versioning.TargetFramework(".NETCoreApp,Version=v10.0", FrameworkDisplayName=".NET 10.0")]
 namespace Awaiten
 {
-    [System.AttributeUsage(System.AttributeTargets.Parameter, AllowMultiple=false, Inherited=false)]
+    [System.AttributeUsage(System.AttributeTargets.Property | System.AttributeTargets.Parameter, AllowMultiple=false, Inherited=false)]
     public sealed class ArgAttribute : System.Attribute
     {
         public ArgAttribute() { }
@@ -59,7 +59,7 @@ namespace Awaiten
         public DecorateAttribute() { }
         public int Order { get; set; }
     }
-    [System.AttributeUsage(System.AttributeTargets.Parameter, AllowMultiple=false, Inherited=false)]
+    [System.AttributeUsage(System.AttributeTargets.Property | System.AttributeTargets.Parameter, AllowMultiple=false, Inherited=false)]
     public sealed class FromKeyAttribute : System.Attribute
     {
         public FromKeyAttribute(string key) { }
@@ -113,6 +113,11 @@ namespace Awaiten
     public sealed class ImportServicesAttribute : System.Attribute
     {
         public ImportServicesAttribute() { }
+    }
+    [System.AttributeUsage(System.AttributeTargets.Property, AllowMultiple=false, Inherited=false)]
+    public sealed class InjectAttribute : System.Attribute
+    {
+        public InjectAttribute() { }
     }
     public enum LifetimeSafety
     {

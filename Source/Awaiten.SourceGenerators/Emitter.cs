@@ -2507,38 +2507,12 @@ internal static class Emitter
 				arguments.Append(", ");
 			}
 
-			// Runtime arguments are passed in as a0, a1, … by the parameterized resolver; the rest resolve
-			// from the graph. On the async construction path, an async-tainted direct dependency is awaited
-			// so the instance it injects is already initialized - which also keeps initialization in
-			// dependency order (the dependency is warmed before the instance that consumes it).
+			// Runtime arguments are passed in as a0, a1, … by the parameterized resolver, and an async factory's
+			// CancellationToken is forwarded from the resolve-time token; everything else resolves from the graph
+			// (a collection, a relationship, or - on the async path - an awaited async-tainted direct dependency).
 			if (parameters[p].Kind == DependencyKind.Arg)
 			{
 				arguments.Append("a" + argIndex++);
-			}
-			else if (parameters[p].Kind == DependencyKind.Enumerable)
-			{
-				// A collection has no single resolver; it materializes eagerly from all of its members' resolvers
-				// (the members registered under the parameter's [FromKey] key). Collections are synchronous-only, so
-				// this is the same array literal on the sync and async paths (an async-tainted member is an AWT122
-				// error outside SyncResolveAfterInit, so none reaches emission there).
-				arguments.Append(CollectionLiteral(new ServiceKey(parameters[p].ServiceType, parameters[p].Key), names));
-			}
-			else if (parameters[p].Kind == DependencyKind.AsyncEnumerable)
-			{
-				// An asynchronous collection materializes into an IAsyncEnumerable<T> over the same members, awaiting
-				// each async-tainted member's initialization when this instance is built on the async path - which it
-				// is whenever a member is async-tainted, since capturing that member taints this consumer too. A
-				// collection whose members are all synchronous stays a synchronous expression and serves a sync one.
-				arguments.Append(AsyncCollectionExpression(new ServiceKey(parameters[p].ServiceType, parameters[p].Key), names, instances, asynchronous));
-			}
-			else if (parameters[p].Kind == DependencyKind.AwaitedEnumerable)
-			{
-				// An awaited collection (Task<C>) materializes the same members behind a task: a completed
-				// Task.FromResult over the synchronous array when every member is synchronous, or an
-				// immediately-invoked async lambda that awaits each async-tainted member. Like the bare Task<T>
-				// relationship it launders the members' taint, so this consumer may well be built on the sync path
-				// even when a member is async-tainted - the await happens inside the produced task, not here.
-				arguments.Append(AwaitedCollectionExpression(parameters[p], names, instances, asynchronous));
 			}
 			else if (parameters[p].Kind == DependencyKind.CancellationToken)
 			{
@@ -2547,15 +2521,9 @@ internal static class Emitter
 				// async path, so this is never reached with asynchronous == false.
 				arguments.Append("cancellationToken");
 			}
-			else if (asynchronous && parameters[p].Kind == DependencyKind.Direct
-			         && serviceToIndex.TryGetValue(new ServiceKey(parameters[p].ServiceType, parameters[p].Key), out int dependency)
-			         && instances[dependency].IsAsyncTainted)
-			{
-				arguments.Append("await ").Append(names.AsyncResolver(dependency)).Append("(cancellationToken).ConfigureAwait(false)");
-			}
 			else
 			{
-				arguments.Append(ResolveExpression(parameters[p], instances, names, serviceToIndex));
+				arguments.Append(DependencyValue(parameters[p], instances, names, serviceToIndex, asynchronous));
 			}
 		}
 
@@ -2575,7 +2543,74 @@ internal static class Emitter
 			return $"{instance.ProductionMember}({arguments})";
 		}
 
-		return $"new {instance.ConstructedType}({arguments})";
+		return $"new {instance.ConstructedType}({arguments}){MemberInitializer(instance, instances, names, serviceToIndex, asynchronous)}";
+	}
+
+	/// <summary>
+	///     The value expression for a graph-resolved dependency - a constructor argument or an injected member.
+	///     A collection materializes eagerly from its members' resolvers (an <c>IAsyncEnumerable&lt;T&gt;</c>
+	///     awaiting each on the async path, or a <c>Task&lt;C&gt;</c> that launders the members' taint behind the
+	///     produced task); on the async construction path an async-tainted direct dependency is awaited so the
+	///     instance it injects is already initialized (keeping initialization in dependency order); everything else
+	///     resolves through <see cref="ResolveExpression" />. Shared by constructor arguments and the
+	///     injected-member initializer so a property resolves exactly like a constructor parameter.
+	/// </summary>
+	private static string DependencyValue(ParameterModel dependency, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool asynchronous)
+	{
+		if (dependency.Kind == DependencyKind.Enumerable)
+		{
+			return CollectionLiteral(new ServiceKey(dependency.ServiceType, dependency.Key), names);
+		}
+
+		if (dependency.Kind == DependencyKind.AsyncEnumerable)
+		{
+			return AsyncCollectionExpression(new ServiceKey(dependency.ServiceType, dependency.Key), names, instances, asynchronous);
+		}
+
+		if (dependency.Kind == DependencyKind.AwaitedEnumerable)
+		{
+			return AwaitedCollectionExpression(dependency, names, instances, asynchronous);
+		}
+
+		if (asynchronous && dependency.Kind == DependencyKind.Direct
+		    && serviceToIndex.TryGetValue(new ServiceKey(dependency.ServiceType, dependency.Key), out int index)
+		    && instances[index].IsAsyncTainted)
+		{
+			return $"await {names.AsyncResolver(index)}(cancellationToken).ConfigureAwait(false)";
+		}
+
+		return ResolveExpression(dependency, instances, names, serviceToIndex);
+	}
+
+	/// <summary>
+	///     The object initializer that fills the opt-in <c>[Inject]</c> members after construction:
+	///     <c>{ Bus = ResolveBus(), … }</c>, appended to the <c>new …(…)</c> so the properties are assigned at
+	///     construction (the instance is never observed half-set). Object-initializer syntax assigns both
+	///     <c>init</c> and <c>set</c> properties; on the async path an async-tainted member is awaited inside the
+	///     initializer exactly like an async-tainted constructor argument. Empty (no initializer) when the
+	///     instance has no injected members.
+	/// </summary>
+	private static string MemberInitializer(InstanceModel instance, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool asynchronous)
+	{
+		MemberModel[] members = instance.InjectedMembers.AsArray();
+		if (members.Length == 0)
+		{
+			return string.Empty;
+		}
+
+		StringBuilder assignments = new();
+		for (int m = 0; m < members.Length; m++)
+		{
+			if (m > 0)
+			{
+				assignments.Append(", ");
+			}
+
+			assignments.Append(members[m].MemberName).Append(" = ")
+				.Append(DependencyValue(members[m].Dependency, instances, names, serviceToIndex, asynchronous));
+		}
+
+		return $" {{ {assignments} }}";
 	}
 
 	/// <summary>

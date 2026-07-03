@@ -508,4 +508,30 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A property marked <c>[Inject]</c> has no <c>set</c> or <c>init</c> accessor the container can assign
+	///     through the object initializer (the container is not a derived context, so a protected/private-protected
+	///     setter - and a cross-assembly internal one - is out of reach), so there is nothing for Awaiten to fill.
+	/// </summary>
+	public static readonly DiagnosticDescriptor InjectedPropertyNotSettable = new(
+		"AWT136",
+		"Injected property is not settable",
+		"The property '{0}' on '{1}' is marked [Inject] but has no set or init accessor the container can assign through; give it an accessible init/set accessor or remove [Inject]",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     An injected property is marked <c>[Arg]</c>, but runtime arguments flow only through a
+	///     <c>Func&lt;…&gt;</c> factory into <c>[Arg]</c> constructor parameters - never through property
+	///     injection, which resolves entirely from the graph.
+	/// </summary>
+	public static readonly DiagnosticDescriptor InjectedPropertyIsArg = new(
+		"AWT137",
+		"Injected property cannot be a runtime argument",
+		"The injected property '{0}' on '{1}' is marked [Arg], but runtime arguments are supplied only through a Func<…> factory to constructor parameters, never to an injected property",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

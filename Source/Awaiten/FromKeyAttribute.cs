@@ -3,11 +3,11 @@ using System;
 namespace Awaiten;
 
 /// <summary>
-///     Selects the keyed registration of a constructor parameter's service type. The parameter is
-///     resolved from the registration whose <c>Key</c> matches <see cref="Key" /> rather than the
-///     unkeyed one.
+///     Selects the keyed registration of a constructor parameter's or injected property's service type.
+///     The dependency is resolved from the registration whose <c>Key</c> matches <see cref="Key" />
+///     rather than the unkeyed one.
 /// </summary>
-[AttributeUsage(AttributeTargets.Parameter, AllowMultiple = false, Inherited = false)]
+[AttributeUsage(AttributeTargets.Parameter | AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
 public sealed class FromKeyAttribute : Attribute
 {
 	/// <summary>

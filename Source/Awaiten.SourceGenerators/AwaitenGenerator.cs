@@ -747,6 +747,15 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 				AddParameterEdges(parameter, serviceToImpl, implToIndex, serviceMembers, includeEagerBare, nodeEdges);
 			}
 
+			// An injected [Inject] member is a full graph edge just like a constructor parameter: a Direct
+			// member captures its target (and, resolved at construction, closes a cycle through it), a collection
+			// member edges to each of its members, and a relationship member defers - so AddParameterEdges
+			// classifies it identically to a constructor edge.
+			foreach (MemberModel member in instances[i].InjectedMembers.AsArray())
+			{
+				AddParameterEdges(member.Dependency, serviceToImpl, implToIndex, serviceMembers, includeEagerBare, nodeEdges);
+			}
+
 			edges[i] = nodeEdges;
 		}
 
@@ -1116,7 +1125,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			// `IService`) is genuinely ambiguous and reported as AWT124, as is a decorator whose only
 			// service-assignable parameter is [FromKey]-ed.
 			List<IParameterSymbol> assignable = constructor.Parameters
-				.Where(p => FromKey(p) is null && !HasFromServices(p) && _compilation.HasImplicitConversion(service, p.Type))
+				.Where(p => FromKey(p.GetAttributes()) is null && !HasFromServices(p) && _compilation.HasImplicitConversion(service, p.Type))
 				.ToList();
 
 			// AWT135: nothing is left to receive the inner instance, but a [FromServices] parameter of the
@@ -1508,6 +1517,16 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		// parameter rather than resolving it from the graph.
 		List<ParameterModel> parameters = ClassifyParameters(producer, info, asyncFactory, context);
 
+		// Property injection: after the constructor, fill opt-in [Inject] properties through an object
+		// initializer. Only a constructed instance is filled - a factory or pre-built instance is produced
+		// whole by its source. Each member edge is classified exactly like a Direct constructor parameter, so
+		// it participates fully in cycle, captive and async-taint analysis.
+		List<MemberModel> members = new();
+		if (info.Production == ProductionKind.Constructor)
+		{
+			DiscoverInjectedMembers(info, containerSymbol, serviceToImpl, context.ConstraintRejected, members, diagnostics);
+		}
+
 		// Disposability follows the type the container actually owns: a factory's produced type (which may
 		// implement IDisposable behind a non-disposable service interface; for an async factory this is the
 		// awaited T, not the Task), or the constructed implementation type. Using info.Symbol for a factory
@@ -1573,7 +1592,8 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			IsAsyncFactory: asyncFactory,
 			RuntimeDisposalCheck: runtimeDisposalCheck,
 			IsAsyncDisposable: asyncDisposable,
-			EmitType: emitType);
+			EmitType: emitType,
+			InjectedMembers: new EquatableArray<MemberModel>(members.ToArray()));
 
 		static bool ImplementsInterface(ITypeSymbol type, INamedTypeSymbol @interface)
 		{
@@ -2232,7 +2252,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			// AWT134: a [FromServices] parameter (External) cannot also be an [Arg] runtime argument - it
 			// cannot be both an externally-resolved dependency and a caller-supplied value. Point the diagnostic
 			// at the offending parameter, falling back to the registration when its location is unavailable.
-			if (parameterModel.Kind == DependencyKind.External && HasArgAttribute(parameter))
+			if (parameterModel.Kind == DependencyKind.External && HasArgAttribute(parameter.GetAttributes()))
 			{
 				context.Diagnostics.Add(new DiagnosticInfo(
 					Diagnostics.ConflictingExternalParameter,
@@ -2307,6 +2327,128 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 				DisplayInstance(info.ImplementationType),
 				DisplayKeyed(parameterModel.ServiceType, parameterModel.Key),
 			])));
+	}
+
+	/// <summary>
+	///     Discovers the injected properties of a constructed implementation: every property marked
+	///     <c>[Inject]</c> (opt-in only - a plain <c>required</c> property is left to the caller and is not
+	///     auto-injected). Each is classified exactly like a Direct constructor parameter and resolved against
+	///     the graph, so it produces a graph edge for cycle, captive and async-taint analysis and is filled
+	///     through an object initializer after construction. Walks the implementation and its base types
+	///     (most-derived first), so an overriding or shadowing declaration wins. Reports AWT136 (<c>[Inject]</c>
+	///     on a property with no set/init accessor the container can assign through), AWT137 (an injected
+	///     property marked <c>[Arg]</c>) and AWT101 (a member with no registration to satisfy it), each at the
+	///     property's own location.
+	/// </summary>
+	private static void DiscoverInjectedMembers(
+		ImplInfo info,
+		INamedTypeSymbol containerSymbol,
+		Dictionary<ServiceKey, string> serviceToImpl,
+		HashSet<string> constraintRejected,
+		List<MemberModel> members,
+		List<DiagnosticInfo> diagnostics)
+	{
+		HashSet<string> seen = new(StringComparer.Ordinal);
+		for (INamedTypeSymbol? type = info.Symbol; type is not null; type = type.BaseType)
+		{
+			foreach (IPropertySymbol property in type.GetMembers().OfType<IPropertySymbol>())
+			{
+				// Walk most-derived first, recording every instance property (seen) so a base declaration is
+				// shadowed by an overriding or `new` one. Property injection is opt-in: only a property marked
+				// [Inject] is filled; a plain required property is left to the caller (never auto-injected).
+				if (property.IsStatic || property.IsIndexer || !seen.Add(property.Name) || !HasInject(property.GetAttributes()))
+				{
+					continue;
+				}
+
+				if (ClassifyInjectedMember(property, info, containerSymbol, serviceToImpl, constraintRejected, diagnostics) is { } member)
+				{
+					members.Add(member);
+				}
+			}
+		}
+	}
+
+	/// <summary>
+	///     Classifies one <c>[Inject]</c> property into the member edge to fill after construction, or reports
+	///     why it cannot be injected and returns <c>null</c>: AWT136 (no set/init accessor the container can
+	///     reach), AWT137 (<c>[Arg]</c> on an injected property) or - when the resolved edge has no registration -
+	///     AWT101 (with AWT121 substituted for an <c>Owned&lt;T&gt;</c> requested through <c>Lazy</c>). Each is
+	///     reported at the property's own location. A missing registration only diagnoses; it still yields a
+	///     member so the edge participates in analysis, exactly like a constructor parameter.
+	/// </summary>
+	private static MemberModel? ClassifyInjectedMember(
+		IPropertySymbol property,
+		ImplInfo info,
+		INamedTypeSymbol containerSymbol,
+		Dictionary<ServiceKey, string> serviceToImpl,
+		HashSet<string> constraintRejected,
+		List<DiagnosticInfo> diagnostics)
+	{
+		LocationInfo? location = LocationInfo.From(property.Locations.FirstOrDefault());
+
+		// AWT136: an [Inject] property must have a set/init accessor the container can assign through the object
+		// initializer. The container is not a derived type, so a protected/private-protected setter (and a
+		// cross-assembly internal one) is out of reach even though it is not private - apply the same accessibility
+		// test the constructor path uses rather than a bare not-private check, so an unreachable setter surfaces as
+		// AWT136 instead of an inaccessible-setter error in generated code.
+		if (property.SetMethod is not { } setter || !IsAccessibleSetter(setter, containerSymbol))
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.InjectedPropertyNotSettable,
+				location,
+				new EquatableArray<string>([property.Name, DisplayInstance(info.ImplementationType),])));
+			return null;
+		}
+
+		ParameterModel dependency = ClassifyDependency(
+			property.Type, property.GetAttributes(), asyncFactory: false, location);
+
+		// AWT137: runtime arguments flow only through a Func<…> factory into [Arg] constructor parameters, never
+		// through property injection (the member resolves entirely from the graph).
+		if (dependency.Kind == DependencyKind.Arg)
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.InjectedPropertyIsArg,
+				location,
+				new EquatableArray<string>([property.Name, DisplayInstance(info.ImplementationType),])));
+			return null;
+		}
+
+		// AWT101: a direct/relationship member edge needs a registration to satisfy it (a collection member is
+		// satisfied elsewhere, like a constructor parameter, and yields an empty collection when unregistered).
+		// Mirror ClassifyParameters: a constraint-rejected open generic (AWT126) is not re-reported here, and an
+		// Owned<T> requested through Lazy surfaces the targeted AWT121 instead.
+		if (dependency.Kind is not (DependencyKind.Enumerable or DependencyKind.AsyncEnumerable)
+		    && !serviceToImpl.ContainsKey(KeyOf(dependency))
+		    && !constraintRejected.Contains(dependency.ServiceType))
+		{
+			bool ownedThroughLazy = dependency.Kind is DependencyKind.Lazy or DependencyKind.LazyTask
+			                        && dependency.ServiceType.StartsWith("global::Awaiten.Owned<", StringComparison.Ordinal);
+
+			diagnostics.Add(new DiagnosticInfo(
+				ownedThroughLazy ? Diagnostics.OwnedThroughLazy : Diagnostics.MissingDependency,
+				location,
+				new EquatableArray<string>([
+					Display(info.OwningServiceOrImpl),
+					DisplayInstance(info.ImplementationType),
+					DisplayKeyed(dependency.ServiceType, dependency.Key),
+				])));
+		}
+
+		return new MemberModel(property.Name, dependency);
+
+		// The setter must be reachable from the container's object initializer, which is not a derived context:
+		// mirrors IsAccessibleConstructor - public always, internal/protected-internal only within the container's
+		// own assembly, and protected/private-protected/private never (the container cannot reach them).
+		static bool IsAccessibleSetter(IMethodSymbol setter, INamedTypeSymbol containerSymbol)
+			=> setter.DeclaredAccessibility switch
+			{
+				Accessibility.Public => true,
+				Accessibility.Internal or Accessibility.ProtectedOrInternal =>
+					SymbolEqualityComparer.Default.Equals(setter.ContainingAssembly, containerSymbol.ContainingAssembly),
+				_ => false,
+			};
 	}
 
 	/// <summary>
@@ -2439,16 +2581,32 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		// An explicit [FromServices] parameter is resolved from the external provider; its own type is the
 		// external service type, and a [FromKey] on it selects the keyed external service (the key is forwarded
 		// to the resolver). It takes precedence so the parameter is never treated as an Awaiten graph edge (a
-		// [FromServices] together with [Arg] is reported as AWT134 in ClassifyParameters).
+		// [FromServices] together with [Arg] is reported as AWT134 in ClassifyParameters). [FromServices] is a
+		// constructor-parameter concern only, so it lives here rather than in the shared ClassifyDependency core
+		// (an injected property never resolves from the external provider).
 		if (HasFromServices(parameter))
 		{
 			return new ParameterModel(
-				parameter.Type.ToDisplayString(FullyQualified), DependencyKind.External, Key: FromKey(parameter), Location: location);
+				parameter.Type.ToDisplayString(FullyQualified), DependencyKind.External, Key: FromKey(parameter.GetAttributes()), Location: location);
 		}
 
-		if (HasArgAttribute(parameter))
+		return ClassifyDependency(parameter.Type, parameter.GetAttributes(), asyncFactory, location);
+	}
+
+	/// <summary>
+	///     Classifies a dependency by its declared type and attributes, shared by constructor parameters and
+	///     injected properties: a runtime argument (<c>[Arg]</c>), an asynchronous factory's forwarded
+	///     <c>CancellationToken</c>, a deferred relationship type (<c>Func&lt;T&gt;</c>, <c>Lazy&lt;T&gt;</c>,
+	///     their async siblings or a bare <c>Owned&lt;T&gt;</c> / <c>Task&lt;T&gt;</c>), a collection, or a
+	///     direct dependency - returning the underlying service type it resolves and an optional
+	///     <c>[FromKey]</c> selection. The property path reuses this verbatim, so a member resolves exactly
+	///     like a constructor parameter.
+	/// </summary>
+	private static ParameterModel ClassifyDependency(ITypeSymbol type, ImmutableArray<AttributeData> attributes, bool asyncFactory, LocationInfo? location)
+	{
+		if (HasArgAttribute(attributes))
 		{
-			return new ParameterModel(parameter.Type.ToDisplayString(FullyQualified), DependencyKind.Arg, Location: location);
+			return new ParameterModel(type.ToDisplayString(FullyQualified), DependencyKind.Arg, Location: location);
 		}
 
 		// An asynchronous factory's CancellationToken parameter is not resolved from the graph: the container
@@ -2458,23 +2616,23 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		// and is reported as AWT101 when unregistered rather than silently receiving default. An [Arg]
 		// CancellationToken is handled above as a caller-supplied runtime argument and is left untouched.
 		if (asyncFactory
-		    && parameter.Type is INamedTypeSymbol { Name: "CancellationToken", } token
+		    && type is INamedTypeSymbol { Name: "CancellationToken", } token
 		    && token.ContainingNamespace?.ToDisplayString() == "System.Threading")
 		{
 			return new ParameterModel(
-				parameter.Type.ToDisplayString(FullyQualified), DependencyKind.CancellationToken, Location: location);
+				type.ToDisplayString(FullyQualified), DependencyKind.CancellationToken, Location: location);
 		}
 
 		// A [FromKey] selects the keyed registration of the dependency's service type, whether it is required
 		// directly, deferred behind a Func<T>/Lazy<T>, wrapped in an Owned<T> handle, or a collection - the
 		// service type is the same, only the delivery differs.
-		string? key = FromKey(parameter);
+		string? key = FromKey(attributes);
 
 		// An asynchronous collection (IAsyncEnumerable<T>) resolves to every registration of its element type, like
 		// the synchronous collection shapes below, but awaits each member's initialization - so it is the one shape
 		// through which an async-tainted member is legal. Recognized before the synchronous shapes (both live in
 		// System.Collections.Generic) and before the relationship gate.
-		if (IsAsyncEnumerable(parameter.Type, out string? asyncElementType))
+		if (IsAsyncEnumerable(type, out string? asyncElementType))
 		{
 			return new ParameterModel(asyncElementType!, DependencyKind.AsyncEnumerable, Key: key, Location: location);
 		}
@@ -2482,7 +2640,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		// A collection dependency resolves to every registration of its element type under the parameter's
 		// [FromKey] key (unkeyed by default). Recognized before the relationship types so IEnumerable<T> and T[]
 		// are not mistaken for a plain generic service or an array-typed direct dependency.
-		if (TryGetCollectionElement(parameter.Type, out string? elementType))
+		if (TryGetCollectionElement(type, out string? elementType))
 		{
 			return new ParameterModel(elementType!, DependencyKind.Enumerable, Key: key, Location: location);
 		}
@@ -2493,7 +2651,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		// collection, and the second shape (besides IAsyncEnumerable<T>) through which an async-tainted member is
 		// legal. Recognized before the bare Task<T> relationship below, so Task<IReadOnlyList<T>> is the awaited
 		// collection of T rather than a Task relationship over the (unregistered) collection type itself.
-		if (TryGetAwaitedCollection(parameter.Type, out string? awaitedElement, out string? awaitedCollection))
+		if (TryGetAwaitedCollection(type, out string? awaitedElement, out string? awaitedCollection))
 		{
 			return new ParameterModel(
 				awaitedElement!, DependencyKind.AwaitedEnumerable, Key: key, Location: location,
@@ -2501,7 +2659,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		}
 
 		// A bare Owned<T> dependency: resolve T into a throwaway scope and hand the caller the disposal handle.
-		if (IsOwned(parameter.Type, out ITypeSymbol ownedInner))
+		if (IsOwned(type, out ITypeSymbol ownedInner))
 		{
 			return new ParameterModel(ownedInner.ToDisplayString(FullyQualified), DependencyKind.Owned, Key: key, Location: location);
 		}
@@ -2509,7 +2667,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		// A bare Task<T> dependency: an awaitable that resolves (and initializes) T. Task lives in
 		// System.Threading.Tasks, not System, so it is recognized here rather than through the System-generic
 		// relationship gate below (which handles the Func/Lazy wrappers, including Func<…, Task<T>>).
-		if (IsTask(parameter.Type, out ITypeSymbol taskResult))
+		if (IsTask(type, out ITypeSymbol taskResult))
 		{
 			// Task<Owned<T>> is the async counterpart of a bare Owned<T>: async-resolve (and initialize) T into a
 			// throwaway child scope and hand back the disposal handle.
@@ -2518,7 +2676,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 				: new ParameterModel(taskResult.ToDisplayString(FullyQualified), DependencyKind.Task, Key: key, Location: location);
 		}
 
-		if (parameter.Type is INamedTypeSymbol { IsGenericType: true, } named
+		if (type is INamedTypeSymbol { IsGenericType: true, } named
 		    && named.ContainingNamespace?.ToDisplayString() == "System"
 		    && ClassifyRelationship(named, key, location) is { } relationship)
 		{
@@ -2527,7 +2685,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 		// A direct dependency, optionally selecting a keyed registration with [FromKey].
 		return new ParameterModel(
-			parameter.Type.ToDisplayString(FullyQualified), DependencyKind.Direct, Key: key, Location: location);
+			type.ToDisplayString(FullyQualified), DependencyKind.Direct, Key: key, Location: location);
 	}
 
 	/// <summary>
@@ -2595,9 +2753,9 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	private static string DisplayKeyed(string serviceType, string? key)
 		=> key is null ? Display(serviceType) : $"{Display(serviceType)} (key: {key})";
 
-	private static string? FromKey(IParameterSymbol parameter)
+	private static string? FromKey(ImmutableArray<AttributeData> attributes)
 	{
-		foreach (AttributeData attribute in parameter.GetAttributes())
+		foreach (AttributeData attribute in attributes)
 		{
 			if (attribute.AttributeClass is { Name: "FromKeyAttribute", } attributeClass
 			    && attributeClass.ContainingNamespace?.ToDisplayString() == ContainerRegistrations.AttributeNamespace
@@ -2997,11 +3155,18 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		return false;
 	}
 
-	private static bool HasArgAttribute(IParameterSymbol parameter)
+	private static bool HasArgAttribute(ImmutableArray<AttributeData> attributes)
+		=> HasAwaitenAttribute(attributes, "ArgAttribute");
+
+	private static bool HasInject(ImmutableArray<AttributeData> attributes)
+		=> HasAwaitenAttribute(attributes, "InjectAttribute");
+
+	private static bool HasAwaitenAttribute(ImmutableArray<AttributeData> attributes, string attributeName)
 	{
-		foreach (AttributeData attribute in parameter.GetAttributes())
+		foreach (AttributeData attribute in attributes)
 		{
-			if (attribute.AttributeClass is { Name: "ArgAttribute", } attributeClass
+			if (attribute.AttributeClass is { } attributeClass
+			    && attributeClass.Name == attributeName
 			    && attributeClass.ContainingNamespace?.ToDisplayString() == ContainerRegistrations.AttributeNamespace)
 			{
 				return true;
