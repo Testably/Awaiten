@@ -632,6 +632,90 @@ public class CollectionTests
 	}
 
 	[Fact]
+	public async Task ExplicitlyRegisteredAsyncEnumerable_ClaimsTheByTypeSlotOnBothSurfaces()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+		                                       using System.Threading;
+		                                       using System.Threading.Tasks;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class AsyncPlugin : IPlugin, IAsyncInitializable
+		                                       {
+		                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+		                                       }
+		                                       public sealed class Channel : IAsyncEnumerable<IPlugin>
+		                                       {
+		                                           public IAsyncEnumerator<IPlugin> GetAsyncEnumerator(CancellationToken cancellationToken = default) => null;
+		                                       }
+
+		                                       [Container]
+		                                       [Singleton<AsyncPlugin, IPlugin>]
+		                                       [Singleton<Channel, IAsyncEnumerable<IPlugin>>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// The registered channel owns typeof(IAsyncEnumerable<IPlugin>) on the synchronous dispatch, and no async
+		// arm is synthesized behind it: ResolveAsync falls through to the same synchronous resolution, so Resolve
+		// and ResolveAsync hand back the same registered service rather than two disagreeing collections.
+		await That(source).Contains("typeof(global::System.Collections.Generic.IAsyncEnumerable<global::MyCode.IPlugin>), static __s => __s.ResolveChannel()")
+			.Because("the explicitly registered IAsyncEnumerable<T> is dispatched as an ordinary service");
+		await That(source).DoesNotContain("__ResolveAsyncCollection")
+			.Because("no async collection arm is synthesized behind the registered async shape");
+		await That(source).DoesNotContain("the async collection 'System.Collections.Generic.IAsyncEnumerable<MyCode.IPlugin>'")
+			.Because("the synthesized view's guidance does not shadow a slot the registration owns");
+	}
+
+	[Fact]
+	public async Task AsyncTaintedRegisteredAsyncEnumerable_IsNotShadowedByTheSynthesizedViewOnTheSyncDispatch()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+		                                       using System.Threading;
+		                                       using System.Threading.Tasks;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class Alpha : IPlugin { }
+		                                       public sealed class Channel : IAsyncEnumerable<IPlugin>, IAsyncInitializable
+		                                       {
+		                                           public IAsyncEnumerator<IPlugin> GetAsyncEnumerator(CancellationToken cancellationToken = default) => null;
+		                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+		                                       }
+
+		                                       [Container]
+		                                       [Singleton<Alpha, IPlugin>]
+		                                       [Singleton<Channel, IAsyncEnumerable<IPlugin>>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// The registered channel is async-tainted, so it is absent from the synchronous dispatch - the synthesized
+		// IPlugin view (whose members are all synchronous) must not claim its vacated slot: synchronous Resolve
+		// throws the channel's own steer-to-ResolveAsync guidance, and ResolveAsync serves the channel.
+		await That(source).DoesNotContain("new __AsyncArray<global::MyCode.IPlugin>")
+			.Because("the synthesized async view is not emitted behind the registered async shape");
+		await That(source).Contains("typeof(global::System.Collections.Generic.IAsyncEnumerable<global::MyCode.IPlugin>), static (__s, __ct) => __AsObject(__s.ResolveChannelAsync(__ct))")
+			.Because("ResolveAsync serves the registered channel through its own async resolver");
+		await That(source).Contains("'System.Collections.Generic.IAsyncEnumerable<MyCode.IPlugin>' requires asynchronous initialization")
+			.Because("synchronous Resolve throws the registered service's guidance, not the synthesized view's");
+	}
+
+	[Fact]
 	public async Task PubliclyRequestedAsyncCollection_ThrowsGuidanceRatherThanBeingSilentlyUnresolvable()
 	{
 		GeneratorResult result = Generator.Run("""

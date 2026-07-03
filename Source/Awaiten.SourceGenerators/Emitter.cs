@@ -200,10 +200,13 @@ internal static class Emitter
 
 	// Whether the __AsyncArray<T> helper is used: some instance injects an IAsyncEnumerable<T>, or some unkeyed,
 	// non-suppressed collection is offered by type as IAsyncEnumerable<T> (a synchronous dispatch entry when
-	// sync-materializable, an async resolver otherwise) - both materialize through the helper.
+	// sync-materializable, an async resolver otherwise) - both materialize through the helper. A collection whose
+	// async shape is explicitly registered offers no synthesized view, so it does not use the helper.
 	private static bool NeedsAsyncArrayHelper(InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex)
 		=> instances.Any(instance => instance.ConstructorParameters.AsArray().Any(p => p.Kind == DependencyKind.AsyncEnumerable))
-		   || names.Collections.Any(collection => collection.Key is null && !SynthesisSuppressed(serviceToIndex, collection.Service));
+		   || names.Collections.Any(collection => collection.Key is null
+		                                          && !SynthesisSuppressed(serviceToIndex, collection.Service)
+		                                          && !AsyncShapeRegistered(serviceToIndex, collection.Service));
 
 	/// <summary>
 	///     Emits the <c>__AsyncArray&lt;T&gt;</c> helper: a minimal <c>IAsyncEnumerable&lt;T&gt;</c> /
@@ -975,8 +978,13 @@ internal static class Emitter
 			// synchronously constructible (it wraps the same members in the __AsyncArray<T> replay enumerator), and
 			// is offered by type alongside the synchronous shapes. An async-member collection has no synchronous
 			// materialization - its IAsyncEnumerable<T> shape is an asynchronous arm instead (AsyncByTypeCollections).
-			string asyncArray = AsyncCollectionExpression(collectionKey, names, instances, asynchronous: false);
-			AddCollectionShape(AwaitenGenerator.AsyncEnumerableShapeType(collection.Service), asyncArray, rootWithheld, entries, seen);
+			// An explicitly registered IAsyncEnumerable<T> claims the slot instead; the seen guard alone would not
+			// hold it when that registration is async-tainted (excluded from the sync dispatch that seeds seen).
+			if (!AsyncShapeRegistered(serviceToIndex, collection.Service))
+			{
+				string asyncArray = AsyncCollectionExpression(collectionKey, names, instances, asynchronous: false);
+				AddCollectionShape(AwaitenGenerator.AsyncEnumerableShapeType(collection.Service), asyncArray, rootWithheld, entries, seen);
+			}
 		}
 	}
 
@@ -985,6 +993,12 @@ internal static class Emitter
 	// unresolvable. Mirrors the injection-side suppression in AwaitenGenerator.ClassifyParameters.
 	private static bool SynthesisSuppressed(Dictionary<ServiceKey, int> serviceToIndex, string elementType)
 		=> AwaitenGenerator.CollectionShapeTypes(elementType).Any(shape => serviceToIndex.ContainsKey(new ServiceKey(shape, null)));
+
+	// A registered IAsyncEnumerable<T> claims only its own async shape: the synthesized async view steps aside for
+	// it (on the sync dispatch, the async arm and the withheld guidance alike) while the synchronous shapes stay
+	// synthesized. Mirrors the injection-side asyncShapeRegistered gate in AwaitenGenerator.ClassifyParameters.
+	private static bool AsyncShapeRegistered(Dictionary<ServiceKey, int> serviceToIndex, string elementType)
+		=> serviceToIndex.ContainsKey(new ServiceKey(AwaitenGenerator.AsyncEnumerableShapeType(elementType), null));
 
 	// Adds one collection shape's dispatch entry, unless an explicit registration already claimed the slot (the
 	// seen guard). A root-withheld collection carries the guidance thrown by Resolve(Type) on the Root.
@@ -1228,14 +1242,21 @@ internal static class Emitter
 
 			// The IAsyncEnumerable<T> shape IS resolvable - it awaits its members - but only asynchronously, so its
 			// synchronous Resolve throws guidance toward ResolveAsync (an async arm serves ResolveAsync itself).
-			string asyncShape = AwaitenGenerator.AsyncEnumerableShapeType(collection.Service);
-			yield return (asyncShape, AsyncCollectionAsyncMessage(asyncShape));
+			// Unless that shape is explicitly registered - then the registration owns the slot and its own dispatch
+			// entry or guidance applies, not the synthesized view's.
+			if (!AsyncShapeRegistered(serviceToIndex, collection.Service))
+			{
+				string asyncShape = AwaitenGenerator.AsyncEnumerableShapeType(collection.Service);
+				yield return (asyncShape, AsyncCollectionAsyncMessage(asyncShape));
+			}
 		}
 	}
 
 	/// <summary>
 	///     The async collections resolvable by type through <c>ResolveAsync</c>: each unkeyed, non-synthesis-
-	///     suppressed collection that is not synchronously materializable (it holds an async-tainted member) - outside
+	///     suppressed collection whose async shape is not itself registered (a registered
+	///     <c>IAsyncEnumerable&lt;T&gt;</c> owns its slot on both surfaces) and that is not synchronously
+	///     materializable (it holds an async-tainted member) - outside
 	///     pragmatic <c>SyncResolveAfterInit</c> mode, where every collection is synchronously materializable and so
 	///     served by the synchronous dispatch. Each is paired with the async resolver method that materializes it,
 	///     named by the collection's position in <see cref="Names.Collections" /> so the method emission and the
@@ -1255,6 +1276,7 @@ internal static class Emitter
 			ServiceMembers collection = collections[i];
 			if (collection.Key is null
 			    && !SynthesisSuppressed(serviceToIndex, collection.Service)
+			    && !AsyncShapeRegistered(serviceToIndex, collection.Service)
 			    && !names.IsSyncCollection(new ServiceKey(collection.Service, collection.Key)))
 			{
 				yield return (collection, "__ResolveAsyncCollection" + i);

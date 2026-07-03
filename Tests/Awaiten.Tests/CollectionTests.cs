@@ -409,6 +409,87 @@ public partial class CollectionTests
 			.Because("a child scope bounds the members the async collection materializes and disposes them with the scope - the accumulation the root would suffer is bounded here");
 	}
 
+	[Fact]
+	public async Task FromKey_AsyncEnumerableResolvesOnlyTheMembersUnderThatKey()
+	{
+		using KeyedAsyncStreamContainer.Root container = new();
+
+		KeyedAsyncStreamHost host = container.Resolve<KeyedAsyncStreamHost>();
+
+		// Each [FromKey] async collection resolves the registration(s) under that key, never the others, and the
+		// unkeyed async collection resolves only the unkeyed registration - the buckets stay disjoint, exactly as
+		// for the synchronous shapes.
+		List<IPlugin> primary = new();
+		await foreach (IPlugin plugin in host.Primary.WithCancellation(TestContext.Current.CancellationToken))
+		{
+			primary.Add(plugin);
+		}
+
+		List<IPlugin> unkeyed = new();
+		await foreach (IPlugin plugin in host.Unkeyed.WithCancellation(TestContext.Current.CancellationToken))
+		{
+			unkeyed.Add(plugin);
+		}
+
+		await That(primary).HasCount(1);
+		await That(primary[0].Name).IsEqualTo("alpha");
+		await That(unkeyed).HasCount(1);
+		await That(unkeyed[0].Name).IsEqualTo("plain");
+	}
+
+	[Fact]
+	public async Task SyncResolveAfterInit_AsyncEnumerable_IsSynchronouslyResolvableAfterWarmUp()
+	{
+		using PragmaticCollectionContainer.Root container = new();
+
+		await container.InitializeAsync(TestContext.Current.CancellationToken);
+
+		// In pragmatic mode every member has a synchronous resolver after warm-up, so the IAsyncEnumerable<T> view
+		// joins the synchronous by-type dispatch instead of being served by an async arm.
+		IAsyncEnumerable<IPlugin> stream = container.Resolve<IAsyncEnumerable<IPlugin>>();
+
+		List<IPlugin> plugins = new();
+		await foreach (IPlugin plugin in stream.WithCancellation(TestContext.Current.CancellationToken))
+		{
+			plugins.Add(plugin);
+		}
+
+		await That(plugins).HasCount(2);
+		await That(plugins.OfType<AsyncPlugin>().Single().Initialized).IsTrue()
+			.Because("InitializeAsync warmed the async member before the synchronously materialized stream handed it back");
+	}
+
+	[Fact]
+	public async Task ExplicitlyRegisteredAsyncEnumerable_IsServedByTypeOnBothResolveAndResolveAsync()
+	{
+		using ExplicitAsyncStreamContainer.Root container = new();
+
+		// IAsyncEnumerable<IPlugin> is itself registered (an opaque channel), so it owns the by-type slot on both
+		// surfaces: no async collection is synthesized behind it from the (async-tainted) IPlugin registration, and
+		// Resolve and ResolveAsync hand back the same registered singleton.
+		PluginChannel channel = (PluginChannel)container.Resolve<IAsyncEnumerable<IPlugin>>();
+		object viaAsync = await container.ResolveAsync<IAsyncEnumerable<IPlugin>>(TestContext.Current.CancellationToken);
+
+		await That(viaAsync).IsSameAs(channel)
+			.Because("both surfaces serve the explicitly registered channel, never a synthesized collection that would disagree with it");
+	}
+
+	[Fact]
+	public async Task AsyncTaintedRegisteredAsyncEnumerable_SyncResolveThrowsItsGuidanceAndResolveAsyncServesIt()
+	{
+		using AsyncChannelContainer.Root container = new();
+
+		// The registered channel requires asynchronous initialization, so it is absent from the synchronous
+		// dispatch - and the async view synthesized from the (all-synchronous) IPlugin members must not claim its
+		// vacated slot: synchronous Resolve throws the channel's steer-to-ResolveAsync guidance instead.
+		await That(() => container.Resolve<IAsyncEnumerable<IPlugin>>()).Throws<InvalidOperationException>()
+			.Because("the registered channel's slot is not shadowed by the synthesized async view");
+
+		AsyncPluginChannel channel = (AsyncPluginChannel)await container.ResolveAsync<IAsyncEnumerable<IPlugin>>(TestContext.Current.CancellationToken);
+		await That(channel.Initialized).IsTrue()
+			.Because("ResolveAsync serves the registered channel, initialized");
+	}
+
 	public interface IPlugin
 	{
 		string Name { get; }
@@ -465,6 +546,53 @@ public partial class CollectionTests
 		public bool Disposed { get; private set; }
 
 		public void Dispose() => Disposed = true;
+	}
+
+	public sealed class KeyedAsyncStreamHost
+	{
+		public KeyedAsyncStreamHost(
+			[FromKey("primary")] IAsyncEnumerable<IPlugin> primary,
+			IAsyncEnumerable<IPlugin> unkeyed)
+		{
+			Primary = primary;
+			Unkeyed = unkeyed;
+		}
+
+		public IAsyncEnumerable<IPlugin> Primary { get; }
+
+		public IAsyncEnumerable<IPlugin> Unkeyed { get; }
+	}
+
+	// An opaque IAsyncEnumerable<IPlugin> service in its own right - the explicit registration the synthesized
+	// async view must step aside for. The stream is empty (via a nested enumerator, so the service itself is not
+	// IAsyncDisposable); the tests only assert which instance the container serves, never its contents.
+	public sealed class PluginChannel : IAsyncEnumerable<IPlugin>
+	{
+		public IAsyncEnumerator<IPlugin> GetAsyncEnumerator(CancellationToken cancellationToken = default) => new EmptyEnumerator();
+	}
+
+	// The channel that itself requires asynchronous initialization: excluded from the synchronous dispatch, so the
+	// by-type slot it vacates there must throw its guidance rather than serve the synthesized view.
+	public sealed class AsyncPluginChannel : IAsyncEnumerable<IPlugin>, IAsyncInitializable
+	{
+		public bool Initialized { get; private set; }
+
+		public IAsyncEnumerator<IPlugin> GetAsyncEnumerator(CancellationToken cancellationToken = default) => new EmptyEnumerator();
+
+		public Task InitializeAsync(CancellationToken cancellationToken)
+		{
+			Initialized = true;
+			return Task.CompletedTask;
+		}
+	}
+
+	private sealed class EmptyEnumerator : IAsyncEnumerator<IPlugin>
+	{
+		public IPlugin Current => null!;
+
+		public ValueTask<bool> MoveNextAsync() => new(false);
+
+		public ValueTask DisposeAsync() => default;
 	}
 
 	public sealed class PluginHost
@@ -640,6 +768,30 @@ public partial class CollectionTests
 	[Container]
 	[Transient<AsyncDisposableWidget, IWidget>]
 	public static partial class AsyncDisposableCollectionContainer;
+
+	// Async collections under disjoint key buckets: 'primary' (alpha) and unkeyed (plain) - a [FromKey] async
+	// collection resolves exactly the members of its bucket, like the synchronous shapes.
+	[Container]
+	[Singleton<Alpha, IPlugin>(Key = "primary")]
+	[Singleton<Plain, IPlugin>]
+	[Singleton<KeyedAsyncStreamHost>]
+	public static partial class KeyedAsyncStreamContainer;
+
+	// IAsyncEnumerable<IPlugin> is registered in its own right (an opaque channel) alongside an async-tainted
+	// IPlugin registration whose synthesized async view would otherwise claim the same by-type slot on the async
+	// surface: the registration owns typeof(IAsyncEnumerable<IPlugin>) on both Resolve and ResolveAsync.
+	[Container]
+	[Singleton<AsyncPlugin, IPlugin>]
+	[Singleton<PluginChannel, IAsyncEnumerable<IPlugin>>]
+	public static partial class ExplicitAsyncStreamContainer;
+
+	// The mirror image: the registered channel is itself async-initialized (absent from the synchronous dispatch)
+	// and the IPlugin members are synchronous, so the synthesized view could otherwise shadow the channel's
+	// vacated slot on the synchronous surface.
+	[Container]
+	[Singleton<Alpha, IPlugin>]
+	[Singleton<AsyncPluginChannel, IAsyncEnumerable<IPlugin>>]
+	public static partial class AsyncChannelContainer;
 
 	// IEnumerable<IPlugin> is registered directly (an opaque value); the individual IPlugin registrations would
 	// otherwise synthesize a collection of two, so the counts distinguish which one injection resolves to.

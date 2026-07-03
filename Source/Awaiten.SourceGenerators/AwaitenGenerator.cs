@@ -1675,6 +1675,39 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	}
 
 	/// <summary>
+	///     Rewrites a collection parameter to an ordinary direct dependency when its collection shape is claimed by
+	///     an explicit registration. A collection type (<c>IEnumerable&lt;T&gt;</c> and friends, <c>T[]</c>, or
+	///     <c>IAsyncEnumerable&lt;T&gt;</c>) is normally synthesized from the registrations of its element type under
+	///     the parameter's key. But if that collection shape is itself registered as a service under the same key - a
+	///     legitimate opaque value such as a <c>string[]</c> of command-line arguments, an
+	///     <c>IReadOnlyList&lt;T&gt;</c> of config or an <c>IAsyncEnumerable&lt;T&gt;</c> channel - synthesis steps
+	///     aside entirely (all-or-nothing): the registered shape resolves to that opaque value as an ordinary direct
+	///     dependency, and an unregistered sibling shape is a plain missing dependency (AWT101) rather than a
+	///     silently synthesized second collection that could disagree with the registered one. A registered
+	///     synchronous shape claims the whole collection - including the <c>IAsyncEnumerable&lt;T&gt;</c> view, so
+	///     injecting it is AWT101 rather than a second collection synthesized behind the opaque one - mirroring the
+	///     by-type SynthesisSuppressed gate; a registered <c>IAsyncEnumerable&lt;T&gt;</c> claims only its own async
+	///     shape.
+	/// </summary>
+	private static ParameterModel SuppressRegisteredCollectionSynthesis(
+		ParameterModel parameterModel,
+		IParameterSymbol parameter,
+		Dictionary<ServiceKey, string> serviceToImpl)
+	{
+		bool syncShapeRegistered = parameterModel.Kind is (DependencyKind.Enumerable or DependencyKind.AsyncEnumerable)
+		                           && CollectionShapeTypes(parameterModel.ServiceType).Any(shape => serviceToImpl.ContainsKey(new ServiceKey(shape, parameterModel.Key)));
+		bool asyncShapeRegistered = parameterModel.Kind == DependencyKind.AsyncEnumerable
+		                            && serviceToImpl.ContainsKey(new ServiceKey(AsyncEnumerableShapeType(parameterModel.ServiceType), parameterModel.Key));
+		if (syncShapeRegistered || asyncShapeRegistered)
+		{
+			string collectionType = parameter.Type.ToDisplayString(FullyQualified);
+			return parameterModel with { ServiceType = collectionType, Kind = DependencyKind.Direct };
+		}
+
+		return parameterModel;
+	}
+
+	/// <summary>
 	///     Classifies the producer's parameters (a constructor's or a factory method's) and reports
 	///     <see cref="Diagnostics.MissingDependency">AWT101</see> for any non-<c>[Arg]</c> parameter whose
 	///     service type is not registered. A runtime argument (<c>[Arg]</c>) is supplied at resolve time, so
@@ -1696,27 +1729,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		{
 			ParameterModel parameterModel = ClassifyParameter(parameter, asyncFactory);
 			parameterModel = RedirectDecoratorInner(parameterModel, info, decoratorInner);
-
-			// A collection type (IEnumerable<T> and friends, T[], or IAsyncEnumerable<T>) is normally synthesized
-			// from the registrations of its element type under the parameter's key. But if that collection shape is
-			// itself registered as a service under the same key - a legitimate opaque value such as a string[] of
-			// command-line arguments, an IReadOnlyList<T> of config or an IAsyncEnumerable<T> channel - synthesis
-			// steps aside entirely (all-or-nothing): the registered shape resolves to that opaque value as an
-			// ordinary direct dependency, and an unregistered sibling shape is a plain missing dependency (AWT101)
-			// rather than a silently synthesized second collection that could disagree with the registered one.
-			// A registered synchronous shape claims the whole collection - including the IAsyncEnumerable<T> view, so
-			// injecting it is AWT101 rather than a second collection synthesized behind the opaque one - mirroring the
-			// by-type SynthesisSuppressed gate; a registered IAsyncEnumerable<T> claims only its own async shape.
-			bool syncShapeRegistered = parameterModel.Kind is (DependencyKind.Enumerable or DependencyKind.AsyncEnumerable)
-			                           && CollectionShapeTypes(parameterModel.ServiceType).Any(shape => serviceToImpl.ContainsKey(new ServiceKey(shape, parameterModel.Key)));
-			bool asyncShapeRegistered = parameterModel.Kind == DependencyKind.AsyncEnumerable
-			                            && serviceToImpl.ContainsKey(new ServiceKey(AsyncEnumerableShapeType(parameterModel.ServiceType), parameterModel.Key));
-			if (syncShapeRegistered || asyncShapeRegistered)
-			{
-				string collectionType = parameter.Type.ToDisplayString(FullyQualified);
-				parameterModel = parameterModel with { ServiceType = collectionType, Kind = DependencyKind.Direct };
-			}
-
+			parameterModel = SuppressRegisteredCollectionSynthesis(parameterModel, parameter, serviceToImpl);
 			parameters.Add(parameterModel);
 
 			// A CancellationToken is forwarded from the resolve-time token, not resolved from the graph (like
