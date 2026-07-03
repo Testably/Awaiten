@@ -62,4 +62,14 @@ internal enum DependencyKind
 	///     an async-tainted async-collection is itself async-tainted and is built through its asynchronous resolver.
 	/// </summary>
 	AsyncEnumerable,
+
+	/// <summary>
+	///     An external dependency: a <c>[FromServices]</c> parameter (or, under <c>[ImportServices]</c>, an
+	///     otherwise-unresolved direct dependency) that is satisfied from the container's
+	///     <c>IExternalResolver</c> rather than the Awaiten graph. Its <c>ServiceType</c> is the external
+	///     service type. It is not registered in the graph, so - like <see cref="Arg" /> - it contributes no
+	///     edge and never taints the async analysis; it is resolved at construction time through the container's
+	///     external resolver.
+	/// </summary>
+	External,
 }

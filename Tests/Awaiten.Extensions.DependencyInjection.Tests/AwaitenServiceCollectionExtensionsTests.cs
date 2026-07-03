@@ -42,6 +42,11 @@ public sealed class AwaitenServiceCollectionExtensionsTests
 		public System.Collections.Generic.IReadOnlyList<AwaitenRegistration> Registrations
 			=> System.Array.Empty<AwaitenRegistration>();
 
+		public System.Collections.Generic.IReadOnlyList<Type> ExternalDependencies
+			=> System.Array.Empty<Type>();
+
+		public IExternalResolver? ExternalResolver { get; set; }
+
 		public object Resolve(Type serviceType) => throw new NotSupportedException();
 
 		public bool TryResolve(Type serviceType, [NotNullWhen(true)] out object? instance)

@@ -65,6 +65,11 @@ namespace Awaiten
         public FromKeyAttribute(string key) { }
         public string Key { get; }
     }
+    [System.AttributeUsage(System.AttributeTargets.Parameter, AllowMultiple=false, Inherited=false)]
+    public sealed class FromServicesAttribute : System.Attribute
+    {
+        public FromServicesAttribute() { }
+    }
     public interface IAsyncInitializable
     {
         System.Threading.Tasks.Task InitializeAsync(System.Threading.CancellationToken cancellationToken);
@@ -73,8 +78,9 @@ namespace Awaiten
     {
         System.Threading.Tasks.Task<object> ResolveAsync(System.Type serviceType, System.Threading.CancellationToken cancellationToken = default);
     }
-    public interface IAwaitenContainerMetadata : Awaiten.IAwaitenAsyncResolver, Awaiten.IAwaitenResolver, Awaiten.IAwaitenRoot, Awaiten.IAwaitenScope, System.IDisposable
+    public interface IAwaitenContainerMetadata : Awaiten.IAwaitenAsyncResolver, Awaiten.IAwaitenResolver, Awaiten.IAwaitenRoot, Awaiten.IAwaitenScope, Awaiten.IExternalResolverHost, System.IDisposable
     {
+        System.Collections.Generic.IReadOnlyList<System.Type> ExternalDependencies { get; }
         System.Collections.Generic.IReadOnlyList<Awaiten.AwaitenRegistration> Registrations { get; }
     }
     public interface IAwaitenResolver
@@ -94,6 +100,19 @@ namespace Awaiten
     {
         Awaiten.IAwaitenScope CreateScope();
         System.Threading.Tasks.Task<Awaiten.IAwaitenScope> CreateScopeAsync(System.Threading.CancellationToken cancellationToken = default);
+    }
+    public interface IExternalResolver
+    {
+        bool TryResolve(System.Type serviceType, object? serviceKey, out object? instance);
+    }
+    public interface IExternalResolverHost
+    {
+        Awaiten.IExternalResolver? ExternalResolver { get; set; }
+    }
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=false, Inherited=false)]
+    public sealed class ImportServicesAttribute : System.Attribute
+    {
+        public ImportServicesAttribute() { }
     }
     public enum LifetimeSafety
     {

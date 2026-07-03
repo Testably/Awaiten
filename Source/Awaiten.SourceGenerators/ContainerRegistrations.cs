@@ -26,6 +26,7 @@ internal static class ContainerRegistrations
 
 	public static (List<RawRegistration> Raw, HashSet<string> ConstraintRejectedServices) Collect(
 		INamedTypeSymbol containerSymbol,
+		bool importServices,
 		List<DiagnosticInfo> diagnostics)
 	{
 		List<RawRegistration> result = new();
@@ -97,7 +98,7 @@ internal static class ContainerRegistrations
 		// implementation (iterating to a fixpoint over its own generic dependencies).
 		if (open.Count > 0)
 		{
-			ExpandOpenGenerics(result, open, containerSymbol, diagnostics, constraintRejected);
+			ExpandOpenGenerics(result, open, containerSymbol, importServices, diagnostics, constraintRejected);
 		}
 
 		return (result, constraintRejected);
@@ -336,6 +337,7 @@ internal static class ContainerRegistrations
 		List<RawRegistration> raw,
 		List<OpenRegistration> open,
 		INamedTypeSymbol containerSymbol,
+		bool importServices,
 		List<DiagnosticInfo> diagnostics,
 		HashSet<string> constraintRejected)
 	{
@@ -387,7 +389,7 @@ internal static class ContainerRegistrations
 				continue;
 			}
 
-			foreach (ITypeSymbol required in RequiredServiceTypes(impl, containerSymbol, raw, openServices))
+			foreach (ITypeSymbol required in RequiredServiceTypes(impl, containerSymbol, raw, openServices, importServices))
 			{
 				if (required is INamedTypeSymbol { IsGenericType: true, IsUnboundGenericType: false, } closed
 				    && expandedServices.Add(closed.ToDisplayString(FullyQualified)))
@@ -502,13 +504,15 @@ internal static class ContainerRegistrations
 		INamedTypeSymbol implementation,
 		INamedTypeSymbol containerSymbol,
 		List<RawRegistration> raw,
-		HashSet<INamedTypeSymbol> openServices)
+		HashSet<INamedTypeSymbol> openServices,
+		bool importServices)
 	{
 		IMethodSymbol? constructor = AwaitenGenerator.SelectConstructor(
 			implementation,
 			containerSymbol,
 			raw.Select(r => r.ServiceType),
-			p => IsOpenGenericSatisfiable(p.Type, openServices));
+			p => IsOpenGenericSatisfiable(p.Type, openServices),
+			importServices);
 
 		return constructor is null
 			? []

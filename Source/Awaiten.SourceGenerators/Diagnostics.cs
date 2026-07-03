@@ -481,4 +481,29 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A constructor parameter is marked both <c>[FromServices]</c> and <c>[Arg]</c>: it cannot be both
+	///     an externally-resolved dependency and a caller-supplied runtime argument.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ConflictingExternalParameter = new(
+		"AWT134",
+		"Conflicting external parameter",
+		"The parameter '{0}' of '{1}' is marked both [FromServices] and [Arg]; it cannot be both an external dependency and a runtime argument",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     The parameter of a decorator that would receive the decorated inner instance is marked
+	///     <c>[FromServices]</c>: the inner is supplied by the decorator chain, not the external provider, so
+	///     the attribute would silently bypass the chain.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ExternalDecoratorInner = new(
+		"AWT135",
+		"External decorator inner parameter",
+		"The parameter '{0}' of the decorator '{1}' is marked [FromServices]; the decorated inner instance is supplied by the decorator chain and cannot be resolved from the external provider",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

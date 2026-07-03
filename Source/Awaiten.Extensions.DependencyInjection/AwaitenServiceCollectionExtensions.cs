@@ -54,7 +54,12 @@ public static class AwaitenServiceCollectionExtensions
 	///         <c>LifetimeSafety.Loose</c>. A container using <c>SyncResolveAfterInit</c> should be warmed at
 	///         startup (resolve <see cref="IAwaitenContainerMetadata" /> and await <c>InitializeAsync</c>)
 	///         before its async-initialized services are first resolved; otherwise the first resolution blocks
-	///         synchronously on initialization. Do not dispose a scope or the provider while a resolved
+	///         synchronously on initialization. A container with external
+	///         (<c>[FromServices]</c> / <c>[ImportServices]</c>) dependencies is wired to the host's provider on
+	///         its first bridged resolution, which a warm-up through the metadata surface bypasses - so when
+	///         warming such a container, first set <c>ExternalResolver</c> on the resolved metadata (for example
+	///         to a <see cref="ServiceProviderExternalResolver" /> over the provider); an explicitly wired
+	///         resolver is left untouched. Do not dispose a scope or the provider while a resolved
 	///         <c>Task&lt;T&gt;</c> is still in flight: MS.DI disposes the captured <c>Task</c>, whose
 	///         <c>Dispose</c> throws for an incomplete task (the awaited instance itself is still disposed
 	///         when the resolution completes).
@@ -87,9 +92,26 @@ public static class AwaitenServiceCollectionExtensions
 		services.AddSingleton(root);
 		services.AddSingleton<IAwaitenScope>(root);
 		services.AddSingleton<IAwaitenContainerMetadata>(root);
-		services.AddScoped(_ => new AwaitenScopeHolder<TRoot>(root.CreateScope()));
 		services.TryAddTransient<AwaitenAsyncDisposalSlot>();
 		services.TryAddSingleton(sp => new AwaitenRootProviderProbe(sp));
+
+		// When the container draws on external (host-owned) services - its [FromServices] / [ImportServices]
+		// dependencies - its external resolvers are wired to the host's providers on first resolution below: the
+		// root (which resolves singletons) to the root provider, so externally-resolved singletons stay valid for
+		// the application's lifetime; and each Awaiten scope to its aligned MS.DI scope's provider, so a scoped
+		// external dependency resolves per scope.
+		bool hasExternal = root.ExternalDependencies.Count > 0;
+
+		services.AddScoped(sp =>
+		{
+			IAwaitenScope scope = root.CreateScope();
+			if (hasExternal)
+			{
+				((IExternalResolverHost)scope).ExternalResolver = new ServiceProviderExternalResolver(sp);
+			}
+
+			return new AwaitenScopeHolder<TRoot>(scope);
+		});
 
 		foreach (AwaitenRegistration registration in root.Registrations)
 		{
@@ -114,6 +136,7 @@ public static class AwaitenServiceCollectionExtensions
 					taskType,
 					sp =>
 					{
+						EnsureExternalWired(sp, root, hasExternal);
 						AwaitenAsyncDisposalSlot slot = sp.GetRequiredService<AwaitenAsyncDisposalSlot>();
 						return asTypedTask(FillSlot(ScopeFor<TRoot>(sp, lifetime, root).ResolveAsync(serviceType), slot));
 					},
@@ -123,7 +146,11 @@ public static class AwaitenServiceCollectionExtensions
 			{
 				services.Add(new ServiceDescriptor(
 					serviceType,
-					sp => ScopeFor<TRoot>(sp, lifetime, root).Resolve(serviceType),
+					sp =>
+					{
+						EnsureExternalWired(sp, root, hasExternal);
+						return ScopeFor<TRoot>(sp, lifetime, root).Resolve(serviceType);
+					},
 					ToServiceLifetime(lifetime)));
 			}
 		}
@@ -146,6 +173,28 @@ public static class AwaitenServiceCollectionExtensions
 	// current provider is that same instance is resolving from the root provider, not from a scope.
 	private static bool IsRootProvider(IServiceProvider provider)
 		=> ReferenceEquals(provider.GetRequiredService<AwaitenRootProviderProbe>().RootProvider, provider);
+
+	// Wires the container root's external resolver to the root provider on first use, when the container has
+	// [FromServices] / [ImportServices] dependencies. The root resolves singletons (and root-provider
+	// transients), so resolving their external dependencies from the root provider keeps externally-resolved
+	// singletons valid for the application's lifetime; scoped external resolution is wired per scope on the
+	// aligned Awaiten scope (see the scope factory above). A resolver a caller wired explicitly is left
+	// untouched. The wiring is guarded by a double-checked lock on the internal probe singleton (one per
+	// provider, never a publicly reachable Scope/Root) so concurrent first resolutions wire it exactly once.
+	private static void EnsureExternalWired<TRoot>(IServiceProvider provider, TRoot root, bool hasExternal)
+		where TRoot : class, IAwaitenContainerMetadata, new()
+	{
+		if (!hasExternal || root.ExternalResolver is not null)
+		{
+			return;
+		}
+
+		AwaitenRootProviderProbe probe = provider.GetRequiredService<AwaitenRootProviderProbe>();
+		lock (probe)
+		{
+			root.ExternalResolver ??= new ServiceProviderExternalResolver(probe.RootProvider);
+		}
+	}
 
 	private static ServiceLifetime ToServiceLifetime(AwaitenLifetime lifetime) => lifetime switch
 	{
