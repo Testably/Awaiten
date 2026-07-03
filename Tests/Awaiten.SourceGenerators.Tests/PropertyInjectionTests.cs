@@ -128,6 +128,10 @@ public class PropertyInjectionTests
 		await That(source).Contains("_orderService.Invoice = __root.ResolveInvoiceService();");
 		// The constructor call carries no object initializer for the deferred member.
 		await That(source).DoesNotContain("new global::MyCode.OrderService() { Invoice");
+		// The lock-free fast path is suppressed for a deferred singleton, so a concurrent caller cannot observe the
+		// instance before its deferred property is wired - every caller blocks on the lock until wiring completes.
+		await That(source).DoesNotContain("_orderService is not null")
+			.Because("a deferred instance is published before it is wired, so the lock-free read is suppressed to keep a half-wired instance unobservable across threads");
 	}
 
 	[Fact]

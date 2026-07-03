@@ -34,8 +34,9 @@ public sealed class InjectAttribute : Attribute
     ///     and awaits an async-initialized target just like a constructor parameter. Requires an accessible
     ///     <c>set</c> accessor (post-construction assignment cannot use an <c>init</c>-only accessor,
     ///     which is <c>AWT138</c>). A cycle-breaking deferred property applies only to synchronous singleton
-    ///     and scoped registrations, and only when <em>every</em> edge in the cycle is deferred: a transient has
-    ///     no cache to terminate a mutual cycle (a transient deferred cycle is <c>AWT139</c>), an async-initialized
+    ///     and scoped registrations, and only when <em>every</em> edge in the cycle is deferred: a cycle whose
+    ///     participants are all transients has no cache anywhere to terminate it (an all-transient deferred cycle is
+    ///     <c>AWT139</c>), an async-initialized
     ///     participant publishes its memoized task only after the re-entrant resolve has returned (a deferred cycle
     ///     through one is <c>AWT140</c>), and a cycle that still traverses a constructor parameter or plain
     ///     <c>[Inject]</c> property re-enters an as-yet-uncached participant when resolution begins there, so it is

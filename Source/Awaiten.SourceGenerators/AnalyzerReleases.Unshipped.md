@@ -40,6 +40,6 @@
  AWT136  | Awaiten   | Error    | An [Inject] property has no set or init accessor the container can assign through
  AWT137  | Awaiten   | Error    | An injected property is marked [Arg]
  AWT138  | Awaiten   | Error    | An [Inject(Deferred = true)] property is init-only rather than settable
- AWT139  | Awaiten   | Error    | A deferred property cycle includes a transient and cannot terminate
+ AWT139  | Awaiten   | Error    | A deferred property cycle consists entirely of transients and cannot terminate
  AWT140  | Awaiten   | Error    | A deferred property cycle includes an async-initialized service and cannot terminate
  AWT141  | Awaiten   | Error    | A deferred property cycle still traverses a construction-time edge and cannot terminate

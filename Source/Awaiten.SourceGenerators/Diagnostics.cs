@@ -549,15 +549,16 @@ internal static class Diagnostics
 		isEnabledByDefault: true);
 
 	/// <summary>
-	///     A cycle of <c>[Inject(Deferred = true)]</c> properties includes a transient. A deferred property
-	///     breaks a cycle only because the owning instance is cached before it is wired; a transient is not
-	///     cached, so the cycle would recurse forever at runtime. Make the participants singleton or scoped,
-	///     or break the cycle.
+	///     Every participant in a cycle of <c>[Inject(Deferred = true)]</c> properties is a transient. A deferred
+	///     property breaks a cycle only because a participant is cached before it is wired, so a re-entrant resolve
+	///     returns that cached instance; when every participant is a transient nothing is cached anywhere, so each
+	///     lap rebuilds the participants and the cycle recurses forever at runtime. Make at least one participant
+	///     singleton or scoped, or break the cycle.
 	/// </summary>
 	public static readonly DiagnosticDescriptor DeferredTransientCycle = new(
 		"AWT139",
 		"Non-terminating deferred transient cycle",
-		"Deferred property cycle through a transient detected: {0}. A deferred property breaks a cycle only when the owning instance is cached (singleton or scoped) before it is wired; a transient is rebuilt on each resolve, so this cycle would recurse forever. Make the participants singleton or scoped, or break the cycle.",
+		"Deferred property cycle in which every participant is a transient detected: {0}. A deferred property breaks a cycle only when a participant is cached (singleton or scoped) before it is wired, so a re-entrant resolve returns that cached instance; when every participant is a transient nothing is cached anywhere, so this cycle would recurse forever. Make at least one participant singleton or scoped, or break the cycle.",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);

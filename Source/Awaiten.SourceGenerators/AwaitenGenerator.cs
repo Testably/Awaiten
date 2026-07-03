@@ -3420,6 +3420,27 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	private static string FormatTypeList(string[] types)
 		=> types.Length == 0 ? "none" : string.Join(", ", types.Select(Display));
 
+	// The union of the construction and deferred edge sets over instance indices: a cycle can close through a
+	// construction edge on one hop and a deferred edge on another (a mixed cycle), which neither the
+	// construction-only graph (AWT102) nor the deferred-only graph sees on its own. Walking the union surfaces
+	// those. Construction edges come first, then the deferred edges not already present (a duplicate edge would
+	// only add redundant DFS work, not change the result).
+	private static Dictionary<int, List<int>> BuildCombinedGraph(
+		int count,
+		Dictionary<int, List<int>> constructionEdges,
+		Dictionary<int, List<int>> deferredEdges)
+	{
+		Dictionary<int, List<int>> combined = new();
+		for (int i = 0; i < count; i++)
+		{
+			List<int> union = new(constructionEdges[i]);
+			union.AddRange(deferredEdges[i].Where(next => !union.Contains(next)));
+			combined[i] = union;
+		}
+
+		return combined;
+	}
+
 	/// <summary>
 	///     AWT139/AWT140/AWT141: a deferred property breaks a mutual cycle only because the owning instance is
 	///     cached before its deferred members are wired, so a re-entrant resolve returns the cached instance. Any
@@ -3427,10 +3448,11 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	///     deferred edges are absent), so it must be vetted here. This walks the combined construction-plus-deferred
 	///     graph and, for each cycle that involves at least one deferred edge, reports the fault that prevents it
 	///     from terminating: a construction-time edge still in the cycle leaves it only partly broken (AWT141); a
-	///     transient participant is never cached, so its re-entrant resolve reconstructs an instance already under
-	///     construction (AWT139); an async-tainted participant publishes its memoized task only after the re-entrant
-	///     resolve has already returned (AWT140). A pure construction cycle is left to AWT102, and an all-deferred
-	///     synchronous singleton/scoped cycle is supported and not reported.
+	///     cycle whose every participant is a transient is never cached anywhere, so each lap reconstructs the
+	///     participants and it recurses forever (AWT139); an async-tainted participant publishes its memoized task
+	///     only after the re-entrant resolve has already returned (AWT140). A pure construction cycle is left to
+	///     AWT102, and an all-deferred synchronous cycle with at least one singleton/scoped participant is supported
+	///     and not reported.
 	/// </summary>
 	private static void DetectNonTerminatingDeferredCycles(
 		List<InstanceModel> instances,
@@ -3439,23 +3461,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		LocationInfo? containerLocation,
 		List<DiagnosticInfo> diagnostics)
 	{
-		// The combined graph: a cycle can close through a construction edge on one hop and a deferred edge on
-		// another (a mixed cycle), which neither the construction-only graph (AWT102) nor the deferred-only graph
-		// sees on its own. Walking the union surfaces those.
-		Dictionary<int, List<int>> combined = new();
-		for (int i = 0; i < instances.Count; i++)
-		{
-			List<int> union = new(constructionEdges[i]);
-			foreach (int next in deferredEdges[i])
-			{
-				if (!union.Contains(next))
-				{
-					union.Add(next);
-				}
-			}
-
-			combined[i] = union;
-		}
+		Dictionary<int, List<int>> combined = BuildCombinedGraph(instances.Count, constructionEdges, deferredEdges);
 
 		HashSet<int> visited = new();
 		HashSet<int> onStack = new();
@@ -3514,13 +3520,14 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 	// The non-termination fault a cycle in the combined construction-plus-deferred graph exhibits, or null when it
 	// is not this analysis's concern (a pure construction cycle - left to AWT102) or is the supported case (every
-	// edge is deferred and every participant is a synchronously-resolved singleton or scoped, cached before its
-	// deferred members are wired, so a re-entrant resolve returns the cached instance). A cycle hop is a
-	// construction edge when the target is in the construction graph, otherwise it is a deferred edge (the combined
-	// walk follows only construction or deferred edges). A cycle that still traverses a construction edge is only
-	// partly broken and cannot terminate from every entry point regardless of lifetime (AWT141); an all-deferred
-	// cycle through a transient is never cached (AWT139); an all-deferred cycle through an async-tainted
-	// participant publishes its memoized task only after the re-entrant resolve has returned (AWT140).
+	// edge is deferred, no participant is async-tainted, and at least one participant is a synchronously-resolved
+	// singleton or scoped that is cached before its deferred members are wired, so a re-entrant resolve returns the
+	// cached instance and terminates the cycle). A cycle hop is a construction edge when the target is in the
+	// construction graph, otherwise it is a deferred edge (the combined walk follows only construction or deferred
+	// edges). A cycle that still traverses a construction edge is only partly broken and cannot terminate from every
+	// entry point regardless of lifetime (AWT141); an all-deferred cycle whose every participant is a transient is
+	// never cached anywhere (AWT139); an all-deferred cycle through an async-tainted participant publishes its
+	// memoized task only after the re-entrant resolve has returned (AWT140).
 	private static DiagnosticDescriptor? DeferredCycleFault(
 		List<int> cycle,
 		List<InstanceModel> instances,
@@ -3557,7 +3564,11 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			return Diagnostics.DeferredMixedCycle;
 		}
 
-		if (cycle.Any(index => instances[index].Lifetime == Lifetime.Transient))
+		// Only when *every* participant is a transient is nothing cached anywhere in the cycle, so it recurses
+		// forever. A single cached (singleton/scoped) participant breaks the recursion: on the second lap its
+		// re-entrant resolve returns the already-cached instance instead of continuing round, so the cycle
+		// terminates from every entry point (the transients are merely rebuilt a bounded number of times).
+		if (cycle.All(index => instances[index].Lifetime == Lifetime.Transient))
 		{
 			return Diagnostics.DeferredTransientCycle;
 		}

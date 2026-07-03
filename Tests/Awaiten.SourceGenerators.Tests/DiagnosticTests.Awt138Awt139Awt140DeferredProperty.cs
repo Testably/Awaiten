@@ -108,6 +108,35 @@ public partial class DiagnosticTests
 		}
 
 		[Fact]
+		public async Task AMixedLifetimeDeferredCycle_WithOneCachedParticipant_DoesNotReportAwt139()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       // Left is a singleton, Right a transient, both deferred. The singleton is cached before it is wired,
+			                                       // so a re-entrant resolve returns the cached Left and the cycle terminates from any entry point - the
+			                                       // transient is merely rebuilt a bounded number of times. AWT139 fires only when *every* participant is
+			                                       // a transient (nothing cached anywhere), so it must not fire here.
+			                                       public sealed class Left { [Inject(Deferred = true)] public Right Right { get; set; } }
+			                                       public sealed class Right { [Inject(Deferred = true)] public Left Left { get; set; } }
+
+			                                       [Container]
+			                                       [Singleton<Left>]
+			                                       [Transient<Right>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics.Any(d => d.Contains("AWT139"))).IsFalse()
+				.Because("a cached singleton participant breaks the recursion, so a mixed-lifetime deferred cycle terminates and is not the all-transient AWT139 fault");
+			await That(result.Diagnostics).IsEmpty()
+				.Because("the mixed cycle is supported: no AWT102 (deferred edges are absent from the construction graph), AWT140 (nothing async) or AWT141 (no construction edge) either");
+		}
+
+		[Fact]
 		public async Task ReportsAwt140WhenADeferredCycleIncludesAnAsyncService()
 		{
 			GeneratorResult result = Generator.Run("""

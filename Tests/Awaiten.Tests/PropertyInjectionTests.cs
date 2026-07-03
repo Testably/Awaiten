@@ -342,6 +342,37 @@ public partial class PropertyInjectionTests
 	[Singleton<Reader>]
 	public static partial class DeferredNonCyclicContainer;
 
+	[Fact]
+	public async Task DeferredProperty_OnAMixedSingletonTransientCycle_Terminates_AndWiresThroughTheCachedSingleton()
+	{
+		using MixedLifetimeCycleContainer.Root container = new();
+
+		// The singleton is cached before it is wired, so the transient's back-reference resolves to it and the
+		// cycle terminates from the singleton entry point rather than recursing forever.
+		CachedHub hub = container.Resolve<CachedHub>();
+
+		await That(hub.Spoke).IsNotNull();
+		await That(hub.Spoke!.Hub).IsSameAs(hub)
+			.Because("the transient's deferred back-reference is wired to the already-cached singleton");
+	}
+
+	public sealed class CachedHub
+	{
+		[Inject(Deferred = true)]
+		public FreshSpoke? Spoke { get; set; }
+	}
+
+	public sealed class FreshSpoke
+	{
+		[Inject(Deferred = true)]
+		public CachedHub? Hub { get; set; }
+	}
+
+	[Container]
+	[Singleton<CachedHub>]
+	[Transient<FreshSpoke>]
+	public static partial class MixedLifetimeCycleContainer;
+
 	public sealed class ScopedLeft
 	{
 		[Inject(Deferred = true)]

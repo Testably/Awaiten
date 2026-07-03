@@ -2494,11 +2494,22 @@ internal static class Emitter
 		Indent(builder, depth).Append(resolver.Modifiers).Append(' ').Append(resolver.Type).Append(' ').Append(resolver.Method).AppendLine("()");
 		Indent(builder, depth).AppendLine("{");
 		EmitDisposedGuard(builder, depth + 1);
-		Indent(builder, depth + 1).Append("if (").Append(resolver.Field).AppendLine(" is not null)");
-		Indent(builder, depth + 1).AppendLine("{");
-		Indent(builder, depth + 2).Append("return ").Append(resolver.Field).AppendLine(";");
-		Indent(builder, depth + 1).AppendLine("}");
-		builder.AppendLine();
+
+		// The lock-free fast path is suppressed when the instance has deferred members: those are wired only after
+		// the field is published (inside the lock, below), so a concurrent caller taking this path could observe the
+		// instance with its deferred properties still unset. Routing every caller through the lock makes them block
+		// until wiring completes. The re-entrant same-thread resolve that breaks a mutual cycle still works: __gate is
+		// a reentrant monitor, so the re-entrant call re-enters the lock, finds the field already set, skips the
+		// miss block, and returns the mid-wiring instance - which is exactly what terminates the cycle.
+		if (emitDeferred is null)
+		{
+			Indent(builder, depth + 1).Append("if (").Append(resolver.Field).AppendLine(" is not null)");
+			Indent(builder, depth + 1).AppendLine("{");
+			Indent(builder, depth + 2).Append("return ").Append(resolver.Field).AppendLine(";");
+			Indent(builder, depth + 1).AppendLine("}");
+			builder.AppendLine();
+		}
+
 		Indent(builder, depth + 1).AppendLine("lock (__gate)");
 		Indent(builder, depth + 1).AppendLine("{");
 		EmitDisposedGuard(builder, depth + 2);
