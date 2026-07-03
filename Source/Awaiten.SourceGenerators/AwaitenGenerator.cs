@@ -318,11 +318,11 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		// Async taint: an instance is tainted if its implementation is async-initialized, or if it reaches one
 		// through a Direct (or eager collection) edge - including a deferred [Inject(Deferred = true)] member,
 		// whose post-construction assignment awaits an async-tainted target, so the owner too requires async
-		// resolution. Relationship types (Func/Lazy/Owned/Task/Arg) launder the taint - even the bare eager
-		// Owned<T>/Task<T>, which hand back a handle/awaitable rather than the resolved-and-initialized value -
-		// so they contribute no edges to BuildTaintGraph. (They do still close cycles, since they resolve at
-		// construction time; that is the wider construction graph.)
-		bool[] tainted = PropagateAsyncTaint(instances, BuildTaintGraph(instances, serviceToImpl, implToIndex, serviceMembers));
+		// resolution (dependencies carries those edges). Relationship types (Func/Lazy/Owned/Task/Arg) launder the
+		// taint - even the bare eager Owned<T>/Task<T>, which hand back a handle/awaitable rather than the
+		// resolved-and-initialized value - so they contribute no edges to it. (They do still close cycles, since
+		// they resolve at construction time; that is the wider construction graph.)
+		bool[] tainted = PropagateAsyncTaint(instances, dependencies);
 		for (int i = 0; i < instances.Count; i++)
 		{
 			if (tainted[i])
@@ -703,40 +703,29 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		};
 
 	// The direct-dependency graph over instance indices (resolvable edges to built instances): the edge set
-	// for captive-dependency analysis (AWT105) and the synchronous-async checks (AWT119/AWT120). The relationship
-	// types (Func<T>/Lazy<T>/…) and the bare eager relationships (Owned<T>/Task<T>) all defer or launder, so only
-	// direct dependencies contribute edges here; deferred [Inject] members are excluded so they do not create a
-	// captive relationship. Cycle detection uses the wider BuildConstructionGraph, and async-taint uses
-	// BuildTaintGraph (which additionally follows deferred edges).
+	// for captive-dependency analysis (AWT105), async-taint propagation, and the synchronous-async checks
+	// (AWT119/AWT120). The relationship types (Func<T>/Lazy<T>/…) and the bare eager relationships
+	// (Owned<T>/Task<T>) all defer or launder, so only direct (and eager collection) dependencies contribute
+	// edges here. A deferred [Inject(Deferred = true)] member is included: its post-construction assignment still
+	// captures its target for the owner's lifetime (captive) and awaits an async target (taint), so for every use
+	// but cycle detection it behaves exactly like a constructor edge. Only cycle detection excludes it (that
+	// exclusion is what lets it break a mutual constructor cycle - AWT102), which uses BuildConstructionGraph.
 	private static Dictionary<int, List<int>> BuildDependencyGraph(
-		List<InstanceModel> instances,
-		Dictionary<ServiceKey, string> serviceToImpl,
-		Dictionary<string, int> implToIndex,
-		Dictionary<ServiceKey, List<string>> serviceMembers)
-		=> BuildEdges(instances, serviceToImpl, implToIndex, serviceMembers, includeEagerBare: false);
-
-	// The async-taint graph over instance indices: BuildDependencyGraph plus the deferred [Inject(Deferred = true)]
-	// member edges. A deferred member is excluded from cycle and captive analysis (so it can break a constructor
-	// cycle), but a deferred Direct/collection member to an async-tainted target is awaited when its assignment
-	// runs after construction, so the owner genuinely requires asynchronous resolution - the taint must reach it.
-	// Uses the narrow (non-eager-bare) semantics: a deferred Owned<T>/Task<T>/Func<T>/Lazy<T> hands back a
-	// handle/awaitable without awaiting, so it launders the taint exactly like its constructor-parameter form.
-	private static Dictionary<int, List<int>> BuildTaintGraph(
 		List<InstanceModel> instances,
 		Dictionary<ServiceKey, string> serviceToImpl,
 		Dictionary<string, int> implToIndex,
 		Dictionary<ServiceKey, List<string>> serviceMembers)
 		=> BuildEdges(instances, serviceToImpl, implToIndex, serviceMembers, includeEagerBare: false, includeDeferredMembers: true);
 
-	// The construction graph over instance indices: a superset of BuildDependencyGraph that additionally
-	// includes the bare eager relationships Owned<T> and Task<T> (the latter also covering Task<Owned<T>>).
-	// Unlike their deferred Func/Lazy wrappers - which are stored as a closure and invoked later - these
-	// resolve their target during the owner's construction: synchronously for a synchronous target, and in
-	// the synchronous prefix (before the first await, and before the memoized task is published) of an async
-	// resolver. A cycle closed through one of them therefore re-enters an as-yet-uncached resolver and
-	// overflows the stack at runtime rather than being broken, so it is reported as a dependency cycle
-	// (AWT102). The narrower direct-only graph stays the edge set for taint/captive analysis, which the
-	// deferrals correctly launder.
+	// The construction graph over instance indices, for cycle detection (AWT102): the direct edges plus the bare
+	// eager relationships Owned<T> and Task<T> (the latter also covering Task<Owned<T>>). Unlike their deferred
+	// Func/Lazy wrappers - which are stored as a closure and invoked later - these resolve their target during the
+	// owner's construction: synchronously for a synchronous target, and in the synchronous prefix (before the
+	// first await, and before the memoized task is published) of an async resolver. A cycle closed through one of
+	// them therefore re-enters an as-yet-uncached resolver and overflows the stack at runtime rather than being
+	// broken, so it is reported as a dependency cycle (AWT102). Deferred [Inject(Deferred = true)] members are
+	// excluded here (that exclusion is what lets them break a cycle); unlike BuildDependencyGraph, which includes
+	// them for captive/taint, so neither graph is a strict superset of the other.
 	private static Dictionary<int, List<int>> BuildConstructionGraph(
 		List<InstanceModel> instances,
 		Dictionary<ServiceKey, string> serviceToImpl,
@@ -2904,9 +2893,9 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	/// <summary>
 	///     Marks every instance that is an async-taint source - its implementation is async-initialized, or it
 	///     is produced by an asynchronous factory (Task&lt;T&gt; / ValueTask&lt;T&gt;), which the container can
-	///     only reach by awaiting - or that reaches one through the taint graph, by fixpoint over that graph.
-	///     The taint graph (<see cref="BuildTaintGraph" />) carries the Direct and eager-collection edges,
-	///     including deferred [Inject] members, and omits the relationship/Owned/Arg deferrals that launder taint.
+	///     only reach by awaiting - or that reaches one through the dependency graph, by fixpoint over it. That
+	///     graph (<see cref="BuildDependencyGraph" />) carries the Direct and eager-collection edges, including
+	///     deferred [Inject] members, and omits the relationship/Owned/Arg deferrals that launder taint.
 	/// </summary>
 	private static bool[] PropagateAsyncTaint(List<InstanceModel> instances, Dictionary<int, List<int>> dependencies)
 	{

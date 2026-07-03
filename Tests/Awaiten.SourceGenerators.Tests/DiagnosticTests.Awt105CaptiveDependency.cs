@@ -175,5 +175,56 @@ public partial class DiagnosticTests
 
 			await That(result.Diagnostics).Contains("*AWT105*").AsWildcard();
 		}
+
+		[Fact]
+		public async Task ReportsWhenASingletonCapturesScopedThroughADeferredProperty()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       // A deferred property is assigned after construction, but the reference it stores still lives for
+			                                       // the singleton's whole lifetime, so it captures the scoped instance exactly like a constructor edge.
+			                                       public sealed class ScopedDependency { }
+			                                       public sealed class SingletonConsumer { [Inject(Deferred = true)] public ScopedDependency Dependency { get; set; } }
+
+			                                       [Container]
+			                                       [Singleton<SingletonConsumer>]
+			                                       [Scoped<ScopedDependency>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT105*").AsWildcard()
+				.Because("deferring the assignment does not shorten how long the singleton holds the scoped instance");
+		}
+
+		[Fact]
+		public async Task DoesNotReportWhenASingletonHoldsScopedThroughADeferredFunc()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using System;
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       // A deferred Func<T> member launders the capture exactly like a constructor Func<T>: it stores a
+			                                       // factory, not the scoped instance, so nothing is captured for the singleton's lifetime.
+			                                       public sealed class ScopedDependency { }
+			                                       public sealed class SingletonConsumer { [Inject(Deferred = true)] public Func<ScopedDependency> Dependency { get; set; } }
+
+			                                       [Container]
+			                                       [Singleton<SingletonConsumer>]
+			                                       [Scoped<ScopedDependency>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).DoesNotContain("*AWT105*").AsWildcard()
+				.Because("a deferred Func<T> stores a factory rather than the scoped instance, so it does not capture it");
+		}
 	}
 }
