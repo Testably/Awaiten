@@ -452,7 +452,7 @@ internal static partial class Sources
 		builder.AppendLine();
 		Indent(builder, depth + 1).AppendLine("global::System.Collections.Generic.IReadOnlyList<global::Awaiten.AwaitenRegistration> global::Awaiten.IAwaitenContainerMetadata.Registrations => global::System.Array.Empty<global::Awaiten.AwaitenRegistration>();");
 		builder.AppendLine();
-		Indent(builder, depth + 1).AppendLine("global::System.Collections.Generic.IReadOnlyList<global::System.Type> global::Awaiten.IAwaitenContainerMetadata.ExternalDependencies => global::System.Array.Empty<global::System.Type>();");
+		Indent(builder, depth + 1).AppendLine("global::System.Collections.Generic.IReadOnlyList<global::Awaiten.AwaitenExternalDependency> global::Awaiten.IAwaitenContainerMetadata.ExternalDependencies => global::System.Array.Empty<global::Awaiten.AwaitenExternalDependency>();");
 		builder.AppendLine();
 		Indent(builder, depth + 1).AppendLine("public global::Awaiten.IExternalResolver? ExternalResolver { get; set; }");
 

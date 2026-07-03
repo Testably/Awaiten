@@ -33,7 +33,7 @@ public static class AwaitenVerificationExtensions
 			throw new ArgumentNullException(nameof(provider));
 		}
 
-		List<Type> missing = container.ExternalDependencies
+		List<AwaitenExternalDependency> missing = container.ExternalDependencies
 			.Where(dependency => !IsRegistered(provider, dependency))
 			.ToList();
 
@@ -41,7 +41,7 @@ public static class AwaitenVerificationExtensions
 		{
 			throw new InvalidOperationException(
 				"Awaiten: the container's external dependencies are not registered in the provider: "
-				+ string.Join(", ", missing.Select(type => type.ToString()))
+				+ string.Join(", ", missing.Select(Describe))
 				+ ". Register them before building the provider, or remove the [FromServices]/[ImportServices] usage.");
 		}
 	}
@@ -68,19 +68,31 @@ public static class AwaitenVerificationExtensions
 		return provider;
 	}
 
-	private static bool IsRegistered(IServiceProvider provider, Type serviceType)
+	private static bool IsRegistered(IServiceProvider provider, AwaitenExternalDependency dependency)
 	{
-#if NET6_0_OR_GREATER
-		// IServiceProviderIsService gives a registration check without constructing the service; it is
-		// absent on net48 / older abstractions, where the synchronous fallback below applies.
-		if (provider.GetService(typeof(IServiceProviderIsService)) is IServiceProviderIsService probe)
+		// A registration check without constructing the service: keyed dependencies probe the keyed surface
+		// (a [FromKey] parameter resolves the registration under that key, not the unkeyed one), unkeyed ones
+		// the ordinary surface. IServiceProviderIs(Keyed)Service is available on the modern abstractions this
+		// package references; a provider that predates it (or does not implement it) falls through to the
+		// resolution-based check below.
+		if (dependency.Key is null)
 		{
-			return probe.IsService(serviceType);
+			if (provider.GetService(typeof(IServiceProviderIsService)) is IServiceProviderIsService probe)
+			{
+				return probe.IsService(dependency.ServiceType);
+			}
 		}
-#endif
+		else if (provider.GetService(typeof(IServiceProviderIsKeyedService)) is IServiceProviderIsKeyedService keyedProbe)
+		{
+			return keyedProbe.IsKeyedService(dependency.ServiceType, dependency.Key);
+		}
+
 		try
 		{
-			return provider.GetService(serviceType) is not null;
+			object? instance = dependency.Key is null
+				? provider.GetService(dependency.ServiceType)
+				: (provider as IKeyedServiceProvider)?.GetKeyedService(dependency.ServiceType, dependency.Key);
+			return instance is not null;
 		}
 		catch (InvalidOperationException)
 		{
@@ -88,4 +100,9 @@ public static class AwaitenVerificationExtensions
 			return true;
 		}
 	}
+
+	private static string Describe(AwaitenExternalDependency dependency)
+		=> dependency.Key is null
+			? dependency.ServiceType.ToString()
+			: dependency.ServiceType + " (key: " + dependency.Key + ")";
 }
