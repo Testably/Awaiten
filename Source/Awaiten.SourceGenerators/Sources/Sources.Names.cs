@@ -60,6 +60,12 @@ internal static partial class Sources
 
 		public string AsyncField(int index) => _fields[index] + "AsyncTask";
 
+		// The "wiring complete" flag for a synchronously-cached instance with deferred ([Inject(Deferred = true)])
+		// members: _foo -> _fooWired. It gates the lock-free fast path so a concurrent caller returns the cached
+		// instance only once its deferred members are wired, while the mid-wiring re-entrant resolve (which sees it
+		// still false) skips the fast path and terminates the cycle through the lock instead.
+		public string WiredField(int index) => _fields[index] + "Wired";
+
 		public static Names Build(InstanceModel[] instances, ServiceMembers[] collections, bool syncResolveAfterInit)
 		{
 			string[] resolvers = new string[instances.Length];

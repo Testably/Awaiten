@@ -8,8 +8,10 @@ namespace Awaiten;
 ///     a plain <c>required</c> property is left to the caller, exactly like any other property. Awaiten
 ///     resolves the property's service type the same way a constructor parameter is resolved - direct,
 ///     <c>Func&lt;T&gt;</c> / <c>Lazy&lt;T&gt;</c>, a collection, or a keyed registration with
-///     <c>[FromKey]</c> - and assigns it through an object initializer, so no reflection is used and the
-///     instance is never observed half-set.
+///     <c>[FromKey]</c> - and, unless the property is marked <see cref="Deferred" />, assigns it through an
+///     object initializer, so no reflection is used and the instance is never observed half-set. A
+///     <see cref="Deferred" /> property is instead assigned after construction (to break a mutual cycle); see
+///     that member for its narrower rules.
 /// </summary>
 /// <remarks>
 ///     The property must have a <c>set</c> or <c>init</c> accessor the container can assign through

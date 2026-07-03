@@ -58,6 +58,52 @@ public partial class DiagnosticTests
 		}
 
 		[Fact]
+		public async Task ReportsAwt139ForASelfReferentialTransientDeferredProperty()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       // A transient that defers a reference to its own type is a one-node deferred cycle; a transient is
+			                                       // never cached, so each resolve rebuilds a fresh instance and the self-reference recurses forever.
+			                                       public sealed class Node { [Inject(Deferred = true)] public Node Self { get; set; } }
+
+			                                       [Container]
+			                                       [Transient<Node>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics.Any(d => d.Contains("AWT139"))).IsTrue()
+				.Because("a self-referential deferred property on a transient is a one-node cycle with nothing cached, so it cannot terminate");
+		}
+
+		[Fact]
+		public async Task ASelfReferentialSingletonDeferredProperty_DoesNotReportAwt139OrAwt140()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       // A singleton is cached before its deferred member is wired, so the re-entrant self-resolve returns
+			                                       // the cached instance and the one-node cycle terminates - the supported case.
+			                                       public sealed class Node { [Inject(Deferred = true)] public Node Self { get; set; } }
+
+			                                       [Container]
+			                                       [Singleton<Node>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("a self-referential deferred property on a cached singleton terminates and is supported");
+		}
+
+		[Fact]
 		public async Task ReportsAwt139WhenADeferredCycleClosesThroughACollectionMember()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -261,6 +307,34 @@ public partial class DiagnosticTests
 				.Because("a mixed cycle through a plain [Inject] property still traverses a construction-time edge, so a deferred property cannot break it");
 			await That(result.Diagnostics.Any(d => d.Contains("AWT102"))).IsFalse()
 				.Because("the deferred edge keeps the cycle out of the construction graph, so AWT102 does not fire");
+		}
+
+		[Fact]
+		public async Task ReportsAwt141WhenAMixedCycleTraversesAnEagerOwned()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       // Left defers Right, but Right holds Left through a bare Owned<Left> constructor parameter - an eager
+			                                       // relationship that resolves its target at construction time, so it is a construction edge just like a
+			                                       // direct parameter. The cycle is only partly broken and re-enters an uncached participant from Right.
+			                                       public sealed class Left { [Inject(Deferred = true)] public Right Right { get; set; } }
+			                                       public sealed class Right { public Right(Owned<Left> left) { } }
+
+			                                       [Container]
+			                                       [Transient<Left>]
+			                                       [Transient<Right>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics.Any(d => d.Contains("AWT141"))).IsTrue()
+				.Because("a bare Owned<T> resolves its target at construction time, so it is a construction edge that leaves the deferred cycle only partly broken");
+			await That(result.Diagnostics.Any(d => d.Contains("AWT102"))).IsFalse()
+				.Because("the construction graph has only the Right -> Left edge (the deferred Left -> Right edge is absent), so it holds no cycle for AWT102");
 		}
 	}
 }

@@ -386,6 +386,17 @@ internal static partial class Sources
 				string modifier = instance.IsReferenceType ? "private volatile " : "private ";
 				Indent(builder, depth).Append(modifier).Append(instance.ConstructedType)
 					.Append("? ").Append(names.Field(i)).AppendLine(";");
+
+				// A deferred ([Inject(Deferred = true)]) member is wired after the cache field is published, so a
+				// separate volatile flag marks when wiring has completed. The lock-free fast path gates on it (rather
+				// than on the field alone) so a concurrent caller never returns a published-but-half-wired instance,
+				// while the mid-wiring re-entrant resolve sees it still false, skips the fast path and terminates the
+				// cycle through the reentrant lock. Volatile: its release-write happens-after the deferred writes, so a
+				// reader that acquire-reads it as true sees the fully-wired instance.
+				if (HasDeferredMembers(instance))
+				{
+					Indent(builder, depth).Append("private volatile bool ").Append(names.WiredField(i)).AppendLine(";");
+				}
 			}
 
 			// The async cache memoizes the construction-and-initialization Task so it is awaited exactly

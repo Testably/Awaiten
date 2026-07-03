@@ -389,4 +389,65 @@ public partial class PropertyInjectionTests
 	[Scoped<ScopedLeft>]
 	[Scoped<ScopedRight>]
 	public static partial class ScopedDeferredCycleContainer;
+
+	[Fact]
+	public async Task DeferredProperty_SelfReferential_OnASingleton_WiresToItself()
+	{
+		using SelfReferentialContainer.Root container = new();
+
+		Node node = container.Resolve<Node>();
+
+		await That(node.Self).IsSameAs(node)
+			.Because("the singleton is cached before its deferred member is wired, so the re-entrant self-resolve returns the same cached instance and the self-cycle terminates");
+	}
+
+	public sealed class Node
+	{
+		[Inject(Deferred = true)]
+		public Node? Self { get; set; }
+	}
+
+	[Container]
+	[Singleton<Node>]
+	public static partial class SelfReferentialContainer;
+
+	[Fact]
+	public async Task DeferredProperty_OnAThreeNodeSingletonCycle_WiresEveryBackReference()
+	{
+		using ThreeNodeCycleContainer.Root container = new();
+
+		Ring1 one = container.Resolve<Ring1>();
+		Ring2 two = container.Resolve<Ring2>();
+		Ring3 three = container.Resolve<Ring3>();
+
+		// A cycle longer than two nodes terminates the same way: each singleton is cached before it is wired, so the
+		// resolve that laps back to an already-cached participant returns it instead of recursing.
+		await That(one.Next).IsSameAs(two);
+		await That(two.Next).IsSameAs(three);
+		await That(three.Next).IsSameAs(one);
+	}
+
+	public sealed class Ring1
+	{
+		[Inject(Deferred = true)]
+		public Ring2? Next { get; set; }
+	}
+
+	public sealed class Ring2
+	{
+		[Inject(Deferred = true)]
+		public Ring3? Next { get; set; }
+	}
+
+	public sealed class Ring3
+	{
+		[Inject(Deferred = true)]
+		public Ring1? Next { get; set; }
+	}
+
+	[Container]
+	[Singleton<Ring1>]
+	[Singleton<Ring2>]
+	[Singleton<Ring3>]
+	public static partial class ThreeNodeCycleContainer;
 }

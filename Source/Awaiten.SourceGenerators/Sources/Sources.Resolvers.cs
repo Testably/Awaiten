@@ -118,7 +118,8 @@ internal static partial class Sources
 		}
 
 		string scopedSummary = $"Resolves the scoped {XmlTypeRef(type)} (one instance per scope).";
-		EmitCachingResolver(builder, depth, new CachingResolver("internal", type, resolver, names.Field(index), construction, DisposalOf(instance), scopedSummary), asyncDisposal, DeferredFor(names.Field(index)));
+		string scopedWiredFlag = HasDeferredMembers(instance) ? names.WiredField(index) : string.Empty;
+		EmitCachingResolver(builder, depth, new CachingResolver("internal", type, resolver, names.Field(index), construction, DisposalOf(instance), scopedSummary, scopedWiredFlag), asyncDisposal, DeferredFor(names.Field(index)));
 	}
 
 	/// <summary>
@@ -191,7 +192,8 @@ internal static partial class Sources
 		Action<int>? emitDeferred = HasDeferredMembers(instance)
 			? d => EmitDeferredAssignments(builder, d, instance, names.Field(index), context, asynchronous: false)
 			: null;
-		EmitCachingResolver(builder, depth, new CachingResolver("protected override", type, resolver, names.Field(index), construction, DisposalOf(instance), singletonSummary), context.AsyncDisposal, emitDeferred);
+		string singletonWiredFlag = HasDeferredMembers(instance) ? names.WiredField(index) : string.Empty;
+		EmitCachingResolver(builder, depth, new CachingResolver("protected override", type, resolver, names.Field(index), construction, DisposalOf(instance), singletonSummary, singletonWiredFlag), context.AsyncDisposal, emitDeferred);
 	}
 
 	/// <summary>
@@ -706,20 +708,22 @@ internal static partial class Sources
 		Indent(builder, depth).AppendLine("{");
 		EmitDisposedGuard(builder, depth + 1);
 
-		// The lock-free fast path is suppressed when the instance has deferred members: those are wired only after
-		// the field is published (inside the lock, below), so a concurrent caller taking this path could observe the
-		// instance with its deferred properties still unset. Routing every caller through the lock makes them block
-		// until wiring completes. The re-entrant same-thread resolve that breaks a mutual cycle still works: __gate is
-		// a reentrant monitor, so the re-entrant call re-enters the lock, finds the field already set, skips the
-		// miss block, and returns the mid-wiring instance - which is exactly what terminates the cycle.
-		if (emitDeferred is null)
-		{
-			Indent(builder, depth + 1).Append("if (").Append(resolver.Field).AppendLine(" is not null)");
-			Indent(builder, depth + 1).AppendLine("{");
-			Indent(builder, depth + 2).Append("return ").Append(resolver.Field).AppendLine(";");
-			Indent(builder, depth + 1).AppendLine("}");
-			builder.AppendLine();
-		}
+		// The lock-free fast path returns the cached field without taking the lock. When the instance has deferred
+		// ([Inject(Deferred = true)]) members it also tests the volatile wiring flag: those members are wired only
+		// after the field is published (inside the lock, below), so gating on the field alone could hand a concurrent
+		// caller a published-but-half-wired instance. The flag is set last, so a caller sees it true only once wiring
+		// has completed (and its acquire-read makes the deferred writes visible). The re-entrant same-thread resolve
+		// that breaks a mutual cycle still works: mid-wiring the flag is still false, so the re-entrant call falls
+		// through to the lock (__gate is a reentrant monitor), finds the field already set, skips the miss block, and
+		// returns the mid-wiring instance - which is exactly what terminates the cycle.
+		string fastPathGuard = resolver.WiredFlag.Length == 0
+			? $"{resolver.Field} is not null"
+			: $"{resolver.Field} is not null && {resolver.WiredFlag}";
+		Indent(builder, depth + 1).Append("if (").Append(fastPathGuard).AppendLine(")");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).Append("return ").Append(resolver.Field).AppendLine(";");
+		Indent(builder, depth + 1).AppendLine("}");
+		builder.AppendLine();
 
 		Indent(builder, depth + 1).AppendLine("lock (__gate)");
 		Indent(builder, depth + 1).AppendLine("{");
@@ -746,8 +750,16 @@ internal static partial class Sources
 
 		// Deferred members are wired after the instance is cached (still inside the cache-miss block, so it runs
 		// exactly once), which is what lets a mutual cycle terminate: the re-entrant resolve returns this cached
-		// instance instead of recursing.
-		emitDeferred?.Invoke(depth + 3);
+		// instance instead of recursing. The wiring flag is set last (a volatile release-write), so the lock-free
+		// fast path publishes the instance to other threads only once it is fully wired.
+		if (emitDeferred is not null)
+		{
+			emitDeferred.Invoke(depth + 3);
+			if (resolver.WiredFlag.Length != 0)
+			{
+				Indent(builder, depth + 3).Append(resolver.WiredFlag).AppendLine(" = true;");
+			}
+		}
 
 		Indent(builder, depth + 2).AppendLine("}");
 		Indent(builder, depth + 1).AppendLine("}");
@@ -761,9 +773,11 @@ internal static partial class Sources
 	///     <see cref="Type" />, the resolver <see cref="Method" /> name and backing <see cref="Field" />, the
 	///     <see cref="Construction" /> expression, how the instance is tracked for <see cref="Disposal" /> (not
 	///     at all, by the static type, or by a runtime <c>is IDisposable</c> check on the realized factory
-	///     output), and the XML doc <see cref="Summary" /> emitted over the resolver.
+	///     output), and the XML doc <see cref="Summary" /> emitted over the resolver. <see cref="WiredFlag" /> is
+	///     the volatile "wiring complete" flag guarding the fast path of an instance with deferred members (empty
+	///     when the instance has none, so the plain fast path on <see cref="Field" /> alone is emitted).
 	/// </summary>
-	private readonly struct CachingResolver(string modifiers, string type, string method, string field, string construction, DisposalTracking disposal, string summary)
+	private readonly struct CachingResolver(string modifiers, string type, string method, string field, string construction, DisposalTracking disposal, string summary, string wiredFlag = "")
 	{
 		public string Modifiers { get; } = modifiers;
 
@@ -778,6 +792,8 @@ internal static partial class Sources
 		public DisposalTracking Disposal { get; } = disposal;
 
 		public string Summary { get; } = summary;
+
+		public string WiredFlag { get; } = wiredFlag;
 	}
 
 	/// <summary>
