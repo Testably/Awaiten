@@ -9,8 +9,9 @@ namespace Awaiten.SourceGenerators;
 ///     implementation symbol, the attribute's source location, how the instance is produced (a
 ///     constructor by default, or the container member named by the attribute's <c>Factory</c>/
 ///     <c>Instance</c> argument), the attribute's optional resolution <c>Key</c> (so several
-///     implementations can share one service type), and whether the attribute set both directives at
-///     once (an error).
+///     implementations can share one service type), whether the attribute set both directives at
+///     once (an error), and - for variance matching - the closed generic service symbol (so a
+///     differently-closed consumer request can be redirected to a variance-compatible registration).
 /// </summary>
 /// <remarks>
 ///     <see cref="Location" /> is the live Roslyn location (with its syntax tree), not an equatable
@@ -27,4 +28,5 @@ internal sealed record RawRegistration(
 	ProductionKind Production = ProductionKind.Constructor,
 	string? ProductionMember = null,
 	bool ConflictingDirectives = false,
-	string? Key = null);
+	string? Key = null,
+	INamedTypeSymbol? ServiceSymbol = null);

@@ -610,6 +610,208 @@ public class GeneralTests
 	}
 
 	[Fact]
+	public async Task Variance_RedirectsASingleServiceRequestToTheVarianceCompatibleRegistration()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace MyCode;
+
+			public class DomainEvent { }
+			public sealed class OrderPlaced : DomainEvent { }
+			public interface IHandler<in T> { }
+			public sealed class DomainEventHandler : IHandler<DomainEvent> { }
+			public sealed class OrderConsumer { public OrderConsumer(IHandler<OrderPlaced> handler) { } }
+
+			[Container]
+			[Transient<DomainEventHandler, IHandler<DomainEvent>>]
+			[Transient<OrderConsumer>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// IHandler<OrderPlaced> has no exact registration; the contravariant IHandler<DomainEvent> (in T) is
+		// redirected to, reusing its resolver in the consumer's construction.
+		await That(source).Contains("return new global::MyCode.OrderConsumer(ResolveDomainEventHandler());");
+		// The requested closed type is a top-level dispatch alias on the same target (Part B): Resolve(typeof(
+		// IHandler<OrderPlaced>)) routes to the DomainEventHandler resolver too.
+		await That(source).Contains("new __Bucket(typeof(global::MyCode.IHandler<global::MyCode.OrderPlaced>), static __s => __s.ResolveDomainEventHandler(), false)");
+	}
+
+	[Fact]
+	public async Task Variance_UnionsVarianceCompatibleRegistrationsIntoAClosedGenericCollection()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+			using System.Collections.Generic;
+
+			namespace MyCode;
+
+			public class DomainEvent { }
+			public sealed class OrderPlaced : DomainEvent { }
+			public interface IHandler<in T> { }
+			public sealed class OrderPlacedHandler : IHandler<OrderPlaced> { }
+			public sealed class DomainEventHandler : IHandler<DomainEvent> { }
+			public sealed class Dispatcher { public Dispatcher(IEnumerable<IHandler<OrderPlaced>> handlers) { } }
+
+			[Container]
+			[Transient<OrderPlacedHandler, IHandler<OrderPlaced>>]
+			[Transient<DomainEventHandler, IHandler<DomainEvent>>]
+			[Transient<Dispatcher>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// The collection of IHandler<OrderPlaced> unions the exact OrderPlacedHandler (leading) with the
+		// contravariant IHandler<DomainEvent> registration (following).
+		await That(source).Contains("new global::MyCode.IHandler<global::MyCode.OrderPlaced>[] { ResolveOrderPlacedHandler(), ResolveDomainEventHandler() }");
+	}
+
+	[Fact]
+	public async Task Variance_DoesNotRedirectThroughAnInvariantLazyOrTaskWrapper()
+	{
+		GeneratorResult result = Generator.Run("""
+			using System;
+			using System.Threading.Tasks;
+			using Awaiten;
+
+			namespace MyCode;
+
+			public class DomainEvent { }
+			public sealed class OrderPlaced : DomainEvent { }
+			public interface IHandler<in T> { }
+			public sealed class DomainEventHandler : IHandler<DomainEvent> { }
+			public sealed class LazyConsumer { public LazyConsumer(Lazy<IHandler<OrderPlaced>> handler) { } }
+			public sealed class TaskConsumer { public TaskConsumer(Task<IHandler<OrderPlaced>> handler) { } }
+
+			[Container]
+			[Transient<DomainEventHandler, IHandler<DomainEvent>>]
+			[Transient<LazyConsumer>]
+			[Transient<TaskConsumer>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		// Lazy<T> and Task<T> are invariant in T: no conversion exists from a wrapper over the registered
+		// IHandler<DomainEvent> to the declared wrapper over IHandler<OrderPlaced>, so redirecting would emit an
+		// argument the parameter cannot accept. The wrapped request stays a plain missing dependency instead.
+		await That(result.Diagnostics).Contains("*AWT101*").AsWildcard();
+	}
+
+	[Fact]
+	public async Task Variance_ValueTypeArgumentIsNeverVarianceConvertible()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace MyCode;
+
+			public interface IHandler<in T> { }
+			public sealed class ObjectHandler : IHandler<object> { }
+			public sealed class IntConsumer { public IntConsumer(IHandler<int> handler) { } }
+
+			[Container]
+			[Transient<ObjectHandler, IHandler<object>>]
+			[Transient<IntConsumer>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		// int converts to object only by boxing, not by a reference conversion, so C# variance does not apply:
+		// IHandler<object> never satisfies IHandler<int>, and the request is a plain missing dependency.
+		await That(result.Diagnostics).Contains("*AWT101*").AsWildcard();
+	}
+
+	[Fact]
+	public async Task Variance_EmitsTheRuntimeFallbackOnlyWhenAVariantCandidateExists()
+	{
+		GeneratorResult variant = Generator.Run("""
+			using Awaiten;
+
+			namespace MyCode;
+
+			public class DomainEvent { }
+			public interface IHandler<in T> { }
+			public sealed class DomainEventHandler : IHandler<DomainEvent> { }
+
+			[Container]
+			[Transient<DomainEventHandler, IHandler<DomainEvent>>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		GeneratorResult invariant = Generator.Run("""
+			using Awaiten;
+
+			namespace MyCode;
+
+			public sealed class Order { }
+			public interface IStore<T> { }
+			public sealed class OrderStore : IStore<Order> { }
+
+			[Container]
+			[Transient<OrderStore, IStore<Order>>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		await That(variant.Diagnostics).IsEmpty();
+		await That(invariant.Diagnostics).IsEmpty();
+
+		// A registered variant closed generic interface makes the by-type dispatch fall back to runtime variance
+		// matching on a miss, so a purely imperative Resolve of a differently-closed request (which no consumer
+		// parameter turned into a compile-time alias) still routes. An invariant interface can never satisfy a
+		// different closure, so such a container emits no fallback machinery at all.
+		await That(variant.Sources["Awaiten.MyCode.MyContainer.g.cs"]).Contains("__TryResolveVariant");
+		await That(invariant.Sources["Awaiten.MyCode.MyContainer.g.cs"]).DoesNotContain("__TryResolveVariant");
+	}
+
+	[Fact]
+	public async Task Variance_WinsOverTheImportServicesFallThrough()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace MyCode;
+
+			public class DomainEvent { }
+			public sealed class OrderPlaced : DomainEvent { }
+			public interface IHandler<in T> { }
+			public sealed class DomainEventHandler : IHandler<DomainEvent> { }
+			public sealed class OrderConsumer { public OrderConsumer(IHandler<OrderPlaced> handler) { } }
+
+			[Container]
+			[ImportServices]
+			[Transient<DomainEventHandler, IHandler<DomainEvent>>]
+			[Transient<OrderConsumer>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// A variance match makes the dependency container-resolved, so it is not "otherwise-unresolved" and
+		// never falls through to the external provider: the redirect to the registered IHandler<DomainEvent>
+		// wins over [ImportServices].
+		await That(source).Contains("return new global::MyCode.OrderConsumer(ResolveDomainEventHandler());");
+		await That(source).DoesNotContain("__ResolveExternal(typeof(global::MyCode.IHandler<global::MyCode.OrderPlaced>)");
+	}
+
+	[Fact]
 	public async Task OpenGeneric_SeedsExpansionFromTheConstructorTheContainerActuallyUses()
 	{
 		GeneratorResult result = Generator.Run("""

@@ -90,7 +90,8 @@ internal static class ContainerRegistrations
 				production,
 				productionMember,
 				conflictingDirectives,
-				NamedArgument(attribute, "Key")));
+				NamedArgument(attribute, "Key"),
+				service as INamedTypeSymbol));
 		}
 
 		// Expand open generic registrations: for every closed generic service required from the graph
@@ -445,7 +446,8 @@ internal static class ContainerRegistrations
 				candidate.Lifetime,
 				closedImpl,
 				candidate.Location?.ToLocation(),
-				Key: candidate.Key));
+				Key: candidate.Key,
+				ServiceSymbol: closed));
 			context.Synthesized++;
 
 			if (context.Seen.Add(closedImpl))
