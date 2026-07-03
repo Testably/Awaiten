@@ -65,10 +65,15 @@ partial class AwaitenGenerator
 		Dictionary<ServiceKey, bool> chosenByDefault = new();
 
 		// Strong registrations claim their service first; overridable defaults (Default/TryAdd) are processed
-		// afterwards so they only fill the gaps left over. Within each group declaration order is preserved, so
-		// the container's own registrations still win over an imported module's. A losing default is dropped
-		// entirely below (not built, not a collection member), so a container or module replaces it transparently.
-		foreach (RawRegistration registration in raw.Where(r => !r.Weak).Concat(raw.Where(r => r.Weak)))
+		// afterwards so they only fill the gaps left over; scan matches come last, so an explicit default - a
+		// deliberate declaration - beats a blanket scan deterministically, independent of scan enumeration
+		// order. Within each group declaration order is preserved, so the container's own registrations still
+		// win over an imported module's. A losing default is dropped entirely below (not built, not a
+		// collection member), so a container or module replaces it transparently; a losing scan match stays a
+		// collection member as before.
+		foreach (RawRegistration registration in raw.Where(r => !r.Weak && !r.IsScan)
+			.Concat(raw.Where(r => r.Weak))
+			.Concat(raw.Where(r => r.IsScan)))
 		{
 			// Record an unkeyed closed-generic-interface registration as a variance candidate, so a
 			// differently-closed consumer request can be redirected to it. Recorded even when it loses the
@@ -109,12 +114,14 @@ partial class AwaitenGenerator
 			// yield to, so that is surfaced as AWT142 rather than silently resolved by attribute order.
 			// An overridable default is meant to be replaced transparently - possibly by a strong registration
 			// of the same implementation with a different lifetime - so, like a scan, it yields rather than
-			// reporting an AWT107/AWT111 conflict against whatever a strong registration fixed for it.
+			// reporting an AWT107/AWT111 conflict against whatever a strong registration fixed for it. AWT142
+			// fires only between two scans: a scan whose implementation was first fixed by an explicit
+			// registration (strong or default, both processed earlier) yields to it silently instead.
 			if (!registration.IsScan && !registration.Weak)
 			{
 				ReportCoalescingConflicts(info, registration, reportedConflicts, reportedProductionConflicts, diagnostics);
 			}
-			else if (info is { IsScan: true, } && info.Lifetime != registration.Lifetime
+			else if (registration.IsScan && info is { IsScan: true, } && info.Lifetime != registration.Lifetime
 			         && reportedConflicts.Add(registration.ImplementationType))
 			{
 				diagnostics.Add(new DiagnosticInfo(

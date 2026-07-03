@@ -103,4 +103,155 @@ public class ModuleTests
 		await That(source).Contains("global::MyCode.Logger")
 			.Because("[Import<TModule>] pulls in the module's registrations like [Import(typeof(TModule))]");
 	}
+
+	[Fact]
+	public async Task Module_Default_BeatsScanMatch_WhenTheDefaultImplementationSortsFirstAmongMatches()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface IClock { }
+		                                       public sealed class AaModuleClock : IClock { }
+		                                       public sealed class ScannedClock : IClock { }
+
+		                                       [Module]
+		                                       [Singleton<AaModuleClock, IClock>(Default = true)]
+		                                       public sealed class ClockModule { }
+
+		                                       [Container]
+		                                       [Import(typeof(ClockModule))]
+		                                       [Scan(typeof(IClock), As = ScanAs.ImplementedInterfaces, Lifetime = AwaitenLifetime.Singleton)]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("__Bucket(typeof(global::MyCode.IClock), static __s => __s.ResolveAaModuleClock()")
+			.Because("an explicit overridable default beats a scan match for single resolution");
+	}
+
+	[Fact]
+	public async Task Module_Default_BeatsScanMatch_WhenTheDefaultImplementationSortsLastAmongMatches()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface IClock { }
+		                                       public sealed class ScannedClock : IClock { }
+		                                       public sealed class ZzModuleClock : IClock { }
+
+		                                       [Module]
+		                                       [Singleton<ZzModuleClock, IClock>(Default = true)]
+		                                       public sealed class ClockModule { }
+
+		                                       [Container]
+		                                       [Import(typeof(ClockModule))]
+		                                       [Scan(typeof(IClock), As = ScanAs.ImplementedInterfaces, Lifetime = AwaitenLifetime.Singleton)]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("__Bucket(typeof(global::MyCode.IClock), static __s => __s.ResolveZzModuleClock()")
+			.Because("the explicit default wins independently of how the scan enumerates its matches");
+	}
+
+	[Fact]
+	public async Task Module_Default_BeatsScanMatch_WhenTheScanIsDeclaredBeforeTheImport()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface IClock { }
+		                                       public sealed class ScannedClock : IClock { }
+		                                       public sealed class ZzModuleClock : IClock { }
+
+		                                       [Module]
+		                                       [Singleton<ZzModuleClock, IClock>(Default = true)]
+		                                       public sealed class ClockModule { }
+
+		                                       [Container]
+		                                       [Scan(typeof(IClock), As = ScanAs.ImplementedInterfaces, Lifetime = AwaitenLifetime.Singleton)]
+		                                       [Import(typeof(ClockModule))]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("__Bucket(typeof(global::MyCode.IClock), static __s => __s.ResolveZzModuleClock()")
+			.Because("attribute declaration order between [Scan] and [Import] does not affect default-over-scan precedence");
+	}
+
+	[Fact]
+	public async Task Module_Default_LifetimeWins_OverAScanMatchingTheSameImplementationWithAnotherLifetime()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface IClock { }
+		                                       public sealed class ModuleClock : IClock { }
+
+		                                       [Module]
+		                                       [Transient<ModuleClock, IClock>(Default = true)]
+		                                       public sealed class ClockModule { }
+
+		                                       [Container]
+		                                       [Import(typeof(ClockModule))]
+		                                       [Scan(typeof(IClock), As = ScanAs.ImplementedInterfaces, Lifetime = AwaitenLifetime.Singleton)]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty()
+			.Because("a scan yields to an explicit default exactly like it yields to a strong registration, so no AWT142/AWT107 is reported");
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("AwaitenRegistration(typeof(global::MyCode.IClock), global::Awaiten.AwaitenLifetime.Transient)")
+			.Because("the explicit default's lifetime is kept; the scan's conflicting lifetime yields");
+	}
+
+	[Fact]
+	public async Task Container_Default_BeatsScanMatch()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface IClock { }
+		                                       public sealed class ScannedClock : IClock { }
+		                                       public sealed class ZzDefaultClock : IClock { }
+
+		                                       [Container]
+		                                       [Singleton<ZzDefaultClock, IClock>(Default = true)]
+		                                       [Scan(typeof(IClock), As = ScanAs.ImplementedInterfaces, Lifetime = AwaitenLifetime.Singleton)]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("__Bucket(typeof(global::MyCode.IClock), static __s => __s.ResolveZzDefaultClock()")
+			.Because("Default = true on the container itself also beats a scan match");
+	}
 }
