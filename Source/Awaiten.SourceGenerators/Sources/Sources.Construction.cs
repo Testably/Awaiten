@@ -540,7 +540,7 @@ internal static partial class Sources
 	{
 		if (hasExternal)
 		{
-			Indent(builder, depth).AppendLine("__owned.ExternalResolver = ExternalResolver;");
+			Indent(builder, depth).AppendLine("__owned.__externalResolver = __externalResolver;");
 		}
 	}
 
