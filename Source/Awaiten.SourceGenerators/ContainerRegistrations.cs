@@ -130,143 +130,111 @@ internal static class ContainerRegistrations
 
 		foreach (AttributeData attribute in containerSymbol.GetAttributes())
 		{
-			if (attribute.AttributeClass is not { Name: "ScanAttribute", } attributeClass
-			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace
-			    || ScanMarker(attribute, attributeClass) is not { } marker)
+			if (attribute.AttributeClass is { Name: "ScanAttribute", } attributeClass
+			    && attributeClass.ContainingNamespace?.ToDisplayString() == AttributeNamespace
+			    && ScanMarker(attribute, attributeClass) is { } marker)
 			{
-				continue;
-			}
-
-			Lifetime lifetime = ScanLifetime(attribute);
-			ScanExposure exposure = ScanExposureOf(attribute);
-			bool registerSelf = exposure is ScanExposure.Self or ScanExposure.SelfAndImplementedInterfaces;
-			bool registerInterfaces = exposure is ScanExposure.ImplementedInterfaces or ScanExposure.SelfAndImplementedInterfaces;
-			Location? location = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation();
-
-			// An unbound generic marker (typeof(IView<>)) matches concrete implementers of any closed form of it,
-			// registered under that closed interface (AsClosedTypesOf), rather than under the marker itself.
-			bool openMarker = IsOpenGenericMarker(marker);
-			INamedTypeSymbol markerDefinition = marker.OriginalDefinition;
-
-			// Count every assignable match, even one an explicit registration overrides: a matched-but-overridden
-			// type still means the scan found something, so AWT138 fires only when the marker truly matches nothing.
-			int matched = 0;
-			foreach (INamedTypeSymbol type in ScanCandidates(attribute, compilation, marker, location, diagnostics))
-			{
-				matched++;
-				string typeName = type.ToDisplayString(FullyQualified);
-
-				if (openMarker)
-				{
-					RegisterOpenMarkerMatch(type, typeName, markerDefinition, exposure, registerSelf, registerInterfaces, lifetime, location, result, diagnostics);
-					continue;
-				}
-
-				if (registerSelf)
-				{
-					result.Add(ScanRegistration(typeName, typeName, lifetime, type, location, type));
-				}
-
-				if (!registerInterfaces)
-				{
-					continue;
-				}
-
-				// Register under each implemented interface assignable to the marker, so a marker interface
-				// registers every match under itself (plus any more-derived service interfaces) without dragging
-				// in unrelated interfaces such as IDisposable.
-				int interfaces = 0;
-				foreach (INamedTypeSymbol contract in type.AllInterfaces)
-				{
-					if (compilation.HasImplicitConversion(contract, marker))
-					{
-						result.Add(ScanRegistration(contract.ToDisplayString(FullyQualified), typeName, lifetime, type, location, contract));
-						interfaces++;
-					}
-				}
-
-				// AWT139: an interfaces-only scan matched a type with nothing to register it under (typically a
-				// base-class marker). SelfAndImplementedInterfaces is exempt - its self registration still covers it.
-				if (interfaces == 0 && exposure == ScanExposure.ImplementedInterfaces)
-				{
-					diagnostics.Add(new DiagnosticInfo(
-						Diagnostics.ScanNoImplementedInterfaces,
-						LocationInfo.From(location),
-						new EquatableArray<string>([
-							AwaitenGenerator.Display(typeName),
-							AwaitenGenerator.Display(marker.ToDisplayString(FullyQualified)),
-						])));
-				}
-			}
-
-			if (matched == 0)
-			{
-				diagnostics.Add(new DiagnosticInfo(
-					Diagnostics.ScanMatchedNothing,
-					LocationInfo.From(location),
-					new EquatableArray<string>([
-						AwaitenGenerator.Display(marker.ToDisplayString(FullyQualified)),
-					])));
+				ExpandScan(attribute, marker, compilation, result, diagnostics);
 			}
 		}
 
 		return result;
 	}
 
-	/// <summary>
-	///     Registers one match of an open-generic <c>[Scan]</c> marker. The marker is an unbound generic
-	///     definition (<c>IView&lt;&gt;</c>); a match is a concrete <paramref name="type" /> implementing (or
-	///     inheriting) one or more <em>closed</em> forms of it (<c>View1 : IView&lt;VM1&gt;</c>). Per
-	///     <c>ScanAs</c> it registers the type as itself and/or under each such closed interface - a type closing
-	///     the marker at several type arguments registers under each. Reports AWT139 when an interfaces-only scan
-	///     matched the marker but found no constructed interface to register under (a base-type marker).
-	/// </summary>
-	private static void RegisterOpenMarkerMatch(
-		INamedTypeSymbol type,
-		string typeName,
-		INamedTypeSymbol markerDefinition,
-		ScanExposure exposure,
-		bool registerSelf,
-		bool registerInterfaces,
-		Lifetime lifetime,
-		Location? location,
+	// Expands one [Scan] over its candidate types, registering each match per ScanAs. An unbound generic marker
+	// (typeof(IView<>)) matches implementers of any closed form of it, registered under that closed interface
+	// (AsClosedTypesOf); a closed marker matches types assignable to it, registered under it. Every assignable
+	// match is counted even when an explicit registration overrides it, so AWT138 fires only when nothing matched.
+	private static void ExpandScan(
+		AttributeData attribute,
+		INamedTypeSymbol marker,
+		Compilation compilation,
 		List<RawRegistration> result,
 		List<DiagnosticInfo> diagnostics)
 	{
-		if (registerSelf)
+		Location? location = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation();
+		ScanMatch match = new(ScanExposureOf(attribute), ScanLifetime(attribute), location);
+		bool openMarker = IsOpenGenericMarker(marker);
+		INamedTypeSymbol markerDefinition = marker.OriginalDefinition;
+		string markerDisplay = (openMarker ? markerDefinition : marker).ToDisplayString(FullyQualified);
+
+		int matched = 0;
+		foreach (INamedTypeSymbol type in ScanCandidates(attribute, compilation, marker, location, diagnostics))
 		{
-			result.Add(ScanRegistration(typeName, typeName, lifetime, type, location, type));
+			matched++;
+			List<INamedTypeSymbol> contracts = openMarker
+				? ClosedMarkerInterfaces(type, markerDefinition)
+				: MarkerInterfaces(type, marker, compilation);
+			RegisterScanMatch(type, contracts, markerDisplay, match, result, diagnostics);
 		}
 
-		if (!registerInterfaces)
+		if (matched == 0)
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.ScanMatchedNothing,
+				LocationInfo.From(location),
+				new EquatableArray<string>([AwaitenGenerator.Display(markerDisplay),])));
+		}
+	}
+
+	// Registers one scan match per ScanAs: as its own concrete type and/or under each contract interface, reporting
+	// AWT139 when an interfaces-only scan found no contract to register under (typically a base-type marker;
+	// SelfAndImplementedInterfaces is exempt because its self registration still covers the type).
+	private static void RegisterScanMatch(
+		INamedTypeSymbol type,
+		List<INamedTypeSymbol> contracts,
+		string markerDisplay,
+		ScanMatch match,
+		List<RawRegistration> result,
+		List<DiagnosticInfo> diagnostics)
+	{
+		string typeName = type.ToDisplayString(FullyQualified);
+
+		if (match.RegisterSelf)
+		{
+			result.Add(ScanRegistration(typeName, typeName, match.Lifetime, type, match.Location, type));
+		}
+
+		if (!match.RegisterInterfaces)
 		{
 			return;
 		}
 
-		// Register under each closed marker interface the type implements (so IView<VM1> resolves to it, and
-		// IEnumerable<IView<VM1>> includes it). A base-class marker yields no interface form - AWT139.
-		int interfaces = 0;
-		foreach (INamedTypeSymbol contract in ClosedMarkerForms(type, markerDefinition))
+		foreach (INamedTypeSymbol contract in contracts)
 		{
-			if (contract.TypeKind != TypeKind.Interface)
-			{
-				continue;
-			}
-
-			result.Add(ScanRegistration(contract.ToDisplayString(FullyQualified), typeName, lifetime, type, location, contract));
-			interfaces++;
+			result.Add(ScanRegistration(contract.ToDisplayString(FullyQualified), typeName, match.Lifetime, type, match.Location, contract));
 		}
 
-		if (interfaces == 0 && exposure == ScanExposure.ImplementedInterfaces)
+		if (contracts.Count == 0 && match.Exposure == ScanExposure.ImplementedInterfaces)
 		{
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.ScanNoImplementedInterfaces,
-				LocationInfo.From(location),
+				LocationInfo.From(match.Location),
 				new EquatableArray<string>([
 					AwaitenGenerator.Display(typeName),
-					AwaitenGenerator.Display(markerDefinition.ToDisplayString(FullyQualified)),
+					AwaitenGenerator.Display(markerDisplay),
 				])));
 		}
+	}
+
+	// The interfaces a closed marker registers a match under: every implemented interface assignable to the marker
+	// (so a marker interface registers the match under itself and any more-derived service interfaces), never
+	// unrelated interfaces such as IDisposable.
+	private static List<INamedTypeSymbol> MarkerInterfaces(INamedTypeSymbol type, INamedTypeSymbol marker, Compilation compilation)
+		=> type.AllInterfaces.Where(contract => compilation.HasImplicitConversion(contract, marker)).ToList();
+
+	// The interfaces an open marker registers a match under: the closed forms of the marker the type implements,
+	// restricted to interfaces (a base-type marker yields none, which surfaces as AWT139).
+	private static List<INamedTypeSymbol> ClosedMarkerInterfaces(INamedTypeSymbol type, INamedTypeSymbol markerDefinition)
+		=> ClosedMarkerForms(type, markerDefinition).Where(contract => contract.TypeKind == TypeKind.Interface).ToList();
+
+	// The per-scan settings shared by every match of one [Scan]: how matches are exposed, the lifetime applied, and
+	// the attribute location for diagnostics. Bundled so the per-match registration takes one handle.
+	private sealed record ScanMatch(ScanExposure Exposure, Lifetime Lifetime, Location? Location)
+	{
+		public bool RegisterSelf => Exposure is ScanExposure.Self or ScanExposure.SelfAndImplementedInterfaces;
+
+		public bool RegisterInterfaces => Exposure is ScanExposure.ImplementedInterfaces or ScanExposure.SelfAndImplementedInterfaces;
 	}
 
 	// Whether the scanned marker is an unbound/open generic definition (typeof(IView<>)): either Roslyn flagged
@@ -287,7 +255,9 @@ internal static class ContainerRegistrations
 		List<INamedTypeSymbol> closed = new();
 		HashSet<string> seen = new(StringComparer.Ordinal);
 
-		void Consider(INamedTypeSymbol candidate)
+		// The type's interfaces and its own inheritance chain: a match may close the marker as an interface it
+		// implements or as a base type it inherits.
+		foreach (INamedTypeSymbol candidate in type.AllInterfaces.Concat(SelfAndBaseTypes(type)))
 		{
 			if (candidate.IsGenericType
 			    && SymbolEqualityComparer.Default.Equals(candidate.OriginalDefinition, markerDefinition)
@@ -297,20 +267,20 @@ internal static class ContainerRegistrations
 			}
 		}
 
-		foreach (INamedTypeSymbol @interface in type.AllInterfaces)
-		{
-			Consider(@interface);
-		}
-
-		for (INamedTypeSymbol? current = type; current is not null; current = current.BaseType)
-		{
-			Consider(current);
-		}
-
 		closed.Sort((left, right) => string.CompareOrdinal(
 			left.ToDisplayString(FullyQualified),
 			right.ToDisplayString(FullyQualified)));
 		return closed;
+	}
+
+	// A type and every base type up its inheritance chain, so a marker closed as a base type is found alongside
+	// one closed as an implemented interface.
+	private static IEnumerable<INamedTypeSymbol> SelfAndBaseTypes(INamedTypeSymbol type)
+	{
+		for (INamedTypeSymbol? current = type; current is not null; current = current.BaseType)
+		{
+			yield return current;
+		}
 	}
 
 	/// <summary>
@@ -326,6 +296,34 @@ internal static class ContainerRegistrations
 		INamedTypeSymbol marker,
 		Location? location,
 		List<DiagnosticInfo> diagnostics)
+	{
+		List<IAssemblySymbol> assemblies = ScanAssemblies(attribute);
+		List<INamedTypeSymbol> candidates = new();
+
+		if (assemblies.Count == 0)
+		{
+			candidates.AddRange(EnumerateTypes(compilation.Assembly.GlobalNamespace)
+				.Where(type => IsScanCandidate(type, marker, compilation)));
+		}
+		else
+		{
+			foreach (IAssemblySymbol assembly in assemblies)
+			{
+				AddAssemblyCandidates(assembly, marker, compilation, candidates, location, diagnostics);
+			}
+		}
+
+		// Cross-assembly enumeration order is not guaranteed stable; sort by fully-qualified name so the
+		// generated output (and any snapshot) is reproducible across builds.
+		candidates.Sort((left, right) => string.CompareOrdinal(
+			left.ToDisplayString(FullyQualified),
+			right.ToDisplayString(FullyQualified)));
+		return candidates;
+	}
+
+	// The assemblies named by InAssembliesOf (each entry's containing assembly, deduped); empty when unset, which
+	// means the container's own assembly is scanned instead.
+	private static List<IAssemblySymbol> ScanAssemblies(AttributeData attribute)
 	{
 		List<IAssemblySymbol> assemblies = new();
 		foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
@@ -345,47 +343,30 @@ internal static class ContainerRegistrations
 			}
 		}
 
-		List<INamedTypeSymbol> candidates = new();
-		if (assemblies.Count == 0)
-		{
-			foreach (INamedTypeSymbol type in EnumerateTypes(compilation.Assembly.GlobalNamespace))
-			{
-				if (IsScanCandidate(type, marker, compilation))
-				{
-					candidates.Add(type);
-				}
-			}
-		}
-		else
-		{
-			foreach (IAssemblySymbol assembly in assemblies)
-			{
-				int contributed = candidates.Count;
-				foreach (INamedTypeSymbol type in EnumerateTypes(assembly.GlobalNamespace))
-				{
-					if (IsScanCandidate(type, marker, compilation))
-					{
-						candidates.Add(type);
-					}
-				}
+		return assemblies;
+	}
 
-				// AWT140: a named assembly holds nothing to scan - almost always a missing ProjectReference.
-				if (candidates.Count == contributed)
-				{
-					diagnostics.Add(new DiagnosticInfo(
-						Diagnostics.ScanAssemblyHasNoCandidates,
-						LocationInfo.From(location),
-						new EquatableArray<string>([assembly.Name,])));
-				}
-			}
-		}
+	// Appends one referenced assembly's scan candidates, reporting AWT140 when it holds none - almost always a
+	// missing ProjectReference or the wrong marker type.
+	private static void AddAssemblyCandidates(
+		IAssemblySymbol assembly,
+		INamedTypeSymbol marker,
+		Compilation compilation,
+		List<INamedTypeSymbol> candidates,
+		Location? location,
+		List<DiagnosticInfo> diagnostics)
+	{
+		int contributed = candidates.Count;
+		candidates.AddRange(EnumerateTypes(assembly.GlobalNamespace)
+			.Where(type => IsScanCandidate(type, marker, compilation)));
 
-		// Cross-assembly enumeration order is not guaranteed stable; sort by fully-qualified name so the
-		// generated output (and any snapshot) is reproducible across builds.
-		candidates.Sort((left, right) => string.CompareOrdinal(
-			left.ToDisplayString(FullyQualified),
-			right.ToDisplayString(FullyQualified)));
-		return candidates;
+		if (candidates.Count == contributed)
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.ScanAssemblyHasNoCandidates,
+				LocationInfo.From(location),
+				new EquatableArray<string>([assembly.Name,])));
+		}
 	}
 
 	// Whether a type is a concrete class assignable to the scanned marker (and not the marker itself) - the
