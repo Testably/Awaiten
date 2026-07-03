@@ -96,7 +96,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		LocationInfo? containerLocation = LocationInfo.From(containerSymbol.Locations.FirstOrDefault());
 		DetectCycles(graph.Instances, graph.ConstructionDependencies, containerLocation, diagnostics);
 		DetectCaptiveDependencies(graph.Instances, graph.Dependencies, graph.InstanceLocations, diagnostics);
-		DetectDeferredTransientCycles(graph.Instances, graph.ServiceToImpl, graph.ImplToIndex, containerLocation, diagnostics);
+		DetectNonTerminatingDeferredCycles(graph.Instances, graph.DeferredDependencies, containerLocation, diagnostics);
 
 		// AWT119/AWT120 (strict only): a synchronous Func<T>/Lazy<T>/Owned<T> relationship resolves its
 		// target without awaiting initialization, so it may not target an async-tainted service. The
@@ -313,13 +313,16 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 		Dictionary<int, List<int>> dependencies = BuildDependencyGraph(instances, serviceToImpl, implToIndex, serviceMembers);
 		Dictionary<int, List<int>> constructionDependencies = BuildConstructionGraph(instances, serviceToImpl, implToIndex, serviceMembers);
+		Dictionary<int, List<int>> deferredDependencies = BuildDeferredGraph(instances, serviceToImpl, implToIndex, serviceMembers);
 
-		// Async taint: an instance is tainted if its implementation is async-initialized, or if it reaches
-		// one through non-deferred (Direct) edges. Relationship types (Func/Lazy/Owned/Task/Arg) launder the
-		// taint - even the bare eager Owned<T>/Task<T>, which hand back a handle/awaitable rather than the
-		// resolved-and-initialized value - so they contribute no edges to BuildDependencyGraph above. (They do
-		// still close cycles, since they resolve at construction time; that is the wider construction graph.)
-		bool[] tainted = PropagateAsyncTaint(instances, dependencies);
+		// Async taint: an instance is tainted if its implementation is async-initialized, or if it reaches one
+		// through a Direct (or eager collection) edge - including a deferred [Inject(Deferred = true)] member,
+		// whose post-construction assignment awaits an async-tainted target, so the owner too requires async
+		// resolution. Relationship types (Func/Lazy/Owned/Task/Arg) launder the taint - even the bare eager
+		// Owned<T>/Task<T>, which hand back a handle/awaitable rather than the resolved-and-initialized value -
+		// so they contribute no edges to BuildTaintGraph. (They do still close cycles, since they resolve at
+		// construction time; that is the wider construction graph.)
+		bool[] tainted = PropagateAsyncTaint(instances, BuildTaintGraph(instances, serviceToImpl, implToIndex, serviceMembers));
 		for (int i = 0; i < instances.Count; i++)
 		{
 			if (tainted[i])
@@ -351,7 +354,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			varianceCandidateTypes.Add(serviceType);
 		}
 
-		return new GraphModel(instances, dependencies, constructionDependencies, serviceToImpl, implToIndex, instanceLocations, collections, varianceCandidateTypes);
+		return new GraphModel(instances, dependencies, constructionDependencies, deferredDependencies, serviceToImpl, implToIndex, instanceLocations, collections, varianceCandidateTypes);
 	}
 
 	/// <summary>
@@ -700,15 +703,30 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		};
 
 	// The direct-dependency graph over instance indices (resolvable edges to built instances): the edge set
-	// for async-taint and captive-dependency analysis. The relationship types (Func<T>/Lazy<T>/…) and the
-	// bare eager relationships (Owned<T>/Task<T>) all defer or launder, so only direct dependencies
-	// contribute edges here. Cycle detection uses the wider BuildConstructionGraph instead.
+	// for captive-dependency analysis (AWT105) and the synchronous-async checks (AWT119/AWT120). The relationship
+	// types (Func<T>/Lazy<T>/…) and the bare eager relationships (Owned<T>/Task<T>) all defer or launder, so only
+	// direct dependencies contribute edges here; deferred [Inject] members are excluded so they do not create a
+	// captive relationship. Cycle detection uses the wider BuildConstructionGraph, and async-taint uses
+	// BuildTaintGraph (which additionally follows deferred edges).
 	private static Dictionary<int, List<int>> BuildDependencyGraph(
 		List<InstanceModel> instances,
 		Dictionary<ServiceKey, string> serviceToImpl,
 		Dictionary<string, int> implToIndex,
 		Dictionary<ServiceKey, List<string>> serviceMembers)
 		=> BuildEdges(instances, serviceToImpl, implToIndex, serviceMembers, includeEagerBare: false);
+
+	// The async-taint graph over instance indices: BuildDependencyGraph plus the deferred [Inject(Deferred = true)]
+	// member edges. A deferred member is excluded from cycle and captive analysis (so it can break a constructor
+	// cycle), but a deferred Direct/collection member to an async-tainted target is awaited when its assignment
+	// runs after construction, so the owner genuinely requires asynchronous resolution - the taint must reach it.
+	// Uses the narrow (non-eager-bare) semantics: a deferred Owned<T>/Task<T>/Func<T>/Lazy<T> hands back a
+	// handle/awaitable without awaiting, so it launders the taint exactly like its constructor-parameter form.
+	private static Dictionary<int, List<int>> BuildTaintGraph(
+		List<InstanceModel> instances,
+		Dictionary<ServiceKey, string> serviceToImpl,
+		Dictionary<string, int> implToIndex,
+		Dictionary<ServiceKey, List<string>> serviceMembers)
+		=> BuildEdges(instances, serviceToImpl, implToIndex, serviceMembers, includeEagerBare: false, includeDeferredMembers: true);
 
 	// The construction graph over instance indices: a superset of BuildDependencyGraph that additionally
 	// includes the bare eager relationships Owned<T> and Task<T> (the latter also covering Task<Owned<T>>).
@@ -726,18 +744,58 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		Dictionary<ServiceKey, List<string>> serviceMembers)
 		=> BuildEdges(instances, serviceToImpl, implToIndex, serviceMembers, includeEagerBare: true);
 
+	// The deferred-edge graph over instance indices: the edges a deferred [Inject(Deferred = true)] member
+	// contributes when its post-construction assignment runs. Deferred members are excluded from the cycle
+	// (AWT102) and captive (AWT105) graphs - that exclusion is what lets a deferred property break a mutual
+	// constructor cycle - so this is a dedicated graph walked only by AWT139/AWT140 (the taint graph also follows
+	// them, since the assignment awaits an async target). A deferred Direct member edges to its target and a
+	// deferred collection (Enumerable/AsyncEnumerable/AwaitedEnumerable) edges to each of its members, because
+	// the assignment materializes them eagerly; a deferred Func<T>/Lazy<T> defers and contributes nothing. Uses
+	// construction-graph semantics (includeEagerBare) because the assignment resolves its target during the
+	// owner's construction (a scoped/singleton is already cached, but a transient is not, and an async task is
+	// not yet published), so a cycle closed through such an edge cannot terminate.
+	private static Dictionary<int, List<int>> BuildDeferredGraph(
+		List<InstanceModel> instances,
+		Dictionary<ServiceKey, string> serviceToImpl,
+		Dictionary<string, int> implToIndex,
+		Dictionary<ServiceKey, List<string>> serviceMembers)
+	{
+		Dictionary<int, List<int>> edges = new();
+		for (int i = 0; i < instances.Count; i++)
+		{
+			List<int> nodeEdges = new();
+			foreach (MemberModel member in instances[i].InjectedMembers.AsArray())
+			{
+				if (member.Deferred)
+				{
+					AddParameterEdges(member.Dependency, serviceToImpl, implToIndex, serviceMembers, includeEagerBare: true, nodeEdges);
+				}
+			}
+
+			edges[i] = nodeEdges;
+		}
+
+		return edges;
+	}
+
 	// Builds the edge set over instance indices, keeping only the parameters that contribute an edge and that
 	// resolve to a built instance. A direct dependency always contributes; the bare eager relationships
 	// Owned<T> and Task<T> contribute only when <paramref name="includeEagerBare" /> is set (the construction
 	// graph), since they resolve eagerly and so close cycles even though they launder async taint. A collection
 	// (Enumerable) contributes an edge to each of its members in both graphs: it materializes them eagerly into
 	// an array, so it captures them (taint/captive) and closes cycles through them just like a direct dependency.
+	// A deferred [Inject(Deferred = true)] member contributes only when <paramref name="includeDeferredMembers" />
+	// is set (the taint graph): its assignment is excluded from cycle (AWT102) and captive (AWT105) analysis - that
+	// exclusion is what lets it break a mutual constructor cycle - but a deferred Direct/collection member to an
+	// async-tainted target is awaited at assignment time, so its taint must still reach the owner (otherwise a
+	// synchronous owner would emit a synchronous resolve of an async-only service and fail to compile).
 	private static Dictionary<int, List<int>> BuildEdges(
 		List<InstanceModel> instances,
 		Dictionary<ServiceKey, string> serviceToImpl,
 		Dictionary<string, int> implToIndex,
 		Dictionary<ServiceKey, List<string>> serviceMembers,
-		bool includeEagerBare)
+		bool includeEagerBare,
+		bool includeDeferredMembers = false)
 	{
 		Dictionary<int, List<int>> edges = new();
 		for (int i = 0; i < instances.Count; i++)
@@ -754,11 +812,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			// classifies it identically to a constructor edge.
 			foreach (MemberModel member in instances[i].InjectedMembers.AsArray())
 			{
-				// A deferred [Inject(Deferred = true)] member is assigned after the owning instance is constructed
-				// and cached, so - like a Func<T>/Lazy<T> relationship - it contributes no graph edge: it is excluded
-				// from cycle (AWT102), captive (AWT105) and async-taint analysis. That exclusion is what lets it break
-				// a mutual constructor cycle.
-				if (member.Deferred)
+				if (member.Deferred && !includeDeferredMembers)
 				{
 					continue;
 				}
@@ -2850,9 +2904,9 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	/// <summary>
 	///     Marks every instance that is an async-taint source - its implementation is async-initialized, or it
 	///     is produced by an asynchronous factory (Task&lt;T&gt; / ValueTask&lt;T&gt;), which the container can
-	///     only reach by awaiting - or that reaches one through non-deferred (Direct) edges, by fixpoint over
-	///     the dependency graph. The edges already exclude relationship/Owned/Arg parameters, so the taint is
-	///     laundered by exactly the deferrals that break cycles.
+	///     only reach by awaiting - or that reaches one through the taint graph, by fixpoint over that graph.
+	///     The taint graph (<see cref="BuildTaintGraph" />) carries the Direct and eager-collection edges,
+	///     including deferred [Inject] members, and omits the relationship/Owned/Arg deferrals that launder taint.
 	/// </summary>
 	private static bool[] PropagateAsyncTaint(List<InstanceModel> instances, Dictionary<int, List<int>> dependencies)
 	{
@@ -3378,48 +3432,22 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		=> types.Length == 0 ? "none" : string.Join(", ", types.Select(Display));
 
 	/// <summary>
-	///     AWT139: a deferred property breaks a mutual cycle only because the owning instance is cached before
-	///     its deferred members are wired, so a re-entrant resolve returns the cached instance. A transient has
-	///     no cache, so a cycle formed of deferred edges in which a transient participates would recurse forever
-	///     at runtime - its deferred assignment reconstructs an instance already under construction. The deferred
-	///     edges are absent from the main dependency graph (that absence is what lets them escape AWT102), so this
-	///     walks a dedicated deferred-edge graph and reports any cycle that touches a transient. A
-	///     singleton/scoped-only deferred cycle is supported and not reported.
+	///     AWT139/AWT140: a deferred property breaks a mutual cycle only because the owning instance is cached
+	///     before its deferred members are wired, so a re-entrant resolve returns the cached instance. That holds
+	///     only for a synchronously-resolved singleton or scoped participant. A transient is never cached, so its
+	///     deferred assignment reconstructs an instance already under construction (AWT139); an async-tainted
+	///     participant publishes its memoized task only after the re-entrant resolve has already returned, so
+	///     awaiting round the cycle overflows the stack or deadlocks (AWT140). The deferred edges are absent from
+	///     the main dependency graph (that absence is what lets them escape AWT102), so this walks the dedicated
+	///     deferred-edge graph and reports any cycle that touches either. A synchronous singleton/scoped-only
+	///     deferred cycle is supported and not reported.
 	/// </summary>
-	private static void DetectDeferredTransientCycles(
+	private static void DetectNonTerminatingDeferredCycles(
 		List<InstanceModel> instances,
-		Dictionary<ServiceKey, string> serviceToImpl,
-		Dictionary<string, int> implToIndex,
+		Dictionary<int, List<int>> deferredEdges,
 		LocationInfo? containerLocation,
 		List<DiagnosticInfo> diagnostics)
 	{
-		// Direct deferred member edges only: a deferred relationship/collection member resolves through its own
-		// deferral at use time and cannot recurse through construction.
-		Dictionary<int, List<int>> deferredEdges = new();
-		bool any = false;
-		for (int i = 0; i < instances.Count; i++)
-		{
-			List<int> edges = new();
-			foreach (MemberModel member in instances[i].InjectedMembers.AsArray())
-			{
-				if (member.Deferred
-				    && member.Dependency.Kind == DependencyKind.Direct
-				    && serviceToImpl.TryGetValue(KeyOf(member.Dependency), out string? targetImpl)
-				    && implToIndex.TryGetValue(targetImpl, out int targetIndex))
-				{
-					edges.Add(targetIndex);
-					any = true;
-				}
-			}
-
-			deferredEdges[i] = edges;
-		}
-
-		if (!any)
-		{
-			return;
-		}
-
 		HashSet<int> visited = new();
 		HashSet<int> onStack = new();
 		List<int> path = new();
@@ -3457,9 +3485,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			int startIndex = path.LastIndexOf(cycleStart);
 			List<int> cycle = path.GetRange(startIndex, path.Count - startIndex);
 
-			// Only a cycle in which a transient participates cannot terminate; a singleton/scoped cycle is cached
-			// and is the supported case.
-			if (!cycle.Any(index => instances[index].Lifetime == Lifetime.Transient))
+			if (DeferredCycleFault(cycle, instances) is not { } descriptor)
 			{
 				return;
 			}
@@ -3473,11 +3499,27 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 			cycle.Add(cycleStart);
 			string rendered = string.Join(" -> ", cycle.Select(index => DisplayInstance(instances[index].ImplementationType)));
-			diagnostics.Add(new DiagnosticInfo(
-				Diagnostics.DeferredTransientCycle,
-				containerLocation,
-				new EquatableArray<string>([rendered,])));
+			diagnostics.Add(new DiagnosticInfo(descriptor, containerLocation, new EquatableArray<string>([rendered,])));
 		}
+	}
+
+	// The non-termination fault a deferred cycle exhibits, or null when it is the supported case (every
+	// participant is a synchronously-resolved singleton or scoped, cached before its deferred members are wired,
+	// so a re-entrant resolve returns the cached instance). A transient participant is never cached (AWT139); an
+	// async-tainted one publishes its memoized task only after the re-entrant resolve has returned (AWT140).
+	private static DiagnosticDescriptor? DeferredCycleFault(List<int> cycle, List<InstanceModel> instances)
+	{
+		if (cycle.Any(index => instances[index].Lifetime == Lifetime.Transient))
+		{
+			return Diagnostics.DeferredTransientCycle;
+		}
+
+		if (cycle.Any(index => instances[index].IsAsyncTainted))
+		{
+			return Diagnostics.DeferredAsyncCycle;
+		}
+
+		return null;
 	}
 
 	private static void DetectCaptiveDependencies(

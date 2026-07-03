@@ -7,6 +7,9 @@ namespace Awaiten.SourceGenerators.Internals;
 ///     <see cref="Dependencies" /> edges between them (by instance index), the wider
 ///     <see cref="ConstructionDependencies" /> edges that additionally include the bare eager relationships
 ///     (<c>Owned&lt;T&gt;</c> / <c>Task&lt;T&gt;</c>) used for cycle detection, the
+///     <see cref="DeferredDependencies" /> edges a deferred (<c>[Inject(Deferred = true)]</c>) member
+///     contributes when its post-construction assignment resolves its target (used to reject a deferred cycle
+///     that cannot terminate), the
 ///     <see cref="ServiceToImpl" /> / <see cref="ImplToIndex" /> lookups that map a service key (service type
 ///     plus optional resolution key) to its implementation and an implementation to its instance index, and
 ///     each instance's source <see cref="InstanceLocations" />. <see cref="Collections" /> is the
@@ -22,6 +25,7 @@ internal sealed record GraphModel(
 	List<InstanceModel> Instances,
 	Dictionary<int, List<int>> Dependencies,
 	Dictionary<int, List<int>> ConstructionDependencies,
+	Dictionary<int, List<int>> DeferredDependencies,
 	Dictionary<ServiceKey, string> ServiceToImpl,
 	Dictionary<string, int> ImplToIndex,
 	List<LocationInfo?> InstanceLocations,

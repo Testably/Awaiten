@@ -561,4 +561,20 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A cycle of <c>[Inject(Deferred = true)]</c> properties includes an async-tainted participant (one that
+	///     is <c>IAsyncInitializable</c>, produced by an async factory, or reaches one). A deferred property
+	///     breaks a cycle only when a re-entrant resolve returns the already-cached instance; an async resolver
+	///     publishes its memoized task only after that re-entrant resolve has returned, so the cycle overflows the
+	///     stack or deadlocks at runtime rather than terminating. Break the cycle, or make its participants
+	///     synchronous.
+	/// </summary>
+	public static readonly DiagnosticDescriptor DeferredAsyncCycle = new(
+		"AWT140",
+		"Non-terminating deferred async cycle",
+		"Deferred property cycle through an async-initialized service detected: {0}. A deferred property breaks a cycle only when a re-entrant resolve returns the already-cached instance; an async resolver publishes its memoized task only after that re-entrant resolve has returned, so this cycle would overflow the stack or deadlock at runtime. Break the cycle, or make its participants synchronous (not IAsyncInitializable and not dependent on an async service).",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

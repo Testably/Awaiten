@@ -32,8 +32,10 @@ public sealed class InjectAttribute : Attribute
     ///     break a mutual constructor cycle: two singletons that each reference the other through a
     ///     deferred property are both constructed and cached first, then wired up. Requires an accessible
     ///     <c>set</c> accessor (post-construction assignment cannot use an <c>init</c>-only accessor,
-    ///     which is <c>AWT138</c>); applies only to singleton and scoped registrations, since a transient
-    ///     has no cache to terminate a mutual cycle (a transient deferred cycle is <c>AWT139</c>).
+    ///     which is <c>AWT138</c>). A cycle-breaking deferred property applies only to synchronous singleton
+    ///     and scoped registrations: a transient has no cache to terminate a mutual cycle (a transient deferred
+    ///     cycle is <c>AWT139</c>), and an async-initialized participant publishes its memoized task only after
+    ///     the re-entrant resolve has returned (a deferred cycle through one is <c>AWT140</c>).
     /// </summary>
     public bool Deferred { get; set; }
 }

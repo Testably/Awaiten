@@ -152,4 +152,40 @@ public class PropertyInjectionTests
 
 		await That(result.Diagnostics.Any(d => d.Contains("AWT102"))).IsTrue();
 	}
+
+	[Fact]
+	public async Task DeferredProperty_ToAnAsyncTarget_TaintsTheOwnerAndAwaitsTheTarget()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using System.Threading;
+		                                       using System.Threading.Tasks;
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       // The owner is not itself async, but its deferred member targets an async-initialized service.
+		                                       // Taint must reach the owner so its deferred assignment awaits, rather than emitting a synchronous
+		                                       // resolve of an async-only service (which would not compile).
+		                                       public sealed class AsyncDep : IAsyncInitializable
+		                                       {
+		                                           public Task InitializeAsync(CancellationToken ct) => Task.CompletedTask;
+		                                       }
+		                                       public sealed class Owner { [Inject(Deferred = true)] public AsyncDep Dep { get; set; } }
+
+		                                       [Container]
+		                                       [Singleton<AsyncDep>]
+		                                       [Singleton<Owner>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		// No diagnostics includes the compiler diagnostics of the generated source, so a synchronous resolve of the
+		// async-only target (CS1061) would fail here.
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// The owner is async-tainted, so its deferred member is wired by awaiting the target's async resolver.
+		await That(source).Contains(".Dep = await ResolveAsyncDepAsync(cancellationToken).ConfigureAwait(false);");
+	}
 }

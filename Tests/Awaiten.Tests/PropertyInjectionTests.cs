@@ -156,6 +156,21 @@ public partial class PropertyInjectionTests
 		await That(right.Left).IsSameAs(left);
 	}
 
+	[Fact]
+	public async Task DeferredProperty_ToAnAsyncTarget_MakesOwnerAsyncAndFillsAnInitializedInstance()
+	{
+		using DeferredAsyncTargetContainer.Root container = new();
+
+		// The owner is not itself IAsyncInitializable, but its deferred member targets an async-initialized
+		// service, so async taint reaches the owner (reachable only through ResolveAsync) and its deferred
+		// assignment awaits the target - rather than emitting a synchronous resolve of an async-only service.
+		DeferredAsyncConsumer consumer = await container.ResolveAsync<DeferredAsyncConsumer>(Ct);
+
+		await That(consumer.Connection).Is<Connection>();
+		await That(consumer.Connection!.Initialized).IsTrue()
+			.Because("a deferred member to an async target is awaited after construction, so the injected instance is already initialized");
+	}
+
 	public sealed class Bus;
 
 	public sealed class Logger
@@ -275,6 +290,17 @@ public partial class PropertyInjectionTests
 	[Singleton<Connection>]
 	[Singleton<AsyncConsumer>]
 	public static partial class AsyncContainer;
+
+	public sealed class DeferredAsyncConsumer
+	{
+		[Inject(Deferred = true)]
+		public Connection? Connection { get; set; }
+	}
+
+	[Container]
+	[Singleton<Connection>]
+	[Singleton<DeferredAsyncConsumer>]
+	public static partial class DeferredAsyncTargetContainer;
 
 	public sealed class OrderService
 	{

@@ -1798,7 +1798,7 @@ internal static class Emitter
 		// after it is cached, so a mutual cycle terminates; a transient right after construction). Null when the
 		// instance has no deferred member, so a plain resolver's emitted code is unchanged.
 		Action<int>? DeferredFor(string variable) => HasDeferredMembers(instance)
-			? d => EmitDeferredAssignments(builder, d, instance, variable, context.Instances, names, context.ServiceToIndex, asynchronous: false)
+			? d => EmitDeferredAssignments(builder, d, instance, variable, context, asynchronous: false)
 			: null;
 
 		if (instance.IsParameterized)
@@ -1981,7 +1981,7 @@ internal static class Emitter
 		// A deferred [Inject(Deferred = true)] member is wired after the singleton is stored in its field, so a
 		// mutual cycle terminates (the re-entrant resolve returns this cached instance). Null when there is none.
 		Action<int>? emitDeferred = HasDeferredMembers(instance)
-			? d => EmitDeferredAssignments(builder, d, instance, names.Field(index), context.Instances, names, context.ServiceToIndex, asynchronous: false)
+			? d => EmitDeferredAssignments(builder, d, instance, names.Field(index), context, asynchronous: false)
 			: null;
 		EmitCachingResolver(builder, depth, new CachingResolver("protected override", type, resolver, names.Field(index), construction, DisposalOf(instance), null), context.AsyncDisposal, emitDeferred);
 	}
@@ -2173,7 +2173,7 @@ internal static class Emitter
 		// A deferred [Inject(Deferred = true)] member is wired after the instance is constructed, awaiting an
 		// async-tainted member exactly like an async-tainted constructor argument. Null when there is none.
 		Action<int>? emitDeferred = HasDeferredMembers(instance)
-			? d => EmitDeferredAssignments(builder, d, instance, "created", context.Instances, names, context.ServiceToIndex, asynchronous: true)
+			? d => EmitDeferredAssignments(builder, d, instance, "created", context, asynchronous: true)
 			: null;
 
 		// A parameterized async service is built fresh per call from its runtime arguments AND awaits
@@ -2246,7 +2246,7 @@ internal static class Emitter
 		// A deferred [Inject(Deferred = true)] member is wired in the creator after construction (awaiting an
 		// async-tainted member like an async-tainted constructor argument). Null when there is none.
 		Action<int>? emitDeferred = HasDeferredMembers(instance)
-			? d => EmitDeferredAssignments(builder, d, instance, "created", context.Instances, context.Names, context.ServiceToIndex, asynchronous: true)
+			? d => EmitDeferredAssignments(builder, d, instance, "created", context, asynchronous: true)
 			: null;
 		EmitAsyncCachingResolver(builder, depth, index, context, construction, "protected override", emitDeferred);
 	}
@@ -2670,7 +2670,7 @@ internal static class Emitter
 	///     cache-miss block), so a cache hit never reassigns. On the async path a deferred async-tainted member is
 	///     awaited exactly like an async-tainted constructor argument.
 	/// </summary>
-	private static void EmitDeferredAssignments(StringBuilder builder, int depth, InstanceModel instance, string variable, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool asynchronous)
+	private static void EmitDeferredAssignments(StringBuilder builder, int depth, InstanceModel instance, string variable, EmitContext context, bool asynchronous)
 	{
 		foreach (MemberModel member in instance.InjectedMembers.AsArray())
 		{
@@ -2679,7 +2679,7 @@ internal static class Emitter
 				continue;
 			}
 
-			string value = DependencyValue(member.Dependency, instances, names, serviceToIndex, asynchronous);
+			string value = DependencyValue(member.Dependency, context.Instances, context.Names, context.ServiceToIndex, asynchronous);
 			Indent(builder, depth).Append(variable).Append('.').Append(member.MemberName).Append(" = ").Append(value).AppendLine(";");
 		}
 	}
