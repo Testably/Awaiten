@@ -38,6 +38,13 @@ namespace Awaiten
             public System.Threading.Tasks.Task<T> ResolveAsync<T>(System.Threading.CancellationToken cancellationToken = default) { }
         }
     }
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
+    public sealed class CompositeAttribute<TComposite, TService> : System.Attribute
+        where TComposite :  class, TService
+    {
+        public CompositeAttribute() { }
+        public Awaiten.AwaitenLifetime Lifetime { get; set; }
+    }
     [System.AttributeUsage(System.AttributeTargets.Class, Inherited=false)]
     public sealed class ContainerAttribute : System.Attribute
     {

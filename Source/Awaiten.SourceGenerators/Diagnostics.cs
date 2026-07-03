@@ -427,4 +427,17 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A <c>[Composite&lt;TComposite, TService&gt;]</c> implementation has no constructor parameter that is a
+	///     collection (<c>IEnumerable&lt;TService&gt;</c>, <c>IReadOnlyList&lt;TService&gt;</c>, <c>TService[]</c>, …)
+	///     of the composed service, so there is nothing for the composite to fan out to.
+	/// </summary>
+	public static readonly DiagnosticDescriptor CompositeMissingCollectionParameter = new(
+		"AWT130",
+		"Composite has no collection parameter",
+		"The composite '{0}' must have a constructor parameter that is a collection of the composed service '{1}'; it has none",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

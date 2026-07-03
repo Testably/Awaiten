@@ -217,6 +217,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 		(List<RawRegistration> raw, HashSet<string> constraintRejected) = ContainerRegistrations.Collect(containerSymbol, diagnostics);
 		List<DecorateRegistration> decorators = ContainerRegistrations.CollectDecorators(containerSymbol);
+		List<CompositeRegistration> composites = ContainerRegistrations.CollectComposites(containerSymbol);
 
 		// Coalesce registrations by (service type, key): the first registration per key wins, and
 		// registrations of the same implementation share one instance. Declaring one implementation with
@@ -234,6 +235,15 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		{
 			new DecoratorChainBuilder(containerSymbol, compilation, serviceToImpl, implOrder, serviceMembers, decoratorInner, diagnostics)
 				.Build(decorators);
+		}
+
+		// Composites: each [Composite<TComposite, TService>] registers the composite as an ordinary instance,
+		// makes it the public single-dispatch winner for TService, and leaves the existing members untouched -
+		// the composite is excluded from its own collection, so its collection parameter fans out to the OTHER
+		// registrations. Runs after decorator chains so a composite fronts the decorated members.
+		if (composites.Count > 0)
+		{
+			BuildComposites(composites, compilation, containerSymbol, serviceToImpl, implOrder, serviceMembers, diagnostics);
 		}
 
 		List<InstanceModel> instances = new();
@@ -1039,6 +1049,141 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 		private static string DecoratorIdentity(string decoratorType, string service, int baseIndex, int link)
 			=> $"{decoratorType}@{DecoratorKeyPrefix}{service}:{baseIndex}:{link}";
+	}
+
+	/// <summary>
+	///     Builds the composites after coalescing (and after decorator chains, so a composite fronts the
+	///     decorated members). For each <c>[Composite&lt;TComposite, TService&gt;]</c> it registers the composite
+	///     as an ordinary instance (constructed, cached and disposed by index) with the chosen lifetime and
+	///     rewrites the public unkeyed winner of <c>TService</c> to the composite, so a plain <c>TService</c>
+	///     parameter and <c>Resolve&lt;TService&gt;()</c> both get the composite. The composite is deliberately
+	///     NOT added to <c>serviceMembers</c>: it is excluded from its own - and everyone else's - collection
+	///     membership, so its own collection parameter (and any separate <c>IEnumerable&lt;TService&gt;</c>
+	///     consumer) resolves to the OTHER registrations, never the composite. There is no self-edge, so the
+	///     cycle (AWT102) and captive (AWT105) analysis works unchanged over the composite's eager collection
+	///     edges. An empty member set is legal (the composite fans out to an empty collection). Reports AWT130
+	///     when the composite has no collection parameter of the composed service.
+	/// </summary>
+	private static void BuildComposites(
+		List<CompositeRegistration> composites,
+		Compilation compilation,
+		INamedTypeSymbol containerSymbol,
+		Dictionary<ServiceKey, string> serviceToImpl,
+		List<ImplInfo> implOrder,
+		Dictionary<ServiceKey, List<string>> serviceMembers,
+		List<DiagnosticInfo> diagnostics)
+	{
+		// The coalesced implementations by identity (including decorator chain links), so the composite's
+		// ImplInfo can be appended for BuildInstance to build and a former winner's public key removed.
+		Dictionary<string, ImplInfo> byImpl = new(StringComparer.Ordinal);
+		foreach (ImplInfo info in implOrder)
+		{
+			byImpl[info.ImplementationType] = info;
+		}
+
+		foreach (CompositeRegistration composite in composites)
+		{
+			string compositeType = composite.Composite.ToDisplayString(FullyQualified);
+
+			// AWT130: the composite must take a collection of the composed service to fan out to.
+			if (!HasCompositeCollectionParameter(composite.Composite, composite.ServiceSymbol, containerSymbol, compilation, serviceToImpl))
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.CompositeMissingCollectionParameter,
+					LocationInfo.From(composite.Location),
+					new EquatableArray<string>([
+						Display(compositeType),
+						Display(composite.Service),
+					])));
+				continue;
+			}
+
+			// Register the composite as an ordinary instance (idempotent if the same type is named twice, or was
+			// already registered as a normal service).
+			if (!byImpl.TryGetValue(compositeType, out ImplInfo? compositeInfo))
+			{
+				compositeInfo = new ImplInfo(
+					compositeType, composite.Composite, composite.Lifetime,
+					LocationInfo.From(composite.Location), ProductionKind.Constructor, null);
+				byImpl.Add(compositeType, compositeInfo);
+				implOrder.Add(compositeInfo);
+			}
+
+			// The composite becomes the public single-dispatch winner: take the unkeyed service off whatever impl
+			// currently holds it (a former winner stays a collection member, just no longer the façade) and hand
+			// it to the composite. The composite is never a serviceMembers entry, so it is excluded from its own
+			// collection parameter and from any other IEnumerable<TService> consumer.
+			ServiceKey publicKey = new(composite.Service, null);
+			if (serviceToImpl.TryGetValue(publicKey, out string? previousWinner)
+			    && previousWinner != compositeType
+			    && byImpl.TryGetValue(previousWinner, out ImplInfo? previousInfo))
+			{
+				previousInfo.Services.Remove(publicKey);
+			}
+
+			serviceToImpl[publicKey] = compositeType;
+			if (!compositeInfo.Services.Contains(publicKey))
+			{
+				compositeInfo.Services.Add(publicKey);
+			}
+		}
+	}
+
+	/// <summary>
+	///     Whether <paramref name="composite" /> has a constructor parameter that is a collection
+	///     (<c>IEnumerable&lt;TService&gt;</c>, <c>IReadOnlyList&lt;TService&gt;</c>, <c>TService[]</c>, …) whose
+	///     element type accepts an instance of <paramref name="service" /> - what the composite fans out over. The
+	///     constructor is chosen by the same <see cref="SelectConstructor" /> the container builds the composite
+	///     through, so this validation can never inspect a different constructor than the one constructed.
+	/// </summary>
+	private static bool HasCompositeCollectionParameter(
+		INamedTypeSymbol composite,
+		INamedTypeSymbol service,
+		INamedTypeSymbol containerSymbol,
+		Compilation compilation,
+		Dictionary<ServiceKey, string> serviceToImpl)
+	{
+		IMethodSymbol? constructor = SelectConstructor(composite, containerSymbol, serviceToImpl.Keys.Select(k => k.Service));
+		if (constructor is null)
+		{
+			return false;
+		}
+
+		foreach (IParameterSymbol parameter in constructor.Parameters)
+		{
+			if (TryGetCompositeCollectionElement(parameter.Type, out ITypeSymbol? element)
+			    && compilation.HasImplicitConversion(service, element!))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/// <summary>
+	///     The element type of a collection parameter (the rank-1 array element, or the single type argument of
+	///     one of the standard generic collection interfaces), mirroring <see cref="TryGetCollectionElement" />
+	///     but yielding the element symbol so the composed service's convertibility to it can be checked.
+	/// </summary>
+	private static bool TryGetCompositeCollectionElement(ITypeSymbol type, out ITypeSymbol? element)
+	{
+		if (type is IArrayTypeSymbol { Rank: 1, } array)
+		{
+			element = array.ElementType;
+			return true;
+		}
+
+		if (type is INamedTypeSymbol { IsGenericType: true, TypeArguments.Length: 1, } named
+		    && named.ContainingNamespace?.ToDisplayString() == "System.Collections.Generic"
+		    && named.Name is "IEnumerable" or "IReadOnlyList" or "IReadOnlyCollection" or "IList" or "ICollection")
+		{
+			element = named.TypeArguments[0];
+			return true;
+		}
+
+		element = null;
+		return false;
 	}
 
 	private static InstanceModel? BuildInstance(ImplInfo info, BuildContext context)

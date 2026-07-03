@@ -144,6 +144,50 @@ internal static class ContainerRegistrations
 	}
 
 	/// <summary>
+	///     Reads the <c>[Composite&lt;TComposite, TService&gt;]</c> registrations declared on a container. Each
+	///     carries the composed service, the composite implementation and the composite's chosen lifetime
+	///     (defaulting to <see cref="Lifetime.Transient" />). Collected apart from the lifetime registrations
+	///     because a composite fronts an existing service after coalescing rather than introducing a new one; the
+	///     type parameters are ordered composite-first to match <c>[Decorate&lt;TDecorator, TService&gt;]</c> and
+	///     the lifetime attributes.
+	/// </summary>
+	public static List<CompositeRegistration> CollectComposites(INamedTypeSymbol containerSymbol)
+	{
+		List<CompositeRegistration> result = new();
+		foreach (AttributeData attribute in containerSymbol.GetAttributes())
+		{
+			if (attribute.AttributeClass is not { Name: "CompositeAttribute", IsGenericType: true, TypeArguments.Length: 2, } attributeClass
+			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace
+			    || attributeClass.TypeArguments[0] is not INamedTypeSymbol composite
+			    || attributeClass.TypeArguments[1] is not INamedTypeSymbol service)
+			{
+				continue;
+			}
+
+			// The Lifetime named argument is an AwaitenLifetime enum, whose members line up with the internal
+			// Lifetime enum (Singleton, Transient, Scoped); a boxed enum surfaces as its underlying int. Absent,
+			// the composite defaults to transient so it re-materializes its member array per resolve.
+			Lifetime lifetime = Lifetime.Transient;
+			foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
+			{
+				if (argument.Key == "Lifetime" && argument.Value.Value is int value)
+				{
+					lifetime = (Lifetime)value;
+				}
+			}
+
+			result.Add(new CompositeRegistration(
+				service.ToDisplayString(FullyQualified),
+				service,
+				composite,
+				lifetime,
+				attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation()));
+		}
+
+		return result;
+	}
+
+	/// <summary>
 	///     Reads a non-generic <c>[Singleton(typeof(Repository&lt;&gt;), typeof(IRepository&lt;&gt;))]</c>
 	///     registration into an <see cref="OpenRegistration" />. Reports AWT125 when the implementation and
 	///     service have mismatched arity, since no closed service can then be mapped onto the implementation.
