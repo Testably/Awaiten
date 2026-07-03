@@ -150,4 +150,100 @@ public partial class ScanTests
 	[Scan(typeof(ICrossAssemblyPlugin), InAssembliesOf = new[] { typeof(ICrossAssemblyPlugin) }, As = ScanAs.ImplementedInterfaces, Lifetime = AwaitenLifetime.Singleton)]
 	[Singleton<CrossAssemblyHub>]
 	public static partial class CrossAssemblyInterfaceScanContainer;
+
+	[Fact]
+	public async Task ScanClosedTypesOf_RegistersEachMatchUnderItsClosedMarkerInterface()
+	{
+		using ClosedTypesOfScanContainer.Root container = new();
+
+		// Each closed form of the marker is resolvable as that closed marker interface.
+		await That(container.Resolve<IView<ViewModelOne>>()).IsNotNull();
+		await That(container.Resolve<IView<ViewModelTwo>>()).IsNotNull();
+	}
+
+	[Fact]
+	public async Task ScanClosedTypesOf_RegistersUnderTheClosedInterfaceNotTheConcreteType()
+	{
+		using ClosedTypesOfScanContainer.Root container = new();
+
+		await That(container.TryResolve(typeof(IView<ViewModelOne>), out _)).IsTrue();
+		await That(container.TryResolve(typeof(ViewOne), out _)).IsFalse();
+	}
+
+	[Fact]
+	public async Task ScanClosedTypesOf_MakesEachClosedFormResolvableAsACollection()
+	{
+		using ClosedTypesOfScanContainer.Root container = new();
+
+		// ViewOne, DecoratedViewOne and DualView close the marker at ViewModelOne; ViewTwo and DualView at ViewModelTwo.
+		await That(container.Resolve<IEnumerable<IView<ViewModelOne>>>().Count()).IsEqualTo(3);
+		await That(container.Resolve<IEnumerable<IView<ViewModelTwo>>>().Count()).IsEqualTo(2);
+	}
+
+	[Fact]
+	public async Task ScanClosedTypesOf_AtSeveralTypeArguments_RegistersUnderEachClosedInterface()
+	{
+		using ClosedTypesOfScanContainer.Root container = new();
+
+		// DualView : IView<ViewModelOne>, IView<ViewModelTwo> - resolvable as both closed forms.
+		await That(container.Resolve<IEnumerable<IView<ViewModelOne>>>().Select(v => v.GetType()))
+			.Contains(typeof(DualView));
+		await That(container.Resolve<IEnumerable<IView<ViewModelTwo>>>().Select(v => v.GetType()))
+			.Contains(typeof(DualView));
+	}
+
+	[Fact]
+	public async Task ScanClosedTypesOf_AsSelf_RegistersTheConcreteType()
+	{
+		using ClosedTypesOfSelfScanContainer.Root container = new();
+
+		// Self mode registers each match as its own concrete type, not under the closed interface.
+		await That(container.Resolve<ViewOne>()).IsNotNull();
+		await That(container.TryResolve(typeof(IView<ViewModelOne>), out _)).IsFalse();
+	}
+
+	[Fact]
+	public async Task ScanClosedTypesOf_IsOverriddenByAnExplicitRegistration()
+	{
+		using ClosedTypesOfScanContainer.Root container = new();
+
+		// The explicit transient registration of ViewTwo (under its closed interface) wins over the scan.
+		await That(container.Resolve<IView<ViewModelTwo>>()).IsNotSameAs(container.Resolve<IView<ViewModelTwo>>());
+	}
+
+	[Fact]
+	public async Task ScanClosedTypesOf_InAssembliesOf_RegistersMatchesFromTheReferencedAssembly()
+	{
+		using CrossAssemblyClosedTypesOfScanContainer.Root container = new();
+
+		await That(container.Resolve<ICrossAssemblyView<CrossAssemblyViewModelOne>>()).Is<CrossAssemblyViewOne>();
+		await That(container.Resolve<ICrossAssemblyView<CrossAssemblyViewModelTwo>>()).Is<CrossAssemblyViewTwo>();
+	}
+
+	public interface IView<TViewModel>;
+
+	public sealed class ViewModelOne;
+
+	public sealed class ViewModelTwo;
+
+	public sealed class ViewOne : IView<ViewModelOne>;
+
+	public sealed class ViewTwo : IView<ViewModelTwo>;
+
+	public sealed class DecoratedViewOne : IView<ViewModelOne>;
+
+	public sealed class DualView : IView<ViewModelOne>, IView<ViewModelTwo>;
+
+	[Container]
+	[Scan(typeof(IView<>), As = ScanAs.ImplementedInterfaces, Lifetime = AwaitenLifetime.Singleton)]
+	[Transient<ViewTwo, IView<ViewModelTwo>>]
+	public static partial class ClosedTypesOfScanContainer;
+
+	[Container]
+	[Scan(typeof(IView<>), Lifetime = AwaitenLifetime.Singleton)]
+	public static partial class ClosedTypesOfSelfScanContainer;
+
+	[Container]
+	[Scan(typeof(ICrossAssemblyView<>), InAssembliesOf = new[] { typeof(ICrossAssemblyView<>) }, As = ScanAs.ImplementedInterfaces, Lifetime = AwaitenLifetime.Singleton)]
+	public static partial class CrossAssemblyClosedTypesOfScanContainer;
 }

@@ -6,7 +6,10 @@ namespace Awaiten;
 ///     Registers every concrete class assignable to <see cref="AssignableTo" /> (a marker interface or base
 ///     type) with the chosen <see cref="Lifetime" />, exposed as configured by <see cref="As" />. By default the
 ///     scan covers the container's own assembly; set <see cref="InAssembliesOf" /> to scan referenced assemblies
-///     instead. Abstract and static classes, and the marker type itself, are skipped.
+///     instead. When <see cref="AssignableTo" /> is an unbound generic (<c>typeof(IView&lt;&gt;)</c>), a match is
+///     a concrete type that implements a <em>closed</em> form of it (<c>View1 : IView&lt;VM1&gt;</c>), registered
+///     under that closed interface - the equivalent of Autofac's <c>AsClosedTypesOf</c>. Abstract and static
+///     classes, and the marker type itself, are skipped.
 /// </summary>
 /// <remarks>
 ///     Scanned registrations are overridable: an explicit registration of the same implementation type (via

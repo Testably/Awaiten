@@ -192,4 +192,40 @@ public class ScanTests
 		await That(first.IndexOf("ResolveDeltaPlugin", System.StringComparison.Ordinal))
 			.IsLessThan(first.IndexOf("ResolveGammaPlugin", System.StringComparison.Ordinal));
 	}
+
+	[Fact]
+	public async Task ScanClosedTypesOf_RegistersEachMatchUnderItsClosedMarkerInterface()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using System.Collections.Generic;
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface IView<TViewModel> { }
+		                                       public sealed class ViewModelOne { }
+		                                       public sealed class ViewModelTwo { }
+		                                       public sealed class ViewOne : IView<ViewModelOne> { }
+		                                       public sealed class ViewTwo : IView<ViewModelTwo> { }
+		                                       public sealed class DualView : IView<ViewModelOne>, IView<ViewModelTwo> { }
+
+		                                       [Container]
+		                                       [Scan(typeof(IView<>), As = ScanAs.ImplementedInterfaces, Lifetime = AwaitenLifetime.Singleton)]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// Each view registers under the closed marker interface(s) it implements (not its concrete type); a view
+		// closing the marker at two type arguments registers under both, and each closed form is a collection.
+		await That(source).Contains("new __Bucket(typeof(global::MyCode.IView<global::MyCode.ViewModelOne>)");
+		await That(source).Contains("new __Bucket(typeof(global::MyCode.IView<global::MyCode.ViewModelTwo>)");
+		await That(source).Contains("new global::MyCode.IView<global::MyCode.ViewModelOne>[] { ResolveDualView(), ResolveViewOne() }");
+		await That(source).Contains("new global::MyCode.IView<global::MyCode.ViewModelTwo>[] { ResolveDualView(), ResolveViewTwo() }");
+		await That(source).DoesNotContain("new __Bucket(typeof(global::MyCode.ViewOne)")
+			.Because("ImplementedInterfaces registers under the closed marker interface, not the concrete view");
+	}
 }

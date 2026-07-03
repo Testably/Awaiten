@@ -14,3 +14,18 @@ public sealed class DeltaPlugin : ICrossAssemblyPlugin;
 
 /// <summary>An abstract type assignable to the marker; a scan must skip it.</summary>
 public abstract class PluginBase : ICrossAssemblyPlugin;
+
+/// <summary>An unbound generic marker in a referenced assembly, for cross-assembly closed-types-of scanning.</summary>
+public interface ICrossAssemblyView<TViewModel>;
+
+/// <summary>A view-model the cross-assembly view closes the marker at.</summary>
+public sealed class CrossAssemblyViewModelOne;
+
+/// <summary>A second view-model the cross-assembly view closes the marker at.</summary>
+public sealed class CrossAssemblyViewModelTwo;
+
+/// <summary>A concrete view closing the cross-assembly marker, discoverable by a closed-types-of scan.</summary>
+public sealed class CrossAssemblyViewOne : ICrossAssemblyView<CrossAssemblyViewModelOne>;
+
+/// <summary>A second concrete view closing the cross-assembly marker at a different type argument.</summary>
+public sealed class CrossAssemblyViewTwo : ICrossAssemblyView<CrossAssemblyViewModelTwo>;

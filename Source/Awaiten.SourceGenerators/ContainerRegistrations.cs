@@ -108,11 +108,13 @@ internal static class ContainerRegistrations
 	/// <summary>
 	///     Expands each <c>[Scan]</c> on the container into overridable registrations for every concrete class
 	///     assignable to the scanned marker - as the type itself, under the (marker-assignable) interfaces it
-	///     implements, or both, per <c>ScanAs</c>. The scan covers the container's own assembly by default, or the
-	///     assemblies named by <c>InAssembliesOf</c>; matches register in a deterministic order (by fully-qualified
-	///     name) so generated output is reproducible. Abstract/static classes and the marker itself are skipped.
-	///     Reports AWT138 when a scan matches nothing, AWT139 when an interfaces-only scan matches a type with no
-	///     assignable interface, and AWT140 when an <c>InAssembliesOf</c> assembly has no candidate types.
+	///     implements, or both, per <c>ScanAs</c>. When the marker is an unbound generic (<c>typeof(IView&lt;&gt;)</c>),
+	///     a match is a concrete type implementing a <em>closed</em> form of it, registered under that closed
+	///     interface (Autofac's <c>AsClosedTypesOf</c>). The scan covers the container's own assembly by default, or
+	///     the assemblies named by <c>InAssembliesOf</c>; matches register in a deterministic order (by
+	///     fully-qualified name) so generated output is reproducible. Abstract/static classes and the marker itself
+	///     are skipped. Reports AWT138 when a scan matches nothing, AWT139 when an interfaces-only scan matches a
+	///     type with no assignable interface, and AWT140 when an <c>InAssembliesOf</c> assembly has no candidate types.
 	/// </summary>
 	/// <remarks>
 	///     The synthesized registrations carry <see cref="RawRegistration.IsScan" />, so coalescing lets an
@@ -142,6 +144,11 @@ internal static class ContainerRegistrations
 			bool registerInterfaces = exposure is ScanExposure.ImplementedInterfaces or ScanExposure.SelfAndImplementedInterfaces;
 			Location? location = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation();
 
+			// An unbound generic marker (typeof(IView<>)) matches concrete implementers of any closed form of it,
+			// registered under that closed interface (AsClosedTypesOf), rather than under the marker itself.
+			bool openMarker = IsOpenGenericMarker(marker);
+			INamedTypeSymbol markerDefinition = marker.OriginalDefinition;
+
 			// Count every assignable match, even one an explicit registration overrides: a matched-but-overridden
 			// type still means the scan found something, so AWT138 fires only when the marker truly matches nothing.
 			int matched = 0;
@@ -149,6 +156,12 @@ internal static class ContainerRegistrations
 			{
 				matched++;
 				string typeName = type.ToDisplayString(FullyQualified);
+
+				if (openMarker)
+				{
+					RegisterOpenMarkerMatch(type, typeName, markerDefinition, exposure, registerSelf, registerInterfaces, lifetime, location, result, diagnostics);
+					continue;
+				}
 
 				if (registerSelf)
 				{
@@ -199,6 +212,106 @@ internal static class ContainerRegistrations
 		}
 
 		return result;
+	}
+
+	/// <summary>
+	///     Registers one match of an open-generic <c>[Scan]</c> marker. The marker is an unbound generic
+	///     definition (<c>IView&lt;&gt;</c>); a match is a concrete <paramref name="type" /> implementing (or
+	///     inheriting) one or more <em>closed</em> forms of it (<c>View1 : IView&lt;VM1&gt;</c>). Per
+	///     <c>ScanAs</c> it registers the type as itself and/or under each such closed interface - a type closing
+	///     the marker at several type arguments registers under each. Reports AWT139 when an interfaces-only scan
+	///     matched the marker but found no constructed interface to register under (a base-type marker).
+	/// </summary>
+	private static void RegisterOpenMarkerMatch(
+		INamedTypeSymbol type,
+		string typeName,
+		INamedTypeSymbol markerDefinition,
+		ScanExposure exposure,
+		bool registerSelf,
+		bool registerInterfaces,
+		Lifetime lifetime,
+		Location? location,
+		List<RawRegistration> result,
+		List<DiagnosticInfo> diagnostics)
+	{
+		if (registerSelf)
+		{
+			result.Add(ScanRegistration(typeName, typeName, lifetime, type, location, type));
+		}
+
+		if (!registerInterfaces)
+		{
+			return;
+		}
+
+		// Register under each closed marker interface the type implements (so IView<VM1> resolves to it, and
+		// IEnumerable<IView<VM1>> includes it). A base-class marker yields no interface form - AWT139.
+		int interfaces = 0;
+		foreach (INamedTypeSymbol contract in ClosedMarkerForms(type, markerDefinition))
+		{
+			if (contract.TypeKind != TypeKind.Interface)
+			{
+				continue;
+			}
+
+			result.Add(ScanRegistration(contract.ToDisplayString(FullyQualified), typeName, lifetime, type, location, contract));
+			interfaces++;
+		}
+
+		if (interfaces == 0 && exposure == ScanExposure.ImplementedInterfaces)
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.ScanNoImplementedInterfaces,
+				LocationInfo.From(location),
+				new EquatableArray<string>([
+					AwaitenGenerator.Display(typeName),
+					AwaitenGenerator.Display(markerDefinition.ToDisplayString(FullyQualified)),
+				])));
+		}
+	}
+
+	// Whether the scanned marker is an unbound/open generic definition (typeof(IView<>)): either Roslyn flagged
+	// it IsUnboundGenericType, or it has arity and is its own definition (its type arguments are the bare
+	// type parameters).
+	private static bool IsOpenGenericMarker(INamedTypeSymbol marker)
+		=> marker.IsUnboundGenericType
+		   || (marker.Arity > 0 && SymbolEqualityComparer.Default.Equals(marker, marker.OriginalDefinition));
+
+	/// <summary>
+	///     The distinct closed forms of <paramref name="markerDefinition" /> that <paramref name="type" />
+	///     implements (its interfaces) or inherits (its base types) - for example <c>IView&lt;VM1&gt;</c> and
+	///     <c>IView&lt;VM2&gt;</c> for a type that implements the marker at two type arguments. Ordered by
+	///     fully-qualified name so multiple matches register deterministically.
+	/// </summary>
+	private static List<INamedTypeSymbol> ClosedMarkerForms(INamedTypeSymbol type, INamedTypeSymbol markerDefinition)
+	{
+		List<INamedTypeSymbol> closed = new();
+		HashSet<string> seen = new(StringComparer.Ordinal);
+
+		void Consider(INamedTypeSymbol candidate)
+		{
+			if (candidate.IsGenericType
+			    && SymbolEqualityComparer.Default.Equals(candidate.OriginalDefinition, markerDefinition)
+			    && seen.Add(candidate.ToDisplayString(FullyQualified)))
+			{
+				closed.Add(candidate);
+			}
+		}
+
+		foreach (INamedTypeSymbol @interface in type.AllInterfaces)
+		{
+			Consider(@interface);
+		}
+
+		for (INamedTypeSymbol? current = type; current is not null; current = current.BaseType)
+		{
+			Consider(current);
+		}
+
+		closed.Sort((left, right) => string.CompareOrdinal(
+			left.ToDisplayString(FullyQualified),
+			right.ToDisplayString(FullyQualified)));
+		return closed;
 	}
 
 	/// <summary>
@@ -277,11 +390,20 @@ internal static class ContainerRegistrations
 	}
 
 	// Whether a type is a concrete class assignable to the scanned marker (and not the marker itself) - the
-	// per-type predicate shared by candidate gathering and the AWT140 emptiness check.
+	// per-type predicate shared by candidate gathering and the AWT140 emptiness check. For an unbound generic
+	// marker (typeof(IView<>)) the type must implement a closed form of it instead.
 	private static bool IsScanCandidate(INamedTypeSymbol type, INamedTypeSymbol marker, Compilation compilation)
-		=> type is { TypeKind: TypeKind.Class, IsAbstract: false, IsStatic: false, IsImplicitClass: false, }
-		   && !SymbolEqualityComparer.Default.Equals(type, marker)
-		   && compilation.HasImplicitConversion(type, marker);
+	{
+		if (type is not { TypeKind: TypeKind.Class, IsAbstract: false, IsStatic: false, IsImplicitClass: false, }
+		    || SymbolEqualityComparer.Default.Equals(type, marker))
+		{
+			return false;
+		}
+
+		return IsOpenGenericMarker(marker)
+			? ClosedMarkerForms(type, marker.OriginalDefinition).Count > 0
+			: compilation.HasImplicitConversion(type, marker);
+	}
 
 	// A single overridable, collection-eligible registration contributed by a [Scan]: IsScan so it never conflicts
 	// with an explicit registration over the same implementation and always joins its service's collection.
