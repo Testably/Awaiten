@@ -1,6 +1,7 @@
 using System.Linq;
+using Awaiten.SourceGenerators.Internals;
 
-namespace Awaiten.SourceGenerators.Internals;
+namespace Awaiten.SourceGenerators.Entities;
 
 /// <summary>
 ///     A single constructed instance on a container: one implementation, the implementation's simple

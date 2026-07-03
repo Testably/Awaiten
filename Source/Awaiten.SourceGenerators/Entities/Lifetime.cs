@@ -1,4 +1,4 @@
-namespace Awaiten.SourceGenerators.Internals;
+namespace Awaiten.SourceGenerators.Entities;
 
 /// <summary>
 ///     The lifetime of a registration. A <see cref="Singleton" /> is created once and shared for the

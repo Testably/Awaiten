@@ -1,6 +1,7 @@
+using Awaiten.SourceGenerators.Internals;
 using Microsoft.CodeAnalysis;
 
-namespace Awaiten.SourceGenerators.Internals;
+namespace Awaiten.SourceGenerators.Entities;
 
 /// <summary>
 ///     The fully-resolved, equatable model of a single <c>[Container]</c> partial class, ready for

@@ -1,4 +1,4 @@
-namespace Awaiten.SourceGenerators.Internals;
+namespace Awaiten.SourceGenerators.Entities;
 
 /// <summary>
 ///     A single injected member: a property marked <c>[Inject]</c>, assigned through an object

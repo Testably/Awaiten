@@ -1,4 +1,6 @@
-namespace Awaiten.SourceGenerators.Internals;
+using Awaiten.SourceGenerators.Internals;
+
+namespace Awaiten.SourceGenerators.Entities;
 
 /// <summary>
 ///     The ordered membership of a collection-resolvable service: the element service type, the resolution

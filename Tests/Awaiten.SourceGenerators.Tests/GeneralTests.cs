@@ -318,7 +318,7 @@ public class GeneralTests
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 		await That(source).Contains("private volatile global::MyCode.Service? _service;")
 			.Because("a scoped registration is cached per scope");
-		await That(source).Contains("Scoped: one instance per scope")
+		await That(source).Contains("(one instance per scope)")
 			.Because("scoped instances live on the scope, not the container");
 		await That(source).Contains("public class Scope : global::Awaiten.IAwaitenScope")
 			.Because("the scope is the single resolver and is publicly accessible");
@@ -904,8 +904,8 @@ public class GeneralTests
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 		await That(source).Contains("protected object __ResolveExternal(global::System.Type serviceType, object? serviceKey)");
 		await That(source).Contains("new global::MyCode.Service((global::MyCode.ILogger)__ResolveExternal(typeof(global::MyCode.ILogger), null))");
-		// The external dependency is advertised in the container metadata.
-		await That(source).Contains("public global::System.Collections.Generic.IReadOnlyList<global::System.Type> ExternalDependencies");
+		// The external dependency is advertised in the container metadata (explicitly, off the Root's own surface).
+		await That(source).Contains("global::Awaiten.IAwaitenContainerMetadata.ExternalDependencies");
 		await That(source).Contains("typeof(global::MyCode.ILogger)");
 	}
 
@@ -1000,5 +1000,47 @@ public class GeneralTests
 			.Because("a keyed [FromServices] parameter is resolved from the external provider under its key");
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 		await That(source).Contains("(global::MyCode.ILogger)__ResolveExternal(typeof(global::MyCode.ILogger), \"audit\")");
+	}
+
+	[Fact]
+	public async Task GeneratedResolvers_CarryLifetimeSpecificXmlDocSummaries()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class Single { }
+		                                       public sealed class PerScope { }
+		                                       public sealed class Fresh { }
+
+		                                       [Container]
+		                                       [Singleton<Single>]
+		                                       [Scoped<PerScope>]
+		                                       [Transient<Fresh>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("/// <summary>")
+			.Because("the generated members carry XML doc summaries");
+		await That(source).Contains("Resolves the singleton <see cref=\"global::MyCode.Single\" /> (one instance per container).")
+			.Because("the Root's singleton resolver documents its lifetime");
+		await That(source).Contains("Resolves the singleton <see cref=\"global::MyCode.Single\" /> from the root.")
+			.Because("the base Scope's singleton delegator documents where the instance lives");
+		await That(source).Contains("Resolves the scoped <see cref=\"global::MyCode.PerScope\" /> (one instance per scope).")
+			.Because("the scoped resolver documents its per-scope caching");
+		await That(source).Contains("Resolves the transient <see cref=\"global::MyCode.Fresh\" /> (a new instance per call).")
+			.Because("the transient resolver documents its fresh-per-call semantics");
+		await That(source).Contains("The container root: owns the singleton instances and serves as the default scope.")
+			.Because("the Root class itself is documented");
+		await That(source).Contains("A resolution scope: caches scoped services and disposes the instances it created.")
+			.Because("the Scope class itself is documented");
+		await That(source).Contains("Disposes every tracked instance in reverse creation order.")
+			.Because("the disposal surface is documented");
 	}
 }
