@@ -56,3 +56,4 @@
  AWT152  | Awaiten   | Error    | An imported [Module] class is not declared static
  AWT153  | Awaiten   | Error    | A module Factory/Instance member is not accessible from the generated container
  AWT154  | Awaiten   | Error    | An imported module declares a [Scan], which is not collected from modules
+ AWT155  | Awaiten   | Warning  | Two imported modules strongly register the same service with different implementations

@@ -64,6 +64,11 @@ partial class AwaitenGenerator
 		// Default correctly overridden by a strong registration is not.
 		Dictionary<ServiceKey, bool> chosenByDefault = new();
 
+		// The imported module that declared the registration currently owning a service key (null for the
+		// container's own or a scan's), so two modules strongly colliding over one service can be surfaced
+		// as AWT155 while the container silently overriding a module - the intended mechanism - is not.
+		Dictionary<ServiceKey, INamedTypeSymbol?> chosenOrigin = new();
+
 		// Strong registrations claim their service first; overridable defaults (Default/TryAdd) are processed
 		// afterwards so they only fill the gaps left over; scan matches come last, so an explicit default - a
 		// deliberate declaration - beats a blanket scan deterministically, independent of scan enumeration
@@ -165,6 +170,7 @@ partial class AwaitenGenerator
 			if (alreadyChosen)
 			{
 				ReportDuplicateKey(registration, existingImpl, diagnostics);
+				ReportCrossModuleDuplicate(registration, existingImpl!, chosenOrigin[serviceKey], diagnostics);
 				continue;
 			}
 
@@ -172,6 +178,7 @@ partial class AwaitenGenerator
 			serviceToImpl[serviceKey] = registration.ImplementationType;
 			chosen.Services.Add(serviceKey);
 			chosenByDefault[serviceKey] = registration.IsDefault;
+			chosenOrigin[serviceKey] = registration.Origin;
 		}
 
 		return (implOrder, serviceToImpl, serviceMembers, serviceMemberOrder, varianceCandidates);
@@ -256,6 +263,37 @@ partial class AwaitenGenerator
 		{
 			members.Add(implementationType);
 		}
+	}
+
+	// AWT155: two different imported modules strongly register the same unkeyed service with different
+	// implementations, so which wins is decided only by [Import] order - invisible at either module. The
+	// container overriding a module stays silent (the intended override mechanism), as do scans and
+	// overridable defaults (which yield by design) and keyed collisions (already surfaced as AWT117).
+	private static void ReportCrossModuleDuplicate(
+		RawRegistration registration,
+		string existingImpl,
+		INamedTypeSymbol? winnerOrigin,
+		List<DiagnosticInfo> diagnostics)
+	{
+		if (registration.Key is not null
+		    || registration.IsScan
+		    || registration.Weak
+		    || registration.Origin is null
+		    || winnerOrigin is null
+		    || SymbolEqualityComparer.Default.Equals(registration.Origin, winnerOrigin)
+		    || existingImpl == registration.ImplementationType)
+		{
+			return;
+		}
+
+		diagnostics.Add(new DiagnosticInfo(
+			Diagnostics.CrossModuleDuplicate,
+			LocationInfo.From(registration.Location),
+			new EquatableArray<string>([
+				Display(registration.ServiceType),
+				Display(winnerOrigin.ToDisplayString(FullyQualified)),
+				Display(registration.Origin.ToDisplayString(FullyQualified)),
+			])));
 	}
 
 	// AWT117: two different implementations claim the same service type and key, so a keyed resolution of

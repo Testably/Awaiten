@@ -782,4 +782,20 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     Two different imported modules strongly register the same service key with different
+	///     implementations, so which one wins single resolution is decided only by [Import] order - invisible
+	///     at either module. A warning rather than an error: the graph still resolves (the earlier import
+	///     wins, and both implementations stay collection members), but the collision is likely unintended -
+	///     override the service on the container, or mark one module's registration Default/TryAdd. The
+	///     container overriding a module stays silent: that is the intended override mechanism.
+	/// </summary>
+	public static readonly DiagnosticDescriptor CrossModuleDuplicate = new(
+		"AWT155",
+		"Imported modules register the same service",
+		"'{0}' is registered by both the imported modules '{1}' and '{2}'; the earlier import '{1}' wins single resolution - override it on the container, or make one registration an overridable default",
+		"Awaiten",
+		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true);
 }
