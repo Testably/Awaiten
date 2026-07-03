@@ -46,7 +46,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 				spc.ReportDiagnostic(diagnostic.ToDiagnostic());
 			}
 
-			spc.AddSource(model.HintName, SourceText.From(Emitter.Emit(model), Encoding.UTF8));
+			spc.AddSource(model.HintName, SourceText.From(Sources.Emit(model), Encoding.UTF8));
 		});
 	}
 
