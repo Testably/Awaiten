@@ -416,7 +416,8 @@ partial class AwaitenGenerator
 	}
 
 	// AWT153: the module declares a member that matches the Factory/Instance registration, but the generated
-	// container cannot access it (private, or internal in another assembly without InternalsVisibleTo).
+	// container cannot access it (e.g. a private member of a source module; a cross-assembly internal member
+	// without InternalsVisibleTo is not even imported into the symbol tables and surfaces as AWT108/AWT109).
 	private static void ReportInaccessibleModuleMember(ImplInfo info, List<DiagnosticInfo> diagnostics)
 		=> diagnostics.Add(new DiagnosticInfo(
 			Diagnostics.InaccessibleModuleMember,

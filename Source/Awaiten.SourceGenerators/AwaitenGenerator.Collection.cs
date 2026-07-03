@@ -9,7 +9,7 @@ partial class AwaitenGenerator
 {
 	private static (List<RawRegistration> Raw, HashSet<string> ConstraintRejectedServices) Collect(
 		INamedTypeSymbol containerSymbol,
-		List<INamedTypeSymbol> modules,
+		List<ImportedModule> modules,
 		Compilation compilation,
 		bool importServices,
 		List<DiagnosticInfo> diagnostics)
@@ -25,14 +25,14 @@ partial class AwaitenGenerator
 		// expanded into concrete closed registrations on demand (see ExpandOpenGenerics).
 		List<OpenRegistration> open = new();
 
-		CollectLifetimeRegistrations(containerSymbol, result, open, diagnostics, origin: null);
+		CollectLifetimeRegistrations(containerSymbol, result, open, diagnostics, origin: null, fallbackLocation: null);
 
 		// [Import(typeof(Module))] pulls a module's registrations in after the container's own, so the
 		// container wins ties and a module's overridable defaults (Default/TryAdd) only fill the gaps it
 		// leaves. Resolved one level deep - a module's own [Import] is not followed.
-		foreach (INamedTypeSymbol module in modules)
+		foreach (ImportedModule module in modules)
 		{
-			CollectLifetimeRegistrations(module, result, open, diagnostics, origin: module);
+			CollectLifetimeRegistrations(module.Symbol, result, open, diagnostics, origin: module.Symbol, fallbackLocation: module.ImportLocation);
 		}
 
 		// Assembly scanning contributes overridable registrations for every concrete type assignable to a
@@ -69,13 +69,17 @@ partial class AwaitenGenerator
 	///     <paramref name="origin" /> is the imported module being read (<see langword="null" /> for the
 	///     container itself), recorded on each registration so a module's <c>Factory</c>/<c>Instance</c>
 	///     member resolves against the module rather than the container.
+	///     <paramref name="fallbackLocation" /> is the container's <c>[Import]</c> location, used for a
+	///     module compiled into a referenced assembly whose attributes have no syntax to point at - its
+	///     diagnostics then point at the import instead of having no location at all.
 	/// </summary>
 	private static void CollectLifetimeRegistrations(
 		INamedTypeSymbol symbol,
 		List<RawRegistration> result,
 		List<OpenRegistration> open,
 		List<DiagnosticInfo> diagnostics,
-		INamedTypeSymbol? origin)
+		INamedTypeSymbol? origin,
+		Location? fallbackLocation)
 	{
 		foreach (AttributeData attribute in symbol.GetAttributes())
 		{
@@ -122,7 +126,7 @@ partial class AwaitenGenerator
 			bool isDefault = NamedFlag(attribute, "Default");
 			bool weak = isDefault || NamedFlag(attribute, "TryAdd");
 
-			Location? location = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation();
+			Location? location = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? fallbackLocation;
 			result.Add(new RawRegistration(
 				service.ToDisplayString(FullyQualified),
 				implementation.ToDisplayString(FullyQualified),
@@ -147,9 +151,9 @@ partial class AwaitenGenerator
 	///     declares no registrations is reported as contributing nothing (AWT151). Only the container's own
 	///     imports are read; a module's imports are not followed.
 	/// </summary>
-	private static List<INamedTypeSymbol> CollectImportedModules(INamedTypeSymbol containerSymbol, List<DiagnosticInfo> diagnostics)
+	private static List<ImportedModule> CollectImportedModules(INamedTypeSymbol containerSymbol, List<DiagnosticInfo> diagnostics)
 	{
-		List<INamedTypeSymbol> modules = new();
+		List<ImportedModule> modules = new();
 		foreach (AttributeData attribute in containerSymbol.GetAttributes())
 		{
 			if (attribute.AttributeClass is not { Name: "ImportAttribute", } attributeClass
@@ -170,8 +174,10 @@ partial class AwaitenGenerator
 			}
 
 			// Every module diagnostic points at the container's [Import] - the line the author actually wrote -
-			// rather than at the module declaration, which may live in another file.
-			LocationInfo? location = LocationInfo.From(attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation());
+			// rather than at the module declaration, which may live in another file (or, for a module compiled
+			// into a referenced assembly, in no source at all).
+			Location? importLocation = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation();
+			LocationInfo? location = LocationInfo.From(importLocation);
 			ImmutableArray<AttributeData> moduleAttributes = module.GetAttributes();
 			string moduleName = Display(module.ToDisplayString(FullyQualified));
 
@@ -219,7 +225,7 @@ partial class AwaitenGenerator
 					Diagnostics.EmptyModule, location, new EquatableArray<string>([moduleName,])));
 			}
 
-			modules.Add(module);
+			modules.Add(new ImportedModule(module, importLocation));
 		}
 
 		return modules;
@@ -252,20 +258,22 @@ partial class AwaitenGenerator
 	///     The attributes of the container followed by those of its imported modules, in import order - the
 	///     shared enumeration for readers that accept module contributions (<c>[Decorate]</c>,
 	///     <c>[Composite]</c>), so the container's declarations always precede a module's and an earlier
-	///     import's precede a later one's.
+	///     import's precede a later one's. Each attribute is paired with a fallback location (the module's
+	///     <c>[Import]</c>) for attributes read from a referenced assembly, which have no syntax of their own.
 	/// </summary>
-	private static IEnumerable<AttributeData> AttributesOf(INamedTypeSymbol containerSymbol, List<INamedTypeSymbol> modules)
+	private static IEnumerable<(AttributeData Attribute, Location? FallbackLocation)> AttributesOf(
+		INamedTypeSymbol containerSymbol, List<ImportedModule> modules)
 	{
 		foreach (AttributeData attribute in containerSymbol.GetAttributes())
 		{
-			yield return attribute;
+			yield return (attribute, null);
 		}
 
-		foreach (INamedTypeSymbol module in modules)
+		foreach (ImportedModule module in modules)
 		{
-			foreach (AttributeData attribute in module.GetAttributes())
+			foreach (AttributeData attribute in module.Symbol.GetAttributes())
 			{
-				yield return attribute;
+				yield return (attribute, module.ImportLocation);
 			}
 		}
 	}
@@ -295,10 +303,10 @@ partial class AwaitenGenerator
 	///     from the lifetime registrations because a decorator wraps an existing registration after coalescing
 	///     rather than introducing a new service.
 	/// </summary>
-	private static List<DecorateRegistration> CollectDecorators(INamedTypeSymbol containerSymbol, List<INamedTypeSymbol> modules)
+	private static List<DecorateRegistration> CollectDecorators(INamedTypeSymbol containerSymbol, List<ImportedModule> modules)
 	{
 		List<DecorateRegistration> result = new();
-		foreach (AttributeData attribute in AttributesOf(containerSymbol, modules))
+		foreach ((AttributeData attribute, Location? fallbackLocation) in AttributesOf(containerSymbol, modules))
 		{
 			if (attribute.AttributeClass is not { Name: "DecorateAttribute", IsGenericType: true, TypeArguments.Length: 2, } attributeClass
 			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace
@@ -323,7 +331,7 @@ partial class AwaitenGenerator
 				decorator,
 				order,
 				result.Count,
-				attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation()));
+				attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? fallbackLocation));
 		}
 
 		return result;
@@ -337,10 +345,10 @@ partial class AwaitenGenerator
 	///     type parameters are ordered composite-first to match <c>[Decorate&lt;TDecorator, TService&gt;]</c> and
 	///     the lifetime attributes.
 	/// </summary>
-	private static List<CompositeRegistration> CollectComposites(INamedTypeSymbol containerSymbol, List<INamedTypeSymbol> modules)
+	private static List<CompositeRegistration> CollectComposites(INamedTypeSymbol containerSymbol, List<ImportedModule> modules)
 	{
 		List<CompositeRegistration> result = new();
-		foreach (AttributeData attribute in AttributesOf(containerSymbol, modules))
+		foreach ((AttributeData attribute, Location? fallbackLocation) in AttributesOf(containerSymbol, modules))
 		{
 			if (attribute.AttributeClass is not { Name: "CompositeAttribute", IsGenericType: true, TypeArguments.Length: 2, } attributeClass
 			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace
@@ -367,7 +375,7 @@ partial class AwaitenGenerator
 				service,
 				composite,
 				lifetime,
-				attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation()));
+				attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? fallbackLocation));
 		}
 
 		return result;

@@ -208,7 +208,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		// The imported modules, resolved once and threaded everywhere module attributes contribute: lifetime
 		// registrations, decorators, composites and [ImportServices]. Import validation (AWT149-152, AWT154)
 		// is reported while collecting them.
-		List<INamedTypeSymbol> modules = CollectImportedModules(containerSymbol, diagnostics);
+		List<ImportedModule> modules = CollectImportedModules(containerSymbol, diagnostics);
 
 		// [ImportServices]: any otherwise-unresolved direct dependency falls through to the external provider
 		// instead of being reported as missing (AWT101), the blanket form of per-parameter [FromServices].
@@ -217,7 +217,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		// BuildInstance must all scan the same constructor the emitted container builds through. A module can
 		// contribute it too: its registrations may rely on externally provided dependencies.
 		bool importServices = ContainerImportsServices(containerSymbol)
-		                      || modules.Any(module => HasAwaitenAttribute(module.GetAttributes(), "ImportServicesAttribute"));
+		                      || modules.Any(module => HasAwaitenAttribute(module.Symbol.GetAttributes(), "ImportServicesAttribute"));
 
 		// Collect also expands the container's [Scan]s into overridable registrations (IsScan), ordered after
 		// the explicit ones so coalescing lets an explicit registration win single resolution while every match

@@ -19,6 +19,40 @@ public static class Generator
 	];
 
 	public static GeneratorResult Run([StringSyntax("c#-test")] string source, params Type[] assemblyTypes)
+		=> Run(source, additionalReferences: [], assemblyTypes);
+
+	/// <summary>
+	///     Runs the generator over <paramref name="source" /> with <paramref name="referencedSource" />
+	///     compiled into a separate referenced assembly first - for cross-assembly scenarios such as a
+	///     <c>[Module]</c> living in another project.
+	/// </summary>
+	public static GeneratorResult RunWithReferencedAssembly(
+		[StringSyntax("c#-test")] string referencedSource,
+		[StringSyntax("c#-test")] string source)
+	{
+		CSharpParseOptions parseOptions = new(LanguageVersion.Latest);
+		CSharpCompilation referenced = CSharpCompilation.Create(
+			"ReferencedAssembly",
+			[CSharpSyntaxTree.ParseText(referencedSource, parseOptions),],
+			References.For([]),
+			new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+
+		using System.IO.MemoryStream stream = new();
+		Microsoft.CodeAnalysis.Emit.EmitResult emitted = referenced.Emit(stream);
+		if (!emitted.Success)
+		{
+			throw new InvalidOperationException(
+				"The referenced assembly does not compile: "
+				+ string.Join(Environment.NewLine, emitted.Diagnostics.Select(d => d.ToString())));
+		}
+
+		return Run(source, [MetadataReference.CreateFromImage(stream.ToArray()),]);
+	}
+
+	private static GeneratorResult Run(
+		[StringSyntax("c#-test")] string source,
+		MetadataReference[] additionalReferences,
+		params Type[] assemblyTypes)
 	{
 		AwaitenGenerator generator = new();
 		CSharpParseOptions parseOptions = new(LanguageVersion.Latest);
@@ -27,7 +61,7 @@ public static class Generator
 		CSharpCompilation compilation = CSharpCompilation.Create(
 			"TestAssembly",
 			syntaxTrees,
-			References.For(assemblyTypes),
+			[..References.For(assemblyTypes), ..additionalReferences,],
 			new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 
 		GeneratorDriver driver = CSharpGeneratorDriver.Create(

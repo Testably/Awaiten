@@ -756,10 +756,12 @@ internal static class Diagnostics
 
 	/// <summary>
 	///     A module registration's <c>Factory</c>/<c>Instance</c> member exists on the module but is not
-	///     accessible from the generated container (it is private, or internal in another assembly without
-	///     <c>InternalsVisibleTo</c>). Unlike the container's own members - which the generated partial can
-	///     reach at any accessibility - a module's members are called from outside the module, so they must
-	///     be public, or internal within the container's assembly (or an assembly granting it internals).
+	///     accessible from the generated container (e.g. a private member of a source module). Unlike the
+	///     container's own members - which the generated partial can reach at any accessibility - a module's
+	///     members are called from outside the module, so they must be public, or internal within the
+	///     container's assembly (or one granting it internals). An internal member of another assembly
+	///     without <c>InternalsVisibleTo</c> is not even imported into the compilation's symbol tables, so
+	///     that case surfaces as the not-found AWT108/AWT109 instead.
 	/// </summary>
 	public static readonly DiagnosticDescriptor InaccessibleModuleMember = new(
 		"AWT153",

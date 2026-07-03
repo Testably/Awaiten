@@ -47,6 +47,18 @@ internal sealed record RawRegistration(
 	INamedTypeSymbol? Origin = null);
 
 /// <summary>
+///     An imported module: its symbol and the location of the container's <c>[Import]</c> attribute that
+///     pulled it in. The location doubles as the diagnostic fallback for module attributes read from a
+///     referenced assembly, which carry no syntax of their own.
+/// </summary>
+/// <remarks>
+///     Like <see cref="RawRegistration" /> this is an intermediate type consumed within a single analysis
+///     pass, so it carries the live Roslyn <see cref="Location" /> and never flows through the generator's
+///     incremental cache.
+/// </remarks>
+internal sealed record ImportedModule(INamedTypeSymbol Symbol, Location? ImportLocation);
+
+/// <summary>
 ///     A single <c>[Decorate&lt;TDecorator, TService&gt;]</c> registration read from a container: the
 ///     decorated service type name, the service and decorator symbols, the requested chain
 ///     <see cref="Order" />, and the declaration index used to break ties between equal orders (so
