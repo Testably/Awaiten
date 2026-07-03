@@ -5,6 +5,13 @@
 		<ProjectReference Include="..\..\Source\Awaiten\Awaiten.csproj" />
 	</ItemGroup>
 
+	<!-- The Microsoft.Extensions.DependencyInjection bridge and its ASP.NET Core hosting examples exist only on
+	     .NET (net8.0+); net48 binds the netstandard2.0 asset of Awaiten and carries none of these. -->
+	<ItemGroup Condition="'$(TargetFramework)' != 'net48'">
+		<ProjectReference Include="..\..\Source\Awaiten.Extensions.DependencyInjection\Awaiten.Extensions.DependencyInjection.csproj" />
+		<FrameworkReference Include="Microsoft.AspNetCore.App" />
+	</ItemGroup>
+
 	<ItemGroup>
 		<PackageReference Include="IsExternalInit">
 			<PrivateAssets>all</PrivateAssets>
