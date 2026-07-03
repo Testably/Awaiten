@@ -106,6 +106,125 @@ internal static class ContainerRegistrations
 	}
 
 	/// <summary>
+	///     Expands each <c>[Scan]</c> on the container into an overridable self-registration for every concrete
+	///     class in the container's assembly assignable to the scanned marker, skipping abstract/static classes,
+	///     the marker itself, and any implementation already in <paramref name="existing" /> (so an explicit
+	///     registration wins). Reports AWT136 when a scan matches no concrete type.
+	/// </summary>
+	public static List<RawRegistration> CollectScans(
+		INamedTypeSymbol containerSymbol,
+		Compilation compilation,
+		IReadOnlyList<RawRegistration> existing,
+		List<DiagnosticInfo> diagnostics)
+	{
+		List<RawRegistration> result = new();
+
+		// Implementations already registered win over a scan match: an explicit registration takes precedence,
+		// and two scans never register the same type twice. Seeded from the existing registrations and grown as
+		// matches are taken.
+		HashSet<string> registered = new(StringComparer.Ordinal);
+		foreach (RawRegistration registration in existing)
+		{
+			registered.Add(registration.ImplementationType);
+		}
+
+		foreach (AttributeData attribute in containerSymbol.GetAttributes())
+		{
+			if (attribute.AttributeClass is not { Name: "ScanAttribute", } attributeClass
+			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace
+			    || attribute.ConstructorArguments.Length != 1
+			    || attribute.ConstructorArguments[0].Value is not INamedTypeSymbol marker)
+			{
+				continue;
+			}
+
+			Lifetime lifetime = ScanLifetime(attribute);
+			Location? location = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation();
+
+			// Count every assignable match, even one already registered: an overridden match still means the
+			// scan found something, so AWT136 fires only when the marker truly matches nothing.
+			int matched = 0;
+			foreach (INamedTypeSymbol type in EnumerateTypes(compilation.Assembly.GlobalNamespace))
+			{
+				if (type is not { TypeKind: TypeKind.Class, IsAbstract: false, IsStatic: false, IsImplicitClass: false, }
+				    || SymbolEqualityComparer.Default.Equals(type, marker)
+				    || !compilation.HasImplicitConversion(type, marker))
+				{
+					continue;
+				}
+
+				matched++;
+				string typeName = type.ToDisplayString(FullyQualified);
+				if (registered.Add(typeName))
+				{
+					result.Add(new RawRegistration(typeName, typeName, lifetime, type, location));
+				}
+			}
+
+			if (matched == 0)
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.ScanMatchedNothing,
+					LocationInfo.From(location),
+					new EquatableArray<string>([
+						AwaitenGenerator.Display(marker.ToDisplayString(FullyQualified)),
+					])));
+			}
+		}
+
+		return result;
+	}
+
+	// The lifetime named on a [Scan] (Lifetime = AwaitenLifetime.X); its underlying int lines up with the
+	// generator's Lifetime enum. Defaults to Transient when unset, matching the attribute default.
+	private static Lifetime ScanLifetime(AttributeData attribute)
+	{
+		foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
+		{
+			if (argument.Key == "Lifetime" && argument.Value.Value is int value)
+			{
+				return (Lifetime)value;
+			}
+		}
+
+		return Lifetime.Transient;
+	}
+
+	// Every named type in an assembly, walking nested types and child namespaces, so a [Scan] can consider
+	// every concrete class the container's assembly declares.
+	private static IEnumerable<INamedTypeSymbol> EnumerateTypes(INamespaceSymbol ns)
+	{
+		foreach (INamedTypeSymbol type in ns.GetTypeMembers())
+		{
+			yield return type;
+			foreach (INamedTypeSymbol nested in EnumerateNested(type))
+			{
+				yield return nested;
+			}
+		}
+
+		foreach (INamespaceSymbol child in ns.GetNamespaceMembers())
+		{
+			foreach (INamedTypeSymbol type in EnumerateTypes(child))
+			{
+				yield return type;
+			}
+		}
+	}
+
+	private static IEnumerable<INamedTypeSymbol> EnumerateNested(INamedTypeSymbol type)
+	{
+		foreach (INamedTypeSymbol nested in type.GetTypeMembers())
+		{
+			yield return nested;
+			foreach (INamedTypeSymbol deeper in EnumerateNested(nested))
+			{
+				yield return deeper;
+			}
+		}
+	}
+
+	/// <summary>
 	///     Reads the <c>[Decorate&lt;TDecorator, TService&gt;]</c> registrations declared on a container, in
 	///     declaration order. Each carries its declaration index so equal <c>Order</c> values fall back to
 	///     declaration order when the chain is built. Collected apart from the lifetime registrations because a

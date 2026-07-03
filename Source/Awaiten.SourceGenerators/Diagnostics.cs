@@ -534,4 +534,16 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A <c>[Scan]</c> matched no concrete type assignable to its marker in the container's assembly, so
+	///     the scan contributes nothing - usually a typo in the marker or an empty marker.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ScanMatchedNothing = new(
+		"AWT138",
+		"Assembly scan matched nothing",
+		"No concrete types assignable to '{0}' were found in this assembly to register",
+		"Awaiten",
+		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true);
 }

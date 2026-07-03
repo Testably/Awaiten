@@ -238,6 +238,12 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		bool importServices = ContainerImportsServices(containerSymbol);
 
 		(List<RawRegistration> raw, HashSet<string> constraintRejected) = ContainerRegistrations.Collect(containerSymbol, importServices, diagnostics);
+
+		// Assembly scanning contributes an overridable self-registration for every concrete type in the
+		// container's assembly assignable to a [Scan] marker. A match whose implementation is already registered
+		// (explicitly, or by an earlier scan) is skipped, so explicit registrations take precedence.
+		raw.AddRange(ContainerRegistrations.CollectScans(containerSymbol, compilation, raw, diagnostics));
+
 		List<DecorateRegistration> decorators = ContainerRegistrations.CollectDecorators(containerSymbol);
 		List<CompositeRegistration> composites = ContainerRegistrations.CollectComposites(containerSymbol);
 

@@ -132,6 +132,13 @@ namespace Awaiten
         public System.Threading.Tasks.ValueTask DisposeAsync() { }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
+    public sealed class ScanAttribute : System.Attribute
+    {
+        public ScanAttribute(System.Type assignableTo) { }
+        public System.Type AssignableTo { get; }
+        public Awaiten.AwaitenLifetime Lifetime { get; set; }
+    }
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
     public sealed class ScopedAttribute : System.Attribute
     {
         public ScopedAttribute(System.Type implementation) { }
