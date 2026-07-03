@@ -150,6 +150,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Jul 3 14:57:47 2026 \u002B0200",
         "message": "docs: add ASP.NET Core and standalone examples for the MS.DI bridge (#45)"
+      },
+      {
+        "sha": "5b468bae4b1cd8e6c4e4d3f2a8eaeafc95407a0e",
+        "author": "Valentin Breu\u00DF",
+        "date": "Fri Jul 3 15:37:13 2026 \u002B0200",
+        "message": "feat: front a service\u0027s registrations with a single fan-out fa\u00E7ade via \u0060[Composite\u003CTComposite, TService\u003E]\u0060 (#46)"
       }
     ],
     "labels": [
@@ -177,7 +183,8 @@ window.BENCHMARK_DATA = {
       "8218b8c5",
       "5705ed1a",
       "e9cb6ad0",
-      "53f93c0f"
+      "53f93c0f",
+      "5b468bae"
     ],
     "datasets": [
       {
@@ -208,7 +215,8 @@ window.BENCHMARK_DATA = {
           13.88274703671535,
           7.469830794976308,
           7.74144422262907,
-          8.327495347460111
+          8.327495347460111,
+          8.177118333322662
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -220,6 +228,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -283,7 +292,8 @@ window.BENCHMARK_DATA = {
           7.689638987183571,
           7.258440149681909,
           8.935732994476954,
-          10.289790589610735
+          10.289790589610735,
+          8.005860907832782
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -295,6 +305,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -358,7 +369,8 @@ window.BENCHMARK_DATA = {
           105.08354619833139,
           135.08744626778824,
           118.4178888286863,
-          114.87640076478323
+          114.87640076478323,
+          149.79166385332744
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -370,6 +382,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -433,7 +446,8 @@ window.BENCHMARK_DATA = {
           0.961176974432809,
           3.1347331230839095,
           2.921686275303364,
-          2.579914105931918
+          2.579914105931918,
+          2.786118009792907
         ],
         "borderColor": "#4A6FA5",
         "backgroundColor": "#4A6FA5",
@@ -445,6 +459,7 @@ window.BENCHMARK_DATA = {
         "label": "Jab memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -508,7 +523,8 @@ window.BENCHMARK_DATA = {
           5.436566989009197,
           5.469818305756364,
           5.423795156180859,
-          5.124915133629527
+          5.124915133629527,
+          5.467773071848429
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
@@ -520,6 +536,7 @@ window.BENCHMARK_DATA = {
         "label": "PureDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -579,7 +596,8 @@ window.BENCHMARK_DATA = {
           9.06794692690556,
           8.754344298289372,
           9.391165431056704,
-          8.570835794011751
+          8.570835794011751,
+          8.724456899932452
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -591,6 +609,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -646,7 +665,8 @@ window.BENCHMARK_DATA = {
           11.196369646986325,
           10.733123080088543,
           10.949953248867622,
-          11.267849479730312
+          11.267849479730312,
+          10.985559885318462
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -658,6 +678,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -1009,6 +1030,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Jul 3 14:57:47 2026 \u002B0200",
         "message": "docs: add ASP.NET Core and standalone examples for the MS.DI bridge (#45)"
+      },
+      {
+        "sha": "5b468bae4b1cd8e6c4e4d3f2a8eaeafc95407a0e",
+        "author": "Valentin Breu\u00DF",
+        "date": "Fri Jul 3 15:37:13 2026 \u002B0200",
+        "message": "feat: front a service\u0027s registrations with a single fan-out fa\u00E7ade via \u0060[Composite\u003CTComposite, TService\u003E]\u0060 (#46)"
       }
     ],
     "labels": [
@@ -1036,7 +1063,8 @@ window.BENCHMARK_DATA = {
       "8218b8c5",
       "5705ed1a",
       "e9cb6ad0",
-      "53f93c0f"
+      "53f93c0f",
+      "5b468bae"
     ],
     "datasets": [
       {
@@ -1067,7 +1095,8 @@ window.BENCHMARK_DATA = {
           1295.7172000591572,
           8.440402075648308,
           8.843668661438501,
-          8.792413794568606
+          8.792413794568606,
+          8.715324146243242
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -1079,6 +1108,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -1142,7 +1172,8 @@ window.BENCHMARK_DATA = {
           7.903934893012047,
           7.2244866107191354,
           8.025128786762556,
-          8.659519016742706
+          8.659519016742706,
+          7.863908431927363
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -1154,6 +1185,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -1217,7 +1249,8 @@ window.BENCHMARK_DATA = {
           112.96804428100586,
           138.2971333357004,
           113.71525398095449,
-          112.83845226253781
+          112.83845226253781,
+          167.2363512357076
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -1229,6 +1262,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -1292,7 +1326,8 @@ window.BENCHMARK_DATA = {
           1.535699951534088,
           42.6658488043717,
           42.78241644586836,
-          46.606805354356766
+          46.606805354356766,
+          42.68302486737569
         ],
         "borderColor": "#4A6FA5",
         "backgroundColor": "#4A6FA5",
@@ -1304,6 +1339,7 @@ window.BENCHMARK_DATA = {
         "label": "Jab memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -1367,7 +1403,8 @@ window.BENCHMARK_DATA = {
           7.331576354801655,
           8.284545916318894,
           7.3298963116747995,
-          7.840676928559939
+          7.840676928559939,
+          8.261155899900656
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
@@ -1379,6 +1416,7 @@ window.BENCHMARK_DATA = {
         "label": "PureDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -1438,7 +1476,8 @@ window.BENCHMARK_DATA = {
           9.027218705664078,
           8.71567962105785,
           9.333782906715687,
-          8.359702853361766
+          8.359702853361766,
+          8.764285535684653
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -1450,6 +1489,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -1505,7 +1545,8 @@ window.BENCHMARK_DATA = {
           14.64560991869523,
           14.293798139052731,
           14.6501855691274,
-          15.003055942058563
+          15.003055942058563,
+          14.656829433945509
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -1517,6 +1558,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -1701,6 +1743,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Jul 3 14:57:47 2026 \u002B0200",
         "message": "docs: add ASP.NET Core and standalone examples for the MS.DI bridge (#45)"
+      },
+      {
+        "sha": "5b468bae4b1cd8e6c4e4d3f2a8eaeafc95407a0e",
+        "author": "Valentin Breu\u00DF",
+        "date": "Fri Jul 3 15:37:13 2026 \u002B0200",
+        "message": "feat: front a service\u0027s registrations with a single fan-out fa\u00E7ade via \u0060[Composite\u003CTComposite, TService\u003E]\u0060 (#46)"
       }
     ],
     "labels": [
@@ -1728,7 +1776,8 @@ window.BENCHMARK_DATA = {
       "8218b8c5",
       "5705ed1a",
       "e9cb6ad0",
-      "53f93c0f"
+      "53f93c0f",
+      "5b468bae"
     ],
     "datasets": [
       {
@@ -1759,7 +1808,8 @@ window.BENCHMARK_DATA = {
           16.982247918844223,
           20.565096275011697,
           17.02897602532591,
-          18.356703317165376
+          18.356703317165376,
+          12.848464790980021
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -1779,6 +1829,7 @@ window.BENCHMARK_DATA = {
           160,
           32,
           32,
+          136,
           136,
           136,
           136,
@@ -1834,7 +1885,8 @@ window.BENCHMARK_DATA = {
           1540.4605482646398,
           1629.6297756830852,
           1653.1158456166586,
-          1678.2765712738037
+          1678.2765712738037,
+          1166.597483698527
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -1846,6 +1898,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          5688,
           5688,
           5688,
           5688,
@@ -1909,7 +1962,8 @@ window.BENCHMARK_DATA = {
           29413.142496744793,
           24116.82841796875,
           24555.878295898438,
-          31734.379801432293
+          31734.379801432293,
+          26066.808040364584
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -1945,6 +1999,7 @@ window.BENCHMARK_DATA = {
           33098,
           33094,
           33092,
+          33094,
           33094
         ],
         "borderColor": "#5E2750",
@@ -1984,7 +2039,8 @@ window.BENCHMARK_DATA = {
           11.171736537416775,
           12.137438577413558,
           9.821586341659229,
-          11.047941998640697
+          11.047941998640697,
+          6.50927542575768
         ],
         "borderColor": "#4A6FA5",
         "backgroundColor": "#4A6FA5",
@@ -2018,6 +2074,7 @@ window.BENCHMARK_DATA = {
           96,
           96,
           32,
+          96,
           96,
           96,
           96
@@ -2059,7 +2116,8 @@ window.BENCHMARK_DATA = {
           15.309284814198811,
           18.725221016009648,
           16.434984815120696,
-          18.573270879189174
+          18.573270879189174,
+          12.260745193277087
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
@@ -2071,6 +2129,7 @@ window.BENCHMARK_DATA = {
         "label": "PureDI memory",
         "unit": "b",
         "data": [
+          128,
           128,
           128,
           128,
@@ -2130,7 +2189,8 @@ window.BENCHMARK_DATA = {
           712.093572362264,
           736.214728418986,
           750.3335794448852,
-          861.4833902359009
+          861.4833902359009,
+          603.9107070650373
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -2160,6 +2220,7 @@ window.BENCHMARK_DATA = {
           1472,
           1472,
           1472,
+          1528,
           1528,
           1528,
           1528
@@ -2197,7 +2258,8 @@ window.BENCHMARK_DATA = {
           11863.90752704327,
           12936.861080714634,
           12341.100021362305,
-          13868.824381510416
+          13868.824381510416,
+          9025.465021405902
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -2229,6 +2291,7 @@ window.BENCHMARK_DATA = {
           24760,
           24761,
           24761,
+          24760,
           24760
         ],
         "borderColor": "#43A047",
@@ -2560,6 +2623,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Jul 3 14:57:47 2026 \u002B0200",
         "message": "docs: add ASP.NET Core and standalone examples for the MS.DI bridge (#45)"
+      },
+      {
+        "sha": "5b468bae4b1cd8e6c4e4d3f2a8eaeafc95407a0e",
+        "author": "Valentin Breu\u00DF",
+        "date": "Fri Jul 3 15:37:13 2026 \u002B0200",
+        "message": "feat: front a service\u0027s registrations with a single fan-out fa\u00E7ade via \u0060[Composite\u003CTComposite, TService\u003E]\u0060 (#46)"
       }
     ],
     "labels": [
@@ -2587,7 +2656,8 @@ window.BENCHMARK_DATA = {
       "8218b8c5",
       "5705ed1a",
       "e9cb6ad0",
-      "53f93c0f"
+      "53f93c0f",
+      "5b468bae"
     ],
     "datasets": [
       {
@@ -2618,7 +2688,8 @@ window.BENCHMARK_DATA = {
           90.0561962212835,
           130.31798241535822,
           116.84006583690643,
-          152.81688194274903
+          152.81688194274903,
+          63.82617916510655
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -2638,6 +2709,7 @@ window.BENCHMARK_DATA = {
           2144,
           32,
           32,
+          2120,
           2120,
           2120,
           2120,
@@ -2693,7 +2765,8 @@ window.BENCHMARK_DATA = {
           14435.218295506069,
           15766.673126220703,
           14515.431002807618,
-          16752.940006510416
+          16752.940006510416,
+          10753.644312177386
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -2705,6 +2778,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          61016,
           61016,
           61016,
           61016,
@@ -2768,7 +2842,8 @@ window.BENCHMARK_DATA = {
           691177.3363560268,
           563657.7147739956,
           576724.550920759,
-          765474.7381510417
+          765474.7381510417,
+          633869.7107872596
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -2804,7 +2879,8 @@ window.BENCHMARK_DATA = {
           720530,
           736616,
           736754,
-          720872
+          720872,
+          739293
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -2843,7 +2919,8 @@ window.BENCHMARK_DATA = {
           9.643098636397294,
           120.15783637364706,
           105.2857757806778,
-          98.72599153518676
+          98.72599153518676,
+          52.11083270953252
         ],
         "borderColor": "#4A6FA5",
         "backgroundColor": "#4A6FA5",
@@ -2877,6 +2954,7 @@ window.BENCHMARK_DATA = {
           2080,
           2080,
           32,
+          2080,
           2080,
           2080,
           2080
@@ -2918,7 +2996,8 @@ window.BENCHMARK_DATA = {
           80.54948471387227,
           135.21918168067933,
           113.17127866404397,
-          105.548047210489
+          105.548047210489,
+          59.56136907849993
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
@@ -2930,6 +3009,7 @@ window.BENCHMARK_DATA = {
         "label": "PureDI memory",
         "unit": "b",
         "data": [
+          2112,
           2112,
           2112,
           2112,
@@ -2989,7 +3069,8 @@ window.BENCHMARK_DATA = {
           43725.72192789714,
           43420.80545654297,
           41547.788736979164,
-          46420.27707926432
+          46420.27707926432,
+          36528.96575458233
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -3021,7 +3102,8 @@ window.BENCHMARK_DATA = {
           81808,
           79819,
           79820,
-          80103
+          80103,
+          80320
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -3056,7 +3138,8 @@ window.BENCHMARK_DATA = {
           357471.60615234374,
           382082.67693219864,
           351472.77740885416,
-          384860.4493489583
+          384860.4493489583,
+          276953.1759905134
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -3088,7 +3171,8 @@ window.BENCHMARK_DATA = {
           573107,
           572317,
           572241,
-          573092
+          573092,
+          573072
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -3228,6 +3312,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Jul 3 14:57:47 2026 \u002B0200",
         "message": "docs: add ASP.NET Core and standalone examples for the MS.DI bridge (#45)"
+      },
+      {
+        "sha": "5b468bae4b1cd8e6c4e4d3f2a8eaeafc95407a0e",
+        "author": "Valentin Breu\u00DF",
+        "date": "Fri Jul 3 15:37:13 2026 \u002B0200",
+        "message": "feat: front a service\u0027s registrations with a single fan-out fa\u00E7ade via \u0060[Composite\u003CTComposite, TService\u003E]\u0060 (#46)"
       }
     ],
     "labels": [
@@ -3251,7 +3341,8 @@ window.BENCHMARK_DATA = {
       "8218b8c5",
       "5705ed1a",
       "e9cb6ad0",
-      "53f93c0f"
+      "53f93c0f",
+      "5b468bae"
     ],
     "datasets": [
       {
@@ -3278,7 +3369,8 @@ window.BENCHMARK_DATA = {
           279.2690004280635,
           269.4532174723489,
           202.84105886731828,
-          244.7578733444214
+          244.7578733444214,
+          245.8961887359619
         ],
         "borderColor": "#3949AB",
         "backgroundColor": "#3949AB",
@@ -3294,6 +3386,7 @@ window.BENCHMARK_DATA = {
           632,
           528,
           528,
+          560,
           560,
           560,
           560,
@@ -3345,7 +3438,8 @@ window.BENCHMARK_DATA = {
           701.0399167197091,
           588.6700119972229,
           463.90773776372276,
-          654.8369034987229
+          654.8369034987229,
+          596.1902864319937
         ],
         "borderColor": "#512BD4",
         "backgroundColor": "#512BD4",
@@ -3357,6 +3451,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          1104,
           1104,
           1104,
           1104,
@@ -3412,7 +3507,8 @@ window.BENCHMARK_DATA = {
           7337.516849517822,
           8504.894354756672,
           6555.322399139404,
-          8397.151169331868
+          8397.151169331868,
+          8110.291421156663
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -3424,6 +3520,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          13696,
           13696,
           13696,
           13696,
@@ -3478,7 +3575,8 @@ window.BENCHMARK_DATA = {
           170.36797893047333,
           213.69349513053893,
           152.55901714960734,
-          187.02172627449036
+          187.02172627449036,
+          173.5312609354655
         ],
         "borderColor": "#D9534F",
         "backgroundColor": "#D9534F",
@@ -3490,6 +3588,7 @@ window.BENCHMARK_DATA = {
         "label": "Jab memory",
         "unit": "b",
         "data": [
+          432,
           432,
           432,
           432,
@@ -3544,7 +3643,8 @@ window.BENCHMARK_DATA = {
           429.6209427629198,
           438.9184142112732,
           341.0653423945109,
-          412.59771467844644
+          412.59771467844644,
+          391.4434162889208
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -3556,6 +3656,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          944,
           944,
           944,
           944,
@@ -3611,7 +3712,8 @@ window.BENCHMARK_DATA = {
           765.562835080283,
           708.5178751627604,
           536.4301235492413,
-          739.8011684417725
+          739.8011684417725,
+          712.8054308210101
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -3623,6 +3725,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          1096,
           1096,
           1096,
           1096,
@@ -3678,7 +3781,8 @@ window.BENCHMARK_DATA = {
           197.50165632565816,
           203.7938642660777,
           147.45285935401915,
-          197.3583844502767
+          197.3583844502767,
+          172.56952585492814
         ],
         "borderColor": "#F0AD4E",
         "backgroundColor": "#F0AD4E",
@@ -3690,6 +3794,7 @@ window.BENCHMARK_DATA = {
         "label": "PureDI memory",
         "unit": "b",
         "data": [
+          632,
           632,
           632,
           632,
