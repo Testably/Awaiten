@@ -1873,9 +1873,11 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	///     Records an unkeyed collection parameter whose element is a closed generic interface (Part C), so after
 	///     the instance loop its members can be unioned with every variance-compatible registration - a collection
 	///     of <c>IHandler&lt;OrderPlaced&gt;</c> then includes a registered <c>IHandler&lt;DomainEvent&gt;</c>
-	///     (<c>in T</c>). Both the synchronous (<c>IEnumerable&lt;T&gt;</c> / <c>T[]</c>) and asynchronous
-	///     (<c>IAsyncEnumerable&lt;T&gt;</c>) shapes are captured. A keyed collection ([FromKey]) resolves only its
-	///     keyed registrations, and every variance candidate is unkeyed, so a keyed collection is left untouched.
+	///     (<c>in T</c>). The synchronous (<c>IEnumerable&lt;T&gt;</c> / <c>T[]</c>), asynchronous
+	///     (<c>IAsyncEnumerable&lt;T&gt;</c>) and awaited (<c>Task&lt;C&gt;</c>) shapes are all captured - they
+	///     share one membership per (element type, key), so the union reaches every shape alike. A keyed collection
+	///     ([FromKey]) resolves only its keyed registrations, and every variance candidate is unkeyed, so a keyed
+	///     collection is left untouched.
 	/// </summary>
 	private static void RecordRequestedCollectionElement(
 		ParameterModel parameterModel,
@@ -1884,7 +1886,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	{
 		if (variance.Candidates.Count == 0
 		    || parameterModel.Key is not null
-		    || parameterModel.Kind is not (DependencyKind.Enumerable or DependencyKind.AsyncEnumerable)
+		    || parameterModel.Kind is not (DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.AwaitedEnumerable)
 		    || CollectionElementSymbol(parameter.Type) is not { } element
 		    || !variance.CollectionSeen.Add(parameterModel.ServiceType))
 		{
@@ -2005,18 +2007,27 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 
 	/// <summary>
 	///     The element type symbol of a collection dependency - a synchronous shape (<c>T[]</c>,
-	///     <c>IEnumerable&lt;T&gt;</c> and friends) or an asynchronous one (<c>IAsyncEnumerable&lt;T&gt;</c>) -
+	///     <c>IEnumerable&lt;T&gt;</c> and friends), an asynchronous one (<c>IAsyncEnumerable&lt;T&gt;</c>) or an
+	///     awaited one (<c>Task&lt;C&gt;</c> over a synchronous shape, e.g. <c>Task&lt;IReadOnlyList&lt;T&gt;&gt;</c>) -
 	///     when that element is a named type, or <see langword="null" /> otherwise. Exactly the shapes
-	///     classification maps to <see cref="DependencyKind.Enumerable" /> / <see cref="DependencyKind.AsyncEnumerable" />
-	///     (the caller's kind gate), so no other wrapper reaches here. Used to variance-match a requested collection
-	///     element against the registered service symbols (the string-only element in the parameter model is enough
-	///     for membership, but variance needs the symbol).
+	///     classification maps to <see cref="DependencyKind.Enumerable" /> / <see cref="DependencyKind.AsyncEnumerable" /> /
+	///     <see cref="DependencyKind.AwaitedEnumerable" /> (the caller's kind gate), so no other wrapper reaches
+	///     here - in particular <c>ValueTask&lt;C&gt;</c> never classifies as a collection, matching
+	///     <see cref="TryGetAwaitedCollection" />. Used to variance-match a requested collection element against
+	///     the registered service symbols (the string-only element in the parameter model is enough for
+	///     membership, but variance needs the symbol).
 	/// </summary>
 	private static INamedTypeSymbol? CollectionElementSymbol(ITypeSymbol type)
 	{
 		if (type is IArrayTypeSymbol array)
 		{
 			return array.ElementType as INamedTypeSymbol;
+		}
+
+		// An awaited collection wraps a synchronous shape in Task<C>; recurse into the inner collection type.
+		if (IsTask(type, out ITypeSymbol awaitedCollection))
+		{
+			return CollectionElementSymbol(awaitedCollection);
 		}
 
 		if (type is INamedTypeSymbol { IsGenericType: true, TypeArguments.Length: 1, } named

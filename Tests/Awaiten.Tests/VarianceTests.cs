@@ -102,6 +102,22 @@ public partial class VarianceTests
 	}
 
 	[Fact]
+	public async Task Contravariance_AwaitedCollectionUnionsVarianceCompatibleRegistrations()
+	{
+		using AwaitedCollectionVarianceContainer.Root container = new();
+
+		// Task<IReadOnlyList<IHandler<OrderPlaced>>>: the awaited collection shares the element membership with
+		// the synchronous shapes, so the contravariant IHandler<DomainEvent> registration is unioned in behind
+		// the returned task exactly as it is for a plain IEnumerable<IHandler<OrderPlaced>>.
+		System.Collections.Generic.IReadOnlyList<IHandler<OrderPlaced>> handlers =
+			await container.Resolve<AwaitedHandlerCollectionConsumer>().Handlers;
+
+		await That(handlers.Count).IsEqualTo(2);
+		await That(handlers[0]).Is<OrderPlacedHandler>();
+		await That(handlers[1]).Is<DomainEventHandler>();
+	}
+
+	[Fact]
 	public async Task InvariantInterface_CollectionDoesNotPullInADifferentClosure()
 	{
 		using InvariantCollectionContainer.Root container = new();
@@ -429,6 +445,13 @@ public partial class VarianceTests
 		public System.Collections.Generic.IEnumerable<IHandler<OrderPlaced>> Handlers { get; }
 	}
 
+	public sealed class AwaitedHandlerCollectionConsumer
+	{
+		public AwaitedHandlerCollectionConsumer(Task<System.Collections.Generic.IReadOnlyList<IHandler<OrderPlaced>>> handlers) => Handlers = handlers;
+
+		public Task<System.Collections.Generic.IReadOnlyList<IHandler<OrderPlaced>>> Handlers { get; }
+	}
+
 	public sealed class DomainFactoryCollectionConsumer
 	{
 		public DomainFactoryCollectionConsumer(System.Collections.Generic.IEnumerable<IFactory<DomainEvent>> factories) => Factories = factories;
@@ -470,6 +493,12 @@ public partial class VarianceTests
 	[Transient<DomainEventHandler, IHandler<DomainEvent>>]
 	[Transient<OrderHandlerCollectionConsumer>]
 	public static partial class ContravariantCollectionContainer;
+
+	[Container]
+	[Transient<OrderPlacedHandler, IHandler<OrderPlaced>>]
+	[Transient<DomainEventHandler, IHandler<DomainEvent>>]
+	[Transient<AwaitedHandlerCollectionConsumer>]
+	public static partial class AwaitedCollectionVarianceContainer;
 
 	[Container]
 	[Transient<DomainEventHandler, IHandler<DomainEvent>>]
