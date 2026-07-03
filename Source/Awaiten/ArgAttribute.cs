@@ -10,5 +10,5 @@ namespace Awaiten;
 ///     arguments, matched positionally to the marked parameters (by the parameter's own declared type).
 ///     The remaining parameters are resolved from the graph as usual.
 /// </summary>
-[AttributeUsage(AttributeTargets.Parameter, AllowMultiple = false, Inherited = false)]
+[AttributeUsage(AttributeTargets.Parameter | AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
 public sealed class ArgAttribute : Attribute;

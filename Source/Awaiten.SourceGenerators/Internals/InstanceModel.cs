@@ -26,6 +26,9 @@ namespace Awaiten.SourceGenerators.Internals;
 ///     resolver then tracks the realized instance for disposal behind a runtime <c>is IDisposable</c> test,
 ///     rather than trusting <see cref="IsDisposable" /> (which only sees the declared type and would leak a
 ///     disposable hidden behind a non-disposable service interface).
+///     <see cref="InjectedMembers" /> are the opt-in <c>[Inject]</c> properties filled through an object
+///     initializer after construction (empty for a factory- or pre-built-instance registration, which is
+///     produced whole by its source); each is a graph edge exactly like a constructor parameter.
 /// </summary>
 internal sealed record InstanceModel(
 	string ImplementationType,
@@ -42,7 +45,8 @@ internal sealed record InstanceModel(
 	bool IsAsyncFactory = false,
 	bool RuntimeDisposalCheck = false,
 	bool IsAsyncDisposable = false,
-	string? EmitType = null)
+	string? EmitType = null,
+	EquatableArray<MemberModel> InjectedMembers = default)
 {
 	/// <summary>
 	///     The concrete type to construct (<c>new …</c>) and to use for cache fields and resolver return
