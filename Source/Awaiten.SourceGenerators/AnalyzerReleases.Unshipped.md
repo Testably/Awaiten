@@ -53,3 +53,4 @@
  AWT149  | Awaiten   | Error    | An [Import] names a type that is not marked [Module]
  AWT150  | Awaiten   | Error    | An imported module has its own [Import], which is not followed
  AWT151  | Awaiten   | Warning  | An imported module declares no registrations
+ AWT152  | Awaiten   | Error    | An imported [Module] class is not declared static

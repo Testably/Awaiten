@@ -178,8 +178,17 @@ partial class AwaitenGenerator
 				continue;
 			}
 
-			// AWT150: a module's own [Import] is not followed, so warn that the nested module's registrations
-			// are not pulled in transitively - the container must import the nested module directly.
+			// AWT152: like a container, a module is a pure definition (registrations plus static factory and
+			// instance members) and is never instantiated, so it must be a static class - mirroring AWT116.
+			// The module is still imported, so its registrations do not additionally cascade as missing.
+			if (!module.IsStatic)
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.NonStaticModule, location, new EquatableArray<string>([moduleName,])));
+			}
+
+			// AWT150: a module's own [Import] is not followed, so it is an error that the nested module's
+			// registrations are not pulled in transitively - the container must import the nested module directly.
 			if (HasAwaitenAttribute(moduleAttributes, "ImportAttribute"))
 			{
 				diagnostics.Add(new DiagnosticInfo(

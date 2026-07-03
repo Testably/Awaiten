@@ -738,4 +738,17 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Warning,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     An imported <c>[Module]</c> class is not declared <c>static</c>. Like a container, a module is a
+	///     pure definition - registrations plus static factory and instance members - and is never
+	///     instantiated, so it must be a static class (mirroring <see cref="NonStaticContainer">AWT116</see>).
+	/// </summary>
+	public static readonly DiagnosticDescriptor NonStaticModule = new(
+		"AWT152",
+		"Module must be static",
+		"'{0}' must be a static class. A [Module] class is a definition whose factory and instance members are static; it is imported, never instantiated.",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

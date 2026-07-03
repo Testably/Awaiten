@@ -69,7 +69,7 @@ public partial class ModuleTests
 	[Singleton<ModuleClock, IClock>(Default = true)]
 	[Singleton<Logger>]
 	[Singleton<MemoryCache, ICache>(TryAdd = true)]
-	public sealed class InfrastructureModule;
+	public static class InfrastructureModule;
 
 	[Container]
 	[Import(typeof(InfrastructureModule))]

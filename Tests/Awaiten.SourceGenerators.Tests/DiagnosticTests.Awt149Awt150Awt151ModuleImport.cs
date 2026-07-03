@@ -72,7 +72,7 @@ public partial class DiagnosticTests
 
 			                                       [Module]
 			                                       [Singleton<SystemClock, IClock>]
-			                                       public sealed class ClockModule { }
+			                                       public static class ClockModule { }
 
 			                                       [Container]
 			                                       [Import(typeof(ClockModule))]
@@ -102,12 +102,12 @@ public partial class DiagnosticTests
 
 			                                       [Module]
 			                                       [Singleton<Logger>]
-			                                       public sealed class LoggingModule { }
+			                                       public static class LoggingModule { }
 
 			                                       [Module]
 			                                       [Import(typeof(LoggingModule))]
 			                                       [Singleton<SystemClock, IClock>]
-			                                       public sealed class InfrastructureModule { }
+			                                       public static class InfrastructureModule { }
 
 			                                       [Container]
 			                                       [Import(typeof(InfrastructureModule))]
@@ -133,7 +133,7 @@ public partial class DiagnosticTests
 
 			                                       [Module]
 			                                       [Singleton<SystemClock, IClock>]
-			                                       public sealed class ClockModule { }
+			                                       public static class ClockModule { }
 
 			                                       [Container]
 			                                       [Import(typeof(ClockModule))]
@@ -158,7 +158,7 @@ public partial class DiagnosticTests
 			                                       namespace MyCode;
 
 			                                       [Module]
-			                                       public sealed class EmptyModule { }
+			                                       public static class EmptyModule { }
 
 			                                       [Container]
 			                                       [Import(typeof(EmptyModule))]
@@ -184,7 +184,7 @@ public partial class DiagnosticTests
 
 			                                       [Module]
 			                                       [Singleton<SystemClock, IClock>]
-			                                       public sealed class ClockModule { }
+			                                       public static class ClockModule { }
 
 			                                       [Container]
 			                                       [Import(typeof(ClockModule))]

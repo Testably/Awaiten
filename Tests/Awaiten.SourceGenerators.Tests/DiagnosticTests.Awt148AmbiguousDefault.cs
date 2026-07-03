@@ -20,11 +20,11 @@ public partial class DiagnosticTests
 
 			                                       [Module]
 			                                       [Singleton<ClockA, IClock>(Default = true)]
-			                                       public sealed class ModuleA { }
+			                                       public static class ModuleA { }
 
 			                                       [Module]
 			                                       [Singleton<ClockB, IClock>(Default = true)]
-			                                       public sealed class ModuleB { }
+			                                       public static class ModuleB { }
 
 			                                       [Container]
 			                                       [Import(typeof(ModuleA))]
@@ -53,11 +53,11 @@ public partial class DiagnosticTests
 
 			                                       [Module]
 			                                       [Singleton<ClockA, IClock>(Default = true)]
-			                                       public sealed class ModuleA { }
+			                                       public static class ModuleA { }
 
 			                                       [Module]
 			                                       [Singleton<ClockB, IClock>(Default = true)]
-			                                       public sealed class ModuleB { }
+			                                       public static class ModuleB { }
 
 			                                       [Container]
 			                                       [Import(typeof(ModuleA))]
@@ -86,11 +86,11 @@ public partial class DiagnosticTests
 
 			                                       [Module]
 			                                       [Singleton<ClockA, IClock>(TryAdd = true)]
-			                                       public sealed class ModuleA { }
+			                                       public static class ModuleA { }
 
 			                                       [Module]
 			                                       [Singleton<ClockB, IClock>(TryAdd = true)]
-			                                       public sealed class ModuleB { }
+			                                       public static class ModuleB { }
 
 			                                       [Container]
 			                                       [Import(typeof(ModuleA))]

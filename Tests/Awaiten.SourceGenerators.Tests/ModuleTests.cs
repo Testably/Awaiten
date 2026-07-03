@@ -24,7 +24,7 @@ public class ModuleTests
 		                                       [Module]
 		                                       [Singleton<ModuleClock, IClock>(Default = true)]
 		                                       [Singleton<Logger>]
-		                                       public sealed class InfrastructureModule { }
+		                                       public static class InfrastructureModule { }
 
 		                                       [Container]
 		                                       [Import(typeof(InfrastructureModule))]
@@ -60,7 +60,7 @@ public class ModuleTests
 
 		                                       [Module]
 		                                       [Singleton<ModuleClock, IClock>(Default = true)]
-		                                       public sealed class InfrastructureModule { }
+		                                       public static class InfrastructureModule { }
 
 		                                       [Container]
 		                                       [Import(typeof(InfrastructureModule))]
@@ -90,7 +90,7 @@ public class ModuleTests
 
 		                                       [Module]
 		                                       [Singleton<AaModuleClock, IClock>(Default = true)]
-		                                       public sealed class ClockModule { }
+		                                       public static class ClockModule { }
 
 		                                       [Container]
 		                                       [Import(typeof(ClockModule))]
@@ -121,7 +121,7 @@ public class ModuleTests
 
 		                                       [Module]
 		                                       [Singleton<ZzModuleClock, IClock>(Default = true)]
-		                                       public sealed class ClockModule { }
+		                                       public static class ClockModule { }
 
 		                                       [Container]
 		                                       [Import(typeof(ClockModule))]
@@ -152,7 +152,7 @@ public class ModuleTests
 
 		                                       [Module]
 		                                       [Singleton<ZzModuleClock, IClock>(Default = true)]
-		                                       public sealed class ClockModule { }
+		                                       public static class ClockModule { }
 
 		                                       [Container]
 		                                       [Scan(typeof(IClock), As = ScanAs.ImplementedInterfaces, Lifetime = AwaitenLifetime.Singleton)]
@@ -182,7 +182,7 @@ public class ModuleTests
 
 		                                       [Module]
 		                                       [Transient<ModuleClock, IClock>(Default = true)]
-		                                       public sealed class ClockModule { }
+		                                       public static class ClockModule { }
 
 		                                       [Container]
 		                                       [Import(typeof(ClockModule))]
@@ -247,7 +247,7 @@ public class ModuleTests
 
 		                                       [Module]
 		                                       [Singleton<ModuleClock, IClock>(Default = true)]
-		                                       public sealed class ClockModule { }
+		                                       public static class ClockModule { }
 
 		                                       [Container]
 		                                       [Import(typeof(ClockModule))]
@@ -284,7 +284,7 @@ public class ModuleTests
 
 		                                       [Module]
 		                                       [Singleton<ModuleClock, IClock>(Default = true)]
-		                                       public sealed class ClockModule { }
+		                                       public static class ClockModule { }
 
 		                                       [Container]
 		                                       [Import(typeof(ClockModule))]
