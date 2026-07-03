@@ -1,5 +1,4 @@
 using System;
-using System.Threading.Tasks;
 
 namespace Awaiten.Extensions.DependencyInjection;
 
@@ -10,22 +9,16 @@ namespace Awaiten.Extensions.DependencyInjection;
 ///     Awaiten scope - backs the lifetime of each MS.DI scope.
 /// </summary>
 /// <remarks>
-///     Disposing the holder deliberately does not dispose the Awaiten scope: the synchronously relayed
-///     instances are disposed by the MS.DI scope they were resolved from, so disposing the Awaiten scope as
-///     well would double-dispose them. Only the <see cref="AsyncDisposals" /> - instances awaited through the
-///     <c>Task&lt;T&gt;</c> projection, of which MS.DI captures just the <c>Task</c> wrapper - are disposed
-///     here. The Awaiten scope itself is collected with the holder when the MS.DI scope is torn down.
+///     The holder deliberately does not dispose the Awaiten scope: the synchronously relayed instances are
+///     disposed by the MS.DI scope they were resolved from, so disposing the Awaiten scope as well would
+///     double-dispose them (an instance awaited through the <c>Task&lt;T&gt;</c> projection is disposed by
+///     the <see cref="AwaitenAsyncDisposalSlot" /> captured with its resolution). The Awaiten scope itself is
+///     collected with the holder when the MS.DI scope is torn down.
 /// </remarks>
-internal sealed class AwaitenScopeHolder<TRoot> : IDisposable, IAsyncDisposable
+internal sealed class AwaitenScopeHolder<TRoot>
 	where TRoot : class, IAwaitenContainerMetadata, new()
 {
 	public AwaitenScopeHolder(IAwaitenScope scope) => Scope = scope;
 
 	public IAwaitenScope Scope { get; }
-
-	public AwaitenAsyncDisposals AsyncDisposals { get; } = new AwaitenAsyncDisposals();
-
-	public void Dispose() => AsyncDisposals.Dispose();
-
-	public ValueTask DisposeAsync() => AsyncDisposals.DisposeAsync();
 }

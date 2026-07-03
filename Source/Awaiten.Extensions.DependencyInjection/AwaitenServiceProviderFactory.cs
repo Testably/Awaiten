@@ -4,53 +4,55 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Awaiten.Extensions.DependencyInjection;
 
 /// <summary>
-///     An <see cref="IServiceProviderFactory{TContainerBuilder}" /> that builds the application's
-///     <see cref="IServiceProvider" /> from a generated Awaiten container root <typeparamref name="TRoot" />
-///     (wrapped in an <see cref="AwaitenServiceProvider" />), so the Awaiten container is the single owner of
-///     construction and disposal end to end - each resolved instance, and everything built for it, is
-///     disposed exactly once when its scope (or the root provider) is disposed.
+///     An <see cref="IServiceProviderFactory{TContainerBuilder}" /> that hosts a generated Awaiten container
+///     root <typeparamref name="TRoot" /> inside a Microsoft.Extensions.DependencyInjection host:
+///     <see cref="CreateServiceProvider" /> projects the container into the host's
+///     <see cref="IServiceCollection" /> (through
+///     <see cref="AwaitenServiceCollectionExtensions.AddGeneratedContainer{TRoot}(IServiceCollection)" />)
+///     and builds a standard
+///     MS.DI provider, so the host's framework registrations and the Awaiten-owned services resolve side by
+///     side - including Awaiten services injected into host services. Hand it to
+///     <c>UseServiceProviderFactory(new AwaitenServiceProviderFactory&lt;MyContainer.Root&gt;())</c>.
 /// </summary>
 /// <remarks>
-///     Awaiten is a compile-time container: it resolves only the services its <c>[Container]</c> declares and
-///     cannot serve registrations a host adds to the <see cref="IServiceCollection" /> (framework services,
-///     or anything registered with <c>AddSingleton</c> / <c>AddScoped</c> / <c>AddTransient</c>). So this
-///     factory requires the collection to be empty - the Awaiten container is the whole provider - and throws
-///     otherwise rather than silently dropping those registrations. To expose Awaiten services inside a
-///     Microsoft.Extensions.DependencyInjection host that also owns other services, project them into the
-///     host's collection with <see cref="AwaitenServiceCollectionExtensions.AddGeneratedContainer{TRoot}" />
-///     instead.
+///     The projection's ownership rules apply; see the remarks on
+///     <see cref="AwaitenServiceCollectionExtensions.AddGeneratedContainer{TRoot}(IServiceCollection)" />.
+///     When the Awaiten
+///     container should instead be the single owner of construction and disposal end to end - with no host
+///     registrations - wrap it in an <see cref="AwaitenServiceProvider" /> directly; that scenario needs no
+///     factory.
 /// </remarks>
 /// <typeparam name="TRoot">The generated Awaiten container root type.</typeparam>
 public sealed class AwaitenServiceProviderFactory<TRoot> : IServiceProviderFactory<TRoot>
-	where TRoot : class, IAwaitenScope, new()
+	where TRoot : class, IAwaitenContainerMetadata, new()
 {
+	private IServiceCollection? _services;
+
 	/// <inheritdoc />
 	/// <exception cref="ArgumentNullException"><paramref name="services" /> is <see langword="null" />.</exception>
-	/// <exception cref="NotSupportedException">
-	///     <paramref name="services" /> is not empty. The Awaiten container is the whole provider here and
-	///     cannot resolve services registered in the collection; project it with
-	///     <see cref="AwaitenServiceCollectionExtensions.AddGeneratedContainer{TRoot}" /> to coexist with them.
-	/// </exception>
 	public TRoot CreateBuilder(IServiceCollection services)
 	{
-		if (services is null)
-		{
-			throw new ArgumentNullException(nameof(services));
-		}
-
-		if (services.Count > 0)
-		{
-			throw new NotSupportedException(
-				$"{nameof(AwaitenServiceProviderFactory<TRoot>)} makes the Awaiten container the whole service " +
-				"provider, which cannot resolve the services registered in the IServiceCollection. Leave the " +
-				$"collection empty, or project the container with {nameof(AwaitenServiceCollectionExtensions)}." +
-				$"{nameof(AwaitenServiceCollectionExtensions.AddGeneratedContainer)} to coexist with other registrations.");
-		}
-
+		_services = services ?? throw new ArgumentNullException(nameof(services));
 		return new();
 	}
 
 	/// <inheritdoc />
+	/// <exception cref="ArgumentNullException"><paramref name="containerBuilder" /> is <see langword="null" />.</exception>
+	/// <exception cref="InvalidOperationException"><see cref="CreateBuilder" /> has not been called.</exception>
 	public IServiceProvider CreateServiceProvider(TRoot containerBuilder)
-		=> new AwaitenServiceProvider(containerBuilder ?? throw new ArgumentNullException(nameof(containerBuilder)));
+	{
+		if (containerBuilder is null)
+		{
+			throw new ArgumentNullException(nameof(containerBuilder));
+		}
+
+		if (_services is null)
+		{
+			throw new InvalidOperationException(
+				$"{nameof(CreateBuilder)} must be called before {nameof(CreateServiceProvider)}.");
+		}
+
+		return AwaitenServiceCollectionExtensions.AddGeneratedContainer(_services, containerBuilder)
+			.BuildServiceProvider();
+	}
 }

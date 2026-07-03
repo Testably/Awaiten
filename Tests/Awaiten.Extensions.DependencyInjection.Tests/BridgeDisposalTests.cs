@@ -1,11 +1,12 @@
+using System.Collections.Generic;
 using System.Threading;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Awaiten.Extensions.DependencyInjection.Tests;
 
 /// <summary>
-///     Disposal behaviour of the bridge. For the provider-replacement path (<see cref="AwaitenServiceProvider" /> /
-///     <see cref="AwaitenServiceProviderFactory{TRoot}" />) the Awaiten container is the single owner:
+///     Disposal behaviour of the bridge. For the provider-replacement path (<see cref="AwaitenServiceProvider" />)
+///     the Awaiten container is the single owner:
 ///     every instance - and everything built for it - is disposed exactly once; these pin the two cases the
 ///     collection projection (<see cref="AwaitenServiceCollectionExtensions.AddGeneratedContainer{TRoot}" />)
 ///     documents it does not guarantee (an implementation exposed under several service types, and a
@@ -187,6 +188,50 @@ public sealed partial class BridgeDisposalTests
 		}
 
 		await That(scoped.DisposeCount).IsEqualTo(1);
+	}
+
+	public sealed class OrderedDependency : IDisposable
+	{
+		public static List<string> DisposeOrder { get; } = new();
+
+		public void Dispose() => DisposeOrder.Add(nameof(OrderedDependency));
+	}
+
+	// An async-initialized dependent of a sync-relayed disposable: on scope teardown it must be disposed
+	// before the dependency it was built on.
+	public sealed class OrderedAsyncService : IAsyncInitializable, IDisposable
+	{
+		public OrderedAsyncService(OrderedDependency dependency) => _ = dependency;
+
+		public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+		public void Dispose() => OrderedDependency.DisposeOrder.Add(nameof(OrderedAsyncService));
+	}
+
+	[Container]
+	[Scoped<OrderedAsyncService>]
+	[Scoped<OrderedDependency>]
+	public static partial class OrderedDisposalContainer;
+
+	[Fact]
+	public async Task Projection_AwaitedInstance_DisposedBeforeItsSyncRelayedDependency()
+	{
+		OrderedDependency.DisposeOrder.Clear();
+		ServiceCollection services = new();
+		services.AddGeneratedContainer<OrderedDisposalContainer.Root>();
+		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
+
+		using (IServiceScope scope = provider.CreateScope())
+		{
+			// The dependency is captured by MS.DI first; the awaited instance's disposal slot is captured
+			// at the Task<T> resolution, so reverse-order teardown disposes the dependent first.
+			scope.ServiceProvider.GetRequiredService<OrderedDependency>();
+			await scope.ServiceProvider.GetRequiredService<Task<OrderedAsyncService>>();
+		}
+
+		await That(OrderedDependency.DisposeOrder.Count).IsEqualTo(2);
+		await That(OrderedDependency.DisposeOrder[0]).IsEqualTo(nameof(OrderedAsyncService));
+		await That(OrderedDependency.DisposeOrder[1]).IsEqualTo(nameof(OrderedDependency));
 	}
 
 	public sealed class ExternalProbe : IDisposable

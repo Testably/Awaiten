@@ -235,21 +235,37 @@ public sealed partial class BridgeTests
 		AwaitenServiceProviderFactory<BridgeContainer.Root> factory = new();
 
 		BridgeContainer.Root root = factory.CreateBuilder(new ServiceCollection());
-		using AwaitenServiceProvider provider = (AwaitenServiceProvider)factory.CreateServiceProvider(root);
+		using ServiceProvider provider = (ServiceProvider)factory.CreateServiceProvider(root);
 
 		await That(provider.GetService(typeof(IService))).Is<SingletonService>();
 	}
 
+	// A host service consuming an Awaiten service: the factory projects the container into the host's
+	// collection, so cross-container constructor injection works.
+	public sealed class HostConsumer
+	{
+		public HostConsumer(IService service) => Service = service;
+
+		public IService Service { get; }
+	}
+
 	[Fact]
-	public async Task AwaitenServiceProviderFactory_ThrowsWhenCollectionHasRegistrations()
+	public async Task AwaitenServiceProviderFactory_CoexistsWithHostRegistrations()
 	{
 		AwaitenServiceProviderFactory<BridgeContainer.Root> factory = new();
 		ServiceCollection services = new();
-		services.AddSingleton("not-an-awaiten-service");
 
-		void Act() => factory.CreateBuilder(services);
+		// A host (HostBuilder, WebApplicationBuilder) seeds the collection with its own registrations
+		// before calling CreateBuilder; they must resolve side by side with the Awaiten services.
+		services.AddSingleton("host-registration");
+		services.AddSingleton<HostConsumer>();
 
-		await That(Act).Throws<NotSupportedException>();
+		BridgeContainer.Root root = factory.CreateBuilder(services);
+		using ServiceProvider provider = (ServiceProvider)factory.CreateServiceProvider(root);
+
+		await That(provider.GetRequiredService<string>()).IsEqualTo("host-registration");
+		await That(provider.GetRequiredService<IService>()).Is<SingletonService>();
+		await That(provider.GetRequiredService<HostConsumer>().Service).Is<SingletonService>();
 	}
 
 	[Fact]
