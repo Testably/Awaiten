@@ -196,7 +196,10 @@ internal static class ContainerRegistrations
 			RegisterScanMatch(type, contracts, markerDisplay, match, result, diagnostics);
 		}
 
-		if (matched == 0)
+		// AWT138 fires only for an own-assembly scan (its "in this assembly" wording is accurate there): an
+		// InAssembliesOf scan that matched nothing already reported the more actionable AWT140 for each named
+		// assembly, so AWT138 would be redundant and misworded.
+		if (matched == 0 && assemblies is null)
 		{
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.ScanMatchedNothing,
