@@ -92,7 +92,7 @@ public partial class CompositeTests
 		INotifier first = container.Resolve<INotifier>();
 		INotifier second = container.Resolve<INotifier>();
 
-		await That(ReferenceEquals(first, second)).IsFalse();
+		await That(first).IsNotSameAs(second);
 	}
 
 	[Fact]
@@ -104,6 +104,21 @@ public partial class CompositeTests
 		INotifier second = container.Resolve<INotifier>();
 
 		await That(first).IsSameAs(second);
+	}
+
+	[Fact]
+	public async Task MultipleComposites_OverDifferentServices_EachFanOutOverItsOwnMembers()
+	{
+		using MultiServiceContainer.Root container = new();
+
+		INotifier notifier = container.Resolve<INotifier>();
+		IValidator validator = container.Resolve<IValidator>();
+
+		// Each service gets its own composite, fanning out only over its own registrations.
+		await That(notifier).Is<CompositeNotifier>();
+		await That(validator).Is<CompositeValidator>();
+		await That(notifier.Send("hi")).IsEqualTo("email:hi|sms:hi");
+		await That(string.Join(",", ((CompositeValidator)validator).Rules.Select(r => r.Name))).IsEqualTo("notnull,range");
 	}
 
 	public interface INotifier
@@ -189,4 +204,37 @@ public partial class CompositeTests
 	[Transient<SmsNotifier, INotifier>]
 	[Composite<CompositeNotifier, INotifier>(Lifetime = AwaitenLifetime.Singleton)]
 	public static partial class SingletonCompositeContainer;
+
+	// A second, unrelated service with its own composite, so [Composite]'s AllowMultiple is exercised across
+	// distinct services in a single container.
+	public interface IValidator
+	{
+		string Name { get; }
+	}
+
+	public sealed class NotNullValidator : IValidator
+	{
+		public string Name => "notnull";
+	}
+
+	public sealed class RangeValidator : IValidator
+	{
+		public string Name => "range";
+	}
+
+	public sealed class CompositeValidator(IEnumerable<IValidator> rules) : IValidator
+	{
+		public IReadOnlyList<IValidator> Rules { get; } = rules.ToList();
+
+		public string Name => "composite";
+	}
+
+	[Container]
+	[Transient<EmailNotifier, INotifier>]
+	[Transient<SmsNotifier, INotifier>]
+	[Transient<NotNullValidator, IValidator>]
+	[Transient<RangeValidator, IValidator>]
+	[Composite<CompositeNotifier, INotifier>]
+	[Composite<CompositeValidator, IValidator>]
+	public static partial class MultiServiceContainer;
 }

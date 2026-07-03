@@ -1059,10 +1059,14 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	///     parameter and <c>Resolve&lt;TService&gt;()</c> both get the composite. The composite is deliberately
 	///     NOT added to <c>serviceMembers</c>: it is excluded from its own - and everyone else's - collection
 	///     membership, so its own collection parameter (and any separate <c>IEnumerable&lt;TService&gt;</c>
-	///     consumer) resolves to the OTHER registrations, never the composite. There is no self-edge, so the
-	///     cycle (AWT102) and captive (AWT105) analysis works unchanged over the composite's eager collection
-	///     edges. An empty member set is legal (the composite fans out to an empty collection). Reports AWT130
-	///     when the composite has no collection parameter of the composed service.
+	///     consumer) resolves to the OTHER registrations, never the composite. With no self-edge the cycle
+	///     (AWT102) and captive (AWT105) analysis works unchanged over the composite's eager collection edges. An
+	///     empty member set is legal (the composite fans out to an empty collection). Reports AWT130 when the
+	///     composite has no collection parameter of the composed service, AWT133 when that collection is of a base
+	///     type rather than the service itself, AWT132 for a second composite over an already-composed service, and
+	///     AWT131 (a warning) when the composite type is also registered as a bare member of its own service - in
+	///     which case that membership is dropped, keeping the no-self-edge invariant that would otherwise be
+	///     violated (and surface as a confusing AWT102 cycle).
 	/// </summary>
 	private static void BuildComposites(
 		List<CompositeRegistration> composites,
@@ -1081,21 +1085,56 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			byImpl[info.ImplementationType] = info;
 		}
 
+		// The composite type chosen for each composed service, so a second composite for the same service is
+		// caught (AWT132) rather than silently overwriting the first and leaving it as a dead built instance.
+		Dictionary<string, string> compositeByService = new(StringComparer.Ordinal);
+
 		foreach (CompositeRegistration composite in composites)
 		{
 			string compositeType = composite.Composite.ToDisplayString(FullyQualified);
 
-			// AWT130: the composite must take a collection of the composed service to fan out to.
-			if (!HasCompositeCollectionParameter(composite.Composite, composite.ServiceSymbol, containerSymbol, compilation, serviceToImpl))
+			// AWT132: a service can have at most one composite façade. The first-declared composite wins; a later
+			// one of a DIFFERENT type is an error, while the same type declared twice is idempotent (not reported).
+			if (compositeByService.TryGetValue(composite.Service, out string? firstComposite))
 			{
-				diagnostics.Add(new DiagnosticInfo(
-					Diagnostics.CompositeMissingCollectionParameter,
-					LocationInfo.From(composite.Location),
-					new EquatableArray<string>([
-						Display(compositeType),
-						Display(composite.Service),
-					])));
+				if (firstComposite != compositeType)
+				{
+					diagnostics.Add(new DiagnosticInfo(
+						Diagnostics.MultipleCompositesForService,
+						LocationInfo.From(composite.Location),
+						new EquatableArray<string>([Display(composite.Service),])));
+				}
+
 				continue;
+			}
+
+			compositeByService.Add(composite.Service, compositeType);
+
+			// AWT130/AWT133: the composite must fan out over a collection of exactly the composed service. A missing
+			// collection parameter is AWT130; a collection of a base type of the service (which would resolve a
+			// different collection, since collections are keyed by exact element type) is AWT133.
+			switch (ClassifyCompositeCollection(composite.Composite, composite.ServiceSymbol, containerSymbol, compilation, serviceToImpl, out string? relatedElement))
+			{
+				case CompositeCollectionKind.Missing:
+					diagnostics.Add(new DiagnosticInfo(
+						Diagnostics.CompositeMissingCollectionParameter,
+						LocationInfo.From(composite.Location),
+						new EquatableArray<string>([
+							Display(compositeType),
+							Display(composite.Service),
+						])));
+					continue;
+
+				case CompositeCollectionKind.RelatedElement:
+					diagnostics.Add(new DiagnosticInfo(
+						Diagnostics.CompositeCollectionNotOfComposedService,
+						LocationInfo.From(composite.Location),
+						new EquatableArray<string>([
+							Display(compositeType),
+							Display(relatedElement!),
+							Display(composite.Service),
+						])));
+					continue;
 			}
 
 			// Register the composite as an ordinary instance (idempotent if the same type is named twice, or was
@@ -1107,6 +1146,30 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 					LocationInfo.From(composite.Location), ProductionKind.Constructor, null);
 				byImpl.Add(compositeType, compositeInfo);
 				implOrder.Add(compositeInfo);
+			}
+
+			// AWT131: the composite type is also registered as a bare member of the service it composes (e.g. a
+			// [Transient<C, S>] alongside [Composite<C, S>]). A composite is excluded from its own fan-out, so drop
+			// it from every collection of the composed service and warn - without the removal its own collection
+			// edge would include itself and surface as a confusing AWT102 dependency cycle.
+			bool wasMember = false;
+			foreach (KeyValuePair<ServiceKey, List<string>> entry in serviceMembers)
+			{
+				if (entry.Key.Service == composite.Service && entry.Value.Remove(compositeType))
+				{
+					wasMember = true;
+				}
+			}
+
+			if (wasMember)
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.CompositeAlsoRegisteredAsMember,
+					LocationInfo.From(composite.Location),
+					new EquatableArray<string>([
+						Display(compositeType),
+						Display(composite.Service),
+					])));
 			}
 
 			// The composite becomes the public single-dispatch winner: take the unkeyed service off whatever impl
@@ -1129,36 +1192,68 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		}
 	}
 
+	/// <summary>Which collection-parameter shape a composite offers for its composed service.</summary>
+	private enum CompositeCollectionKind
+	{
+		/// <summary>A collection parameter whose element type is exactly the composed service - valid.</summary>
+		Exact,
+
+		/// <summary>
+		///     A collection parameter of a base (or otherwise related) type of the composed service. Collections
+		///     resolve by exact element type, so it would fan out over a different collection - reported as AWT133.
+		/// </summary>
+		RelatedElement,
+
+		/// <summary>No collection parameter of the composed service at all - reported as AWT130.</summary>
+		Missing,
+	}
+
 	/// <summary>
-	///     Whether <paramref name="composite" /> has a constructor parameter that is a collection
-	///     (<c>IEnumerable&lt;TService&gt;</c>, <c>IReadOnlyList&lt;TService&gt;</c>, <c>TService[]</c>, …) whose
-	///     element type accepts an instance of <paramref name="service" /> - what the composite fans out over. The
-	///     constructor is chosen by the same <see cref="SelectConstructor" /> the container builds the composite
-	///     through, so this validation can never inspect a different constructor than the one constructed.
+	///     Classifies the collection constructor parameter <paramref name="composite" /> offers for its composed
+	///     <paramref name="service" /> - what it fans out over. <see cref="CompositeCollectionKind.Exact" /> when a
+	///     collection parameter (<c>IEnumerable&lt;TService&gt;</c>, <c>IReadOnlyList&lt;TService&gt;</c>,
+	///     <c>TService[]</c>, …) has element type exactly the service; <see cref="CompositeCollectionKind.RelatedElement" />
+	///     (yielding the offending element type in <paramref name="relatedElement" />) when a collection parameter's
+	///     element is a base type the service is assignable to but is not the service itself - collections resolve
+	///     by exact element type, so it would fan out over a different collection; otherwise
+	///     <see cref="CompositeCollectionKind.Missing" />. An exact match wins over a related one. The constructor
+	///     is chosen by the same <see cref="SelectConstructor" /> the container builds the composite through, so
+	///     this validation can never inspect a different constructor than the one constructed.
 	/// </summary>
-	private static bool HasCompositeCollectionParameter(
+	private static CompositeCollectionKind ClassifyCompositeCollection(
 		INamedTypeSymbol composite,
 		INamedTypeSymbol service,
 		INamedTypeSymbol containerSymbol,
 		Compilation compilation,
-		Dictionary<ServiceKey, string> serviceToImpl)
+		Dictionary<ServiceKey, string> serviceToImpl,
+		out string? relatedElement)
 	{
+		relatedElement = null;
 		IMethodSymbol? constructor = SelectConstructor(composite, containerSymbol, serviceToImpl.Keys.Select(k => k.Service));
 		if (constructor is null)
 		{
-			return false;
+			return CompositeCollectionKind.Missing;
 		}
 
 		foreach (IParameterSymbol parameter in constructor.Parameters)
 		{
-			if (TryGetCompositeCollectionElement(parameter.Type, out ITypeSymbol? element)
-			    && compilation.HasImplicitConversion(service, element!))
+			if (!TryGetCompositeCollectionElement(parameter.Type, out ITypeSymbol? element))
 			{
-				return true;
+				continue;
+			}
+
+			if (SymbolEqualityComparer.Default.Equals(element, service))
+			{
+				return CompositeCollectionKind.Exact;
+			}
+
+			if (relatedElement is null && compilation.HasImplicitConversion(service, element!))
+			{
+				relatedElement = element!.ToDisplayString(FullyQualified);
 			}
 		}
 
-		return false;
+		return relatedElement is null ? CompositeCollectionKind.Missing : CompositeCollectionKind.RelatedElement;
 	}
 
 	/// <summary>

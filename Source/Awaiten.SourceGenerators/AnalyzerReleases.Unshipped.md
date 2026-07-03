@@ -32,3 +32,6 @@
  AWT128  | Awaiten   | Error    | An open generic implementation does not expose its service with type parameters in declaration order
  AWT129  | Awaiten   | Error    | Open generic expansion nested too deep, indicating an unbounded generic recursion
  AWT130  | Awaiten   | Error    | A [Composite] implementation has no collection parameter of the composed service to fan out to
+ AWT131  | Awaiten   | Warning  | A [Composite] type is also registered as an ordinary member of the service it composes
+ AWT132  | Awaiten   | Error    | More than one [Composite] names the same service
+ AWT133  | Awaiten   | Error    | A [Composite]'s collection parameter is of a base type of the composed service, not the composed service itself
