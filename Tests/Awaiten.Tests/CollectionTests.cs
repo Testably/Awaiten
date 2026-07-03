@@ -490,6 +490,87 @@ public partial class CollectionTests
 			.Because("ResolveAsync serves the registered channel, initialized");
 	}
 
+	[Fact]
+	public async Task AwaitedCollection_AwaitsMemberInitializationWithoutTaintingTheConsumer()
+	{
+		using AwaitedStreamContainer.Root container = new();
+
+		// The host injects Task<IReadOnlyList<IPlugin>> over an async-initialized member, yet resolves
+		// SYNCHRONOUSLY in the strict default: the awaited collection launders its members' taint like the bare
+		// Task<T> relationship - the await happens inside the produced task, not at the host's construction.
+		AwaitedPluginHost host = container.Resolve<AwaitedPluginHost>();
+
+		IReadOnlyList<IPlugin> plugins = await host.Plugins;
+
+		await That(plugins).HasCount(2);
+		await That(plugins[0].Name).IsEqualTo("alpha");
+		await That(plugins[1].Name).IsEqualTo("async");
+		await That(plugins.OfType<AsyncPlugin>().Single().Initialized).IsTrue()
+			.Because("awaiting the collection awaited the async member's initialization in registration order");
+	}
+
+	[Fact]
+	public async Task AwaitedCollection_AllSynchronousMembers_IsACompletedTask()
+	{
+		using SyncAwaitedStreamContainer.Root container = new();
+
+		AwaitedPluginHost host = container.Resolve<AwaitedPluginHost>();
+
+		// Every member is synchronous, so the awaited collection is a completed Task.FromResult over the
+		// synchronously materialized array - available without ever leaving the synchronous path.
+		await That(host.Plugins.IsCompleted).IsTrue()
+			.Because("an all-synchronous awaited collection carries no async machinery");
+
+		IReadOnlyList<IPlugin> plugins = await host.Plugins;
+		await That(plugins).HasCount(2);
+		await That(plugins[0].Name).IsEqualTo("alpha");
+		await That(plugins[1].Name).IsEqualTo("beta");
+	}
+
+	[Fact]
+	public async Task AwaitedCollection_NoRegistrations_YieldsACompletedEmptyCollection()
+	{
+		using EmptyAwaitedStreamContainer.Root container = new();
+
+		AwaitedExtensionHost host = container.Resolve<AwaitedExtensionHost>();
+
+		IExtension[] extensions = await host.Extensions;
+		await That(extensions).HasCount(0)
+			.Because("an element type with no registration yields a completed empty awaited collection, not a missing-dependency error");
+	}
+
+	[Fact]
+	public async Task AwaitedCollection_SingletonMembers_AreSharedAcrossResolutions()
+	{
+		using AwaitedStreamContainer.Root container = new();
+
+		AwaitedPluginHost first = container.Resolve<AwaitedPluginHost>();
+		AwaitedPluginHost second = container.Resolve<AwaitedPluginHost>();
+
+		// The transient hosts each materialize their own awaited collection, but the singleton members inside
+		// are shared - each member keeps its own lifetime on the awaited path, exactly as on the synchronous one.
+		await That((await second.Plugins)[0]).IsSameAs((await first.Plugins)[0]);
+		await That((await second.Plugins)[1]).IsSameAs((await first.Plugins)[1]);
+	}
+
+	[Fact]
+	public async Task FromKey_AwaitedCollectionResolvesOnlyTheMembersUnderThatKey()
+	{
+		using KeyedAwaitedStreamContainer.Root container = new();
+
+		KeyedAwaitedPluginHost host = container.Resolve<KeyedAwaitedPluginHost>();
+
+		// Each [FromKey] awaited collection resolves the registration(s) under that key, never the others, and
+		// the unkeyed one only the unkeyed registration - the buckets stay disjoint, as for every other shape.
+		IReadOnlyList<IPlugin> primary = await host.Primary;
+		IReadOnlyList<IPlugin> unkeyed = await host.Unkeyed;
+
+		await That(primary).HasCount(1);
+		await That(primary[0].Name).IsEqualTo("alpha");
+		await That(unkeyed).HasCount(1);
+		await That(unkeyed[0].Name).IsEqualTo("plain");
+	}
+
 	public interface IPlugin
 	{
 		string Name { get; }
@@ -561,6 +642,35 @@ public partial class CollectionTests
 		public IAsyncEnumerable<IPlugin> Primary { get; }
 
 		public IAsyncEnumerable<IPlugin> Unkeyed { get; }
+	}
+
+	public sealed class AwaitedPluginHost
+	{
+		public AwaitedPluginHost(Task<IReadOnlyList<IPlugin>> plugins) => Plugins = plugins;
+
+		public Task<IReadOnlyList<IPlugin>> Plugins { get; }
+	}
+
+	public sealed class AwaitedExtensionHost
+	{
+		public AwaitedExtensionHost(Task<IExtension[]> extensions) => Extensions = extensions;
+
+		public Task<IExtension[]> Extensions { get; }
+	}
+
+	public sealed class KeyedAwaitedPluginHost
+	{
+		public KeyedAwaitedPluginHost(
+			[FromKey("primary")] Task<IReadOnlyList<IPlugin>> primary,
+			Task<IReadOnlyList<IPlugin>> unkeyed)
+		{
+			Primary = primary;
+			Unkeyed = unkeyed;
+		}
+
+		public Task<IReadOnlyList<IPlugin>> Primary { get; }
+
+		public Task<IReadOnlyList<IPlugin>> Unkeyed { get; }
 	}
 
 	// An opaque IAsyncEnumerable<IPlugin> service in its own right - the explicit registration the synthesized
@@ -792,6 +902,34 @@ public partial class CollectionTests
 	[Singleton<Alpha, IPlugin>]
 	[Singleton<AsyncPluginChannel, IAsyncEnumerable<IPlugin>>]
 	public static partial class AsyncChannelContainer;
+
+	// The strict default with an async-initialized member consumed as an awaited Task<IReadOnlyList<T>>: the
+	// awaited collection awaits each member behind the produced task, so the async member is legal (no AWT122)
+	// and - unlike the IAsyncEnumerable<T> shape - the members' taint is laundered, so the transient host stays
+	// synchronously resolvable.
+	[Container]
+	[Singleton<Alpha, IPlugin>]
+	[Singleton<AsyncPlugin, IPlugin>]
+	[Transient<AwaitedPluginHost>]
+	public static partial class AwaitedStreamContainer;
+
+	// Every member is synchronous, so the awaited collection is a completed Task.FromResult.
+	[Container]
+	[Singleton<Alpha, IPlugin>]
+	[Singleton<Beta, IPlugin>]
+	[Singleton<AwaitedPluginHost>]
+	public static partial class SyncAwaitedStreamContainer;
+
+	[Container]
+	[Singleton<AwaitedExtensionHost>]
+	public static partial class EmptyAwaitedStreamContainer;
+
+	// Awaited collections under disjoint key buckets: 'primary' (alpha) and unkeyed (plain).
+	[Container]
+	[Singleton<Alpha, IPlugin>(Key = "primary")]
+	[Singleton<Plain, IPlugin>]
+	[Singleton<KeyedAwaitedPluginHost>]
+	public static partial class KeyedAwaitedStreamContainer;
 
 	// IEnumerable<IPlugin> is registered directly (an opaque value); the individual IPlugin registrations would
 	// otherwise synthesize a collection of two, so the counts distinguish which one injection resolves to.

@@ -422,9 +422,10 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	}
 
 	// Pushes the dependencies of <paramref name="instance" /> that are rebuilt as part of constructing it: a
-	// direct (non-deferred) transient dependency, and each transient member of a collection (a collection
-	// materializes its members eagerly during construction). A relationship/Owned/Arg parameter defers, and a
-	// scoped/singleton dependency is cached/shared, so neither is followed.
+	// direct (non-deferred) transient dependency, and each transient member of a collection (a collection -
+	// including the awaited Task<C> form, whose task starts materializing at construction - builds its members
+	// eagerly during construction). A relationship/Owned/Arg parameter defers, and a scoped/singleton dependency
+	// is cached/shared, so neither is followed.
 	private static void PushFreshTransientDependencies(
 		InstanceModel instance,
 		IReadOnlyList<InstanceModel> instances,
@@ -434,7 +435,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	{
 		foreach (ParameterModel parameter in instance.ConstructorParameters.AsArray())
 		{
-			if (parameter.Kind is DependencyKind.Enumerable or DependencyKind.AsyncEnumerable)
+			if (parameter.Kind is DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.AwaitedEnumerable)
 			{
 				PushTransientCollectionMembers(KeyOf(parameter), instances, collectionMembers, stack);
 			}
@@ -708,6 +709,9 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	// the construction graph, a bare eager Owned<T>/Task<T>) edges to its single resolved instance; everything else
 	// defers and contributes nothing. Both collection kinds materialize their members eagerly, so both capture them
 	// (taint/captive) and close cycles through them; they differ only in that AsyncEnumerable awaits its members.
+	// An awaited collection (AwaitedEnumerable) is the collection form of the bare Task<T>: its members are awaited
+	// behind the produced task, not at the consumer's construction, so it launders their taint - but the task starts
+	// materializing them during construction, so its member edges still close cycles (the construction graph only).
 	private static void AddParameterEdges(
 		ParameterModel parameter,
 		Dictionary<ServiceKey, string> serviceToImpl,
@@ -716,7 +720,8 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		bool includeEagerBare,
 		List<int> nodeEdges)
 	{
-		if (parameter.Kind is DependencyKind.Enumerable or DependencyKind.AsyncEnumerable)
+		if (parameter.Kind is DependencyKind.Enumerable or DependencyKind.AsyncEnumerable
+		    || (includeEagerBare && parameter.Kind == DependencyKind.AwaitedEnumerable))
 		{
 			AddCollectionMemberEdges(KeyOf(parameter), serviceMembers, implToIndex, nodeEdges);
 			return;
@@ -1738,24 +1743,26 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	///     aside entirely (all-or-nothing): the registered shape resolves to that opaque value as an ordinary direct
 	///     dependency, and an unregistered sibling shape is a plain missing dependency (AWT101) rather than a
 	///     silently synthesized second collection that could disagree with the registered one. A registered
-	///     synchronous shape claims the whole collection - including the <c>IAsyncEnumerable&lt;T&gt;</c> view, so
-	///     injecting it is AWT101 rather than a second collection synthesized behind the opaque one - mirroring the
-	///     by-type SynthesisSuppressed gate; a registered <c>IAsyncEnumerable&lt;T&gt;</c> claims only its own async
-	///     shape.
+	///     synchronous shape claims the whole collection - including the <c>IAsyncEnumerable&lt;T&gt;</c> and awaited
+	///     <c>Task&lt;C&gt;</c> views, so injecting either is AWT101 rather than a second collection synthesized
+	///     behind the opaque one - mirroring the by-type SynthesisSuppressed gate; a registered
+	///     <c>IAsyncEnumerable&lt;T&gt;</c> or <c>Task&lt;C&gt;</c> claims only its own exact shape.
 	/// </summary>
 	private static ParameterModel SuppressRegisteredCollectionSynthesis(
 		ParameterModel parameterModel,
 		IParameterSymbol parameter,
 		Dictionary<ServiceKey, string> serviceToImpl)
 	{
-		bool syncShapeRegistered = parameterModel.Kind is (DependencyKind.Enumerable or DependencyKind.AsyncEnumerable)
+		bool syncShapeRegistered = parameterModel.Kind is (DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.AwaitedEnumerable)
 		                           && CollectionShapeTypes(parameterModel.ServiceType).Any(shape => serviceToImpl.ContainsKey(new ServiceKey(shape, parameterModel.Key)));
 		bool asyncShapeRegistered = parameterModel.Kind == DependencyKind.AsyncEnumerable
 		                            && serviceToImpl.ContainsKey(new ServiceKey(AsyncEnumerableShapeType(parameterModel.ServiceType), parameterModel.Key));
-		if (syncShapeRegistered || asyncShapeRegistered)
+		bool awaitedShapeRegistered = parameterModel.Kind == DependencyKind.AwaitedEnumerable
+		                              && serviceToImpl.ContainsKey(new ServiceKey(parameter.Type.ToDisplayString(FullyQualified), parameterModel.Key));
+		if (syncShapeRegistered || asyncShapeRegistered || awaitedShapeRegistered)
 		{
 			string collectionType = parameter.Type.ToDisplayString(FullyQualified);
-			return parameterModel with { ServiceType = collectionType, Kind = DependencyKind.Direct };
+			return parameterModel with { ServiceType = collectionType, Kind = DependencyKind.Direct, AwaitedCollectionType = null, };
 		}
 
 		return parameterModel;
@@ -1817,11 +1824,11 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	///     <see cref="Diagnostics.OwnedThroughLazy">AWT121</see> for an <c>Owned&lt;T&gt;</c> reached through a
 	///     <c>Lazy</c>) for a classified parameter whose service type has no registration. A CancellationToken is
 	///     forwarded from the resolve-time token, not resolved from the graph (like <c>[Arg]</c>), so it is never
-	///     a missing dependency. A collection (Enumerable or AsyncEnumerable) resolves to every registration of
-	///     its element type under the parameter's key and an empty collection is legal, so an element type with no
-	///     such registration is not a missing dependency either - it just yields an empty collection. (An
-	///     unregistered collection type whose synthesis was suppressed was rewritten to Direct and so is no longer
-	///     a collection kind here, and does surface as AWT101.) A closed generic that expansion refused to
+	///     a missing dependency. A collection (Enumerable, AsyncEnumerable or the awaited AwaitedEnumerable) resolves
+	///     to every registration of its element type under the parameter's key and an empty collection is legal, so
+	///     an element type with no such registration is not a missing dependency either - it just yields an empty
+	///     collection. (An unregistered collection type whose synthesis was suppressed was rewritten to Direct and so
+	///     is no longer a collection kind here, and does surface as AWT101.) A closed generic that expansion refused to
 	///     synthesize because its type arguments violate the open implementation's constraints (AWT126) is
 	///     deliberately absent from <c>ServiceToImpl</c>; reporting AWT101 on top would name the same root cause
 	///     twice, so it is suppressed here. An External dependency (a <c>[FromServices]</c> parameter, or an
@@ -1830,7 +1837,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 	/// </summary>
 	private static void ReportWhenUnregistered(ParameterModel parameterModel, ImplInfo info, BuildContext context)
 	{
-		if (parameterModel.Kind is DependencyKind.Arg or DependencyKind.CancellationToken or DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.External
+		if (parameterModel.Kind is DependencyKind.Arg or DependencyKind.CancellationToken or DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.AwaitedEnumerable or DependencyKind.External
 		    || context.ServiceToImpl.ContainsKey(KeyOf(parameterModel))
 		    || context.ConstraintRejected.Contains(parameterModel.ServiceType))
 		{
@@ -1937,12 +1944,13 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			.Where(c => c.Parameters.All(p =>
 			{
 				// Selecting a constructor, never an async factory, so no CancellationToken forwarding applies.
-				// A collection - synchronous (Enumerable) or asynchronous (AsyncEnumerable) - is always satisfiable:
-				// an unregistered element type just yields an empty collection, so it never disqualifies a constructor.
-				// A [FromServices] (External) parameter is always satisfiable too; with [ImportServices] any direct
-				// dependency can fall through to the external provider, so it does not disqualify a constructor either.
+				// A collection - synchronous (Enumerable), asynchronous (AsyncEnumerable) or awaited (AwaitedEnumerable)
+				// - is always satisfiable: an unregistered element type just yields an empty collection, so it never
+				// disqualifies a constructor. A [FromServices] (External) parameter is always satisfiable too; with
+				// [ImportServices] any direct dependency can fall through to the external provider, so it does not
+				// disqualify a constructor either.
 				ParameterModel parameter = ClassifyParameter(p, asyncFactory: false);
-				return parameter.Kind is DependencyKind.Arg or DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.External
+				return parameter.Kind is DependencyKind.Arg or DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.AwaitedEnumerable or DependencyKind.External
 				       || (importServices && parameter.Kind == DependencyKind.Direct)
 				       || registered.Contains(parameter.ServiceType)
 				       || (additionallySatisfiable?.Invoke(p) ?? false);
@@ -2028,6 +2036,19 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		if (TryGetCollectionElement(parameter.Type, out string? elementType))
 		{
 			return new ParameterModel(elementType!, DependencyKind.Enumerable, Key: key, Location: location);
+		}
+
+		// An awaited collection (Task<C> over the synchronous collection shapes, e.g. Task<IReadOnlyList<T>>)
+		// resolves to every registration of its element type under the parameter's key, awaiting each
+		// async-initialized member behind the returned task - the eager awaited sibling of the synchronous
+		// collection, and the second shape (besides IAsyncEnumerable<T>) through which an async-tainted member is
+		// legal. Recognized before the bare Task<T> relationship below, so Task<IReadOnlyList<T>> is the awaited
+		// collection of T rather than a Task relationship over the (unregistered) collection type itself.
+		if (TryGetAwaitedCollection(parameter.Type, out string? awaitedElement, out string? awaitedCollection))
+		{
+			return new ParameterModel(
+				awaitedElement!, DependencyKind.AwaitedEnumerable, Key: key, Location: location,
+				AwaitedCollectionType: awaitedCollection);
 		}
 
 		// A bare Owned<T> dependency: resolve T into a throwaway scope and hand the caller the disposal handle.
@@ -2455,6 +2476,27 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		return false;
 	}
 
+	/// <summary>
+	///     Recognizes an awaited collection - a <c>Task&lt;C&gt;</c> whose result <c>C</c> is one of the collection
+	///     shapes recognized by <see cref="TryGetCollectionElement" /> (e.g. <c>Task&lt;IReadOnlyList&lt;T&gt;&gt;</c>
+	///     or <c>Task&lt;T[]&gt;</c>) - yielding the fully-qualified element type and inner collection type.
+	///     <c>ValueTask&lt;C&gt;</c> is deliberately not recognized, for the same reason a bare
+	///     <c>ValueTask&lt;T&gt;</c> is not a relationship type (see <see cref="IsTask" />): a stored ValueTask may
+	///     only be awaited once, and an injected collection is held for the consumer's lifetime.
+	/// </summary>
+	private static bool TryGetAwaitedCollection(ITypeSymbol type, out string? elementType, out string? collectionType)
+	{
+		if (IsTask(type, out ITypeSymbol result) && TryGetCollectionElement(result, out elementType))
+		{
+			collectionType = result.ToDisplayString(FullyQualified);
+			return true;
+		}
+
+		elementType = null;
+		collectionType = null;
+		return false;
+	}
+
 	// Whether a type is a System.Collections.Generic.IAsyncEnumerable<T> asynchronous collection, yielding its
 	// fully-qualified element type T. The one collection shape that awaits its members, so it is classified apart
 	// from the synchronous shapes in TryGetCollectionElement (which materialize eagerly into an array).
@@ -2606,14 +2648,14 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			// registration-time diagnostic for the [Arg]-plus-async combination itself.
 			foreach (ParameterModel parameter in instance.ConstructorParameters.AsArray())
 			{
-				// A collection (Enumerable) resolves to a set of members, not a single registration whose [Arg]
-				// parameters could be supplied, so runtime-argument matching does not apply to it (its element
-				// type may coincidentally be singly registered, so it is excluded explicitly rather than by the
-				// serviceToImpl lookup below). Guard the implToIndex lookup the same way BuildDependencyGraph does:
-				// serviceToImpl can name an implementation whose BuildInstance failed (so it is absent from
-				// implToIndex), and an unguarded indexer would crash the generator (KeyNotFoundException) instead
-				// of surfacing the real registration error (e.g. AWT103).
-				if (parameter.Kind is DependencyKind.Arg or DependencyKind.Enumerable
+				// A collection (Enumerable, AsyncEnumerable or AwaitedEnumerable) resolves to a set of members, not
+				// a single registration whose [Arg] parameters could be supplied, so runtime-argument matching does
+				// not apply to it (its element type may coincidentally be singly registered, so it is excluded
+				// explicitly rather than by the serviceToImpl lookup below). Guard the implToIndex lookup the same
+				// way BuildDependencyGraph does: serviceToImpl can name an implementation whose BuildInstance failed
+				// (so it is absent from implToIndex), and an unguarded indexer would crash the generator
+				// (KeyNotFoundException) instead of surfacing the real registration error (e.g. AWT103).
+				if (parameter.Kind is DependencyKind.Arg or DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.AwaitedEnumerable
 				    || !serviceToImpl.TryGetValue(KeyOf(parameter), out string? targetImpl)
 				    || !implToIndex.TryGetValue(targetImpl, out int targetIndex))
 				{

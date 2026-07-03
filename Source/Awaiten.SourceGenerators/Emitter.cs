@@ -1102,6 +1102,49 @@ internal static class Emitter
 	}
 
 	/// <summary>
+	///     A <c>Task&lt;C&gt;</c> expression producing the awaited collection of every registration of the
+	///     parameter's (element type, key), materialized eagerly in registration order. When every member is
+	///     synchronous it is a completed <c>Task.FromResult&lt;C&gt;</c> over the synchronous array - no async
+	///     machinery at all; otherwise it is an immediately-invoked async lambda that awaits each async-tainted
+	///     member through its async resolver and resolves the rest synchronously, with the array cast to the
+	///     requested collection shape <c>C</c> so the task's result type matches the parameter exactly. The
+	///     resolve-time token is forwarded to the awaited members only on the async construction path; a
+	///     synchronously built consumer has no ambient token, so its awaited members receive <c>default</c>.
+	///     An empty membership yields a completed empty array.
+	/// </summary>
+	private static string AwaitedCollectionExpression(ParameterModel parameter, Names names, InstanceModel[] instances, bool asynchronous)
+	{
+		ServiceKey collection = new(parameter.ServiceType, parameter.Key);
+		string shape = parameter.AwaitedCollectionType!;
+		string[] resolvers = names.CollectionResolvers(collection);
+		int[] indices = names.CollectionMemberIndices(collection);
+
+		bool anyAsync = false;
+		for (int m = 0; m < indices.Length; m++)
+		{
+			anyAsync |= instances[indices[m]].IsAsyncTainted;
+		}
+
+		if (!anyAsync)
+		{
+			string syncItems = string.Join(", ", resolvers.Select(resolver => resolver + "()"));
+			return $"global::System.Threading.Tasks.Task.FromResult<{shape}>(new {parameter.ServiceType}[] {{ {syncItems} }})";
+		}
+
+		string token = asynchronous ? "cancellationToken" : "default";
+		string[] items = new string[resolvers.Length];
+		for (int m = 0; m < resolvers.Length; m++)
+		{
+			items[m] = instances[indices[m]].IsAsyncTainted
+				? $"await {names.AsyncResolver(indices[m])}({token}).ConfigureAwait(false)"
+				: resolvers[m] + "()";
+		}
+
+		string array = $"({shape})new {parameter.ServiceType}[] {{ {string.Join(", ", items)} }}";
+		return $"((global::System.Func<global::System.Threading.Tasks.Task<{shape}>>)(async () => {array}))()";
+	}
+
+	/// <summary>
 	///     Adds the directly-dispatchable entry for each of an instance's service types: a parameterized
 	///     service contributes only its <c>Func&lt;TArg…, T&gt;</c> factory (its bare type cannot be built
 	///     without the runtime arguments); any other service maps to its resolver call.
@@ -2289,6 +2332,15 @@ internal static class Emitter
 				// is whenever a member is async-tainted, since capturing that member taints this consumer too. A
 				// collection whose members are all synchronous stays a synchronous expression and serves a sync one.
 				arguments.Append(AsyncCollectionExpression(new ServiceKey(parameters[p].ServiceType, parameters[p].Key), names, instances, asynchronous));
+			}
+			else if (parameters[p].Kind == DependencyKind.AwaitedEnumerable)
+			{
+				// An awaited collection (Task<C>) materializes the same members behind a task: a completed
+				// Task.FromResult over the synchronous array when every member is synchronous, or an
+				// immediately-invoked async lambda that awaits each async-tainted member. Like the bare Task<T>
+				// relationship it launders the members' taint, so this consumer may well be built on the sync path
+				// even when a member is async-tainted - the await happens inside the produced task, not here.
+				arguments.Append(AwaitedCollectionExpression(parameters[p], names, instances, asynchronous));
 			}
 			else if (parameters[p].Kind == DependencyKind.CancellationToken)
 			{

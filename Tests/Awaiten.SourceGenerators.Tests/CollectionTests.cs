@@ -750,4 +750,254 @@ public class CollectionTests
 		await That(source).DoesNotContain("new global::MyCode.IPlugin[] { ResolveAsyncPlugin() }")
 			.Because("an async-tainted member has no synchronous resolver, so no synchronous collection literal is emitted for it");
 	}
+
+	[Fact]
+	public async Task AwaitedCollection_AllSynchronousMembers_MaterializesACompletedTask()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+		                                       using System.Threading.Tasks;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class Alpha : IPlugin { }
+		                                       public sealed class Beta : IPlugin { }
+		                                       public sealed class Host { public Host(Task<IReadOnlyList<IPlugin>> plugins) { } }
+
+		                                       [Container]
+		                                       [Singleton<Alpha, IPlugin>]
+		                                       [Singleton<Beta, IPlugin>]
+		                                       [Singleton<Host>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty()
+			.Because("Task<IReadOnlyList<T>> is the awaited collection of T, not a missing dependency on the collection type");
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// Every member is synchronous, so the awaited collection is a completed Task.FromResult over the
+		// synchronously materialized array - no async machinery at all.
+		await That(source).Contains("global::System.Threading.Tasks.Task.FromResult<global::System.Collections.Generic.IReadOnlyList<global::MyCode.IPlugin>>(new global::MyCode.IPlugin[] { ResolveAlpha(), ResolveBeta() })")
+			.Because("an all-synchronous awaited collection is a completed task over the members in registration order");
+	}
+
+	[Fact]
+	public async Task AwaitedCollectionWithAnAsyncMember_AwaitsItInsideTheProducedTaskWithoutTaintingTheConsumer()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+		                                       using System.Threading;
+		                                       using System.Threading.Tasks;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class Alpha : IPlugin { }
+		                                       public sealed class AsyncPlugin : IPlugin, IAsyncInitializable
+		                                       {
+		                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+		                                       }
+		                                       public sealed class Host { public Host(Task<IReadOnlyList<IPlugin>> plugins) { } }
+
+		                                       [Container]
+		                                       [Singleton<Alpha, IPlugin>]
+		                                       [Singleton<AsyncPlugin, IPlugin>]
+		                                       [Singleton<Host>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).DoesNotContain("*AWT122*").AsWildcard()
+			.Because("an awaited collection awaits its members behind the returned task, so an async-tainted member is legal through it");
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// The async member is awaited inside an immediately-invoked async lambda (with no ambient token - the
+		// consumer is built synchronously), the synchronous member resolved directly, and the array cast to the
+		// requested IReadOnlyList<T> so the task's result type matches the parameter.
+		await That(source).Contains("((global::System.Func<global::System.Threading.Tasks.Task<global::System.Collections.Generic.IReadOnlyList<global::MyCode.IPlugin>>>)(async () => (global::System.Collections.Generic.IReadOnlyList<global::MyCode.IPlugin>)new global::MyCode.IPlugin[] { ResolveAlpha(), await ResolveAsyncPluginAsync(default).ConfigureAwait(false) }))()")
+			.Because("the async-tainted member is awaited inside the produced task, in registration order");
+
+		// Unlike IAsyncEnumerable<T>, the awaited collection launders its members' taint - the members are awaited
+		// inside the task, not at construction - so the host stays synchronously constructible and dispatchable.
+		await That(source).Contains("typeof(global::MyCode.Host), static __s => __s.ResolveHost()")
+			.Because("a consumer of an awaited collection stays synchronously resolvable even when a member is async-tainted");
+	}
+
+	[Fact]
+	public async Task EmptyAwaitedCollection_MaterializesACompletedEmptyTaskWithoutAwt101()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+		                                       using System.Threading.Tasks;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class Host { public Host(Task<IPlugin[]> plugins) { } }
+
+		                                       [Container]
+		                                       [Singleton<Host>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty()
+			.Because("an unregistered element type resolves to an empty awaited collection, not a missing-dependency error");
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("global::System.Threading.Tasks.Task.FromResult<global::MyCode.IPlugin[]>(new global::MyCode.IPlugin[] {  })")
+			.Because("an element type with no registration materializes a completed empty awaited collection");
+	}
+
+	[Fact]
+	public async Task ValueTaskCollection_IsNotAnAwaitedCollection()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+		                                       using System.Threading.Tasks;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class Alpha : IPlugin { }
+		                                       public sealed class Host { public Host(ValueTask<IReadOnlyList<IPlugin>> plugins) { } }
+
+		                                       [Container]
+		                                       [Singleton<Alpha, IPlugin>]
+		                                       [Singleton<Host>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		// A stored ValueTask may only be awaited once, so - exactly like the bare ValueTask<T> relationship -
+		// ValueTask<C> is deliberately not synthesized; it surfaces as an ordinary missing dependency.
+		await That(result.Diagnostics).Contains("*AWT101*").AsWildcard()
+			.Because("ValueTask<C> is not an awaited collection shape, matching the bare ValueTask<T> relationship decision");
+	}
+
+	[Fact]
+	public async Task ExplicitlyRegisteredSyncCollectionShape_SuppressesTheAwaitedViewOnInjectionToo()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+		                                       using System.Threading.Tasks;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class Alpha : IPlugin { }
+		                                       public sealed class Config : IReadOnlyList<IPlugin>
+		                                       {
+		                                           public IPlugin this[int i] => null;
+		                                           public int Count => 0;
+		                                           public IEnumerator<IPlugin> GetEnumerator() => null;
+		                                           System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => null;
+		                                       }
+		                                       public sealed class Host { public Host(Task<IReadOnlyList<IPlugin>> plugins) { } }
+
+		                                       [Container]
+		                                       [Singleton<Alpha, IPlugin>]
+		                                       [Singleton<Config, IReadOnlyList<IPlugin>>]
+		                                       [Singleton<Host>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		// A registered synchronous shape makes the whole IPlugin collection an opaque value, all-or-nothing:
+		// the awaited Task<IReadOnlyList<IPlugin>> view is suppressed alongside the sibling shapes, so injecting
+		// the unregistered awaited shape is AWT101 rather than a second collection synthesized behind the opaque one.
+		await That(result.Diagnostics).Contains("*AWT101*").AsWildcard()
+			.Because("a registered synchronous collection shape suppresses the awaited Task<C> view on injection too");
+		await That(result.Sources.TryGetValue("Awaiten.MyCode.MyContainer.g.cs", out string? source) ? source : string.Empty)
+			.DoesNotContain("Task.FromResult<global::System.Collections.Generic.IReadOnlyList<global::MyCode.IPlugin>>")
+			.Because("the suppressed awaited view is not synthesized behind the opaque registration");
+	}
+
+	[Fact]
+	public async Task ExplicitlyRegisteredAwaitedShape_WinsOverSynthesisOnInjection()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+		                                       using System.Threading.Tasks;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class Alpha : IPlugin { }
+		                                       public sealed class PluginTask : Task<IReadOnlyList<IPlugin>>
+		                                       {
+		                                           public PluginTask() : base(() => null) { }
+		                                       }
+		                                       public sealed class Host { public Host(Task<IReadOnlyList<IPlugin>> plugins) { } }
+
+		                                       [Container]
+		                                       [Singleton<Alpha, IPlugin>]
+		                                       [Singleton<PluginTask, Task<IReadOnlyList<IPlugin>>>]
+		                                       [Singleton<Host>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// Task<IReadOnlyList<IPlugin>> is itself a registered service (an opaque, pre-built task), so the parameter
+		// is a direct dependency on that registration - not the awaited collection synthesized from the members.
+		await That(source).Contains("new global::MyCode.Host(__root.ResolvePluginTask())")
+			.Because("an explicitly registered Task<C> claims its own exact shape, winning over the synthesized awaited collection");
+		await That(source).DoesNotContain("Task.FromResult<global::System.Collections.Generic.IReadOnlyList<global::MyCode.IPlugin>>")
+			.Because("no awaited collection is synthesized behind the registered shape");
+	}
+
+	[Fact]
+	public async Task OpenGenericRegistrations_ExpandIntoAnAwaitedClosedCollection()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+		                                       using System.Threading.Tasks;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class OrderPlaced { }
+		                                       public interface IHandler<T> { }
+		                                       public sealed class AuditHandler<T> : IHandler<T> { }
+		                                       public sealed class ProjectionHandler<T> : IHandler<T> { }
+		                                       public sealed class Dispatcher { public Dispatcher(Task<IReadOnlyList<IHandler<OrderPlaced>>> handlers) { } }
+
+		                                       [Container]
+		                                       [Transient(typeof(AuditHandler<>), typeof(IHandler<>))]
+		                                       [Transient(typeof(ProjectionHandler<>), typeof(IHandler<>))]
+		                                       [Transient<Dispatcher>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty()
+			.Because("an awaited collection of a closed generic seeds open generic expansion through its inner type (the Task unwrap in RequiredServiceType)");
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// Both open registrations expand at the closed argument and join the awaited collection, in declaration order.
+		await That(source).Contains("global::System.Threading.Tasks.Task.FromResult<global::System.Collections.Generic.IReadOnlyList<global::MyCode.IHandler<global::MyCode.OrderPlaced>>>(new global::MyCode.IHandler<global::MyCode.OrderPlaced>[] {")
+			.Because("the awaited collection completes over the closed member array");
+		await That(source).Contains("new global::MyCode.AuditHandler<global::MyCode.OrderPlaced>()")
+			.Because("the first open registration is expanded at the closed argument");
+		await That(source).Contains("new global::MyCode.ProjectionHandler<global::MyCode.OrderPlaced>()")
+			.Because("the second open registration is expanded at the closed argument");
+	}
 }

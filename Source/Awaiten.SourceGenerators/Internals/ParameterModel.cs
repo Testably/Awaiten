@@ -15,6 +15,10 @@ namespace Awaiten.SourceGenerators.Internals;
 ///     contribute no edges for taint or captive-dependency analysis. The deferred forms (Func/Lazy and their
 ///     async variants) also break cycles; the bare eager <c>Owned&lt;T&gt;</c> / <c>Task&lt;T&gt;</c> resolve
 ///     at construction time and so still close cycles (the construction graph in <c>BuildConstructionGraph</c>).
+///     <c>AwaitedCollectionType</c> is the inner collection shape of an
+///     <see cref="DependencyKind.AwaitedEnumerable" /> (e.g. <c>IReadOnlyList&lt;T&gt;</c> for a
+///     <c>Task&lt;IReadOnlyList&lt;T&gt;&gt;</c> parameter), which the materialized array must be typed as so
+///     the produced task's result type matches the parameter exactly (null for every other kind).
 /// </summary>
 internal sealed record ParameterModel(
 	string ServiceType,
@@ -22,4 +26,5 @@ internal sealed record ParameterModel(
 	EquatableArray<string> FuncArgTypes = default,
 	string? Key = null,
 	LocationInfo? Location = null,
-	bool ProducesOwned = false);
+	bool ProducesOwned = false,
+	string? AwaitedCollectionType = null);
