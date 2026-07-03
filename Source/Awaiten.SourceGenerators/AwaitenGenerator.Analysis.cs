@@ -892,12 +892,11 @@ partial class AwaitenGenerator
 
 		if (asyncParticipant >= 0)
 		{
-			// Demonstrate a cycle through the async participant: its first intra-component edge closes one.
-			foreach (int next in combinedEdges[asyncParticipant].Where(members.Contains))
-			{
-				Report(Diagnostics.DeferredAsyncCycle, (asyncParticipant, next));
-				return;
-			}
+			// Demonstrate a cycle through the async participant: its first intra-component edge closes one (a
+			// participant of a non-trivial strongly connected component always has one).
+			int closing = combinedEdges[asyncParticipant].First(members.Contains);
+			Report(Diagnostics.DeferredAsyncCycle, (asyncParticipant, closing));
+			return;
 		}
 
 		// Supported: every construction edge starts at a transient and a synchronously-cached participant
@@ -985,15 +984,7 @@ partial class AwaitenGenerator
 	{
 		HashSet<int> visited = new();
 		HashSet<int> onStack = new();
-		foreach (int node in component.Where(node => !visited.Contains(node)))
-		{
-			if (Visit(node))
-			{
-				return true;
-			}
-		}
-
-		return false;
+		return component.Where(node => !visited.Contains(node)).Any(Visit);
 
 		bool Visit(int node)
 		{
