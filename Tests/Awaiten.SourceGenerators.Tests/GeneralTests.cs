@@ -733,6 +733,50 @@ public class GeneralTests
 	}
 
 	[Fact]
+	public async Task ImportServices_ExpandsOpenGenericsForTheImportSelectedConstructor()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class Order { }
+		                                       public interface IRepository<T> { }
+		                                       public sealed class Repository<T> : IRepository<T> { }
+		                                       public sealed class Dep { }
+		                                       public interface ILogger { }
+
+		                                       public sealed class Service
+		                                       {
+		                                           public Service(Dep dep) { }
+		                                           // With [ImportServices] the greedier constructor is satisfiable (ILogger falls through to
+		                                           // the external provider), so the container builds through it - and IRepository<Order> must
+		                                           // still be expanded from the open registration, not routed externally too.
+		                                           public Service(Dep dep, IRepository<Order> repository, ILogger logger) { }
+		                                       }
+
+		                                       [Container]
+		                                       [ImportServices]
+		                                       [Transient(typeof(Repository<>), typeof(IRepository<>))]
+		                                       [Transient<Dep>]
+		                                       [Transient<Service>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty()
+			.Because("the open generic dependency of the import-selected constructor is expandable");
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// The seed scanned the same (greedier) constructor the container builds through, so the open generic
+		// was expanded from the Awaiten registration; only ILogger is external.
+		await That(source).Contains("new global::MyCode.Repository<global::MyCode.Order>()");
+		await That(source).DoesNotContain("__ResolveExternal(typeof(global::MyCode.IRepository<global::MyCode.Order>)");
+		await That(source).Contains("(global::MyCode.ILogger)__ResolveExternal(typeof(global::MyCode.ILogger), null)");
+	}
+
+	[Fact]
 	public async Task FromServicesWithFromKey_ForwardsTheKeyToTheExternalResolver()
 	{
 		GeneratorResult result = Generator.Run("""

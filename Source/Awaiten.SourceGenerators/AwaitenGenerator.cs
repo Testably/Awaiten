@@ -216,7 +216,14 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			AsyncDisposableSupport(compilation),
 			compilation.GetTypeByMetadataName("Awaiten.IAsyncInitializable"));
 
-		(List<RawRegistration> raw, HashSet<string> constraintRejected) = ContainerRegistrations.Collect(containerSymbol, diagnostics);
+		// [ImportServices]: any otherwise-unresolved direct dependency falls through to the external provider
+		// instead of being reported as missing (AWT101), the blanket form of per-parameter [FromServices].
+		// Computed up front because it widens constructor selection everywhere a constructor is chosen - the
+		// open generic expansion seed, decorator inner-parameter detection, composite validation and
+		// BuildInstance must all scan the same constructor the emitted container builds through.
+		bool importServices = ContainerImportsServices(containerSymbol);
+
+		(List<RawRegistration> raw, HashSet<string> constraintRejected) = ContainerRegistrations.Collect(containerSymbol, importServices, diagnostics);
 		List<DecorateRegistration> decorators = ContainerRegistrations.CollectDecorators(containerSymbol);
 		List<CompositeRegistration> composites = ContainerRegistrations.CollectComposites(containerSymbol);
 
@@ -234,7 +241,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		Dictionary<string, DecoratorInner> decoratorInner = new(StringComparer.Ordinal);
 		if (decorators.Count > 0)
 		{
-			new DecoratorChainBuilder(containerSymbol, compilation, serviceToImpl, implOrder, serviceMembers, decoratorInner, diagnostics)
+			new DecoratorChainBuilder(containerSymbol, compilation, serviceToImpl, implOrder, serviceMembers, decoratorInner, importServices, diagnostics)
 				.Build(decorators);
 		}
 
@@ -244,16 +251,12 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		// registrations. Runs after decorator chains so a composite fronts the decorated members.
 		if (composites.Count > 0)
 		{
-			BuildComposites(composites, compilation, containerSymbol, serviceToImpl, implOrder, serviceMembers, diagnostics);
+			BuildComposites(composites, compilation, containerSymbol, serviceToImpl, implOrder, serviceMembers, importServices, diagnostics);
 		}
 
 		List<InstanceModel> instances = new();
 		List<LocationInfo?> instanceLocations = new();
 		Dictionary<string, int> implToIndex = new(StringComparer.Ordinal);
-
-		// [ImportServices]: any otherwise-unresolved direct dependency falls through to the external provider
-		// instead of being reported as missing (AWT101), the blanket form of per-parameter [FromServices].
-		bool importServices = ContainerImportsServices(containerSymbol);
 
 		BuildContext buildContext = new(containerSymbol, compilation, serviceToImpl, decoratorInner, wellKnown, constraintRejected, importServices, diagnostics);
 
@@ -767,6 +770,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		private readonly List<ImplInfo> _implOrder;
 		private readonly Dictionary<ServiceKey, List<string>> _serviceMembers;
 		private readonly Dictionary<string, DecoratorInner> _decoratorInner;
+		private readonly bool _importServices;
 		private readonly List<DiagnosticInfo> _diagnostics;
 
 		// The coalesced implementations by identity, so a base impl's ImplInfo can be moved onto a synthetic key
@@ -780,6 +784,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			List<ImplInfo> implOrder,
 			Dictionary<ServiceKey, List<string>> serviceMembers,
 			Dictionary<string, DecoratorInner> decoratorInner,
+			bool importServices,
 			List<DiagnosticInfo> diagnostics)
 		{
 			_containerSymbol = containerSymbol;
@@ -788,6 +793,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			_implOrder = implOrder;
 			_serviceMembers = serviceMembers;
 			_decoratorInner = decoratorInner;
+			_importServices = importServices;
 			_diagnostics = diagnostics;
 
 			_byImpl = new Dictionary<string, ImplInfo>(StringComparer.Ordinal);
@@ -1011,7 +1017,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		/// </summary>
 		private string? SingleInnerParameterType(INamedTypeSymbol decorator, INamedTypeSymbol service)
 		{
-			IMethodSymbol? constructor = SelectConstructor(decorator, _containerSymbol, _serviceToImpl.Keys.Select(k => k.Service));
+			IMethodSymbol? constructor = SelectConstructor(decorator, _containerSymbol, _serviceToImpl.Keys.Select(k => k.Service), importServices: _importServices);
 			if (constructor is null)
 			{
 				return null;
@@ -1082,6 +1088,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		Dictionary<ServiceKey, string> serviceToImpl,
 		List<ImplInfo> implOrder,
 		Dictionary<ServiceKey, List<string>> serviceMembers,
+		bool importServices,
 		List<DiagnosticInfo> diagnostics)
 	{
 		// The coalesced implementations by identity (including decorator chain links), so the composite's
@@ -1107,7 +1114,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 			}
 
 			// AWT130/AWT133: the composite must fan out over a collection of exactly the composed service.
-			if (!ValidateCompositeCollection(composite, compositeType, containerSymbol, compilation, serviceToImpl, diagnostics))
+			if (!ValidateCompositeCollection(composite, compositeType, containerSymbol, compilation, serviceToImpl, importServices, diagnostics))
 			{
 				continue;
 			}
@@ -1153,9 +1160,10 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		INamedTypeSymbol containerSymbol,
 		Compilation compilation,
 		Dictionary<ServiceKey, string> serviceToImpl,
+		bool importServices,
 		List<DiagnosticInfo> diagnostics)
 	{
-		switch (ClassifyCompositeCollection(composite.Composite, composite.ServiceSymbol, containerSymbol, compilation, serviceToImpl, out string? relatedElement))
+		switch (ClassifyCompositeCollection(composite.Composite, composite.ServiceSymbol, containerSymbol, compilation, serviceToImpl, importServices, out string? relatedElement))
 		{
 			case CompositeCollectionKind.Missing:
 				diagnostics.Add(new DiagnosticInfo(
@@ -1298,10 +1306,11 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		INamedTypeSymbol containerSymbol,
 		Compilation compilation,
 		Dictionary<ServiceKey, string> serviceToImpl,
+		bool importServices,
 		out string? relatedElement)
 	{
 		relatedElement = null;
-		IMethodSymbol? constructor = SelectConstructor(composite, containerSymbol, serviceToImpl.Keys.Select(k => k.Service));
+		IMethodSymbol? constructor = SelectConstructor(composite, containerSymbol, serviceToImpl.Keys.Select(k => k.Service), importServices: importServices);
 		if (constructor is null)
 		{
 			return CompositeCollectionKind.Missing;
@@ -1736,7 +1745,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		{
 			ParameterModel parameterModel = ClassifyParameter(parameter, asyncFactory);
 
-			// AWT131: a [FromServices] parameter (External) cannot also be an [Arg] runtime argument - it
+			// AWT134: a [FromServices] parameter (External) cannot also be an [Arg] runtime argument - it
 			// cannot be both an externally-resolved dependency and a caller-supplied value. Point the diagnostic
 			// at the offending parameter, falling back to the registration when its location is unavailable.
 			if (parameterModel.Kind == DependencyKind.External && HasArgAttribute(parameter))
@@ -1927,7 +1936,7 @@ public sealed class AwaitenGenerator : IIncrementalGenerator
 		// An explicit [FromServices] parameter is resolved from the external provider; its own type is the
 		// external service type, and a [FromKey] on it selects the keyed external service (the key is forwarded
 		// to the resolver). It takes precedence so the parameter is never treated as an Awaiten graph edge (a
-		// [FromServices] together with [Arg] is reported as AWT131 in ClassifyParameters).
+		// [FromServices] together with [Arg] is reported as AWT134 in ClassifyParameters).
 		if (HasFromServices(parameter))
 		{
 			return new ParameterModel(

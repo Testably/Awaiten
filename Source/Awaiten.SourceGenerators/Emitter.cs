@@ -565,7 +565,7 @@ internal static class Emitter
 		if (instances.Length > 0)
 		{
 			builder.AppendLine();
-			EmitOwnedHelper(builder, body);
+			EmitOwnedHelper(builder, body, HasExternalDependencies(instances));
 		}
 
 		// The __ResolveExternal helper is emitted on the base Scope (reached from the Root through __root) only
@@ -2542,8 +2542,10 @@ internal static class Emitter
 		Indent(builder, depth + 2).AppendLine("return instance;");
 		Indent(builder, depth + 1).AppendLine("}");
 		builder.AppendLine();
+		// Name the [FromKey] key in the message when there is one, so a keyed miss is not mistaken for a
+		// missing unkeyed registration.
 		Indent(builder, depth + 1).AppendLine(
-			"throw new global::System.InvalidOperationException($\"Awaiten: the external dependency '{serviceType}' is not available; register it in the host provider or set ExternalResolver.\");");
+			"throw new global::System.InvalidOperationException($\"Awaiten: the external dependency '{serviceType}'{(serviceKey == null ? \"\" : $\" (key: {serviceKey})\")} is not available; register it in the host provider or set ExternalResolver.\");");
 		Indent(builder, depth).AppendLine("}");
 	}
 
@@ -2583,11 +2585,12 @@ internal static class Emitter
 	///     returns an <c>Owned&lt;T&gt;</c> over that scope. Disposing the handle disposes only that scope,
 	///     draining what was built for this one resolution while shared singletons live on.
 	/// </summary>
-	private static void EmitOwnedHelper(StringBuilder builder, int depth)
+	private static void EmitOwnedHelper(StringBuilder builder, int depth, bool hasExternal)
 	{
 		Indent(builder, depth).AppendLine("protected global::Awaiten.Owned<T> __Owned<T>(global::System.Func<Scope, T> __resolve)");
 		Indent(builder, depth).AppendLine("{");
 		Indent(builder, depth + 1).AppendLine("Scope __owned = CreateScope();");
+		EmitOwnedExternalPropagation(builder, depth + 1, hasExternal);
 		Indent(builder, depth + 1).AppendLine("return new global::Awaiten.Owned<T>(__owned, __resolve(__owned));");
 		Indent(builder, depth).AppendLine("}");
 		builder.AppendLine();
@@ -2599,8 +2602,21 @@ internal static class Emitter
 		Indent(builder, depth).AppendLine("protected async global::System.Threading.Tasks.Task<global::Awaiten.Owned<T>> __OwnedAsync<T>(global::System.Func<Scope, global::System.Threading.CancellationToken, global::System.Threading.Tasks.Task<T>> __resolve, global::System.Threading.CancellationToken cancellationToken)");
 		Indent(builder, depth).AppendLine("{");
 		Indent(builder, depth + 1).AppendLine("Scope __owned = CreateScope();");
+		EmitOwnedExternalPropagation(builder, depth + 1, hasExternal);
 		Indent(builder, depth + 1).AppendLine("return new global::Awaiten.Owned<T>(__owned, await __resolve(__owned, cancellationToken).ConfigureAwait(false));");
 		Indent(builder, depth).AppendLine("}");
+	}
+
+	// The throwaway Owned scope belongs to the resolution that opened it, so it inherits the creating scope's
+	// external resolver: an external dependency built inside it resolves from the same provider the creating
+	// scope is aligned to (a null resolver propagates as null, keeping the fallback to the root's). Emitted only
+	// when the container has external dependencies, so other containers' Owned helpers stay unchanged.
+	private static void EmitOwnedExternalPropagation(StringBuilder builder, int depth, bool hasExternal)
+	{
+		if (hasExternal)
+		{
+			Indent(builder, depth).AppendLine("__owned.ExternalResolver = ExternalResolver;");
+		}
 	}
 
 	/// <summary>

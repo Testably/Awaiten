@@ -54,7 +54,12 @@ public static class AwaitenServiceCollectionExtensions
 	///         <c>LifetimeSafety.Loose</c>. A container using <c>SyncResolveAfterInit</c> should be warmed at
 	///         startup (resolve <see cref="IAwaitenContainerMetadata" /> and await <c>InitializeAsync</c>)
 	///         before its async-initialized services are first resolved; otherwise the first resolution blocks
-	///         synchronously on initialization. Do not dispose a scope or the provider while a resolved
+	///         synchronously on initialization. A container with external
+	///         (<c>[FromServices]</c> / <c>[ImportServices]</c>) dependencies is wired to the host's provider on
+	///         its first bridged resolution, which a warm-up through the metadata surface bypasses - so when
+	///         warming such a container, first set <c>ExternalResolver</c> on the resolved metadata (for example
+	///         to a <see cref="ServiceProviderExternalResolver" /> over the provider); an explicitly wired
+	///         resolver is left untouched. Do not dispose a scope or the provider while a resolved
 	///         <c>Task&lt;T&gt;</c> is still in flight: MS.DI disposes the captured <c>Task</c>, whose
 	///         <c>Dispose</c> throws for an incomplete task (the awaited instance itself is still disposed
 	///         when the resolution completes).

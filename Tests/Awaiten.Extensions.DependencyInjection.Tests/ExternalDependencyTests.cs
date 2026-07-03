@@ -114,6 +114,54 @@ public sealed partial class ExternalDependencyTests
 		await That(((IAwaitenContainerMetadata)container).ExternalDependencies).Contains(typeof(IClock));
 	}
 
+	private sealed class DisposableClock : IClock, IDisposable
+	{
+		public bool Disposed { get; private set; }
+
+		public string Now => "noon";
+
+		public void Dispose() => Disposed = true;
+	}
+
+	private sealed class FixedResolver : IExternalResolver
+	{
+		private readonly IClock _clock;
+
+		public FixedResolver(IClock clock) => _clock = clock;
+
+		public bool TryResolve(Type serviceType, object? serviceKey, out object? instance)
+		{
+			instance = serviceType == typeof(IClock) ? _clock : null;
+			return instance is not null;
+		}
+	}
+
+	[Fact]
+	public async Task ExternallySuppliedInstance_IsNotDisposedWithTheContainer()
+	{
+		DisposableClock clock = new();
+		using (ExternalContainer.Root container = new())
+		{
+			container.ExternalResolver = new FixedResolver(clock);
+			_ = container.Resolve<TimeReporter>();
+		}
+
+		// An externally supplied instance stays owned by whoever provided it; the container never captures
+		// it for disposal.
+		await That(clock.Disposed).IsFalse();
+	}
+
+	[Fact]
+	public async Task ChildScope_FallsBackToTheRootsExternalResolver()
+	{
+		using ScopedExternalContainer.Root container = new();
+		container.ExternalResolver = new ClockResolver();
+		using IAwaitenScope scope = container.CreateScope();
+
+		// The child scope has no resolver of its own, so its external dependency routes through the root's.
+		await That(scope.Resolve<ScopedReporter>().Clock).IsNotNull();
+	}
+
 	public sealed class ScopedReporter
 	{
 		// A scoped Awaiten service whose external dependency is a scoped host service.
@@ -144,6 +192,41 @@ public sealed partial class ExternalDependencyTests
 		// would throw under validateScopes), so the two scopes see distinct instances.
 		await That(first.Clock).IsNotSameAs(second.Clock);
 		await That(scope1.ServiceProvider.GetRequiredService<IClock>()).IsSameAs(first.Clock);
+	}
+
+	public sealed class ReporterUser
+	{
+		private readonly Func<Owned<ScopedReporter>> _factory;
+
+		public ReporterUser(Func<Owned<ScopedReporter>> factory) => _factory = factory;
+
+		public IClock ResolveOwnedClock()
+		{
+			using Owned<ScopedReporter> owned = _factory();
+			return owned.Value.Clock;
+		}
+	}
+
+	[Container]
+	[Scoped<ScopedReporter>]
+	[Scoped<ReporterUser>]
+	public static partial class OwnedExternalContainer;
+
+	[Fact]
+	public async Task OwnedResolution_UsesTheCreatingScopesExternalResolver()
+	{
+		ServiceCollection services = new();
+		services.AddScoped<IClock>(_ => new FixedClock());
+		services.AddGeneratedContainer<OwnedExternalContainer.Root>();
+		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
+
+		using IServiceScope scope = provider.CreateScope();
+		ReporterUser user = scope.ServiceProvider.GetRequiredService<ReporterUser>();
+
+		// The throwaway Owned scope inherits the creating scope's external resolver, so the scoped host
+		// service resolves from the aligned MS.DI scope (resolving it from the root provider would throw
+		// under validateScopes) and is the same instance the scope itself sees.
+		await That(user.ResolveOwnedClock()).IsSameAs(scope.ServiceProvider.GetRequiredService<IClock>());
 	}
 
 	public sealed class KeyedReporter

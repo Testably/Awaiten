@@ -13,7 +13,7 @@ namespace Awaiten;
 ///     Combine with <see cref="FromKeyAttribute" /> to resolve a keyed external service; the key is
 ///     forwarded to the resolver (<see cref="ImportServicesAttribute" /> only imports unkeyed dependencies).
 ///     Mutually exclusive with <see cref="ArgAttribute" />: a parameter cannot be both a runtime
-///     argument and an external dependency (AWT131). Use <see cref="ImportServicesAttribute" /> on the
+///     argument and an external dependency (AWT134). Use <see cref="ImportServicesAttribute" /> on the
 ///     container to make every otherwise-unresolved dependency external without annotating each one.
 /// </remarks>
 [AttributeUsage(AttributeTargets.Parameter, AllowMultiple = false, Inherited = false)]
