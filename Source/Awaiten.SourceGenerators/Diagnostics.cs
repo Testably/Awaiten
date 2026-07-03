@@ -697,4 +697,45 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Warning,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     An <c>[Import]</c> names a type that is not marked <c>[Module]</c>. Only modules can be imported, so
+	///     the target contributes nothing and is skipped - most likely the wrong type was named. An error rather
+	///     than a warning: an import that pulls in no registrations is silently useless, so the mistake is caught
+	///     here rather than surfacing later as a cascade of missing dependencies.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ImportNotAModule = new(
+		"AWT149",
+		"Import target is not a module",
+		"'{0}' is imported but is not marked [Module], so nothing is imported from it; only [Module] types can be imported",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     An imported <c>[Module]</c> carries its own <c>[Import]</c>, which is not followed: module imports are
+	///     resolved one level deep, so a module cannot re-export another module's registrations. An error rather
+	///     than a warning: leaving it as a warning would silently drop the nested module's registrations, so the
+	///     container is forced to import the nested module directly instead.
+	/// </summary>
+	public static readonly DiagnosticDescriptor NestedModuleImport = new(
+		"AWT150",
+		"Nested module import not followed",
+		"The imported module '{0}' has its own [Import], which is not followed; import the nested module directly, because module imports are resolved one level deep",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     An imported <c>[Module]</c> declares no <c>[Singleton]</c>/<c>[Transient]</c>/<c>[Scoped]</c>
+	///     registrations, so the import contributes nothing - most likely the module is incomplete or the wrong
+	///     type was named.
+	/// </summary>
+	public static readonly DiagnosticDescriptor EmptyModule = new(
+		"AWT151",
+		"Imported module has no registrations",
+		"The imported module '{0}' declares no registrations, so it contributes nothing",
+		"Awaiten",
+		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true);
 }

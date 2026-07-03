@@ -1,4 +1,6 @@
+using System.Collections.Immutable;
 using Awaiten.SourceGenerators.Entities;
+using Awaiten.SourceGenerators.Internals;
 using Microsoft.CodeAnalysis;
 
 namespace Awaiten.SourceGenerators;
@@ -27,7 +29,7 @@ partial class AwaitenGenerator
 		// [Import(typeof(Module))] pulls a module's registrations in after the container's own, so the
 		// container wins ties and a module's overridable defaults (Default/TryAdd) only fill the gaps it
 		// leaves. Resolved one level deep - a module's own [Import] is not followed.
-		foreach (INamedTypeSymbol module in CollectImportedModules(containerSymbol))
+		foreach (INamedTypeSymbol module in CollectImportedModules(containerSymbol, diagnostics))
 		{
 			CollectLifetimeRegistrations(module, result, open, diagnostics);
 		}
@@ -133,25 +135,79 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     Reads the module types a container pulls in with <c>[Import(typeof(Module))]</c>, in declaration
-	///     order. Only the container's own imports are read (one level deep); a module's own
-	///     <c>[Import]</c> is not followed.
+	///     Reads the modules a container pulls in with <c>[Import(typeof(Module))]</c>, in declaration order,
+	///     validating each import as it goes: the target must be a <c>[Module]</c> (AWT149, else it is skipped),
+	///     a module's own <c>[Import]</c> is reported as not-followed (AWT150, one level deep), and a module that
+	///     declares no registrations is reported as contributing nothing (AWT151). Only the container's own
+	///     imports are read; a module's imports are not followed.
 	/// </summary>
-	private static List<INamedTypeSymbol> CollectImportedModules(INamedTypeSymbol containerSymbol)
+	private static List<INamedTypeSymbol> CollectImportedModules(INamedTypeSymbol containerSymbol, List<DiagnosticInfo> diagnostics)
 	{
 		List<INamedTypeSymbol> modules = new();
 		foreach (AttributeData attribute in containerSymbol.GetAttributes())
 		{
-			if (attribute.AttributeClass is { Name: "ImportAttribute", } attributeClass
-			    && attributeClass.ContainingNamespace?.ToDisplayString() == AttributeNamespace
-			    && attribute.ConstructorArguments.Length == 1
-			    && attribute.ConstructorArguments[0].Value is INamedTypeSymbol module)
+			if (attribute.AttributeClass is not { Name: "ImportAttribute", } attributeClass
+			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace
+			    || attribute.ConstructorArguments.Length != 1
+			    || attribute.ConstructorArguments[0].Value is not INamedTypeSymbol module)
 			{
-				modules.Add(module);
+				continue;
 			}
+
+			// Every module diagnostic points at the container's [Import] - the line the author actually wrote -
+			// rather than at the module declaration, which may live in another file.
+			LocationInfo? location = LocationInfo.From(attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation());
+			ImmutableArray<AttributeData> moduleAttributes = module.GetAttributes();
+			string moduleName = Display(module.ToDisplayString(FullyQualified));
+
+			// AWT149: only [Module] types can be imported. A non-module target contributes nothing, so it is
+			// skipped and the mistake is surfaced here rather than as a later cascade of missing dependencies.
+			if (!HasAwaitenAttribute(moduleAttributes, "ModuleAttribute"))
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.ImportNotAModule, location, new EquatableArray<string>([moduleName,])));
+				continue;
+			}
+
+			// AWT150: a module's own [Import] is not followed, so warn that the nested module's registrations
+			// are not pulled in transitively - the container must import the nested module directly.
+			if (HasAwaitenAttribute(moduleAttributes, "ImportAttribute"))
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.NestedModuleImport, location, new EquatableArray<string>([moduleName,])));
+			}
+
+			// AWT151: a module that declares no lifetime registrations imports nothing useful.
+			if (!DeclaresAnyRegistration(moduleAttributes))
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.EmptyModule, location, new EquatableArray<string>([moduleName,])));
+			}
+
+			modules.Add(module);
 		}
 
 		return modules;
+	}
+
+	/// <summary>
+	///     Whether an attribute list carries any <c>[Singleton]</c>/<c>[Transient]</c>/<c>[Scoped]</c> lifetime
+	///     registration (in either the generic or the open <c>typeof</c> form), used to detect a module that
+	///     declares nothing to import (AWT151).
+	/// </summary>
+	private static bool DeclaresAnyRegistration(ImmutableArray<AttributeData> attributes)
+	{
+		foreach (AttributeData attribute in attributes)
+		{
+			if (attribute.AttributeClass is { } attributeClass
+			    && attributeClass.ContainingNamespace?.ToDisplayString() == AttributeNamespace
+			    && attributeClass.Name is "SingletonAttribute" or "TransientAttribute" or "ScopedAttribute")
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/// <summary>
