@@ -537,8 +537,8 @@ partial class AwaitenGenerator
 		// before the bare Task<T> relationship below, so Task<IReadOnlyDictionary<…>> is the awaited keyed dictionary
 		// rather than a Task relationship over the (unregistered) dictionary type itself. The declared dictionary
 		// type is carried for suppression (a registered synchronous dictionary claims the awaited view) and emission;
-		// as for the synchronous dictionary the [FromKey] is carried only for suppression / AWT160, and the declared
-		// key type is not stored (a non-string key is rejected as AWT159 at the classification site).
+		// as for the synchronous dictionary the FromKey attribute is carried only for suppression or AWT160, and the
+		// declared key type is not stored (a non-string key is rejected as AWT159 at the classification site).
 		if (TryGetAwaitedKeyedCollection(type, out string? awaitedKeyedService, out _, out string? awaitedKeyedDictionary))
 		{
 			return new ParameterModel(
@@ -742,9 +742,14 @@ partial class AwaitenGenerator
 	// (IReadOnlyDictionary<TKey, T>) or awaited (Task<IReadOnlyDictionary<TKey, T>>), or null when the type is
 	// neither shape. Lets the AWT159 report read the key type off either form.
 	private static string? KeyedDependencyKeyType(ITypeSymbol type)
-		=> TryGetKeyedCollectionElement(type, out _, out string? keyType) ? keyType
-			: TryGetAwaitedKeyedCollection(type, out _, out keyType, out _) ? keyType
-			: null;
+	{
+		if (TryGetKeyedCollectionElement(type, out _, out string? keyType))
+		{
+			return keyType;
+		}
+
+		return TryGetAwaitedKeyedCollection(type, out _, out keyType, out _) ? keyType : null;
+	}
 
 	/// <summary>
 	///     Reports <see cref="Diagnostics.FromKeyOnKeyedCollection">AWT160</see> when a dependency that stays a
