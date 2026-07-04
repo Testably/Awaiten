@@ -564,4 +564,43 @@ public partial class PropertyInjectionTests
 	[Singleton<DisposingWriter>]
 	[Singleton<DisposingDep>]
 	public static partial class DisposalOrderContainer;
+
+	[Fact]
+	public async Task OptionalProperty_WithNoRegistration_IsLeftUnset()
+	{
+		using OptionalUnregisteredContainer.Root container = new();
+
+		OptionalConsumer consumer = container.Resolve<OptionalConsumer>();
+
+		await That(consumer.Bus).IsNull()
+			.Because("an [Inject(Optional = true)] property whose service type is not registered is left at its default rather than being a missing dependency");
+	}
+
+	[Fact]
+	public async Task OptionalProperty_WithARegistration_IsFilled()
+	{
+		using OptionalRegisteredContainer.Root container = new();
+
+		OptionalConsumer consumer = container.Resolve<OptionalConsumer>();
+
+		await That(consumer.Bus).Is<Bus>()
+			.Because("when its service type is registered, an optional property is filled exactly like a required one");
+	}
+
+	public sealed class OptionalConsumer
+	{
+		[Inject(Optional = true)]
+		public Bus? Bus { get; set; }
+	}
+
+	// Bus is deliberately not registered: the optional property must be dropped from the graph so the
+	// container still compiles and resolves the consumer with the property left unset.
+	[Container]
+	[Transient<OptionalConsumer>]
+	public static partial class OptionalUnregisteredContainer;
+
+	[Container]
+	[Transient<Bus>]
+	[Transient<OptionalConsumer>]
+	public static partial class OptionalRegisteredContainer;
 }

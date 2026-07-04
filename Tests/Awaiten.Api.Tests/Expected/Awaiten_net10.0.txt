@@ -136,6 +136,7 @@ namespace Awaiten
     {
         public InjectAttribute() { }
         public bool Deferred { get; set; }
+        public bool Optional { get; set; }
     }
     public enum LifetimeSafety
     {

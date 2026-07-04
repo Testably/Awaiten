@@ -11,7 +11,10 @@ namespace Awaiten;
 ///     <c>[FromKey]</c> - and, unless the property is marked <see cref="Deferred" />, assigns it through an
 ///     object initializer, so no reflection is used and the instance is never observed half-set. A
 ///     <see cref="Deferred" /> property is instead assigned after construction (to break a mutual cycle); see
-///     that member for its narrower rules.
+///     that member for its narrower rules. By default the property is required: if its service type is not
+///     registered the container reports <c>AWT101</c>, exactly like a missing constructor parameter. Mark the
+///     property <see cref="Optional" /> to instead leave it unassigned when nothing is registered; see that
+///     member for its rules.
 /// </summary>
 /// <remarks>
 ///     The property must have a <c>set</c> or <c>init</c> accessor the container can assign through
@@ -46,4 +49,25 @@ public sealed class InjectAttribute : Attribute
     ///     participant; otherwise break the cycle by deferring both sides.
     /// </summary>
     public bool Deferred { get; set; }
+
+    /// <summary>
+    ///     Makes the property's dependency optional: when its service type is not registered on the container
+    ///     the property is left unassigned (at its default) instead of reporting the missing-dependency error
+    ///     (<c>AWT101</c>) that a required <c>[Inject]</c> property produces. When the dependency <em>is</em>
+    ///     registered an optional property is filled exactly like a required one - through the object
+    ///     initializer, participating fully in cycle, captive and async-initialization analysis - so
+    ///     <c>Optional</c> only changes what happens when nothing is registered.
+    /// </summary>
+    /// <remarks>
+    ///     The property must be omittable from the construction-time object initializer, since that is exactly
+    ///     what happens when the dependency is absent. A <c>required</c> member cannot be omitted (the generated
+    ///     construction would fail with <c>CS9035</c>), so an optional <c>required</c> property is <c>AWT157</c>.
+    ///     An <c>init</c>-only property is omittable and therefore allowed, but reports the suppressible warning
+    ///     <c>AWT158</c>: when the dependency is absent an <c>init</c>-only property can never be assigned
+    ///     afterwards either, so it stays at its default with no fallback - give it a plain <c>set</c> accessor so
+    ///     a value can still be assigned after construction when the dependency is not registered. <c>Optional</c>
+    ///     has no effect on a collection property
+    ///     (an unregistered collection already yields an empty collection, not a missing dependency).
+    /// </remarks>
+    public bool Optional { get; set; }
 }

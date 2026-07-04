@@ -565,20 +565,41 @@ partial class AwaitenGenerator
 
 		foreach (IPropertySymbol property in InjectedProperties(implementation))
 		{
-			// An [Inject] member resolves from the graph like a Direct constructor parameter (no external
-			// fall-through, no variance redirect - mirroring ClassifyInjectedMember).
-			ParameterModel member = ClassifyDependency(property.Type, property.GetAttributes(), asyncFactory: false, location: null);
-			if (property.SetMethod is not { } setter || !IsAccessibleSetter(setter, containerSymbol) || member.Kind == DependencyKind.Arg)
+			if (UnsatisfiableInjectedMemberReason(property, containerSymbol, services, constraintRejected) is { } reason)
 			{
-				continue;
+				return reason;
 			}
+		}
 
-			if (member.Kind is not (DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.KeyedCollection)
-			    && !services.Contains(KeyOf(member))
-			    && !constraintRejected.Contains(member.ServiceType))
-			{
-				return $"its injected member '{property.Name}' requires '{DisplayKeyed(member.ServiceType, member.Key)}', which is not registered";
-			}
+		return null;
+	}
+
+	/// <summary>
+	///     The reason a scanned implementation's <c>[Inject]</c> member cannot be satisfied - an AWT141 fragment -
+	///     or <see langword="null" /> when it is satisfiable (or not a reason at all). An <c>[Inject]</c> member
+	///     resolves from the graph like a Direct constructor parameter (no external fall-through, no variance
+	///     redirect - mirroring <see cref="ClassifyInjectedMember" />). A not-settable member, an <c>[Arg]</c>-marked
+	///     one (targeted AWT136/AWT137, real faults in the type) and an optional one (dropped when unregistered
+	///     rather than filled) are never a reason; a collection member is always satisfiable (empty is legal).
+	/// </summary>
+	private static string? UnsatisfiableInjectedMemberReason(
+		IPropertySymbol property,
+		INamedTypeSymbol containerSymbol,
+		HashSet<ServiceKey> services,
+		HashSet<string> constraintRejected)
+	{
+		ParameterModel member = ClassifyDependency(property.Type, property.GetAttributes(), asyncFactory: false, location: null);
+		if (property.SetMethod is not { } setter || !IsAccessibleSetter(setter, containerSymbol)
+		    || member.Kind == DependencyKind.Arg || IsInjectOptional(property.GetAttributes()))
+		{
+			return null;
+		}
+
+		if (member.Kind is not (DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.KeyedCollection)
+		    && !services.Contains(KeyOf(member))
+		    && !constraintRejected.Contains(member.ServiceType))
+		{
+			return $"its injected member '{property.Name}' requires '{DisplayKeyed(member.ServiceType, member.Key)}', which is not registered";
 		}
 
 		return null;
