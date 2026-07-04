@@ -81,11 +81,23 @@ internal static partial class Sources
 			// This explicit impl is an instance method on the Scope, so it resolves over `this`: a singleton
 			// through its Root-hosted static resolver over the root, a scoped/transient through its Scope-hosted
 			// static resolver over this scope.
-			string call = IsRootOwned(instances[index])
-				? $"Root.{names.Resolver(index)}(__root)"
-				: $"{names.Resolver(index)}(this)";
+			if (IsRootOwned(instances[index]))
+			{
+				// A singleton's static resolver guards the root, not this scope, so a disposed scope would still
+				// serve it. Guard `this` here (a block body, unlike the self-guarding scoped/transient impl below)
+				// so resolving any type from a disposed scope throws - this is the typed fast path the generic
+				// Resolve<T> extension takes, which bypasses the Type-based TryResolve guard.
+				Indent(builder, depth).Append(service).Append(" global::Awaiten.IAwaitenResolver<")
+					.Append(service).AppendLine(">.Resolve()");
+				Indent(builder, depth).AppendLine("{");
+				EmitDisposedGuard(builder, depth + 1);
+				Indent(builder, depth + 1).Append("return Root.").Append(names.Resolver(index)).AppendLine("(__root);");
+				Indent(builder, depth).AppendLine("}");
+				continue;
+			}
+
 			Indent(builder, depth).Append(service).Append(" global::Awaiten.IAwaitenResolver<")
-				.Append(service).Append(">.Resolve() => ").Append(call).AppendLine(";");
+				.Append(service).Append(">.Resolve() => ").Append(names.Resolver(index)).AppendLine("(this);");
 		}
 	}
 
@@ -252,6 +264,10 @@ internal static partial class Sources
 			"Attempts to resolve <paramref name=\"serviceType\" />, returning <see langword=\"false\" /> when it is not resolvable.");
 		Indent(builder, depth).AppendLine("public bool TryResolve(global::System.Type serviceType, [global::System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? instance)");
 		Indent(builder, depth).AppendLine("{");
+		// A disposed scope rejects every by-type resolution (including a root-owned singleton reached through
+		// Root.ResolveX(__s.__root)): the per-resolver guards only see the target's owner, so the resolving
+		// scope's own disposal is enforced here, the shared entry the public Resolve(Type) also flows through.
+		EmitDisposedGuard(builder, depth + 1);
 		if (entries.Count == 0)
 		{
 			Indent(builder, depth + 1).AppendLine("instance = null;");

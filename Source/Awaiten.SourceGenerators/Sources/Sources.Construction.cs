@@ -480,9 +480,6 @@ internal static partial class Sources
 	/// </summary>
 	private static string AsyncOwnedInner(ParameterModel parameter, InstanceModel target, int targetIndex, Names names, bool rootOwned, string[] argTypes)
 	{
-		// __o is the throwaway Owned scope the delegate resolves into (named distinctly from the enclosing
-		// resolver's __s to avoid shadowing). A root-owned target goes through the throwaway's public ResolveAsync;
-		// any other target calls its Scope-hosted static resolver over __o (never withheld, and bounded by __o).
 		if (rootOwned)
 		{
 			return $"async (__o, __ct) => ({parameter.ServiceType})await __o.ResolveAsync(typeof({parameter.ServiceType}), __ct).ConfigureAwait(false)";
