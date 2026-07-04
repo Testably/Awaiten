@@ -1103,7 +1103,7 @@ public class GeneralTests
 	}
 
 	[Fact]
-	public async Task NonStringKeyedDictionary_ReportsAwt156()
+	public async Task NonStringKeyedDictionary_ReportsAwt159()
 	{
 		GeneratorResult result = Generator.Run("""
 			using Awaiten;
@@ -1202,7 +1202,7 @@ public class GeneralTests
 	}
 
 	[Fact]
-	public async Task ExplicitlyRegisteredNonStringKeyedDictionary_IsADirectDependencyWithoutAwt156()
+	public async Task ExplicitlyRegisteredNonStringKeyedDictionary_IsADirectDependencyWithoutAwt159()
 	{
 		GeneratorResult result = Generator.Run("""
 			using Awaiten;
@@ -1233,7 +1233,7 @@ public class GeneralTests
 	}
 
 	[Fact]
-	public async Task FromKeyOnASynthesizedKeyedDictionary_ReportsAwt157()
+	public async Task FromKeyOnASynthesizedKeyedDictionary_ReportsAwt160()
 	{
 		GeneratorResult result = Generator.Run("""
 			using Awaiten;
