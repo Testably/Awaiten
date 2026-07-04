@@ -8,34 +8,39 @@ namespace Awaiten.SourceGenerators;
 partial class AwaitenGenerator
 {
 	/// <summary>
-	///     Rewrites a collection parameter to an ordinary direct dependency when its collection shape is claimed by
-	///     an explicit registration. A collection type (<c>IEnumerable&lt;T&gt;</c> and friends, <c>T[]</c>, or
-	///     <c>IAsyncEnumerable&lt;T&gt;</c>) is normally synthesized from the registrations of its element type under
-	///     the parameter's key. But if that collection shape is itself registered as a service under the same key - a
-	///     legitimate opaque value such as a <c>string[]</c> of command-line arguments, an
-	///     <c>IReadOnlyList&lt;T&gt;</c> of config or an <c>IAsyncEnumerable&lt;T&gt;</c> channel - synthesis steps
-	///     aside entirely (all-or-nothing): the registered shape resolves to that opaque value as an ordinary direct
-	///     dependency, and an unregistered sibling shape is a plain missing dependency (AWT101) rather than a
-	///     silently synthesized second collection that could disagree with the registered one. A registered
-	///     synchronous shape claims the whole collection - including the <c>IAsyncEnumerable&lt;T&gt;</c> and awaited
-	///     <c>Task&lt;C&gt;</c> views, so injecting either is AWT101 rather than a second collection synthesized
-	///     behind the opaque one - mirroring the by-type SynthesisSuppressed gate; a registered
-	///     <c>IAsyncEnumerable&lt;T&gt;</c> or <c>Task&lt;C&gt;</c> claims only its own exact shape.
+	///     Rewrites a collection dependency to an ordinary direct dependency when its collection shape is claimed by
+	///     an explicit registration. A collection type (<c>IEnumerable&lt;T&gt;</c> and friends, <c>T[]</c>,
+	///     <c>IAsyncEnumerable&lt;T&gt;</c>, or a keyed <c>IReadOnlyDictionary&lt;TKey, T&gt;</c>) is normally
+	///     synthesized from the registrations of its element type under the dependency's key. But if that collection
+	///     shape is itself registered as a service under the same key - a legitimate opaque value such as a
+	///     <c>string[]</c> of command-line arguments, an <c>IReadOnlyList&lt;T&gt;</c> of config or an
+	///     <c>IAsyncEnumerable&lt;T&gt;</c> channel - synthesis steps aside entirely (all-or-nothing): the registered
+	///     shape resolves to that opaque value as an ordinary direct dependency, and an unregistered sibling shape is
+	///     a plain missing dependency (AWT101) rather than a silently synthesized second collection that could
+	///     disagree with the registered one. A registered synchronous shape claims the whole collection - including
+	///     the <c>IAsyncEnumerable&lt;T&gt;</c> and awaited <c>Task&lt;C&gt;</c> views, so injecting either is AWT101
+	///     rather than a second collection synthesized behind the opaque one - mirroring the by-type
+	///     SynthesisSuppressed gate; a registered <c>IAsyncEnumerable&lt;T&gt;</c> or <c>Task&lt;C&gt;</c> claims only
+	///     its own exact shape. A registered keyed dictionary also claims only its own exact declared type (whatever
+	///     its key type - so a registered <c>IReadOnlyDictionary&lt;int, T&gt;</c> resolves as a direct dependency and
+	///     is never AWT156): it is a different axis from the element-type shapes and does not suppress them, nor they
+	///     it. Shared by the constructor-parameter and <c>[Inject]</c>-property paths, so a member resolves exactly
+	///     like a constructor parameter.
 	/// </summary>
 	private static ParameterModel SuppressRegisteredCollectionSynthesis(
 		ParameterModel parameterModel,
-		IParameterSymbol parameter,
+		ITypeSymbol declaredType,
 		Dictionary<ServiceKey, string> serviceToImpl)
 	{
 		bool syncShapeRegistered = parameterModel.Kind is (DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.AwaitedEnumerable)
 		                           && CollectionShapeTypes(parameterModel.ServiceType).Any(shape => serviceToImpl.ContainsKey(new ServiceKey(shape, parameterModel.Key)));
 		bool asyncShapeRegistered = parameterModel.Kind == DependencyKind.AsyncEnumerable
 		                            && serviceToImpl.ContainsKey(new ServiceKey(AsyncEnumerableShapeType(parameterModel.ServiceType), parameterModel.Key));
-		bool awaitedShapeRegistered = parameterModel.Kind == DependencyKind.AwaitedEnumerable
-		                              && serviceToImpl.ContainsKey(new ServiceKey(parameter.Type.ToDisplayString(FullyQualified), parameterModel.Key));
-		if (syncShapeRegistered || asyncShapeRegistered || awaitedShapeRegistered)
+		bool awaitedOrKeyedShapeRegistered = parameterModel.Kind is DependencyKind.AwaitedEnumerable or DependencyKind.KeyedCollection
+		                                     && serviceToImpl.ContainsKey(new ServiceKey(declaredType.ToDisplayString(FullyQualified), parameterModel.Key));
+		if (syncShapeRegistered || asyncShapeRegistered || awaitedOrKeyedShapeRegistered)
 		{
-			string collectionType = parameter.Type.ToDisplayString(FullyQualified);
+			string collectionType = declaredType.ToDisplayString(FullyQualified);
 			return parameterModel with { ServiceType = collectionType, Kind = DependencyKind.Direct, AwaitedCollectionType = null, };
 		}
 
@@ -61,9 +66,6 @@ partial class AwaitenGenerator
 		{
 			ParameterModel parameterModel = ClassifyParameter(parameter, asyncFactory);
 
-			// AWT156: a keyed collection (IReadOnlyDictionary<TKey, T>) must use a string key in v1.
-			ReportUnsupportedKeyedCollectionKey(parameterModel, parameter.Type, info, context.Diagnostics);
-
 			// AWT134: a [FromServices] parameter (External) cannot also be an [Arg] runtime argument - it
 			// cannot be both an externally-resolved dependency and a caller-supplied value. Point the diagnostic
 			// at the offending parameter, falling back to the registration when its location is unavailable.
@@ -77,7 +79,13 @@ partial class AwaitenGenerator
 
 			parameterModel = RedirectDecoratorInner(parameterModel, info, context.DecoratorInner);
 
-			parameterModel = SuppressRegisteredCollectionSynthesis(parameterModel, parameter, context.ServiceToImpl);
+			parameterModel = SuppressRegisteredCollectionSynthesis(parameterModel, parameter.Type, context.ServiceToImpl);
+
+			// AWT156/AWT157: keyed-collection misuse is reported only for a dictionary that stays synthesized -
+			// an explicitly registered dictionary was rewritten to Direct above and resolves that registration,
+			// whatever its key type or [FromKey].
+			ReportUnsupportedKeyedCollectionKey(parameterModel, parameter.Type, info, context.Diagnostics);
+			ReportFromKeyOnKeyedCollection(parameterModel, parameter.Type, info, context.Diagnostics);
 
 			// Variance: a closed-generic-interface request with no exact registration is redirected to a
 			// variance-compatible registration before the [ImportServices] fall-through below - a match makes
@@ -253,8 +261,15 @@ partial class AwaitenGenerator
 		ParameterModel dependency = ClassifyDependency(
 			property.Type, property.GetAttributes(), asyncFactory: false, location);
 
-		// AWT156: a keyed collection (IReadOnlyDictionary<TKey, T>) must use a string key in v1.
+		// An explicitly registered collection shape (or keyed dictionary) preempts synthesis for an [Inject]
+		// member exactly as for a constructor parameter: the member is rewritten to a direct dependency on the
+		// registered opaque value.
+		dependency = SuppressRegisteredCollectionSynthesis(dependency, property.Type, serviceToImpl);
+
+		// AWT156/AWT157: keyed-collection misuse is reported only for a dictionary that stays synthesized -
+		// an explicitly registered dictionary was rewritten to Direct above and resolves that registration.
 		ReportUnsupportedKeyedCollectionKey(dependency, property.Type, info, diagnostics);
+		ReportFromKeyOnKeyedCollection(dependency, property.Type, info, diagnostics);
 
 		// AWT137: runtime arguments flow only through a Func<…> factory into [Arg] constructor parameters, never
 		// through property injection (the member resolves entirely from the graph).
@@ -378,12 +393,15 @@ partial class AwaitenGenerator
 		// A keyed collection (IReadOnlyDictionary<TKey, T>) resolves to every keyed registration of its service
 		// (value) type T, keyed by each registration's [Key]. Recognized before the plain collection shapes (both
 		// live in System.Collections.Generic) so IReadOnlyDictionary is not mistaken for a plain generic service.
-		// [FromKey] does not apply - the dictionary resolves every key - so no Key is carried. The declared key
-		// type is not stored: v1 emits a string-keyed dictionary; a non-string key is rejected as AWT156 at the
-		// classification site (which still classifies it here, so an empty index is not misreported as AWT101).
+		// The [FromKey] key is carried only so an explicitly registered dictionary service under that key can
+		// preempt synthesis (SuppressRegisteredCollectionSynthesis); the synthesized dictionary itself resolves
+		// every key, so a [FromKey] that survives suppression is rejected as AWT157 rather than silently ignored.
+		// The declared key type is not stored: v1 emits a string-keyed dictionary; a non-string key is rejected as
+		// AWT156 at the classification site (which still classifies it here, so an empty index is not misreported
+		// as AWT101).
 		if (TryGetKeyedCollectionElement(type, out string? keyedService, out _))
 		{
-			return new ParameterModel(keyedService!, DependencyKind.KeyedCollection, Location: location);
+			return new ParameterModel(keyedService!, DependencyKind.KeyedCollection, Key: key, Location: location);
 		}
 
 		// A collection dependency resolves to every registration of its element type under the parameter's
@@ -581,7 +599,9 @@ partial class AwaitenGenerator
 	///     Reports <see cref="Diagnostics.UnsupportedKeyedCollectionKey">AWT156</see> when a dependency classified
 	///     as a keyed collection declares a key type other than the supported <c>string</c>. v1 keys are strings
 	///     (the <c>[Key]</c> registration value); typed/enum keys are deferred. The kind gate lives here so an
-	///     <c>[Arg]</c>/<c>[FromServices]</c>-preempted dictionary parameter is never reported, and the dependency
+	///     <c>[Arg]</c>/<c>[FromServices]</c>-preempted dictionary parameter is never reported - and, called after
+	///     <see cref="SuppressRegisteredCollectionSynthesis" />, neither is an explicitly registered dictionary
+	///     (rewritten to Direct, its key type is the registration's business, not synthesis's) - and the dependency
 	///     stays classified as a keyed collection, so it is never re-reported as a missing dependency (AWT101) on
 	///     top of this.
 	/// </summary>
@@ -594,6 +614,29 @@ partial class AwaitenGenerator
 				Diagnostics.UnsupportedKeyedCollectionKey,
 				dependency.Location ?? info.Location,
 				new EquatableArray<string>([DisplayInstance(info.ImplementationType), Display(keyType!),])));
+		}
+	}
+
+	/// <summary>
+	///     Reports <see cref="Diagnostics.FromKeyOnKeyedCollection">AWT157</see> when a dependency that stays a
+	///     synthesized keyed collection carries a <c>[FromKey]</c>: the synthesized dictionary resolves
+	///     <em>every</em> keyed registration of its service type, so a key selection cannot apply and would
+	///     otherwise be silently ignored. Called after <see cref="SuppressRegisteredCollectionSynthesis" />, so a
+	///     dictionary service explicitly registered under that key is never reported - the <c>[FromKey]</c>
+	///     legitimately selects that registration as an ordinary keyed direct dependency.
+	/// </summary>
+	private static void ReportFromKeyOnKeyedCollection(ParameterModel dependency, ITypeSymbol type, ImplInfo info, List<DiagnosticInfo> diagnostics)
+	{
+		if (dependency is { Kind: DependencyKind.KeyedCollection, Key: not null, })
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.FromKeyOnKeyedCollection,
+				dependency.Location ?? info.Location,
+				new EquatableArray<string>([
+					DisplayInstance(info.ImplementationType),
+					dependency.Key,
+					Display(type.ToDisplayString(FullyQualified)),
+				])));
 		}
 	}
 

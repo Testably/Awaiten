@@ -163,5 +163,30 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).DoesNotContain("*AWT102*").AsWildcard()
 				.Because("a Func<Task<B>> stores a closure and defers resolution, so the A -> B -> A edge is not a construction cycle");
 		}
+
+		[Fact]
+		public async Task IsClosedByAKeyedDictionaryMember()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+			                                       using System.Collections.Generic;
+
+			                                       namespace MyCode;
+
+			                                       public interface IWorker { }
+			                                       public sealed class Hub { public Hub(IReadOnlyDictionary<string, IWorker> workers) { } }
+			                                       public sealed class Worker : IWorker { public Worker(Hub hub) { } }
+
+			                                       [Container]
+			                                       [Singleton<Hub>]
+			                                       [Singleton<Worker, IWorker>(Key = "w")]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT102*").AsWildcard()
+				.Because("a keyed dictionary materializes its members eagerly during construction, so a member depending back on the consumer is a hard cycle");
+		}
 	}
 }

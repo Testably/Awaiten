@@ -201,6 +201,36 @@ public partial class KeyedDictionaryTests
 	[Singleton<GadgetHost>]
 	public static partial class DictionaryContainer;
 
+	[Fact]
+	public async Task SameImplementationUnderTwoKeys_SharesTheSingletonAcrossKeys()
+	{
+		using TwinContainer.Root container = new();
+
+		IReadOnlyDictionary<string, ITwin> twins = container.Resolve<IReadOnlyDictionary<string, ITwin>>();
+
+		await That(twins).HasCount(2);
+		await That(twins["a"]).IsSameAs(twins["b"])
+			.Because("one singleton implementation registered under two keys backs both dictionary entries");
+	}
+
+	[Fact]
+	public async Task ExplicitlyRegisteredDictionary_WinsOverSynthesis()
+	{
+		using RegisteredMapContainer.Root container = new();
+
+		MapConsumer consumer = container.Resolve<MapConsumer>();
+
+		// IReadOnlyDictionary<string, IChannel> is itself registered (ChannelMap), so injection and by-type
+		// resolution both hand out that registration - never a dictionary synthesized from the keyed
+		// registrations, which would contain FastChannel under "fast".
+		await That(consumer.Channels).Is<ChannelMap>()
+			.Because("an explicitly registered dictionary service preempts the synthesized keyed dictionary");
+		await That(consumer.Channels).HasCount(0)
+			.Because("the registered (empty) map is handed out as-is; the keyed IChannel registrations do not leak into it");
+		await That(container.Resolve<IReadOnlyDictionary<string, IChannel>>()).IsSameAs(consumer.Channels)
+			.Because("by-type resolution dispatches the registered singleton dictionary, not a fresh synthesized one");
+	}
+
 	public interface IWidget;
 
 	public sealed class DisposableWidget : IWidget, IDisposable
@@ -213,4 +243,28 @@ public partial class KeyedDictionaryTests
 	[Container]
 	[Transient<DisposableWidget, IWidget>(Key = "a")]
 	public static partial class WidgetContainer;
+
+	public interface ITwin;
+
+	public sealed class TwinChannel : ITwin;
+
+	[Container]
+	[Singleton<TwinChannel, ITwin>(Key = "a")]
+	[Singleton<TwinChannel, ITwin>(Key = "b")]
+	public static partial class TwinContainer;
+
+	public sealed class ChannelMap : Dictionary<string, IChannel>;
+
+	public sealed class MapConsumer
+	{
+		public MapConsumer(IReadOnlyDictionary<string, IChannel> channels) => Channels = channels;
+
+		public IReadOnlyDictionary<string, IChannel> Channels { get; }
+	}
+
+	[Container]
+	[Singleton<FastChannel, IChannel>(Key = "fast")]
+	[Singleton<ChannelMap, IReadOnlyDictionary<string, IChannel>>]
+	[Singleton<MapConsumer>]
+	public static partial class RegisteredMapContainer;
 }

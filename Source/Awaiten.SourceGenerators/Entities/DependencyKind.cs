@@ -97,8 +97,11 @@ internal enum DependencyKind
 	///     so it contributes a graph edge to each of them (cycle, captive and async-taint analysis) and never
 	///     launders their taint - a synchronous dictionary cannot await an async-initialized member, so such a
 	///     member trips AWT122 exactly as it does through <see cref="Enumerable" />. An empty index is legal (it
-	///     yields an empty dictionary, not AWT101). v1 supports <c>string</c> keys only; a non-<c>string</c> key
-	///     type is reported as AWT156.
+	///     yields an empty dictionary, not AWT101). An explicitly registered dictionary service of the exact
+	///     declared type (under the dependency's key) preempts synthesis: the dependency is rewritten to
+	///     <see cref="Direct" /> and resolves that registration, whatever its key type. v1 synthesis supports
+	///     <c>string</c> keys only; a non-<c>string</c> key type is reported as AWT156, and a <c>[FromKey]</c>
+	///     that survives suppression as AWT157 (the synthesized dictionary resolves every key).
 	/// </summary>
 	KeyedCollection,
 }

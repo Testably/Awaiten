@@ -505,7 +505,10 @@ internal static partial class Sources
 	///     synchronous collection, one whose members include a build-on-demand disposable is root-withheld under
 	///     strict lifetime safety - materializing it by type off the Root would accumulate those disposables for the
 	///     container's lifetime - so it is resolvable from a child scope but carries the withheld guidance on the
-	///     Root. The seen guard is belt-and-braces against a slot an explicit registration already claimed.
+	///     Root. An explicitly registered dictionary of the exact type suppresses the synthesized entry outright
+	///     (mirroring <see cref="SynthesisSuppressed" />): the registration is dispatched as an ordinary service, and
+	///     no second dictionary is synthesized behind it even when the registration itself has no synchronous entry.
+	///     The seen guard is belt-and-braces against a slot an explicit registration already claimed.
 	/// </summary>
 	private static void AddKeyedCollectionEntries(
 		InstanceModel[] instances,
@@ -519,7 +522,7 @@ internal static partial class Sources
 		foreach (string service in names.KeyedCollections.Select(keyed => keyed.Service))
 		{
 			string type = $"global::System.Collections.Generic.IReadOnlyDictionary<string, {service}>";
-			if (!names.IsSyncKeyedCollection(service) || !seen.Add(type))
+			if (serviceToIndex.ContainsKey(new ServiceKey(type, null)) || !names.IsSyncKeyedCollection(service) || !seen.Add(type))
 			{
 				continue;
 			}
