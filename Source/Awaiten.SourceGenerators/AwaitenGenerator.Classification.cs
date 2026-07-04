@@ -153,6 +153,19 @@ partial class AwaitenGenerator
 			ReportWhenUnregistered(parameterModel, info, context);
 		}
 
+		// AWT163: a requesting-type factory is built fresh per consumer with the consumer's typeof(…) supplied at
+		// each site, so it is not reached through a Func<TArg…, T> - it cannot also be a parameterized ([Arg])
+		// factory. The two together would emit a resolver that takes the requesting type but omits the runtime
+		// arguments (and vice versa at the call site), so reject the combination outright.
+		if (parameters.Any(p => p.Kind == DependencyKind.RequestingType)
+		    && parameters.Any(p => p.Kind == DependencyKind.Arg))
+		{
+			context.Diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.RequestingTypeWithArg,
+				info.Location,
+				new EquatableArray<string>([DisplayInstance(info.ImplementationType),])));
+		}
+
 		return parameters;
 	}
 

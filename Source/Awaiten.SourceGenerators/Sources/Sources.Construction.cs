@@ -317,6 +317,13 @@ internal static partial class Sources
 		    && serviceToIndex.TryGetValue(new ServiceKey(dependency.ServiceType, dependency.Key), out int index)
 		    && instances[index].IsAsyncTainted)
 		{
+			// A requesting-type factory's async resolver takes the consumer's typeof(…) (never root-owned); every
+			// other async target resolves through AsyncResolveCall.
+			if (instances[index].IsRequestingTypeFactory)
+			{
+				return $"await {names.AsyncResolver(index)}(__s, {requestingType}, cancellationToken).ConfigureAwait(false)";
+			}
+
 			return $"await {AsyncResolveCall(names.AsyncResolver(index), IsRootOwned(instances[index]), "cancellationToken")}.ConfigureAwait(false)";
 		}
 
@@ -450,12 +457,30 @@ internal static partial class Sources
 		bool rootOwned = IsRootOwned(target);
 
 		// A requesting-type factory's resolver takes the requesting type, so the consumer passes its own
-		// typeof(…) (or null at a top-level resolve) directly into the call, and a Func/Lazy over it closes over
+		// typeof(…) (or null at a top-level resolve) directly into the call, and any wrapper over it closes over
 		// the same literal. The factory is Scope-hosted (never root-owned) and called per consumer, never cached
-		// by service type. Placed before the relationship/Owned handling below: the supported shapes are the plain
-		// dependency and its Func<T>/Lazy<T> wrappers, matching the context a per-consumer literal is meaningful in.
+		// by service type. Placed before the relationship/Owned handling below - it produces the supported shapes
+		// itself: the plain dependency, its Func<T>/Lazy<T> wrappers, and, when the factory is async-tainted, the
+		// awaiting Task<T>/Func<Task<T>>/Lazy<Task<T>> forms (a synchronous Func/Lazy over an async-tainted factory
+		// is AWT119, never reaching here). There is no Owned<T> form (the requesting type has no owner scope).
 		if (target.IsRequestingTypeFactory)
 		{
+			if (parameter.Kind is DependencyKind.Task or DependencyKind.FuncTask or DependencyKind.LazyTask)
+			{
+				string task = $"global::System.Threading.Tasks.Task<{parameter.ServiceType}>";
+				// An async-tainted factory produces its Task through the awaiting async resolver; a synchronous one
+				// wraps its resolver's result in a completed task. By-type deferral carries no ambient token (default).
+				string taskValue = target.IsAsyncTainted
+					? $"{names.AsyncResolver(targetIndex)}(__s, {requestingType}, default)"
+					: $"global::System.Threading.Tasks.Task.FromResult<{parameter.ServiceType}>({resolver}(__s, {requestingType}))";
+				return parameter.Kind switch
+				{
+					DependencyKind.FuncTask => $"new global::System.Func<{task}>(() => {taskValue})",
+					DependencyKind.LazyTask => $"new global::System.Lazy<{task}>(() => {taskValue})",
+					_ => taskValue,
+				};
+			}
+
 			string requestingCall = $"{resolver}(__s, {requestingType})";
 			return parameter.Kind switch
 			{

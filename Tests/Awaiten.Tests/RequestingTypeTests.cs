@@ -1,3 +1,5 @@
+using System.Threading;
+
 namespace Awaiten.Tests;
 
 /// <summary>
@@ -124,6 +126,51 @@ public partial class RequestingTypeTests
 		public Func<ILogger> LoggerFactory { get; }
 	}
 
+	[Fact]
+	public async Task AsyncTaintedRequestingType_IsFilledWithTheConsumerType()
+	{
+		using AsyncLoggerContainer.Root container = new();
+
+		Epsilon epsilon = await container.ResolveAsync<Epsilon>(TestContext.Current.CancellationToken);
+
+		// The factory is async-tainted (it awaits its AsyncPrefix dependency), so it is built through the async
+		// resolver - which still embeds the consumer's typeof(…) per site.
+		await That(epsilon.Logger.Category).IsEqualTo(typeof(Epsilon).FullName);
+	}
+
+	[Fact]
+	public async Task AsyncTaintedRequestingType_AtTheTopLevelReceivesNull()
+	{
+		using AsyncLoggerContainer.Root container = new();
+
+		ILogger logger = await container.ResolveAsync<ILogger>(TestContext.Current.CancellationToken);
+
+		await That(logger.Category).IsEqualTo("<root>");
+	}
+
+	[Fact]
+	public async Task AsyncFactoryRequestingType_IsFilledWithTheConsumerType()
+	{
+		using AsyncFactoryContainer.Root container = new();
+
+		Epsilon epsilon = await container.ResolveAsync<Epsilon>(TestContext.Current.CancellationToken);
+
+		// The factory itself is asynchronous (returns Task<Logger>); the requesting type still flows through.
+		await That(epsilon.Logger.Category).IsEqualTo(typeof(Epsilon).FullName);
+	}
+
+	public sealed class AsyncPrefix : IAsyncInitializable
+	{
+		public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+	}
+
+	public sealed class Epsilon
+	{
+		public Epsilon(ILogger logger) => Logger = logger;
+
+		public ILogger Logger { get; }
+	}
+
 	[Container]
 	[Singleton<Prefix>]
 	[Transient<ILogger>(Factory = nameof(CreateLogger))]
@@ -134,7 +181,34 @@ public partial class RequestingTypeTests
 	public static partial class LoggerContainer
 	{
 		// The category is the requesting consumer's full name, or "<root>" when resolved at the top level.
-		private static ILogger CreateLogger([RequestingType] Type? requestingType, Prefix prefix)
+		private static Logger CreateLogger([RequestingType] Type? requestingType, Prefix prefix)
 			=> new Logger(requestingType?.FullName ?? "<root>", prefix);
+	}
+
+	[Container]
+	[Singleton<Prefix>]
+	[Singleton<AsyncPrefix>]
+	[Transient<ILogger>(Factory = nameof(CreateLogger))]
+	[Transient<Epsilon>]
+	public static partial class AsyncLoggerContainer
+	{
+		// Async-tainted through its AsyncPrefix dependency (which the factory awaits), so the logger is reached
+		// only through the async resolver - yet the requesting type is still supplied per consumer.
+		private static Logger CreateLogger([RequestingType] Type? requestingType, Prefix prefix, AsyncPrefix asyncPrefix)
+			=> new Logger(requestingType?.FullName ?? "<root>", prefix);
+	}
+
+	[Container]
+	[Singleton<Prefix>]
+	[Transient<ILogger>(Factory = nameof(CreateLogger))]
+	[Transient<Epsilon>]
+	public static partial class AsyncFactoryContainer
+	{
+		// An asynchronous factory (returns Task<Logger>) that also takes the requesting type.
+		private static async Task<Logger> CreateLogger([RequestingType] Type? requestingType, Prefix prefix)
+		{
+			await Task.Yield();
+			return new Logger(requestingType?.FullName ?? "<root>", prefix);
+		}
 	}
 }
