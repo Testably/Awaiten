@@ -72,6 +72,9 @@ internal static partial class Sources
 		// together: ResolveFoo -> ResolveFooAsync / CreateFooAsync, _foo -> _fooAsyncTask.
 		public string AsyncResolver(int index) => _resolvers[index] + "Async";
 
+		// The local async function inside the memoizing async resolver. Named off the resolver (ResolveFoo ->
+		// CreateFooAsync) rather than a fixed literal so it cannot shadow a container factory/instance member the
+		// construction expression references by simple name (e.g. a user factory named 'Create').
 		public string AsyncCreator(int index) => "Create" + _resolvers[index].Substring("Resolve".Length) + "Async";
 
 		public string AsyncField(int index) => _fields[index] + "AsyncTask";

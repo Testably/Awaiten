@@ -253,9 +253,12 @@ internal static partial class Sources
 	///     synchronously and completes immediately (deferring to <c>Resolve</c> for the same registration /
 	///     withholding errors as the synchronous path).
 	/// </summary>
-	private static void EmitAsyncResolutionApi(StringBuilder builder, int depth, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool strict, bool syncResolveAfterInit)
+	private static void EmitAsyncResolutionApi(ApiRegions regions, int depth, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool strict, bool syncResolveAfterInit)
 	{
 		const string task = "global::System.Threading.Tasks.Task";
+		(StringBuilder members, StringBuilder fields, StringBuilder helpers) = regions;
+		StringBuilder builder = members;
+		Separate(members);
 
 		List<(string Service, string AsyncResolver, bool RootOwned, string? RootWithheldMessage)> arms = BuildAsyncArms(instances, names, serviceToIndex, strict, syncResolveAfterInit);
 
@@ -297,10 +300,9 @@ internal static partial class Sources
 		builder.AppendLine();
 		Indent(builder, depth + 1).Append("return ").Append(task).AppendLine(".FromResult(Resolve(serviceType));");
 		Indent(builder, depth).AppendLine("}");
-		builder.AppendLine();
 
-		EmitAsyncBucketDispatch(builder, depth, arms);
-		EmitAsObjectHelper(builder, depth);
+		EmitAsyncBucketDispatch(fields, helpers, depth, arms);
+		EmitAsObjectHelper(helpers, depth);
 	}
 
 	/// <summary>
@@ -308,36 +310,39 @@ internal static partial class Sources
 	///     <c>__asyncBucketSize</c> table, built once through field initializers (which coexist with the
 	///     synchronous static constructor). Each slot's delegate awaits the async resolver and converts the result
 	///     to <c>Task&lt;object&gt;</c>; a root-withheld arm bakes its guidance throw into the delegate (the Root
-	///     throws, a child scope resolves). No forwarder methods are needed - the delegates are inline lambdas.
+	///     throws, a child scope resolves). No forwarder methods are needed - the delegates are inline lambdas. The
+	///     table fields are routed into <paramref name="fields" /> (the fields region); the <c>__AsyncBucket</c>
+	///     slot type and <c>__BuildAsyncBuckets</c> into <paramref name="helpers" />.
 	/// </summary>
-	private static void EmitAsyncBucketDispatch(StringBuilder builder, int depth, List<(string Service, string AsyncResolver, bool RootOwned, string? RootWithheldMessage)> arms)
+	private static void EmitAsyncBucketDispatch(StringBuilder fields, StringBuilder helpers, int depth, List<(string Service, string AsyncResolver, bool RootOwned, string? RootWithheldMessage)> arms)
 	{
 		const string func = "global::System.Func<Scope, global::System.Threading.CancellationToken, global::System.Threading.Tasks.Task<object>>";
 		int bucketCount = BucketCount(arms.Count);
 
-		AppendXmlSummary(builder, depth, "One slot of the async by-type dispatch table.");
-		Indent(builder, depth).AppendLine("private readonly struct __AsyncBucket");
-		Indent(builder, depth).AppendLine("{");
-		Indent(builder, depth + 1).AppendLine("public readonly global::System.Type? Key;");
-		Indent(builder, depth + 1).Append("public readonly ").Append(func).AppendLine(" Resolve;");
-		Indent(builder, depth + 1).Append("public __AsyncBucket(global::System.Type? key, ").Append(func).AppendLine(" resolve)");
-		Indent(builder, depth + 1).AppendLine("{");
-		Indent(builder, depth + 2).AppendLine("Key = key;");
-		Indent(builder, depth + 2).AppendLine("Resolve = resolve;");
-		Indent(builder, depth + 1).AppendLine("}");
-		Indent(builder, depth).AppendLine("}");
-		builder.AppendLine();
+		Separate(fields);
+		Indent(fields, depth).Append("private const int __asyncBucketCount = ").Append(bucketCount).AppendLine(";");
+		Indent(fields, depth).AppendLine("private static readonly __AsyncBucket[] __asyncBuckets = __BuildAsyncBuckets();");
+		Indent(fields, depth).AppendLine("private static readonly int __asyncBucketSize = __asyncBuckets.Length / __asyncBucketCount;");
 
-		Indent(builder, depth).Append("private const int __asyncBucketCount = ").Append(bucketCount).AppendLine(";");
-		Indent(builder, depth).AppendLine("private static readonly __AsyncBucket[] __asyncBuckets = __BuildAsyncBuckets();");
-		Indent(builder, depth).AppendLine("private static readonly int __asyncBucketSize = __asyncBuckets.Length / __asyncBucketCount;");
-		builder.AppendLine();
+		Separate(helpers);
+		AppendXmlSummary(helpers, depth, "One slot of the async by-type dispatch table.");
+		Indent(helpers, depth).AppendLine("private readonly struct __AsyncBucket");
+		Indent(helpers, depth).AppendLine("{");
+		Indent(helpers, depth + 1).AppendLine("public readonly global::System.Type? Key;");
+		Indent(helpers, depth + 1).Append("public readonly ").Append(func).AppendLine(" Resolve;");
+		Indent(helpers, depth + 1).Append("public __AsyncBucket(global::System.Type? key, ").Append(func).AppendLine(" resolve)");
+		Indent(helpers, depth + 1).AppendLine("{");
+		Indent(helpers, depth + 2).AppendLine("Key = key;");
+		Indent(helpers, depth + 2).AppendLine("Resolve = resolve;");
+		Indent(helpers, depth + 1).AppendLine("}");
+		Indent(helpers, depth).AppendLine("}");
+		helpers.AppendLine();
 
-		AppendXmlSummary(builder, depth, "Builds the async by-type dispatch table.");
-		Indent(builder, depth).AppendLine("private static __AsyncBucket[] __BuildAsyncBuckets()");
-		Indent(builder, depth).AppendLine("{");
-		Indent(builder, depth + 1).AppendLine("__AsyncBucket[] __entries =");
-		Indent(builder, depth + 1).AppendLine("{");
+		AppendXmlSummary(helpers, depth, "Builds the async by-type dispatch table.");
+		Indent(helpers, depth).AppendLine("private static __AsyncBucket[] __BuildAsyncBuckets()");
+		Indent(helpers, depth).AppendLine("{");
+		Indent(helpers, depth + 1).AppendLine("__AsyncBucket[] __entries =");
+		Indent(helpers, depth + 1).AppendLine("{");
 		foreach ((string service, string asyncResolver, bool rootOwned, string? rootWithheldMessage) in arms)
 		{
 			// A root-owned (singleton) async resolver lives on the Root and caches on the root, so it is called
@@ -349,13 +354,13 @@ internal static partial class Sources
 			string resolve = rootWithheldMessage is not null
 				? $"static (__s, __ct) => __s is Root ? throw new global::System.InvalidOperationException({rootWithheldMessage}) : __AsObject({call})"
 				: $"static (__s, __ct) => __AsObject({call})";
-			Indent(builder, depth + 2).Append("new __AsyncBucket(typeof(").Append(service).Append("), ").Append(resolve).AppendLine("),");
+			Indent(helpers, depth + 2).Append("new __AsyncBucket(typeof(").Append(service).Append("), ").Append(resolve).AppendLine("),");
 		}
 
-		Indent(builder, depth + 1).AppendLine("};");
-		builder.AppendLine();
-		EmitBucketDistribution(builder, depth + 1, "__AsyncBucket", "__asyncBucketCount");
-		Indent(builder, depth).AppendLine("}");
+		Indent(helpers, depth + 1).AppendLine("};");
+		helpers.AppendLine();
+		EmitBucketDistribution(helpers, depth + 1, "__AsyncBucket", "__asyncBucketCount");
+		Indent(helpers, depth).AppendLine("}");
 	}
 
 	/// <summary>
@@ -363,11 +368,11 @@ internal static partial class Sources
 	///     the <c>Task&lt;object&gt;</c> the by-type <c>ResolveAsync</c> returns. Called only when at least one
 	///     async-tainted service exists (otherwise nothing references it).
 	/// </summary>
-	private static void EmitAsObjectHelper(StringBuilder builder, int depth)
+	private static void EmitAsObjectHelper(StringBuilder helpers, int depth)
 	{
 		const string task = "global::System.Threading.Tasks.Task";
-		builder.AppendLine();
-		Indent(builder, depth).Append("private static async ").Append(task)
+		Separate(helpers);
+		Indent(helpers, depth).Append("private static async ").Append(task)
 			.AppendLine("<object> __AsObject<T>(global::System.Threading.Tasks.Task<T> __task) => (object)(await __task.ConfigureAwait(false))!;");
 	}
 
@@ -455,11 +460,12 @@ internal static partial class Sources
 	}
 
 	/// <summary>
-	///     Emits a memoizing async resolver and its creator. The resolver returns the cached <c>Task</c> if it
-	///     exists (lock-free), otherwise assigns it under <c>__gate</c> so the creator runs once; the creator
-	///     constructs, registers for disposal and awaits <c>InitializeAsync</c>. A task that faults or is
-	///     canceled is evicted from the cache so a later call retries rather than replaying the same failure
-	///     (and so one caller's cancellation does not permanently poison a shared singleton).
+	///     Emits a memoizing async resolver whose construction-and-initialization runs in a local <c>async</c>
+	///     function. The resolver returns the cached <c>Task</c> if it exists (lock-free), otherwise assigns it
+	///     under <c>__gate</c> so the local function runs once; that function constructs, registers for disposal
+	///     and awaits <c>InitializeAsync</c>. A task that faults or is canceled is evicted from the cache so a
+	///     later call retries rather than replaying the same failure (and so one caller's cancellation does not
+	///     permanently poison a shared singleton).
 	/// </summary>
 	private static void EmitAsyncCachingResolver(StringBuilder builder, int depth, int index, EmitContext context, string construction, string owner, Action<int>? emitDeferred = null)
 	{
@@ -497,26 +503,27 @@ internal static partial class Sources
 		Indent(builder, depth + 2).Append(task).Append('<').Append(type).Append(">? __pending = __s.").Append(asyncField).AppendLine(";");
 		Indent(builder, depth + 2).AppendLine("if (__pending is null || __pending.IsFaulted || __pending.IsCanceled)");
 		Indent(builder, depth + 2).AppendLine("{");
-		Indent(builder, depth + 3).Append("__pending = ").Append(creator).AppendLine("(__s, cancellationToken);");
+		Indent(builder, depth + 3).Append("__pending = ").Append(creator).AppendLine("();");
 		Indent(builder, depth + 3).Append("__s.").Append(asyncField).AppendLine(" = __pending;");
 		Indent(builder, depth + 2).AppendLine("}");
 		builder.AppendLine();
 		Indent(builder, depth + 2).AppendLine("return __pending;");
 		Indent(builder, depth + 1).AppendLine("}");
-		Indent(builder, depth).AppendLine("}");
 		builder.AppendLine();
 
-		Indent(builder, depth).Append("private static async ").Append(task).Append('<').Append(type).Append("> ")
-			.Append(creator).Append('(').Append(owner).Append(" __s, ").Append(ct).AppendLine(")");
-		Indent(builder, depth).AppendLine("{");
-		Indent(builder, depth + 1).Append(type).Append(" created = ").Append(construction).AppendLine(";");
-		// Deferred members are wired before the owner's own disposal registration, so a dependency first built
-		// during wiring registers earlier and is disposed later than this owner (reverse teardown order). A failed
-		// wiring faults the memoized task, which the resolver evicts, so a later call retries.
-		emitDeferred?.Invoke(depth + 1);
-		EmitAsyncDisposableRegistration(builder, depth + 1, instance, context.AsyncDisposal);
-		EmitAsyncInitialization(builder, depth + 1, instance, "created");
-		Indent(builder, depth + 1).AppendLine("return created;");
+		// The construction-and-initialization is a local async function so the synchronous disposed-guard above
+		// runs eagerly; it captures `__s` and `cancellationToken`. Deferred members are wired before the owner's
+		// own disposal registration, so a dependency first built during wiring registers earlier and is disposed
+		// later than this owner (reverse teardown order). A failed wiring faults the memoized task, which the
+		// resolver evicts, so a later call retries.
+		Indent(builder, depth + 1).Append("async ").Append(task).Append('<').Append(type).Append("> ").Append(creator).AppendLine("()");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).Append(type).Append(" created = ").Append(construction).AppendLine(";");
+		emitDeferred?.Invoke(depth + 2);
+		EmitAsyncDisposableRegistration(builder, depth + 2, instance, context.AsyncDisposal);
+		EmitAsyncInitialization(builder, depth + 2, instance, "created");
+		Indent(builder, depth + 2).AppendLine("return created;");
+		Indent(builder, depth + 1).AppendLine("}");
 		Indent(builder, depth).AppendLine("}");
 	}
 
@@ -586,8 +593,8 @@ internal static partial class Sources
 	///     Emits a warm-up method that awaits the async resolver of every async-tainted, non-parameterized
 	///     instance of the given lifetime; with none it returns <c>Task.CompletedTask</c>. The disposed-guard
 	///     runs synchronously (eager state validation, like <c>ResolveAsync</c>) rather than surfacing only when
-	///     the returned task is awaited: with targets the public/internal entry validates and delegates to a
-	///     private <c>async</c> core, so a disposed container throws immediately on the call.
+	///     the returned task is awaited: with targets the entry validates and delegates to a local <c>async</c>
+	///     function, so a disposed container throws immediately on the call.
 	/// </summary>
 	private static void EmitWarmUp(StringBuilder builder, int depth, InstanceModel[] instances, Names names, string modifiers, string method, Lifetime lifetime)
 	{
@@ -610,25 +617,25 @@ internal static partial class Sources
 			return;
 		}
 
-		string core = method + "Core";
 		AppendXmlSummary(builder, depth, summary);
 		Indent(builder, depth).Append(modifiers).Append(' ').Append(task).Append(' ').Append(method).Append('(').Append(ctParam).AppendLine(")");
 		Indent(builder, depth).AppendLine("{");
 		EmitDisposedGuard(builder, depth + 1);
-		Indent(builder, depth + 1).Append("return ").Append(core).AppendLine("(cancellationToken);");
-		Indent(builder, depth).AppendLine("}");
+		Indent(builder, depth + 1).AppendLine("return Core();");
 		builder.AppendLine();
 
-		Indent(builder, depth).Append("private async ").Append(task).Append(' ').Append(core)
-			.AppendLine("(global::System.Threading.CancellationToken cancellationToken)");
-		Indent(builder, depth).AppendLine("{");
+		// The warming loop is a local async function so the synchronous disposed-guard above runs eagerly on the
+		// call; it captures `cancellationToken` and `this`. The warm-up runs on the same class that hosts these
+		// resolvers (the base Scope warms its scoped async services; the Root warms its singletons), so each static
+		// resolver is called with `this`.
+		Indent(builder, depth + 1).Append("async ").Append(task).AppendLine(" Core()");
+		Indent(builder, depth + 1).AppendLine("{");
 		foreach (int i in targets)
 		{
-			// The warm-up runs on the same class that hosts these resolvers (the base Scope warms its scoped
-			// async services; the Root warms its singletons), so each static resolver is called with `this`.
-			Indent(builder, depth + 1).Append("await ").Append(names.AsyncResolver(i)).AppendLine("(this, cancellationToken).ConfigureAwait(false);");
+			Indent(builder, depth + 2).Append("await ").Append(names.AsyncResolver(i)).AppendLine("(this, cancellationToken).ConfigureAwait(false);");
 		}
 
+		Indent(builder, depth + 1).AppendLine("}");
 		Indent(builder, depth).AppendLine("}");
 	}
 
@@ -641,36 +648,36 @@ internal static partial class Sources
 	{
 		const string task = "global::System.Threading.Tasks.Task";
 
-		// The disposed-guard runs synchronously (eager state validation, like ResolveAsync) by splitting the
-		// public entry from a private async core: the entry validates and returns the core's task, so a disposed
-		// container throws immediately on the call rather than only when the returned task is awaited.
+		// The disposed-guard runs synchronously (eager state validation, like ResolveAsync): the entry validates
+		// and returns a local async function's task, so a disposed container throws immediately on the call rather
+		// than only when the returned task is awaited.
 		AppendXmlSummary(builder, depth,
 			"Opens a child scope, warming its async-initialized scoped services.");
 		Indent(builder, depth).Append("public ").Append(task)
 			.AppendLine("<global::Awaiten.IAwaitenScope> CreateScopeAsync(global::System.Threading.CancellationToken cancellationToken = default)");
 		Indent(builder, depth).AppendLine("{");
 		EmitDisposedGuard(builder, depth + 1);
-		Indent(builder, depth + 1).AppendLine("return CreateScopeAsyncCore(cancellationToken);");
-		Indent(builder, depth).AppendLine("}");
+		Indent(builder, depth + 1).AppendLine("return Core();");
 		builder.AppendLine();
 
-		Indent(builder, depth).Append("private async ").Append(task)
-			.AppendLine("<global::Awaiten.IAwaitenScope> CreateScopeAsyncCore(global::System.Threading.CancellationToken cancellationToken)");
-		Indent(builder, depth).AppendLine("{");
-		Indent(builder, depth + 1).AppendLine("Scope __scope = CreateScope();");
-		Indent(builder, depth + 1).AppendLine("try");
+		Indent(builder, depth + 1).Append("async ").Append(task)
+			.AppendLine("<global::Awaiten.IAwaitenScope> Core()");
 		Indent(builder, depth + 1).AppendLine("{");
-		Indent(builder, depth + 2).AppendLine("await __scope.__WarmAsync(cancellationToken).ConfigureAwait(false);");
-		Indent(builder, depth + 1).AppendLine("}");
-		Indent(builder, depth + 1).AppendLine("catch");
-		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).AppendLine("Scope __scope = CreateScope();");
+		Indent(builder, depth + 2).AppendLine("try");
+		Indent(builder, depth + 2).AppendLine("{");
+		Indent(builder, depth + 3).AppendLine("await __scope.__WarmAsync(cancellationToken).ConfigureAwait(false);");
+		Indent(builder, depth + 2).AppendLine("}");
+		Indent(builder, depth + 2).AppendLine("catch");
+		Indent(builder, depth + 2).AppendLine("{");
 		// Initialization failed (or was canceled) partway through: dispose the scope so the instances it
 		// already built and tracked are torn down rather than leaked, then surface the original failure.
-		Indent(builder, depth + 2).AppendLine("__scope.Dispose();");
-		Indent(builder, depth + 2).AppendLine("throw;");
-		Indent(builder, depth + 1).AppendLine("}");
+		Indent(builder, depth + 3).AppendLine("__scope.Dispose();");
+		Indent(builder, depth + 3).AppendLine("throw;");
+		Indent(builder, depth + 2).AppendLine("}");
 		builder.AppendLine();
-		Indent(builder, depth + 1).AppendLine("return __scope;");
+		Indent(builder, depth + 2).AppendLine("return __scope;");
+		Indent(builder, depth + 1).AppendLine("}");
 		Indent(builder, depth).AppendLine("}");
 	}
 
