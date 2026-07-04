@@ -2,7 +2,6 @@ using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Diagnostics;
 
 namespace Awaiten.SourceGenerators.Tests.TestHelpers;
@@ -15,26 +14,50 @@ namespace Awaiten.SourceGenerators.Tests.TestHelpers;
 /// </summary>
 public static class Analyzer
 {
-	public static async Task<string[]> Run<TAnalyzer>(
+	public static Task<string[]> Run<TAnalyzer>(
 		[StringSyntax("c#-test")] string source,
 		params Type[] assemblyTypes)
 		where TAnalyzer : DiagnosticAnalyzer, new()
+		=> Run<TAnalyzer>(source, additionalReferences: [], assemblyTypes);
+
+	/// <summary>
+	///     Runs the analyzer over <paramref name="source" /> with <paramref name="referencedSource" />
+	///     compiled into a separate referenced assembly first - with the <see cref="AwaitenGenerator" />
+	///     applied to it, so a <c>[Container]</c> declared there carries its generated
+	///     <c>Root</c>/<c>Scope</c> into the metadata reference - for cross-assembly scenarios such as
+	///     disposing another project's container.
+	/// </summary>
+	public static Task<string[]> RunWithReferencedAssembly<TAnalyzer>(
+		[StringSyntax("c#-test")] string referencedSource,
+		[StringSyntax("c#-test")] string source)
+		where TAnalyzer : DiagnosticAnalyzer, new()
 	{
-		CSharpParseOptions parseOptions = new(LanguageVersion.Latest);
-		SyntaxTree[] syntaxTrees = [CSharpSyntaxTree.ParseText(source, parseOptions),];
+		(Compilation referenced, _) = Generator.RunGenerator(referencedSource, [], [], "ReferencedAssembly");
+		return Run<TAnalyzer>(source, [Generator.EmitToReference(referenced),], []);
+	}
 
-		CSharpCompilation compilation = CSharpCompilation.Create(
-			"TestAssembly",
-			syntaxTrees,
-			References.For(assemblyTypes),
-			new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+	private static async Task<string[]> Run<TAnalyzer>(
+		[StringSyntax("c#-test")] string source,
+		MetadataReference[] additionalReferences,
+		Type[] assemblyTypes)
+		where TAnalyzer : DiagnosticAnalyzer, new()
+	{
+		(Compilation outputCompilation, GeneratorDriverRunResult generatorResult) =
+			Generator.RunGenerator(source, additionalReferences, assemblyTypes);
 
-		GeneratorDriver driver = CSharpGeneratorDriver.Create(
-			[new AwaitenGenerator().AsSourceGenerator(),],
-			[],
-			parseOptions,
-			null);
-		driver.RunGeneratorsAndUpdateCompilation(compilation, out Compilation outputCompilation, out _);
+		// A snippet that does not compile (or trips the generator) would otherwise pass a negative
+		// assertion vacuously, so a generator or compilation error fails the test run loudly instead.
+		string[] errors = generatorResult.Diagnostics
+			.Concat(outputCompilation.GetDiagnostics())
+			.Where(d => d.Severity == DiagnosticSeverity.Error)
+			.Select(d => d.ToString())
+			.ToArray();
+		if (errors.Length > 0)
+		{
+			throw new InvalidOperationException(
+				"The analyzer test source does not compile:"
+				+ Environment.NewLine + string.Join(Environment.NewLine, errors));
+		}
 
 		CompilationWithAnalyzers withAnalyzers = outputCompilation.WithAnalyzers(
 			ImmutableArray.Create<DiagnosticAnalyzer>(new TAnalyzer()));
