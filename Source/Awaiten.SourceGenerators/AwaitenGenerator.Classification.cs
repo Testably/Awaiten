@@ -23,7 +23,7 @@ partial class AwaitenGenerator
 	///     SynthesisSuppressed gate; a registered <c>IAsyncEnumerable&lt;T&gt;</c> or <c>Task&lt;C&gt;</c> claims only
 	///     its own exact shape. A registered keyed dictionary also claims only its own exact declared type (whatever
 	///     its key type - so a registered <c>IReadOnlyDictionary&lt;int, T&gt;</c> resolves as a direct dependency and
-	///     is never AWT156): it is a different axis from the element-type shapes and does not suppress them, nor they
+	///     is never AWT159): it is a different axis from the element-type shapes and does not suppress them, nor they
 	///     it. Shared by the constructor-parameter and <c>[Inject]</c>-property paths, so a member resolves exactly
 	///     like a constructor parameter.
 	/// </summary>
@@ -81,7 +81,7 @@ partial class AwaitenGenerator
 
 			parameterModel = SuppressRegisteredCollectionSynthesis(parameterModel, parameter.Type, context.ServiceToImpl);
 
-			// AWT156/AWT157: keyed-collection misuse is reported only for a dictionary that stays synthesized -
+			// AWT159/AWT160: keyed-collection misuse is reported only for a dictionary that stays synthesized -
 			// an explicitly registered dictionary was rewritten to Direct above and resolves that registration,
 			// whatever its key type or [FromKey].
 			ReportUnsupportedKeyedCollectionKey(parameterModel, parameter.Type, info, context.Diagnostics);
@@ -266,7 +266,7 @@ partial class AwaitenGenerator
 		// registered opaque value.
 		dependency = SuppressRegisteredCollectionSynthesis(dependency, property.Type, serviceToImpl);
 
-		// AWT156/AWT157: keyed-collection misuse is reported only for a dictionary that stays synthesized -
+		// AWT159/AWT160: keyed-collection misuse is reported only for a dictionary that stays synthesized -
 		// an explicitly registered dictionary was rewritten to Direct above and resolves that registration.
 		ReportUnsupportedKeyedCollectionKey(dependency, property.Type, info, diagnostics);
 		ReportFromKeyOnKeyedCollection(dependency, property.Type, info, diagnostics);
@@ -395,9 +395,9 @@ partial class AwaitenGenerator
 		// live in System.Collections.Generic) so IReadOnlyDictionary is not mistaken for a plain generic service.
 		// The [FromKey] key is carried only so an explicitly registered dictionary service under that key can
 		// preempt synthesis (SuppressRegisteredCollectionSynthesis); the synthesized dictionary itself resolves
-		// every key, so a [FromKey] that survives suppression is rejected as AWT157 rather than silently ignored.
+		// every key, so a [FromKey] that survives suppression is rejected as AWT160 rather than silently ignored.
 		// The declared key type is not stored: v1 emits a string-keyed dictionary; a non-string key is rejected as
-		// AWT156 at the classification site (which still classifies it here, so an empty index is not misreported
+		// AWT159 at the classification site (which still classifies it here, so an empty index is not misreported
 		// as AWT101).
 		if (TryGetKeyedCollectionElement(type, out string? keyedService, out _))
 		{
@@ -577,7 +577,7 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     Recognizes a keyed collection - <c>IReadOnlyDictionary&lt;TKey, T&gt;</c> - yielding the fully-qualified
 	///     service (value) type <c>T</c> and the declared key type. v1 resolves only <c>string</c> keys; a
-	///     non-<c>string</c> key type is still recognized here (so the caller reports AWT156 rather than treating
+	///     non-<c>string</c> key type is still recognized here (so the caller reports AWT159 rather than treating
 	///     the dependency as a plain, unregistered generic service and misreporting AWT101).
 	/// </summary>
 	private static bool TryGetKeyedCollectionElement(ITypeSymbol type, out string? serviceType, out string? keyType)
@@ -596,7 +596,7 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     Reports <see cref="Diagnostics.UnsupportedKeyedCollectionKey">AWT156</see> when a dependency classified
+	///     Reports <see cref="Diagnostics.UnsupportedKeyedCollectionKey">AWT159</see> when a dependency classified
 	///     as a keyed collection declares a key type other than the supported <c>string</c>. v1 keys are strings
 	///     (the <c>[Key]</c> registration value); typed/enum keys are deferred. The kind gate lives here so an
 	///     <c>[Arg]</c>/<c>[FromServices]</c>-preempted dictionary parameter is never reported - and, called after
@@ -618,7 +618,7 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     Reports <see cref="Diagnostics.FromKeyOnKeyedCollection">AWT157</see> when a dependency that stays a
+	///     Reports <see cref="Diagnostics.FromKeyOnKeyedCollection">AWT160</see> when a dependency that stays a
 	///     synthesized keyed collection carries a <c>[FromKey]</c>: the synthesized dictionary resolves
 	///     <em>every</em> keyed registration of its service type, so a key selection cannot apply and would
 	///     otherwise be silently ignored. Called after <see cref="SuppressRegisteredCollectionSynthesis" />, so a

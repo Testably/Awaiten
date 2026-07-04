@@ -1125,7 +1125,7 @@ public class GeneralTests
 			""");
 
 		// v1 supports only string keys; a non-string key type is rejected rather than treated as a plain dependency.
-		await That(result.Diagnostics).Contains("*AWT156*").AsWildcard();
+		await That(result.Diagnostics).Contains("*AWT159*").AsWildcard();
 	}
 
 	[Fact]
@@ -1225,7 +1225,7 @@ public class GeneralTests
 			""");
 
 		// An explicitly registered dictionary resolves as an ordinary direct dependency whatever its key type -
-		// AWT156 gates only the synthesized dictionary, which supports string keys.
+		// AWT159 gates only the synthesized dictionary, which supports string keys.
 		await That(result.Diagnostics).IsEmpty()
 			.Because("an explicitly registered non-string-keyed dictionary is an opaque registered value, not a rejected synthesized collection");
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
@@ -1255,7 +1255,7 @@ public class GeneralTests
 
 		// The synthesized dictionary resolves every keyed registration; a [FromKey] cannot select within it and
 		// is rejected rather than silently ignored.
-		await That(result.Diagnostics).Contains("*AWT157*").AsWildcard();
+		await That(result.Diagnostics).Contains("*AWT160*").AsWildcard();
 	}
 
 	[Fact]
@@ -1282,7 +1282,7 @@ public class GeneralTests
 			""");
 
 		// A dictionary service registered under the requested key preempts synthesis, so the [FromKey] is a
-		// legitimate keyed selection of that registration - no AWT157.
+		// legitimate keyed selection of that registration - no AWT160.
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 		await That(source).Contains("new global::MyCode.Router(Root.ResolveChannelMap(__s.__root))")

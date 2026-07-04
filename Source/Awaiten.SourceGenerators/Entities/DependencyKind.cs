@@ -100,8 +100,8 @@ internal enum DependencyKind
 	///     yields an empty dictionary, not AWT101). An explicitly registered dictionary service of the exact
 	///     declared type (under the dependency's key) preempts synthesis: the dependency is rewritten to
 	///     <see cref="Direct" /> and resolves that registration, whatever its key type. v1 synthesis supports
-	///     <c>string</c> keys only; a non-<c>string</c> key type is reported as AWT156, and a <c>[FromKey]</c>
-	///     that survives suppression as AWT157 (the synthesized dictionary resolves every key).
+	///     <c>string</c> keys only; a non-<c>string</c> key type is reported as AWT159, and a <c>[FromKey]</c>
+	///     that survives suppression as AWT160 (the synthesized dictionary resolves every key).
 	/// </summary>
 	KeyedCollection,
 }

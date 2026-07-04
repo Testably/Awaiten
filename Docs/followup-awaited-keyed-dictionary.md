@@ -8,7 +8,7 @@ The keyed dictionary (`IReadOnlyDictionary<string, TService>`, `DependencyKind.K
 
 ## Current state (read these first)
 
-- `feat/keyed-dictionary` commits `89f34a8` (feature), `ee63735` (owner-qualified static resolver calls), plus the suppression/AWT157 work on top. Read `Tests/Awaiten.Tests/KeyedDictionaryTests.cs` and the keyed tests in `Tests/Awaiten.SourceGenerators.Tests/GeneralTests.cs` for the intended semantics.
+- `feat/keyed-dictionary` commits `89f34a8` (feature), `ee63735` (owner-qualified static resolver calls), plus the suppression/AWT160 work on top. Read `Tests/Awaiten.Tests/KeyedDictionaryTests.cs` and the keyed tests in `Tests/Awaiten.SourceGenerators.Tests/GeneralTests.cs` for the intended semantics.
 - The synchronous keyed dictionary: classification in `AwaitenGenerator.Classification.cs` (`TryGetKeyedCollectionElement`, the `KeyedCollection` branch of `ClassifyDependency`), membership in `AwaitenGenerator.Coalescing.cs` (`AddKeyedMember`), graph edges in `AwaitenGenerator.Analysis.cs` (`AddKeyedCollectionMemberEdges`, `PushTransientKeyedMembers`), emission in `Sources.Construction.cs` (`KeyedCollectionLiteral`) and `Sources.Dispatch.cs` (`AddKeyedCollectionEntries`), names/resolvers in `Sources.Names.cs` (`BuildKeyedNames`).
 - The awaited-collection precedent to mirror: `TryGetAwaitedCollection` (classification), the `AwaitedEnumerable` branches throughout `AwaitenGenerator.Analysis.cs` / `Production.cs` / `Scan.cs`, `AwaitedCollectionExpression` (`Sources.Construction.cs`), `AddAwaitedCollectionEntries` + `AwaitedCollectionWithheldMessage` (`Sources.Dispatch.cs` / `Sources.Guidance.cs`).
 
@@ -21,7 +21,7 @@ The keyed dictionary (`IReadOnlyDictionary<string, TService>`, `DependencyKind.K
 3. The task itself is handed back synchronously, so the shape joins the synchronous dispatch by type (like awaited collections do) rather than an async arm.
 4. Eager behind the task: it materializes its members during construction of the consumer's value, so it contributes construction-graph edges (`includeEagerBare`, cycle detection AWT102), dependency edges (captive AWT105, taint propagation), and is followed by the transitive-disposable walk (AWT118 / strict root-withholding — add the awaited-keyed analogue of the `AwaitedCollectionWithheldMessage` guidance).
 5. Empty membership yields a completed task over an empty dictionary, not AWT101.
-6. AWT156 for a non-`string` key type, AWT157 for a `[FromKey]` — same reports as the synchronous dictionary, and only when the dependency stays synthesized (see 7).
+6. AWT159 for a non-`string` key type, AWT160 for a `[FromKey]` — same reports as the synchronous dictionary, and only when the dependency stays synthesized (see 7).
 7. Suppression (all-or-nothing, mirroring `SuppressRegisteredCollectionSynthesis` and `SynthesisSuppressed`):
    - an explicitly registered `Task<IReadOnlyDictionary<string, TService>>` claims its own exact shape (like a registered `Task<C>`);
    - a registered synchronous `IReadOnlyDictionary<string, TService>` claims the awaited view too (like a registered sync collection shape claims `Task<C>`): injecting the awaited sibling is then AWT101 rather than a second dictionary synthesized behind the opaque registration. Extend both the classification-side gate and the dispatch-side gate in `AddKeyedCollectionEntries`'s awaited analogue.
@@ -37,7 +37,7 @@ The keyed dictionary (`IReadOnlyDictionary<string, TService>`, `DependencyKind.K
 
 ## Tests (all three suites)
 
-- Generator (`GeneralTests.cs` or a dedicated file): materialization with all-sync members (completed task), with an async-tainted member (no AWT122, awaits the member), empty membership, suppression by a registered sync dictionary and by a registered `Task<...>` dictionary, AWT156/AWT157 for the awaited form, by-type dispatch entry.
+- Generator (`GeneralTests.cs` or a dedicated file): materialization with all-sync members (completed task), with an async-tainted member (no AWT122, awaits the member), empty membership, suppression by a registered sync dictionary and by a registered `Task<...>` dictionary, AWT159/AWT160 for the awaited form, by-type dispatch entry.
 - Diagnostics: AWT102 cycle closed through the awaited keyed edge (eager bare), AWT105 captive scoped member, AWT118 analyzer walk through the awaited keyed edge, AWT122 **not** reported.
 - Runtime (`Awaiten.Tests`, net48 included): awaiting the injected task, async-initialized member is initialized when the task completes, lifetimes (singleton shared / transient fresh / scoped per scope), strict root-withholding parity with the synchronous dictionary.
 

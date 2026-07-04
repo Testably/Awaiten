@@ -837,7 +837,7 @@ internal static class Diagnostics
 	///     only <c>IReadOnlyDictionary&lt;string, TService&gt;</c>; typed/enum keys are not yet supported.
 	/// </summary>
 	public static readonly DiagnosticDescriptor UnsupportedKeyedCollectionKey = new(
-		"AWT156",
+		"AWT159",
 		"Unsupported keyed-collection key type",
 		"'{0}' requests a keyed collection with key type '{1}', but keyed registrations use string keys; use IReadOnlyDictionary<string, TService> (typed/enum keys are not yet supported)",
 		"Awaiten",
@@ -852,7 +852,7 @@ internal static class Diagnostics
 	///     and resolves as an ordinary keyed dependency, so it is never reported.
 	/// </summary>
 	public static readonly DiagnosticDescriptor FromKeyOnKeyedCollection = new(
-		"AWT157",
+		"AWT160",
 		"[FromKey] on a keyed collection",
 		"'{0}' applies [FromKey(\"{1}\")] to the keyed collection '{2}', which resolves every keyed registration of its service type; remove the [FromKey], or register a dictionary service under that key to take precedence over synthesis",
 		"Awaiten",
