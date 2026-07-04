@@ -37,17 +37,17 @@ public class CompositeTests
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
 		// The single INotifier dispatch resolves the composite, never a bare channel.
-		await That(source).Contains("static __s => __s.ResolveCompositeNotifier()")
+		await That(source).Contains("static __s => ResolveCompositeNotifier(__s)")
 			.Because("the composite is the public single-dispatch winner for INotifier");
-		await That(source).DoesNotContain("static __s => __s.ResolveEmail()")
+		await That(source).DoesNotContain("static __s => ResolveEmail(__s)")
 			.Because("a bare channel is no longer publicly dispatched — only the composite is");
 
 		// The composite fans out to the OTHER registrations (Email, Sms), never to itself.
-		await That(source).Contains("new global::MyCode.CompositeNotifier(new global::MyCode.INotifier[] { ResolveEmail(), ResolveSms() })")
+		await That(source).Contains("new global::MyCode.CompositeNotifier(new global::MyCode.INotifier[] { ResolveEmail(__s), ResolveSms(__s) })")
 			.Because("the composite's collection parameter materializes the other members, excluding itself");
 
 		// A separate IEnumerable<INotifier> consumer also gets the bare channels, not the composite.
-		await That(source).Contains("new global::MyCode.Host(new global::MyCode.INotifier[] { ResolveEmail(), ResolveSms() })")
+		await That(source).Contains("new global::MyCode.Host(new global::MyCode.INotifier[] { ResolveEmail(__s), ResolveSms(__s) })")
 			.Because("the composite is excluded from every collection, so a separate consumer sees the bare members");
 	}
 
@@ -74,7 +74,7 @@ public class CompositeTests
 			.Because("a composite over zero other registrations is legal");
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		await That(source).Contains("static __s => __s.ResolveCompositeNotifier()")
+		await That(source).Contains("static __s => ResolveCompositeNotifier(__s)")
 			.Because("the composite is still the public winner for INotifier");
 		await That(source).Contains("new global::MyCode.CompositeNotifier(new global::MyCode.INotifier[]")
 			.Because("the composite fans out to an empty array when there are no other registrations");

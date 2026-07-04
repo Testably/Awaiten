@@ -37,7 +37,7 @@ public class OwnedTests
 			.Because("the throwaway-scope owned helper is emitted on the base Scope");
 		await That(source).Contains("Scope __owned = CreateScope();")
 			.Because("the owned helper builds its value in a fresh child scope");
-		await That(source).Contains("__Owned<global::MyCode.Widget>(__s => __s.ResolveWidget())")
+		await That(source).Contains("__s.__Owned<global::MyCode.Widget>(__o => ResolveWidget(__o))")
 			.Because("the Func<Owned<Widget>> factory builds the widget into the throwaway scope through its resolver");
 	}
 
@@ -91,7 +91,7 @@ public class OwnedTests
 
 		await That(source).Contains("typeof(global::System.Func<string, global::Awaiten.Owned<global::MyCode.Label>>)")
 			.Because("the leak-free factory for a parameterized service is Func<TArg…, Owned<T>>");
-		await That(source).Contains("__Owned<global::MyCode.Label>(__s => __s.ResolveLabel(a0))")
+		await That(source).Contains("__s.__Owned<global::MyCode.Label>(__o => ResolveLabel(__o, a0))")
 			.Because("the runtime argument flows into the parameterized resolver called on the throwaway scope");
 	}
 

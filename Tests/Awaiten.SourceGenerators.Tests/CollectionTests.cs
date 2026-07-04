@@ -38,7 +38,7 @@ public class CollectionTests
 
 		// The collection is an array of every member's resolver, in registration order; both members get their
 		// own backing field (no second instance is fabricated for the "losing" registration).
-		await That(source).Contains("new global::MyCode.Host(new global::MyCode.IPlugin[] { ResolveAlpha(), ResolveBeta() })")
+		await That(source).Contains("new global::MyCode.Host(new global::MyCode.IPlugin[] { Root.ResolveAlpha(__s.__root), Root.ResolveBeta(__s.__root) })")
 			.Because("the collection dependency materializes every registration in registration order");
 		await That(source).Contains("_alpha")
 			.Because("the first (winning) registration is a real instance");
@@ -51,7 +51,7 @@ public class CollectionTests
 			.Because("the collection is publicly resolvable as IEnumerable<T>");
 		await That(source).Contains("typeof(global::MyCode.IPlugin[])")
 			.Because("the collection is publicly resolvable as T[]");
-		await That(source).Contains("() => new global::MyCode.IPlugin[] { ResolveAlpha(), ResolveBeta() };")
+		await That(source).Contains("(Scope __s) => new global::MyCode.IPlugin[] { Root.ResolveAlpha(__s.__root), Root.ResolveBeta(__s.__root) };")
 			.Because("the public collection dispatch returns the same materialized array");
 		await That(source).Contains("typeof(global::MyCode.IPlugin)")
 			.Because("the single IPlugin resolution still dispatches to the winning registration");
@@ -80,7 +80,7 @@ public class CollectionTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		await That(source).Contains("new global::MyCode.Host(new global::MyCode.IPlugin[] { ResolveAlpha() })")
+		await That(source).Contains("new global::MyCode.Host(new global::MyCode.IPlugin[] { Root.ResolveAlpha(__s.__root) })")
 			.Because("an array parameter resolves to the collection of registrations, not a single registration");
 	}
 
@@ -137,7 +137,7 @@ public class CollectionTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		await That(source).Contains("new global::MyCode.Host(new global::MyCode.IPlugin[] { ResolveUnkeyed() })")
+		await That(source).Contains("new global::MyCode.Host(new global::MyCode.IPlugin[] { Root.ResolveUnkeyed(__s.__root) })")
 			.Because("only the unkeyed registration is a collection member; the keyed one is reached only by [FromKey]");
 	}
 
@@ -167,7 +167,7 @@ public class CollectionTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		await That(source).Contains("new global::MyCode.Host(new global::MyCode.IPlugin[] { ResolvePlain() })")
+		await That(source).Contains("new global::MyCode.Host(new global::MyCode.IPlugin[] { Root.ResolvePlain(__s.__root) })")
 			.Because("a parameterized [Arg] service is reachable only through its Func<TArg…, T> factory, never a collection");
 	}
 
@@ -259,7 +259,7 @@ public class CollectionTests
 		// IEnumerable<IPlugin> is itself a registered service, so the parameter is a direct dependency on that
 		// registration - not the collection synthesized from the IPlugin members. Registering a collection type
 		// as an opaque value (e.g. a string[] of command-line arguments) is therefore supported.
-		await That(source).Contains("new global::MyCode.Host(__root.ResolveBundle())")
+		await That(source).Contains("new global::MyCode.Host(Root.ResolveBundle(__s.__root))")
 			.Because("an explicitly registered collection type wins over the synthesized collection on injection (the singleton member routes through the root)");
 
 		// All-or-nothing synthesis: because a shape of IPlugin (IEnumerable<IPlugin>) is registered, no shape is
@@ -350,12 +350,12 @@ public class CollectionTests
 
 		// The [FromKey("primary")] collection materializes only the 'primary' member, not the unkeyed Plain. (A
 		// key identifies at most one registration per service type here, so the keyed collection holds one member.)
-		await That(source).Contains("new global::MyCode.Host(new global::MyCode.IPlugin[] { ResolveKeyed() })")
+		await That(source).Contains("new global::MyCode.Host(new global::MyCode.IPlugin[] { Root.ResolveKeyed(__s.__root) })")
 			.Because("a keyed collection resolves exactly the registrations under that key");
 
 		// The unkeyed collection (publicly resolvable by type) holds only the unkeyed Plain - a keyed member is
 		// never an unkeyed one, so the two buckets stay disjoint.
-		await That(source).Contains("() => new global::MyCode.IPlugin[] { ResolvePlain() };")
+		await That(source).Contains("(Scope __s) => new global::MyCode.IPlugin[] { Root.ResolvePlain(__s.__root) };")
 			.Because("the public unkeyed collection resolves only the unkeyed registration");
 	}
 
@@ -415,7 +415,7 @@ public class CollectionTests
 
 		// Every member is synchronous, so the async collection is a synchronous expression: the members are
 		// materialized into a T[] in registration order and wrapped in the __AsyncArray<T> helper.
-		await That(source).Contains("new __AsyncArray<global::MyCode.IPlugin>(new global::MyCode.IPlugin[] { ResolveAlpha(), ResolveBeta() })")
+		await That(source).Contains("new __AsyncArray<global::MyCode.IPlugin>(new global::MyCode.IPlugin[] { Root.ResolveAlpha(__s.__root), Root.ResolveBeta(__s.__root) })")
 			.Because("an async collection materializes every registration in registration order, wrapped as an IAsyncEnumerable<T>");
 		await That(source).Contains("private sealed class __AsyncArray<T> : global::System.Collections.Generic.IAsyncEnumerable<T>, global::System.Collections.Generic.IAsyncEnumerator<T>")
 			.Because("the __AsyncArray<T> backing type is emitted when an async collection is injected");
@@ -455,7 +455,7 @@ public class CollectionTests
 
 		// The host captured an async-tainted member, so it is built on the async path: the async member is awaited
 		// through its async resolver (in registration order), the synchronous member resolved directly.
-		await That(source).Contains("new __AsyncArray<global::MyCode.IPlugin>(new global::MyCode.IPlugin[] { ResolveAlpha(), await ResolveAsyncPluginAsync(cancellationToken).ConfigureAwait(false) })")
+		await That(source).Contains("new __AsyncArray<global::MyCode.IPlugin>(new global::MyCode.IPlugin[] { Root.ResolveAlpha(__s.__root), await Root.ResolveAsyncPluginAsync(__s.__root, cancellationToken).ConfigureAwait(false) })")
 			.Because("the async-tainted member is awaited while materializing the collection, the synchronous member resolved directly");
 	}
 
@@ -518,7 +518,7 @@ public class CollectionTests
 
 		// IAsyncEnumerable<IPlugin> is itself a registered service (an opaque channel), so the parameter is a direct
 		// dependency on that registration - not the async collection synthesized from the IPlugin members.
-		await That(source).Contains("new global::MyCode.Host(__root.ResolveChannel())")
+		await That(source).Contains("new global::MyCode.Host(Root.ResolveChannel(__s.__root))")
 			.Because("an explicitly registered IAsyncEnumerable<T> wins over the synthesized async collection on injection");
 	}
 
@@ -589,7 +589,7 @@ public class CollectionTests
 		// wrapping the same materialized members in the __AsyncArray<T> replay enumerator.
 		await That(source).Contains("typeof(global::System.Collections.Generic.IAsyncEnumerable<global::MyCode.IPlugin>)")
 			.Because("a synchronous collection is also publicly resolvable as IAsyncEnumerable<T>");
-		await That(source).Contains("new __AsyncArray<global::MyCode.IPlugin>(new global::MyCode.IPlugin[] { ResolveAlpha(), ResolveBeta() })")
+		await That(source).Contains("new __AsyncArray<global::MyCode.IPlugin>(new global::MyCode.IPlugin[] { Root.ResolveAlpha(__s.__root), Root.ResolveBeta(__s.__root) })")
 			.Because("the IAsyncEnumerable<T> dispatch wraps the synchronously materialized members");
 	}
 
@@ -621,9 +621,9 @@ public class CollectionTests
 
 		// The collection holds an async-tainted member, so its IAsyncEnumerable<T> shape is served by an async
 		// dispatch arm routed to a generated async collection resolver that awaits each member.
-		await That(source).Contains("typeof(global::System.Collections.Generic.IAsyncEnumerable<global::MyCode.IPlugin>), static (__s, __ct) => __AsObject(__s.__ResolveAsyncCollection0(__ct))")
+		await That(source).Contains("typeof(global::System.Collections.Generic.IAsyncEnumerable<global::MyCode.IPlugin>), static (__s, __ct) => __AsObject(__ResolveAsyncCollection0(__s, __ct))")
 			.Because("the async collection is resolvable by type through ResolveAsync");
-		await That(source).Contains("return new __AsyncArray<global::MyCode.IPlugin>(new global::MyCode.IPlugin[] { await ResolveAsyncPluginAsync(cancellationToken).ConfigureAwait(false) });")
+		await That(source).Contains("return new __AsyncArray<global::MyCode.IPlugin>(new global::MyCode.IPlugin[] { await Root.ResolveAsyncPluginAsync(__s.__root, cancellationToken).ConfigureAwait(false) });")
 			.Because("the generated async collection resolver materializes the stream, awaiting the async member");
 
 		// Its synchronous Resolve steers to ResolveAsync rather than surfacing a generic no-registration error.
@@ -666,7 +666,7 @@ public class CollectionTests
 		// The registered channel owns typeof(IAsyncEnumerable<IPlugin>) on the synchronous dispatch, and no async
 		// arm is synthesized behind it: ResolveAsync falls through to the same synchronous resolution, so Resolve
 		// and ResolveAsync hand back the same registered service rather than two disagreeing collections.
-		await That(source).Contains("typeof(global::System.Collections.Generic.IAsyncEnumerable<global::MyCode.IPlugin>), static __s => __s.ResolveChannel()")
+		await That(source).Contains("typeof(global::System.Collections.Generic.IAsyncEnumerable<global::MyCode.IPlugin>), static __s => Root.ResolveChannel(__s.__root)")
 			.Because("the explicitly registered IAsyncEnumerable<T> is dispatched as an ordinary service");
 		await That(source).DoesNotContain("__ResolveAsyncCollection")
 			.Because("no async collection arm is synthesized behind the registered async shape");
@@ -709,7 +709,7 @@ public class CollectionTests
 		// throws the channel's own steer-to-ResolveAsync guidance, and ResolveAsync serves the channel.
 		await That(source).DoesNotContain("new __AsyncArray<global::MyCode.IPlugin>")
 			.Because("the synthesized async view is not emitted behind the registered async shape");
-		await That(source).Contains("typeof(global::System.Collections.Generic.IAsyncEnumerable<global::MyCode.IPlugin>), static (__s, __ct) => __AsObject(__s.ResolveChannelAsync(__ct))")
+		await That(source).Contains("typeof(global::System.Collections.Generic.IAsyncEnumerable<global::MyCode.IPlugin>), static (__s, __ct) => __AsObject(Root.ResolveChannelAsync(__s.__root, __ct))")
 			.Because("ResolveAsync serves the registered channel through its own async resolver");
 		await That(source).Contains("'System.Collections.Generic.IAsyncEnumerable<MyCode.IPlugin>' requires asynchronous initialization")
 			.Because("synchronous Resolve throws the registered service's guidance, not the synthesized view's");
@@ -781,7 +781,7 @@ public class CollectionTests
 
 		// Every member is synchronous, so the awaited collection is a completed Task.FromResult over the
 		// synchronously materialized array - no async machinery at all.
-		await That(source).Contains("global::System.Threading.Tasks.Task.FromResult<global::System.Collections.Generic.IReadOnlyList<global::MyCode.IPlugin>>(new global::MyCode.IPlugin[] { ResolveAlpha(), ResolveBeta() })")
+		await That(source).Contains("global::System.Threading.Tasks.Task.FromResult<global::System.Collections.Generic.IReadOnlyList<global::MyCode.IPlugin>>(new global::MyCode.IPlugin[] { Root.ResolveAlpha(__s.__root), Root.ResolveBeta(__s.__root) })")
 			.Because("an all-synchronous awaited collection is a completed task over the members in registration order");
 	}
 
@@ -820,12 +820,12 @@ public class CollectionTests
 		// The async member is awaited inside an immediately-invoked async lambda (with no ambient token - the
 		// consumer is built synchronously), the synchronous member resolved directly, and the array cast to the
 		// requested IReadOnlyList<T> so the task's result type matches the parameter.
-		await That(source).Contains("((global::System.Func<global::System.Threading.Tasks.Task<global::System.Collections.Generic.IReadOnlyList<global::MyCode.IPlugin>>>)(async () => (global::System.Collections.Generic.IReadOnlyList<global::MyCode.IPlugin>)new global::MyCode.IPlugin[] { ResolveAlpha(), await ResolveAsyncPluginAsync(default).ConfigureAwait(false) }))()")
+		await That(source).Contains("((global::System.Func<global::System.Threading.Tasks.Task<global::System.Collections.Generic.IReadOnlyList<global::MyCode.IPlugin>>>)(async () => (global::System.Collections.Generic.IReadOnlyList<global::MyCode.IPlugin>)new global::MyCode.IPlugin[] { Root.ResolveAlpha(__s.__root), await Root.ResolveAsyncPluginAsync(__s.__root, default).ConfigureAwait(false) }))()")
 			.Because("the async-tainted member is awaited inside the produced task, in registration order");
 
 		// Unlike IAsyncEnumerable<T>, the awaited collection launders its members' taint - the members are awaited
 		// inside the task, not at construction - so the host stays synchronously constructible and dispatchable.
-		await That(source).Contains("typeof(global::MyCode.Host), static __s => __s.ResolveHost()")
+		await That(source).Contains("typeof(global::MyCode.Host), static __s => Root.ResolveHost(__s.__root)")
 			.Because("a consumer of an awaited collection stays synchronously resolvable even when a member is async-tainted");
 	}
 
@@ -961,7 +961,7 @@ public class CollectionTests
 
 		// Task<IReadOnlyList<IPlugin>> is itself a registered service (an opaque, pre-built task), so the parameter
 		// is a direct dependency on that registration - not the awaited collection synthesized from the members.
-		await That(source).Contains("new global::MyCode.Host(__root.ResolvePluginTask())")
+		await That(source).Contains("new global::MyCode.Host(Root.ResolvePluginTask(__s.__root))")
 			.Because("an explicitly registered Task<C> claims its own exact shape, winning over the synthesized awaited collection");
 		await That(source).DoesNotContain("Task.FromResult<global::System.Collections.Generic.IReadOnlyList<global::MyCode.IPlugin>>")
 			.Because("no awaited collection is synthesized behind the registered shape");
@@ -1073,9 +1073,9 @@ public class CollectionTests
 		// async arm), the awaited collection stays on the SYNCHRONOUS by-type dispatch even with an async-tainted
 		// member: its forwarder hands back an already-started task (default token - no ambient token by type) that
 		// awaits the async member behind it.
-		await That(source).Contains("typeof(global::System.Threading.Tasks.Task<global::System.Collections.Generic.IReadOnlyList<global::MyCode.IPlugin>>), static __s => __s.__R")
+		await That(source).Contains("typeof(global::System.Threading.Tasks.Task<global::System.Collections.Generic.IReadOnlyList<global::MyCode.IPlugin>>), static __s => __R")
 			.Because("the awaited collection is a synchronous by-type dispatch entry even with an async member");
-		await That(source).Contains("await ResolveAsyncPluginAsync(default).ConfigureAwait(false)")
+		await That(source).Contains("await Root.ResolveAsyncPluginAsync(__s.__root, default).ConfigureAwait(false)")
 			.Because("the by-type awaited collection awaits its async member with the default token");
 	}
 
@@ -1110,7 +1110,7 @@ public class CollectionTests
 		// The registered Task<IReadOnlyList<IPlugin>> owns its own by-type slot (its bare resolver), and no awaited
 		// collection is synthesized behind it - but the sibling awaited shapes still synthesize, exactly as on the
 		// injection side (the awaitedShapeRegistered gate claims only the exact shape).
-		await That(source).Contains("typeof(global::System.Threading.Tasks.Task<global::System.Collections.Generic.IReadOnlyList<global::MyCode.IPlugin>>), static __s => __s.ResolvePluginTask()")
+		await That(source).Contains("typeof(global::System.Threading.Tasks.Task<global::System.Collections.Generic.IReadOnlyList<global::MyCode.IPlugin>>), static __s => Root.ResolvePluginTask(__s.__root)")
 			.Because("the registered awaited shape is served by its own resolver, not a synthesized awaited collection");
 		await That(source).Contains("typeof(global::System.Threading.Tasks.Task<global::MyCode.IPlugin[]>)")
 			.Because("a sibling awaited shape that was not registered still synthesizes an awaited collection");

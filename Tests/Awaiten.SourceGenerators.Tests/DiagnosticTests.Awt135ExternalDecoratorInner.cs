@@ -60,7 +60,7 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).IsEmpty()
 				.Because("a [FromServices] side-dependency of a decorator is legal; only the inner parameter is off-limits");
 			string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-			await That(source).Contains("(global::MyCode.ILogger)__ResolveExternal(typeof(global::MyCode.ILogger), null)");
+			await That(source).Contains("(global::MyCode.ILogger)__s.__ResolveExternal(typeof(global::MyCode.ILogger), null)");
 		}
 
 		[Fact]
@@ -90,7 +90,7 @@ public partial class DiagnosticTests
 				.Because("a [FromServices] sibling of the service type is a separate external dependency, not a second inner candidate");
 			string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 			// The chain is wired (the decorator wraps the base impl) while the sibling resolves externally.
-			await That(source).Contains("(global::MyCode.IService)__ResolveExternal(typeof(global::MyCode.IService), null)");
+			await That(source).Contains("(global::MyCode.IService)__s.__ResolveExternal(typeof(global::MyCode.IService), null)");
 			await That(source).Contains("new global::MyCode.Real()");
 		}
 	}

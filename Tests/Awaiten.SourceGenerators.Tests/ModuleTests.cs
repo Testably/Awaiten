@@ -105,7 +105,7 @@ public class ModuleTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		await That(source).Contains("__Bucket(typeof(global::MyCode.IClock), static __s => __s.ResolveAaModuleClock()")
+		await That(source).Contains("__Bucket(typeof(global::MyCode.IClock), static __s => Root.ResolveAaModuleClock(__s.__root)")
 			.Because("an explicit overridable default beats a scan match for single resolution");
 	}
 
@@ -136,7 +136,7 @@ public class ModuleTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		await That(source).Contains("__Bucket(typeof(global::MyCode.IClock), static __s => __s.ResolveZzModuleClock()")
+		await That(source).Contains("__Bucket(typeof(global::MyCode.IClock), static __s => Root.ResolveZzModuleClock(__s.__root)")
 			.Because("the explicit default wins independently of how the scan enumerates its matches");
 	}
 
@@ -167,7 +167,7 @@ public class ModuleTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		await That(source).Contains("__Bucket(typeof(global::MyCode.IClock), static __s => __s.ResolveZzModuleClock()")
+		await That(source).Contains("__Bucket(typeof(global::MyCode.IClock), static __s => Root.ResolveZzModuleClock(__s.__root)")
 			.Because("attribute declaration order between [Scan] and [Import] does not affect default-over-scan precedence");
 	}
 
@@ -225,7 +225,7 @@ public class ModuleTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		await That(source).Contains("__Bucket(typeof(global::MyCode.IClock), static __s => __s.ResolveZzDefaultClock()")
+		await That(source).Contains("__Bucket(typeof(global::MyCode.IClock), static __s => Root.ResolveZzDefaultClock(__s.__root)")
 			.Because("Default = true on the container itself also beats a scan match");
 	}
 
@@ -262,7 +262,7 @@ public class ModuleTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		await That(source).Contains("__Bucket(typeof(global::MyCode.IRepo<global::MyCode.Foo>), static __s => __s.ResolveCachedRepo()")
+		await That(source).Contains("__Bucket(typeof(global::MyCode.IRepo<global::MyCode.Foo>), static __s => Root.ResolveCachedRepo(__s.__root)")
 			.Because("an explicit closed default - a deliberate declaration - beats the closed registration the blanket open template expands on demand, like it beats a blanket scan");
 	}
 
@@ -675,7 +675,7 @@ public class ModuleTests
 			.Because("re-registering the same implementation coalesces into one instance without conflicts");
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		await That(source).Contains("new global::MyCode.IClock[] { ResolveModuleClock() }")
+		await That(source).Contains("new global::MyCode.IClock[] { Root.ResolveModuleClock(__s.__root) }")
 			.Because("the duplicate import does not duplicate the collection membership either");
 	}
 

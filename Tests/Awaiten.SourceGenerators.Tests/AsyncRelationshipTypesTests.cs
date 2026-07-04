@@ -47,8 +47,8 @@ public class AsyncRelationshipTypesTests
 
 		await That(source).Contains("new __Bucket(typeof(global::MyCode.Pool),")
 			.Because("Pool is not async-tainted, so it keeps a synchronous by-type dispatch entry");
-		await That(source).Contains("new global::System.Func<global::System.Threading.Tasks.Task<global::MyCode.Connection>>(() => __root.ResolveConnectionAsync(default))");
-		await That(source).Contains("new global::System.Lazy<global::System.Threading.Tasks.Task<global::MyCode.Connection>>(() => __root.ResolveConnectionAsync(default))");
+		await That(source).Contains("new global::System.Func<global::System.Threading.Tasks.Task<global::MyCode.Connection>>(() => Root.ResolveConnectionAsync(__s.__root, default))");
+		await That(source).Contains("new global::System.Lazy<global::System.Threading.Tasks.Task<global::MyCode.Connection>>(() => Root.ResolveConnectionAsync(__s.__root, default))");
 	}
 
 	[Fact]
@@ -84,9 +84,9 @@ public class AsyncRelationshipTypesTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		await That(source).Contains("new global::System.Func<int, global::System.Threading.Tasks.Task<global::MyCode.Robot>>((a0) => ResolveRobotAsync(a0, default))")
+		await That(source).Contains("new global::System.Func<int, global::System.Threading.Tasks.Task<global::MyCode.Robot>>((a0) => ResolveRobotAsync(__s, a0, default))")
 			.Because("the async factory forwards the runtime argument to the async parameterized resolver");
-		await That(source).Contains("internal async global::System.Threading.Tasks.Task<global::MyCode.Robot> ResolveRobotAsync(int a0, global::System.Threading.CancellationToken cancellationToken)")
+		await That(source).Contains("internal static async global::System.Threading.Tasks.Task<global::MyCode.Robot> ResolveRobotAsync(Scope __s, int a0, global::System.Threading.CancellationToken cancellationToken)")
 			.Because("the async parameterized resolver takes the runtime arguments alongside the token");
 		await That(source).Contains("InitializeAsync(cancellationToken).ConfigureAwait(false)")
 			.Because("the async parameterized resolver awaits the service's initialization");
@@ -159,9 +159,9 @@ public class AsyncRelationshipTypesTests
 		// still runs, never building a second uninitialized instance.
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-		await That(source).Contains("internal global::MyCode.Robot ResolveRobot(int a0)")
+		await That(source).Contains("internal static global::MyCode.Robot ResolveRobot(Scope __s, int a0)")
 			.Because("the pragmatic sync parameterized resolver keeps the runtime-argument signature");
-		await That(source).Contains("return ResolveRobotAsync(a0, default).GetAwaiter().GetResult();")
+		await That(source).Contains("return ResolveRobotAsync(__s, a0, default).GetAwaiter().GetResult();")
 			.Because("it forwards the argument and blocks on the single async (initializing) resolver");
 	}
 
@@ -230,7 +230,7 @@ public class AsyncRelationshipTypesTests
 			.Because("the consumer binds a Func<Task<Owned<Connection>>> factory");
 		await That(source).Contains("__OwnedAsync<global::MyCode.Connection>")
 			.Because("the async owned handle resolves the service into a throwaway child scope through the async owned helper");
-		await That(source).Contains("ResolveConnectionAsync(__ct)")
+		await That(source).Contains("ResolveConnectionAsync(__o, __ct)")
 			.Because("the throwaway scope awaits the service's async resolver (initialization included)");
 	}
 

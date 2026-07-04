@@ -78,8 +78,26 @@ internal static partial class Sources
 	{
 		foreach ((string service, int index) in UniqueServices(instances, strict, syncResolveAfterInit))
 		{
+			// This explicit impl is an instance method on the Scope, so it resolves over `this`: a singleton
+			// through its Root-hosted static resolver over the root, a scoped/transient through its Scope-hosted
+			// static resolver over this scope.
+			if (IsRootOwned(instances[index]))
+			{
+				// A singleton's static resolver guards the root, not this scope, so a disposed scope would still
+				// serve it. Guard `this` here (a block body, unlike the self-guarding scoped/transient impl below)
+				// so resolving any type from a disposed scope throws - this is the typed fast path the generic
+				// Resolve<T> extension takes, which bypasses the Type-based TryResolve guard.
+				Indent(builder, depth).Append(service).Append(" global::Awaiten.IAwaitenResolver<")
+					.Append(service).AppendLine(">.Resolve()");
+				Indent(builder, depth).AppendLine("{");
+				EmitDisposedGuard(builder, depth + 1);
+				Indent(builder, depth + 1).Append("return Root.").Append(names.Resolver(index)).AppendLine("(__root);");
+				Indent(builder, depth).AppendLine("}");
+				continue;
+			}
+
 			Indent(builder, depth).Append(service).Append(" global::Awaiten.IAwaitenResolver<")
-				.Append(service).Append(">.Resolve() => ").Append(names.Resolver(index)).AppendLine("();");
+				.Append(service).Append(">.Resolve() => ").Append(names.Resolver(index)).AppendLine("(this);");
 		}
 	}
 
@@ -246,6 +264,10 @@ internal static partial class Sources
 			"Attempts to resolve <paramref name=\"serviceType\" />, returning <see langword=\"false\" /> when it is not resolvable.");
 		Indent(builder, depth).AppendLine("public bool TryResolve(global::System.Type serviceType, [global::System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? instance)");
 		Indent(builder, depth).AppendLine("{");
+		// A disposed scope rejects every by-type resolution (including a root-owned singleton reached through
+		// Root.ResolveX(__s.__root)): the per-resolver guards only see the target's owner, so the resolving
+		// scope's own disposal is enforced here, the shared entry the public Resolve(Type) also flows through.
+		EmitDisposedGuard(builder, depth + 1);
 		if (entries.Count == 0)
 		{
 			Indent(builder, depth + 1).AppendLine("instance = null;");
@@ -505,7 +527,7 @@ internal static partial class Sources
 			bool rootWithheld = collectionMembers.TryGetValue(collectionKey, out List<int>? members)
 			                    && members.Any(member => IsFuncWithheld(instances, member, serviceToIndex, collectionMembers, strict));
 
-			string array = CollectionLiteral(collectionKey, names);
+			string array = CollectionLiteral(collectionKey, names, instances);
 			foreach (string shape in AwaitenGenerator.CollectionShapeTypes(collection.Service))
 			{
 				AddCollectionShape(shape, array, rootWithheld, entries, seen);
@@ -652,8 +674,8 @@ internal static partial class Sources
 			// which bounds its lifetime. A non-disposable service is not withheld at the bare type even when its
 			// Func is (its single bare resolution is bounded).
 			entries.Add(bareWithheld
-				? new DispatchEntry(service, resolver + "()", BareWithheldMessage(service), resolver)
-				: new DispatchEntry(service, resolver + "()", directResolver: resolver));
+				? new DispatchEntry(service, resolver + "()", BareWithheldMessage(service), resolver, rootOwned)
+				: new DispatchEntry(service, resolver + "()", directResolver: resolver, rootOwnedDirect: rootOwned));
 		}
 	}
 
@@ -679,12 +701,15 @@ internal static partial class Sources
 			// The plain Func<T> factory accumulates on its owner; under strict safety it is root-withheld
 			// (resolving it by type off the Root throws guidance, steering to Func<Owned<T>>), but it stays
 			// resolvable from a child scope, where the disposables it builds are bounded by the scope.
+			// The deferred call binds the target's static resolver over the forwarder's scope __s (Root-hosted for
+			// a singleton, Scope-hosted otherwise).
+			string call = ResolveCall(resolver, rootOwned);
 			string func = $"global::System.Func<{service}>";
 			if (seen.Add(func))
 			{
 				entries.Add(funcWithheld
-					? new DispatchEntry(func, $"new global::System.Func<{service}>(() => {resolver}())", FuncWithheldMessage(service))
-					: new DispatchEntry(func, $"new global::System.Func<{service}>(() => {resolver}())"));
+					? new DispatchEntry(func, $"new global::System.Func<{service}>(() => {call})", FuncWithheldMessage(service))
+					: new DispatchEntry(func, $"new global::System.Func<{service}>(() => {call})"));
 			}
 
 			// Lazy<T> is memoized - it builds at most once and never accumulates - so it stays resolvable even
@@ -692,7 +717,7 @@ internal static partial class Sources
 			string lazy = $"global::System.Lazy<{service}>";
 			if (seen.Add(lazy))
 			{
-				entries.Add(new DispatchEntry(lazy, $"new global::System.Lazy<{service}>(() => {resolver}())"));
+				entries.Add(new DispatchEntry(lazy, $"new global::System.Lazy<{service}>(() => {call})"));
 			}
 
 			// Owned<T> hands the caller a disposal handle over a single resolution; Func<Owned<T>> is the
@@ -768,9 +793,21 @@ internal static partial class Sources
 		Indent(builder, depth + 1).AppendLine("{");
 		for (int i = 0; i < entries.Count; i++)
 		{
-			string resolve = entries[i].DirectResolver is { } direct
-				? $"static __s => __s.{direct}()"
-				: $"static __s => __s.__R{forwarderOf[entries[i].Value]}()";
+			string resolve;
+			if (entries[i].DirectResolver is { } direct)
+			{
+				// A bare service binds directly to its static resolver: a singleton on the Root over the shared
+				// root, a scoped/transient on the Scope over the resolving scope.
+				resolve = entries[i].RootOwnedDirect
+					? $"static __s => Root.{direct}(__s.__root)"
+					: $"static __s => {direct}(__s)";
+			}
+			else
+			{
+				// A compound value routes through a static __R forwarder over the resolving scope.
+				resolve = $"static __s => __R{forwarderOf[entries[i].Value]}(__s)";
+			}
+
 			Indent(builder, depth + 2).Append("new __Bucket(typeof(").Append(entries[i].Type).Append("), ")
 				.Append(resolve).Append(", ").Append(entries[i].RootWithheld ? "true" : "false").AppendLine("),");
 		}
@@ -787,12 +824,13 @@ internal static partial class Sources
 		EmitBucketDistribution(builder, depth + 1, "__Bucket", "__bucketCount");
 		Indent(builder, depth).AppendLine("}");
 
-		// One forwarder per unique compound value, preserving the value expression verbatim. Each is tiny and
-		// individually optimizable; deduplication (above) keeps the six collection shapes of an element type to one.
+		// One forwarder per unique compound value, preserving the value expression verbatim over the resolving
+		// scope __s. Each is tiny and individually optimizable; deduplication (above) keeps the six collection
+		// shapes of an element type to one.
 		for (int k = 0; k < forwarders.Count; k++)
 		{
 			builder.AppendLine();
-			Indent(builder, depth).Append("private object __R").Append(k).Append("() => ").Append(forwarders[k]).AppendLine(";");
+			Indent(builder, depth).Append("private static object __R").Append(k).Append("(Scope __s) => ").Append(forwarders[k]).AppendLine(";");
 		}
 	}
 
@@ -905,7 +943,7 @@ internal static partial class Sources
 	///     message (placed in the <c>__withheld</c> table) - so the root-accumulation leak stays impossible
 	///     while the safe scope-bound resolution is allowed.
 	/// </summary>
-	private readonly struct DispatchEntry(string type, string value, string? guidance = null, string? directResolver = null)
+	private readonly struct DispatchEntry(string type, string value, string? guidance = null, string? directResolver = null, bool rootOwnedDirect = false)
 	{
 		public string Type { get; } = type;
 
@@ -913,11 +951,15 @@ internal static partial class Sources
 
 		public string? Guidance { get; } = guidance;
 
-		// A bare-service entry's value is a plain `resolver()` call over the current owner; the resolver method name
-		// is kept so the bucket table can bind a direct delegate (__s => __s.ResolveX()) to the existing virtual
-		// resolver instead of routing through a per-entry forwarder. Null for compound values (Func/Lazy/Owned/
-		// collection literals), which need their expression preserved verbatim in a __R forwarder.
+		// A bare-service entry keeps its resolver method name so the bucket table can bind a direct delegate to the
+		// static resolver (__s => ResolveX(__s), or __s => Root.ResolveX(__s.__root) for a singleton) instead of
+		// routing through a per-entry forwarder. Null for compound values (Func/Lazy/Owned/collection literals),
+		// which need their expression preserved verbatim in a __R forwarder.
 		public string? DirectResolver { get; } = directResolver;
+
+		// Whether a bare-service DirectResolver is root-owned (a singleton or pre-built Instance): its static
+		// resolver lives on the Root and is bound as Root.ResolveX(__s.__root); otherwise it lives on the Scope.
+		public bool RootOwnedDirect { get; } = rootOwnedDirect;
 
 		public bool RootWithheld => Guidance is not null;
 	}

@@ -300,12 +300,19 @@ internal static partial class Sources
 	{
 		for (int i = 0; i < instances.Length; i++)
 		{
+			// Singleton-owned instances (singletons and pre-built Instances) are emitted as static resolvers on the
+			// Root (see EmitRootClass); the base Scope hosts only the scoped, transient and parameterized ones.
+			if (IsRootOwned(instances[i]))
+			{
+				continue;
+			}
+
 			if (EmitsSync(instances[i], syncResolveAfterInit))
 			{
 				builder.AppendLine();
 				if (instances[i].IsAsyncTainted)
 				{
-					EmitDelegatingSyncResolver(builder, depth, i, instances[i], names);
+					EmitDelegatingSyncResolver(builder, depth, i, instances[i], names, "Scope");
 				}
 				else
 				{
@@ -461,14 +468,21 @@ internal static partial class Sources
 				continue;
 			}
 
-			// The synchronous override is suppressed for an async-tainted singleton: in the strict default it
-			// is reachable only through ResolveAsync, and in pragmatic mode its synchronous resolver is the
-			// base Scope's delegator to the async path (which the async override below backs), so it needs no
-			// Root sync override of its own.
-			if (EmitsSync(instance, syncResolveAfterInit) && !instance.IsAsyncTainted)
+			// A synchronously-resolvable, non-async singleton gets its caching static resolver here. An async
+			// singleton in pragmatic mode (SyncResolveAfterInit) instead gets a delegating synchronous resolver
+			// that blocks on its async resolver (both hosted on the Root); in the strict default it has no
+			// synchronous resolver at all (reachable only through ResolveAsync).
+			if (EmitsSync(instance, syncResolveAfterInit))
 			{
 				builder.AppendLine();
-				EmitRootResolver(builder, body, i, context);
+				if (instance.IsAsyncTainted)
+				{
+					EmitDelegatingSyncResolver(builder, body, i, instance, names, "Root");
+				}
+				else
+				{
+					EmitRootResolver(builder, body, i, context);
+				}
 			}
 
 			if (instance.IsAsyncTainted)

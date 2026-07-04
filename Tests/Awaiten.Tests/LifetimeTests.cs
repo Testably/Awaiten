@@ -222,6 +222,20 @@ public partial class LifetimeTests
 		await That(() => scope.Resolve<IScopedService>()).Throws<ObjectDisposedException>();
 	}
 
+	[Fact]
+	public async Task ResolvingASingletonFromADisposedScope_Throws()
+	{
+		using LifetimeContainer.Root container = new();
+		IAwaitenScope scope = container.CreateScope();
+		scope.Dispose();
+
+		// A disposed scope rejects every resolution, not just its own scoped services: a root-owned singleton
+		// is reached through the (live) root, so the resolving scope's disposal is enforced at the entry point -
+		// on both the generic typed fast path and the Type-based path (which take different routes to the resolver).
+		await That(() => scope.Resolve<ISingletonService>()).Throws<ObjectDisposedException>();
+		await That(() => scope.Resolve(typeof(ISingletonService))).Throws<ObjectDisposedException>();
+	}
+
 	public interface ISingletonService;
 
 	public sealed class SingletonService : ISingletonService, IDisposable

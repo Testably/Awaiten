@@ -107,7 +107,7 @@ public class ScanTests
 
 		// Both matches register under IHandler and become members of its collection, resolved by their concrete
 		// resolvers; the concrete types themselves are not self-registered for single dispatch.
-		await That(source).Contains("new global::MyCode.Dispatcher(new global::MyCode.IHandler[] { ResolveEmailHandler(), ResolveSmsHandler() })");
+		await That(source).Contains("new global::MyCode.Dispatcher(new global::MyCode.IHandler[] { Root.ResolveEmailHandler(__s.__root), Root.ResolveSmsHandler(__s.__root) })");
 		await That(source).DoesNotContain("new __Bucket(typeof(global::MyCode.EmailHandler)")
 			.Because("ImplementedInterfaces registers under the marker interface, not the concrete type");
 	}
@@ -139,7 +139,7 @@ public class ScanTests
 		// Resolvable both as its own concrete type and as a member of the marker's collection.
 		await That(source).Contains("new __Bucket(typeof(global::MyCode.SalesReport)")
 			.Because("SelfAndImplementedInterfaces keeps the concrete self registration");
-		await That(source).Contains("new global::MyCode.IReport[] { ResolveSalesReport() }")
+		await That(source).Contains("new global::MyCode.IReport[] { Root.ResolveSalesReport(__s.__root) }")
 			.Because("SelfAndImplementedInterfaces also registers the match under the marker collection");
 	}
 
@@ -223,8 +223,8 @@ public class ScanTests
 		// closing the marker at two type arguments registers under both, and each closed form is a collection.
 		await That(source).Contains("new __Bucket(typeof(global::MyCode.IView<global::MyCode.ViewModelOne>)");
 		await That(source).Contains("new __Bucket(typeof(global::MyCode.IView<global::MyCode.ViewModelTwo>)");
-		await That(source).Contains("new global::MyCode.IView<global::MyCode.ViewModelOne>[] { ResolveDualView(), ResolveViewOne() }");
-		await That(source).Contains("new global::MyCode.IView<global::MyCode.ViewModelTwo>[] { ResolveDualView(), ResolveViewTwo() }");
+		await That(source).Contains("new global::MyCode.IView<global::MyCode.ViewModelOne>[] { Root.ResolveDualView(__s.__root), Root.ResolveViewOne(__s.__root) }");
+		await That(source).Contains("new global::MyCode.IView<global::MyCode.ViewModelTwo>[] { Root.ResolveDualView(__s.__root), Root.ResolveViewTwo(__s.__root) }");
 		await That(source).DoesNotContain("new __Bucket(typeof(global::MyCode.ViewOne)")
 			.Because("ImplementedInterfaces registers under the closed marker interface, not the concrete view");
 	}

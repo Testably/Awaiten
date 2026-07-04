@@ -52,13 +52,15 @@ internal static partial class Sources
 	///     (element type, key), materialized eagerly in registration order (each member keeping its own lifetime).
 	///     An empty membership yields <c>new T[] { }</c>. An array satisfies every supported collection parameter
 	///     shape (<c>IEnumerable&lt;T&gt;</c>, <c>IReadOnlyList&lt;T&gt;</c>, <c>IReadOnlyCollection&lt;T&gt;</c>,
-	///     <c>IList&lt;T&gt;</c>, <c>ICollection&lt;T&gt;</c>, <c>T[]</c>). The member resolvers are called
-	///     unqualified against the current owner, so a singleton member routes through its virtual delegator to
-	///     the root and a scoped/transient member resolves on the scope evaluating the collection.
+	///     <c>IList&lt;T&gt;</c>, <c>ICollection&lt;T&gt;</c>, <c>T[]</c>). Each member calls its static resolver
+	///     over the current owner <c>__s</c>: a singleton member on the <c>Root</c> (<c>Root.ResolveX(__s.__root)</c>),
+	///     a scoped/transient member on the <c>Scope</c> (<c>ResolveX(__s)</c>).
 	/// </summary>
-	private static string CollectionLiteral(ServiceKey collection, Names names)
+	private static string CollectionLiteral(ServiceKey collection, Names names, InstanceModel[] instances)
 	{
-		string items = string.Join(", ", names.CollectionResolvers(collection).Select(resolver => resolver + "()"));
+		string[] resolvers = names.CollectionResolvers(collection);
+		int[] indices = names.CollectionMemberIndices(collection);
+		string items = string.Join(", ", resolvers.Select((resolver, m) => ResolveCall(resolver, IsRootOwned(instances[indices[m]]))));
 		return $"new {collection.Service}[] {{ {items} }}";
 	}
 
@@ -78,9 +80,10 @@ internal static partial class Sources
 		string[] items = new string[resolvers.Length];
 		for (int m = 0; m < resolvers.Length; m++)
 		{
+			bool rootOwned = IsRootOwned(instances[indices[m]]);
 			items[m] = asynchronous && instances[indices[m]].IsAsyncTainted
-				? $"await {names.AsyncResolver(indices[m])}(cancellationToken).ConfigureAwait(false)"
-				: resolvers[m] + "()";
+				? $"await {AsyncResolveCall(names.AsyncResolver(indices[m]), rootOwned, "cancellationToken")}.ConfigureAwait(false)"
+				: ResolveCall(resolvers[m], rootOwned);
 		}
 
 		return $"new __AsyncArray<{collection.Service}>(new {collection.Service}[] {{ {string.Join(", ", items)} }})";
@@ -118,7 +121,7 @@ internal static partial class Sources
 
 		if (!anyAsync)
 		{
-			string syncItems = string.Join(", ", resolvers.Select(resolver => resolver + "()"));
+			string syncItems = string.Join(", ", resolvers.Select((resolver, m) => ResolveCall(resolver, IsRootOwned(instances[indices[m]]))));
 			return $"global::System.Threading.Tasks.Task.FromResult<{shape}>(new {collection.Service}[] {{ {syncItems} }})";
 		}
 
@@ -126,9 +129,10 @@ internal static partial class Sources
 		string[] items = new string[resolvers.Length];
 		for (int m = 0; m < resolvers.Length; m++)
 		{
+			bool rootOwned = IsRootOwned(instances[indices[m]]);
 			items[m] = instances[indices[m]].IsAsyncTainted
-				? $"await {names.AsyncResolver(indices[m])}({token}).ConfigureAwait(false)"
-				: resolvers[m] + "()";
+				? $"await {AsyncResolveCall(names.AsyncResolver(indices[m]), rootOwned, token)}.ConfigureAwait(false)"
+				: ResolveCall(resolvers[m], rootOwned);
 		}
 
 		string array = $"({shape})new {collection.Service}[] {{ {string.Join(", ", items)} }}";
@@ -199,7 +203,7 @@ internal static partial class Sources
 	{
 		if (dependency.Kind == DependencyKind.Enumerable)
 		{
-			return CollectionLiteral(new ServiceKey(dependency.ServiceType, dependency.Key), names);
+			return CollectionLiteral(new ServiceKey(dependency.ServiceType, dependency.Key), names, instances);
 		}
 
 		if (dependency.Kind == DependencyKind.AsyncEnumerable)
@@ -216,7 +220,7 @@ internal static partial class Sources
 		    && serviceToIndex.TryGetValue(new ServiceKey(dependency.ServiceType, dependency.Key), out int index)
 		    && instances[index].IsAsyncTainted)
 		{
-			return $"await {names.AsyncResolver(index)}(cancellationToken).ConfigureAwait(false)";
+			return $"await {AsyncResolveCall(names.AsyncResolver(index), IsRootOwned(instances[index]), "cancellationToken")}.ConfigureAwait(false)";
 		}
 
 		return ResolveExpression(dependency, instances, names, serviceToIndex);
@@ -300,13 +304,33 @@ internal static partial class Sources
 	}
 
 	/// <summary>
+	///     A call to a target's synchronous static resolver over the owner variable <c>__s</c> in scope at the
+	///     emission site. A root-owned target (singleton or pre-built Instance) is resolved on the <c>Root</c>
+	///     (<c>Root.ResolveX(__s.__root, …)</c>); a scoped/transient one on the <c>Scope</c>
+	///     (<c>ResolveX(__s, …)</c>). <paramref name="trailingArgs" /> are any runtime <c>[Arg]</c> values
+	///     following the owner (comma-prefixed, e.g. <c>", a0, a1"</c>); a root-owned target never takes them.
+	/// </summary>
+	private static string ResolveCall(string resolver, bool rootOwned, string trailingArgs = "")
+		=> rootOwned
+			? $"Root.{resolver}(__s.__root{trailingArgs})"
+			: $"{resolver}(__s{trailingArgs})";
+
+	/// <summary>
+	///     A call to a target's asynchronous static resolver over <c>__s</c>. <paramref name="args" /> are the
+	///     arguments after the owner (any runtime <c>[Arg]</c> values plus the cancellation token, e.g.
+	///     <c>"cancellationToken"</c> or <c>"a0, __ct"</c>).
+	/// </summary>
+	private static string AsyncResolveCall(string asyncResolver, bool rootOwned, string args)
+		=> rootOwned
+			? $"Root.{asyncResolver}(__s.__root, {args})"
+			: $"{asyncResolver}(__s, {args})";
+
+	/// <summary>
 	///     The expression that supplies a single constructor argument, resolving the target named by the
 	///     parameter's service type and (optional) <c>[FromKey]</c>. A root-owned target (a singleton or
-	///     pre-built Instance) is read straight off the sealed root so the call devirtualizes; a
-	///     scoped/transient target resolves through its own resolver - <c>internal</c> on the base
-	///     <c>Scope</c>, so the Root reaches it directly when a singleton captures it through a relationship,
-	///     and a throwaway <c>Owned&lt;T&gt;</c> scope can call it too. A relationship type wraps the target in
-	///     a deferred <c>Func&lt;T&gt;</c> / <c>Lazy&lt;T&gt;</c>.
+	///     pre-built Instance) resolves through its <c>Root</c>-hosted static resolver over the root; a
+	///     scoped/transient target through its <c>Scope</c>-hosted static resolver over the current owner
+	///     <c>__s</c>. A relationship type wraps the target in a deferred <c>Func&lt;T&gt;</c> / <c>Lazy&lt;T&gt;</c>.
 	/// </summary>
 	private static string ResolveExpression(ParameterModel parameter, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex)
 	{
@@ -315,7 +339,7 @@ internal static partial class Sources
 		// [FromKey] key (null when unkeyed) so a keyed external service can be selected.
 		if (parameter.Kind == DependencyKind.External)
 		{
-			return $"({parameter.ServiceType})__ResolveExternal(typeof({parameter.ServiceType}), {ExternalKeyLiteral(parameter.Key)})";
+			return $"({parameter.ServiceType})__s.__ResolveExternal(typeof({parameter.ServiceType}), {ExternalKeyLiteral(parameter.Key)})";
 		}
 
 		int targetIndex = serviceToIndex[new ServiceKey(parameter.ServiceType, parameter.Key)];
@@ -355,23 +379,11 @@ internal static partial class Sources
 			return FuncFactory(funcArgTypes, parameter.ServiceType, resolver);
 		}
 
-		string value;
-		if (rootOwned)
-		{
-			// Read singletons straight off the (sealed) root scope so the dependency call devirtualizes,
-			// rather than dispatching through this scope's virtual delegator. On the root, __root is itself.
-			value = $"__root.{resolver}()";
-		}
-		else
-		{
-			// A root-owned owner can only capture a non-singleton through a relationship (a direct capture
-			// would be a captive dependency). The target's scoped/transient resolver is internal on the base
-			// Scope, so it is reachable by simple name from the Root too - call it directly (the target index
-			// has already selected the resolver for the requested [FromKey], if any). Routing through the generic
-			// Resolve<T>() instead would hit the by-type withholding under strict lifetime safety and throw when
-			// a Lazy<DisposableTransient> held by a singleton is forced.
-			value = $"{resolver}()";
-		}
+		// A singleton/Instance is resolved through its Root-hosted static resolver over the root (__s.__root; on
+		// the root, __root is itself); a scoped/transient through its Scope-hosted static resolver over the current
+		// owner __s. Owner selection is thus static (no virtual hop), and a transient built for a singleton tracks
+		// on the root because the singleton resolver runs with __s == root.
+		string value = ResolveCall(resolver, rootOwned);
 
 		return parameter.Kind switch
 		{
@@ -393,7 +405,7 @@ internal static partial class Sources
 	{
 		if (parameter.ProducesOwned)
 		{
-			string ownedValue = $"__OwnedAsync<{parameter.ServiceType}>({AsyncOwnedInner(parameter, target, targetIndex, names, rootOwned, funcArgTypes)}, default)";
+			string ownedValue = $"__s.__OwnedAsync<{parameter.ServiceType}>({AsyncOwnedInner(parameter, target, targetIndex, names, rootOwned, funcArgTypes)}, default)";
 			return parameter.Kind == DependencyKind.FuncTask
 				? AsyncOwnedFuncFactory(funcArgTypes, parameter.ServiceType, ownedValue)
 				: ownedValue;
@@ -417,7 +429,10 @@ internal static partial class Sources
 	{
 		string generics = argTypes.Length == 0 ? service : string.Join(", ", argTypes) + ", " + service;
 		string lambdaArgs = string.Join(", ", argTypes.Select((_, i) => "a" + i));
-		return $"new global::System.Func<{generics}>(({lambdaArgs}) => {resolver}({lambdaArgs}))";
+		// A Func over a parameterized service binds its Scope-hosted static resolver over the current owner __s,
+		// forwarding the runtime arguments after it.
+		string call = ResolveCall(resolver, rootOwned: false, argTypes.Length == 0 ? "" : ", " + lambdaArgs);
+		return $"new global::System.Func<{generics}>(({lambdaArgs}) => {call})";
 	}
 
 	/// <summary>
@@ -433,12 +448,11 @@ internal static partial class Sources
 		string callArgs = string.Join("", argTypes.Select((_, i) => "a" + i + ", "));
 		if (target.IsAsyncTainted)
 		{
-			string asyncResolver = rootOwned ? $"__root.{names.AsyncResolver(targetIndex)}" : names.AsyncResolver(targetIndex);
-			return $"{asyncResolver}({callArgs}default)";
+			return AsyncResolveCall(names.AsyncResolver(targetIndex), rootOwned, callArgs + "default");
 		}
 
-		string resolver = rootOwned ? $"__root.{names.Resolver(targetIndex)}" : names.Resolver(targetIndex);
-		return $"global::System.Threading.Tasks.Task.FromResult<{parameter.ServiceType}>({resolver}({string.Join(", ", argTypes.Select((_, i) => "a" + i))}))";
+		string syncArgs = argTypes.Length == 0 ? "" : ", " + string.Join(", ", argTypes.Select((_, i) => "a" + i));
+		return $"global::System.Threading.Tasks.Task.FromResult<{parameter.ServiceType}>({ResolveCall(names.Resolver(targetIndex), rootOwned, syncArgs)})";
 	}
 
 	/// <summary>
@@ -468,17 +482,17 @@ internal static partial class Sources
 	{
 		if (rootOwned)
 		{
-			return $"async (__s, __ct) => ({parameter.ServiceType})await __s.ResolveAsync(typeof({parameter.ServiceType}), __ct).ConfigureAwait(false)";
+			return $"async (__o, __ct) => ({parameter.ServiceType})await __o.ResolveAsync(typeof({parameter.ServiceType}), __ct).ConfigureAwait(false)";
 		}
 
 		if (target.IsAsyncTainted)
 		{
 			string callArgs = string.Join("", argTypes.Select((_, i) => "a" + i + ", "));
-			return $"(__s, __ct) => __s.{names.AsyncResolver(targetIndex)}({callArgs}__ct)";
+			return $"(__o, __ct) => {names.AsyncResolver(targetIndex)}(__o, {callArgs}__ct)";
 		}
 
-		string syncArgs = string.Join(", ", argTypes.Select((_, i) => "a" + i));
-		return $"(__s, __ct) => global::System.Threading.Tasks.Task.FromResult<{parameter.ServiceType}>(__s.{names.Resolver(targetIndex)}({syncArgs}))";
+		string syncArgs = argTypes.Length == 0 ? "" : ", " + string.Join(", ", argTypes.Select((_, i) => "a" + i));
+		return $"(__o, __ct) => global::System.Threading.Tasks.Task.FromResult<{parameter.ServiceType}>({names.Resolver(targetIndex)}(__o{syncArgs}))";
 	}
 
 	/// <summary>
@@ -548,7 +562,7 @@ internal static partial class Sources
 	///     A bare <c>Owned&lt;T&gt;</c>: resolve T once into a throwaway child scope and wrap it as a disposal handle.
 	/// </summary>
 	private static string OwnedBare(string service, string resolver, bool rootOwned)
-		=> $"__Owned<{service}>({OwnedInner(service, resolver, [], rootOwned)})";
+		=> $"__s.__Owned<{service}>({OwnedInner(service, resolver, [], rootOwned)})";
 
 	/// <summary>
 	///     A <c>new Func&lt;TArg…, Owned&lt;T&gt;&gt;((a0, …) =&gt; __Owned&lt;T&gt;(…))</c> expression: each call
@@ -559,7 +573,7 @@ internal static partial class Sources
 		string owned = $"global::Awaiten.Owned<{service}>";
 		string generics = argTypes.Length == 0 ? owned : string.Join(", ", argTypes) + ", " + owned;
 		string lambdaArgs = string.Join(", ", argTypes.Select((_, i) => "a" + i));
-		return $"new global::System.Func<{generics}>(({lambdaArgs}) => __Owned<{service}>({OwnedInner(service, resolver, argTypes, rootOwned)}))";
+		return $"new global::System.Func<{generics}>(({lambdaArgs}) => __s.__Owned<{service}>({OwnedInner(service, resolver, argTypes, rootOwned)}))";
 	}
 
 	/// <summary>
@@ -571,12 +585,15 @@ internal static partial class Sources
 	/// </summary>
 	private static string OwnedInner(string service, string resolver, string[] argTypes, bool rootOwned)
 	{
+		// __o is the throwaway Owned scope (named distinctly from the enclosing resolver's __s). A root-owned
+		// target goes through the throwaway's public typed surface; any other calls its Scope-hosted static
+		// resolver over __o.
 		if (rootOwned)
 		{
-			return $"__s => __s.Resolve<{service}>()";
+			return $"__o => __o.Resolve<{service}>()";
 		}
 
-		string lambdaArgs = string.Join(", ", argTypes.Select((_, i) => "a" + i));
-		return $"__s => __s.{resolver}({lambdaArgs})";
+		string syncArgs = argTypes.Length == 0 ? "" : ", " + string.Join(", ", argTypes.Select((_, i) => "a" + i));
+		return $"__o => {resolver}(__o{syncArgs})";
 	}
 }
