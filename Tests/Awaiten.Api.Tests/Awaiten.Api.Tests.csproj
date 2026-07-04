@@ -6,6 +6,7 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\..\Source\Awaiten\Awaiten.csproj"/>
+		<ProjectReference Include="..\..\Source\Awaiten.Extensions.DependencyInjection\Awaiten.Extensions.DependencyInjection.csproj"/>
 	</ItemGroup>
 
 	<ItemGroup>
