@@ -366,11 +366,20 @@ internal static partial class Sources
 			// Root.ResolveXAsync(__s.__root, __ct); a scoped/transient/collection one lives on the Scope, so it is
 			// called ResolveXAsync(__s, __ct) over the resolving scope. A requesting-type factory (never root-owned)
 			// takes the requesting type; a top-level ResolveAsync has no consumer, so it passes null.
-			string call = rootOwned
-				? $"Root.{asyncResolver}(__s.__root, __ct)"
-				: requestingType
-					? $"{asyncResolver}(__s, null, __ct)"
-					: $"{asyncResolver}(__s, __ct)";
+			string call;
+			if (rootOwned)
+			{
+				call = $"Root.{asyncResolver}(__s.__root, __ct)";
+			}
+			else if (requestingType)
+			{
+				call = $"{asyncResolver}(__s, null, __ct)";
+			}
+			else
+			{
+				call = $"{asyncResolver}(__s, __ct)";
+			}
+
 			string resolve = rootWithheldMessage is not null
 				? $"static (__s, __ct) => __s is Root ? throw new global::System.InvalidOperationException({rootWithheldMessage}) : __AsObject({call})"
 				: $"static (__s, __ct) => __AsObject({call})";
@@ -418,9 +427,8 @@ internal static partial class Sources
 		// forbids it from also being parameterized, so it has no runtime arguments to carry.
 		if (instance.IsRequestingTypeFactory)
 		{
-			string requestingConstruction = EmitConstruction(instance, context.Instances, names, context.ServiceToIndex, asynchronous: true);
 			string requestingSummary = $"Asynchronously resolves {XmlTypeRef(instance.ConstructedType)} through its requesting-type factory, passing the requesting consumer's typeof(…) (a new instance per call).";
-			EmitAsyncFreshResolver(builder, depth, index, context, requestingConstruction, $"global::System.Type? {RequestingTypeParameterName}, ", emitDeferred, requestingSummary);
+			EmitAsyncFreshResolver(builder, depth, index, context, $"global::System.Type? {RequestingTypeParameterName}, ", emitDeferred, requestingSummary);
 			return;
 		}
 
@@ -431,19 +439,18 @@ internal static partial class Sources
 		{
 			string[] argTypes = instance.ArgTypes();
 			string argSignature = string.Join("", argTypes.Select((t, i) => $"{t} a{i}, "));
-			string parameterizedConstruction = EmitConstruction(instance, context.Instances, names, context.ServiceToIndex, asynchronous: true);
-			EmitAsyncFreshResolver(builder, depth, index, context, parameterizedConstruction, argSignature, emitDeferred);
+			EmitAsyncFreshResolver(builder, depth, index, context, argSignature, emitDeferred);
 			return;
 		}
 
-		string construction = EmitConstruction(instance, context.Instances, names, context.ServiceToIndex, asynchronous: true);
 		if (instance.Lifetime == Lifetime.Transient)
 		{
-			EmitAsyncFreshResolver(builder, depth, index, context, construction, emitDeferred: emitDeferred);
+			EmitAsyncFreshResolver(builder, depth, index, context, emitDeferred: emitDeferred);
 			return;
 		}
 
 		// Scoped: a memoized Task on the scope guards construction-and-initialization.
+		string construction = EmitConstruction(instance, context.Instances, names, context.ServiceToIndex, asynchronous: true);
 		EmitAsyncCachingResolver(builder, depth, index, context, construction, "Scope", emitDeferred);
 	}
 
@@ -572,11 +579,12 @@ internal static partial class Sources
 	///     transient, or a parameterized service that additionally takes the runtime arguments named in
 	///     <paramref name="argSignature" />). A disposable instance is registered for teardown on the owner.
 	/// </summary>
-	private static void EmitAsyncFreshResolver(StringBuilder builder, int depth, int index, EmitContext context, string construction, string argSignature = "", Action<int>? emitDeferred = null, string? summaryOverride = null)
+	private static void EmitAsyncFreshResolver(StringBuilder builder, int depth, int index, EmitContext context, string argSignature = "", Action<int>? emitDeferred = null, string? summaryOverride = null)
 	{
 		InstanceModel instance = context.Instances[index];
 		Names names = context.Names;
 		string type = instance.ConstructedType;
+		string construction = EmitConstruction(instance, context.Instances, names, context.ServiceToIndex, asynchronous: true);
 		const string task = "global::System.Threading.Tasks.Task";
 		const string ct = "global::System.Threading.CancellationToken cancellationToken";
 
