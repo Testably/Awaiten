@@ -858,6 +858,40 @@ public class CollectionTests
 	}
 
 	[Fact]
+	public async Task EmptyAwaitedCollection_InjectedIntoAProperty_IsNotAMissingDependency()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+		                                       using System.Threading.Tasks;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class Host
+		                                       {
+		                                           [Inject]
+		                                           public Task<IReadOnlyList<IPlugin>> Plugins { get; set; }
+		                                       }
+
+		                                       [Container]
+		                                       [Singleton<Host>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		// An [Inject] member resolves exactly like a constructor parameter: an awaited collection is always
+		// satisfiable, so an unregistered element type yields a completed empty collection - never AWT101.
+		await That(result.Diagnostics).IsEmpty()
+			.Because("an [Inject] awaited collection over an unregistered element type is a completed empty collection, exactly like the constructor parameter");
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("Plugins = global::System.Threading.Tasks.Task.FromResult<global::System.Collections.Generic.IReadOnlyList<global::MyCode.IPlugin>>(")
+			.Because("the member is filled with a completed empty awaited collection");
+	}
+
+	[Fact]
 	public async Task ValueTaskCollection_IsNotAnAwaitedCollection()
 	{
 		GeneratorResult result = Generator.Run("""

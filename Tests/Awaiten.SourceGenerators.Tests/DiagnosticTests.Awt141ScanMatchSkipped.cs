@@ -41,6 +41,42 @@ public partial class DiagnosticTests
 		}
 
 		[Fact]
+		public async Task SkipUnconstructable_KeepsAMatchWithAnEmptyInjectedAwaitedCollectionMember()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+			                                       using System.Collections.Generic;
+			                                       using System.Threading.Tasks;
+
+			                                       namespace MyCode;
+
+			                                       public interface IExtension { }
+			                                       public interface IPlugin { }
+			                                       public sealed class Host : IPlugin
+			                                       {
+			                                           [Inject]
+			                                           public Task<IReadOnlyList<IExtension>> Extensions { get; set; }
+			                                       }
+
+			                                       [Container]
+			                                       [Scan(typeof(IPlugin), SkipUnconstructable = true)]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			// An [Inject] awaited collection member is always satisfiable - an unregistered element type yields a
+			// completed empty collection - so it is never a reason to skip the match, exactly like a constructor
+			// parameter of the same shape.
+			await That(result.Diagnostics).IsEmpty()
+				.Because("an empty awaited collection member does not make a scanned match unconstructable");
+			string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+			await That(source).Contains("new global::MyCode.Host()")
+				.Because("the match is registered with its awaited collection member filled");
+		}
+
+		[Fact]
 		public async Task Default_KeepsTheMissingDependencyError()
 		{
 			GeneratorResult result = Generator.Run("""

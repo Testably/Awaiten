@@ -714,7 +714,8 @@ partial class AwaitenGenerator
 				// way BuildDependencyGraph does: serviceToImpl can name an implementation whose BuildInstance failed
 				// (so it is absent from implToIndex), and an unguarded indexer would crash the generator
 				// (KeyNotFoundException) instead of surfacing the real registration error (e.g. AWT103).
-				if (parameter.Kind is DependencyKind.Arg or DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.AwaitedEnumerable or DependencyKind.KeyedCollection or DependencyKind.AwaitedKeyedCollection
+				if (parameter.Kind == DependencyKind.Arg
+				    || IsSynthesizedCollection(parameter.Kind)
 				    || !serviceToImpl.TryGetValue(KeyOf(parameter), out string? targetImpl)
 				    || !implToIndex.TryGetValue(targetImpl, out int targetIndex))
 				{

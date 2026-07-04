@@ -24,7 +24,11 @@ partial class AwaitenGenerator
 	///     its own exact shape. A registered keyed dictionary also claims only its own exact declared type (whatever
 	///     its key type - so a registered <c>IReadOnlyDictionary&lt;int, T&gt;</c> resolves as a direct dependency and
 	///     is never AWT159): it is a different axis from the element-type shapes and does not suppress them, nor they
-	///     it. Shared by the constructor-parameter and <c>[Inject]</c>-property paths, so a member resolves exactly
+	///     it. It does claim its awaited <c>Task&lt;IReadOnlyDictionary&lt;…&gt;&gt;</c> view: the keyless string-keyed
+	///     view all-or-nothing (AWT101, mirroring how a registered synchronous collection shape claims
+	///     <c>Task&lt;C&gt;</c>), while a <c>[FromKey]</c> or non-string-keyed view - which admits no synthesized
+	///     dictionary anyway - stays the bare <c>Task</c> relationship over the registered dictionary and resolves it.
+	///     Shared by the constructor-parameter and <c>[Inject]</c>-property paths, so a member resolves exactly
 	///     like a constructor parameter.
 	/// </summary>
 	private static ParameterModel SuppressRegisteredCollectionSynthesis(
@@ -38,16 +42,30 @@ partial class AwaitenGenerator
 		                            && serviceToImpl.ContainsKey(new ServiceKey(AsyncEnumerableShapeType(parameterModel.ServiceType), parameterModel.Key));
 		bool awaitedOrKeyedShapeRegistered = parameterModel.Kind is DependencyKind.AwaitedEnumerable or DependencyKind.KeyedCollection or DependencyKind.AwaitedKeyedCollection
 		                                     && serviceToImpl.ContainsKey(new ServiceKey(declaredType.ToDisplayString(FullyQualified), parameterModel.Key));
-		// A registered synchronous IReadOnlyDictionary<string, T> claims the awaited Task<…> view too, exactly as a
-		// registered synchronous collection shape claims the awaited Task<C> view (the syncShapeRegistered gate). The
-		// inner dictionary type is carried in AwaitedCollectionType; the awaited sibling then resolves the
-		// registration through the bare Task relationship (AWT101 when it is not itself registered).
+		// A registered dictionary under the dependency's key claims the awaited Task<…> view too (the inner
+		// dictionary type is carried in AwaitedCollectionType). How it is claimed depends on whether a synthesized
+		// awaited view could exist at all - see below.
 		bool keyedSyncShapeRegistered = parameterModel.Kind == DependencyKind.AwaitedKeyedCollection
 		                                && serviceToImpl.ContainsKey(new ServiceKey(parameterModel.AwaitedCollectionType!, parameterModel.Key));
-		if (syncShapeRegistered || asyncShapeRegistered || awaitedOrKeyedShapeRegistered || keyedSyncShapeRegistered)
+		if (syncShapeRegistered || asyncShapeRegistered || awaitedOrKeyedShapeRegistered)
 		{
 			string collectionType = declaredType.ToDisplayString(FullyQualified);
 			return parameterModel with { ServiceType = collectionType, Kind = DependencyKind.Direct, AwaitedCollectionType = null, };
+		}
+
+		if (keyedSyncShapeRegistered)
+		{
+			// The keyless string-keyed form is the all-or-nothing suppression: a registered synchronous
+			// IReadOnlyDictionary<string, T> claims the awaited Task<…> view exactly as a registered synchronous
+			// collection shape claims Task<C> (the syncShapeRegistered gate), so the awaited sibling becomes a
+			// direct dependency on the declared Task<…> type - AWT101 when that is not itself registered - rather
+			// than a silently synthesized second dictionary that could disagree with the registered one. A [FromKey]
+			// selection or a non-string key admits no synthesized awaited view at all (surviving as AWT160 / AWT159),
+			// so there is no second dictionary to step aside from: the dependency stays what it was before the
+			// awaited keyed dictionary existed - the bare Task relationship over the registered dictionary.
+			return parameterModel.Key is null && KeyedDependencyKeyType(declaredType) == "string"
+				? parameterModel with { ServiceType = declaredType.ToDisplayString(FullyQualified), Kind = DependencyKind.Direct, AwaitedCollectionType = null, }
+				: parameterModel with { ServiceType = parameterModel.AwaitedCollectionType!, Kind = DependencyKind.Task, AwaitedCollectionType = null, };
 		}
 
 		return parameterModel;
@@ -133,9 +151,19 @@ partial class AwaitenGenerator
 	///     <c>[ImportServices]</c> fall-through) is resolved from the external provider, not the Awaiten graph, so
 	///     it is never a missing dependency.
 	/// </summary>
+	// A collection-shaped dependency - a synchronous collection, an IAsyncEnumerable<T>, an awaited Task<C>, or a
+	// keyed dictionary in its synchronous or awaited form - is synthesized from the registrations of its element
+	// (or service) type, so it is always satisfiable: an element type with no registration yields an empty
+	// collection, never a missing dependency. The one predicate for every gate that must treat all collection
+	// kinds alike (AWT101/AWT141 exemption, constructor eligibility, the guarded graph indexer), so the next
+	// collection kind is a one-line change here instead of a hunt for hand-maintained kind lists.
+	private static bool IsSynthesizedCollection(DependencyKind kind)
+		=> kind is DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.AwaitedEnumerable or DependencyKind.KeyedCollection or DependencyKind.AwaitedKeyedCollection;
+
 	private static void ReportWhenUnregistered(ParameterModel parameterModel, ImplInfo info, BuildContext context)
 	{
-		if (parameterModel.Kind is DependencyKind.Arg or DependencyKind.CancellationToken or DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.AwaitedEnumerable or DependencyKind.KeyedCollection or DependencyKind.AwaitedKeyedCollection or DependencyKind.External
+		if (parameterModel.Kind is DependencyKind.Arg or DependencyKind.CancellationToken or DependencyKind.External
+		    || IsSynthesizedCollection(parameterModel.Kind)
 		    || context.ServiceToImpl.ContainsKey(KeyOf(parameterModel))
 		    || context.ConstraintRejected.Contains(parameterModel.ServiceType))
 		{
@@ -262,7 +290,7 @@ partial class AwaitenGenerator
 		// shape rules (AWT157/AWT158) nor the Optional drop below apply, exactly as they leave a collection alone.
 		// Measured before synthesis suppression below: a collection whose shape is explicitly registered is still a
 		// collection-typed member here (never omitted), so the shape rules must skip it too.
-		bool isCollection = dependency.Kind is DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.KeyedCollection or DependencyKind.AwaitedKeyedCollection;
+		bool isCollection = IsSynthesizedCollection(dependency.Kind);
 
 		// AWT144/AWT157/AWT158: the accessor and modifiers must be compatible with how the member is assigned.
 		if (RejectsInjectedPropertyShape(property, setter, info, deferred, optional, isCollection, diagnostics))

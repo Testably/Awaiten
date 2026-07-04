@@ -519,9 +519,10 @@ internal static partial class Sources
 	///     the synchronous dispatch even for a dictionary whose members are async-tainted, and
 	///     <see cref="Names.IsSyncKeyedCollection" /> is not consulted. By-type resolution has no ambient token, so
 	///     awaited async members receive <c>default</c>. An explicitly registered <c>Task&lt;IReadOnlyDictionary&lt;…&gt;&gt;</c>
-	///     owns its own slot (the <paramref name="seen" /> guard, seeded from the explicit registrations); a registered
-	///     synchronous <c>IReadOnlyDictionary&lt;string, T&gt;</c> suppresses the awaited view outright, all-or-nothing,
-	///     exactly as on the injection side. The root-withholding of a build-on-demand disposable member applies here
+	///     owns its own slot - checked against the registrations directly, because the <paramref name="seen" /> guard
+	///     is seeded only from the synchronous dispatch and would not hold the slot for an async-tainted registration;
+	///     a registered synchronous <c>IReadOnlyDictionary&lt;string, T&gt;</c> suppresses the awaited view outright,
+	///     all-or-nothing, exactly as on the injection side. The root-withholding of a build-on-demand disposable member applies here
 	///     too: materializing the awaited dictionary by type off the Root would accumulate its members for the
 	///     container's lifetime, so it is withheld from the Root (resolvable from a child scope, which bounds them).
 	/// </summary>
@@ -540,8 +541,13 @@ internal static partial class Sources
 			string awaitedType = $"global::System.Threading.Tasks.Task<{dictionaryType}>";
 
 			// A registered synchronous dictionary suppresses the awaited view (all-or-nothing); a registered
-			// Task<IReadOnlyDictionary<…>> of this exact shape owns its own slot (its bare entry seeded 'seen').
-			if (serviceToIndex.ContainsKey(new ServiceKey(dictionaryType, null)) || !seen.Add(awaitedType))
+			// Task<IReadOnlyDictionary<…>> of this exact shape owns its own slot. The seen guard alone would not
+			// hold that slot when the registration is async-tainted (excluded from the sync dispatch that seeds
+			// seen) - the synthesized dictionary would silently shadow it and mask its ResolveAsync guidance - so
+			// the registration is checked directly, mirroring AsyncShapeRegistered for IAsyncEnumerable<T>.
+			if (serviceToIndex.ContainsKey(new ServiceKey(dictionaryType, null))
+			    || serviceToIndex.ContainsKey(new ServiceKey(awaitedType, null))
+			    || !seen.Add(awaitedType))
 			{
 				continue;
 			}

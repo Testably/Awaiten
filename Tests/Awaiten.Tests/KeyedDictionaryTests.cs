@@ -452,4 +452,61 @@ public partial class KeyedDictionaryTests
 	[Transient<AwaitedFeedPropertyRouter>]
 	[Singleton<AwaitedEmptyRouter>]
 	public static partial class AwaitedDictionaryContainer;
+
+	[Fact]
+	public async Task AwaitedDictionary_FromKeyOverAKeyRegisteredDictionary_ResolvesTheRegistration()
+	{
+		using RegisteredAwaitedMapContainer.Root container = new();
+
+		FromKeyAwaitedRouter router = container.Resolve<FromKeyAwaitedRouter>();
+		IReadOnlyDictionary<string, IChannel> channels = await router.Channels;
+
+		// A [FromKey] selection admits no synthesized awaited view (that would be AWT160), so the parameter is the
+		// bare Task relationship over the dictionary registered under that key - never a synthesized dictionary of
+		// the keyed IChannel registrations.
+		await That(channels).Is<KeyedChannelMap>()
+			.Because("[FromKey] resolves the dictionary registered under that key through the bare Task relationship");
+		await That(channels).HasCount(0)
+			.Because("the registered (empty) map is handed out as-is; the keyed IChannel registrations do not leak into it");
+	}
+
+	[Fact]
+	public async Task AwaitedDictionary_NonStringKeyOverARegisteredDictionary_ResolvesTheRegistration()
+	{
+		using RegisteredAwaitedMapContainer.Root container = new();
+
+		IntAwaitedRouter router = container.Resolve<IntAwaitedRouter>();
+		IReadOnlyDictionary<int, IChannel> channels = await router.Channels;
+
+		// A non-string key admits no synthesized awaited view at all (unregistered it is AWT159), so over a
+		// registered dictionary the parameter stays the bare Task relationship and resolves the registration.
+		await That(channels).Is<IntChannelMap>()
+			.Because("a registered non-string-keyed dictionary is resolvable through its awaited Task<…> view");
+	}
+
+	public sealed class KeyedChannelMap : Dictionary<string, IChannel>;
+
+	public sealed class IntChannelMap : Dictionary<int, IChannel>;
+
+	public sealed class FromKeyAwaitedRouter
+	{
+		public FromKeyAwaitedRouter([FromKey("map")] Task<IReadOnlyDictionary<string, IChannel>> channels) => Channels = channels;
+
+		public Task<IReadOnlyDictionary<string, IChannel>> Channels { get; }
+	}
+
+	public sealed class IntAwaitedRouter
+	{
+		public IntAwaitedRouter(Task<IReadOnlyDictionary<int, IChannel>> channels) => Channels = channels;
+
+		public Task<IReadOnlyDictionary<int, IChannel>> Channels { get; }
+	}
+
+	[Container]
+	[Singleton<FastChannel, IChannel>(Key = "fast")]
+	[Singleton<KeyedChannelMap, IReadOnlyDictionary<string, IChannel>>(Key = "map")]
+	[Singleton<IntChannelMap, IReadOnlyDictionary<int, IChannel>>]
+	[Singleton<FromKeyAwaitedRouter>]
+	[Singleton<IntAwaitedRouter>]
+	public static partial class RegisteredAwaitedMapContainer;
 }
