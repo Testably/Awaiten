@@ -163,11 +163,11 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 			}
 		}
 
-		// The collection membership by (element service type, key), so the transitive-disposable walk can follow a
-		// service's collection dependencies (a transient disposable member accumulates on the root just like a
-		// direct transient one).
-		Dictionary<ServiceKey, List<int>> collectionMembers =
-			AwaitenGenerator.CollectionMemberIndices(graph.Collections, graph.ImplToIndex);
+		// The collection membership - plain, by (element service type, key), and keyed, by service type - so the
+		// transitive-disposable walk can follow a service's collection dependencies of either kind (a transient
+		// disposable member accumulates on the root just like a direct transient one).
+		CollectionMembership membership =
+			AwaitenGenerator.MembershipIndices(graph.Collections, graph.KeyedCollections, graph.ImplToIndex);
 
 		// One report per holder+service, even when several root-owned owners reach the same factory.
 		HashSet<string> reported = new(StringComparer.Ordinal);
@@ -175,7 +175,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 		{
 			if (IsRootOwned(graph.Instances[i]))
 			{
-				ReportFromOwner(i, graph, serviceToIndex, collectionMembers, strict, reported, diagnostics);
+				ReportFromOwner(i, graph, serviceToIndex, membership, strict, reported, diagnostics);
 			}
 		}
 
@@ -186,7 +186,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 		int owner,
 		GraphModel graph,
 		Dictionary<ServiceKey, int> serviceToIndex,
-		Dictionary<ServiceKey, List<int>> collectionMembers,
+		CollectionMembership membership,
 		bool strict,
 		HashSet<string> reported,
 		List<DiagnosticInfo> diagnostics)
@@ -206,7 +206,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 				continue;
 			}
 
-			AddAccumulatingFuncs(node, graph, serviceToIndex, collectionMembers, strict, reported, diagnostics);
+			AddAccumulatingFuncs(node, graph, serviceToIndex, membership, strict, reported, diagnostics);
 			PushTransientDependencies(node, graph, stack);
 		}
 	}
@@ -215,7 +215,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 		int node,
 		GraphModel graph,
 		Dictionary<ServiceKey, int> serviceToIndex,
-		Dictionary<ServiceKey, List<int>> collectionMembers,
+		CollectionMembership membership,
 		bool strict,
 		HashSet<string> reported,
 		List<DiagnosticInfo> diagnostics)
@@ -228,7 +228,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 		InstanceModel holder = graph.Instances[node];
 		foreach (ParameterModel parameter in holder.ConstructorParameters.AsArray())
 		{
-			if (!IsRootAccumulatingFunc(graph, serviceToIndex, collectionMembers, parameter) || !reported.Add($"{node}|{parameter.ServiceType}|{parameter.Key}"))
+			if (!IsRootAccumulatingFunc(graph, serviceToIndex, membership, parameter) || !reported.Add($"{node}|{parameter.ServiceType}|{parameter.Key}"))
 			{
 				continue;
 			}
@@ -262,7 +262,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 	// the container's lifetime. The async resolver tracks disposables identically to the synchronous one, so the
 	// async factory leaks the same way and is included here - and since Owned<T> is unavailable for an async
 	// service, the async form is the only deferred factory that can reach an async-tainted target at all.
-	private static bool IsRootAccumulatingFunc(GraphModel graph, Dictionary<ServiceKey, int> serviceToIndex, Dictionary<ServiceKey, List<int>> collectionMembers, ParameterModel parameter)
+	private static bool IsRootAccumulatingFunc(GraphModel graph, Dictionary<ServiceKey, int> serviceToIndex, CollectionMembership membership, ParameterModel parameter)
 	{
 		if (parameter.Kind is not (DependencyKind.Func or DependencyKind.FuncTask) || parameter.ProducesOwned
 		    || !graph.ServiceToImpl.TryGetValue(new ServiceKey(parameter.ServiceType, parameter.Key), out string? targetImpl)
@@ -273,7 +273,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 
 		InstanceModel target = graph.Instances[targetIndex];
 		return (target.Lifetime == Lifetime.Transient || target.IsParameterized)
-		       && AwaitenGenerator.BuildsFreshDisposable(graph.Instances, serviceToIndex, collectionMembers, targetIndex);
+		       && AwaitenGenerator.BuildsFreshDisposable(graph.Instances, serviceToIndex, membership, targetIndex);
 	}
 
 	// AWT156: a synchronous `using` (statement or declaration) whose resource is a generated Root/Scope of a

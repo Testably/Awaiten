@@ -65,6 +65,22 @@ internal static partial class Sources
 	}
 
 	/// <summary>
+	///     A <c>new Dictionary&lt;string, TService&gt; { ["a"] = ResolveA(__s), … }</c> expression: every keyed
+	///     registration of the service type, materialized eagerly and keyed by its <c>[Key]</c>, in registration
+	///     order (each member keeping its own lifetime). A <c>Dictionary&lt;,&gt;</c> satisfies the requested
+	///     <c>IReadOnlyDictionary&lt;string, TService&gt;</c>; an empty membership yields an empty dictionary.
+	///     Each member calls its static resolver over the current owner <c>__s</c>, exactly like
+	///     <see cref="CollectionLiteral" />: a singleton member on the <c>Root</c>
+	///     (<c>Root.ResolveX(__s.__root)</c>), a scoped/transient member on the <c>Scope</c> (<c>ResolveX(__s)</c>).
+	/// </summary>
+	private static string KeyedCollectionLiteral(string service, Names names)
+	{
+		string items = string.Join(", ", names.KeyedCollectionResolvers(service)
+			.Select(member => $"[{SymbolDisplay.FormatLiteral(member.Key, quote: true)}] = {ResolveCall(member.Resolver, member.RootOwned)}"));
+		return $"new global::System.Collections.Generic.Dictionary<string, {service}> {{ {items} }}";
+	}
+
+	/// <summary>
 	///     A <c>new __AsyncArray&lt;T&gt;(new T[] { … })</c> expression producing an
 	///     <c>IAsyncEnumerable&lt;T&gt;</c> over every registration of the collection's (element type, key). The
 	///     members are materialized eagerly in registration order into the backing array - each async-tainted member
@@ -214,6 +230,11 @@ internal static partial class Sources
 		if (dependency.Kind == DependencyKind.AwaitedEnumerable)
 		{
 			return AwaitedCollectionExpression(dependency, names, instances, asynchronous);
+		}
+
+		if (dependency.Kind == DependencyKind.KeyedCollection)
+		{
+			return KeyedCollectionLiteral(dependency.ServiceType, names);
 		}
 
 		if (asynchronous && dependency.Kind == DependencyKind.Direct

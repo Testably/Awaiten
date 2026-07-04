@@ -226,5 +226,30 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).DoesNotContain("*AWT105*").AsWildcard()
 				.Because("a deferred Func<T> stores a factory rather than the scoped instance, so it does not capture it");
 		}
+
+		[Fact]
+		public async Task ReportsWhenASingletonCapturesAScopedKeyedDictionaryMember()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+			                                       using System.Collections.Generic;
+
+			                                       namespace MyCode;
+
+			                                       public interface IWork { }
+			                                       public sealed class MainWork : IWork { }
+			                                       public sealed class Host { public Host(IReadOnlyDictionary<string, IWork> work) { } }
+
+			                                       [Container]
+			                                       [Scoped<MainWork, IWork>(Key = "main")]
+			                                       [Singleton<Host>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT105*").AsWildcard()
+				.Because("a keyed dictionary captures its members eagerly, so a singleton holding one over a scoped member makes that member captive");
+		}
 	}
 }

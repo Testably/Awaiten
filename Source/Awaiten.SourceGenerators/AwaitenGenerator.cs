@@ -105,7 +105,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			DetectSynchronousAsyncResolution(
 				graph.Instances, graph.Dependencies, graph.ServiceToImpl, graph.ImplToIndex, graph.InstanceLocations, diagnostics);
 			DetectSynchronousAsyncCollection(
-				graph.Instances, graph.Collections, graph.ImplToIndex, graph.InstanceLocations, diagnostics);
+				graph.Instances, graph.Collections, graph.KeyedCollections, graph.ImplToIndex, graph.InstanceLocations, diagnostics);
 		}
 
 		string? containerNamespace = containerSymbol.ContainingNamespace is { IsGlobalNamespace: false, } ns
@@ -140,7 +140,8 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			syncResolveAfterInit,
 			hasAsyncDisposable,
 			new EquatableArray<ServiceMembers>(graph.Collections.ToArray()),
-			new EquatableArray<string>(graph.VarianceCandidates.ToArray()));
+			new EquatableArray<string>(graph.VarianceCandidates.ToArray()),
+			new EquatableArray<KeyedServiceMembers>(graph.KeyedCollections.ToArray()));
 	}
 
 	/// <summary>
@@ -237,7 +238,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		// registrations of the same implementation share one instance. Declaring one implementation with
 		// two different lifetimes is reported as AWT107; two implementations under the same service type and
 		// key as AWT117.
-		(List<ImplInfo> implOrder, Dictionary<ServiceKey, string> serviceToImpl, Dictionary<ServiceKey, List<string>> serviceMembers, List<ServiceKey> serviceMemberOrder, List<(string ServiceType, INamedTypeSymbol Symbol)> varianceCandidates) =
+		(List<ImplInfo> implOrder, Dictionary<ServiceKey, string> serviceToImpl, Dictionary<ServiceKey, List<string>> serviceMembers, List<ServiceKey> serviceMemberOrder, List<(string ServiceType, INamedTypeSymbol Symbol)> varianceCandidates, Dictionary<string, List<KeyedMember>> keyedMembers, List<string> keyedMemberOrder) =
 			CoalesceByImplementation(raw, diagnostics);
 		CoalescedGraph graph = new(serviceToImpl, implOrder, serviceMembers);
 
@@ -300,16 +301,16 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		// A parameterized ([Arg]) service cannot be built without its runtime arguments, so it is reachable
 		// only through its Func<TArg…, T> factory - never as a collection member. Prune such implementations
 		// before they drive collection edges, AWT122 and emission.
-		PruneParameterizedMembers(instances, serviceMembers);
+		PruneParameterizedMembers(instances, serviceMembers, keyedMembers);
 
-		Dictionary<int, List<int>> dependencies = BuildDependencyGraph(instances, serviceToImpl, implToIndex, serviceMembers);
-		Dictionary<int, List<int>> constructionDependencies = BuildConstructionGraph(instances, serviceToImpl, implToIndex, serviceMembers);
+		Dictionary<int, List<int>> dependencies = BuildDependencyGraph(instances, serviceToImpl, implToIndex, serviceMembers, keyedMembers);
+		Dictionary<int, List<int>> constructionDependencies = BuildConstructionGraph(instances, serviceToImpl, implToIndex, serviceMembers, keyedMembers);
 
 		// The combined construction-plus-deferred graph vets deferred cycles (AWT145-147). Deferred members are
 		// its only addition over the construction graph, so when none exists it IS the construction graph and the
 		// extra pass is skipped (DetectNonTerminatingDeferredCycles early-exits on the same condition).
 		Dictionary<int, List<int>> combinedDependencies = AnyDeferredMember(instances)
-			? BuildCombinedGraph(instances, serviceToImpl, implToIndex, serviceMembers)
+			? BuildCombinedGraph(instances, serviceToImpl, implToIndex, serviceMembers, keyedMembers)
 			: constructionDependencies;
 
 		// Async taint: an instance is tainted if its implementation is async-initialized, or if it reaches
@@ -340,6 +341,8 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			}
 		}
 
+		List<KeyedServiceMembers> keyedCollections = BuiltKeyedCollections(keyedMemberOrder, keyedMembers, implToIndex);
+
 		// The variance candidates' service types (registration order), for the emitter's runtime variance
 		// fallback: an imperative Resolve of a differently-closed generic interface no consumer parameter ever
 		// requested (so no compile-time alias exists) is matched against these at runtime instead of throwing.
@@ -349,6 +352,31 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			varianceCandidateTypes.Add(serviceType);
 		}
 
-		return new GraphModel(instances, dependencies, constructionDependencies, combinedDependencies, serviceToImpl, implToIndex, instanceLocations, collections, varianceCandidateTypes);
+		return new GraphModel(instances, dependencies, constructionDependencies, combinedDependencies, serviceToImpl, implToIndex, instanceLocations, collections, varianceCandidateTypes, keyedCollections);
+	}
+
+	/// <summary>
+	///     The keyed-collection membership, in first-seen service order and keeping only members that were
+	///     actually built (a member whose BuildInstance failed already surfaced its own error and is absent from
+	///     <paramref name="implToIndex" />). A service whose only keyed registrations were pruned (or failed to
+	///     build) contributes no keyed collection. A service with no keyed registration at all is simply absent,
+	///     and injecting its dictionary yields an empty one.
+	/// </summary>
+	private static List<KeyedServiceMembers> BuiltKeyedCollections(
+		List<string> keyedMemberOrder,
+		Dictionary<string, List<KeyedMember>> keyedMembers,
+		Dictionary<string, int> implToIndex)
+	{
+		List<KeyedServiceMembers> keyedCollections = new();
+		foreach (string service in keyedMemberOrder)
+		{
+			KeyedMember[] members = keyedMembers[service].Where(member => implToIndex.ContainsKey(member.Implementation)).ToArray();
+			if (members.Length > 0)
+			{
+				keyedCollections.Add(new KeyedServiceMembers(service, new EquatableArray<KeyedMember>(members)));
+			}
+		}
+
+		return keyedCollections;
 	}
 }

@@ -223,4 +223,39 @@ public class PropertyInjectionTests
 		// The owner is async-tainted, so its deferred member is wired by awaiting the target's async resolver.
 		await That(source).Contains(".Dep = await Root.ResolveAsyncDepAsync(__s.__root, cancellationToken).ConfigureAwait(false);");
 	}
+
+	[Fact]
+	public async Task ExplicitlyRegisteredCollectionShape_WinsOverSynthesisOnAnInjectedProperty()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+
+		                                       namespace MyCode;
+
+		                                       public interface IPlugin { }
+		                                       public sealed class Alpha : IPlugin { }
+		                                       public sealed class Bundle : List<IPlugin> { }
+		                                       public sealed class Host
+		                                       {
+		                                           [Inject] public IEnumerable<IPlugin> Plugins { get; set; }
+		                                       }
+
+		                                       [Container]
+		                                       [Singleton<Alpha, IPlugin>]
+		                                       [Singleton<Bundle, IEnumerable<IPlugin>>]
+		                                       [Singleton<Host>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// An [Inject] member resolves exactly like a constructor parameter: the registered IEnumerable<IPlugin>
+		// service (an opaque value) preempts the collection synthesized from the IPlugin registrations.
+		await That(source).Contains("Plugins = Root.ResolveBundle(__s.__root)")
+			.Because("an explicitly registered collection shape wins over synthesis on property injection too");
+	}
 }

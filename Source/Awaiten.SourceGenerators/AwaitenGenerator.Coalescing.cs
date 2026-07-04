@@ -11,7 +11,7 @@ partial class AwaitenGenerator
 	///     built fresh from its runtime arguments and is reachable only through its <c>Func&lt;TArg…, T&gt;</c>
 	///     factory, so it is never a collection member.
 	/// </summary>
-	private static void PruneParameterizedMembers(List<InstanceModel> instances, Dictionary<ServiceKey, List<string>> serviceMembers)
+	private static void PruneParameterizedMembers(List<InstanceModel> instances, Dictionary<ServiceKey, List<string>> serviceMembers, Dictionary<string, List<KeyedMember>> keyedMembers)
 	{
 		HashSet<string> parameterized = new(StringComparer.Ordinal);
 		foreach (InstanceModel instance in instances)
@@ -31,9 +31,14 @@ partial class AwaitenGenerator
 		{
 			members.RemoveAll(parameterized.Contains);
 		}
+
+		foreach (List<KeyedMember> members in keyedMembers.Values)
+		{
+			members.RemoveAll(member => parameterized.Contains(member.Implementation));
+		}
 	}
 
-	private static (List<ImplInfo> Order, Dictionary<ServiceKey, string> ServiceToImpl, Dictionary<ServiceKey, List<string>> Members, List<ServiceKey> MemberOrder, List<(string ServiceType, INamedTypeSymbol Symbol)> VarianceCandidates) CoalesceByImplementation(
+	private static (List<ImplInfo> Order, Dictionary<ServiceKey, string> ServiceToImpl, Dictionary<ServiceKey, List<string>> Members, List<ServiceKey> MemberOrder, List<(string ServiceType, INamedTypeSymbol Symbol)> VarianceCandidates, Dictionary<string, List<KeyedMember>> KeyedMembers, List<string> KeyedMemberOrder) CoalesceByImplementation(
 		List<RawRegistration> raw,
 		List<DiagnosticInfo> diagnostics)
 	{
@@ -49,6 +54,14 @@ partial class AwaitenGenerator
 		// serviceMemberOrder preserves the first-seen (type, key) order for deterministic emission.
 		Dictionary<ServiceKey, List<string>> serviceMembers = new();
 		List<ServiceKey> serviceMemberOrder = new();
+
+		// Keyed-collection membership: every real keyed registration of a service (its [Key] and implementation),
+		// grouped by service (value) type in registration order, so an IReadOnlyDictionary<string, T> resolves to
+		// all of them keyed by their [Key]. Only real [Key] registrations join here - the synthetic keys minted
+		// for decorator chains are added to serviceMembers/serviceToImpl by a later phase, never to the raw
+		// registrations this loop sees, so a keyed dictionary never surfaces a decorator's internal chain link.
+		Dictionary<string, List<KeyedMember>> keyedMembers = new(StringComparer.Ordinal);
+		List<string> keyedMemberOrder = new();
 
 		// Variance: every unkeyed registration of a closed generic interface whose definition declares variance
 		// (in/out), keyed by its fully-qualified string, in registration order. When a consumer requests a closed
@@ -162,6 +175,9 @@ partial class AwaitenGenerator
 			AddCollectionMember(serviceMembers, serviceMemberOrder, serviceKey, registration.ImplementationType);
 			EnsureImpl(implInfos, implOrder, registration);
 
+			// A keyed registration is also a member of its service's keyed collection, indexed by its [Key].
+			AddKeyedMember(keyedMembers, keyedMemberOrder, registration, alreadyChosen);
+
 			if (alreadyChosen)
 			{
 				ReportDuplicateKey(registration, winner!.ImplementationType, diagnostics);
@@ -175,7 +191,7 @@ partial class AwaitenGenerator
 			chosen.Services.Add(serviceKey);
 		}
 
-		return (implOrder, serviceToImpl, serviceMembers, serviceMemberOrder, varianceCandidates);
+		return (implOrder, serviceToImpl, serviceMembers, serviceMemberOrder, varianceCandidates, keyedMembers, keyedMemberOrder);
 
 		// Creates the single ImplInfo for a registration's implementation (idempotent): the first registration seen
 		// for an implementation fixes its lifetime/production, and the same instance is shared by every registration
@@ -355,6 +371,33 @@ partial class AwaitenGenerator
 				Display(winner.Origin.ToDisplayString(FullyQualified)),
 				Display(registration.Origin.ToDisplayString(FullyQualified)),
 			])));
+	}
+
+	// Records a keyed registration as a member of its service's keyed collection: the [Key] and its
+	// implementation, grouped by service (value) type in registration order. keyedMemberOrder preserves the
+	// first-seen service order for deterministic emission. An unkeyed registration contributes nothing, and the
+	// first registration per (service, key) wins - mirroring single keyed resolution (a later one already lost
+	// that slot, alreadyChosen; a genuine duplicate is the caller's AWT117) - so each key maps to a single
+	// implementation.
+	private static void AddKeyedMember(
+		Dictionary<string, List<KeyedMember>> keyedMembers,
+		List<string> keyedMemberOrder,
+		RawRegistration registration,
+		bool alreadyChosen)
+	{
+		if (registration.Key is null || alreadyChosen)
+		{
+			return;
+		}
+
+		if (!keyedMembers.TryGetValue(registration.ServiceType, out List<KeyedMember>? members))
+		{
+			members = new List<KeyedMember>();
+			keyedMembers.Add(registration.ServiceType, members);
+			keyedMemberOrder.Add(registration.ServiceType);
+		}
+
+		members.Add(new KeyedMember(registration.Key, registration.ImplementationType));
 	}
 
 	// AWT117: two different implementations claim the same service type and key, so a keyed resolution of

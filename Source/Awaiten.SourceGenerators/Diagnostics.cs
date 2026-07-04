@@ -836,4 +836,32 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Warning,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A keyed collection (<c>IReadOnlyDictionary&lt;TKey, TService&gt;</c>) declares a key type other than
+	///     <c>string</c>. Keyed registrations carry <c>string</c> keys (the <c>[Key]</c> value), so v1 resolves
+	///     only <c>IReadOnlyDictionary&lt;string, TService&gt;</c>; typed/enum keys are not yet supported.
+	/// </summary>
+	public static readonly DiagnosticDescriptor UnsupportedKeyedCollectionKey = new(
+		"AWT159",
+		"Unsupported keyed-collection key type",
+		"'{0}' requests a keyed collection with key type '{1}', but keyed registrations use string keys; use IReadOnlyDictionary<string, TService> (typed/enum keys are not yet supported)",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A <c>[FromKey]</c> is applied to a synthesized keyed collection
+	///     (<c>IReadOnlyDictionary&lt;string, TService&gt;</c>). The synthesized dictionary resolves <em>every</em>
+	///     keyed registration of its service type, so a key selection cannot apply and would otherwise be silently
+	///     ignored. An <c>IReadOnlyDictionary</c> service explicitly registered under that key preempts synthesis
+	///     and resolves as an ordinary keyed dependency, so it is never reported.
+	/// </summary>
+	public static readonly DiagnosticDescriptor FromKeyOnKeyedCollection = new(
+		"AWT160",
+		"[FromKey] on a keyed collection",
+		"'{0}' applies [FromKey(\"{1}\")] to the keyed collection '{2}', which resolves every keyed registration of its service type; remove the [FromKey], or register a dictionary service under that key to take precedence over synthesis",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

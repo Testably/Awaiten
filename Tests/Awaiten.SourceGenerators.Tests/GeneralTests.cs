@@ -1041,4 +1041,281 @@ public class GeneralTests
 		await That(source).Contains("Disposes every tracked instance in reverse creation order.")
 			.Because("the disposal surface is documented");
 	}
+
+	[Fact]
+	public async Task KeyedDictionaryDependency_MaterializesAllKeyedRegistrationsAsADictionary()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+			using System.Collections.Generic;
+
+			namespace MyCode;
+
+			public interface IChannel { }
+			public sealed class Fast : IChannel { }
+			public sealed class Slow : IChannel { }
+			public sealed class Router { public Router(IReadOnlyDictionary<string, IChannel> channels) { } }
+
+			[Container]
+			[Singleton<Fast, IChannel>(Key = "fast")]
+			[Singleton<Slow, IChannel>(Key = "slow")]
+			[Singleton<Router>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// The keyed dictionary is a Dictionary<string, TService> of every keyed member's resolver, keyed by its
+		// [Key] in registration order, materialized inline where it is injected. Each member calls its static
+		// resolver over the current owner, exactly like a collection literal (here singletons, so on the Root).
+		await That(source).Contains("new global::MyCode.Router(new global::System.Collections.Generic.Dictionary<string, global::MyCode.IChannel> { [\"fast\"] = Root.ResolveFast(__s.__root), [\"slow\"] = Root.ResolveSlow(__s.__root) })");
+		// IReadOnlyDictionary<string, T> is publicly resolvable by type (its own bucket in the dispatch table).
+		await That(source).Contains("typeof(global::System.Collections.Generic.IReadOnlyDictionary<string, global::MyCode.IChannel>)");
+	}
+
+	[Fact]
+	public async Task EmptyKeyedDictionary_MaterializesAnEmptyDictionaryWithoutAwt101()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+			using System.Collections.Generic;
+
+			namespace MyCode;
+
+			public interface IChannel { }
+			public sealed class Host { public Host(IReadOnlyDictionary<string, IChannel> channels) { } }
+
+			[Container]
+			[Singleton<Host>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// An element type with no keyed registration yields a completed empty dictionary, not a missing dependency.
+		await That(source).Contains("new global::MyCode.Host(new global::System.Collections.Generic.Dictionary<string, global::MyCode.IChannel> {  })");
+	}
+
+	[Fact]
+	public async Task NonStringKeyedDictionary_ReportsAwt159()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+			using System.Collections.Generic;
+
+			namespace MyCode;
+
+			public enum ProcessType { A, B }
+			public interface IChannel { }
+			public sealed class Fast : IChannel { }
+			public sealed class Host { public Host(IReadOnlyDictionary<ProcessType, IChannel> channels) { } }
+
+			[Container]
+			[Singleton<Fast, IChannel>(Key = "fast")]
+			[Singleton<Host>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		// v1 supports only string keys; a non-string key type is rejected rather than treated as a plain dependency.
+		await That(result.Diagnostics).Contains("*AWT159*").AsWildcard();
+	}
+
+	[Fact]
+	public async Task ExplicitlyRegisteredKeyedDictionary_WinsOverSynthesisOnInjection()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+			using System.Collections.Generic;
+
+			namespace MyCode;
+
+			public interface IChannel { }
+			public sealed class Fast : IChannel { }
+			public sealed class ChannelMap : Dictionary<string, IChannel> { }
+			public sealed class Router { public Router(IReadOnlyDictionary<string, IChannel> channels) { } }
+
+			[Container]
+			[Singleton<Fast, IChannel>(Key = "fast")]
+			[Singleton<ChannelMap, IReadOnlyDictionary<string, IChannel>>]
+			[Singleton<Router>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// IReadOnlyDictionary<string, IChannel> is itself a registered service, so the parameter is a direct
+		// dependency on that registration - not the dictionary synthesized from the keyed IChannel registrations.
+		await That(source).Contains("new global::MyCode.Router(Root.ResolveChannelMap(__s.__root))")
+			.Because("an explicitly registered dictionary service wins over the synthesized keyed dictionary on injection");
+
+		// The synthesized dictionary is suppressed outright: no dictionary literal is emitted anywhere - the
+		// by-type dispatch resolves the registration, never a second dictionary synthesized behind it.
+		await That(source).DoesNotContain("new global::System.Collections.Generic.Dictionary<string, global::MyCode.IChannel>")
+			.Because("a registered dictionary suppresses the synthesized keyed dictionary, mirroring the collection SynthesisSuppressed gate");
+	}
+
+	[Fact]
+	public async Task ExplicitlyRegisteredKeyedDictionary_WinsOverSynthesisOnPropertyInjectionToo()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+			using System.Collections.Generic;
+
+			namespace MyCode;
+
+			public interface IChannel { }
+			public sealed class Fast : IChannel { }
+			public sealed class ChannelMap : Dictionary<string, IChannel> { }
+			public sealed class Router
+			{
+			    [Inject]
+			    public IReadOnlyDictionary<string, IChannel> Channels { get; set; }
+			}
+
+			[Container]
+			[Singleton<Fast, IChannel>(Key = "fast")]
+			[Singleton<ChannelMap, IReadOnlyDictionary<string, IChannel>>]
+			[Singleton<Router>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// An [Inject] member resolves exactly like a constructor parameter: the registered dictionary service
+		// preempts synthesis for the property too.
+		await That(source).Contains("Channels = Root.ResolveChannelMap(__s.__root)")
+			.Because("an explicitly registered dictionary service preempts the synthesized keyed dictionary on property injection");
+	}
+
+	[Fact]
+	public async Task ExplicitlyRegisteredNonStringKeyedDictionary_IsADirectDependencyWithoutAwt159()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+			using System.Collections.Generic;
+
+			namespace MyCode;
+
+			public interface IChannel { }
+			public sealed class Fast : IChannel { }
+			public sealed class PortMap : Dictionary<int, IChannel> { }
+			public sealed class Router { public Router(IReadOnlyDictionary<int, IChannel> ports) { } }
+
+			[Container]
+			[Singleton<Fast, IChannel>(Key = "fast")]
+			[Singleton<PortMap, IReadOnlyDictionary<int, IChannel>>]
+			[Singleton<Router>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		// An explicitly registered dictionary resolves as an ordinary direct dependency whatever its key type -
+		// AWT159 gates only the synthesized dictionary, which supports string keys.
+		await That(result.Diagnostics).IsEmpty()
+			.Because("an explicitly registered non-string-keyed dictionary is an opaque registered value, not a rejected synthesized collection");
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+		await That(source).Contains("new global::MyCode.Router(Root.ResolvePortMap(__s.__root))");
+	}
+
+	[Fact]
+	public async Task FromKeyOnASynthesizedKeyedDictionary_ReportsAwt160()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+			using System.Collections.Generic;
+
+			namespace MyCode;
+
+			public interface IChannel { }
+			public sealed class Fast : IChannel { }
+			public sealed class Router { public Router([FromKey("fast")] IReadOnlyDictionary<string, IChannel> channels) { } }
+
+			[Container]
+			[Singleton<Fast, IChannel>(Key = "fast")]
+			[Singleton<Router>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		// The synthesized dictionary resolves every keyed registration; a [FromKey] cannot select within it and
+		// is rejected rather than silently ignored.
+		await That(result.Diagnostics).Contains("*AWT160*").AsWildcard();
+	}
+
+	[Fact]
+	public async Task FromKeyOnAKeyedDictionary_ResolvesAnExplicitKeyedRegistrationOfTheDictionaryType()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+			using System.Collections.Generic;
+
+			namespace MyCode;
+
+			public interface IChannel { }
+			public sealed class Fast : IChannel { }
+			public sealed class ChannelMap : Dictionary<string, IChannel> { }
+			public sealed class Router { public Router([FromKey("primary")] IReadOnlyDictionary<string, IChannel> channels) { } }
+
+			[Container]
+			[Singleton<Fast, IChannel>(Key = "fast")]
+			[Singleton<ChannelMap, IReadOnlyDictionary<string, IChannel>>(Key = "primary")]
+			[Singleton<Router>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		// A dictionary service registered under the requested key preempts synthesis, so the [FromKey] is a
+		// legitimate keyed selection of that registration - no AWT160.
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+		await That(source).Contains("new global::MyCode.Router(Root.ResolveChannelMap(__s.__root))")
+			.Because("a [FromKey] on a keyed dictionary selects an explicitly registered dictionary service under that key");
+	}
+
+	[Fact]
+	public async Task SameImplementationRegisteredUnderTwoKeys_AppearsUnderBothDictionaryKeys()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+			using System.Collections.Generic;
+
+			namespace MyCode;
+
+			public interface IChannel { }
+			public sealed class Fast : IChannel { }
+			public sealed class Router { public Router(IReadOnlyDictionary<string, IChannel> channels) { } }
+
+			[Container]
+			[Singleton<Fast, IChannel>(Key = "fast")]
+			[Singleton<Fast, IChannel>(Key = "turbo")]
+			[Singleton<Router>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// One implementation registered under two keys yields two dictionary entries sharing the single resolver
+		// (and, being a singleton, the single instance).
+		await That(source).Contains("[\"fast\"] = Root.ResolveFast(__s.__root), [\"turbo\"] = Root.ResolveFast(__s.__root)");
+	}
 }

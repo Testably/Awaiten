@@ -88,4 +88,20 @@ internal enum DependencyKind
 	///     <c>ValueTask&lt;T&gt;</c> is not a relationship type: a stored ValueTask may only be awaited once.
 	/// </summary>
 	AwaitedEnumerable,
+
+	/// <summary>
+	///     A keyed-collection dependency (<c>IReadOnlyDictionary&lt;string, T&gt;</c>): resolves to every
+	///     <em>keyed</em> registration of the service type <c>T</c> (the parameter's <c>ServiceType</c>),
+	///     materialized eagerly into a dictionary keyed by each registration's <c>[Key]</c>, in registration
+	///     order (each member keeping its own lifetime). Like <see cref="Enumerable" /> it captures its members,
+	///     so it contributes a graph edge to each of them (cycle, captive and async-taint analysis) and never
+	///     launders their taint - a synchronous dictionary cannot await an async-initialized member, so such a
+	///     member trips AWT122 exactly as it does through <see cref="Enumerable" />. An empty index is legal (it
+	///     yields an empty dictionary, not AWT101). An explicitly registered dictionary service of the exact
+	///     declared type (under the dependency's key) preempts synthesis: the dependency is rewritten to
+	///     <see cref="Direct" /> and resolves that registration, whatever its key type. v1 synthesis supports
+	///     <c>string</c> keys only; a non-<c>string</c> key type is reported as AWT159, and a <c>[FromKey]</c>
+	///     that survives suppression as AWT160 (the synthesized dictionary resolves every key).
+	/// </summary>
+	KeyedCollection,
 }

@@ -46,7 +46,7 @@ internal static partial class Sources
 		}
 		else
 		{
-			Names names = Names.Build(model.Instances.AsArray(), model.Collections.AsArray(), model.SyncResolveAfterInit);
+			Names names = Names.Build(model.Instances.AsArray(), model.Collections.AsArray(), model.KeyedCollections.AsArray(), model.SyncResolveAfterInit);
 			Dictionary<ServiceKey, int> serviceToIndex = BuildServiceMap(model);
 			EmitContainerBody(builder, depth + 1, model, names, serviceToIndex);
 		}

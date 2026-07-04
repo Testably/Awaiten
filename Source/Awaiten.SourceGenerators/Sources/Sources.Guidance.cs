@@ -25,10 +25,10 @@ internal static partial class Sources
 	///     into a throwaway scope) is offered; the plain Func stays resolvable from a child scope, which bounds the
 	///     disposables it builds.
 	/// </summary>
-	private static bool IsFuncWithheld(InstanceModel[] instances, int index, Dictionary<ServiceKey, int> serviceToIndex, IReadOnlyDictionary<ServiceKey, List<int>> collectionMembers, bool strict)
+	private static bool IsFuncWithheld(InstanceModel[] instances, int index, Dictionary<ServiceKey, int> serviceToIndex, CollectionMembership membership, bool strict)
 		=> strict
 		   && (instances[index].Lifetime == Lifetime.Transient || instances[index].IsParameterized)
-		   && AwaitenGenerator.BuildsFreshDisposable(instances, serviceToIndex, collectionMembers, index);
+		   && AwaitenGenerator.BuildsFreshDisposable(instances, serviceToIndex, membership, index);
 
 	/// <summary>
 	///     The guidance message (a quoted string literal) thrown by Resolve(Type) on the Root when a service
@@ -52,6 +52,18 @@ internal static partial class Sources
 	{
 		string display = collection.Replace("global::", string.Empty);
 		return $"\"Awaiten: the collection '{display}' has a build-on-demand disposable member and is withheld from by-type resolution on the container root under strict lifetime safety; resolve it from a child scope, inject it directly, or set LifetimeSafety.Loose on the [Container].\"";
+	}
+
+	/// <summary>
+	///     The guidance thrown by Resolve(Type) on the Root for a keyed dictionary
+	///     (<c>IReadOnlyDictionary&lt;string, T&gt;</c>) withheld there under strict lifetime safety: it has a
+	///     build-on-demand disposable keyed member, so materializing it by type off the Root would accumulate those
+	///     disposables for the container's lifetime. The keyed counterpart of <see cref="CollectionWithheldMessage" />.
+	/// </summary>
+	private static string KeyedCollectionWithheldMessage(string dictionary)
+	{
+		string display = dictionary.Replace("global::", string.Empty);
+		return $"\"Awaiten: the keyed dictionary '{display}' has a build-on-demand disposable member and is withheld from by-type resolution on the container root under strict lifetime safety; resolve it from a child scope, inject it directly, or set LifetimeSafety.Loose on the [Container].\"";
 	}
 
 	/// <summary>

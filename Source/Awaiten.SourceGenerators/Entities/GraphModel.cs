@@ -19,6 +19,9 @@ namespace Awaiten.SourceGenerators.Entities;
 ///     <see cref="VarianceCandidates" /> is every unkeyed registered service type that is a closed generic
 ///     interface with declared variance (in registration order) - the candidates a differently-closed request
 ///     can be satisfied by, which the emitter bakes into the runtime variance fallback of the by-type dispatch.
+///     <see cref="KeyedCollections" /> is the keyed-collection-resolvable membership (each service type and its
+///     keyed implementations, in registration order), which the emitter materializes as
+///     <c>IReadOnlyDictionary&lt;string, T&gt;</c>.
 ///     Produced by <c>AwaitenGenerator.BuildGraph</c> and shared by the generator (which emits the container
 ///     from it) and <c>AwaitenAnalyzer</c> (which walks it for AWT118).
 /// </summary>
@@ -31,4 +34,5 @@ internal sealed record GraphModel(
 	Dictionary<string, int> ImplToIndex,
 	List<LocationInfo?> InstanceLocations,
 	List<ServiceMembers> Collections,
-	List<string> VarianceCandidates);
+	List<string> VarianceCandidates,
+	List<KeyedServiceMembers> KeyedCollections);
