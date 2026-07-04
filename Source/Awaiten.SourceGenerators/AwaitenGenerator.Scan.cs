@@ -552,7 +552,8 @@ partial class AwaitenGenerator
 		{
 			ParameterModel model = ClassifyParameter(parameter, asyncFactory: false);
 			bool satisfiable =
-				model.Kind is DependencyKind.Arg or DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.AwaitedEnumerable or DependencyKind.KeyedCollection or DependencyKind.External
+				model.Kind is DependencyKind.Arg or DependencyKind.External
+				|| IsSynthesizedCollection(model.Kind)
 				|| (importServices && model is { Kind: DependencyKind.Direct, Key: null, })
 				|| services.Contains(KeyOf(model))
 				|| constraintRejected.Contains(model.ServiceType)
@@ -595,7 +596,7 @@ partial class AwaitenGenerator
 			return null;
 		}
 
-		if (member.Kind is not (DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.KeyedCollection)
+		if (!IsSynthesizedCollection(member.Kind)
 		    && !services.Contains(KeyOf(member))
 		    && !constraintRejected.Contains(member.ServiceType))
 		{

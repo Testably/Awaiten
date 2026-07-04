@@ -501,7 +501,65 @@ internal static partial class Sources
 		// materialization - injecting one is AWT122 - so it is omitted.
 		AddKeyedCollectionEntries(instances, names, serviceToIndex, membership, strict, entries, seen);
 
+		// The awaited keyed-dictionary view (Task<IReadOnlyDictionary<string, T>>) joins the synchronous dispatch
+		// too, exactly like the awaited collection: it always hands back a Task synchronously, even for a dictionary
+		// whose members are async-tainted (it awaits them behind the task), so it is offered by type rather than
+		// through an async arm.
+		AddAwaitedKeyedCollectionEntries(instances, names, serviceToIndex, membership, strict, entries, seen);
+
 		return entries;
+	}
+
+	/// <summary>
+	///     Adds the public dispatch entry for the awaited keyed-dictionary view - <c>Task&lt;IReadOnlyDictionary&lt;string, T&gt;&gt;</c> -
+	///     of each keyed-collection-resolvable service. Unlike the synchronous <c>IReadOnlyDictionary&lt;string, T&gt;</c>
+	///     shape, the awaited view is ALWAYS synchronously obtainable: it produces a <c>Task</c> (a completed
+	///     <c>Task.FromResult</c> when every member is synchronous, an already-started task that awaits its async-tainted
+	///     members otherwise), laundering their taint exactly as an injected awaited keyed dictionary does - so it joins
+	///     the synchronous dispatch even for a dictionary whose members are async-tainted, and
+	///     <see cref="Names.IsSyncKeyedCollection" /> is not consulted. By-type resolution has no ambient token, so
+	///     awaited async members receive <c>default</c>. An explicitly registered <c>Task&lt;IReadOnlyDictionary&lt;…&gt;&gt;</c>
+	///     owns its own slot - checked against the registrations directly, because the <paramref name="seen" /> guard
+	///     is seeded only from the synchronous dispatch and would not hold the slot for an async-tainted registration;
+	///     a registered synchronous <c>IReadOnlyDictionary&lt;string, T&gt;</c> suppresses the awaited view outright,
+	///     all-or-nothing, exactly as on the injection side. The root-withholding of a build-on-demand disposable member applies here
+	///     too: materializing the awaited dictionary by type off the Root would accumulate its members for the
+	///     container's lifetime, so it is withheld from the Root (resolvable from a child scope, which bounds them).
+	/// </summary>
+	private static void AddAwaitedKeyedCollectionEntries(
+		InstanceModel[] instances,
+		Names names,
+		Dictionary<ServiceKey, int> serviceToIndex,
+		CollectionMembership membership,
+		bool strict,
+		List<DispatchEntry> entries,
+		HashSet<string> seen)
+	{
+		foreach (string service in names.KeyedCollections.Select(keyed => keyed.Service))
+		{
+			string dictionaryType = $"global::System.Collections.Generic.IReadOnlyDictionary<string, {service}>";
+			string awaitedType = $"global::System.Threading.Tasks.Task<{dictionaryType}>";
+
+			// A registered synchronous dictionary suppresses the awaited view (all-or-nothing); a registered
+			// Task<IReadOnlyDictionary<…>> of this exact shape owns its own slot. The seen guard alone would not
+			// hold that slot when the registration is async-tainted (excluded from the sync dispatch that seeds
+			// seen) - the synthesized dictionary would silently shadow it and mask its ResolveAsync guidance - so
+			// the registration is checked directly, mirroring AsyncShapeRegistered for IAsyncEnumerable<T>.
+			if (serviceToIndex.ContainsKey(new ServiceKey(dictionaryType, null))
+			    || serviceToIndex.ContainsKey(new ServiceKey(awaitedType, null))
+			    || !seen.Add(awaitedType))
+			{
+				continue;
+			}
+
+			bool rootWithheld = membership.Keyed.TryGetValue(service, out List<int>? members)
+			                    && members.Any(member => IsFuncWithheld(instances, member, serviceToIndex, membership, strict));
+
+			string value = AwaitedKeyedCollectionExpression(service, names, instances, asynchronous: false);
+			entries.Add(rootWithheld
+				? new DispatchEntry(awaitedType, value, AwaitedKeyedCollectionWithheldMessage(awaitedType))
+				: new DispatchEntry(awaitedType, value));
+		}
 	}
 
 	/// <summary>

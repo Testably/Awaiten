@@ -64,6 +64,12 @@ internal static partial class Sources
 		public (string Key, string Resolver, bool RootOwned)[] KeyedCollectionResolvers(string service)
 			=> _keyed.Resolvers.TryGetValue(service, out (string Key, string Resolver, bool RootOwned)[]? resolvers) ? resolvers : System.Array.Empty<(string, string, bool)>();
 
+		// The instance indices of a keyed collection's members, in the same registration order as
+		// KeyedCollectionResolvers, so the awaited-keyed materialization can test each member's async taint and pick
+		// its async resolver accordingly (the keyed analogue of CollectionMemberIndices).
+		public int[] KeyedCollectionMemberIndices(string service)
+			=> _keyed.Indices.TryGetValue(service, out int[]? indices) ? indices : System.Array.Empty<int>();
+
 		// Whether a keyed collection can be materialized synchronously - i.e. every keyed member has a synchronous
 		// resolver. One with an async-tainted member is omitted from the public sync dispatch (injecting it is AWT122).
 		public bool IsSyncKeyedCollection(string service) => _keyed.Sync.Contains(service);
@@ -160,35 +166,42 @@ internal static partial class Sources
 			HashSet<string> syncImpls)
 		{
 			Dictionary<string, (string Key, string Resolver, bool RootOwned)[]> keyedResolvers = new(StringComparer.Ordinal);
+			Dictionary<string, int[]> keyedIndices = new(StringComparer.Ordinal);
 			HashSet<string> syncKeyedCollections = new(StringComparer.Ordinal);
 			foreach (KeyedServiceMembers keyed in keyedCollections)
 			{
 				KeyedMember[] keyedMembers = keyed.Members.AsArray();
 				(string Key, string Resolver, bool RootOwned)[] members = new (string, string, bool)[keyedMembers.Length];
+				int[] indices = new int[keyedMembers.Length];
 				bool allSync = true;
 				for (int m = 0; m < keyedMembers.Length; m++)
 				{
 					string implementation = keyedMembers[m].Implementation;
-					members[m] = (keyedMembers[m].Key, implToResolver[implementation], IsRootOwned(instances[implToIndex[implementation]]));
+					int index = implToIndex[implementation];
+					members[m] = (keyedMembers[m].Key, implToResolver[implementation], IsRootOwned(instances[index]));
+					indices[m] = index;
 					allSync &= syncImpls.Contains(implementation);
 				}
 
 				keyedResolvers[keyed.Service] = members;
+				keyedIndices[keyed.Service] = indices;
 				if (allSync)
 				{
 					syncKeyedCollections.Add(keyed.Service);
 				}
 			}
 
-			return new KeyedNames(keyedCollections, keyedResolvers, syncKeyedCollections);
+			return new KeyedNames(keyedCollections, keyedResolvers, keyedIndices, syncKeyedCollections);
 		}
 
 		// The keyed-collection naming state, grouped so it travels as one unit: the keyed-collection-resolvable
-		// services (first-seen order), each service's (key, resolver, root-ownedness) members, and the services
+		// services (first-seen order), each service's (key, resolver, root-ownedness) members, each service's member
+		// instance indices (parallel to the members, for the awaited-keyed async materialization), and the services
 		// whose every member is synchronously resolvable.
 		private readonly record struct KeyedNames(
 			KeyedServiceMembers[] Collections,
 			Dictionary<string, (string Key, string Resolver, bool RootOwned)[]> Resolvers,
+			Dictionary<string, int[]> Indices,
 			HashSet<string> Sync);
 
 		// Reserves a base name together with the derived member names generated off it (the async resolver's

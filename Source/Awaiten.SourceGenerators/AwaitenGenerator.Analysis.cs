@@ -125,10 +125,12 @@ partial class AwaitenGenerator
 			{
 				PushTransientCollectionMembers(KeyOf(parameter), instances, membership.Collections, stack);
 			}
-			else if (parameter.Kind == DependencyKind.KeyedCollection)
+			else if (parameter.Kind is DependencyKind.KeyedCollection or DependencyKind.AwaitedKeyedCollection)
 			{
 				// A keyed dictionary materializes its members eagerly during construction too, so a transient
-				// disposable keyed member is rebuilt on every construction just like a plain collection member.
+				// disposable keyed member is rebuilt on every construction just like a plain collection member. The
+				// awaited keyed dictionary (Task<…>) starts materializing its members at construction as well, so it
+				// accumulates disposables on the owner exactly like the synchronous dictionary and the awaited collection.
 				PushTransientKeyedMembers(parameter.ServiceType, instances, membership.Keyed, stack);
 			}
 			else if (parameter.Kind == DependencyKind.Direct
@@ -321,8 +323,13 @@ partial class AwaitenGenerator
 		List<int> nodeEdges)
 	{
 		// A keyed collection materializes every keyed member eagerly into a dictionary, so - like a synchronous
-		// collection - it captures them (taint/captive) and closes cycles through them, in both graphs.
-		if (parameter.Kind == DependencyKind.KeyedCollection)
+		// collection - it captures them (taint/captive) and closes cycles through them, in both graphs. The awaited
+		// keyed dictionary (Task<…>) is the keyed form of the bare Task<T>: it launders its members' taint (they are
+		// awaited behind the produced task, not at the consumer's construction), so its member edges appear only in
+		// the construction graph, where the task's eager materialization still closes cycles - exactly as
+		// AwaitedEnumerable does below.
+		if (parameter.Kind == DependencyKind.KeyedCollection
+		    || (includeEagerBare && parameter.Kind == DependencyKind.AwaitedKeyedCollection))
 		{
 			AddKeyedCollectionMemberEdges(parameter.ServiceType, keyedMembers, implToIndex, nodeEdges);
 			return;
@@ -707,7 +714,8 @@ partial class AwaitenGenerator
 				// way BuildDependencyGraph does: serviceToImpl can name an implementation whose BuildInstance failed
 				// (so it is absent from implToIndex), and an unguarded indexer would crash the generator
 				// (KeyNotFoundException) instead of surfacing the real registration error (e.g. AWT103).
-				if (parameter.Kind is DependencyKind.Arg or DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.AwaitedEnumerable or DependencyKind.KeyedCollection
+				if (parameter.Kind == DependencyKind.Arg
+				    || IsSynthesizedCollection(parameter.Kind)
 				    || !serviceToImpl.TryGetValue(KeyOf(parameter), out string? targetImpl)
 				    || !implToIndex.TryGetValue(targetImpl, out int targetIndex))
 				{

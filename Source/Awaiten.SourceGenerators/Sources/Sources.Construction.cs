@@ -155,6 +155,52 @@ internal static partial class Sources
 		return $"((global::System.Func<global::System.Threading.Tasks.Task<{shape}>>)(async () => {array}))()";
 	}
 
+	/// <summary>
+	///     A <c>Task&lt;IReadOnlyDictionary&lt;string, TService&gt;&gt;</c> expression producing the awaited keyed
+	///     dictionary of every keyed registration of the service, keyed by each registration's <c>[Key]</c> in
+	///     registration order. The keyed analogue of the awaited collection expression: when every member is
+	///     synchronous it is a completed <c>Task.FromResult</c> over a synchronous <c>Dictionary&lt;string, T&gt;</c> -
+	///     no async machinery at all; otherwise it is an immediately-invoked async lambda that awaits each
+	///     async-tainted member through its async resolver and resolves the rest synchronously, the dictionary cast to
+	///     <c>IReadOnlyDictionary&lt;string, T&gt;</c> so the task's result type matches exactly. The resolve-time
+	///     token is forwarded to the awaited members only on the async construction path; a synchronously built
+	///     consumer has no ambient token, so its awaited members receive <c>default</c>. An empty membership yields a
+	///     completed empty dictionary.
+	/// </summary>
+	private static string AwaitedKeyedCollectionExpression(string service, Names names, InstanceModel[] instances, bool asynchronous)
+	{
+		(string Key, string Resolver, bool RootOwned)[] members = names.KeyedCollectionResolvers(service);
+		int[] indices = names.KeyedCollectionMemberIndices(service);
+		string shape = $"global::System.Collections.Generic.IReadOnlyDictionary<string, {service}>";
+		string dictionary = $"global::System.Collections.Generic.Dictionary<string, {service}>";
+
+		bool anyAsync = false;
+		for (int m = 0; m < indices.Length; m++)
+		{
+			anyAsync |= instances[indices[m]].IsAsyncTainted;
+		}
+
+		if (!anyAsync)
+		{
+			string syncItems = string.Join(", ", members.Select(member =>
+				$"[{SymbolDisplay.FormatLiteral(member.Key, quote: true)}] = {ResolveCall(member.Resolver, member.RootOwned)}"));
+			return $"global::System.Threading.Tasks.Task.FromResult<{shape}>(new {dictionary} {{ {syncItems} }})";
+		}
+
+		string token = asynchronous ? "cancellationToken" : "default";
+		string[] items = new string[members.Length];
+		for (int m = 0; m < members.Length; m++)
+		{
+			string value = instances[indices[m]].IsAsyncTainted
+				? $"await {AsyncResolveCall(names.AsyncResolver(indices[m]), members[m].RootOwned, token)}.ConfigureAwait(false)"
+				: ResolveCall(members[m].Resolver, members[m].RootOwned);
+			items[m] = $"[{SymbolDisplay.FormatLiteral(members[m].Key, quote: true)}] = {value}";
+		}
+
+		string literal = $"({shape})new {dictionary} {{ {string.Join(", ", items)} }}";
+		return $"((global::System.Func<global::System.Threading.Tasks.Task<{shape}>>)(async () => {literal}))()";
+	}
+
 	private static string EmitConstruction(InstanceModel instance, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool asynchronous = false)
 	{
 		ParameterModel[] parameters = instance.ConstructorParameters.AsArray();
@@ -235,6 +281,11 @@ internal static partial class Sources
 		if (dependency.Kind == DependencyKind.KeyedCollection)
 		{
 			return KeyedCollectionLiteral(dependency.ServiceType, names);
+		}
+
+		if (dependency.Kind == DependencyKind.AwaitedKeyedCollection)
+		{
+			return AwaitedKeyedCollectionExpression(dependency.ServiceType, names, instances, asynchronous);
 		}
 
 		if (asynchronous && dependency.Kind == DependencyKind.Direct

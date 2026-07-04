@@ -1318,4 +1318,418 @@ public class GeneralTests
 		// (and, being a singleton, the single instance).
 		await That(source).Contains("[\"fast\"] = Root.ResolveFast(__s.__root), [\"turbo\"] = Root.ResolveFast(__s.__root)");
 	}
+
+	[Fact]
+	public async Task AwaitedKeyedDictionary_AllSynchronousMembers_MaterializesACompletedTask()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+			using System.Collections.Generic;
+			using System.Threading.Tasks;
+
+			namespace MyCode;
+
+			public interface IChannel { }
+			public sealed class Fast : IChannel { }
+			public sealed class Slow : IChannel { }
+			public sealed class Router { public Router(Task<IReadOnlyDictionary<string, IChannel>> channels) { } }
+
+			[Container]
+			[Singleton<Fast, IChannel>(Key = "fast")]
+			[Singleton<Slow, IChannel>(Key = "slow")]
+			[Singleton<Router>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty()
+			.Because("Task<IReadOnlyDictionary<string, T>> is the awaited keyed dictionary of T, not a missing dependency on the dictionary type");
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// Every keyed member is synchronous, so the awaited keyed dictionary is a completed Task.FromResult over the
+		// synchronous Dictionary<string, T>, keyed by each registration's [Key] in registration order.
+		await That(source).Contains("new global::MyCode.Router(global::System.Threading.Tasks.Task.FromResult<global::System.Collections.Generic.IReadOnlyDictionary<string, global::MyCode.IChannel>>(new global::System.Collections.Generic.Dictionary<string, global::MyCode.IChannel> { [\"fast\"] = Root.ResolveFast(__s.__root), [\"slow\"] = Root.ResolveSlow(__s.__root) }))")
+			.Because("an all-synchronous awaited keyed dictionary completes immediately over the materialized dictionary");
+	}
+
+	[Fact]
+	public async Task AwaitedKeyedDictionaryWithAnAsyncMember_AwaitsItInsideTheProducedTaskWithoutTaintingTheConsumer()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+			using System.Collections.Generic;
+			using System.Threading;
+			using System.Threading.Tasks;
+
+			namespace MyCode;
+
+			public interface IChannel { }
+			public sealed class Fast : IChannel { }
+			public sealed class AsyncSlow : IChannel, IAsyncInitializable
+			{
+			    public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+			}
+			public sealed class Router { public Router(Task<IReadOnlyDictionary<string, IChannel>> channels) { } }
+
+			[Container]
+			[Singleton<Fast, IChannel>(Key = "fast")]
+			[Singleton<AsyncSlow, IChannel>(Key = "slow")]
+			[Singleton<Router>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		// The awaited keyed dictionary awaits its members behind the returned task, so an async-tainted keyed member
+		// is legal through it - it is never AWT122 (unlike the synchronous IReadOnlyDictionary<string, T>).
+		await That(result.Diagnostics).DoesNotContain("*AWT122*").AsWildcard()
+			.Because("an awaited keyed dictionary awaits its async-initialized members behind the produced task");
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// The async-tainted member is awaited inside an immediately-invoked async lambda (no ambient token - the
+		// consumer is built synchronously), the synchronous member resolved directly, and the dictionary cast to the
+		// requested IReadOnlyDictionary<string, T> so the task's result type matches the parameter.
+		await That(source).Contains("((global::System.Func<global::System.Threading.Tasks.Task<global::System.Collections.Generic.IReadOnlyDictionary<string, global::MyCode.IChannel>>>)(async () => (global::System.Collections.Generic.IReadOnlyDictionary<string, global::MyCode.IChannel>)new global::System.Collections.Generic.Dictionary<string, global::MyCode.IChannel> { [\"fast\"] = Root.ResolveFast(__s.__root), [\"slow\"] = await Root.ResolveAsyncSlowAsync(__s.__root, default).ConfigureAwait(false) }))()")
+			.Because("the async-tainted keyed member is awaited inside the produced task, in registration order");
+
+		// Like the awaited collection, the awaited keyed dictionary launders its members' taint - so the router stays
+		// synchronously constructible and dispatchable even though a member is async-tainted.
+		await That(source).Contains("typeof(global::MyCode.Router), static __s => Root.ResolveRouter(__s.__root)")
+			.Because("a consumer of an awaited keyed dictionary stays synchronously resolvable even when a member is async-tainted");
+	}
+
+	[Fact]
+	public async Task EmptyAwaitedKeyedDictionary_MaterializesACompletedEmptyTaskWithoutAwt101()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+			using System.Collections.Generic;
+			using System.Threading.Tasks;
+
+			namespace MyCode;
+
+			public interface IChannel { }
+			public sealed class Host { public Host(Task<IReadOnlyDictionary<string, IChannel>> channels) { } }
+
+			[Container]
+			[Singleton<Host>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty()
+			.Because("a service with no keyed registration resolves to an empty awaited keyed dictionary, not a missing-dependency error");
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("new global::MyCode.Host(global::System.Threading.Tasks.Task.FromResult<global::System.Collections.Generic.IReadOnlyDictionary<string, global::MyCode.IChannel>>(new global::System.Collections.Generic.Dictionary<string, global::MyCode.IChannel> {  }))")
+			.Because("an element type with no keyed registration materializes a completed empty awaited keyed dictionary");
+	}
+
+	[Fact]
+	public async Task NonStringAwaitedKeyedDictionary_ReportsAwt159()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+			using System.Collections.Generic;
+			using System.Threading.Tasks;
+
+			namespace MyCode;
+
+			public enum ProcessType { A, B }
+			public interface IChannel { }
+			public sealed class Fast : IChannel { }
+			public sealed class Host { public Host(Task<IReadOnlyDictionary<ProcessType, IChannel>> channels) { } }
+
+			[Container]
+			[Singleton<Fast, IChannel>(Key = "fast")]
+			[Singleton<Host>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		// The awaited keyed dictionary supports string keys only, exactly like the synchronous dictionary.
+		await That(result.Diagnostics).Contains("*AWT159*").AsWildcard()
+			.Because("a non-string key type is rejected for the awaited keyed dictionary just as for the synchronous one");
+	}
+
+	[Fact]
+	public async Task FromKeyOnASynthesizedAwaitedKeyedDictionary_ReportsAwt160()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+			using System.Collections.Generic;
+			using System.Threading.Tasks;
+
+			namespace MyCode;
+
+			public interface IChannel { }
+			public sealed class Fast : IChannel { }
+			public sealed class Router { public Router([FromKey("fast")] Task<IReadOnlyDictionary<string, IChannel>> channels) { } }
+
+			[Container]
+			[Singleton<Fast, IChannel>(Key = "fast")]
+			[Singleton<Router>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		// The synthesized awaited keyed dictionary resolves every keyed registration; a [FromKey] cannot select
+		// within it and is rejected rather than silently ignored, exactly as for the synchronous dictionary.
+		await That(result.Diagnostics).Contains("*AWT160*").AsWildcard()
+			.Because("a [FromKey] on a synthesized awaited keyed dictionary is rejected just as on the synchronous one");
+	}
+
+	[Fact]
+	public async Task ExplicitlyRegisteredAwaitedKeyedDictionary_WinsOverSynthesisOnInjection()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+			using System.Collections.Generic;
+			using System.Threading.Tasks;
+
+			namespace MyCode;
+
+			public interface IChannel { }
+			public sealed class Fast : IChannel { }
+			public sealed class ChannelMapTask : Task<IReadOnlyDictionary<string, IChannel>>
+			{
+			    public ChannelMapTask() : base(() => null) { }
+			}
+			public sealed class Router { public Router(Task<IReadOnlyDictionary<string, IChannel>> channels) { } }
+
+			[Container]
+			[Singleton<Fast, IChannel>(Key = "fast")]
+			[Singleton<ChannelMapTask, Task<IReadOnlyDictionary<string, IChannel>>>]
+			[Singleton<Router>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// Task<IReadOnlyDictionary<string, IChannel>> is itself a registered service (an opaque, pre-built task), so
+		// the parameter is a direct dependency on that registration - not a synthesized awaited keyed dictionary.
+		await That(source).Contains("new global::MyCode.Router(Root.ResolveChannelMapTask(__s.__root))")
+			.Because("an explicitly registered Task<IReadOnlyDictionary<…>> claims its own exact shape, winning over the synthesized awaited keyed dictionary");
+		await That(source).DoesNotContain("global::System.Threading.Tasks.Task.FromResult<global::System.Collections.Generic.IReadOnlyDictionary<string, global::MyCode.IChannel>>(new global::System.Collections.Generic.Dictionary")
+			.Because("no awaited keyed dictionary is synthesized behind the registered shape");
+	}
+
+	[Fact]
+	public async Task RegisteredSyncKeyedDictionary_SuppressesTheAwaitedViewOnInjection()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+			using System.Collections.Generic;
+			using System.Threading.Tasks;
+
+			namespace MyCode;
+
+			public interface IChannel { }
+			public sealed class Fast : IChannel { }
+			public sealed class ChannelMap : Dictionary<string, IChannel> { }
+			public sealed class Router { public Router(Task<IReadOnlyDictionary<string, IChannel>> channels) { } }
+
+			[Container]
+			[Singleton<Fast, IChannel>(Key = "fast")]
+			[Singleton<ChannelMap, IReadOnlyDictionary<string, IChannel>>]
+			[Singleton<Router>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		// A registered synchronous IReadOnlyDictionary<string, IChannel> claims the awaited Task<…> view too
+		// (all-or-nothing), so the awaited sibling is suppressed to a direct dependency on the full Task<…> type -
+		// which is not itself registered, so it is a plain missing dependency rather than a second synthesized view.
+		await That(result.Diagnostics)
+			.Contains("*AWT101*requires 'System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyDictionary<string, MyCode.IChannel>>', which is not registered*").AsWildcard()
+			.Because("a registered synchronous keyed dictionary suppresses the awaited view, mirroring how a registered sync collection shape suppresses Task<C>");
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+		await That(source).DoesNotContain("Task.FromResult<global::System.Collections.Generic.IReadOnlyDictionary<string, global::MyCode.IChannel>>")
+			.Because("no awaited keyed dictionary is synthesized behind the registered synchronous one");
+	}
+
+	[Fact]
+	public async Task AwaitedKeyedDictionary_JoinsTheByTypeDispatch()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+			using System.Collections.Generic;
+			using System.Threading;
+			using System.Threading.Tasks;
+
+			namespace MyCode;
+
+			public interface IChannel { }
+			public sealed class Fast : IChannel { }
+			public sealed class AsyncSlow : IChannel, IAsyncInitializable
+			{
+			    public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+			}
+
+			[Container]
+			[Singleton<Fast, IChannel>(Key = "fast")]
+			[Singleton<AsyncSlow, IChannel>(Key = "slow")]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		await That(result.Diagnostics).DoesNotContain("*AWT122*").AsWildcard();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// Even though a keyed member is async-tainted (so the synchronous IReadOnlyDictionary<string, T> shape is
+		// withheld with AWT122-style guidance), the awaited Task<…> view is always synchronously obtainable and gets
+		// its own by-type dispatch slot.
+		await That(source).Contains("typeof(global::System.Threading.Tasks.Task<global::System.Collections.Generic.IReadOnlyDictionary<string, global::MyCode.IChannel>>), static __s => __R")
+			.Because("the awaited keyed dictionary joins the synchronous by-type dispatch even when a member is async-tainted");
+	}
+
+	[Fact]
+	public async Task RegisteredSyncKeyedDictionary_SuppressesTheAwaitedByTypeDispatch()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+			using System.Collections.Generic;
+			using System.Threading.Tasks;
+
+			namespace MyCode;
+
+			public interface IChannel { }
+			public sealed class Fast : IChannel { }
+			public sealed class ChannelMap : Dictionary<string, IChannel> { }
+
+			[Container]
+			[Singleton<Fast, IChannel>(Key = "fast")]
+			[Singleton<ChannelMap, IReadOnlyDictionary<string, IChannel>>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// The registered synchronous dictionary owns the IReadOnlyDictionary<string, IChannel> slot; no awaited
+		// Task<…> view is synthesized behind it (all-or-nothing).
+		await That(source).DoesNotContain("typeof(global::System.Threading.Tasks.Task<global::System.Collections.Generic.IReadOnlyDictionary<string, global::MyCode.IChannel>>)")
+			.Because("a registered synchronous keyed dictionary suppresses the synthesized awaited view on the by-type dispatch too");
+	}
+
+	[Fact]
+	public async Task AsyncTaintedRegisteredAwaitedKeyedDictionary_IsNotShadowedOnTheByTypeDispatch()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+			using System.Collections.Generic;
+			using System.Threading;
+			using System.Threading.Tasks;
+
+			namespace MyCode;
+
+			public interface IChannel { }
+			public sealed class Fast : IChannel { }
+			public sealed class ChannelMapTask : Task<IReadOnlyDictionary<string, IChannel>>, IAsyncInitializable
+			{
+			    public ChannelMapTask() : base(() => null) { }
+			    public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+			}
+
+			[Container]
+			[Singleton<Fast, IChannel>(Key = "fast")]
+			[Singleton<ChannelMapTask, Task<IReadOnlyDictionary<string, IChannel>>>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// The async-tainted registration is excluded from the synchronous dispatch that seeds the seen guard, so
+		// the guard alone would not hold its Task<IReadOnlyDictionary<…>> slot - the synthesized dictionary would
+		// silently claim it on the sync Resolve path (masking the registration's ResolveAsync guidance) while
+		// injection resolves the registration. The registration is therefore checked directly.
+		await That(source).DoesNotContain("global::System.Threading.Tasks.Task.FromResult<global::System.Collections.Generic.IReadOnlyDictionary<string, global::MyCode.IChannel>>")
+			.Because("no awaited keyed dictionary is synthesized behind the explicitly registered Task<…>, even when that registration is async-tainted");
+		await That(source).Contains("ResolveChannelMapTaskAsync")
+			.Because("the async-tainted registration keeps its own async resolution path");
+	}
+
+	[Fact]
+	public async Task NonStringAwaitedKeyedDictionary_OverARegisteredDictionary_ResolvesTheRegistration()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+			using System.Collections.Generic;
+			using System.Threading.Tasks;
+
+			namespace MyCode;
+
+			public interface IChannel { }
+			public sealed class Fast : IChannel { }
+			public sealed class IntMap : Dictionary<int, IChannel> { }
+			public sealed class Host { public Host(Task<IReadOnlyDictionary<int, IChannel>> channels) { } }
+
+			[Container]
+			[Singleton<Fast, IChannel>(Key = "fast")]
+			[Singleton<IntMap, IReadOnlyDictionary<int, IChannel>>]
+			[Singleton<Host>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		// A non-string key admits no synthesized awaited view at all (unregistered it is AWT159), so over a
+		// registered dictionary the dependency stays what it was before the awaited keyed dictionary existed: the
+		// bare Task relationship, resolving the registration - neither AWT159 nor AWT101.
+		await That(result.Diagnostics).IsEmpty()
+			.Because("Task<IReadOnlyDictionary<int, T>> over a registered IReadOnlyDictionary<int, T> resolves the registration through the bare Task relationship");
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("ResolveIntMap")
+			.Because("the awaited view hands back the registered dictionary behind a task");
+	}
+
+	[Fact]
+	public async Task FromKeyAwaitedKeyedDictionary_OverAKeyRegisteredDictionary_ResolvesTheRegistration()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+			using System.Collections.Generic;
+			using System.Threading.Tasks;
+
+			namespace MyCode;
+
+			public interface IChannel { }
+			public sealed class Fast : IChannel { }
+			public sealed class ChannelMap : Dictionary<string, IChannel> { }
+			public sealed class Router { public Router([FromKey("map")] Task<IReadOnlyDictionary<string, IChannel>> channels) { } }
+
+			[Container]
+			[Singleton<Fast, IChannel>(Key = "fast")]
+			[Singleton<ChannelMap, IReadOnlyDictionary<string, IChannel>>(Key = "map")]
+			[Singleton<Router>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		// A [FromKey] selection admits no synthesized awaited view (surviving synthesis it would be AWT160), so
+		// over a dictionary registered under that key it stays the bare Task relationship and resolves the
+		// registration - neither AWT160 nor AWT101, exactly as the synchronous [FromKey] dictionary counterpart.
+		await That(result.Diagnostics).IsEmpty()
+			.Because("[FromKey] Task<IReadOnlyDictionary<string, T>> over a dictionary registered under that key resolves the registration");
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("ResolveChannelMap")
+			.Because("the awaited view hands back the keyed registered dictionary behind a task");
+	}
 }

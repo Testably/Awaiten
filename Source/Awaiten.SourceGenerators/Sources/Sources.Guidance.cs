@@ -80,6 +80,20 @@ internal static partial class Sources
 	}
 
 	/// <summary>
+	///     The guidance thrown by Resolve(Type) on the Root for an awaited keyed dictionary
+	///     (<c>Task&lt;IReadOnlyDictionary&lt;string, T&gt;&gt;</c>) that holds a build-on-demand disposable member:
+	///     the produced task materializes its members eagerly, so resolving it by type on the Root would accumulate
+	///     those disposables for the container's lifetime. The keyed counterpart of
+	///     <see cref="AwaitedCollectionWithheldMessage" />; like it there is no <c>Owned&lt;T&gt;</c> form for a
+	///     dictionary, so the guidance steers to a child scope, direct injection, or <c>LifetimeSafety.Loose</c>.
+	/// </summary>
+	private static string AwaitedKeyedCollectionWithheldMessage(string dictionary)
+	{
+		string display = dictionary.Replace("global::", string.Empty);
+		return $"\"Awaiten: the awaited keyed dictionary '{display}' has a build-on-demand disposable member and is withheld from by-type resolution on the container root under strict lifetime safety; resolve it from a child scope, inject it directly, or set LifetimeSafety.Loose on the [Container].\"";
+	}
+
+	/// <summary>
 	///     The guidance thrown by Resolve(Type) for a collection (<c>IEnumerable&lt;T&gt;</c> / <c>T[]</c>) that
 	///     holds an async-tainted member: a collection is materialized synchronously (built eagerly into an array,
 	///     with no place to await an initialization), so there is no synchronous - and no asynchronous - resolution

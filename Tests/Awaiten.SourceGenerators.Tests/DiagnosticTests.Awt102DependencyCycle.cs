@@ -188,5 +188,31 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).Contains("*AWT102*").AsWildcard()
 				.Because("a keyed dictionary materializes its members eagerly during construction, so a member depending back on the consumer is a hard cycle");
 		}
+
+		[Fact]
+		public async Task IsClosedByAnAwaitedKeyedDictionaryMember()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+			                                       using System.Collections.Generic;
+			                                       using System.Threading.Tasks;
+
+			                                       namespace MyCode;
+
+			                                       public interface IWorker { }
+			                                       public sealed class Hub { public Hub(Task<IReadOnlyDictionary<string, IWorker>> workers) { } }
+			                                       public sealed class Worker : IWorker { public Worker(Hub hub) { } }
+
+			                                       [Container]
+			                                       [Singleton<Hub>]
+			                                       [Singleton<Worker, IWorker>(Key = "w")]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT102*").AsWildcard()
+				.Because("the awaited keyed dictionary starts materializing its members at construction (the construction graph), so a member depending back on the consumer is still a hard cycle - exactly like the bare Task<T> and the awaited collection");
+		}
 	}
 }
