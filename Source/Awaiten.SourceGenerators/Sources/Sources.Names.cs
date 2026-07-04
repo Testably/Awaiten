@@ -18,8 +18,11 @@ internal static partial class Sources
 		private readonly Dictionary<ServiceKey, string[]> _collectionResolvers;
 		private readonly Dictionary<ServiceKey, int[]> _collectionMemberIndices;
 		private readonly HashSet<ServiceKey> _syncCollections;
+		private readonly KeyedServiceMembers[] _keyedCollections;
+		private readonly Dictionary<string, (string Key, string Resolver)[]> _keyedCollectionResolvers;
+		private readonly HashSet<string> _syncKeyedCollections;
 
-		private Names(string[] resolvers, string[] fields, ServiceMembers[] collections, Dictionary<ServiceKey, string[]> collectionResolvers, Dictionary<ServiceKey, int[]> collectionMemberIndices, HashSet<ServiceKey> syncCollections)
+		private Names(string[] resolvers, string[] fields, ServiceMembers[] collections, Dictionary<ServiceKey, string[]> collectionResolvers, Dictionary<ServiceKey, int[]> collectionMemberIndices, HashSet<ServiceKey> syncCollections, KeyedServiceMembers[] keyedCollections, Dictionary<string, (string Key, string Resolver)[]> keyedCollectionResolvers, HashSet<string> syncKeyedCollections)
 		{
 			_resolvers = resolvers;
 			_fields = fields;
@@ -27,6 +30,9 @@ internal static partial class Sources
 			_collectionResolvers = collectionResolvers;
 			_collectionMemberIndices = collectionMemberIndices;
 			_syncCollections = syncCollections;
+			_keyedCollections = keyedCollections;
+			_keyedCollectionResolvers = keyedCollectionResolvers;
+			_syncKeyedCollections = syncKeyedCollections;
 		}
 
 		// The collection-resolvable services in first-seen (type, key) order, driving the public IEnumerable<T> /
@@ -52,6 +58,19 @@ internal static partial class Sources
 		// synchronous resolver is referenced where none is emitted; injecting such a collection is AWT122.
 		public bool IsSyncCollection(ServiceKey collection) => _syncCollections.Contains(collection);
 
+		// The keyed-collection-resolvable services in first-seen order, driving the public
+		// IReadOnlyDictionary<string, T> dispatch.
+		public KeyedServiceMembers[] KeyedCollections => _keyedCollections;
+
+		// The (key, resolver) pairs of a keyed collection's members, in registration order (empty when the service
+		// has no keyed registration, which materializes an empty dictionary).
+		public (string Key, string Resolver)[] KeyedCollectionResolvers(string service)
+			=> _keyedCollectionResolvers.TryGetValue(service, out (string Key, string Resolver)[]? resolvers) ? resolvers : System.Array.Empty<(string, string)>();
+
+		// Whether a keyed collection can be materialized synchronously - i.e. every keyed member has a synchronous
+		// resolver. One with an async-tainted member is omitted from the public sync dispatch (injecting it is AWT122).
+		public bool IsSyncKeyedCollection(string service) => _syncKeyedCollections.Contains(service);
+
 		// The async members are named off the synchronous resolver/field so they stay collision-safe
 		// together: ResolveFoo -> ResolveFooAsync / CreateFooAsync, _foo -> _fooAsyncTask.
 		public string AsyncResolver(int index) => _resolvers[index] + "Async";
@@ -66,7 +85,7 @@ internal static partial class Sources
 		// still false) skips the fast path and terminates the cycle through the lock instead.
 		public string WiredField(int index) => _fields[index] + "Wired";
 
-		public static Names Build(InstanceModel[] instances, ServiceMembers[] collections, bool syncResolveAfterInit)
+		public static Names Build(InstanceModel[] instances, ServiceMembers[] collections, KeyedServiceMembers[] keyedCollections, bool syncResolveAfterInit)
 		{
 			string[] resolvers = new string[instances.Length];
 			string[] fields = new string[instances.Length];
@@ -126,7 +145,30 @@ internal static partial class Sources
 				}
 			}
 
-			return new Names(resolvers, fields, collections, collectionResolvers, collectionMemberIndices, syncCollections);
+			// Map each keyed collection's (key, implementation) members to their (key, resolver) pairs, preserving
+			// registration order; the keyed dictionary is materialized synchronously, so it is sync-materializable
+			// only when every member has a synchronous resolver.
+			Dictionary<string, (string Key, string Resolver)[]> keyedCollectionResolvers = new(StringComparer.Ordinal);
+			HashSet<string> syncKeyedCollections = new(StringComparer.Ordinal);
+			foreach (KeyedServiceMembers keyed in keyedCollections)
+			{
+				KeyedMember[] keyedMembers = keyed.Members.AsArray();
+				(string Key, string Resolver)[] pairs = new (string, string)[keyedMembers.Length];
+				bool allSync = true;
+				for (int m = 0; m < keyedMembers.Length; m++)
+				{
+					pairs[m] = (keyedMembers[m].Key, implToResolver[keyedMembers[m].Implementation]);
+					allSync &= syncImpls.Contains(keyedMembers[m].Implementation);
+				}
+
+				keyedCollectionResolvers[keyed.Service] = pairs;
+				if (allSync)
+				{
+					syncKeyedCollections.Add(keyed.Service);
+				}
+			}
+
+			return new Names(resolvers, fields, collections, collectionResolvers, collectionMemberIndices, syncCollections, keyedCollections, keyedCollectionResolvers, syncKeyedCollections);
 		}
 
 		// Reserves a base name together with the derived member names generated off it (the async resolver's

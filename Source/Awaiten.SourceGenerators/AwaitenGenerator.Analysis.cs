@@ -35,13 +35,42 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
+	///     The instance indices of every keyed-collection-resolvable service's members, keyed by the service
+	///     (value) type, for the transitive-disposable walk. Composed from the graph's
+	///     <paramref name="keyedCollections" /> and <paramref name="implToIndex" /> (a member absent from the
+	///     latter failed to build and is skipped).
+	/// </summary>
+	internal static Dictionary<string, List<int>> KeyedCollectionMemberIndices(
+		IReadOnlyList<KeyedServiceMembers> keyedCollections,
+		Dictionary<string, int> implToIndex)
+	{
+		Dictionary<string, List<int>> members = new(StringComparer.Ordinal);
+		foreach (KeyedServiceMembers keyed in keyedCollections)
+		{
+			List<int> indices = new();
+			foreach (KeyedMember member in keyed.Members.AsArray())
+			{
+				if (implToIndex.TryGetValue(member.Implementation, out int index))
+				{
+					indices.Add(index);
+				}
+			}
+
+			members[keyed.Service] = indices;
+		}
+
+		return members;
+	}
+
+	/// <summary>
 	///     Whether building the service at <paramref name="start" /> on its owner tracks a fresh disposable
 	///     there: the service itself is disposable, or its construction transitively rebuilds one. The walk
 	///     follows only <em>transient</em> dependency edges, because a scoped or singleton dependency is
 	///     cached/shared (built at most once on the owner) and so is bounded, whereas a transient dependency is
-	///     rebuilt - and, if disposable, re-tracked - on every construction. A collection (Enumerable) edge is
-	///     followed too: it materializes its members eagerly into the owner, so a transient disposable member is
-	///     rebuilt on every construction just like a direct transient dependency. Used to decide whether a plain
+	///     rebuilt - and, if disposable, re-tracked - on every construction. A collection (Enumerable) edge - and a
+	///     keyed collection (IReadOnlyDictionary&lt;string, T&gt;) edge - is followed too: each materializes its
+	///     members eagerly into the owner, so a transient disposable member is rebuilt on every construction just
+	///     like a direct transient dependency. Used to decide whether a plain
 	///     <c>Func&lt;…&gt;</c> over the service accumulates on the container root (AWT118 / strict withholding):
 	///     a non-disposable transient that injects a disposable transient leaks just the same when built
 	///     repeatedly through a root-bound factory.
@@ -50,6 +79,7 @@ partial class AwaitenGenerator
 		IReadOnlyList<InstanceModel> instances,
 		Dictionary<ServiceKey, int> serviceToIndex,
 		IReadOnlyDictionary<ServiceKey, List<int>> collectionMembers,
+		IReadOnlyDictionary<string, List<int>> keyedCollectionMembers,
 		int start)
 	{
 		HashSet<int> visited = new();
@@ -70,7 +100,7 @@ partial class AwaitenGenerator
 				return true;
 			}
 
-			PushFreshTransientDependencies(instance, instances, serviceToIndex, collectionMembers, stack);
+			PushFreshTransientDependencies(instance, instances, serviceToIndex, collectionMembers, keyedCollectionMembers, stack);
 		}
 
 		return false;
@@ -86,6 +116,7 @@ partial class AwaitenGenerator
 		IReadOnlyList<InstanceModel> instances,
 		Dictionary<ServiceKey, int> serviceToIndex,
 		IReadOnlyDictionary<ServiceKey, List<int>> collectionMembers,
+		IReadOnlyDictionary<string, List<int>> keyedCollectionMembers,
 		Stack<int> stack)
 	{
 		foreach (ParameterModel parameter in instance.ConstructorParameters.AsArray())
@@ -93,6 +124,12 @@ partial class AwaitenGenerator
 			if (parameter.Kind is DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.AwaitedEnumerable)
 			{
 				PushTransientCollectionMembers(KeyOf(parameter), instances, collectionMembers, stack);
+			}
+			else if (parameter.Kind == DependencyKind.KeyedCollection)
+			{
+				// A keyed dictionary materializes its members eagerly during construction too, so a transient
+				// disposable keyed member is rebuilt on every construction just like a plain collection member.
+				PushTransientKeyedMembers(parameter.ServiceType, instances, keyedCollectionMembers, stack);
 			}
 			else if (parameter.Kind == DependencyKind.Direct
 			         && serviceToIndex.TryGetValue(KeyOf(parameter), out int dependency)
@@ -125,6 +162,29 @@ partial class AwaitenGenerator
 		}
 	}
 
+	// Pushes each transient member of the keyed collection for <paramref name="serviceType" /> (a non-transient
+	// member is cached/shared, so it is bounded). The keyed analogue of PushTransientCollectionMembers, grouped
+	// by service (value) type rather than (element type, key).
+	private static void PushTransientKeyedMembers(
+		string serviceType,
+		IReadOnlyList<InstanceModel> instances,
+		IReadOnlyDictionary<string, List<int>> keyedCollectionMembers,
+		Stack<int> stack)
+	{
+		if (!keyedCollectionMembers.TryGetValue(serviceType, out List<int>? members))
+		{
+			return;
+		}
+
+		foreach (int member in members)
+		{
+			if (instances[member].Lifetime == Lifetime.Transient)
+			{
+				stack.Push(member);
+			}
+		}
+	}
+
 	// The direct-dependency graph over instance indices (resolvable edges to built instances): the edge set
 	// for captive-dependency analysis (AWT105), async-taint propagation, and the synchronous-async checks
 	// (AWT119/AWT120). The relationship types (Func<T>/Lazy<T>/…) and the bare eager relationships
@@ -137,8 +197,9 @@ partial class AwaitenGenerator
 		List<InstanceModel> instances,
 		Dictionary<ServiceKey, string> serviceToImpl,
 		Dictionary<string, int> implToIndex,
-		Dictionary<ServiceKey, List<string>> serviceMembers)
-		=> BuildEdges(instances, serviceToImpl, implToIndex, serviceMembers, includeEagerBare: false, includeDeferredMembers: true);
+		Dictionary<ServiceKey, List<string>> serviceMembers,
+		Dictionary<string, List<KeyedMember>> keyedMembers)
+		=> BuildEdges(instances, serviceToImpl, implToIndex, serviceMembers, keyedMembers, includeEagerBare: false, includeDeferredMembers: true);
 
 	// The construction graph over instance indices, for cycle detection (AWT102): the direct edges plus the bare
 	// eager relationships Owned<T> and Task<T> (the latter also covering Task<Owned<T>>). Unlike their deferred
@@ -153,8 +214,9 @@ partial class AwaitenGenerator
 		List<InstanceModel> instances,
 		Dictionary<ServiceKey, string> serviceToImpl,
 		Dictionary<string, int> implToIndex,
-		Dictionary<ServiceKey, List<string>> serviceMembers)
-		=> BuildEdges(instances, serviceToImpl, implToIndex, serviceMembers, includeEagerBare: true);
+		Dictionary<ServiceKey, List<string>> serviceMembers,
+		Dictionary<string, List<KeyedMember>> keyedMembers)
+		=> BuildEdges(instances, serviceToImpl, implToIndex, serviceMembers, keyedMembers, includeEagerBare: true);
 
 	// The combined construction-plus-deferred graph over instance indices, for the deferred-cycle analysis
 	// (AWT145/AWT146/AWT147): the construction edges plus the edges a deferred [Inject(Deferred = true)] member
@@ -167,8 +229,9 @@ partial class AwaitenGenerator
 		List<InstanceModel> instances,
 		Dictionary<ServiceKey, string> serviceToImpl,
 		Dictionary<string, int> implToIndex,
-		Dictionary<ServiceKey, List<string>> serviceMembers)
-		=> BuildEdges(instances, serviceToImpl, implToIndex, serviceMembers, includeEagerBare: true, includeDeferredMembers: true);
+		Dictionary<ServiceKey, List<string>> serviceMembers,
+		Dictionary<string, List<KeyedMember>> keyedMembers)
+		=> BuildEdges(instances, serviceToImpl, implToIndex, serviceMembers, keyedMembers, includeEagerBare: true, includeDeferredMembers: true);
 
 	/// <summary>
 	///     Whether any built instance has a deferred (<c>[Inject(Deferred = true)]</c>) member - the gate for
@@ -207,6 +270,7 @@ partial class AwaitenGenerator
 		Dictionary<ServiceKey, string> serviceToImpl,
 		Dictionary<string, int> implToIndex,
 		Dictionary<ServiceKey, List<string>> serviceMembers,
+		Dictionary<string, List<KeyedMember>> keyedMembers,
 		bool includeEagerBare,
 		bool includeDeferredMembers = false)
 	{
@@ -216,7 +280,7 @@ partial class AwaitenGenerator
 			List<int> nodeEdges = new();
 			foreach (ParameterModel parameter in instances[i].ConstructorParameters.AsArray())
 			{
-				AddParameterEdges(parameter, serviceToImpl, implToIndex, serviceMembers, includeEagerBare, nodeEdges);
+				AddParameterEdges(parameter, serviceToImpl, implToIndex, serviceMembers, keyedMembers, includeEagerBare, nodeEdges);
 			}
 
 			// An injected [Inject] member is a full graph edge just like a constructor parameter: a Direct
@@ -230,7 +294,7 @@ partial class AwaitenGenerator
 					continue;
 				}
 
-				AddParameterEdges(member.Dependency, serviceToImpl, implToIndex, serviceMembers, includeEagerBare, nodeEdges);
+				AddParameterEdges(member.Dependency, serviceToImpl, implToIndex, serviceMembers, keyedMembers, includeEagerBare, nodeEdges);
 			}
 
 			edges[i] = nodeEdges;
@@ -252,9 +316,18 @@ partial class AwaitenGenerator
 		Dictionary<ServiceKey, string> serviceToImpl,
 		Dictionary<string, int> implToIndex,
 		Dictionary<ServiceKey, List<string>> serviceMembers,
+		Dictionary<string, List<KeyedMember>> keyedMembers,
 		bool includeEagerBare,
 		List<int> nodeEdges)
 	{
+		// A keyed collection materializes every keyed member eagerly into a dictionary, so - like a synchronous
+		// collection - it captures them (taint/captive) and closes cycles through them, in both graphs.
+		if (parameter.Kind == DependencyKind.KeyedCollection)
+		{
+			AddKeyedCollectionMemberEdges(parameter.ServiceType, keyedMembers, implToIndex, nodeEdges);
+			return;
+		}
+
 		if (parameter.Kind is DependencyKind.Enumerable or DependencyKind.AsyncEnumerable
 		    || (includeEagerBare && parameter.Kind == DependencyKind.AwaitedEnumerable))
 		{
@@ -288,6 +361,30 @@ partial class AwaitenGenerator
 		foreach (string member in members)
 		{
 			if (implToIndex.TryGetValue(member, out int memberIndex))
+			{
+				nodeEdges.Add(memberIndex);
+			}
+		}
+	}
+
+	// Appends an edge to each built keyed member of the keyed collection for <paramref name="serviceType" />
+	// (a member absent from implToIndex failed to build and is skipped). Mirrors AddCollectionMemberEdges, but the
+	// membership is grouped by service (value) type - a keyed collection spans every key of the service, not a
+	// single (type, key) collection.
+	private static void AddKeyedCollectionMemberEdges(
+		string serviceType,
+		Dictionary<string, List<KeyedMember>> keyedMembers,
+		Dictionary<string, int> implToIndex,
+		List<int> nodeEdges)
+	{
+		if (!keyedMembers.TryGetValue(serviceType, out List<KeyedMember>? members))
+		{
+			return;
+		}
+
+		foreach (KeyedMember member in members)
+		{
+			if (implToIndex.TryGetValue(member.Implementation, out int memberIndex))
 			{
 				nodeEdges.Add(memberIndex);
 			}
@@ -425,11 +522,12 @@ partial class AwaitenGenerator
 	private static void DetectSynchronousAsyncCollection(
 		List<InstanceModel> instances,
 		List<ServiceMembers> collections,
+		List<KeyedServiceMembers> keyedCollections,
 		Dictionary<string, int> implToIndex,
 		List<LocationInfo?> instanceLocations,
 		List<DiagnosticInfo> diagnostics)
 	{
-		if (collections.Count == 0)
+		if (collections.Count == 0 && keyedCollections.Count == 0)
 		{
 			return;
 		}
@@ -440,42 +538,61 @@ partial class AwaitenGenerator
 			byService[new ServiceKey(collection.Service, collection.Key)] = collection;
 		}
 
+		Dictionary<string, KeyedServiceMembers> byKeyedService = new(StringComparer.Ordinal);
+		foreach (KeyedServiceMembers keyed in keyedCollections)
+		{
+			byKeyedService[keyed.Service] = keyed;
+		}
+
 		for (int i = 0; i < instances.Count; i++)
 		{
 			foreach (ParameterModel parameter in instances[i].ConstructorParameters.AsArray())
 			{
-				if (parameter.Kind == DependencyKind.Enumerable
-				    && byService.TryGetValue(KeyOf(parameter), out ServiceMembers members))
-				{
-					ReportAsyncTaintedMembers(i, parameter, members, instances, implToIndex, instanceLocations, diagnostics);
-				}
+				CheckCollection(i, parameter);
 			}
 
 			// An injected [Inject] collection member (deferred or not) is materialized through the same
 			// synchronous expression as a constructor parameter, so it is checked the same way.
 			foreach (ParameterModel dependency in instances[i].InjectedMembers.AsArray().Select(member => member.Dependency))
 			{
-				if (dependency.Kind == DependencyKind.Enumerable
-				    && byService.TryGetValue(KeyOf(dependency), out ServiceMembers memberCollection))
-				{
-					ReportAsyncTaintedMembers(i, dependency, memberCollection, instances, implToIndex, instanceLocations, diagnostics);
-				}
+				CheckCollection(i, dependency);
+			}
+		}
+
+		void CheckCollection(int consumer, ParameterModel dependency)
+		{
+			if (dependency.Kind == DependencyKind.Enumerable
+			    && byService.TryGetValue(KeyOf(dependency), out ServiceMembers members))
+			{
+				ReportAsyncTaintedMembers(consumer, dependency, members.Implementations.AsArray(), instances, implToIndex, instanceLocations, diagnostics);
+			}
+
+			// A keyed collection is also materialized synchronously into a dictionary, so an async-tainted keyed
+			// member cannot have its initialization awaited - the same AWT122 concern as a synchronous collection.
+			if (dependency.Kind == DependencyKind.KeyedCollection
+			    && byKeyedService.TryGetValue(dependency.ServiceType, out KeyedServiceMembers keyed))
+			{
+				ReportAsyncTaintedMembers(
+					consumer, dependency, keyed.Members.AsArray().Select(member => member.Implementation).ToArray(),
+					instances, implToIndex, instanceLocations, diagnostics);
 			}
 		}
 	}
 
 	// Reports AWT122 for each async-tainted member of the collection <paramref name="consumer" /> injects
 	// through <paramref name="parameter" /> (a member absent from implToIndex failed to build and is skipped).
+	// <paramref name="members" /> is the member implementations, shared by the synchronous collection and the
+	// synchronous keyed dictionary - both materialize their members eagerly with no place to await one.
 	private static void ReportAsyncTaintedMembers(
 		int consumer,
 		ParameterModel parameter,
-		ServiceMembers members,
+		string[] members,
 		List<InstanceModel> instances,
 		Dictionary<string, int> implToIndex,
 		List<LocationInfo?> instanceLocations,
 		List<DiagnosticInfo> diagnostics)
 	{
-		foreach (string member in members.Implementations.AsArray())
+		foreach (string member in members)
 		{
 			if (!implToIndex.TryGetValue(member, out int memberIndex) || !instances[memberIndex].IsAsyncTainted)
 			{
@@ -590,7 +707,7 @@ partial class AwaitenGenerator
 				// way BuildDependencyGraph does: serviceToImpl can name an implementation whose BuildInstance failed
 				// (so it is absent from implToIndex), and an unguarded indexer would crash the generator
 				// (KeyNotFoundException) instead of surfacing the real registration error (e.g. AWT103).
-				if (parameter.Kind is DependencyKind.Arg or DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.AwaitedEnumerable
+				if (parameter.Kind is DependencyKind.Arg or DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.AwaitedEnumerable or DependencyKind.KeyedCollection
 				    || !serviceToImpl.TryGetValue(KeyOf(parameter), out string? targetImpl)
 				    || !implToIndex.TryGetValue(targetImpl, out int targetIndex))
 				{

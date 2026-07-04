@@ -65,6 +65,21 @@ internal static partial class Sources
 	}
 
 	/// <summary>
+	///     A <c>new Dictionary&lt;string, TService&gt; { ["a"] = ResolveA(), ["b"] = ResolveB(), … }</c>
+	///     expression: every keyed registration of the service type, materialized eagerly and keyed by its
+	///     <c>[Key]</c>, in registration order (each member keeping its own lifetime). A <c>Dictionary&lt;,&gt;</c>
+	///     satisfies the requested <c>IReadOnlyDictionary&lt;string, TService&gt;</c>; an empty membership yields an
+	///     empty dictionary. The member resolvers are called unqualified against the current owner, exactly like
+	///     <see cref="CollectionLiteral" />, so each member resolves on the scope evaluating the dictionary.
+	/// </summary>
+	private static string KeyedCollectionLiteral(string service, Names names)
+	{
+		string items = string.Join(", ", names.KeyedCollectionResolvers(service)
+			.Select(pair => $"[{SymbolDisplay.FormatLiteral(pair.Key, quote: true)}] = {pair.Resolver}()"));
+		return $"new global::System.Collections.Generic.Dictionary<string, {service}> {{ {items} }}";
+	}
+
+	/// <summary>
 	///     A <c>new __AsyncArray&lt;T&gt;(new T[] { … })</c> expression producing an
 	///     <c>IAsyncEnumerable&lt;T&gt;</c> over every registration of the collection's (element type, key). The
 	///     members are materialized eagerly in registration order into the backing array - each async-tainted member
@@ -214,6 +229,11 @@ internal static partial class Sources
 		if (dependency.Kind == DependencyKind.AwaitedEnumerable)
 		{
 			return AwaitedCollectionExpression(dependency, names, instances, asynchronous);
+		}
+
+		if (dependency.Kind == DependencyKind.KeyedCollection)
+		{
+			return KeyedCollectionLiteral(dependency.ServiceType, names);
 		}
 
 		if (asynchronous && dependency.Kind == DependencyKind.Direct

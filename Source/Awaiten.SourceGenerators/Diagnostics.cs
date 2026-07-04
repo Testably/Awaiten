@@ -830,4 +830,17 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Warning,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A keyed collection (<c>IReadOnlyDictionary&lt;TKey, TService&gt;</c>) declares a key type other than
+	///     <c>string</c>. Keyed registrations carry <c>string</c> keys (the <c>[Key]</c> value), so v1 resolves
+	///     only <c>IReadOnlyDictionary&lt;string, TService&gt;</c>; typed/enum keys are not yet supported.
+	/// </summary>
+	public static readonly DiagnosticDescriptor UnsupportedKeyedCollectionKey = new(
+		"AWT156",
+		"Unsupported keyed-collection key type",
+		"'{0}' requests a keyed collection with key type '{1}', but keyed registrations use string keys; use IReadOnlyDictionary<string, TService> (typed/enum keys are not yet supported)",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

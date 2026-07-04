@@ -233,12 +233,13 @@ internal static partial class Sources
 		}
 
 		Dictionary<ServiceKey, List<int>> collectionMembers = AwaitenGenerator.CollectionMemberIndices(names.Collections, implToIndex);
+		Dictionary<string, List<int>> keyedCollectionMembers = AwaitenGenerator.KeyedCollectionMemberIndices(names.KeyedCollections, implToIndex);
 		foreach ((ServiceMembers collection, string method) in AsyncByTypeCollections(names, serviceToIndex, syncResolveAfterInit))
 		{
 			ServiceKey collectionKey = new(collection.Service, collection.Key);
 			string shape = AwaitenGenerator.AsyncEnumerableShapeType(collection.Service);
 			bool rootWithheld = collectionMembers.TryGetValue(collectionKey, out List<int>? members)
-			                    && members.Any(member => IsFuncWithheld(instances, member, serviceToIndex, collectionMembers, strict));
+			                    && members.Any(member => IsFuncWithheld(instances, member, serviceToIndex, collectionMembers, keyedCollectionMembers, strict));
 			// An async collection resolver is emitted on the base Scope (never root-owned), so it is called with __s.
 			arms.Add((shape, method, false, rootWithheld ? CollectionAsyncRootWithheldMessage(shape) : null));
 		}

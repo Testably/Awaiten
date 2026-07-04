@@ -1041,4 +1041,89 @@ public class GeneralTests
 		await That(source).Contains("Disposes every tracked instance in reverse creation order.")
 			.Because("the disposal surface is documented");
 	}
+
+	[Fact]
+	public async Task KeyedDictionaryDependency_MaterializesAllKeyedRegistrationsAsADictionary()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+			using System.Collections.Generic;
+
+			namespace MyCode;
+
+			public interface IChannel { }
+			public sealed class Fast : IChannel { }
+			public sealed class Slow : IChannel { }
+			public sealed class Router { public Router(IReadOnlyDictionary<string, IChannel> channels) { } }
+
+			[Container]
+			[Singleton<Fast, IChannel>(Key = "fast")]
+			[Singleton<Slow, IChannel>(Key = "slow")]
+			[Singleton<Router>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// The keyed dictionary is a Dictionary<string, TService> of every keyed member's resolver, keyed by its
+		// [Key] in registration order, materialized inline where it is injected.
+		await That(source).Contains("new global::MyCode.Router(new global::System.Collections.Generic.Dictionary<string, global::MyCode.IChannel> { [\"fast\"] = ResolveFast(), [\"slow\"] = ResolveSlow() })");
+		// IReadOnlyDictionary<string, T> is publicly resolvable by type (its own bucket in the dispatch table).
+		await That(source).Contains("typeof(global::System.Collections.Generic.IReadOnlyDictionary<string, global::MyCode.IChannel>)");
+	}
+
+	[Fact]
+	public async Task EmptyKeyedDictionary_MaterializesAnEmptyDictionaryWithoutAwt101()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+			using System.Collections.Generic;
+
+			namespace MyCode;
+
+			public interface IChannel { }
+			public sealed class Host { public Host(IReadOnlyDictionary<string, IChannel> channels) { } }
+
+			[Container]
+			[Singleton<Host>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// An element type with no keyed registration yields a completed empty dictionary, not a missing dependency.
+		await That(source).Contains("new global::MyCode.Host(new global::System.Collections.Generic.Dictionary<string, global::MyCode.IChannel> {  })");
+	}
+
+	[Fact]
+	public async Task NonStringKeyedDictionary_ReportsAwt156()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+			using System.Collections.Generic;
+
+			namespace MyCode;
+
+			public enum ProcessType { A, B }
+			public interface IChannel { }
+			public sealed class Fast : IChannel { }
+			public sealed class Host { public Host(IReadOnlyDictionary<ProcessType, IChannel> channels) { } }
+
+			[Container]
+			[Singleton<Fast, IChannel>(Key = "fast")]
+			[Singleton<Host>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		// v1 supports only string keys; a non-string key type is rejected rather than treated as a plain dependency.
+		await That(result.Diagnostics).Contains("*AWT156*").AsWildcard();
+	}
 }

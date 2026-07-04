@@ -61,6 +61,12 @@ partial class AwaitenGenerator
 		{
 			ParameterModel parameterModel = ClassifyParameter(parameter, asyncFactory);
 
+			// AWT156: a keyed collection (IReadOnlyDictionary<TKey, T>) must use a string key in v1.
+			if (parameterModel.Kind == DependencyKind.KeyedCollection)
+			{
+				ReportUnsupportedKeyedCollectionKey(parameter.Type, info, parameterModel.Location ?? info.Location, context.Diagnostics);
+			}
+
 			// AWT134: a [FromServices] parameter (External) cannot also be an [Arg] runtime argument - it
 			// cannot be both an externally-resolved dependency and a caller-supplied value. Point the diagnostic
 			// at the offending parameter, falling back to the registration when its location is unavailable.
@@ -118,7 +124,7 @@ partial class AwaitenGenerator
 	/// </summary>
 	private static void ReportWhenUnregistered(ParameterModel parameterModel, ImplInfo info, BuildContext context)
 	{
-		if (parameterModel.Kind is DependencyKind.Arg or DependencyKind.CancellationToken or DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.AwaitedEnumerable or DependencyKind.External
+		if (parameterModel.Kind is DependencyKind.Arg or DependencyKind.CancellationToken or DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.AwaitedEnumerable or DependencyKind.KeyedCollection or DependencyKind.External
 		    || context.ServiceToImpl.ContainsKey(KeyOf(parameterModel))
 		    || context.ConstraintRejected.Contains(parameterModel.ServiceType))
 		{
@@ -250,6 +256,12 @@ partial class AwaitenGenerator
 		ParameterModel dependency = ClassifyDependency(
 			property.Type, property.GetAttributes(), asyncFactory: false, location);
 
+		// AWT156: a keyed collection (IReadOnlyDictionary<TKey, T>) must use a string key in v1.
+		if (dependency.Kind == DependencyKind.KeyedCollection)
+		{
+			ReportUnsupportedKeyedCollectionKey(property.Type, info, location, diagnostics);
+		}
+
 		// AWT137: runtime arguments flow only through a Func<…> factory into [Arg] constructor parameters, never
 		// through property injection (the member resolves entirely from the graph).
 		if (dependency.Kind == DependencyKind.Arg)
@@ -265,7 +277,7 @@ partial class AwaitenGenerator
 		// satisfied elsewhere, like a constructor parameter, and yields an empty collection when unregistered).
 		// Mirror ClassifyParameters: a constraint-rejected open generic (AWT126) is not re-reported here, and an
 		// Owned<T> requested through Lazy surfaces the targeted AWT121 instead.
-		if (dependency.Kind is not (DependencyKind.Enumerable or DependencyKind.AsyncEnumerable)
+		if (dependency.Kind is not (DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.KeyedCollection)
 		    && !serviceToImpl.ContainsKey(KeyOf(dependency))
 		    && !constraintRejected.Contains(dependency.ServiceType))
 		{
@@ -367,6 +379,17 @@ partial class AwaitenGenerator
 		if (IsAsyncEnumerable(type, out string? asyncElementType))
 		{
 			return new ParameterModel(asyncElementType!, DependencyKind.AsyncEnumerable, Key: key, Location: location);
+		}
+
+		// A keyed collection (IReadOnlyDictionary<TKey, T>) resolves to every keyed registration of its service
+		// (value) type T, keyed by each registration's [Key]. Recognized before the plain collection shapes (both
+		// live in System.Collections.Generic) so IReadOnlyDictionary is not mistaken for a plain generic service.
+		// [FromKey] does not apply - the dictionary resolves every key - so no Key is carried. The declared key
+		// type is not stored: v1 emits a string-keyed dictionary; a non-string key is rejected as AWT156 at the
+		// classification site (which still classifies it here, so an empty index is not misreported as AWT101).
+		if (TryGetKeyedCollectionElement(type, out string? keyedService, out _))
+		{
+			return new ParameterModel(keyedService!, DependencyKind.KeyedCollection, Location: location);
 		}
 
 		// A collection dependency resolves to every registration of its element type under the parameter's
@@ -537,6 +560,44 @@ partial class AwaitenGenerator
 
 		elementType = null;
 		return false;
+	}
+
+	/// <summary>
+	///     Recognizes a keyed collection - <c>IReadOnlyDictionary&lt;TKey, T&gt;</c> - yielding the fully-qualified
+	///     service (value) type <c>T</c> and the declared key type. v1 resolves only <c>string</c> keys; a
+	///     non-<c>string</c> key type is still recognized here (so the caller reports AWT156 rather than treating
+	///     the dependency as a plain, unregistered generic service and misreporting AWT101).
+	/// </summary>
+	private static bool TryGetKeyedCollectionElement(ITypeSymbol type, out string? serviceType, out string? keyType)
+	{
+		if (type is INamedTypeSymbol { IsGenericType: true, Name: "IReadOnlyDictionary", TypeArguments.Length: 2, } named
+		    && named.ContainingNamespace?.ToDisplayString() == "System.Collections.Generic")
+		{
+			keyType = named.TypeArguments[0].ToDisplayString(FullyQualified);
+			serviceType = named.TypeArguments[1].ToDisplayString(FullyQualified);
+			return true;
+		}
+
+		serviceType = null;
+		keyType = null;
+		return false;
+	}
+
+	/// <summary>
+	///     Reports <see cref="Diagnostics.UnsupportedKeyedCollectionKey">AWT156</see> when a keyed collection's
+	///     declared key type is not the supported <c>string</c>. v1 keys are strings (the <c>[Key]</c> registration
+	///     value); typed/enum keys are deferred. The dependency stays classified as a keyed collection, so it is
+	///     never re-reported as a missing dependency (AWT101) on top of this.
+	/// </summary>
+	private static void ReportUnsupportedKeyedCollectionKey(ITypeSymbol type, ImplInfo info, LocationInfo? location, List<DiagnosticInfo> diagnostics)
+	{
+		if (TryGetKeyedCollectionElement(type, out _, out string? keyType) && keyType != "string")
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.UnsupportedKeyedCollectionKey,
+				location,
+				new EquatableArray<string>([DisplayInstance(info.ImplementationType), Display(keyType!),])));
+		}
 	}
 
 	/// <summary>

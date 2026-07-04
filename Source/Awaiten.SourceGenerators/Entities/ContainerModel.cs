@@ -18,7 +18,8 @@ internal sealed record ContainerModel(
 	bool SyncResolveAfterInit,
 	bool HasAsyncDisposable,
 	EquatableArray<ServiceMembers> Collections = default,
-	EquatableArray<string> VarianceCandidates = default)
+	EquatableArray<string> VarianceCandidates = default,
+	EquatableArray<KeyedServiceMembers> KeyedCollections = default)
 {
 	public bool HasErrors
 	{
