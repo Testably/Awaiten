@@ -140,7 +140,10 @@ partial class AwaitenGenerator
 				service as INamedTypeSymbol,
 				Weak: weak,
 				IsDefault: isDefault,
-				Origin: origin));
+				Origin: origin,
+				// Eager is exposed on [Singleton<…>] alone; a Transient/Scoped attribute has no such property, so
+				// this reads false there. BuildInstance additionally honors it only for a singleton lifetime.
+				Eager: NamedFlag(attribute, "Eager")));
 		}
 	}
 

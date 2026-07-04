@@ -106,6 +106,11 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 				graph.Instances, graph.Dependencies, graph.ServiceToImpl, graph.ImplToIndex, graph.InstanceLocations, diagnostics);
 			DetectSynchronousAsyncCollection(
 				graph.Instances, graph.Collections, graph.KeyedCollections, graph.ImplToIndex, graph.InstanceLocations, diagnostics);
+
+			// AWT161 (strict only): an async-tainted Eager singleton has no synchronous construction path, so it
+			// cannot be built in the generated root's synchronous constructor. Pragmatic SyncResolveAfterInit emits
+			// a blocking synchronous resolver, so eager construction is allowed there and this is not reported.
+			DetectEagerAsyncSingletons(graph.Instances, graph.InstanceLocations, diagnostics);
 		}
 
 		string? containerNamespace = containerSymbol.ContainingNamespace is { IsGlobalNamespace: false, } ns

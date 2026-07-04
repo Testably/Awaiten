@@ -224,6 +224,7 @@ namespace Awaiten
     {
         public SingletonAttribute() { }
         public bool Default { get; set; }
+        public bool Eager { get; set; }
         public string? Factory { get; set; }
         public string? Instance { get; set; }
         public string? Key { get; set; }
@@ -235,6 +236,7 @@ namespace Awaiten
     {
         public SingletonAttribute() { }
         public bool Default { get; set; }
+        public bool Eager { get; set; }
         public string? Factory { get; set; }
         public string? Instance { get; set; }
         public string? Key { get; set; }

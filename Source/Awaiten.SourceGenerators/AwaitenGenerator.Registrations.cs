@@ -23,7 +23,9 @@ namespace Awaiten.SourceGenerators;
 ///     own registrations - a module's <c>Factory</c>/<c>Instance</c> member is resolved against and
 ///     emitted qualified with the module type, not the container), and whether the registration was
 ///     synthesized by open generic expansion rather than written by hand (<c>IsSynthesized</c> - such a
-///     registration yields to every explicit one, including an overridable default, in coalescing).
+///     registration yields to every explicit one, including an overridable default, in coalescing), and
+///     whether the registration opted into eager build-time construction (<c>Eager</c>, honored only for
+///     a singleton).
 /// </summary>
 /// <remarks>
 ///     <see cref="Location" /> is the live Roslyn location (with its syntax tree), not an equatable
@@ -47,7 +49,8 @@ internal sealed record RawRegistration(
 	bool Weak = false,
 	bool IsDefault = false,
 	INamedTypeSymbol? Origin = null,
-	bool IsSynthesized = false);
+	bool IsSynthesized = false,
+	bool Eager = false);
 
 /// <summary>
 ///     An imported module: its symbol and the location of the container's <c>[Import]</c> attribute that
@@ -142,6 +145,13 @@ partial class AwaitenGenerator
 
 		/// <summary>Whether the first (winning) registration of this implementation came from a <c>[Scan]</c>.</summary>
 		public bool IsScan { get; init; }
+
+		/// <summary>
+		///     Whether the winning registration opted into eager build-time construction (<c>Eager = true</c>).
+		///     Set from the first registration like the implementation's other options; honored only for a
+		///     singleton (see <c>BuildInstance</c>).
+		/// </summary>
+		public bool Eager { get; init; }
 
 		/// <summary>
 		///     The imported module that declared the winning registration, or <see langword="null" /> for the

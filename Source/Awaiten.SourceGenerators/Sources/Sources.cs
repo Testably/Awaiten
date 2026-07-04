@@ -480,6 +480,7 @@ internal static partial class Sources
 			"Creates the container root: the usable container instance and its default scope.");
 		Indent(members, body).AppendLine("public Root() : base()");
 		Indent(members, body).AppendLine("{");
+		EmitEagerActivation(members, body + 1, instances, names);
 		Indent(members, body).AppendLine("}");
 		// The Root override of InitializeAsync warms the async singletons in dependency order (the base
 		// Scope warms only its async scoped services).
@@ -545,6 +546,28 @@ internal static partial class Sources
 			new MemberSection("Helpers", helpers));
 
 		Indent(builder, depth).AppendLine("}");
+	}
+
+	/// <summary>
+	///     Emits the body of the generated <c>Root</c> constructor: each <c>Eager</c> singleton is constructed at
+	///     build time, in registration (instance) order, after <c>base()</c> has initialized the root's fields -
+	///     the synchronous analog of <c>InitializeAsync</c>, which warms only the async singletons. Every eager
+	///     singleton routes through its own caching static resolver (called with <c>this</c>, the root), so its
+	///     construction is cached and a disposable one is tracked for teardown exactly as on a lazy resolve. Emits
+	///     nothing when no singleton is eager. The model never reaches emission with an async-tainted eager
+	///     singleton in the strict default (its synchronous resolver is not emitted) - that is AWT161, whose error
+	///     yields the throwing error body instead; in pragmatic <c>SyncResolveAfterInit</c> mode the eager
+	///     singleton has a (blocking) synchronous resolver, so the call is always valid here.
+	/// </summary>
+	private static void EmitEagerActivation(StringBuilder builder, int depth, InstanceModel[] instances, Names names)
+	{
+		for (int i = 0; i < instances.Length; i++)
+		{
+			if (instances[i].Eager)
+			{
+				Indent(builder, depth).Append(names.Resolver(i)).AppendLine("(this);");
+			}
+		}
 	}
 
 	/// <summary>

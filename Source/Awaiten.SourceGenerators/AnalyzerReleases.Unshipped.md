@@ -62,3 +62,4 @@
  AWT158  | Awaiten   | Warning  | An [Inject(Optional = true)] property is init-only, so an unregistered dependency leaves it permanently at its default
  AWT159  | Awaiten   | Error    | A keyed collection (IReadOnlyDictionary<TKey, TService>) uses a non-string key type
  AWT160  | Awaiten   | Error    | A [FromKey] is applied to a synthesized keyed collection (IReadOnlyDictionary<string, TService>), which resolves every key
+ AWT161  | Awaiten   | Error    | An Eager singleton is async-initialized and cannot be constructed synchronously at container build time
