@@ -7,13 +7,20 @@
 	</PropertyGroup>
 
 	<!-- A plain support library referenced by Awaiten.Tests so cross-assembly [Scan(InAssembliesOf = ...)]
-	     has a referenced assembly with marker-implementing types to discover. Not a test project. -->
+	     has a referenced assembly with marker-implementing types to discover, and so a container in the test
+	     assembly can [Import] a [Module] compiled into a real referenced assembly. Not a test project. -->
 	<ItemGroup>
 		<PackageReference Remove="xunit.v3" />
 		<PackageReference Remove="xunit.runner.visualstudio" />
 		<PackageReference Remove="Microsoft.NET.Test.Sdk" />
 		<PackageReference Remove="coverlet.collector" />
 		<PackageReference Remove="aweXpect" />
+	</ItemGroup>
+
+	<!-- The Awaiten attributes only (not the analyzer): this library declares a [Module] but the generator
+	     runs on the importing container in Awaiten.Tests, never here. -->
+	<ItemGroup>
+		<ProjectReference Include="..\..\Source\Awaiten\Awaiten.csproj" />
 	</ItemGroup>
 
 </Project>

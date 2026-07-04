@@ -12,6 +12,8 @@ namespace Awaiten;
 ///     arguments because an unbound generic (<c>typeof(Repository&lt;&gt;)</c>) cannot be a type
 ///     argument. Resolving a closed service (<c>IRepository&lt;Order&gt;</c>) constructs a fresh
 ///     matching closed implementation (<c>Repository&lt;Order&gt;</c>) on every request.
+///     Unlike the generic forms, the open <c>typeof</c> form has no <c>Default</c>/<c>TryAdd</c>: an open
+///     generic registration cannot be declared as an overridable default.
 /// </summary>
 /// <example><c>[Transient(typeof(Repository&lt;&gt;), typeof(IRepository&lt;&gt;))]</c></example>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
@@ -76,6 +78,19 @@ public sealed class TransientAttribute<TImplementation> : Attribute
 	///     different keys; consumers select one with <c>[FromKey]</c>.
 	/// </summary>
 	public string? Key { get; set; }
+
+	/// <summary>
+	///     Marks this as an overridable default (typically declared in a module): it is used only when
+	///     nothing else registers the same service, so a container or another module can replace it.
+	/// </summary>
+	public bool Default { get; set; }
+
+	/// <summary>
+	///     Adds this registration only if the service is not already registered, like
+	///     <see cref="Default" />. Use on a module to contribute a service without overriding an
+	///     existing one.
+	/// </summary>
+	public bool TryAdd { get; set; }
 }
 
 /// <summary>
@@ -103,6 +118,19 @@ public sealed class TransientAttribute<TImplementation, TService> : Attribute
 	///     different keys; consumers select one with <c>[FromKey]</c>.
 	/// </summary>
 	public string? Key { get; set; }
+
+	/// <summary>
+	///     Marks this as an overridable default (typically declared in a module): it is used only when
+	///     nothing else registers the same service, so a container or another module can replace it.
+	/// </summary>
+	public bool Default { get; set; }
+
+	/// <summary>
+	///     Adds this registration only if the service is not already registered, like
+	///     <see cref="Default" />. Use on a module to contribute a service without overriding an
+	///     existing one.
+	/// </summary>
+	public bool TryAdd { get; set; }
 }
 
 #pragma warning restore S2326

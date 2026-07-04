@@ -49,3 +49,11 @@
  AWT145  | Awaiten   | Error    | A deferred property cycle consists entirely of transients and cannot terminate
  AWT146  | Awaiten   | Error    | A deferred property cycle includes an async-initialized service and cannot terminate
  AWT147  | Awaiten   | Error    | A deferred property cycle still traverses a construction-time edge that duplicates a cached participant or recurses forever
+ AWT148  | Awaiten   | Warning  | Two overridable default registrations provide the same service ambiguously
+ AWT149  | Awaiten   | Error    | An [Import] names a type that is not marked [Module]
+ AWT150  | Awaiten   | Error    | An imported module has its own [Import], which is not followed
+ AWT151  | Awaiten   | Warning  | An imported module declares no registrations
+ AWT152  | Awaiten   | Error    | An imported [Module] class is not declared static
+ AWT153  | Awaiten   | Error    | A module Factory/Instance member is not accessible from the generated container
+ AWT154  | Awaiten   | Error    | An imported module declares a [Scan], which is not collected from modules
+ AWT155  | Awaiten   | Warning  | Two imported modules strongly register the same service with different implementations

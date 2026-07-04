@@ -205,17 +205,24 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			AsyncDisposableSupport(compilation),
 			compilation.GetTypeByMetadataName("Awaiten.IAsyncInitializable"));
 
+		// The imported modules, resolved once and threaded everywhere module attributes contribute: lifetime
+		// registrations, decorators, composites and [ImportServices]. Import validation (AWT149-152, AWT154)
+		// is reported while collecting them.
+		List<ImportedModule> modules = CollectImportedModules(containerSymbol, diagnostics);
+
 		// [ImportServices]: any otherwise-unresolved direct dependency falls through to the external provider
 		// instead of being reported as missing (AWT101), the blanket form of per-parameter [FromServices].
 		// Computed up front because it widens constructor selection everywhere a constructor is chosen - the
 		// open generic expansion seed, decorator inner-parameter detection, composite validation and
-		// BuildInstance must all scan the same constructor the emitted container builds through.
-		bool importServices = ContainerImportsServices(containerSymbol);
+		// BuildInstance must all scan the same constructor the emitted container builds through. A module can
+		// contribute it too: its registrations may rely on externally provided dependencies.
+		bool importServices = ContainerImportsServices(containerSymbol)
+		                      || modules.Any(module => HasAwaitenAttribute(module.Symbol.GetAttributes(), "ImportServicesAttribute"));
 
 		// Collect also expands the container's [Scan]s into overridable registrations (IsScan), ordered after
 		// the explicit ones so coalescing lets an explicit registration win single resolution while every match
 		// still joins its service's collection.
-		(List<RawRegistration> raw, HashSet<string> constraintRejected) = Collect(containerSymbol, compilation, importServices, diagnostics);
+		(List<RawRegistration> raw, HashSet<string> constraintRejected) = Collect(containerSymbol, modules, compilation, importServices, diagnostics);
 
 		// A [Scan(SkipUnconstructable = true)] trades the AWT101 error for a skip-with-warning (AWT141) on
 		// matches the container cannot construct: such a scan sweeps every assignable concrete class, so an
@@ -223,8 +230,8 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		// opt-in - and explicit registrations - keep the error.
 		PruneUnconstructableScanMatches(raw, containerSymbol, compilation, importServices, constraintRejected, diagnostics);
 
-		List<DecorateRegistration> decorators = CollectDecorators(containerSymbol);
-		List<CompositeRegistration> composites = CollectComposites(containerSymbol);
+		List<DecorateRegistration> decorators = CollectDecorators(containerSymbol, modules);
+		List<CompositeRegistration> composites = CollectComposites(containerSymbol, modules);
 
 		// Coalesce registrations by (service type, key): the first registration per key wins, and
 		// registrations of the same implementation share one instance. Declaring one implementation with

@@ -52,6 +52,92 @@ public partial class DiagnosticTests
 		}
 
 		[Fact]
+		public async Task ReportsForAWinningDefaultThatContradictsWhatAStrongRegistrationFixed()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface ICacheA { }
+			                                       public interface ICacheB { }
+			                                       public sealed class Cache : ICacheA, ICacheB { }
+
+			                                       [Module]
+			                                       [Transient<Cache, ICacheB>(TryAdd = true)]
+			                                       public static class CacheModule { }
+
+			                                       [Container]
+			                                       [Singleton<Cache, ICacheA>]
+			                                       [Import(typeof(CacheModule))]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT107*").AsWildcard()
+				.Because("the TryAdd keeps its service key, so its declared Transient lifetime would be silently replaced by the Singleton the strong registration fixed - a contradiction, not a transparent override");
+		}
+
+		[Fact]
+		public async Task ReportsForTwoDefaultsRegisteringTheSameImplementationWithDifferentLifetimes()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IClock { }
+			                                       public sealed class SharedClock : IClock { }
+
+			                                       [Module]
+			                                       [Singleton<SharedClock, IClock>(Default = true)]
+			                                       public static class ModuleA { }
+
+			                                       [Module]
+			                                       [Transient<SharedClock, IClock>(Default = true)]
+			                                       public static class ModuleB { }
+
+			                                       [Container]
+			                                       [Import(typeof(ModuleA))]
+			                                       [Import(typeof(ModuleB))]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT107*").AsWildcard()
+				.Because("the two defaults contradict each other's lifetime with nothing stronger to resolve them, and the same implementation rules out AWT148 - without AWT107 the loser's declared lifetime would be discarded silently");
+		}
+
+		[Fact]
+		public async Task DoesNotReportForADefaultOverriddenByAStrongRegistration()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface ICache { }
+			                                       public sealed class Cache : ICache { }
+
+			                                       [Module]
+			                                       [Transient<Cache, ICache>(Default = true)]
+			                                       public static class CacheModule { }
+
+			                                       [Container]
+			                                       [Singleton<Cache, ICache>]
+			                                       [Import(typeof(CacheModule))]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("a default losing its service key to a strong registration is replaced transparently - even by the same implementation with a different lifetime");
+		}
+
+		[Fact]
 		public async Task ReportsForTheSameServiceTypeWithDifferentLifetimes()
 		{
 			GeneratorResult result = Generator.Run("""

@@ -99,25 +99,27 @@ internal static class Diagnostics
 		isEnabledByDefault: true);
 
 	/// <summary>
-	///     A <c>Factory</c> registration names a member that is not a usable factory method on the
-	///     container (it is missing, is not a method, or does not return the registered service type).
+	///     A <c>Factory</c> registration names a member that is not a usable factory method on its owner -
+	///     the container, or the declaring module for an imported registration (it is missing, is not a
+	///     method, or does not return the registered service type).
 	/// </summary>
 	public static readonly DiagnosticDescriptor InvalidFactory = new(
 		"AWT108",
 		"Invalid factory",
-		"'{0}' cannot be produced: the container has no accessible method '{1}' returning '{0}'",
+		"'{0}' cannot be produced: {2} has no accessible method '{1}' returning '{0}'",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
 
 	/// <summary>
-	///     An <c>Instance</c> registration names a member that is not a usable instance member on the
-	///     container (it is missing, is not a field or property, or is not assignable to the service type).
+	///     An <c>Instance</c> registration names a member that is not a usable instance member on its owner -
+	///     the container, or the declaring module for an imported registration (it is missing, is not a field
+	///     or property, or is not assignable to the service type).
 	/// </summary>
 	public static readonly DiagnosticDescriptor InvalidInstance = new(
 		"AWT109",
 		"Invalid instance member",
-		"'{0}' cannot be exposed: the container has no accessible field or property '{1}' of type '{0}'",
+		"'{0}' cannot be exposed: {2} has no accessible field or property '{1}' of type '{0}'",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
@@ -154,7 +156,7 @@ internal static class Diagnostics
 	public static readonly DiagnosticDescriptor AmbiguousFactory = new(
 		"AWT112",
 		"Ambiguous factory",
-		"'{0}' has an ambiguous factory: the container has more than one accessible method '{1}' returning '{0}'. Give the factory method a unique name.",
+		"'{0}' has an ambiguous factory: {2} has more than one accessible method '{1}' returning '{0}'. Give the factory method a unique name.",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
@@ -681,5 +683,124 @@ internal static class Diagnostics
 		"The cycle {0} is only partly broken by a deferred property: it still has at least one construction-time edge (a constructor parameter, a plain [Inject] property, or an eager Owned<T>/Task<T>). Resolution that traverses that edge re-enters a participant before it is cached, so it constructs a duplicate of a cached (singleton/scoped) participant - or recurses forever when every participant is a transient. To fix it, turn the remaining constructor parameter (or plain [Inject] property) into an [Inject(Deferred = true)] property, or remove one of the dependencies to break the cycle.",
 		"Awaiten",
 		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     Two overridable <c>Default</c> registrations provide the same service and neither is overridden by a
+	///     strong (non-default) registration, so which default applies is decided only by declaration order. A
+	///     warning rather than an error: the graph still resolves (the first-declared default wins), but the
+	///     ambiguity is likely unintended - mark one as the winner with a strong registration, or use
+	///     <c>TryAdd</c> to opt out of the warning.
+	/// </summary>
+	public static readonly DiagnosticDescriptor AmbiguousDefault = new(
+		"AWT148",
+		"Ambiguous default registration",
+		"'{0}' has more than one overridable default registration and none overrides the others; the first declared wins",
+		"Awaiten",
+		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     An <c>[Import]</c> names a type that is not marked <c>[Module]</c>. Only modules can be imported, so
+	///     the target contributes nothing and is skipped - most likely the wrong type was named. An error rather
+	///     than a warning: an import that pulls in no registrations is silently useless, so the mistake is caught
+	///     here rather than surfacing later as a cascade of missing dependencies.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ImportNotAModule = new(
+		"AWT149",
+		"Import target is not a module",
+		"'{0}' is imported but is not marked [Module], so nothing is imported from it; only [Module] types can be imported",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     An imported <c>[Module]</c> carries its own <c>[Import]</c>, which is not followed: module imports are
+	///     resolved one level deep, so a module cannot re-export another module's registrations. An error rather
+	///     than a warning: leaving it as a warning would silently drop the nested module's registrations, so the
+	///     container is forced to import the nested module directly instead.
+	/// </summary>
+	public static readonly DiagnosticDescriptor NestedModuleImport = new(
+		"AWT150",
+		"Nested module import not followed",
+		"The imported module '{0}' has its own [Import], which is not followed; import the nested module directly, because module imports are resolved one level deep",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     An imported <c>[Module]</c> declares no <c>[Singleton]</c>/<c>[Transient]</c>/<c>[Scoped]</c>
+	///     registrations, so the import contributes nothing - most likely the module is incomplete or the wrong
+	///     type was named.
+	/// </summary>
+	public static readonly DiagnosticDescriptor EmptyModule = new(
+		"AWT151",
+		"Imported module has no registrations",
+		"The imported module '{0}' declares no registrations, so it contributes nothing",
+		"Awaiten",
+		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     An imported <c>[Module]</c> class is not declared <c>static</c>. Like a container, a module is a
+	///     pure definition - registrations plus static factory and instance members - and is never
+	///     instantiated, so it must be a static class (mirroring <see cref="NonStaticContainer">AWT116</see>).
+	/// </summary>
+	public static readonly DiagnosticDescriptor NonStaticModule = new(
+		"AWT152",
+		"Module must be static",
+		"'{0}' must be a static class. A [Module] class is a definition whose factory and instance members are static; it is imported, never instantiated.",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A module registration's <c>Factory</c>/<c>Instance</c> member exists on the module but is not
+	///     accessible from the generated container (e.g. a private member of a source module). Unlike the
+	///     container's own members - which the generated partial can reach at any accessibility - a module's
+	///     members are called from outside the module, so they must be public, or internal within the
+	///     container's assembly (or one granting it internals). An internal member of another assembly
+	///     without <c>InternalsVisibleTo</c> is not even imported into the compilation's symbol tables, so
+	///     that case surfaces as the not-found AWT108/AWT109 instead.
+	/// </summary>
+	public static readonly DiagnosticDescriptor InaccessibleModuleMember = new(
+		"AWT153",
+		"Module production member not accessible",
+		"'{0}' cannot be produced: the member '{2}' exists on the module '{1}' but is not accessible from the generated container; make it public, or internal within a visible assembly",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     An imported <c>[Module]</c> carries a <c>[Scan]</c>. Assembly scanning is a container concern (it
+	///     sweeps assemblies relative to the container) and is not collected from modules, so a module-declared
+	///     scan would contribute nothing; an error rather than a warning so the scan is not silently dropped -
+	///     move it onto the container.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ScanOnModule = new(
+		"AWT154",
+		"Scan on module not supported",
+		"The imported module '{0}' declares a [Scan], which is not collected from modules and contributes nothing; move the [Scan] onto the container",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     Two different imported modules register the same service key with different implementations at
+	///     the same precedence tier - both strongly, or both through open generic templates expanded to the
+	///     same closed service - so which one wins single resolution is decided only by [Import] order -
+	///     invisible at either module. A warning rather than an error: the graph still resolves (the earlier
+	///     import wins, and both implementations stay collection members), but the collision is likely
+	///     unintended - override the service on the container, or mark one module's registration
+	///     Default/TryAdd. A cross-tier loss (an explicit registration beating another module's expanded
+	///     template) is deterministic regardless of import order and stays silent, as does the container
+	///     overriding a module: that is the intended override mechanism.
+	/// </summary>
+	public static readonly DiagnosticDescriptor CrossModuleDuplicate = new(
+		"AWT155",
+		"Imported modules register the same service",
+		"'{0}' is registered by both the imported modules '{1}' and '{2}'; the earlier import '{1}' wins single resolution - override it on the container, or make one registration an overridable default",
+		"Awaiten",
+		DiagnosticSeverity.Warning,
 		isEnabledByDefault: true);
 }

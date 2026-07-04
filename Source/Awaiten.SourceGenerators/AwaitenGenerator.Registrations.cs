@@ -13,9 +13,17 @@ namespace Awaiten.SourceGenerators;
 ///     once (an error), and - for variance matching - the closed generic service symbol (so a
 ///     differently-closed consumer request can be redirected to a variance-compatible registration),
 ///     whether the registration was contributed by a <c>[Scan]</c> (an overridable registration that
-///     never conflicts with an explicit one over the same implementation), and whether that scan opted
+///     never conflicts with an explicit one over the same implementation), whether that scan opted
 ///     into skipping unconstructable matches (<c>SkipUnconstructable</c>, degrading the AWT101 error to
-///     the AWT141 warning).
+///     the AWT141 warning), whether the registration is an overridable module default (<c>Weak</c>:
+///     <c>Default</c> or <c>TryAdd</c>, contributing its service only when nothing stronger claimed it),
+///     whether that default was a <c>Default</c> specifically (<c>IsDefault</c>, so two colliding
+///     <c>Default</c>s can be surfaced as AWT148 while <c>TryAdd</c> stays silent), the imported
+///     module that declared the registration (<c>Origin</c>, <see langword="null" /> for the container's
+///     own registrations - a module's <c>Factory</c>/<c>Instance</c> member is resolved against and
+///     emitted qualified with the module type, not the container), and whether the registration was
+///     synthesized by open generic expansion rather than written by hand (<c>IsSynthesized</c> - such a
+///     registration yields to every explicit one, including an overridable default, in coalescing).
 /// </summary>
 /// <remarks>
 ///     <see cref="Location" /> is the live Roslyn location (with its syntax tree), not an equatable
@@ -35,7 +43,23 @@ internal sealed record RawRegistration(
 	string? Key = null,
 	INamedTypeSymbol? ServiceSymbol = null,
 	bool IsScan = false,
-	bool ScanSkipsUnconstructable = false);
+	bool ScanSkipsUnconstructable = false,
+	bool Weak = false,
+	bool IsDefault = false,
+	INamedTypeSymbol? Origin = null,
+	bool IsSynthesized = false);
+
+/// <summary>
+///     An imported module: its symbol and the location of the container's <c>[Import]</c> attribute that
+///     pulled it in. The location doubles as the diagnostic fallback for module attributes read from a
+///     referenced assembly, which carry no syntax of their own.
+/// </summary>
+/// <remarks>
+///     Like <see cref="RawRegistration" /> this is an intermediate type consumed within a single analysis
+///     pass, so it carries the live Roslyn <see cref="Location" /> and never flows through the generator's
+///     incremental cache.
+/// </remarks>
+internal sealed record ImportedModule(INamedTypeSymbol Symbol, Location? ImportLocation);
 
 /// <summary>
 ///     A single <c>[Decorate&lt;TDecorator, TService&gt;]</c> registration read from a container: the
@@ -98,8 +122,7 @@ partial class AwaitenGenerator
 			Lifetime lifetime,
 			LocationInfo? location,
 			ProductionKind production,
-			string? productionMember,
-			bool isScan = false)
+			string? productionMember)
 		{
 			ImplementationType = implementationType;
 			Symbol = symbol;
@@ -107,7 +130,6 @@ partial class AwaitenGenerator
 			Location = location;
 			Production = production;
 			ProductionMember = productionMember;
-			IsScan = isScan;
 			Services = new List<ServiceKey>();
 		}
 
@@ -119,7 +141,14 @@ partial class AwaitenGenerator
 		public string? ProductionMember { get; }
 
 		/// <summary>Whether the first (winning) registration of this implementation came from a <c>[Scan]</c>.</summary>
-		public bool IsScan { get; }
+		public bool IsScan { get; init; }
+
+		/// <summary>
+		///     The imported module that declared the winning registration, or <see langword="null" /> for the
+		///     container's own (or a scan's). A module's <c>Factory</c>/<c>Instance</c> member is resolved
+		///     against and emitted qualified with this type rather than the container.
+		/// </summary>
+		public INamedTypeSymbol? Origin { get; init; }
 
 		public List<ServiceKey> Services { get; }
 

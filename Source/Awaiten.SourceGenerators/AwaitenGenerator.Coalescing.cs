@@ -59,7 +59,18 @@ partial class AwaitenGenerator
 		List<(string ServiceType, INamedTypeSymbol Symbol)> varianceCandidates = new();
 		HashSet<string> varianceSeen = new(StringComparer.Ordinal);
 
-		foreach (RawRegistration registration in raw)
+		// The registration that currently owns each service key, so a later loser can be judged against the
+		// full winner: a Default losing to another Default is an ambiguous-default warning (AWT148), two
+		// same-tier module registrations colliding is AWT155, and a default losing to another default with a
+		// contradicting lifetime/production is an AWT107/AWT111 conflict - while a default correctly
+		// overridden by a strong registration, and the container overriding a module (the intended
+		// mechanisms), stay silent.
+		Dictionary<ServiceKey, RawRegistration> winners = new();
+
+		// Registrations are processed in precedence order (see PrecedenceRank): a losing default is dropped
+		// entirely below (not built, not a collection member), so a container or module replaces it
+		// transparently; a losing strong, synthesized or scan registration stays a collection member as before.
+		foreach ((RawRegistration registration, _) in InPrecedenceOrder(raw))
 		{
 			// Record an unkeyed closed-generic-interface registration as a variance candidate, so a
 			// differently-closed consumer request can be redirected to it. Recorded even when it loses the
@@ -90,6 +101,9 @@ partial class AwaitenGenerator
 			// always-empty dictionary.
 			implInfos.TryGetValue(registration.ImplementationType, out ImplInfo? info);
 
+			ServiceKey serviceKey = new(registration.ServiceType, registration.Key);
+			bool alreadyChosen = winners.TryGetValue(serviceKey, out RawRegistration? winner);
+
 			// A lifetime (AWT107) or production (AWT111) conflict is a property of the implementation, not of any
 			// single service type, so it is checked before the per-service dedup below; otherwise re-registering
 			// the same service type differently would be skipped and the contradiction silently dropped.
@@ -98,11 +112,19 @@ partial class AwaitenGenerator
 			// first) fixed for the implementation, so it is exempt from that check - but two scans that match
 			// the same implementation with different lifetimes contradict each other with nothing explicit to
 			// yield to, so that is surfaced as AWT142 rather than silently resolved by attribute order.
-			if (!registration.IsScan)
+			// An overridable default losing its service key to a strong registration is meant to be replaced
+			// transparently - possibly by a strong registration of the same implementation with a different
+			// lifetime - so that one loser yields rather than reporting a conflict. Every other default is
+			// checked like an explicit registration: one that keeps its key still contributes its declared
+			// lifetime/production and must not silently inherit what another registration fixed for the
+			// implementation, and one losing to another default contradicts it with nothing stronger to resolve
+			// them. AWT142 fires only between two scans: a scan whose implementation was first fixed by an
+			// explicit registration (strong or default, both processed earlier) yields to it silently instead.
+			if (!registration.IsScan && (!registration.Weak || !alreadyChosen || winner!.Weak))
 			{
 				ReportCoalescingConflicts(info, registration, reportedConflicts, reportedProductionConflicts, diagnostics);
 			}
-			else if (info is { IsScan: true, } && info.Lifetime != registration.Lifetime
+			else if (registration.IsScan && info is { IsScan: true, } && info.Lifetime != registration.Lifetime
 			         && reportedConflicts.Add(registration.ImplementationType))
 			{
 				diagnostics.Add(new DiagnosticInfo(
@@ -115,8 +137,23 @@ partial class AwaitenGenerator
 					])));
 			}
 
-			ServiceKey serviceKey = new(registration.ServiceType, registration.Key);
-			bool alreadyChosen = serviceToImpl.TryGetValue(serviceKey, out string? existingImpl);
+			// An overridable default whose service is already claimed is dropped in full - not built and not a
+			// collection member - so the stronger (or earlier) registration replaces it transparently. When both
+			// the loser and the current winner are Defaults, which one applies is left to declaration order, so
+			// AWT148 warns; a TryAdd default (or a default correctly overridden by a strong registration) is silent.
+			if (registration.Weak && alreadyChosen)
+			{
+				if (registration.IsDefault && winner!.IsDefault
+				    && winner.ImplementationType != registration.ImplementationType)
+				{
+					diagnostics.Add(new DiagnosticInfo(
+						Diagnostics.AmbiguousDefault,
+						LocationInfo.From(registration.Location),
+						new EquatableArray<string>([Display(registration.ServiceType),])));
+				}
+
+				continue;
+			}
 
 			// Every registration is a member of the collection for its (service type, key): an unkeyed
 			// IEnumerable<T> resolves the unkeyed registrations, a [FromKey("k")] IEnumerable<T> the ones under
@@ -127,12 +164,14 @@ partial class AwaitenGenerator
 
 			if (alreadyChosen)
 			{
-				ReportDuplicateKey(registration, existingImpl, diagnostics);
+				ReportDuplicateKey(registration, winner!.ImplementationType, diagnostics);
+				ReportCrossModuleDuplicate(registration, winner, diagnostics);
 				continue;
 			}
 
 			ImplInfo chosen = EnsureImpl(implInfos, implOrder, registration);
 			serviceToImpl[serviceKey] = registration.ImplementationType;
+			winners[serviceKey] = registration;
 			chosen.Services.Add(serviceKey);
 		}
 
@@ -150,13 +189,77 @@ partial class AwaitenGenerator
 			{
 				info = new ImplInfo(
 					reg.ImplementationType, reg.Implementation, reg.Lifetime,
-					LocationInfo.From(reg.Location), reg.Production, reg.ProductionMember, reg.IsScan);
+					LocationInfo.From(reg.Location), reg.Production, reg.ProductionMember)
+				{
+					IsScan = reg.IsScan,
+					Origin = reg.Origin,
+				};
 				implInfos.Add(reg.ImplementationType, info);
 				implOrder.Add(info);
 			}
 
 			return info;
 		}
+	}
+
+	/// <summary>
+	///     The single encoding of coalescing precedence. Explicit strong registrations claim their service
+	///     first; overridable defaults (<c>Default</c>/<c>TryAdd</c>) fill the remaining gaps; closed
+	///     registrations synthesized by open generic expansion yield to both - a deliberate declaration,
+	///     even an overridable default, beats the blanket expansion, mirroring how a default beats a
+	///     blanket scan; scan matches come last. Consumed by the coalescing loop and by the open generic
+	///     expansion seed (<see cref="DroppedOverridableDefaults" />), which must agree on who wins.
+	/// </summary>
+	private static int PrecedenceRank(RawRegistration registration)
+		=> registration switch
+		{
+			{ IsScan: true, } => 3,
+			{ IsSynthesized: true, } => 2,
+			{ Weak: true, } => 1,
+			_ => 0,
+		};
+
+	/// <summary>
+	///     Enumerates registrations in coalescing precedence order (see <see cref="PrecedenceRank" />),
+	///     preserving declaration order within each tier - so the container's own registrations still win
+	///     over an imported module's, and an earlier import's over a later one's. Each registration is
+	///     paired with its index into <paramref name="raw" /> for consumers that track identity across
+	///     passes (value equality cannot: two identical attributes coalesce into equal records).
+	/// </summary>
+	private static IEnumerable<(RawRegistration Registration, int Index)> InPrecedenceOrder(List<RawRegistration> raw)
+	{
+		for (int rank = 0; rank <= 3; rank++)
+		{
+			for (int index = 0; index < raw.Count; index++)
+			{
+				if (PrecedenceRank(raw[index]) == rank)
+				{
+					yield return (raw[index], index);
+				}
+			}
+		}
+	}
+
+	/// <summary>
+	///     The registrations (by index into <paramref name="raw" />) that coalescing will drop in full: an
+	///     overridable default whose service key a higher-tier or earlier registration claims. Losing
+	///     strong, synthesized and scan registrations are not dropped - they stay collection members and
+	///     are built. Sound to compute before open generic expansion runs: synthesized registrations rank
+	///     below defaults, so nothing expansion adds to <paramref name="raw" /> can claim a key ahead of one.
+	/// </summary>
+	private static HashSet<int> DroppedOverridableDefaults(List<RawRegistration> raw)
+	{
+		HashSet<ServiceKey> claimed = new();
+		HashSet<int> dropped = new();
+		foreach ((RawRegistration registration, int index) in InPrecedenceOrder(raw))
+		{
+			if (!claimed.Add(new ServiceKey(registration.ServiceType, registration.Key)) && registration.Weak)
+			{
+				dropped.Add(index);
+			}
+		}
+
+		return dropped;
 	}
 
 	// Reports the coalescing conflicts a re-registration of an already-seen implementation raises: a different
@@ -220,6 +323,40 @@ partial class AwaitenGenerator
 		}
 	}
 
+	// AWT155: two different imported modules register the same unkeyed service with different
+	// implementations at the same precedence tier - two strong registrations, or two closed registrations
+	// expanded from open typeof templates - so which wins is decided only by [Import] order, invisible at
+	// either module. A cross-tier loss is deterministic by design (an explicit registration beats an
+	// expanded one regardless of import order), so it stays silent, as do scans and overridable defaults
+	// (which yield by design), the container overriding a module (the intended override mechanism), and
+	// keyed collisions (already surfaced as AWT117).
+	private static void ReportCrossModuleDuplicate(
+		RawRegistration registration,
+		RawRegistration winner,
+		List<DiagnosticInfo> diagnostics)
+	{
+		if (registration.Key is not null
+		    || registration.IsScan
+		    || registration.Weak
+		    || registration.Origin is null
+		    || winner.Origin is null
+		    || PrecedenceRank(registration) != PrecedenceRank(winner)
+		    || SymbolEqualityComparer.Default.Equals(registration.Origin, winner.Origin)
+		    || winner.ImplementationType == registration.ImplementationType)
+		{
+			return;
+		}
+
+		diagnostics.Add(new DiagnosticInfo(
+			Diagnostics.CrossModuleDuplicate,
+			LocationInfo.From(registration.Location),
+			new EquatableArray<string>([
+				Display(registration.ServiceType),
+				Display(winner.Origin.ToDisplayString(FullyQualified)),
+				Display(registration.Origin.ToDisplayString(FullyQualified)),
+			])));
+	}
+
 	// AWT117: two different implementations claim the same service type and key, so a keyed resolution of
 	// that key would be ambiguous. The same implementation re-registered under one key is just a coalesce
 	// (first wins), and an unkeyed duplicate keeps the existing first-wins behavior, so neither is reported.
@@ -237,11 +374,15 @@ partial class AwaitenGenerator
 	}
 
 	// Two registrations of the same implementation conflict when they produce it differently: a different
-	// kind (constructor vs factory vs instance), or the same kind naming a different container member.
-	// Coalescing keeps the first, so the second would otherwise be dropped without a trace.
+	// kind (constructor vs factory vs instance), the same kind naming a different member, or the same
+	// member name declared by different owners (a container member and a module member of the same name
+	// are different methods). Coalescing keeps the first, so the second would otherwise be dropped
+	// without a trace.
 	private static bool ConflictsWith(ImplInfo info, RawRegistration registration)
 		=> info.Production != registration.Production
-		   || !string.Equals(info.ProductionMember, registration.ProductionMember, StringComparison.Ordinal);
+		   || !string.Equals(info.ProductionMember, registration.ProductionMember, StringComparison.Ordinal)
+		   || (registration.Production != ProductionKind.Constructor
+		       && !SymbolEqualityComparer.Default.Equals(info.Origin, registration.Origin));
 
 	private static string DescribeProduction(ProductionKind production, string? member)
 		=> production switch

@@ -120,6 +120,12 @@ namespace Awaiten
     {
         Awaiten.IExternalResolver? ExternalResolver { get; set; }
     }
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
+    public sealed class ImportAttribute : System.Attribute
+    {
+        public ImportAttribute(System.Type module) { }
+        public System.Type Module { get; }
+    }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=false, Inherited=false)]
     public sealed class ImportServicesAttribute : System.Attribute
     {
@@ -135,6 +141,11 @@ namespace Awaiten
     {
         Strict = 0,
         Loose = 1,
+    }
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=false, Inherited=false)]
+    public sealed class ModuleAttribute : System.Attribute
+    {
+        public ModuleAttribute() { }
     }
     public readonly struct Owned<T> : System.IDisposable
     {
@@ -181,16 +192,20 @@ namespace Awaiten
         where TImplementation :  class
     {
         public ScopedAttribute() { }
+        public bool Default { get; set; }
         public string? Factory { get; set; }
         public string? Key { get; set; }
+        public bool TryAdd { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
     public sealed class ScopedAttribute<TImplementation, TService> : System.Attribute
         where TImplementation :  class, TService
     {
         public ScopedAttribute() { }
+        public bool Default { get; set; }
         public string? Factory { get; set; }
         public string? Key { get; set; }
+        public bool TryAdd { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
     public sealed class SingletonAttribute : System.Attribute
@@ -206,18 +221,22 @@ namespace Awaiten
         where TImplementation :  class
     {
         public SingletonAttribute() { }
+        public bool Default { get; set; }
         public string? Factory { get; set; }
         public string? Instance { get; set; }
         public string? Key { get; set; }
+        public bool TryAdd { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
     public sealed class SingletonAttribute<TImplementation, TService> : System.Attribute
         where TImplementation :  class, TService
     {
         public SingletonAttribute() { }
+        public bool Default { get; set; }
         public string? Factory { get; set; }
         public string? Instance { get; set; }
         public string? Key { get; set; }
+        public bool TryAdd { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
     public sealed class TransientAttribute : System.Attribute
@@ -233,15 +252,19 @@ namespace Awaiten
         where TImplementation :  class
     {
         public TransientAttribute() { }
+        public bool Default { get; set; }
         public string? Factory { get; set; }
         public string? Key { get; set; }
+        public bool TryAdd { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
     public sealed class TransientAttribute<TImplementation, TService> : System.Attribute
         where TImplementation :  class, TService
     {
         public TransientAttribute() { }
+        public bool Default { get; set; }
         public string? Factory { get; set; }
         public string? Key { get; set; }
+        public bool TryAdd { get; set; }
     }
 }
