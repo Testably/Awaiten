@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 
 namespace Awaiten.Tests;
 
@@ -7,9 +8,12 @@ namespace Awaiten.Tests;
 ///     Runtime behavior of eager singleton activation (<c>[Singleton&lt;T&gt;(Eager = true)]</c>): an eager
 ///     singleton is constructed in the generated container root's constructor - before any <c>Resolve</c> - in
 ///     registration order, it is cached (so a later resolve hands back the same instance), and a disposable
-///     eager singleton is disposed with the container exactly like a lazily-resolved one. The containers and
-///     services are nested types, so the enclosing class is <c>partial</c>. Construction is observed through a
-///     static probe because the container is a static definition and the usable instance is <c>new …Root()</c>.
+///     eager singleton is tracked for disposal by that eager construction alone (no resolve needed). In
+///     pragmatic <c>SyncResolveAfterInit</c> mode an eager <c>IAsyncInitializable</c> singleton is even
+///     constructed and initialized at build time through its blocking synchronous resolver. The containers and
+///     services are nested types, so the enclosing class is <c>partial</c>. Construction, initialization and
+///     disposal are observed through a static probe because the container is a static definition and the usable
+///     instance is <c>new …Root()</c>.
 /// </summary>
 public partial class EagerActivationTests
 {
@@ -69,9 +73,49 @@ public partial class EagerActivationTests
 		await That(instance.Disposed).IsTrue();
 	}
 
+	[Fact]
+	public async Task EagerDisposableSingleton_IsTrackedForDisposalByConstructionAlone()
+	{
+		Probe.Constructed.Clear();
+		Probe.Disposed.Clear();
+
+		using (ProbeDisposableContainer.Root container = new())
+		{
+			// Constructed eagerly, and tracked for disposal by that eager construction alone - no Resolve here.
+			await That(Probe.Constructed).Contains("ProbeDisposable");
+			await That(Probe.Disposed).DoesNotContain("ProbeDisposable");
+		}
+
+		// Disposing the container disposes the eagerly-constructed singleton, so eager construction (not a
+		// resolve) is what registered it for teardown.
+		await That(Probe.Disposed).Contains("ProbeDisposable");
+	}
+
+	[Fact]
+	public async Task PragmaticMode_EagerAsyncSingleton_IsConstructedAndInitializedBeforeAnyResolve()
+	{
+		Probe.Constructed.Clear();
+
+		using PragmaticEagerContainer.Root container = new();
+
+		// The blocking synchronous resolver ran in the constructor, so the async-initialized singleton was both
+		// constructed and initialized at build time - before any Resolve / InitializeAsync.
+		await That(Probe.Constructed).Contains("AsyncEager");
+		await That(Probe.Constructed).Contains("AsyncEager:init");
+
+		// A later synchronous resolve (allowed by SyncResolveAfterInit) hands back that same, already-initialized
+		// instance - constructed exactly once.
+		AsyncEager resolved = container.Resolve<AsyncEager>();
+		await That(resolved.Initialized).IsTrue();
+		await That(Probe.Constructed.Count(name => name == "AsyncEager")).IsEqualTo(1)
+			.Because("the eager async singleton is constructed once at build time and cached");
+	}
+
 	private static class Probe
 	{
 		public static readonly List<string> Constructed = new();
+
+		public static readonly List<string> Disposed = new();
 	}
 
 	public sealed class Eager
@@ -101,6 +145,27 @@ public partial class EagerActivationTests
 		public void Dispose() => Disposed = true;
 	}
 
+	public sealed class ProbeDisposable : IDisposable
+	{
+		public ProbeDisposable() => Probe.Constructed.Add("ProbeDisposable");
+
+		public void Dispose() => Probe.Disposed.Add("ProbeDisposable");
+	}
+
+	public sealed class AsyncEager : IAsyncInitializable
+	{
+		public AsyncEager() => Probe.Constructed.Add("AsyncEager");
+
+		public bool Initialized { get; private set; }
+
+		public Task InitializeAsync(CancellationToken cancellationToken)
+		{
+			Initialized = true;
+			Probe.Constructed.Add("AsyncEager:init");
+			return Task.CompletedTask;
+		}
+	}
+
 	[Container]
 	[Singleton<Eager>(Eager = true)]
 	public static partial class EagerContainer;
@@ -118,4 +183,12 @@ public partial class EagerActivationTests
 	[Container]
 	[Singleton<Disposable>(Eager = true)]
 	public static partial class DisposableContainer;
+
+	[Container]
+	[Singleton<ProbeDisposable>(Eager = true)]
+	public static partial class ProbeDisposableContainer;
+
+	[Container(SyncResolveAfterInit = true)]
+	[Singleton<AsyncEager>(Eager = true)]
+	public static partial class PragmaticEagerContainer;
 }
