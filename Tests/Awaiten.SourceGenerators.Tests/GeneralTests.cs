@@ -1958,4 +1958,34 @@ public class GeneralTests
 		await That(source).Contains("ResolveILoggerAsync(__s, __requestingType, default).GetAwaiter().GetResult()");
 		await That(source).Contains("new global::MyCode.Alpha(await ResolveILoggerAsync(__s, typeof(global::MyCode.Alpha), cancellationToken).ConfigureAwait(false))");
 	}
+
+	[Fact]
+	public async Task LifecycleHooks_CallActivationAndQueueReleaseRunAheadOfDisposal()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace MyCode;
+
+			public sealed class Service { }
+
+			[Container]
+			[Singleton<Service>(OnActivated = nameof(Started), OnRelease = nameof(Stopping))]
+			public static partial class MyContainer
+			{
+				private static void Started(Service service) { }
+				private static void Stopping(Service service) { }
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// A reverse-drained release queue is emitted, the activation hook runs post-construction, and the release
+		// hook is queued as an action that is drained (reverse creation order) before the disposables on teardown.
+		await That(source).Contains("global::System.Collections.Generic.List<global::System.Action>? __releases;");
+		await That(source).Contains("Started(__s.");
+		await That(source).Contains(".Add(() => Stopping(__s.");
+		await That(source).Contains("__toRelease[__index]();");
+	}
 }

@@ -936,4 +936,17 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     An <c>OnActivated</c> / <c>OnRelease</c> registration names a member that is not a usable lifecycle
+	///     hook on the container: there is no accessible <c>static void</c> method of that name accepting the
+	///     registered implementation type.
+	/// </summary>
+	public static readonly DiagnosticDescriptor InvalidLifecycleHook = new(
+		"AWT164",
+		"Invalid lifecycle hook",
+		"'{0}' cannot use the lifecycle hook '{1}': the container has no accessible static void method '{1}' accepting '{0}'",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

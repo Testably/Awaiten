@@ -33,6 +33,10 @@ namespace Awaiten.SourceGenerators.Entities;
 ///     <see cref="Eager" /> marks a singleton constructed at container build time (in the generated root's
 ///     constructor, in registration order) rather than lazily on first resolve - set only on a singleton,
 ///     so a coalesced non-singleton never carries it.
+///     <see cref="OnActivated" /> / <see cref="OnRelease" /> are the resolved names of the container's
+///     <c>static void M(TImplementation)</c> lifecycle hooks (or <see langword="null" />): the activation hook
+///     is called once the instance is constructed, and the release hook is queued at construction and run when
+///     the owning Root/Scope is disposed, in reverse creation order and before the instance's own disposal.
 /// </summary>
 internal sealed record InstanceModel(
 	string ImplementationType,
@@ -51,7 +55,9 @@ internal sealed record InstanceModel(
 	bool IsAsyncDisposable = false,
 	string? EmitType = null,
 	EquatableArray<MemberModel> InjectedMembers = default,
-	bool Eager = false)
+	bool Eager = false,
+	string? OnActivated = null,
+	string? OnRelease = null)
 {
 	/// <summary>
 	///     The concrete type to construct (<c>new …</c>) and to use for cache fields and resolver return
@@ -106,4 +112,7 @@ internal sealed record InstanceModel(
 	///     membership.
 	/// </summary>
 	public bool IsRequestingTypeFactory => ConstructorParameters.AsArray().Any(p => p.Kind == DependencyKind.RequestingType);
+
+	/// <summary>Whether this instance runs a lifecycle hook when the owning Root/Scope is disposed.</summary>
+	public bool HasReleaseHook => OnRelease is not null;
 }

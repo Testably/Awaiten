@@ -121,6 +121,12 @@ partial class AwaitenGenerator
 		string realType = info.Symbol.ToDisplayString(FullyQualified);
 		string? emitType = info.ImplementationType == realType ? null : realType;
 
+		// Lifecycle hooks (AWT164 when a named member is not a usable static void M(TImplementation)). Applied to
+		// constructed and factory-produced instances - the ones the container owns; a pre-built Instance returns
+		// above (the caller owns it, so activation/release do not apply).
+		string? onActivated = ResolveHook(containerSymbol, info, info.OnActivated, compilation, diagnostics);
+		string? onRelease = ResolveHook(containerSymbol, info, info.OnRelease, compilation, diagnostics);
+
 		return new InstanceModel(
 			info.ImplementationType,
 			info.Symbol.Name,
@@ -140,7 +146,9 @@ partial class AwaitenGenerator
 			// Eager build-time construction is the synchronous analog of InitializeAsync, which warms singletons,
 			// so it applies to a singleton only. The attribute exposes Eager on [Singleton<…>] alone, but the flag
 			// coalesces onto the implementation, so this guard keeps a coalesced non-singleton from carrying it.
-			Eager: info.Eager && info.Lifetime == Lifetime.Singleton);
+			Eager: info.Eager && info.Lifetime == Lifetime.Singleton,
+			OnActivated: onActivated,
+			OnRelease: onRelease);
 
 		static bool ImplementsInterface(ITypeSymbol type, INamedTypeSymbol @interface)
 		{
@@ -200,6 +208,44 @@ partial class AwaitenGenerator
 		}
 
 		return constructor;
+	}
+
+	/// <summary>
+	///     Resolves an <c>OnActivated</c> / <c>OnRelease</c> lifecycle hook to a container method
+	///     <c>static void M(TImplementation)</c>, returning its simple name (or <see langword="null" /> when the
+	///     registration named none). A <c>[Container]</c> is a static class, so the hook is a static method
+	///     reached by simple name from the generated Root/Scope, exactly like a factory method - no receiver and
+	///     no instance/static distinction. Container members are reachable at any accessibility from the generated
+	///     partial, so a <c>private</c> hook qualifies. Reports
+	///     <see cref="Diagnostics.InvalidLifecycleHook">AWT164</see> and returns <see langword="null" /> when no
+	///     accessible ordinary void method of that name accepts the implementation type.
+	/// </summary>
+	private static string? ResolveHook(
+		INamedTypeSymbol containerSymbol,
+		ImplInfo info,
+		string? hookName,
+		Compilation compilation,
+		List<DiagnosticInfo> diagnostics)
+	{
+		if (hookName is null)
+		{
+			return null;
+		}
+
+		foreach (ISymbol member in AccessibleMembers(containerSymbol, hookName))
+		{
+			if (member is IMethodSymbol { MethodKind: MethodKind.Ordinary, ReturnsVoid: true, Parameters.Length: 1, } method
+			    && compilation.HasImplicitConversion(info.Symbol, method.Parameters[0].Type))
+			{
+				return hookName;
+			}
+		}
+
+		diagnostics.Add(new DiagnosticInfo(
+			Diagnostics.InvalidLifecycleHook,
+			info.Location,
+			new EquatableArray<string>([Display(info.OwningServiceOrImpl), hookName,])));
+		return null;
 	}
 
 	/// <summary>

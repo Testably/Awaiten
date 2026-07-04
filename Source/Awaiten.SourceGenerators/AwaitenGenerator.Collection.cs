@@ -143,7 +143,11 @@ partial class AwaitenGenerator
 				Origin: origin,
 				// Eager is exposed on [Singleton<…>] alone; a Transient/Scoped attribute has no such property, so
 				// this reads false there. BuildInstance additionally honors it only for a singleton lifetime.
-				Eager: NamedFlag(attribute, "Eager")));
+				Eager: NamedFlag(attribute, "Eager"),
+				// OnActivated/OnRelease name a static void container method run post-construction and at teardown;
+				// null when the registration sets neither. BuildInstance resolves each against the container.
+				OnActivated: NamedArgument(attribute, "OnActivated"),
+				OnRelease: NamedArgument(attribute, "OnRelease")));
 		}
 	}
 

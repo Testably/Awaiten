@@ -201,6 +201,13 @@ internal static partial class Sources
 		Indent(fields, body).AppendLine("protected readonly object __gate = new object();");
 		Indent(fields, body).AppendLine("protected volatile bool __disposed;");
 		Indent(fields, body).AppendLine("protected global::System.Collections.Generic.List<object>? __disposables;");
+		// The queued OnRelease actions, run (reverse creation order) ahead of __disposables on teardown. Emitted
+		// only when some registration names an OnRelease hook, so containers without one carry no extra field.
+		if (HasReleaseHooks(instances))
+		{
+			Indent(fields, body).AppendLine("protected global::System.Collections.Generic.List<global::System.Action>? __releases;");
+		}
+
 		if (NeedsWiringSupport(instances))
 		{
 			// The nesting depth of the wiring episode in progress on this owner (touched only under __gate; the
@@ -264,11 +271,12 @@ internal static partial class Sources
 		Indent(members, body).AppendLine("public Scope CreateScope() => new Scope(__root);");
 		Indent(members, body).AppendLine("global::Awaiten.IAwaitenScope global::Awaiten.IAwaitenScope.CreateScope() => CreateScope();");
 		Separate(members);
-		EmitDispose(members, body, asyncDisposal);
+		bool hasReleases = HasReleaseHooks(instances);
+		EmitDispose(members, body, asyncDisposal, hasReleases);
 		if (asyncDisposal)
 		{
 			Separate(members);
-			EmitDisposeAsync(members, body);
+			EmitDisposeAsync(members, body, hasReleases);
 		}
 
 		// Typed-resolver region: the explicit IAwaitenResolver<T>.Resolve() fast path for each registered service.

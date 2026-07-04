@@ -33,6 +33,47 @@ internal static partial class Sources
 			_ => DisposalTracking.None,
 		};
 
+	// Whether any instance registers an OnRelease hook, so the base Scope needs the __releases queue, its drain
+	// in Dispose/DisposeAsync, and the per-instance release registration in the resolvers.
+	private static bool HasReleaseHooks(InstanceModel[] instances)
+	{
+		foreach (InstanceModel instance in instances)
+		{
+			if (instance.HasReleaseHook)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	// Emits the OnActivated hook call for a freshly built instance: OnActivated(variable);. The hook is a static
+	// container method reached by simple name from the nested Root/Scope, exactly like a factory method. Emitted
+	// only on the success path (a raced fresh resolve throws before reaching it), so an instance that was torn
+	// down during a concurrent dispose is never activated. Nothing when the instance names no activation hook.
+	private static void EmitActivation(StringBuilder builder, int depth, InstanceModel instance, string variable)
+	{
+		if (instance.OnActivated is not null)
+		{
+			Indent(builder, depth).Append(instance.OnActivated).Append('(').Append(variable).AppendLine(");");
+		}
+	}
+
+	// Queues the OnRelease hook for a freshly built instance on the owner's __releases list:
+	// (__s.__releases ??= new List<Action>()).Add(() => OnRelease(variable));. The queue is drained (reverse
+	// creation order) ahead of __disposables when the owner is disposed. The caller registers it only where the
+	// owner is known not disposed (a caching resolver's locked miss block, or a fresh resolver's !__raced branch),
+	// so a release is queued exactly when the instance is retained. Nothing when the instance names no hook.
+	private static void EmitReleaseRegistration(StringBuilder builder, int depth, InstanceModel instance, string variable)
+	{
+		if (instance.OnRelease is not null)
+		{
+			Indent(builder, depth).Append("(__s.__releases ??= new global::System.Collections.Generic.List<global::System.Action>()).Add(() => ")
+				.Append(instance.OnRelease).Append('(').Append(variable).AppendLine("));");
+		}
+	}
+
 	/// <summary>
 	///     Emits the reverse-order synchronous drain of the (possibly null) <c>__toDispose</c> list captured
 	///     under the lock - disposing what the owner created, newest first. When <paramref name="asyncDisposal" />
@@ -97,19 +138,28 @@ internal static partial class Sources
 	}
 
 	/// <summary>
-	///     Emits the disposal tracking for a freshly built <c>created</c> instance: under <c>lock (__gate)</c>,
+	///     Emits the teardown tracking for a freshly built <c>created</c> instance: under <c>lock (__gate)</c>,
 	///     re-check <c>__disposed</c> so one built during a concurrent dispose is torn down here rather than
-	///     leaked, otherwise add it to <c>__disposables</c>. When <paramref name="runtimeCheck" /> is set (a
-	///     factory output, whose declared return type may hide a concrete disposable), the whole block is gated on
-	///     a runtime test so only genuinely-disposable outputs are retained; otherwise the static flag already
-	///     guarantees disposability. When <paramref name="asyncDisposal" /> is set the tracked set and the
+	///     leaked, otherwise add a disposable instance to <c>__disposables</c> and queue an <c>OnRelease</c> hook
+	///     on <c>__releases</c>. A factory output whose declared return type may hide a concrete disposable is
+	///     added behind a runtime test so only genuinely-disposable outputs are retained; with no release hook the
+	///     whole block is skipped when the runtime test fails, but a release must be queued regardless of
+	///     disposability, so a hooked instance always takes the lock and the runtime test then guards only the
+	///     <c>__disposables</c> add. When <paramref name="asyncDisposal" /> is set the tracked set and the
 	///     raced-teardown also cover <c>IAsyncDisposable</c>; the teardown runs outside the lock (an <c>await</c>
 	///     cannot occur inside one) and, in an <paramref name="asyncContext" /> (the async fresh resolver), awaits
 	///     <c>DisposeAsync</c>. Shared by the synchronous and asynchronous fresh resolvers.
 	/// </summary>
-	private static void EmitFreshDisposalTracking(StringBuilder builder, int depth, bool runtimeCheck, bool asyncDisposal, bool asyncContext)
+	private static void EmitFreshDisposalTracking(StringBuilder builder, int depth, InstanceModel instance, bool asyncDisposal, bool asyncContext)
 	{
-		if (runtimeCheck)
+		DisposalTracking disposal = DisposalOf(instance);
+		bool hasRelease = instance.HasReleaseHook;
+
+		// A runtime disposal check normally lets the whole lock be skipped for a realized output that turns out
+		// not to be disposable. A release must be queued regardless of disposability, so when one is present the
+		// lock is always taken and the runtime check instead guards only the disposables.Add inside it.
+		bool wrapInRuntimeCheck = disposal == DisposalTracking.Runtime && !hasRelease;
+		if (wrapInRuntimeCheck)
 		{
 			string test = asyncDisposal
 				? "created is global::System.IDisposable or global::System.IAsyncDisposable"
@@ -121,14 +171,17 @@ internal static partial class Sources
 
 		// Record whether the scope was already disposed under the lock, then tear down the raced instance outside
 		// it (so an async teardown can await, and user code never runs under the lock). The owner is the static
-		// resolver's `__s` parameter (the scope for a scoped/transient resolver, the root for a singleton one).
+		// resolver's `__s` parameter (the scope for a scoped/transient resolver, the root for a singleton one). A
+		// disposable is tracked for teardown and a release hook queued only when the owner is not disposed - a
+		// raced instance is torn down and never released (it was never activated either).
 		Indent(builder, depth).AppendLine("bool __raced;");
 		Indent(builder, depth).AppendLine("lock (__s.__gate)");
 		Indent(builder, depth).AppendLine("{");
 		Indent(builder, depth + 1).AppendLine("__raced = __s.__disposed;");
 		Indent(builder, depth + 1).AppendLine("if (!__raced)");
 		Indent(builder, depth + 1).AppendLine("{");
-		Indent(builder, depth + 2).AppendLine("(__s.__disposables ??= new global::System.Collections.Generic.List<object>()).Add(created);");
+		EmitFreshDisposablesAdd(builder, depth + 2, disposal, guardRuntime: disposal == DisposalTracking.Runtime && hasRelease, asyncDisposal);
+		EmitReleaseRegistration(builder, depth + 2, instance, "created");
 		Indent(builder, depth + 1).AppendLine("}");
 		Indent(builder, depth).AppendLine("}");
 		builder.AppendLine();
@@ -138,11 +191,37 @@ internal static partial class Sources
 		Indent(builder, depth + 1).AppendLine("throw new global::System.ObjectDisposedException(__s.GetType().FullName);");
 		Indent(builder, depth).AppendLine("}");
 
-		if (runtimeCheck)
+		if (wrapInRuntimeCheck)
 		{
 			depth--;
 			Indent(builder, depth).AppendLine("}");
 		}
+	}
+
+	// Emits the disposables.Add(created) inside the fresh resolver's raced-safe lock: nothing for a
+	// non-disposable instance (only a release forced the lock), an unconditional add for a statically disposable
+	// one, and - when a release forced the lock to be taken unconditionally - a runtime-guarded add for a factory
+	// output that could hide a disposable behind a non-disposable return type.
+	private static void EmitFreshDisposablesAdd(StringBuilder builder, int depth, DisposalTracking disposal, bool guardRuntime, bool asyncDisposal)
+	{
+		if (disposal == DisposalTracking.None)
+		{
+			return;
+		}
+
+		if (guardRuntime)
+		{
+			string test = asyncDisposal
+				? "created is global::System.IDisposable or global::System.IAsyncDisposable"
+				: "created is global::System.IDisposable";
+			Indent(builder, depth).Append("if (").Append(test).AppendLine(")");
+			Indent(builder, depth).AppendLine("{");
+			Indent(builder, depth + 1).AppendLine("(__s.__disposables ??= new global::System.Collections.Generic.List<object>()).Add(created);");
+			Indent(builder, depth).AppendLine("}");
+			return;
+		}
+
+		Indent(builder, depth).AppendLine("(__s.__disposables ??= new global::System.Collections.Generic.List<object>()).Add(created);");
 	}
 
 	/// <summary>
@@ -183,22 +262,28 @@ internal static partial class Sources
 	/// </summary>
 	private static void EmitAsyncDisposableRegistration(StringBuilder builder, int depth, InstanceModel instance, bool asyncDisposal)
 	{
-		DisposalTracking disposal = DisposalOf(instance);
-		if (disposal == DisposalTracking.None)
+		// Nothing to track when the instance is neither disposable nor releasable; otherwise the raced-safe lock
+		// registers its disposal and/or queues its release exactly as on the synchronous fresh path.
+		if (DisposalOf(instance) == DisposalTracking.None && !instance.HasReleaseHook)
 		{
 			return;
 		}
 
-		EmitFreshDisposalTracking(builder, depth, disposal == DisposalTracking.Runtime, asyncDisposal, asyncContext: true);
+		EmitFreshDisposalTracking(builder, depth, instance, asyncDisposal, asyncContext: true);
 	}
 
-	private static void EmitDispose(StringBuilder builder, int depth, bool asyncDisposal)
+	private static void EmitDispose(StringBuilder builder, int depth, bool asyncDisposal, bool hasReleases)
 	{
 		AppendXmlSummary(builder, depth,
 			"Disposes every tracked instance in reverse creation order.");
 		Indent(builder, depth).AppendLine("public void Dispose()");
 		Indent(builder, depth).AppendLine("{");
 		Indent(builder, depth + 1).AppendLine("global::System.Collections.Generic.List<object>? __toDispose;");
+		if (hasReleases)
+		{
+			Indent(builder, depth + 1).AppendLine("global::System.Collections.Generic.List<global::System.Action>? __toRelease;");
+		}
+
 		Indent(builder, depth + 1).AppendLine("lock (__gate)");
 		Indent(builder, depth + 1).AppendLine("{");
 		Indent(builder, depth + 2).AppendLine("if (__disposed)");
@@ -207,13 +292,41 @@ internal static partial class Sources
 		Indent(builder, depth + 2).AppendLine("}");
 		builder.AppendLine();
 		Indent(builder, depth + 2).AppendLine("__disposed = true;");
-		// Hand off the list rather than copying it: nulling the field releases ownership without allocating.
+		// Hand off the lists rather than copying them: nulling the fields releases ownership without allocating.
 		Indent(builder, depth + 2).AppendLine("__toDispose = __disposables;");
 		Indent(builder, depth + 2).AppendLine("__disposables = null;");
+		if (hasReleases)
+		{
+			Indent(builder, depth + 2).AppendLine("__toRelease = __releases;");
+			Indent(builder, depth + 2).AppendLine("__releases = null;");
+		}
+
 		Indent(builder, depth + 1).AppendLine("}");
 		builder.AppendLine();
-		// Dispose outside the lock so user code does not run under the lock.
+		// Outside the lock so user code does not run under it: run the release hooks (reverse creation order)
+		// first, so each instance is released while its dependencies are still alive, then dispose.
+		if (hasReleases)
+		{
+			EmitDrainReleases(builder, depth + 1);
+		}
+
 		EmitDrainDisposables(builder, depth + 1, asyncDisposal);
+		Indent(builder, depth).AppendLine("}");
+	}
+
+	/// <summary>
+	///     Emits the reverse-order drain of the (possibly null) captured <c>__toRelease</c> list: each queued
+	///     <c>OnRelease</c> action runs newest-first, before the instances are disposed. Release actions are
+	///     synchronous, so the synchronous and asynchronous disposal paths drain them identically.
+	/// </summary>
+	private static void EmitDrainReleases(StringBuilder builder, int depth)
+	{
+		Indent(builder, depth).AppendLine("if (__toRelease is not null)");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).AppendLine("for (int __index = __toRelease.Count - 1; __index >= 0; __index--)");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).AppendLine("__toRelease[__index]();");
+		Indent(builder, depth + 1).AppendLine("}");
 		Indent(builder, depth).AppendLine("}");
 	}
 
@@ -224,13 +337,18 @@ internal static partial class Sources
 	///     the lock, preferring <c>DisposeAsync</c> over <c>Dispose</c>. Emitted only when the compilation can see
 	///     <c>IAsyncDisposable</c>; the base <c>Scope</c> defines it and the <c>Root</c> inherits it.
 	/// </summary>
-	private static void EmitDisposeAsync(StringBuilder builder, int depth)
+	private static void EmitDisposeAsync(StringBuilder builder, int depth, bool hasReleases)
 	{
 		AppendXmlSummary(builder, depth,
 			"Asynchronously disposes every tracked instance in reverse creation order.");
 		Indent(builder, depth).AppendLine("public async global::System.Threading.Tasks.ValueTask DisposeAsync()");
 		Indent(builder, depth).AppendLine("{");
 		Indent(builder, depth + 1).AppendLine("global::System.Collections.Generic.List<object>? __toDispose;");
+		if (hasReleases)
+		{
+			Indent(builder, depth + 1).AppendLine("global::System.Collections.Generic.List<global::System.Action>? __toRelease;");
+		}
+
 		Indent(builder, depth + 1).AppendLine("lock (__gate)");
 		Indent(builder, depth + 1).AppendLine("{");
 		Indent(builder, depth + 2).AppendLine("if (__disposed)");
@@ -241,9 +359,21 @@ internal static partial class Sources
 		Indent(builder, depth + 2).AppendLine("__disposed = true;");
 		Indent(builder, depth + 2).AppendLine("__toDispose = __disposables;");
 		Indent(builder, depth + 2).AppendLine("__disposables = null;");
+		if (hasReleases)
+		{
+			Indent(builder, depth + 2).AppendLine("__toRelease = __releases;");
+			Indent(builder, depth + 2).AppendLine("__releases = null;");
+		}
+
 		Indent(builder, depth + 1).AppendLine("}");
 		builder.AppendLine();
-		// Tear down outside the lock so an awaited DisposeAsync (user code) never runs under it.
+		// Outside the lock so an awaited DisposeAsync (user code) never runs under it: run the synchronous
+		// release hooks (reverse creation order) first, then tear down.
+		if (hasReleases)
+		{
+			EmitDrainReleases(builder, depth + 1);
+		}
+
 		EmitDrainDisposablesAsync(builder, depth + 1);
 		Indent(builder, depth).AppendLine("}");
 	}
