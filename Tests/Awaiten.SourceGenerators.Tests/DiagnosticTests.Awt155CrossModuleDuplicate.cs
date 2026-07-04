@@ -39,6 +39,82 @@ public partial class DiagnosticTests
 		}
 
 		[Fact]
+		public async Task ReportsWhenTwoModulesOpenGenericTemplatesCollideOnTheSameClosedService()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IRepo<T> { }
+			                                       public sealed class RepoA<T> : IRepo<T> { }
+			                                       public sealed class RepoB<T> : IRepo<T> { }
+			                                       public sealed class Order { }
+			                                       public sealed class Consumer
+			                                       {
+			                                           public Consumer(IRepo<Order> repo) { }
+			                                       }
+
+			                                       [Module]
+			                                       [Singleton(typeof(RepoA<>), typeof(IRepo<>))]
+			                                       public static class ModuleA { }
+
+			                                       [Module]
+			                                       [Singleton(typeof(RepoB<>), typeof(IRepo<>))]
+			                                       public static class ModuleB { }
+
+			                                       [Container]
+			                                       [Import(typeof(ModuleA))]
+			                                       [Import(typeof(ModuleB))]
+			                                       [Singleton<Consumer>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT155*IRepo*ModuleA*ModuleB*").AsWildcard()
+				.Because("the closed registrations expanded from two modules' open templates collide exactly like two hand-written registrations - the winner is decided only by [Import] order");
+		}
+
+		[Fact]
+		public async Task DoesNotReportWhenAnExplicitRegistrationBeatsAnotherModulesOpenGenericTemplate()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IRepo<T> { }
+			                                       public sealed class Repo<T> : IRepo<T> { }
+			                                       public sealed class Order { }
+			                                       public sealed class SpecialRepo : IRepo<Order> { }
+			                                       public sealed class Consumer
+			                                       {
+			                                           public Consumer(IRepo<Order> repo) { }
+			                                       }
+
+			                                       [Module]
+			                                       [Singleton(typeof(Repo<>), typeof(IRepo<>))]
+			                                       public static class TemplateModule { }
+
+			                                       [Module]
+			                                       [Singleton<SpecialRepo, IRepo<Order>>]
+			                                       public static class SpecialModule { }
+
+			                                       [Container]
+			                                       [Import(typeof(TemplateModule))]
+			                                       [Import(typeof(SpecialModule))]
+			                                       [Singleton<Consumer>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics.Any(d => d.Contains("AWT155"))).IsFalse()
+				.Because("an explicit registration beating another module's expanded template is deterministic regardless of [Import] order, so the collision is not ambiguous");
+		}
+
+		[Fact]
 		public async Task DoesNotReportWhenTheContainerOverridesAModule()
 		{
 			GeneratorResult result = Generator.Run("""

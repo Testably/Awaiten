@@ -18,10 +18,12 @@ namespace Awaiten.SourceGenerators;
 ///     the AWT141 warning), whether the registration is an overridable module default (<c>Weak</c>:
 ///     <c>Default</c> or <c>TryAdd</c>, contributing its service only when nothing stronger claimed it),
 ///     whether that default was a <c>Default</c> specifically (<c>IsDefault</c>, so two colliding
-///     <c>Default</c>s can be surfaced as AWT148 while <c>TryAdd</c> stays silent), and the imported
+///     <c>Default</c>s can be surfaced as AWT148 while <c>TryAdd</c> stays silent), the imported
 ///     module that declared the registration (<c>Origin</c>, <see langword="null" /> for the container's
 ///     own registrations - a module's <c>Factory</c>/<c>Instance</c> member is resolved against and
-///     emitted qualified with the module type, not the container).
+///     emitted qualified with the module type, not the container), and whether the registration was
+///     synthesized by open generic expansion rather than written by hand (<c>IsSynthesized</c> - such a
+///     registration yields to every explicit one, including an overridable default, in coalescing).
 /// </summary>
 /// <remarks>
 ///     <see cref="Location" /> is the live Roslyn location (with its syntax tree), not an equatable
@@ -44,7 +46,8 @@ internal sealed record RawRegistration(
 	bool ScanSkipsUnconstructable = false,
 	bool Weak = false,
 	bool IsDefault = false,
-	INamedTypeSymbol? Origin = null);
+	INamedTypeSymbol? Origin = null,
+	bool IsSynthesized = false);
 
 /// <summary>
 ///     An imported module: its symbol and the location of the container's <c>[Import]</c> attribute that

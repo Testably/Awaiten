@@ -185,4 +185,38 @@ public class CrossAssemblyModuleTests
 		await That(result.Diagnostics).Contains("*AWT108*the module 'ModuleAssembly.ClockModule' has no accessible method 'CreateClock'*").AsWildcard()
 			.Because("an invisible cross-assembly internal member is indistinguishable from a missing one");
 	}
+
+	[Fact]
+	public async Task CrossAssemblyModule_OpenGenericDiagnosticsFallBackToTheImportLocation()
+	{
+		GeneratorResult result = Generator.RunWithReferencedAssembly("""
+			using Awaiten;
+
+			namespace ModuleAssembly;
+
+			public interface IRepo<TKey, TValue> { }
+			public sealed class Repo<T> { }
+
+			[Module]
+			[Singleton(typeof(Repo<>), typeof(IRepo<,>))]
+			public static class RepositoryModule { }
+			""", """
+			using Awaiten;
+			using ModuleAssembly;
+
+			namespace MyCode;
+
+			[Container]
+			[Import(typeof(RepositoryModule))]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		// The metadata module's open typeof registration has no syntax of its own, so its arity-mismatch
+		// error must fall back to the container's [Import] line instead of having no location at all.
+		// Diagnostic.ToString() prefixes "(line,col): " only when a location exists.
+		await That(result.Diagnostics).Contains("(*,*): *AWT125*").AsWildcard()
+			.Because("a metadata module's open generic diagnostic falls back to the container's [Import] location");
+	}
 }

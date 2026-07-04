@@ -230,6 +230,85 @@ public class ModuleTests
 	}
 
 	[Fact]
+	public async Task Module_ClosedDefault_BeatsOpenGenericExpansion()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface IRepo<T> { }
+		                                       public sealed class Repo<T> : IRepo<T> { }
+		                                       public sealed class Foo { }
+		                                       public sealed class CachedRepo : IRepo<Foo> { }
+		                                       public sealed class Consumer
+		                                       {
+		                                           public Consumer(IRepo<Foo> repo) { }
+		                                       }
+
+		                                       [Module]
+		                                       [Singleton<CachedRepo, IRepo<Foo>>(Default = true)]
+		                                       public static class RepositoryModule { }
+
+		                                       [Container]
+		                                       [Import(typeof(RepositoryModule))]
+		                                       [Singleton(typeof(Repo<>), typeof(IRepo<>))]
+		                                       [Singleton<Consumer>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("__Bucket(typeof(global::MyCode.IRepo<global::MyCode.Foo>), static __s => __s.ResolveCachedRepo()")
+			.Because("an explicit closed default - a deliberate declaration - beats the closed registration the blanket open template expands on demand, like it beats a blanket scan");
+	}
+
+	[Fact]
+	public async Task Module_DefaultOverriddenByAnEarlierDefault_DoesNotSeedOpenGenericExpansion()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface IClock { }
+		                                       public interface IRepo<T> { }
+		                                       public sealed class Repo<T> : IRepo<T> { }
+		                                       public sealed class Foo { }
+		                                       public sealed class AClock : IClock { }
+		                                       public sealed class BClock : IClock
+		                                       {
+		                                           public BClock(IRepo<Foo> repo) { }
+		                                       }
+
+		                                       [Module]
+		                                       [Singleton<AClock, IClock>(TryAdd = true)]
+		                                       public static class ModuleA { }
+
+		                                       [Module]
+		                                       [Singleton<BClock, IClock>(TryAdd = true)]
+		                                       public static class ModuleB { }
+
+		                                       [Container]
+		                                       [Import(typeof(ModuleA))]
+		                                       [Import(typeof(ModuleB))]
+		                                       [Singleton(typeof(Repo<>), typeof(IRepo<>))]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).DoesNotContain("Repo<global::MyCode.Foo>")
+			.Because("a default dropped by an earlier default is not built, so its constructor must not seed open generic expansion either");
+	}
+
+	[Fact]
 	public async Task Module_OverriddenDefault_DoesNotSeedOpenGenericExpansion()
 	{
 		GeneratorResult result = Generator.Run("""

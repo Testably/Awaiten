@@ -786,12 +786,15 @@ internal static class Diagnostics
 		isEnabledByDefault: true);
 
 	/// <summary>
-	///     Two different imported modules strongly register the same service key with different
-	///     implementations, so which one wins single resolution is decided only by [Import] order - invisible
-	///     at either module. A warning rather than an error: the graph still resolves (the earlier import
-	///     wins, and both implementations stay collection members), but the collision is likely unintended -
-	///     override the service on the container, or mark one module's registration Default/TryAdd. The
-	///     container overriding a module stays silent: that is the intended override mechanism.
+	///     Two different imported modules register the same service key with different implementations at
+	///     the same precedence tier - both strongly, or both through open generic templates expanded to the
+	///     same closed service - so which one wins single resolution is decided only by [Import] order -
+	///     invisible at either module. A warning rather than an error: the graph still resolves (the earlier
+	///     import wins, and both implementations stay collection members), but the collision is likely
+	///     unintended - override the service on the container, or mark one module's registration
+	///     Default/TryAdd. A cross-tier loss (an explicit registration beating another module's expanded
+	///     template) is deterministic regardless of import order and stays silent, as does the container
+	///     overriding a module: that is the intended override mechanism.
 	/// </summary>
 	public static readonly DiagnosticDescriptor CrossModuleDuplicate = new(
 		"AWT155",

@@ -106,7 +106,7 @@ partial class AwaitenGenerator
 			// expanded into concrete closed registrations on demand.
 			if (!attributeClass.IsGenericType)
 			{
-				CollectOpenRegistration(attribute, lifetime.Value, open, diagnostics);
+				CollectOpenRegistration(attribute, lifetime.Value, open, diagnostics, origin, fallbackLocation);
 				continue;
 			}
 

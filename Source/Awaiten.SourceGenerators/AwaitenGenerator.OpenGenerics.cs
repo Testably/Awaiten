@@ -21,12 +21,19 @@ partial class AwaitenGenerator
 	///     Reads a non-generic <c>[Singleton(typeof(Repository&lt;&gt;), typeof(IRepository&lt;&gt;))]</c>
 	///     registration into an <see cref="OpenRegistration" />. Reports AWT125 when the implementation and
 	///     service have mismatched arity, since no closed service can then be mapped onto the implementation.
+	///     <paramref name="origin" /> and <paramref name="fallbackLocation" /> mirror
+	///     <see cref="CollectLifetimeRegistrations" />: the imported module declaring the registration (so
+	///     the closed registrations expanded from it keep their module identity, e.g. for AWT155), and the
+	///     container's <c>[Import]</c> location for a module read from a referenced assembly whose
+	///     attributes carry no syntax of their own.
 	/// </summary>
 	private static void CollectOpenRegistration(
 		AttributeData attribute,
 		Lifetime lifetime,
 		List<OpenRegistration> open,
-		List<DiagnosticInfo> diagnostics)
+		List<DiagnosticInfo> diagnostics,
+		INamedTypeSymbol? origin,
+		Location? fallbackLocation)
 	{
 		if (attribute.ConstructorArguments.Length < 1
 		    || attribute.ConstructorArguments[0].Value is not INamedTypeSymbol implementation)
@@ -39,7 +46,8 @@ partial class AwaitenGenerator
 			? declaredService
 			: implementation;
 
-		LocationInfo? location = LocationInfo.From(attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation());
+		LocationInfo? location = LocationInfo.From(
+			attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? fallbackLocation);
 
 		// AWT127: the typeof-ctor form exists for open generics and must receive unbound generics
 		// (typeof(Repository<>)). A closed generic (typeof(Repository<int>)) would otherwise be silently reduced
@@ -95,7 +103,7 @@ partial class AwaitenGenerator
 			return;
 		}
 
-		open.Add(new OpenRegistration(service, implementation, lifetime, NamedArgument(attribute, "Key"), location));
+		open.Add(new OpenRegistration(service, implementation, lifetime, NamedArgument(attribute, "Key"), location, origin));
 	}
 
 	/// <summary>
@@ -188,21 +196,10 @@ partial class AwaitenGenerator
 		// An overridable default (Default/TryAdd) whose service key a stronger (or earlier) registration
 		// claims is dropped in full by coalescing - not built and not a collection member - so it must not
 		// seed the expansion either; otherwise an overridden default's constructor would synthesize (and the
-		// container would emit) closed registrations nothing in the surviving graph needs. Mirrors the
-		// coalescing precedence: strong explicit registrations, then defaults, then scans - a losing strong
-		// or scan registration still seeds, since it stays a collection member and is built.
-		HashSet<ServiceKey> claimed = new();
-		HashSet<int> droppedWeak = new();
-		foreach ((RawRegistration registration, int index) in raw
-			.Select(static (registration, index) => (registration, index))
-			.Where(static entry => !entry.registration.IsScan)
-			.OrderBy(static entry => entry.registration.Weak))
-		{
-			if (!claimed.Add(new ServiceKey(registration.ServiceType, registration.Key)) && registration.Weak)
-			{
-				droppedWeak.Add(index);
-			}
-		}
+		// container would emit) closed registrations nothing in the surviving graph needs. The drop set is
+		// computed by the same precedence encoding coalescing runs on (see DroppedOverridableDefaults); a
+		// losing strong or scan registration still seeds, since it stays a collection member and is built.
+		HashSet<int> droppedWeak = DroppedOverridableDefaults(raw);
 
 		// The constructor parameters to scan for closed generic dependencies, each carried with the expansion
 		// depth that reached it. Seeded from every known surviving implementation at depth 0; grows as closed
@@ -297,7 +294,9 @@ partial class AwaitenGenerator
 				closedImpl,
 				candidate.Location?.ToLocation(),
 				Key: candidate.Key,
-				ServiceSymbol: closed));
+				ServiceSymbol: closed,
+				Origin: candidate.Origin,
+				IsSynthesized: true));
 			context.Synthesized++;
 
 			if (context.Seen.Add(closedImpl))
@@ -585,8 +584,10 @@ partial class AwaitenGenerator
 	///     An open generic registration template - <c>[Transient(typeof(Repository&lt;&gt;), typeof(IRepository&lt;&gt;))]</c>
 	///     - holding the unbound service and implementation definitions. Not an instance itself; expanded
 	///     into concrete closed <see cref="RawRegistration" />s on demand by <see cref="ExpandOpenGenerics" />.
+	///     <see cref="Origin" /> is the imported module that declared the template (<see langword="null" />
+	///     for the container's own), stamped onto every closed registration expanded from it.
 	/// </summary>
-	private sealed record OpenRegistration(INamedTypeSymbol Service, INamedTypeSymbol Implementation, Lifetime Lifetime, string? Key, LocationInfo? Location);
+	private sealed record OpenRegistration(INamedTypeSymbol Service, INamedTypeSymbol Implementation, Lifetime Lifetime, string? Key, LocationInfo? Location, INamedTypeSymbol? Origin);
 
 	/// <summary>
 	///     The mutable state threaded through open generic expansion: the growing registration list and worklist,
