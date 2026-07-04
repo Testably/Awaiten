@@ -1151,6 +1151,9 @@ public partial class AsyncInitializationTests
 		public Task<Owned<Valve>> MakeAsync() => _factory();
 	}
 
+	// These containers deliberately register the IAsyncDisposable-only Valve to exercise the async drain and
+	// the synchronous-Dispose throw, so the AWT156 heads-up is suppressed rather than heeded.
+#pragma warning disable AWT156
 	[Container]
 	[Transient<Valve>]
 	[Singleton<ValvePlant>]
@@ -1159,5 +1162,6 @@ public partial class AsyncInitializationTests
 	[Container]
 	[Singleton<Valve>]
 	public static partial class ValveSingletonContainer;
+#pragma warning restore AWT156
 #endif
 }

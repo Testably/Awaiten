@@ -18,7 +18,9 @@ namespace Awaiten.SourceGenerators;
 ///     it transitively rebuilds a disposable transient. Such a factory is bound to the root, so every instance
 ///     it builds (and the disposables built with it) is tracked on the root and accumulates for the container's
 ///     lifetime; a <c>Func&lt;…, Owned&lt;T&gt;&gt;</c> hands each instance back as a disposal handle and is not
-///     reported.
+///     reported. Also reports <see cref="Diagnostics.AsyncOnlyDisposal">AWT156</see> for a registered service
+///     that implements <c>IAsyncDisposable</c> but not <c>IDisposable</c>, which forces the container and its
+///     scopes to be disposed with <c>DisposeAsync</c> (<c>await using</c>).
 /// </summary>
 /// <remarks>
 ///     AWT118 is an analyzer (rather than a generator) diagnostic so that, under loose lifetime safety where
@@ -38,7 +40,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 
 	/// <inheritdoc />
 	public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
-		ImmutableArray.Create(Diagnostics.RootAccumulatingFactory, Diagnostics.RootAccumulatingFactoryStrict);
+		ImmutableArray.Create(Diagnostics.RootAccumulatingFactory, Diagnostics.RootAccumulatingFactoryStrict, Diagnostics.AsyncOnlyDisposal);
 
 	/// <inheritdoc />
 	public override void Initialize(AnalysisContext context)
@@ -107,6 +109,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 	private static List<DiagnosticInfo> Detect(GraphModel graph, bool strict)
 	{
 		List<DiagnosticInfo> diagnostics = new();
+		AddAsyncOnlyDisposals(graph, diagnostics);
 		// A service-key -> instance-index lookup for the transitive-disposable walk (composed once from the
 		// graph's service-to-implementation and implementation-to-index maps).
 		Dictionary<ServiceKey, int> serviceToIndex = new();
@@ -229,6 +232,30 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 		InstanceModel target = graph.Instances[targetIndex];
 		return (target.Lifetime == Lifetime.Transient || target.IsParameterized)
 		       && AwaitenGenerator.BuildsFreshDisposable(graph.Instances, serviceToIndex, collectionMembers, targetIndex);
+	}
+
+	// AWT156: an instance the container owns for teardown that is IAsyncDisposable but not IDisposable can only
+	// be torn down by DisposeAsync, so the whole container and its scopes must be disposed with 'await using' (a
+	// synchronous Dispose() throws when its drain reaches such an instance). IsAsyncDisposable is set only off a
+	// registration's declared/produced type - a factory output hiding one behind a non-disposable declared type is
+	// left to the generated drain's runtime backstop - and a pre-built Instance registration is never owned, so it
+	// carries neither flag and is naturally exempt. One report per implementation type: a decorator type can recur
+	// as several chain-link instances, which would repeat an identical message at one location.
+	private static void AddAsyncOnlyDisposals(GraphModel graph, List<DiagnosticInfo> diagnostics)
+	{
+		HashSet<string> reported = new(StringComparer.Ordinal);
+		for (int i = 0; i < graph.Instances.Count; i++)
+		{
+			InstanceModel instance = graph.Instances[i];
+			string display = AwaitenGenerator.DisplayInstance(instance.ImplementationType);
+			if (instance.IsAsyncDisposable && !instance.IsDisposable && reported.Add(display))
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.AsyncOnlyDisposal,
+					graph.InstanceLocations[i],
+					new EquatableArray<string>([display,])));
+			}
+		}
 	}
 
 	private static void PushTransientDependencies(int node, GraphModel graph, Stack<int> stack)

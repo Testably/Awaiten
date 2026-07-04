@@ -803,4 +803,27 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Warning,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A registered service implements <c>IAsyncDisposable</c> but not <c>IDisposable</c>, so the container
+	///     can tear it down only asynchronously: a synchronous <c>Dispose()</c> of the root or a scope throws
+	///     when its teardown drain reaches such an instance (matching Microsoft.Extensions.DependencyInjection,
+	///     rather than leaking it or blocking on its <c>DisposeAsync</c>), while <c>DisposeAsync</c>
+	///     (<c>await using</c>) tears it down correctly. A warning rather than an error: registering an
+	///     async-only disposable is fully supported and a container that is always disposed with
+	///     <c>await using</c> is entirely correct - the fault, if any, lies at the disposal sites, which this
+	///     registration-driven check cannot see (they may be in another assembly). Reported by
+	///     <see cref="AwaitenAnalyzer" /> (not the generator) so a team that deliberately disposes
+	///     asynchronously can suppress it in source, and one that wants to forbid the pattern outright can raise
+	///     it per project (<c>dotnet_diagnostic.AWT156.severity = error</c>). A factory whose declared return
+	///     type hides an async-only disposable is not reported (the static flags cannot see through the declared
+	///     type); the runtime throw in the generated synchronous drain remains the backstop there.
+	/// </summary>
+	public static readonly DiagnosticDescriptor AsyncOnlyDisposal = new(
+		"AWT156",
+		"Service requires asynchronous disposal",
+		"'{0}' implements IAsyncDisposable but not IDisposable, so the container can only tear it down asynchronously; dispose the root and its scopes with DisposeAsync ('await using') - a synchronous Dispose() throws when its drain reaches this service",
+		"Awaiten",
+		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true);
 }
