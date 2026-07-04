@@ -217,8 +217,9 @@ internal static partial class Sources
 		_ => "global::Awaiten.AwaitenLifetime.Scoped",
 	};
 
-	private static void EmitResolutionApi(StringBuilder members, StringBuilder fields, StringBuilder helpers, int depth, EmitContext context, bool strict, bool syncResolveAfterInit, string[] varianceCandidates)
+	private static void EmitResolutionApi(ApiRegions regions, int depth, EmitContext context, bool strict, bool syncResolveAfterInit, string[] varianceCandidates)
 	{
+		(StringBuilder members, StringBuilder fields, StringBuilder helpers) = regions;
 		InstanceModel[] instances = context.Instances;
 		Names names = context.Names;
 		Dictionary<ServiceKey, int> serviceToIndex = context.ServiceToIndex;

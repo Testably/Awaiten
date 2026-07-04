@@ -253,9 +253,10 @@ internal static partial class Sources
 	///     synchronously and completes immediately (deferring to <c>Resolve</c> for the same registration /
 	///     withholding errors as the synchronous path).
 	/// </summary>
-	private static void EmitAsyncResolutionApi(StringBuilder members, StringBuilder fields, StringBuilder helpers, int depth, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool strict, bool syncResolveAfterInit)
+	private static void EmitAsyncResolutionApi(ApiRegions regions, int depth, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool strict, bool syncResolveAfterInit)
 	{
 		const string task = "global::System.Threading.Tasks.Task";
+		(StringBuilder members, StringBuilder fields, StringBuilder helpers) = regions;
 		StringBuilder builder = members;
 		Separate(members);
 

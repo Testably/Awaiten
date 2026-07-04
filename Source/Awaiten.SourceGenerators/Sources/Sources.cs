@@ -79,6 +79,12 @@ internal static partial class Sources
 		Dictionary<ServiceKey, int> ServiceToIndex,
 		bool AsyncDisposal);
 
+	/// <summary>
+	///     The three region buffers a resolution-API emitter routes into: its public <see cref="Members" />, the
+	///     dispatch-table <see cref="Fields" /> and the private <see cref="Helpers" />.
+	/// </summary>
+	private readonly record struct ApiRegions(StringBuilder Members, StringBuilder Fields, StringBuilder Helpers);
+
 	private static void EmitContainerBody(StringBuilder builder, int depth, ContainerModel model, Names names, Dictionary<ServiceKey, int> serviceToIndex)
 	{
 		EmitContext context = new(model.Instances.AsArray(), names, serviceToIndex, model.HasAsyncDisposable);
@@ -237,13 +243,14 @@ internal static partial class Sources
 		Indent(members, body + 1).AppendLine("set => __externalResolver = value;");
 		Indent(members, body).AppendLine("}");
 
-		EmitResolutionApi(members, fields, helpers, body, context, strict, syncResolveAfterInit, varianceCandidates);
+		ApiRegions regions = new(members, fields, helpers);
+		EmitResolutionApi(regions, body, context, strict, syncResolveAfterInit, varianceCandidates);
 		Separate(members);
 		EmitGenericResolveMethod(members, body);
 		// The asynchronous surface: ResolveAsync(Type) on every owner, plus CreateScopeAsync. Its by-type dispatch
 		// table fields go to the fields region and its slot type / builder / __AsObject helper to the helpers
 		// region. The Root's InitializeAsync and per-singleton async resolvers are emitted on the Root.
-		EmitAsyncResolutionApi(members, fields, helpers, body, instances, names, serviceToIndex, strict, syncResolveAfterInit);
+		EmitAsyncResolutionApi(regions, body, instances, names, serviceToIndex, strict, syncResolveAfterInit);
 		Separate(members);
 		EmitCreateScopeAsync(members, body);
 		// A scope is the single source of scopes: nesting shares the same root (and therefore the same
@@ -549,17 +556,9 @@ internal static partial class Sources
 	{
 		// The cache fields form one contiguous block; separate it from any prior content in the region buffer with
 		// a single blank line before the first field written (a no-op when the buffer is still empty, e.g. the
-		// singleton fields opening the Root's fields region).
+		// singleton fields opening the Root's fields region). Every non-skipped instance emits exactly one field,
+		// so the separation is done ahead of the first emit.
 		bool separated = false;
-		void Sep()
-		{
-			if (!separated)
-			{
-				Separate(builder);
-				separated = true;
-			}
-		}
-
 		for (int i = 0; i < instances.Length; i++)
 		{
 			InstanceModel instance = instances[i];
@@ -570,39 +569,50 @@ internal static partial class Sources
 				continue;
 			}
 
-			// The synchronous cache backs synchronous resolution. An async-tainted service is never cached
-			// synchronously: in the strict default it has no synchronous resolver at all, and in pragmatic
-			// mode its synchronous resolver delegates to the (memoizing) async one - so the async cache below
-			// is its single home and there is no second, uninitialized instance to cache here.
-			if (!instance.IsAsyncTainted)
+			if (!separated)
 			{
-				Sep();
-				string modifier = instance.IsReferenceType ? "private volatile " : "private ";
-				Indent(builder, depth).Append(modifier).Append(instance.ConstructedType)
-					.Append("? ").Append(names.Field(i)).AppendLine(";");
-
-				// A deferred ([Inject(Deferred = true)]) member is wired after the cache field is published, so a
-				// separate volatile flag marks when wiring has completed. The lock-free fast path gates on it (rather
-				// than on the field alone) so a concurrent caller never returns a published-but-half-wired instance,
-				// while the mid-wiring re-entrant resolve sees it still false, skips the fast path and terminates the
-				// cycle through the reentrant lock. It is committed by the outermost frame of the wiring episode
-				// (__CommitWiring), so a cycle peer is never flagged while a participant that references it is still
-				// half-wired. Volatile: its release-write happens-after every deferred write of the episode, so a
-				// reader that acquire-reads it as true sees fully-wired instances only.
-				if (HasDeferredMembers(instance))
-				{
-					Indent(builder, depth).Append("private volatile bool ").Append(names.WiredField(i)).AppendLine(";");
-				}
+				Separate(builder);
+				separated = true;
 			}
 
-			// The async cache memoizes the construction-and-initialization Task so it is awaited exactly
-			// once; it is volatile so the lock-free read cannot observe it before its writes are visible.
-			if (instance.IsAsyncTainted)
-			{
-				Sep();
-				Indent(builder, depth).Append("private volatile global::System.Threading.Tasks.Task<").Append(instance.ConstructedType)
-					.Append(">? ").Append(names.AsyncField(i)).AppendLine(";");
-			}
+			EmitCacheField(builder, depth, instance, names, i);
+		}
+	}
+
+	/// <summary>
+	///     Emits the single cache field of a non-skipped instance: the synchronous cache field (plus its
+	///     wired-completion flag for a deferred instance), or the async memoization field for an async-tainted one.
+	/// </summary>
+	private static void EmitCacheField(StringBuilder builder, int depth, InstanceModel instance, Names names, int i)
+	{
+		// The async cache memoizes the construction-and-initialization Task so it is awaited exactly once; it is
+		// volatile so the lock-free read cannot observe it before its writes are visible.
+		if (instance.IsAsyncTainted)
+		{
+			Indent(builder, depth).Append("private volatile global::System.Threading.Tasks.Task<").Append(instance.ConstructedType)
+				.Append(">? ").Append(names.AsyncField(i)).AppendLine(";");
+			return;
+		}
+
+		// The synchronous cache backs synchronous resolution. An async-tainted service is never cached
+		// synchronously: in the strict default it has no synchronous resolver at all, and in pragmatic
+		// mode its synchronous resolver delegates to the (memoizing) async one - so the async cache above
+		// is its single home and there is no second, uninitialized instance to cache here.
+		string modifier = instance.IsReferenceType ? "private volatile " : "private ";
+		Indent(builder, depth).Append(modifier).Append(instance.ConstructedType)
+			.Append("? ").Append(names.Field(i)).AppendLine(";");
+
+		// A deferred ([Inject(Deferred = true)]) member is wired after the cache field is published, so a
+		// separate volatile flag marks when wiring has completed. The lock-free fast path gates on it (rather
+		// than on the field alone) so a concurrent caller never returns a published-but-half-wired instance,
+		// while the mid-wiring re-entrant resolve sees it still false, skips the fast path and terminates the
+		// cycle through the reentrant lock. It is committed by the outermost frame of the wiring episode
+		// (__CommitWiring), so a cycle peer is never flagged while a participant that references it is still
+		// half-wired. Volatile: its release-write happens-after every deferred write of the episode, so a
+		// reader that acquire-reads it as true sees fully-wired instances only.
+		if (HasDeferredMembers(instance))
+		{
+			Indent(builder, depth).Append("private volatile bool ").Append(names.WiredField(i)).AppendLine(";");
 		}
 	}
 
