@@ -535,10 +535,11 @@ partial class AwaitenGenerator
 		// service (value) type T behind the returned task, awaiting each async-initialized member - the keyed
 		// analogue of the awaited collection above, and (like it) legal through an async-tainted member. Recognized
 		// before the bare Task<T> relationship below, so Task<IReadOnlyDictionary<…>> is the awaited keyed dictionary
-		// rather than a Task relationship over the (unregistered) dictionary type itself. The declared dictionary
-		// type is carried for suppression (a registered synchronous dictionary claims the awaited view) and emission;
-		// as for the synchronous dictionary the FromKey attribute is carried only for suppression or AWT160, and the
-		// declared key type is not stored (a non-string key is rejected as AWT159 at the classification site).
+		// rather than a Task relationship over the unregistered dictionary type itself. The declared dictionary
+		// type is carried for suppression, where a registered synchronous dictionary claims the awaited view, and for
+		// emission. As for the synchronous dictionary the FromKey attribute is carried only for suppression or AWT160,
+		// and the declared key type is not stored, since a non-string key is rejected as AWT159 at the classification
+		// site.
 		if (TryGetAwaitedKeyedCollection(type, out string? awaitedKeyedService, out _, out string? awaitedKeyedDictionary))
 		{
 			return new ParameterModel(
