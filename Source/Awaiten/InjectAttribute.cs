@@ -64,8 +64,9 @@ public sealed class InjectAttribute : Attribute
     ///     construction would fail with <c>CS9035</c>), so an optional <c>required</c> property is <c>AWT157</c>.
     ///     An <c>init</c>-only property is omittable and therefore allowed, but reports the suppressible warning
     ///     <c>AWT158</c>: when the dependency is absent an <c>init</c>-only property can never be assigned
-    ///     afterwards either, so it stays at its default with no fallback - give it a plain <c>set</c> accessor if
-    ///     calling code should be able to supply one. <c>Optional</c> has no effect on a collection property
+    ///     afterwards either, so it stays at its default with no fallback - give it a plain <c>set</c> accessor so
+    ///     a value can still be assigned after construction when the dependency is not registered. <c>Optional</c>
+    ///     has no effect on a collection property
     ///     (an unregistered collection already yields an empty collection, not a missing dependency).
     /// </remarks>
     public bool Optional { get; set; }

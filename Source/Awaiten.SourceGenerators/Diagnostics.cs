@@ -862,7 +862,7 @@ internal static class Diagnostics
 	public static readonly DiagnosticDescriptor OptionalPropertyIsInitOnly = new(
 		"AWT158",
 		"Optional injected property is init-only",
-		"The property '{0}' on '{1}' is marked [Inject(Optional = true)] but is init-only; when its dependency is not registered it is omitted from the object initializer and left at its default, and an init-only accessor cannot be assigned afterwards, so it stays default with no fallback. Give it a plain set accessor if calling code should be able to supply one.",
+		"The property '{0}' on '{1}' is marked [Inject(Optional = true)] but is init-only; when its dependency is not registered it is omitted from the object initializer and left at its default, and an init-only accessor cannot be assigned afterwards, so it stays default with no fallback. Give it a plain set accessor so a value can still be assigned after construction when the dependency is not registered.",
 		"Awaiten",
 		DiagnosticSeverity.Warning,
 		isEnabledByDefault: true);

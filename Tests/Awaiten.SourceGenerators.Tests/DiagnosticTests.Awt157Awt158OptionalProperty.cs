@@ -257,5 +257,33 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).Contains("*AWT121*").AsWildcard()
 				.Because("an Owned<T> disposal handle cannot be produced through Lazy, and Optional does not suppress a structurally impossible request");
 		}
+
+		[Fact]
+		public async Task DeferredOptionalProperty_WithNoRegistration_IsDroppedWithoutDiagnostic()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public sealed class Bus { }
+			                                       public sealed class Consumer
+			                                       {
+			                                           // Deferred + Optional combine cleanly: a well-formed deferred property (plain set, not required)
+			                                           // whose dependency is unregistered is dropped by Optional rather than assigned after construction,
+			                                           // so neither the deferred shape rule (AWT144) nor a missing dependency (AWT101) applies.
+			                                           [Inject(Deferred = true, Optional = true)] public Bus Bus { get; set; }
+			                                       }
+
+			                                       [Container]
+			                                       [Transient<Consumer>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("an unregistered deferred optional property is dropped and left at its default, exactly like a non-deferred optional one, so nothing is reported");
+		}
 	}
 }
