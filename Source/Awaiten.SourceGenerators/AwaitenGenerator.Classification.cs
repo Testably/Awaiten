@@ -244,48 +244,14 @@ partial class AwaitenGenerator
 
 		// A deferred property ([Inject(Deferred = true)]) is assigned after construction and caching rather than
 		// inside the object initializer, so it contributes no graph edge and can break a mutual constructor cycle.
+		// An optional property ([Inject(Optional = true)]) is instead dropped when its dependency is unregistered.
 		bool deferred = IsInjectDeferred(property.GetAttributes());
-
-		// AWT144: a deferred property is assigned after construction and omitted from the emitted object
-		// initializer, so it needs a real set accessor and must not be `required` - an init-only accessor can
-		// only be assigned inside an object initializer (exactly the construction-time path a deferred property
-		// must avoid to break a cycle), and a required member omitted from the initializer would surface as an
-		// opaque CS9035 inside the generated container instead of a targeted diagnostic here.
-		if (deferred && (setter.IsInitOnly || property.IsRequired))
-		{
-			diagnostics.Add(new DiagnosticInfo(
-				Diagnostics.DeferredPropertyIsInitOnly,
-				location,
-				new EquatableArray<string>([
-					property.Name,
-					DisplayInstance(info.ImplementationType),
-					setter.IsInitOnly ? "init-only" : "required",
-				])));
-			return null;
-		}
-
-		// An optional property ([Inject(Optional = true)]) is omitted from the object initializer when its
-		// dependency is not registered, so it must be omittable from construction. A required member cannot be
-		// left unassigned - the generated `new T { … }` would fail with an opaque CS9035 - so AWT157 rejects it
-		// here. An init-only property is omittable and therefore allowed, but reports the suppressible AWT158:
-		// once construction has passed, an init-only accessor can no longer be assigned, so an unregistered
-		// optional member stays at its default with no fallback.
 		bool optional = IsInjectOptional(property.GetAttributes());
-		if (optional && property.IsRequired)
-		{
-			diagnostics.Add(new DiagnosticInfo(
-				Diagnostics.OptionalPropertyIsRequired,
-				location,
-				new EquatableArray<string>([property.Name, DisplayInstance(info.ImplementationType),])));
-			return null;
-		}
 
-		if (optional && setter.IsInitOnly)
+		// AWT144/AWT157/AWT158: the accessor and modifiers must be compatible with how the member is assigned.
+		if (RejectsInjectedPropertyShape(property, setter, info, deferred, optional, location, diagnostics))
 		{
-			diagnostics.Add(new DiagnosticInfo(
-				Diagnostics.OptionalPropertyIsInitOnly,
-				location,
-				new EquatableArray<string>([property.Name, DisplayInstance(info.ImplementationType),])));
+			return null;
 		}
 
 		ParameterModel dependency = ClassifyDependency(
@@ -342,6 +308,61 @@ partial class AwaitenGenerator
 		}
 
 		return new MemberModel(property.Name, dependency, deferred);
+	}
+
+	/// <summary>
+	///     Reports the shape diagnostics for an <c>[Inject]</c> property whose accessor or modifiers are
+	///     incompatible with how it would be assigned, returning <see langword="true" /> when the property is
+	///     rejected. AWT144: a deferred property is assigned after construction and omitted from the object
+	///     initializer, so it needs a real <c>set</c> accessor and must not be <c>required</c> (an init-only
+	///     accessor and a required member can only be satisfied inside an object initializer, exactly the
+	///     construction-time path a deferred property avoids; a required member omitted from the initializer would
+	///     otherwise surface as an opaque CS9035). AWT157: an optional property is omitted from the initializer
+	///     when its dependency is unregistered, which a <c>required</c> member does not allow (same CS9035). AWT158
+	///     (suppressible warning, does <em>not</em> reject): an optional init-only property is omittable, but once
+	///     construction has passed an init-only accessor can no longer be assigned, so an unregistered optional
+	///     member stays at its default with no fallback.
+	/// </summary>
+	private static bool RejectsInjectedPropertyShape(
+		IPropertySymbol property,
+		IMethodSymbol setter,
+		ImplInfo info,
+		bool deferred,
+		bool optional,
+		LocationInfo? location,
+		List<DiagnosticInfo> diagnostics)
+	{
+		if (deferred && (setter.IsInitOnly || property.IsRequired))
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.DeferredPropertyIsInitOnly,
+				location,
+				new EquatableArray<string>([
+					property.Name,
+					DisplayInstance(info.ImplementationType),
+					setter.IsInitOnly ? "init-only" : "required",
+				])));
+			return true;
+		}
+
+		if (optional && property.IsRequired)
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.OptionalPropertyIsRequired,
+				location,
+				new EquatableArray<string>([property.Name, DisplayInstance(info.ImplementationType),])));
+			return true;
+		}
+
+		if (optional && setter.IsInitOnly)
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.OptionalPropertyIsInitOnly,
+				location,
+				new EquatableArray<string>([property.Name, DisplayInstance(info.ImplementationType),])));
+		}
+
+		return false;
 	}
 
 	// The setter must be reachable from the container's object initializer, which is not a derived context:
