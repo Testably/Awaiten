@@ -36,8 +36,10 @@ internal static partial class Sources
 		{
 			// A parameterized service has no typed fast path; a strictly-withheld disposable service is reached
 			// only through Owned<T>, so it gets none either. An async-tainted service in the strict default is
-			// reached only through ResolveAsync, so it gets no synchronous typed resolver either.
-			if (instances[i].IsParameterized || IsWithheld(instances[i], strict) || !EmitsSync(instances[i], syncResolveAfterInit))
+			// reached only through ResolveAsync, so it gets no synchronous typed resolver either. A requesting-type
+			// factory's resolver takes the requesting type, which the typed Resolve<T>() fast path has no place to
+			// supply, so it too gets none - it is reached through the Type-based dispatch, which passes null.
+			if (instances[i].IsParameterized || instances[i].IsRequestingTypeFactory || IsWithheld(instances[i], strict) || !EmitsSync(instances[i], syncResolveAfterInit))
 			{
 				continue;
 			}
@@ -760,6 +762,19 @@ internal static partial class Sources
 			}
 
 			string service = serviceKey.Service;
+
+			// A requesting-type factory's resolver takes the requesting type; a top-level resolve has no
+			// requesting consumer, so the by-type dispatch passes null (the factory decides what a null context
+			// means). It is built fresh per call, so it routes through a forwarder (its call is not a bare
+			// parameterless resolver), and has no Owned<T> form and no root-withholding - the factory itself may
+			// dedup, exactly as the canonical logger factory does.
+			if (instance.IsRequestingTypeFactory)
+			{
+				seen.Add(service);
+				entries.Add(new DispatchEntry(service, $"{resolver}(__s, null)"));
+				continue;
+			}
+
 			if (argTypes.Length > 0)
 			{
 				// The plain Func<TArg…, T> factory accumulates on its owner; under strict safety it is root-withheld
@@ -808,6 +823,27 @@ internal static partial class Sources
 			}
 
 			string service = serviceKey.Service;
+
+			// A requesting-type factory: Func<T>/Lazy<T> over it close over the null top-level requesting type
+			// (the factory is Scope-hosted and reached over __s). There is no Owned<T> form - the requesting type
+			// has no owner scope and the factory decides its own disposal.
+			if (instance.IsRequestingTypeFactory)
+			{
+				string requestingCall = $"{resolver}(__s, null)";
+				string requestingFunc = $"global::System.Func<{service}>";
+				if (seen.Add(requestingFunc))
+				{
+					entries.Add(new DispatchEntry(requestingFunc, $"new global::System.Func<{service}>(() => {requestingCall})"));
+				}
+
+				string requestingLazy = $"global::System.Lazy<{service}>";
+				if (seen.Add(requestingLazy))
+				{
+					entries.Add(new DispatchEntry(requestingLazy, $"new global::System.Lazy<{service}>(() => {requestingCall})"));
+				}
+
+				continue;
+			}
 
 			// The plain Func<T> factory accumulates on its owner; under strict safety it is root-withheld
 			// (resolving it by type off the Root throws guidance, steering to Func<Owned<T>>), but it stays

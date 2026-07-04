@@ -96,4 +96,14 @@ internal sealed record InstanceModel(
 	///     <c>Func&lt;TArg…, T&gt;</c> factory.
 	/// </summary>
 	public bool IsParameterized => ArgTypes().Length > 0;
+
+	/// <summary>
+	///     Whether this instance is produced by a requesting-type factory: a <c>Factory =</c> method with a
+	///     <c>[RequestingType]</c> parameter (<see cref="DependencyKind.RequestingType" />). Its resolver
+	///     embeds the consumer's <c>typeof(…)</c> per call, so - unlike an ordinary registration - it cannot
+	///     be lowered to a shared cached resolver: it is built fresh on every invocation (the declared
+	///     lifetime is ignored for caching) and, like a parameterized service, pruned from collection
+	///     membership.
+	/// </summary>
+	public bool IsRequestingTypeFactory => ConstructorParameters.AsArray().Any(p => p.Kind == DependencyKind.RequestingType);
 }

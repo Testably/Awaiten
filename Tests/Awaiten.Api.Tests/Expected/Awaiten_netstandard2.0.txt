@@ -154,6 +154,11 @@ namespace Awaiten
         public T Value { get; }
         public void Dispose() { }
     }
+    [System.AttributeUsage(System.AttributeTargets.Parameter, AllowMultiple=false, Inherited=false)]
+    public sealed class RequestingTypeAttribute : System.Attribute
+    {
+        public RequestingTypeAttribute() { }
+    }
     public enum ScanAs
     {
         Self = 0,

@@ -7,16 +7,18 @@ namespace Awaiten.SourceGenerators;
 partial class AwaitenGenerator
 {
 	/// <summary>
-	///     Removes parameterized ([Arg]) implementations from every collection's membership: such a service is
-	///     built fresh from its runtime arguments and is reachable only through its <c>Func&lt;TArg…, T&gt;</c>
-	///     factory, so it is never a collection member.
+	///     Removes parameterized ([Arg]) and requesting-type-factory implementations from every collection's
+	///     membership: a parameterized service is built fresh from its runtime arguments and reachable only
+	///     through its <c>Func&lt;TArg…, T&gt;</c> factory, and a requesting-type factory needs the consumer's
+	///     <c>typeof(…)</c> at each site (which a collection materialization does not supply) - so neither is
+	///     ever a collection member.
 	/// </summary>
 	private static void PruneParameterizedMembers(List<InstanceModel> instances, Dictionary<ServiceKey, List<string>> serviceMembers, Dictionary<string, List<KeyedMember>> keyedMembers)
 	{
 		HashSet<string> parameterized = new(StringComparer.Ordinal);
 		foreach (InstanceModel instance in instances)
 		{
-			if (instance.IsParameterized)
+			if (instance.IsParameterized || instance.IsRequestingTypeFactory)
 			{
 				parameterized.Add(instance.ImplementationType);
 			}

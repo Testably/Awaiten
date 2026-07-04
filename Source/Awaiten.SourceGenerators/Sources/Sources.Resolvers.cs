@@ -71,6 +71,20 @@ internal static partial class Sources
 		string type = instance.ConstructedType;
 		string resolver = names.Resolver(index);
 
+		// A requesting-type factory embeds the consumer's typeof(…) per call, so it cannot be lowered to a shared
+		// cached resolver: its resolver takes the requesting type as a parameter and calls the factory on each
+		// invocation (the factory itself may cache, as the canonical logger factory does). It is built fresh per
+		// call - the declared lifetime is ignored for caching, exactly so the per-consumer requesting type
+		// survives - and a disposable output is still tracked for teardown on the resolving scope.
+		if (instance.IsRequestingTypeFactory)
+		{
+			string requestingConstruction = EmitConstruction(instance, context.Instances, names, context.ServiceToIndex);
+			string requestingSignature = $"global::System.Type? {RequestingTypeParameterName}";
+			string requestingSummary = $"Resolves {XmlTypeRef(type)} through its requesting-type factory, passing the requesting consumer's typeof(…) (a new instance per call).";
+			EmitFreshResolver(builder, depth, new FreshResolver("Scope", type, resolver, requestingSignature, requestingConstruction, DisposalOf(instance), requestingSummary), asyncDisposal);
+			return;
+		}
+
 		if (instance.IsParameterized)
 		{
 			string[] argTypes = instance.ArgTypes();

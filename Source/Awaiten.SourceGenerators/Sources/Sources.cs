@@ -109,7 +109,8 @@ internal static partial class Sources
 	}
 
 	private static bool IsRootOwned(InstanceModel instance)
-		=> instance.Lifetime == Lifetime.Singleton || instance.Production == ProductionKind.Instance;
+		=> !instance.IsRequestingTypeFactory
+		   && (instance.Lifetime == Lifetime.Singleton || instance.Production == ProductionKind.Instance);
 
 	/// <summary>
 	///     Whether synchronous resolution members (resolver, cache field, dispatch entries, typed fast path) are
@@ -497,10 +498,12 @@ internal static partial class Sources
 		for (int i = 0; i < instances.Length; i++)
 		{
 			InstanceModel instance = instances[i];
-			// A parameterized service is never cached on the root; its single fresh-per-call resolver lives
-			// on the base Scope (protected) and the Root inherits it. Only singleton-owned instances
-			// (singletons and pre-built Instances) get a Root override.
+			// A parameterized service and a requesting-type factory are never cached on the root; their single
+			// fresh-per-call resolver lives on the base Scope (Root inherits it). Only singleton-owned instances
+			// (singletons and pre-built Instances) get a Root override - and a requesting-type factory is not
+			// singleton-owned (IsRootOwned excludes it) even when it is declared a singleton.
 			if (instance.IsParameterized
+			    || instance.IsRequestingTypeFactory
 			    || (instance.Lifetime != Lifetime.Singleton && instance.Production != ProductionKind.Instance))
 			{
 				continue;
@@ -585,9 +588,10 @@ internal static partial class Sources
 		for (int i = 0; i < instances.Length; i++)
 		{
 			InstanceModel instance = instances[i];
-			// A pre-built Instance has no field, and a parameterized service is rebuilt per call from its
-			// runtime arguments and so is never cached.
-			if (instance.Production == ProductionKind.Instance || instance.IsParameterized || instance.Lifetime != lifetime)
+			// A pre-built Instance has no field; a parameterized service is rebuilt per call from its runtime
+			// arguments; and a requesting-type factory is rebuilt per call with the consumer's typeof(…) - so
+			// none of the three is ever cached.
+			if (instance.Production == ProductionKind.Instance || instance.IsParameterized || instance.IsRequestingTypeFactory || instance.Lifetime != lifetime)
 			{
 				continue;
 			}
