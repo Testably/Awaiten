@@ -23,7 +23,9 @@ namespace Awaiten.SourceGenerators;
 ///     reported. Also reports <see cref="Diagnostics.AsyncOnlyDisposal">AWT156</see> for a synchronous
 ///     <c>using</c> / <c>Dispose()</c> of a generated <c>Root</c> or <c>Scope</c> whose container owns a service
 ///     that implements <c>IAsyncDisposable</c> but not <c>IDisposable</c> - a disposal only <c>DisposeAsync</c>
-///     (<c>await using</c>) can carry out.
+///     (<c>await using</c>) can carry out - and that the disposed owner could actually track: a root-owned
+///     instance (a singleton or pre-built instance) always lives on the <c>Root</c>, so it never faults a
+///     child <c>Scope</c>'s disposal.
 /// </summary>
 /// <remarks>
 ///     AWT118 is an analyzer (rather than a generator) diagnostic so that, under loose lifetime safety where
@@ -58,29 +60,33 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 				return;
 			}
 
+			// One graph build per container per compilation, shared by the AWT118 symbol walk and the AWT156
+			// disposal sites - one compilation can dispose the same container in many places. The Lazy
+			// (ExecutionAndPublication) collapses concurrent callers into a single BuildGraph per container.
+			ConcurrentDictionary<INamedTypeSymbol, Lazy<GraphModel>> graphByContainer =
+				new(SymbolEqualityComparer.Default);
+
 			start.RegisterSymbolAction(
 				ctx => Analyze(
-					(INamedTypeSymbol)ctx.Symbol, containerAttribute, start.Compilation, ctx.ReportDiagnostic, ctx.CancellationToken),
+					(INamedTypeSymbol)ctx.Symbol, containerAttribute, start.Compilation, graphByContainer, ctx.ReportDiagnostic, ctx.CancellationToken),
 				SymbolKind.NamedType);
 
-			// AWT156 fires at each synchronous disposal site of a generated Root/Scope, so the graph walk behind
-			// it (does this container own an async-only disposable?) is cached per container - one compilation
-			// can dispose the same container in many places. A generated Root/Scope is recognized as a type
-			// implementing IAwaitenScope that is nested in a [Container] class (a user type nested in the static
-			// container class does not implement it).
+			// AWT156 fires at each synchronous disposal site of a generated Root/Scope. A generated Root/Scope
+			// is recognized by shape and name: a type named Root or Scope, implementing IAwaitenScope, nested in
+			// a [Container] class. The name check matters - a user-authored type nested in the container class
+			// can hand-implement the public IAwaitenScope, but it cannot coexist with the generated Root/Scope
+			// under their names.
 			INamedTypeSymbol? scopeInterface = start.Compilation.GetTypeByMetadataName("Awaiten.IAwaitenScope");
 			if (scopeInterface is null)
 			{
 				return;
 			}
 
-			ConcurrentDictionary<INamedTypeSymbol, ImmutableArray<string>> asyncOnlyByContainer =
-				new(SymbolEqualityComparer.Default);
 			start.RegisterOperationAction(
-				ctx => AnalyzeSynchronousUsing(ctx, containerAttribute, scopeInterface, start.Compilation, asyncOnlyByContainer),
+				ctx => AnalyzeSynchronousUsing(ctx, containerAttribute, scopeInterface, start.Compilation, graphByContainer),
 				OperationKind.Using, OperationKind.UsingDeclaration);
 			start.RegisterOperationAction(
-				ctx => AnalyzeSynchronousDisposeCall(ctx, containerAttribute, scopeInterface, start.Compilation, asyncOnlyByContainer),
+				ctx => AnalyzeSynchronousDisposeCall(ctx, containerAttribute, scopeInterface, start.Compilation, graphByContainer),
 				OperationKind.Invocation);
 		});
 	}
@@ -89,6 +95,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 		INamedTypeSymbol type,
 		INamedTypeSymbol containerAttribute,
 		Compilation compilation,
+		ConcurrentDictionary<INamedTypeSymbol, Lazy<GraphModel>> graphByContainer,
 		Action<Diagnostic> report,
 		CancellationToken cancellationToken)
 	{
@@ -97,11 +104,10 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 			return;
 		}
 
-		// Re-derive the object graph; the registration diagnostics produced while building it are the
-		// generator's to report, so they are collected into a throwaway list and discarded here. Strict
-		// lifetime safety reports the root-accumulating pattern through the non-suppressible error descriptor,
-		// loose reports the plain suppressible warning.
-		GraphModel graph = AwaitenGenerator.BuildGraph(type, compilation, new List<DiagnosticInfo>(), cancellationToken);
+		// Re-derive the object graph (cached, shared with the AWT156 disposal sites). Strict lifetime safety
+		// reports the root-accumulating pattern through the non-suppressible error descriptor, loose reports
+		// the plain suppressible warning.
+		GraphModel graph = CachedGraph(graphByContainer, type, compilation, cancellationToken);
 		bool strict = AwaitenGenerator.ReadStrict(type);
 
 		foreach (DiagnosticInfo diagnostic in Detect(graph, strict))
@@ -128,6 +134,20 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 			? Diagnostic.Create(info.Descriptor, location, severity, additionalLocations: null, properties: null, args)
 			: Diagnostic.Create(info.Descriptor, location, args);
 	}
+
+	// Builds (or returns the cached) object graph of a container. The registration diagnostics produced
+	// while building it are the generator's to report, so they are collected into a throwaway list and
+	// discarded here.
+	private static GraphModel CachedGraph(
+		ConcurrentDictionary<INamedTypeSymbol, Lazy<GraphModel>> graphByContainer,
+		INamedTypeSymbol container,
+		Compilation compilation,
+		CancellationToken cancellationToken)
+		=> graphByContainer.GetOrAdd(
+			container,
+			c => new Lazy<GraphModel>(
+				() => AwaitenGenerator.BuildGraph(c, compilation, new List<DiagnosticInfo>(), cancellationToken),
+				LazyThreadSafetyMode.ExecutionAndPublication)).Value;
 
 	private static List<DiagnosticInfo> Detect(GraphModel graph, bool strict)
 	{
@@ -264,7 +284,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 		INamedTypeSymbol containerAttribute,
 		INamedTypeSymbol scopeInterface,
 		Compilation compilation,
-		ConcurrentDictionary<INamedTypeSymbol, ImmutableArray<string>> asyncOnlyByContainer)
+		ConcurrentDictionary<INamedTypeSymbol, Lazy<GraphModel>> graphByContainer)
 	{
 		IOperation resources;
 		switch (context.Operation)
@@ -279,24 +299,26 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 				return;
 		}
 
-		foreach (ITypeSymbol? resourceType in ResourceTypes(resources))
+		foreach ((ITypeSymbol? resourceType, SyntaxNode resourceSyntax) in Resources(resources))
 		{
-			ReportIfAsyncOnlyOwner(context, resourceType, containerAttribute, scopeInterface, compilation, asyncOnlyByContainer);
+			ReportIfAsyncOnlyOwner(context, resourceType, resourceSyntax, containerAttribute, scopeInterface, compilation, graphByContainer);
 		}
 	}
 
-	// The declared type of each resource a using operation disposes: the declarators of a declaration group
-	// (`using var root = …`, possibly several in one statement), or the expression itself (`using (root)`).
-	private static IEnumerable<ITypeSymbol?> ResourceTypes(IOperation resources)
+	// Each resource a using operation disposes, paired with the syntax to report at: the declarators of a
+	// declaration group (`using var root = …`, possibly several in one statement), or the expression itself
+	// (`using (root)`). Reporting per declarator keeps a multi-declarator statement from stacking identical
+	// whole-statement diagnostics, and keeps the squiggle of a `using (…) { }` statement off its body block.
+	private static IEnumerable<(ITypeSymbol? Type, SyntaxNode Syntax)> Resources(IOperation resources)
 	{
 		if (resources is not IVariableDeclarationGroupOperation group)
 		{
-			return [resources.Type,];
+			return [(resources.Type, resources.Syntax),];
 		}
 
 		return group.Declarations
 			.SelectMany(declaration => declaration.Declarators)
-			.Select(declarator => (ITypeSymbol?)declarator.Symbol.Type);
+			.Select(declarator => ((ITypeSymbol?)declarator.Symbol.Type, declarator.Syntax));
 	}
 
 	// AWT156: an explicit synchronous Dispose() call on a receiver statically typed as a generated Root/Scope.
@@ -307,29 +329,33 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 		INamedTypeSymbol containerAttribute,
 		INamedTypeSymbol scopeInterface,
 		Compilation compilation,
-		ConcurrentDictionary<INamedTypeSymbol, ImmutableArray<string>> asyncOnlyByContainer)
+		ConcurrentDictionary<INamedTypeSymbol, Lazy<GraphModel>> graphByContainer)
 	{
 		if (context.Operation is IInvocationOperation { TargetMethod: { Name: "Dispose", Parameters.Length: 0, }, Instance: { } receiver, })
 		{
-			ReportIfAsyncOnlyOwner(context, receiver.Type, containerAttribute, scopeInterface, compilation, asyncOnlyByContainer);
+			ReportIfAsyncOnlyOwner(context, receiver.Type, context.Operation.Syntax, containerAttribute, scopeInterface, compilation, graphByContainer);
 		}
 	}
 
-	// Reports AWT156 when the synchronously disposed type is a generated Root/Scope (an IAwaitenScope nested in
-	// a [Container] class) of a container that statically owns an async-only disposable. IsAsyncDisposable is
-	// read off a registration's declared/produced type - a factory output hiding one behind a non-disposable
-	// declared type is left to the runtime backstop - and a pre-built Instance registration is never owned, so
-	// it carries neither flag and is naturally exempt. The check is per container, not per tracked owner: a
-	// scoped async-only service also warns on a Root using, since the root is itself a scope and may track one.
+	// Reports AWT156 when the synchronously disposed type is a generated Root/Scope (a type named Root or
+	// Scope, implementing IAwaitenScope, nested in a [Container] class) of a container that statically owns an
+	// async-only disposable the disposed owner could track. IsAsyncDisposable is read off a registration's
+	// declared/produced type - a factory output hiding one behind a non-disposable declared type is left to
+	// the runtime backstop - and a pre-built Instance registration is never owned, so it carries neither flag
+	// and is naturally exempt. A scoped/transient async-only service also warns on a Root using, since the
+	// root is itself a scope and may track one; a root-owned one never warns on a child Scope using, since a
+	// singleton always tracks on the Root (its resolver runs against the root even when first hit inside a
+	// child scope), so a Scope's drain cannot reach it.
 	private static void ReportIfAsyncOnlyOwner(
 		OperationAnalysisContext context,
 		ITypeSymbol? disposedType,
+		SyntaxNode reportSyntax,
 		INamedTypeSymbol containerAttribute,
 		INamedTypeSymbol scopeInterface,
 		Compilation compilation,
-		ConcurrentDictionary<INamedTypeSymbol, ImmutableArray<string>> asyncOnlyByContainer)
+		ConcurrentDictionary<INamedTypeSymbol, Lazy<GraphModel>> graphByContainer)
 	{
-		if (disposedType is not INamedTypeSymbol named
+		if (disposedType is not INamedTypeSymbol { Name: "Root" or "Scope", } named
 		    || named.ContainingType is not { } container
 		    || !named.AllInterfaces.Contains(scopeInterface, SymbolEqualityComparer.Default)
 		    || !container.GetAttributes().Any(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass, containerAttribute)))
@@ -337,9 +363,17 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 			return;
 		}
 
-		ImmutableArray<string> asyncOnly = asyncOnlyByContainer.GetOrAdd(
-			container,
-			c => AsyncOnlyDisposables(c, compilation, context.CancellationToken));
+		// A container declared in a referenced assembly stays invisible to this check (a documented false
+		// negative, like an interface-typed receiver): its graph cannot be rebuilt faithfully here, because
+		// BuildGraph expands a default [Scan] over the current compilation's assembly, not the container's.
+		// The runtime throw in the generated synchronous drain remains the backstop.
+		if (!SymbolEqualityComparer.Default.Equals(container.ContainingAssembly, compilation.Assembly))
+		{
+			return;
+		}
+
+		GraphModel graph = CachedGraph(graphByContainer, container, compilation, context.CancellationToken);
+		ImmutableArray<string> asyncOnly = AsyncOnlyDisposables(graph, includeRootOwned: named.Name == "Root");
 		if (asyncOnly.IsEmpty)
 		{
 			return;
@@ -347,32 +381,23 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 
 		context.ReportDiagnostic(Diagnostic.Create(
 			Diagnostics.AsyncOnlyDisposal,
-			context.Operation.Syntax.GetLocation(),
+			reportSyntax.GetLocation(),
 			named.ToDisplayString(),
 			string.Join("', '", asyncOnly)));
 	}
 
-	// The container's async-only disposable implementations (IAsyncDisposable without IDisposable), deduped by
-	// display name: a decorator type can recur as several chain-link instances, which would repeat one name.
-	private static ImmutableArray<string> AsyncOnlyDisposables(
-		INamedTypeSymbol container,
-		Compilation compilation,
-		CancellationToken cancellationToken)
-	{
-		GraphModel graph = AwaitenGenerator.BuildGraph(container, compilation, new List<DiagnosticInfo>(), cancellationToken);
-		HashSet<string> seen = new(StringComparer.Ordinal);
-		ImmutableArray<string>.Builder asyncOnly = ImmutableArray.CreateBuilder<string>();
-		foreach (InstanceModel instance in graph.Instances)
-		{
-			string display = AwaitenGenerator.DisplayInstance(instance.ImplementationType);
-			if (instance.IsAsyncDisposable && !instance.IsDisposable && seen.Add(display))
-			{
-				asyncOnly.Add(display);
-			}
-		}
-
-		return asyncOnly.ToImmutable();
-	}
+	// The async-only disposable implementations (IAsyncDisposable without IDisposable) the disposed owner
+	// could track - a child Scope's drain never reaches a root-owned instance, so those are filtered out
+	// unless the Root itself is disposed. Deduped by display name: a decorator type can recur as several
+	// chain-link instances, which would repeat one name (Distinct keeps the first occurrence, preserving
+	// registration order). The cheap flag test runs before the display formatting, which allocates.
+	private static ImmutableArray<string> AsyncOnlyDisposables(GraphModel graph, bool includeRootOwned)
+		=> graph.Instances
+			.Where(instance => instance.IsAsyncDisposable && !instance.IsDisposable
+			                   && (includeRootOwned || !IsRootOwned(instance)))
+			.Select(instance => AwaitenGenerator.DisplayInstance(instance.ImplementationType))
+			.Distinct(StringComparer.Ordinal)
+			.ToImmutableArray();
 
 	private static void PushTransientDependencies(int node, GraphModel graph, Stack<int> stack)
 	{

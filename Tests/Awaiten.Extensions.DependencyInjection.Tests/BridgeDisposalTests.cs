@@ -288,8 +288,8 @@ public sealed partial class BridgeDisposalTests
 	public async Task ProviderReplacement_AsyncOnlyDisposable_DisposedThroughAsyncScopeTeardown()
 	{
 		// The scoped AsyncOnlyDisposable only ever lives in the child scope, drained asynchronously below - the
-		// root never tracks one, so its synchronous using is safe here (AWT156 checks per container, not per
-		// tracked owner).
+		// root never tracks one, so its synchronous using is safe here (AWT156 checks what the disposed owner
+		// could track, not what it actually tracked, and the root is itself a scope that could track one).
 #pragma warning disable AWT156
 		using AsyncOnlyDisposalContainer.Root container = new();
 #pragma warning restore AWT156

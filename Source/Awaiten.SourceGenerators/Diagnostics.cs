@@ -815,13 +815,19 @@ internal static class Diagnostics
 	///     correct. A warning rather than an error because the throw is conditional at runtime - the drain only
 	///     reaches an instance that was actually resolved and tracked on the disposed owner (e.g. a scoped
 	///     async-only service warns on a Root <c>using</c> too, since the root is itself a scope, but throws
-	///     only if it tracked one). Reported by <see cref="AwaitenAnalyzer" /> (not the generator) so a
+	///     only if it tracked one). The check is per disposed owner: a root-owned instance (a singleton or
+	///     pre-built instance) always tracks on the <c>Root</c> - its resolver runs against the root even when
+	///     it is first resolved inside a child scope - so a child <c>Scope</c>'s drain can never reach it, and
+	///     a container whose only async-only disposables are root-owned does not warn on a <c>Scope</c>
+	///     disposal. Reported by <see cref="AwaitenAnalyzer" /> (not the generator) so a
 	///     deliberate site can be suppressed in source, and a team that wants to forbid it outright can raise it
 	///     per project (<c>dotnet_diagnostic.AWT156.severity = error</c>). Only a receiver statically typed as
 	///     the generated <c>Root</c>/<c>Scope</c> is recognized: a dispose through <c>IAwaitenScope</c> /
 	///     <c>IDisposable</c>, from another assembly, or by a host framework - and a factory output hiding the
-	///     async-only disposable behind a non-disposable declared type - stay invisible to this check; the
-	///     runtime throw in the generated synchronous drain remains the backstop there.
+	///     async-only disposable behind a non-disposable declared type - stay invisible to this check, as does
+	///     a <c>Root</c>/<c>Scope</c> of a container declared in a referenced assembly (its graph cannot be
+	///     rebuilt faithfully from the consuming compilation); the runtime throw in the generated synchronous
+	///     drain remains the backstop there.
 	/// </summary>
 	public static readonly DiagnosticDescriptor AsyncOnlyDisposal = new(
 		"AWT156",
