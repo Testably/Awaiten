@@ -168,5 +168,94 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).IsEmpty()
 				.Because("a collection member is never a missing dependency, so marking it optional is a harmless no-op");
 		}
+
+		[Fact]
+		public async Task OptionalInitOnlyCollectionProperty_DoesNotReportAwt158()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using System.Collections.Generic;
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IPlugin { }
+			                                       public sealed class Host
+			                                       {
+			                                           // Init-only would earn AWT158 on a scalar, but a collection is always filled through the
+			                                           // initializer (empty when unregistered), so it is never left at its default - no warning.
+			                                           [Inject(Optional = true)] public IEnumerable<IPlugin> Plugins { get; init; }
+			                                       }
+
+			                                       [Container]
+			                                       [Transient<Host>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics.Any(d => d.Contains("AWT158"))).IsFalse()
+				.Because("Optional has no effect on a collection, which is always filled, so the init-only-stays-default warning does not apply");
+			await That(result.Diagnostics).IsEmpty()
+				.Because("an optional init-only collection is well-defined and reports nothing");
+		}
+
+		[Fact]
+		public async Task OptionalRequiredCollectionProperty_DoesNotReportAwt157()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using System.Collections.Generic;
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IPlugin { }
+			                                       public sealed class Host
+			                                       {
+			                                           // required would earn AWT157 on a scalar, but a collection is never omitted from the
+			                                           // initializer, so there is no CS9035 risk and required is fine.
+			                                           [Inject(Optional = true)] public required IEnumerable<IPlugin> Plugins { get; set; }
+			                                       }
+
+			                                       [Container]
+			                                       [Transient<Host>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics.Any(d => d.Contains("AWT157"))).IsFalse()
+				.Because("a collection is always filled and never omitted, so a required optional collection is not the AWT157 fault");
+			await That(result.Diagnostics).IsEmpty()
+				.Because("an optional required collection is well-defined and reports nothing");
+		}
+
+		[Fact]
+		public async Task OptionalOwnedThroughLazyProperty_StillReportsAwt121()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using System;
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public sealed class Widget : IDisposable { public void Dispose() { } }
+			                                       public sealed class Workshop
+			                                       {
+			                                           // Owned<T> can never be produced through Lazy - a structural fault, not a missing
+			                                           // registration - so Optional must not swallow it: AWT121 is reported regardless.
+			                                           [Inject(Optional = true)] public Lazy<Owned<Widget>> Widgets { get; set; }
+			                                       }
+
+			                                       [Container]
+			                                       [Transient<Widget>]
+			                                       [Transient<Workshop>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT121*").AsWildcard()
+				.Because("an Owned<T> disposal handle cannot be produced through Lazy, and Optional does not suppress a structurally impossible request");
+		}
 	}
 }

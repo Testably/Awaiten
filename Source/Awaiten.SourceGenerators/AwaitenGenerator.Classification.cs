@@ -161,8 +161,8 @@ partial class AwaitenGenerator
 	///     (most-derived first), so an overriding or shadowing declaration wins. Reports AWT136 (<c>[Inject]</c>
 	///     on a property with no set/init accessor the container can assign through), AWT137 (an injected
 	///     property marked <c>[Arg]</c>) and AWT101 (a required member with no registration to satisfy it),
-		///     plus AWT157/AWT158 for a malformed <c>[Inject(Optional = true)]</c> property (an Optional member with
-		///     no registration is dropped without diagnostic instead), each at the
+	///     plus AWT157/AWT158 for a malformed <c>[Inject(Optional = true)]</c> property (an Optional member with
+	///     no registration is dropped without diagnostic instead), each at the
 	///     property's own location.
 	/// </summary>
 	private static void DiscoverInjectedMembers(
@@ -248,14 +248,21 @@ partial class AwaitenGenerator
 		bool deferred = IsInjectDeferred(property.GetAttributes());
 		bool optional = IsInjectOptional(property.GetAttributes());
 
+		ParameterModel dependency = ClassifyDependency(
+			property.Type, property.GetAttributes(), asyncFactory: false, location);
+
+		// A collection member is always filled (an unregistered collection yields an empty one), so it is never
+		// omitted from the object initializer - Optional therefore has no effect on it, and neither the Optional
+		// shape rules (AWT157/AWT158) nor the Optional drop below apply, exactly as they leave a collection alone.
+		// Measured before synthesis suppression below: a collection whose shape is explicitly registered is still a
+		// collection-typed member here (never omitted), so the shape rules must skip it too.
+		bool isCollection = dependency.Kind is DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.KeyedCollection;
+
 		// AWT144/AWT157/AWT158: the accessor and modifiers must be compatible with how the member is assigned.
-		if (RejectsInjectedPropertyShape(property, setter, info, deferred, optional, location, diagnostics))
+		if (RejectsInjectedPropertyShape(property, setter, info, deferred, optional, isCollection, diagnostics))
 		{
 			return null;
 		}
-
-		ParameterModel dependency = ClassifyDependency(
-			property.Type, property.GetAttributes(), asyncFactory: false, location);
 
 		// An explicitly registered collection shape (or keyed dictionary) preempts synthesis for an [Inject]
 		// member exactly as for a constructor parameter: the member is rewritten to a direct dependency on the
@@ -282,20 +289,22 @@ partial class AwaitenGenerator
 		// satisfied elsewhere, like a constructor parameter, and yields an empty collection when unregistered).
 		// Mirror ClassifyParameters: a constraint-rejected open generic (AWT126) is not re-reported here, and an
 		// Owned<T> requested through Lazy surfaces the targeted AWT121 instead.
-		if (dependency.Kind is not (DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.KeyedCollection)
+		if (!isCollection
 		    && !serviceToImpl.ContainsKey(KeyOf(dependency))
 		    && !constraintRejected.Contains(dependency.ServiceType))
 		{
-			// An optional member is not reported when unregistered: it is simply dropped so the property is left
-			// at its default. Dropping it (rather than yielding a member) also keeps the absent edge out of cycle,
-			// captive and async-taint analysis - there is nothing to assign, so nothing to analyze.
-			if (optional)
+			bool ownedThroughLazy = dependency.Kind is DependencyKind.Lazy or DependencyKind.LazyTask
+			                        && dependency.ServiceType.StartsWith("global::Awaiten.Owned<", StringComparison.Ordinal);
+
+			// An optional member with a merely missing registration is dropped so the property is left at its
+			// default. Dropping it (rather than yielding a member) also keeps the absent edge out of cycle, captive
+			// and async-taint analysis - there is nothing to assign, so nothing to analyze. A structurally
+			// impossible request is not a missing registration, though: Owned<T> can never be produced through
+			// Lazy, so AWT121 is reported (and the edge kept) regardless of Optional, exactly as for a required one.
+			if (optional && !ownedThroughLazy)
 			{
 				return null;
 			}
-
-			bool ownedThroughLazy = dependency.Kind is DependencyKind.Lazy or DependencyKind.LazyTask
-			                        && dependency.ServiceType.StartsWith("global::Awaiten.Owned<", StringComparison.Ordinal);
 
 			diagnostics.Add(new DiagnosticInfo(
 				ownedThroughLazy ? Diagnostics.OwnedThroughLazy : Diagnostics.MissingDependency,
@@ -321,7 +330,9 @@ partial class AwaitenGenerator
 	///     when its dependency is unregistered, which a <c>required</c> member does not allow (same CS9035). AWT158
 	///     (suppressible warning, does <em>not</em> reject): an optional init-only property is omittable, but once
 	///     construction has passed an init-only accessor can no longer be assigned, so an unregistered optional
-	///     member stays at its default with no fallback.
+	///     member stays at its default with no fallback. The two Optional rules do not apply to a collection member
+	///     (<paramref name="isCollection" />): a collection is always filled (empty when unregistered), so it is
+	///     never omitted and Optional has no effect on it - required and init-only are both fine.
 	/// </summary>
 	private static bool RejectsInjectedPropertyShape(
 		IPropertySymbol property,
@@ -329,9 +340,11 @@ partial class AwaitenGenerator
 		ImplInfo info,
 		bool deferred,
 		bool optional,
-		LocationInfo? location,
+		bool isCollection,
 		List<DiagnosticInfo> diagnostics)
 	{
+		LocationInfo? location = LocationInfo.From(property.Locations.FirstOrDefault());
+
 		if (deferred && (setter.IsInitOnly || property.IsRequired))
 		{
 			diagnostics.Add(new DiagnosticInfo(
@@ -345,7 +358,7 @@ partial class AwaitenGenerator
 			return true;
 		}
 
-		if (optional && property.IsRequired)
+		if (optional && !isCollection && property.IsRequired)
 		{
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.OptionalPropertyIsRequired,
@@ -354,7 +367,7 @@ partial class AwaitenGenerator
 			return true;
 		}
 
-		if (optional && setter.IsInitOnly)
+		if (optional && !isCollection && setter.IsInitOnly)
 		{
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.OptionalPropertyIsInitOnly,
