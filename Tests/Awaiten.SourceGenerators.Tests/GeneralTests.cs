@@ -117,11 +117,11 @@ public class GeneralTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		await That(source).Contains("new global::MyCode.Consumer(new global::System.Func<global::MyCode.Leaf>(() => ResolveLeaf()))")
+		await That(source).Contains("new global::MyCode.Consumer(new global::System.Func<global::MyCode.Leaf>(() => ResolveLeaf(__s)))")
 			.Because("the Func parameter is supplied as a factory bound to the owner's resolver");
 		await That(source).Contains("new __Bucket(typeof(global::System.Func<global::MyCode.Leaf>),")
 			.Because("Func<T> is also resolvable directly through the dispatch table");
-		await That(source).Contains("() => new global::System.Func<global::MyCode.Leaf>(() => ResolveLeaf());")
+		await That(source).Contains("(Scope __s) => new global::System.Func<global::MyCode.Leaf>(() => ResolveLeaf(__s));")
 			.Because("its dispatch slot builds a fresh factory over the target's resolver");
 	}
 
@@ -154,16 +154,16 @@ public class GeneralTests
 			.Because("reference-type singletons are cached in a volatile backing field");
 		await That(source).Contains("private volatile global::MyCode.Middle? _middle;")
 			.Because("reference-type singletons are cached in a volatile backing field");
-		await That(source).Contains("lock (__gate)")
+		await That(source).Contains("lock (__s.__gate)")
 			.Because("singletons are created once under a lock on a private gate, not the publicly reachable scope");
-		await That(source).Contains("_middle = new global::MyCode.Middle(__root.ResolveLeaf());")
+		await That(source).Contains("__s._middle = new global::MyCode.Middle(Root.ResolveLeaf(__s.__root));")
 			.Because("singletons are memoized into their backing field and read straight off the root scope");
-		await That(source).Contains("return new global::MyCode.Top(__root.ResolveMiddle(), __root.ResolveLeaf());")
+		await That(source).Contains("return new global::MyCode.Top(Root.ResolveMiddle(__s.__root), Root.ResolveLeaf(__s.__root));")
 			.Because("transients are constructed on each request, not cached");
 
 		await That(source).Contains("new __Bucket(typeof(global::MyCode.IMiddle),")
 			.Because("each service type is a key in the static dispatch table");
-		await That(source).Contains("static __s => __s.ResolveMiddle()")
+		await That(source).Contains("static __s => Root.ResolveMiddle(__s.__root)")
 			.Because("its dispatch slot resolves the registered service");
 	}
 
@@ -186,7 +186,7 @@ public class GeneralTests
 
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-		await That(source).Contains("_foo = new global::MyCode.Foo();");
+		await That(source).Contains("__s._foo = new global::MyCode.Foo();");
 	}
 
 	[Fact]
@@ -212,11 +212,11 @@ public class GeneralTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		await That(source).Contains("new global::MyCode.Consumer(new global::System.Lazy<global::MyCode.Leaf>(() => __root.ResolveLeaf()))")
+		await That(source).Contains("new global::MyCode.Consumer(new global::System.Lazy<global::MyCode.Leaf>(() => Root.ResolveLeaf(__s.__root)))")
 			.Because("the Lazy parameter is supplied as a lazy bound to the owner's resolver");
 		await That(source).Contains("new __Bucket(typeof(global::System.Lazy<global::MyCode.Leaf>),")
 			.Because("Lazy<T> is also resolvable directly through the dispatch table");
-		await That(source).Contains("() => new global::System.Lazy<global::MyCode.Leaf>(() => ResolveLeaf());")
+		await That(source).Contains("(Scope __s) => new global::System.Lazy<global::MyCode.Leaf>(() => Root.ResolveLeaf(__s.__root));")
 			.Because("its dispatch slot builds a fresh lazy over the target's resolver");
 	}
 
@@ -249,7 +249,7 @@ public class GeneralTests
 			.Because("each service type is a key in the static dispatch table");
 		await That(source).Contains("new __Bucket(typeof(global::MyCode.IWriter),")
 			.Because("each service type is a key in the static dispatch table");
-		await That(source).Contains("static __s => __s.ResolveStore()")
+		await That(source).Contains("static __s => Root.ResolveStore(__s.__root)")
 			.Because("both service types dispatch to the one shared instance");
 	}
 
@@ -278,7 +278,7 @@ public class GeneralTests
 		string source = result.Sources["Awaiten.MyCode.Outer+Inner.g.cs"];
 		await That(source).Contains("partial class Outer");
 		await That(source).Contains("static partial class Inner");
-		await That(source).Contains("_service = new global::MyCode.Outer.Service();");
+		await That(source).Contains("__s._service = new global::MyCode.Outer.Service();");
 	}
 
 	[Fact]
@@ -375,7 +375,7 @@ public class GeneralTests
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 		await That(source).Contains("if (created is global::System.IDisposable or global::System.IAsyncDisposable)")
 			.Because("a factory declared to return a non-disposable interface may build a concrete IDisposable (or IAsyncDisposable), so disposal is tracked by a runtime check on the realized instance");
-		await That(source).Contains("(__disposables ??= new global::System.Collections.Generic.List<object>()).Add(created);")
+		await That(source).Contains("(__s.__disposables ??= new global::System.Collections.Generic.List<object>()).Add(created);")
 			.Because("a genuinely-disposable factory output is still registered for teardown");
 		await That(source).DoesNotContain("((global::System.IDisposable)created).Dispose();")
 			.Because("the realized instance is reached through the runtime pattern, never an unchecked cast");
@@ -432,7 +432,7 @@ public class GeneralTests
 
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-		await That(source).Contains("MakeService(__root.ResolveSettings())")
+		await That(source).Contains("MakeService(Root.ResolveSettings(__s.__root))")
 			.Because("the factory method's parameters are resolved from the graph");
 		await That(source).DoesNotContain("__container.MakeService")
 			.Because("a static factory is in scope of the nested type directly and needs no container receiver");
@@ -461,8 +461,8 @@ public class GeneralTests
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 		await That(source).Contains("return Clock;")
 			.Because("the container hands back its own pre-built static member rather than constructing the type");
-		await That(source).Contains("return __root.ResolveIClock();")
-			.Because("the nested scope delegates to the root scope like any other singleton");
+		await That(source).Contains("static __s => Root.ResolveIClock(__s.__root)")
+			.Because("a child scope reaches the root's pre-built instance through the static dispatch, like any other singleton");
 		await That(source).DoesNotContain("new global::MyCode.FixedClock")
 			.Because("an Instance registration is never constructed by the container");
 		await That(source).DoesNotContain("__disposables.Add")
@@ -501,10 +501,10 @@ public class GeneralTests
 
 		// The resolver takes the runtime argument and is internal so a root-owned singleton's Func - and a
 		// throwaway Owned<T> scope - can bind it; its graph dependency is still read straight off the root scope.
-		await That(source).Contains("internal global::MyCode.Robot ResolveRobot(string a0)");
-		await That(source).Contains("new global::MyCode.Robot(__root.ResolveEngine(), a0)");
+		await That(source).Contains("internal static global::MyCode.Robot ResolveRobot(Scope __s, string a0)");
+		await That(source).Contains("new global::MyCode.Robot(Root.ResolveEngine(__s.__root), a0)");
 		// The consumer receives a Func that forwards the runtime argument to that resolver.
-		await That(source).Contains("new global::System.Func<string, global::MyCode.Robot>((a0) => ResolveRobot(a0))");
+		await That(source).Contains("new global::System.Func<string, global::MyCode.Robot>((a0) => ResolveRobot(__s, a0))");
 		// A parameterized service is reachable only through its Func factory, never directly.
 		await That(source).Contains("typeof(global::System.Func<string, global::MyCode.Robot>)");
 		await That(source).DoesNotContain("typeof(global::MyCode.Robot)")
@@ -636,10 +636,10 @@ public class GeneralTests
 
 		// IHandler<OrderPlaced> has no exact registration; the contravariant IHandler<DomainEvent> (in T) is
 		// redirected to, reusing its resolver in the consumer's construction.
-		await That(source).Contains("return new global::MyCode.OrderConsumer(ResolveDomainEventHandler());");
+		await That(source).Contains("return new global::MyCode.OrderConsumer(ResolveDomainEventHandler(__s));");
 		// The requested closed type is a top-level dispatch alias on the same target (Part B): Resolve(typeof(
 		// IHandler<OrderPlaced>)) routes to the DomainEventHandler resolver too.
-		await That(source).Contains("new __Bucket(typeof(global::MyCode.IHandler<global::MyCode.OrderPlaced>), static __s => __s.ResolveDomainEventHandler(), false)");
+		await That(source).Contains("new __Bucket(typeof(global::MyCode.IHandler<global::MyCode.OrderPlaced>), static __s => ResolveDomainEventHandler(__s), false)");
 	}
 
 	[Fact]
@@ -672,7 +672,7 @@ public class GeneralTests
 
 		// The collection of IHandler<OrderPlaced> unions the exact OrderPlacedHandler (leading) with the
 		// contravariant IHandler<DomainEvent> registration (following).
-		await That(source).Contains("new global::MyCode.IHandler<global::MyCode.OrderPlaced>[] { ResolveOrderPlacedHandler(), ResolveDomainEventHandler() }");
+		await That(source).Contains("new global::MyCode.IHandler<global::MyCode.OrderPlaced>[] { ResolveOrderPlacedHandler(__s), ResolveDomainEventHandler(__s) }");
 	}
 
 	[Fact]
@@ -807,8 +807,8 @@ public class GeneralTests
 		// A variance match makes the dependency container-resolved, so it is not "otherwise-unresolved" and
 		// never falls through to the external provider: the redirect to the registered IHandler<DomainEvent>
 		// wins over [ImportServices].
-		await That(source).Contains("return new global::MyCode.OrderConsumer(ResolveDomainEventHandler());");
-		await That(source).DoesNotContain("__ResolveExternal(typeof(global::MyCode.IHandler<global::MyCode.OrderPlaced>)");
+		await That(source).Contains("return new global::MyCode.OrderConsumer(ResolveDomainEventHandler(__s));");
+		await That(source).DoesNotContain("__s.__ResolveExternal(typeof(global::MyCode.IHandler<global::MyCode.OrderPlaced>)");
 	}
 
 	[Fact]
@@ -903,7 +903,7 @@ public class GeneralTests
 			.Because("a [FromServices] parameter is resolved from the external provider, not the Awaiten graph");
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 		await That(source).Contains("protected object __ResolveExternal(global::System.Type serviceType, object? serviceKey)");
-		await That(source).Contains("new global::MyCode.Service((global::MyCode.ILogger)__ResolveExternal(typeof(global::MyCode.ILogger), null))");
+		await That(source).Contains("new global::MyCode.Service((global::MyCode.ILogger)__s.__ResolveExternal(typeof(global::MyCode.ILogger), null))");
 		// The external dependency is advertised in the container metadata (explicitly, off the Root's own surface).
 		await That(source).Contains("global::Awaiten.IAwaitenContainerMetadata.ExternalDependencies");
 		await That(source).Contains("typeof(global::MyCode.ILogger)");
@@ -931,7 +931,7 @@ public class GeneralTests
 		await That(result.Diagnostics).IsEmpty()
 			.Because("[ImportServices] routes an otherwise-unresolved direct dependency to the external provider");
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-		await That(source).Contains("(global::MyCode.ILogger)__ResolveExternal(typeof(global::MyCode.ILogger), null)");
+		await That(source).Contains("(global::MyCode.ILogger)__s.__ResolveExternal(typeof(global::MyCode.ILogger), null)");
 	}
 
 	[Fact]
@@ -974,8 +974,8 @@ public class GeneralTests
 		// The seed scanned the same (greedier) constructor the container builds through, so the open generic
 		// was expanded from the Awaiten registration; only ILogger is external.
 		await That(source).Contains("new global::MyCode.Repository<global::MyCode.Order>()");
-		await That(source).DoesNotContain("__ResolveExternal(typeof(global::MyCode.IRepository<global::MyCode.Order>)");
-		await That(source).Contains("(global::MyCode.ILogger)__ResolveExternal(typeof(global::MyCode.ILogger), null)");
+		await That(source).DoesNotContain("__s.__ResolveExternal(typeof(global::MyCode.IRepository<global::MyCode.Order>)");
+		await That(source).Contains("(global::MyCode.ILogger)__s.__ResolveExternal(typeof(global::MyCode.ILogger), null)");
 	}
 
 	[Fact]
@@ -999,7 +999,7 @@ public class GeneralTests
 		await That(result.Diagnostics).IsEmpty()
 			.Because("a keyed [FromServices] parameter is resolved from the external provider under its key");
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-		await That(source).Contains("(global::MyCode.ILogger)__ResolveExternal(typeof(global::MyCode.ILogger), \"audit\")");
+		await That(source).Contains("(global::MyCode.ILogger)__s.__ResolveExternal(typeof(global::MyCode.ILogger), \"audit\")");
 	}
 
 	[Fact]
@@ -1030,8 +1030,6 @@ public class GeneralTests
 			.Because("the generated members carry XML doc summaries");
 		await That(source).Contains("Resolves the singleton <see cref=\"global::MyCode.Single\" /> (one instance per container).")
 			.Because("the Root's singleton resolver documents its lifetime");
-		await That(source).Contains("Resolves the singleton <see cref=\"global::MyCode.Single\" /> from the root.")
-			.Because("the base Scope's singleton delegator documents where the instance lives");
 		await That(source).Contains("Resolves the scoped <see cref=\"global::MyCode.PerScope\" /> (one instance per scope).")
 			.Because("the scoped resolver documents its per-scope caching");
 		await That(source).Contains("Resolves the transient <see cref=\"global::MyCode.Fresh\" /> (a new instance per call).")

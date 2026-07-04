@@ -48,20 +48,20 @@ internal static partial class Sources
 		ServiceKey collectionKey = new(collection.Service, collection.Key);
 		AppendXmlSummary(builder, depth,
 			$"Asynchronously materializes the {XmlTypeRef(collection.Service)} collection, awaiting each member.");
-		Indent(builder, depth).Append("internal async global::System.Threading.Tasks.Task<global::System.Collections.Generic.IAsyncEnumerable<")
-			.Append(collection.Service).Append(">> ").Append(method).AppendLine("(global::System.Threading.CancellationToken cancellationToken)");
+		Indent(builder, depth).Append("internal static async global::System.Threading.Tasks.Task<global::System.Collections.Generic.IAsyncEnumerable<")
+			.Append(collection.Service).Append(">> ").Append(method).AppendLine("(Scope __s, global::System.Threading.CancellationToken cancellationToken)");
 		Indent(builder, depth).AppendLine("{");
 		Indent(builder, depth + 1).Append("return ").Append(AsyncCollectionExpression(collectionKey, names, instances, asynchronous: true)).AppendLine(";");
 		Indent(builder, depth).AppendLine("}");
 	}
 
 	/// <summary>
-	///     Emits a resolver on the base <c>Scope</c>. A parameterized service (with <c>[Arg]</c> parameters)
-	///     takes those runtime arguments and is built fresh per call (regardless of its declared lifetime),
-	///     so it lives here as a <c>protected</c> method the <c>Root</c> can also call. Otherwise
-	///     singleton-owned services (singletons and pre-built Instances) become a <c>protected virtual</c>
-	///     delegator to <c>__root</c> (overridden by the <c>Root</c>); scoped services cache on the scope;
-	///     transients construct fresh.
+	///     Emits a non-singleton resolver as an <c>internal static</c> method on the base <c>Scope</c>, taking the
+	///     resolving scope as <c>__s</c>. A parameterized service (with <c>[Arg]</c> parameters) is built fresh per
+	///     call from its runtime arguments; a scoped service caches on <c>__s</c>; a transient constructs fresh on
+	///     <c>__s</c>. Singleton-owned services (singletons and pre-built Instances) are emitted on the <c>Root</c>
+	///     instead (see <see cref="EmitRootResolver" />), so this never emits a delegator - a dependency selects the
+	///     right owner by calling the target's static resolver directly.
 	/// </summary>
 	private static void EmitScopeResolver(StringBuilder builder, int depth, int index, EmitContext context)
 	{
@@ -77,42 +77,23 @@ internal static partial class Sources
 			string signature = string.Join(", ", argTypes.Select((t, i) => $"{t} a{i}"));
 			string parameterizedConstruction = EmitConstruction(instance, context.Instances, names, context.ServiceToIndex);
 			string parameterizedSummary = $"Resolves {XmlTypeRef(type)} from its <c>[Arg]</c> arguments (a new instance per call).";
-			// Reachable from the Root (a singleton's Func<TArg…, T> binds it there) and from a throwaway
-			// Owned<T> scope built off any owner (__s.ResolveX(args)), so it is internal rather than protected -
-			// protected would not be callable through a base-typed scope reference from the derived Root (CS1540).
-			EmitFreshResolver(builder, depth, new FreshResolver("internal", type, resolver, signature, parameterizedConstruction, DisposalOf(instance), parameterizedSummary), asyncDisposal, DeferredEmitter(builder, instance, "created", context, asynchronous: false));
-			return;
-		}
-
-		if (instance.Lifetime == Lifetime.Singleton || instance.Production == ProductionKind.Instance)
-		{
-			AppendXmlSummary(builder, depth, instance.Production == ProductionKind.Instance
-				? $"Resolves the pre-built {XmlTypeRef(type)} from the root."
-				: $"Resolves the singleton {XmlTypeRef(type)} from the root.");
-			Indent(builder, depth).Append("protected virtual ").Append(type).Append(' ').Append(resolver).AppendLine("()");
-			Indent(builder, depth).AppendLine("{");
-			EmitDisposedGuard(builder, depth + 1);
-			Indent(builder, depth + 1).Append("return __root.").Append(resolver).AppendLine("();");
-			Indent(builder, depth).AppendLine("}");
+			EmitFreshResolver(builder, depth, new FreshResolver("Scope", type, resolver, signature, parameterizedConstruction, DisposalOf(instance), parameterizedSummary), asyncDisposal, DeferredEmitter(builder, instance, "created", context, asynchronous: false));
 			return;
 		}
 
 		string construction = EmitConstruction(instance, context.Instances, names, context.ServiceToIndex);
 
-		// Transient and scoped resolvers are internal (not private/protected) so a throwaway Owned<T> scope can
-		// call them directly through a base-typed scope reference (__s.ResolveX()) - this bypasses the strict
-		// by-type withholding, which only blocks the public dispatch/typed surface, not these resolver methods.
-		// Internal also covers the case the Root (a subclass) reaches a captured scoped/transient's resolver.
 		if (instance.Lifetime == Lifetime.Transient)
 		{
 			string transientSummary = $"Resolves the transient {XmlTypeRef(type)} (a new instance per call).";
-			EmitFreshResolver(builder, depth, new FreshResolver("internal", type, resolver, string.Empty, construction, DisposalOf(instance), transientSummary), asyncDisposal, DeferredEmitter(builder, instance, "created", context, asynchronous: false));
+			EmitFreshResolver(builder, depth, new FreshResolver("Scope", type, resolver, string.Empty, construction, DisposalOf(instance), transientSummary), asyncDisposal, DeferredEmitter(builder, instance, "created", context, asynchronous: false));
 			return;
 		}
 
 		string scopedSummary = $"Resolves the scoped {XmlTypeRef(type)} (one instance per scope).";
 		string scopedWiredFlag = HasDeferredMembers(instance) ? names.WiredField(index) : string.Empty;
-		EmitCachingResolver(builder, depth, new CachingResolver("internal", type, resolver, (names.Field(index), scopedWiredFlag), construction, DisposalOf(instance), scopedSummary), asyncDisposal, DeferredEmitter(builder, instance, names.Field(index), context, asynchronous: false));
+		// The deferred members are wired onto the cached field on the owner (__s.<field>), inside the static resolver.
+		EmitCachingResolver(builder, depth, new CachingResolver("Scope", type, resolver, (names.Field(index), scopedWiredFlag), construction, DisposalOf(instance), scopedSummary), asyncDisposal, DeferredEmitter(builder, instance, "__s." + names.Field(index), context, asynchronous: false));
 	}
 
 	/// <summary>
@@ -137,10 +118,19 @@ internal static partial class Sources
 		string type = resolver.Type;
 		string construction = resolver.Construction;
 		AppendXmlSummary(builder, depth, resolver.Summary);
-		Indent(builder, depth).Append(resolver.Modifiers).Append(' ').Append(type).Append(' ').Append(resolver.Method)
-			.Append('(').Append(resolver.Signature).AppendLine(")");
+		// A static resolver over its owner `__s` (the resolving scope, or the root for a singleton), so it is
+		// reachable across Scope/Root without a virtual hop and stays off the instance surface. Runtime [Arg]
+		// arguments, when present, follow the owner.
+		Indent(builder, depth).Append("internal static ").Append(type).Append(' ').Append(resolver.Method)
+			.Append('(').Append(resolver.Owner).Append(" __s");
+		if (resolver.Signature.Length > 0)
+		{
+			builder.Append(", ").Append(resolver.Signature);
+		}
+
+		builder.AppendLine(")");
 		Indent(builder, depth).AppendLine("{");
-		EmitDisposedGuard(builder, depth + 1);
+		EmitDisposedGuard(builder, depth + 1, "__s.");
 
 		// A transient is not cached, so its deferred members never participate in a terminating cycle (AWT145
 		// rejects a transient deferred cycle); they are still wired after construction here - before the owner's
@@ -183,9 +173,9 @@ internal static partial class Sources
 		{
 			AppendXmlSummary(builder, depth, $"Returns the pre-built {XmlTypeRef(type)}.");
 			// The container is a static class, so its pre-built instance member is in scope by simple name.
-			Indent(builder, depth).Append("protected override ").Append(type).Append(' ').Append(resolver).AppendLine("()");
+			Indent(builder, depth).Append("internal static ").Append(type).Append(' ').Append(resolver).AppendLine("(Root __s)");
 			Indent(builder, depth).AppendLine("{");
-			EmitDisposedGuard(builder, depth + 1);
+			EmitDisposedGuard(builder, depth + 1, "__s.");
 			Indent(builder, depth + 1).Append("return ").Append(instance.ProductionMember).AppendLine(";");
 			Indent(builder, depth).AppendLine("}");
 			return;
@@ -194,7 +184,8 @@ internal static partial class Sources
 		string construction = EmitConstruction(instance, context.Instances, names, context.ServiceToIndex);
 		string singletonSummary = $"Resolves the singleton {XmlTypeRef(type)} (one instance per container).";
 		string singletonWiredFlag = HasDeferredMembers(instance) ? names.WiredField(index) : string.Empty;
-		EmitCachingResolver(builder, depth, new CachingResolver("protected override", type, resolver, (names.Field(index), singletonWiredFlag), construction, DisposalOf(instance), singletonSummary), context.AsyncDisposal, DeferredEmitter(builder, instance, names.Field(index), context, asynchronous: false));
+		// The deferred members are wired onto the cached field on the owner (__s.<field>), inside the static resolver.
+		EmitCachingResolver(builder, depth, new CachingResolver("Root", type, resolver, (names.Field(index), singletonWiredFlag), construction, DisposalOf(instance), singletonSummary), context.AsyncDisposal, DeferredEmitter(builder, instance, "__s." + names.Field(index), context, asynchronous: false));
 	}
 
 	/// <summary>
@@ -205,10 +196,10 @@ internal static partial class Sources
 	///     across chunk methods, staying under RyuJIT's optimization guards - the same cliff the synchronous dispatch
 	///     hit before it was chunked.
 	/// </summary>
-	private static List<(string Service, string AsyncResolver, string? RootWithheldMessage)> BuildAsyncArms(
+	private static List<(string Service, string AsyncResolver, bool RootOwned, string? RootWithheldMessage)> BuildAsyncArms(
 		InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool strict, bool syncResolveAfterInit)
 	{
-		List<(string Service, string AsyncResolver, string? RootWithheldMessage)> arms = new();
+		List<(string Service, string AsyncResolver, bool RootOwned, string? RootWithheldMessage)> arms = new();
 		for (int i = 0; i < instances.Length; i++)
 		{
 			// A parameterized service is built fresh from its runtime arguments, so it is reached only through
@@ -225,10 +216,11 @@ internal static partial class Sources
 			// Root throws guidance toward a child scope while a child scope still resolves it (its disposal bounds
 			// the instance). Injection into a singleton stays allowed - that is bounded to one instance.
 			bool rootWithheld = IsWithheld(instances[i], strict);
+			bool rootOwned = IsRootOwned(instances[i]);
 			// Keyed registrations are reached only by [FromKey] injection, never by-type resolution.
 			foreach (string service in instances[i].Services.AsArray().Where(serviceKey => serviceKey.Key is null).Select(serviceKey => serviceKey.Service))
 			{
-				arms.Add((service, asyncResolver, rootWithheld ? AsyncRootWithheldMessage(service) : null));
+				arms.Add((service, asyncResolver, rootOwned, rootWithheld ? AsyncRootWithheldMessage(service) : null));
 			}
 		}
 
@@ -247,7 +239,8 @@ internal static partial class Sources
 			string shape = AwaitenGenerator.AsyncEnumerableShapeType(collection.Service);
 			bool rootWithheld = collectionMembers.TryGetValue(collectionKey, out List<int>? members)
 			                    && members.Any(member => IsFuncWithheld(instances, member, serviceToIndex, collectionMembers, strict));
-			arms.Add((shape, method, rootWithheld ? CollectionAsyncRootWithheldMessage(shape) : null));
+			// An async collection resolver is emitted on the base Scope (never root-owned), so it is called with __s.
+			arms.Add((shape, method, false, rootWithheld ? CollectionAsyncRootWithheldMessage(shape) : null));
 		}
 
 		return arms;
@@ -264,7 +257,7 @@ internal static partial class Sources
 	{
 		const string task = "global::System.Threading.Tasks.Task";
 
-		List<(string Service, string AsyncResolver, string? RootWithheldMessage)> arms = BuildAsyncArms(instances, names, serviceToIndex, strict, syncResolveAfterInit);
+		List<(string Service, string AsyncResolver, bool RootOwned, string? RootWithheldMessage)> arms = BuildAsyncArms(instances, names, serviceToIndex, strict, syncResolveAfterInit);
 
 		AppendXmlSummary(builder, depth,
 			"Asynchronously resolves the service registered for <paramref name=\"serviceType\" />, awaiting any async initialization.");
@@ -317,7 +310,7 @@ internal static partial class Sources
 	///     to <c>Task&lt;object&gt;</c>; a root-withheld arm bakes its guidance throw into the delegate (the Root
 	///     throws, a child scope resolves). No forwarder methods are needed - the delegates are inline lambdas.
 	/// </summary>
-	private static void EmitAsyncBucketDispatch(StringBuilder builder, int depth, List<(string Service, string AsyncResolver, string? RootWithheldMessage)> arms)
+	private static void EmitAsyncBucketDispatch(StringBuilder builder, int depth, List<(string Service, string AsyncResolver, bool RootOwned, string? RootWithheldMessage)> arms)
 	{
 		const string func = "global::System.Func<Scope, global::System.Threading.CancellationToken, global::System.Threading.Tasks.Task<object>>";
 		int bucketCount = BucketCount(arms.Count);
@@ -345,11 +338,17 @@ internal static partial class Sources
 		Indent(builder, depth).AppendLine("{");
 		Indent(builder, depth + 1).AppendLine("__AsyncBucket[] __entries =");
 		Indent(builder, depth + 1).AppendLine("{");
-		foreach ((string service, string asyncResolver, string? rootWithheldMessage) in arms)
+		foreach ((string service, string asyncResolver, bool rootOwned, string? rootWithheldMessage) in arms)
 		{
+			// A root-owned (singleton) async resolver lives on the Root and caches on the root, so it is called
+			// Root.ResolveXAsync(__s.__root, __ct); a scoped/transient/collection one lives on the Scope, so it is
+			// called ResolveXAsync(__s, __ct) over the resolving scope.
+			string call = rootOwned
+				? $"Root.{asyncResolver}(__s.__root, __ct)"
+				: $"{asyncResolver}(__s, __ct)";
 			string resolve = rootWithheldMessage is not null
-				? $"static (__s, __ct) => __s is Root ? throw new global::System.InvalidOperationException({rootWithheldMessage}) : __AsObject(__s.{asyncResolver}(__ct))"
-				: $"static (__s, __ct) => __AsObject(__s.{asyncResolver}(__ct))";
+				? $"static (__s, __ct) => __s is Root ? throw new global::System.InvalidOperationException({rootWithheldMessage}) : __AsObject({call})"
+				: $"static (__s, __ct) => __AsObject({call})";
 			Indent(builder, depth + 2).Append("new __AsyncBucket(typeof(").Append(service).Append("), ").Append(resolve).AppendLine("),");
 		}
 
@@ -373,17 +372,16 @@ internal static partial class Sources
 	}
 
 	/// <summary>
-	///     Emits the async resolver for an async-tainted instance on the base <c>Scope</c>: a singleton becomes
-	///     a <c>protected virtual</c> delegator to <c>__root</c> (the <c>Root</c> overrides it with the real
-	///     caching creator); a scoped service memoizes its construction-and-initialization <c>Task</c> on the
-	///     scope; a transient constructs, initializes and returns each call.
+	///     Emits the async resolver for a non-singleton async-tainted instance as an <c>internal static</c> method
+	///     on the base <c>Scope</c>, over the resolving scope <c>__s</c>: a scoped service memoizes its
+	///     construction-and-initialization <c>Task</c> on <c>__s</c>; a transient (and a parameterized service)
+	///     constructs, initializes and returns each call. Singleton async resolvers are emitted on the <c>Root</c>
+	///     (see <see cref="EmitAsyncRootResolver" />).
 	/// </summary>
 	private static void EmitAsyncScopeResolver(StringBuilder builder, int depth, int index, EmitContext context)
 	{
 		InstanceModel instance = context.Instances[index];
 		Names names = context.Names;
-		const string task = "global::System.Threading.Tasks.Task";
-		const string ct = "global::System.Threading.CancellationToken cancellationToken";
 
 		// A deferred [Inject(Deferred = true)] member is wired after the instance is constructed, awaiting an
 		// async-tainted member exactly like an async-tainted constructor argument. Null when there is none.
@@ -391,24 +389,13 @@ internal static partial class Sources
 
 		// A parameterized async service is built fresh per call from its runtime arguments AND awaits
 		// initialization, so it is reached only through Func<TArg…, Task<T>>. Its async resolver takes the
-		// arguments alongside the token; like the synchronous parameterized resolver it lives on the base Scope
-		// (internal) and the Root inherits it, never caching (a parameterized service is always transient).
+		// arguments alongside the token, never caching (a parameterized service is always transient).
 		if (instance.IsParameterized)
 		{
 			string[] argTypes = instance.ArgTypes();
 			string argSignature = string.Join("", argTypes.Select((t, i) => $"{t} a{i}, "));
 			string parameterizedConstruction = EmitConstruction(instance, context.Instances, names, context.ServiceToIndex, asynchronous: true);
 			EmitAsyncFreshResolver(builder, depth, index, context, parameterizedConstruction, argSignature, emitDeferred);
-			return;
-		}
-
-		if (instance.Lifetime == Lifetime.Singleton)
-		{
-			AppendXmlSummary(builder, depth,
-				$"Asynchronously resolves the singleton {XmlTypeRef(instance.ConstructedType)} from the root.");
-			Indent(builder, depth).Append("protected virtual ").Append(task).Append('<').Append(instance.ConstructedType)
-				.Append("> ").Append(names.AsyncResolver(index)).Append('(').Append(ct).Append(") => __root.")
-				.Append(names.AsyncResolver(index)).AppendLine("(cancellationToken);");
 			return;
 		}
 
@@ -420,7 +407,7 @@ internal static partial class Sources
 		}
 
 		// Scoped: a memoized Task on the scope guards construction-and-initialization.
-		EmitAsyncCachingResolver(builder, depth, index, context, construction, "internal", emitDeferred);
+		EmitAsyncCachingResolver(builder, depth, index, context, construction, "Scope", emitDeferred);
 	}
 
 	/// <summary>
@@ -432,22 +419,23 @@ internal static partial class Sources
 	///     instance without blocking; resolving before warm-up blocks the caller until initialization
 	///     completes. (Strict mode emits no synchronous resolver for an async-tainted service at all.)
 	/// </summary>
-	private static void EmitDelegatingSyncResolver(StringBuilder builder, int depth, int index, InstanceModel instance, Names names)
+	private static void EmitDelegatingSyncResolver(StringBuilder builder, int depth, int index, InstanceModel instance, Names names, string owner)
 	{
 		// A parameterized service forwards its runtime arguments to the async resolver: the synchronous resolver
 		// takes the same arguments, blocks on the (per-call) async resolver, and so still drives initialization.
+		// The async resolver is emitted on the same host (Scope or Root), so it is called with `__s` directly.
 		string[] argTypes = instance.ArgTypes();
-		string signature = string.Join(", ", argTypes.Select((t, i) => $"{t} a{i}"));
+		string signature = string.Join("", argTypes.Select((t, i) => $", {t} a{i}"));
 		string forward = string.Join("", argTypes.Select((_, i) => "a" + i + ", "));
 
 		AppendXmlSummary(builder, depth,
 			$"Resolves {XmlTypeRef(instance.ConstructedType)} by blocking on its async resolver (<c>SyncResolveAfterInit</c>).");
-		Indent(builder, depth).Append("internal ").Append(instance.ConstructedType).Append(' ')
-			.Append(names.Resolver(index)).Append('(').Append(signature).AppendLine(")");
+		Indent(builder, depth).Append("internal static ").Append(instance.ConstructedType).Append(' ')
+			.Append(names.Resolver(index)).Append('(').Append(owner).Append(" __s").Append(signature).AppendLine(")");
 		Indent(builder, depth).AppendLine("{");
-		EmitDisposedGuard(builder, depth + 1);
+		EmitDisposedGuard(builder, depth + 1, "__s.");
 		Indent(builder, depth + 1).Append("return ").Append(names.AsyncResolver(index))
-			.Append('(').Append(forward).AppendLine("default).GetAwaiter().GetResult();");
+			.Append("(__s, ").Append(forward).AppendLine("default).GetAwaiter().GetResult();");
 		Indent(builder, depth).AppendLine("}");
 	}
 
@@ -463,7 +451,7 @@ internal static partial class Sources
 		// A deferred [Inject(Deferred = true)] member is wired in the creator after construction (awaiting an
 		// async-tainted member like an async-tainted constructor argument). Null when there is none.
 		Action<int>? emitDeferred = DeferredEmitter(builder, instance, "created", context, asynchronous: true);
-		EmitAsyncCachingResolver(builder, depth, index, context, construction, "protected override", emitDeferred);
+		EmitAsyncCachingResolver(builder, depth, index, context, construction, "Root", emitDeferred);
 	}
 
 	/// <summary>
@@ -473,7 +461,7 @@ internal static partial class Sources
 	///     canceled is evicted from the cache so a later call retries rather than replaying the same failure
 	///     (and so one caller's cancellation does not permanently poison a shared singleton).
 	/// </summary>
-	private static void EmitAsyncCachingResolver(StringBuilder builder, int depth, int index, EmitContext context, string construction, string modifiers, Action<int>? emitDeferred = null)
+	private static void EmitAsyncCachingResolver(StringBuilder builder, int depth, int index, EmitContext context, string construction, string owner, Action<int>? emitDeferred = null)
 	{
 		InstanceModel instance = context.Instances[index];
 		Names names = context.Names;
@@ -484,15 +472,17 @@ internal static partial class Sources
 		const string task = "global::System.Threading.Tasks.Task";
 		const string ct = "global::System.Threading.CancellationToken cancellationToken";
 
-		string summary = modifiers == "protected override"
+		string summary = owner == "Root"
 			? $"Asynchronously resolves the singleton {XmlTypeRef(type)} (one instance per container)."
 			: $"Asynchronously resolves the scoped {XmlTypeRef(type)} (one instance per scope).";
 		AppendXmlSummary(builder, depth, summary);
-		Indent(builder, depth).Append(modifiers).Append(' ').Append(task).Append('<').Append(type).Append("> ")
-			.Append(asyncResolver).Append('(').Append(ct).AppendLine(")");
+		// A static memoizing async resolver over its owner `__s` (the scope for a scoped service, the root for a
+		// singleton), caching the construction-and-initialization Task on that owner's field.
+		Indent(builder, depth).Append("internal static ").Append(task).Append('<').Append(type).Append("> ")
+			.Append(asyncResolver).Append('(').Append(owner).Append(" __s, ").Append(ct).AppendLine(")");
 		Indent(builder, depth).AppendLine("{");
-		EmitDisposedGuard(builder, depth + 1);
-		Indent(builder, depth + 1).Append(task).Append('<').Append(type).Append(">? __cached = ").Append(asyncField).AppendLine(";");
+		EmitDisposedGuard(builder, depth + 1, "__s.");
+		Indent(builder, depth + 1).Append(task).Append('<').Append(type).Append(">? __cached = __s.").Append(asyncField).AppendLine(";");
 		// A faulted or canceled task is not memoized: treat it as absent so this call rebuilds rather than
 		// replaying a past failure (or a previous caller's cancellation) forever. A successful or still-running
 		// task is returned without taking the lock.
@@ -501,14 +491,14 @@ internal static partial class Sources
 		Indent(builder, depth + 2).AppendLine("return __cached;");
 		Indent(builder, depth + 1).AppendLine("}");
 		builder.AppendLine();
-		Indent(builder, depth + 1).AppendLine("lock (__gate)");
+		Indent(builder, depth + 1).AppendLine("lock (__s.__gate)");
 		Indent(builder, depth + 1).AppendLine("{");
-		EmitDisposedGuard(builder, depth + 2);
-		Indent(builder, depth + 2).Append(task).Append('<').Append(type).Append(">? __pending = ").Append(asyncField).AppendLine(";");
+		EmitDisposedGuard(builder, depth + 2, "__s.");
+		Indent(builder, depth + 2).Append(task).Append('<').Append(type).Append(">? __pending = __s.").Append(asyncField).AppendLine(";");
 		Indent(builder, depth + 2).AppendLine("if (__pending is null || __pending.IsFaulted || __pending.IsCanceled)");
 		Indent(builder, depth + 2).AppendLine("{");
-		Indent(builder, depth + 3).Append("__pending = ").Append(creator).AppendLine("(cancellationToken);");
-		Indent(builder, depth + 3).Append(asyncField).AppendLine(" = __pending;");
+		Indent(builder, depth + 3).Append("__pending = ").Append(creator).AppendLine("(__s, cancellationToken);");
+		Indent(builder, depth + 3).Append("__s.").Append(asyncField).AppendLine(" = __pending;");
 		Indent(builder, depth + 2).AppendLine("}");
 		builder.AppendLine();
 		Indent(builder, depth + 2).AppendLine("return __pending;");
@@ -516,8 +506,8 @@ internal static partial class Sources
 		Indent(builder, depth).AppendLine("}");
 		builder.AppendLine();
 
-		Indent(builder, depth).Append("private async ").Append(task).Append('<').Append(type).Append("> ")
-			.Append(creator).Append('(').Append(ct).AppendLine(")");
+		Indent(builder, depth).Append("private static async ").Append(task).Append('<').Append(type).Append("> ")
+			.Append(creator).Append('(').Append(owner).Append(" __s, ").Append(ct).AppendLine(")");
 		Indent(builder, depth).AppendLine("{");
 		Indent(builder, depth + 1).Append(type).Append(" created = ").Append(construction).AppendLine(";");
 		// Deferred members are wired before the owner's own disposal registration, so a dependency first built
@@ -547,10 +537,12 @@ internal static partial class Sources
 			? $"Asynchronously resolves {XmlTypeRef(type)} from its <c>[Arg]</c> arguments (a new instance per call)."
 			: $"Asynchronously resolves the transient {XmlTypeRef(type)} (a new instance per call).";
 		AppendXmlSummary(builder, depth, summary);
-		Indent(builder, depth).Append("internal async ").Append(task).Append('<').Append(type).Append("> ")
-			.Append(names.AsyncResolver(index)).Append('(').Append(argSignature).Append(ct).AppendLine(")");
+		// A static async resolver over the resolving scope `__s`; fresh per call (transient or parameterized), so
+		// it never caches. Runtime [Arg] arguments, when present, precede the cancellation token.
+		Indent(builder, depth).Append("internal static async ").Append(task).Append('<').Append(type).Append("> ")
+			.Append(names.AsyncResolver(index)).Append("(Scope __s, ").Append(argSignature).Append(ct).AppendLine(")");
 		Indent(builder, depth).AppendLine("{");
-		EmitDisposedGuard(builder, depth + 1);
+		EmitDisposedGuard(builder, depth + 1, "__s.");
 		Indent(builder, depth + 1).Append(type).Append(" created = ").Append(construction).AppendLine(";");
 		EmitAsyncDisposableRegistration(builder, depth + 1, instance, context.AsyncDisposal);
 		emitDeferred?.Invoke(depth + 1);
@@ -632,7 +624,9 @@ internal static partial class Sources
 		Indent(builder, depth).AppendLine("{");
 		foreach (int i in targets)
 		{
-			Indent(builder, depth + 1).Append("await ").Append(names.AsyncResolver(i)).AppendLine("(cancellationToken).ConfigureAwait(false);");
+			// The warm-up runs on the same class that hosts these resolvers (the base Scope warms its scoped
+			// async services; the Root warms its singletons), so each static resolver is called with `this`.
+			Indent(builder, depth + 1).Append("await ").Append(names.AsyncResolver(i)).AppendLine("(this, cancellationToken).ConfigureAwait(false);");
 		}
 
 		Indent(builder, depth).AppendLine("}");
@@ -716,9 +710,12 @@ internal static partial class Sources
 		bool deferred = resolver.WiredFlag.Length != 0;
 
 		AppendXmlSummary(builder, depth, resolver.Summary);
-		Indent(builder, depth).Append(resolver.Modifiers).Append(' ').Append(resolver.Type).Append(' ').Append(resolver.Method).AppendLine("()");
+		// A static caching resolver over its owner `__s` (the scope for a scoped service, the root for a
+		// singleton), caching on that owner's field so a child scope caches per-scope and a singleton caches once.
+		Indent(builder, depth).Append("internal static ").Append(resolver.Type).Append(' ').Append(resolver.Method)
+			.Append('(').Append(resolver.Owner).AppendLine(" __s)");
 		Indent(builder, depth).AppendLine("{");
-		EmitDisposedGuard(builder, depth + 1);
+		EmitDisposedGuard(builder, depth + 1, "__s.");
 
 		// The lock-free fast path returns the cached field without taking the lock. When the instance has deferred
 		// ([Inject(Deferred = true)]) members it also tests the volatile wiring flag: those members are wired only
@@ -730,22 +727,22 @@ internal static partial class Sources
 		// (__gate is a reentrant monitor), finds the field already set, skips the miss block, and returns the
 		// mid-wiring instance - which is exactly what terminates the cycle.
 		string fastPathGuard = deferred
-			? $"{field} is not null && {resolver.WiredFlag}"
-			: $"{field} is not null";
+			? $"__s.{field} is not null && __s.{resolver.WiredFlag}"
+			: $"__s.{field} is not null";
 		Indent(builder, depth + 1).Append("if (").Append(fastPathGuard).AppendLine(")");
 		Indent(builder, depth + 1).AppendLine("{");
-		Indent(builder, depth + 2).Append("return ").Append(field).AppendLine(";");
+		Indent(builder, depth + 2).Append("return __s.").Append(field).AppendLine(";");
 		Indent(builder, depth + 1).AppendLine("}");
 		builder.AppendLine();
 
-		Indent(builder, depth + 1).AppendLine("lock (__gate)");
+		Indent(builder, depth + 1).AppendLine("lock (__s.__gate)");
 		Indent(builder, depth + 1).AppendLine("{");
-		EmitDisposedGuard(builder, depth + 2);
-		Indent(builder, depth + 2).Append("if (").Append(field).AppendLine(" is null)");
+		EmitDisposedGuard(builder, depth + 2, "__s.");
+		Indent(builder, depth + 2).Append("if (__s.").Append(field).AppendLine(" is null)");
 		Indent(builder, depth + 2).AppendLine("{");
 		if (!deferred)
 		{
-			Indent(builder, depth + 3).Append(field).Append(" = ").Append(construction).AppendLine(";");
+			Indent(builder, depth + 3).Append("__s.").Append(field).Append(" = ").Append(construction).AppendLine(";");
 			EmitCachedDisposalRegistration(builder, depth + 3, field, disposal, asyncDisposal);
 		}
 		else
@@ -755,10 +752,10 @@ internal static partial class Sources
 			// is what lets the re-entrant resolve of a mutual cycle return it - and registered for disposal after
 			// them, so a dependency first built during wiring registers earlier and is disposed later than this
 			// owner (reverse teardown order preserves dependency-outlives-dependent).
-			Indent(builder, depth + 3).AppendLine("__wiring++;");
+			Indent(builder, depth + 3).AppendLine("__s.__wiring++;");
 			Indent(builder, depth + 3).AppendLine("try");
 			Indent(builder, depth + 3).AppendLine("{");
-			Indent(builder, depth + 4).Append(field).Append(" = ").Append(construction).AppendLine(";");
+			Indent(builder, depth + 4).Append("__s.").Append(field).Append(" = ").Append(construction).AppendLine(";");
 			emitDeferred?.Invoke(depth + 4);
 			EmitCachedDisposalRegistration(builder, depth + 4, field, disposal, asyncDisposal);
 			Indent(builder, depth + 3).AppendLine("}");
@@ -769,10 +766,10 @@ internal static partial class Sources
 			// outermost frame - every other instance the failed episode published (their flags are still false),
 			// so the next resolve rebuilds instead. Peers cached in the failed episode may keep a reference to an
 			// unpublished instance; they are unpublished with it, so nothing published survives half-consistent.
-			Indent(builder, depth + 4).Append(field).AppendLine(" = null;");
-			Indent(builder, depth + 4).AppendLine("if (__wiring == 1)");
+			Indent(builder, depth + 4).Append("__s.").Append(field).AppendLine(" = null;");
+			Indent(builder, depth + 4).AppendLine("if (__s.__wiring == 1)");
 			Indent(builder, depth + 4).AppendLine("{");
-			Indent(builder, depth + 5).AppendLine("__RollbackWiring();");
+			Indent(builder, depth + 5).AppendLine("__s.__RollbackWiring();");
 			Indent(builder, depth + 4).AppendLine("}");
 			builder.AppendLine();
 			Indent(builder, depth + 4).AppendLine("throw;");
@@ -783,10 +780,10 @@ internal static partial class Sources
 			// be referenced by a half-wired outer participant, so flagging it early would let another thread's
 			// fast path observe that half-wired participant transitively. After a rollback the commit is a no-op
 			// (everything unwired was unpublished).
-			Indent(builder, depth + 4).AppendLine("__wiring--;");
-			Indent(builder, depth + 4).AppendLine("if (__wiring == 0)");
+			Indent(builder, depth + 4).AppendLine("__s.__wiring--;");
+			Indent(builder, depth + 4).AppendLine("if (__s.__wiring == 0)");
 			Indent(builder, depth + 4).AppendLine("{");
-			Indent(builder, depth + 5).AppendLine("__CommitWiring();");
+			Indent(builder, depth + 5).AppendLine("__s.__CommitWiring();");
 			Indent(builder, depth + 4).AppendLine("}");
 			Indent(builder, depth + 3).AppendLine("}");
 		}
@@ -794,7 +791,7 @@ internal static partial class Sources
 		Indent(builder, depth + 2).AppendLine("}");
 		Indent(builder, depth + 1).AppendLine("}");
 		builder.AppendLine();
-		Indent(builder, depth + 1).Append("return ").Append(field).AppendLine(";");
+		Indent(builder, depth + 1).Append("return __s.").Append(field).AppendLine(";");
 		Indent(builder, depth).AppendLine("}");
 	}
 
@@ -811,29 +808,31 @@ internal static partial class Sources
 			string test = asyncDisposal
 				? " is global::System.IDisposable or global::System.IAsyncDisposable)"
 				: " is global::System.IDisposable)";
-			Indent(builder, depth).Append("if (").Append(field).AppendLine(test);
+			Indent(builder, depth).Append("if (__s.").Append(field).AppendLine(test);
 			Indent(builder, depth).AppendLine("{");
-			Indent(builder, depth + 1).Append("(__disposables ??= new global::System.Collections.Generic.List<object>()).Add(").Append(field).AppendLine(");");
+			Indent(builder, depth + 1).Append("(__s.__disposables ??= new global::System.Collections.Generic.List<object>()).Add(__s.").Append(field).AppendLine(");");
 			Indent(builder, depth).AppendLine("}");
 		}
 		else if (disposal == DisposalTracking.Static)
 		{
-			Indent(builder, depth).Append("(__disposables ??= new global::System.Collections.Generic.List<object>()).Add(").Append(field).AppendLine(");");
+			Indent(builder, depth).Append("(__s.__disposables ??= new global::System.Collections.Generic.List<object>()).Add(__s.").Append(field).AppendLine(");");
 		}
 	}
 
 	/// <summary>
-	///     The inputs to <see cref="EmitCachingResolver" />: the method <see cref="Modifiers" /> and return
-	///     <see cref="Type" />, the resolver <see cref="Method" /> name and backing <see cref="Field" />, the
+	///     The inputs to <see cref="EmitCachingResolver" />: the <see cref="Owner" /> type of the static resolver's
+	///     <c>__s</c> parameter and return <see cref="Type" />, the resolver <see cref="Method" /> name and backing <see cref="Field" />, the
 	///     <see cref="Construction" /> expression, how the instance is tracked for <see cref="Disposal" /> (not
 	///     at all, by the static type, or by a runtime <c>is IDisposable</c> check on the realized factory
 	///     output), and the XML doc <see cref="Summary" /> emitted over the resolver. <see cref="WiredFlag" /> is
 	///     the volatile "wiring complete" flag guarding the fast path of an instance with deferred members (empty
 	///     when the instance has none, so the plain fast path on <see cref="Field" /> alone is emitted).
 	/// </summary>
-	private readonly struct CachingResolver(string modifiers, string type, string method, (string Field, string WiredFlag) cache, string construction, DisposalTracking disposal, string summary)
+	private readonly struct CachingResolver(string owner, string type, string method, (string Field, string WiredFlag) cache, string construction, DisposalTracking disposal, string summary)
 	{
-		public string Modifiers { get; } = modifiers;
+		// The declaring/owner type of the static resolver's `__s` parameter: <c>Scope</c> for a scoped resolver,
+		// <c>Root</c> for a singleton one - it is always emitted on that type and caches on that owner.
+		public string Owner { get; } = owner;
 
 		public string Type { get; } = type;
 
@@ -851,16 +850,18 @@ internal static partial class Sources
 	}
 
 	/// <summary>
-	///     The inputs to <see cref="EmitFreshResolver" />: the method <see cref="Modifiers" /> and return
-	///     <see cref="Type" />, the resolver <see cref="Method" /> name, its parameter <see cref="Signature" />
+	///     The inputs to <see cref="EmitFreshResolver" />: the <see cref="Owner" /> type of the static resolver's
+	///     <c>__s</c> parameter and return <see cref="Type" />, the resolver <see cref="Method" /> name, its parameter <see cref="Signature" />
 	///     (empty for a transient, the runtime arguments for a parameterized service), the
 	///     <see cref="Construction" /> expression, how the instance is tracked for <see cref="Disposal" />
 	///     (not at all, by the static type, or by a runtime <c>is IDisposable</c> check on the realized factory
 	///     output), and the XML doc <see cref="Summary" /> emitted over the resolver.
 	/// </summary>
-	private readonly struct FreshResolver(string modifiers, string type, string method, string signature, string construction, DisposalTracking disposal, string summary)
+	private readonly struct FreshResolver(string owner, string type, string method, string signature, string construction, DisposalTracking disposal, string summary)
 	{
-		public string Modifiers { get; } = modifiers;
+		// The declaring/owner type of the static resolver's `__s` parameter: <c>Scope</c> for a scoped or
+		// transient resolver, <c>Root</c> for a (parameterized-on-root) one - it is always emitted on that type.
+		public string Owner { get; } = owner;
 
 		public string Type { get; } = type;
 

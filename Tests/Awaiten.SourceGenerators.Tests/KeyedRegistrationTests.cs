@@ -33,7 +33,7 @@ public class KeyedRegistrationTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		await That(source).Contains("new global::MyCode.Consumer(__root.ResolveSlowClock())")
+		await That(source).Contains("new global::MyCode.Consumer(Root.ResolveSlowClock(__s.__root))")
 			.Because("the keyed dependency is wired to the implementation registered under its key");
 	}
 
@@ -104,9 +104,9 @@ public class KeyedRegistrationTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		await That(source).Contains("new global::System.Func<global::MyCode.IClock>(() => __root.ResolveSlowClock())")
+		await That(source).Contains("new global::System.Func<global::MyCode.IClock>(() => Root.ResolveSlowClock(__s.__root))")
 			.Because("a [FromKey] Func<T> defers to the implementation registered under its key");
-		await That(source).Contains("new global::System.Lazy<global::MyCode.IClock>(() => __root.ResolveFastClock())")
+		await That(source).Contains("new global::System.Lazy<global::MyCode.IClock>(() => Root.ResolveFastClock(__s.__root))")
 			.Because("a [FromKey] Lazy<T> defers to the implementation registered under its key");
 	}
 

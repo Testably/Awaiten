@@ -39,21 +39,21 @@ public class DecoratorTests
 
 		// The chain is built from synthetic-keyed links: D2(LoggingDecorator(Real)). Each link constructs the
 		// link below it, so the outermost decorator's resolver constructs the inner one, down to the bare Real.
-		await That(source).Contains("new global::MyCode.D2(ResolveLoggingDecorator())")
+		await That(source).Contains("new global::MyCode.D2(ResolveLoggingDecorator(__s))")
 			.Because("the outermost decorator wraps the next-lower link");
-		await That(source).Contains("new global::MyCode.LoggingDecorator(ResolveReal())")
+		await That(source).Contains("new global::MyCode.LoggingDecorator(ResolveReal(__s))")
 			.Because("the inner decorator wraps the bare implementation");
 
 		// The public IService dispatch and every consumer reach the outermost decorator, never the bare Real.
-		await That(source).Contains("static __s => __s.ResolveD2()")
+		await That(source).Contains("static __s => ResolveD2(__s)")
 			.Because("the public IService dispatch resolves the outermost decorator");
-		await That(source).Contains("new global::MyCode.Consumer(ResolveD2())")
+		await That(source).Contains("new global::MyCode.Consumer(ResolveD2(__s))")
 			.Because("a consumer of IService receives the outermost decorator");
 
 		// The collection view is decorated too — one element, the full chain, never the bare Real.
-		await That(source).Contains("new global::MyCode.IService[] { ResolveD2() }")
+		await That(source).Contains("new global::MyCode.IService[] { ResolveD2(__s) }")
 			.Because("the collection view yields the decorated chain, so the decorator is unbypassable");
-		await That(source).DoesNotContain("static __s => __s.ResolveReal()")
+		await That(source).DoesNotContain("static __s => ResolveReal(__s)")
 			.Because("the bare implementation is no longer publicly dispatched — only the decorator chain is");
 	}
 
@@ -90,7 +90,7 @@ public class DecoratorTests
 		int decoratorConstructions = source.Split(new[] { "new global::MyCode.LoggingDecorator(", }, System.StringSplitOptions.None).Length - 1;
 		await That(decoratorConstructions).IsEqualTo(2)
 			.Because("each of the two registrations gets its own decorator instance");
-		await That(source).Contains("new global::MyCode.LoggingDecorator(ResolveReal1())");
-		await That(source).Contains("new global::MyCode.LoggingDecorator(ResolveReal2())");
+		await That(source).Contains("new global::MyCode.LoggingDecorator(ResolveReal1(__s))");
+		await That(source).Contains("new global::MyCode.LoggingDecorator(ResolveReal2(__s))");
 	}
 }

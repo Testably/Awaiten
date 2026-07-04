@@ -40,7 +40,7 @@ public class PropertyInjectionTests
 
 		// The init property and the settable property are both filled through an object initializer appended to
 		// the constructor call (object-initializer syntax assigns init-only just as it does set).
-		await That(source).Contains("new global::MyCode.Consumer() { Bus = ResolveBus(), Log = ResolveLog() }");
+		await That(source).Contains("new global::MyCode.Consumer() { Bus = ResolveBus(__s), Log = ResolveLog(__s) }");
 	}
 
 	[Fact]
@@ -70,7 +70,7 @@ public class PropertyInjectionTests
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
 		// Only the [Inject] property is assigned; the plain property is left to the caller.
-		await That(source).Contains("new global::MyCode.Consumer() { Injected = ResolveBus() }");
+		await That(source).Contains("new global::MyCode.Consumer() { Injected = ResolveBus(__s) }");
 		await That(source).DoesNotContain("Plain =");
 	}
 
@@ -124,15 +124,15 @@ public class PropertyInjectionTests
 
 		// The deferred property is assigned after the instance is stored in its cache field - not inside the object
 		// initializer - so a re-entrant resolve returns the cached instance and the cycle terminates.
-		await That(source).Contains("_orderService = new global::MyCode.OrderService();");
-		await That(source).Contains("_orderService.Invoice = __root.ResolveInvoiceService();");
+		await That(source).Contains("__s._orderService = new global::MyCode.OrderService();");
+		await That(source).Contains("_orderService.Invoice = Root.ResolveInvoiceService(__s.__root);");
 		// The constructor call carries no object initializer for the deferred member.
 		await That(source).DoesNotContain("new global::MyCode.OrderService() { Invoice");
 		// The lock-free fast path is preserved but gated on a volatile wiring flag, set last inside the cache-miss
 		// block: a concurrent caller returns the cached instance only once its deferred property is wired, while the
 		// mid-wiring re-entrant resolve sees the flag still false and terminates the cycle through the lock.
 		await That(source).Contains("private volatile bool _orderServiceWired;");
-		await That(source).Contains("if (_orderService is not null && _orderServiceWired)")
+		await That(source).Contains("if (__s._orderService is not null && __s._orderServiceWired)")
 			.Because("the fast path returns the singleton only once it is fully wired, keeping a half-wired instance unobservable across threads without permanently locking every resolve");
 		await That(source).Contains("_orderServiceWired = true;");
 	}
@@ -221,6 +221,6 @@ public class PropertyInjectionTests
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
 		// The owner is async-tainted, so its deferred member is wired by awaiting the target's async resolver.
-		await That(source).Contains(".Dep = await ResolveAsyncDepAsync(cancellationToken).ConfigureAwait(false);");
+		await That(source).Contains(".Dep = await Root.ResolveAsyncDepAsync(__s.__root, cancellationToken).ConfigureAwait(false);");
 	}
 }

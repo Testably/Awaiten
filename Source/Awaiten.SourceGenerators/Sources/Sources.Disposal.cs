@@ -85,11 +85,14 @@ internal static partial class Sources
 		Indent(builder, depth).AppendLine("}");
 	}
 
-	private static void EmitDisposedGuard(StringBuilder builder, int depth)
+	// <paramref name="receiver" /> is the member-access prefix for the disposed flag: empty in an instance
+	// context (the public async entries, which guard `this`), or "__s." inside a static resolver (which guards
+	// the owner it was handed). The owner reference also names the type in the thrown exception.
+	private static void EmitDisposedGuard(StringBuilder builder, int depth, string receiver = "")
 	{
-		Indent(builder, depth).AppendLine("if (__disposed)");
+		Indent(builder, depth).Append("if (").Append(receiver).AppendLine("__disposed)");
 		Indent(builder, depth).AppendLine("{");
-		Indent(builder, depth + 1).AppendLine("throw new global::System.ObjectDisposedException(GetType().FullName);");
+		Indent(builder, depth + 1).Append("throw new global::System.ObjectDisposedException(").Append(receiver).AppendLine("GetType().FullName);");
 		Indent(builder, depth).AppendLine("}");
 	}
 
@@ -117,21 +120,22 @@ internal static partial class Sources
 		}
 
 		// Record whether the scope was already disposed under the lock, then tear down the raced instance outside
-		// it (so an async teardown can await, and user code never runs under the lock).
+		// it (so an async teardown can await, and user code never runs under the lock). The owner is the static
+		// resolver's `__s` parameter (the scope for a scoped/transient resolver, the root for a singleton one).
 		Indent(builder, depth).AppendLine("bool __raced;");
-		Indent(builder, depth).AppendLine("lock (__gate)");
+		Indent(builder, depth).AppendLine("lock (__s.__gate)");
 		Indent(builder, depth).AppendLine("{");
-		Indent(builder, depth + 1).AppendLine("__raced = __disposed;");
+		Indent(builder, depth + 1).AppendLine("__raced = __s.__disposed;");
 		Indent(builder, depth + 1).AppendLine("if (!__raced)");
 		Indent(builder, depth + 1).AppendLine("{");
-		Indent(builder, depth + 2).AppendLine("(__disposables ??= new global::System.Collections.Generic.List<object>()).Add(created);");
+		Indent(builder, depth + 2).AppendLine("(__s.__disposables ??= new global::System.Collections.Generic.List<object>()).Add(created);");
 		Indent(builder, depth + 1).AppendLine("}");
 		Indent(builder, depth).AppendLine("}");
 		builder.AppendLine();
 		Indent(builder, depth).AppendLine("if (__raced)");
 		Indent(builder, depth).AppendLine("{");
 		EmitRacedTeardown(builder, depth + 1, asyncDisposal, asyncContext);
-		Indent(builder, depth + 1).AppendLine("throw new global::System.ObjectDisposedException(GetType().FullName);");
+		Indent(builder, depth + 1).AppendLine("throw new global::System.ObjectDisposedException(__s.GetType().FullName);");
 		Indent(builder, depth).AppendLine("}");
 
 		if (runtimeCheck)
