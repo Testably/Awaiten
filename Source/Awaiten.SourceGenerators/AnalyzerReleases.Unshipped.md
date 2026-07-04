@@ -58,5 +58,7 @@
  AWT154  | Awaiten   | Error    | An imported module declares a [Scan], which is not collected from modules
  AWT155  | Awaiten   | Warning  | Two imported modules strongly register the same service with different implementations
  AWT156  | Awaiten   | Warning  | A generated Root/Scope is disposed synchronously although its container owns a service that implements IAsyncDisposable but not IDisposable
+ AWT157  | Awaiten   | Error    | An [Inject(Optional = true)] property is required and cannot be omitted from the object initializer
+ AWT158  | Awaiten   | Warning  | An [Inject(Optional = true)] property is init-only, so an unregistered dependency leaves it permanently at its default
  AWT159  | Awaiten   | Error    | A keyed collection (IReadOnlyDictionary<TKey, TService>) uses a non-string key type
  AWT160  | Awaiten   | Error    | A [FromKey] is applied to a synthesized keyed collection (IReadOnlyDictionary<string, TService>), which resolves every key

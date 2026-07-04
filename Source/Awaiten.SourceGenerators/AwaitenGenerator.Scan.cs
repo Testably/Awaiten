@@ -573,6 +573,13 @@ partial class AwaitenGenerator
 				continue;
 			}
 
+			// An optional member ([Inject(Optional = true)]) is dropped when unregistered rather than filled, so a
+			// missing registration never makes the type unconstructable (mirroring ClassifyInjectedMember).
+			if (IsInjectOptional(property.GetAttributes()))
+			{
+				continue;
+			}
+
 			if (member.Kind is not (DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.KeyedCollection)
 			    && !services.Contains(KeyOf(member))
 			    && !constraintRejected.Contains(member.ServiceType))

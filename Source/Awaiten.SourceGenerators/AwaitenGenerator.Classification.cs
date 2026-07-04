@@ -160,7 +160,9 @@ partial class AwaitenGenerator
 	///     through an object initializer after construction. Walks the implementation and its base types
 	///     (most-derived first), so an overriding or shadowing declaration wins. Reports AWT136 (<c>[Inject]</c>
 	///     on a property with no set/init accessor the container can assign through), AWT137 (an injected
-	///     property marked <c>[Arg]</c>) and AWT101 (a member with no registration to satisfy it), each at the
+	///     property marked <c>[Arg]</c>) and AWT101 (a required member with no registration to satisfy it),
+		///     plus AWT157/AWT158 for a malformed <c>[Inject(Optional = true)]</c> property (an Optional member with
+		///     no registration is dropped without diagnostic instead), each at the
 	///     property's own location.
 	/// </summary>
 	private static void DiscoverInjectedMembers(
@@ -207,10 +209,14 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     Classifies one <c>[Inject]</c> property into the member edge to fill after construction, or reports
 	///     why it cannot be injected and returns <c>null</c>: AWT136 (no set/init accessor the container can
-	///     reach), AWT137 (<c>[Arg]</c> on an injected property) or - when the resolved edge has no registration -
-	///     AWT101 (with AWT121 substituted for an <c>Owned&lt;T&gt;</c> requested through <c>Lazy</c>). Each is
-	///     reported at the property's own location. A missing registration only diagnoses; it still yields a
-	///     member so the edge participates in analysis, exactly like a constructor parameter.
+	///     reach), AWT137 (<c>[Arg]</c> on an injected property), AWT157 (an <c>Optional</c> property that is
+	///     <c>required</c>) or - when the resolved edge has no registration - AWT101 (with AWT121 substituted for
+	///     an <c>Owned&lt;T&gt;</c> requested through <c>Lazy</c>). It also reports the suppressible AWT158 for an
+	///     <c>Optional</c> init-only property (without rejecting it). Each is reported at the property's own
+	///     location. For a required member a missing registration only diagnoses (AWT101); it still yields a
+	///     member so the edge participates in analysis, exactly like a constructor parameter. For an
+	///     <c>Optional</c> member a missing registration instead drops the member (returns <c>null</c>) with no
+	///     diagnostic, so the property is left at its default and contributes no edge.
 	/// </summary>
 	private static MemberModel? ClassifyInjectedMember(
 		IPropertySymbol property,
@@ -258,6 +264,30 @@ partial class AwaitenGenerator
 			return null;
 		}
 
+		// An optional property ([Inject(Optional = true)]) is omitted from the object initializer when its
+		// dependency is not registered, so it must be omittable from construction. A required member cannot be
+		// left unassigned - the generated `new T { … }` would fail with an opaque CS9035 - so AWT157 rejects it
+		// here. An init-only property is omittable and therefore allowed, but reports the suppressible AWT158:
+		// once construction has passed, an init-only accessor can no longer be assigned, so an unregistered
+		// optional member stays at its default with no fallback.
+		bool optional = IsInjectOptional(property.GetAttributes());
+		if (optional && property.IsRequired)
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.OptionalPropertyIsRequired,
+				location,
+				new EquatableArray<string>([property.Name, DisplayInstance(info.ImplementationType),])));
+			return null;
+		}
+
+		if (optional && setter.IsInitOnly)
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.OptionalPropertyIsInitOnly,
+				location,
+				new EquatableArray<string>([property.Name, DisplayInstance(info.ImplementationType),])));
+		}
+
 		ParameterModel dependency = ClassifyDependency(
 			property.Type, property.GetAttributes(), asyncFactory: false, location);
 
@@ -290,6 +320,14 @@ partial class AwaitenGenerator
 		    && !serviceToImpl.ContainsKey(KeyOf(dependency))
 		    && !constraintRejected.Contains(dependency.ServiceType))
 		{
+			// An optional member is not reported when unregistered: it is simply dropped so the property is left
+			// at its default. Dropping it (rather than yielding a member) also keeps the absent edge out of cycle,
+			// captive and async-taint analysis - there is nothing to assign, so nothing to analyze.
+			if (optional)
+			{
+				return null;
+			}
+
 			bool ownedThroughLazy = dependency.Kind is DependencyKind.Lazy or DependencyKind.LazyTask
 			                        && dependency.ServiceType.StartsWith("global::Awaiten.Owned<", StringComparison.Ordinal);
 
@@ -721,6 +759,15 @@ partial class AwaitenGenerator
 	// Whether an [Inject] attribute sets Deferred = true, so the member is assigned after construction and
 	// caching (breaking a mutual constructor cycle) rather than filled inside the object initializer.
 	private static bool IsInjectDeferred(ImmutableArray<AttributeData> attributes)
+		=> InjectFlag(attributes, "Deferred");
+
+	// Whether an [Inject] attribute sets Optional = true, so the member is left unassigned (rather than
+	// reported as AWT101) when its service type is not registered.
+	private static bool IsInjectOptional(ImmutableArray<AttributeData> attributes)
+		=> InjectFlag(attributes, "Optional");
+
+	// The value of a named bool flag on the [Inject] attribute (Deferred/Optional), false when absent.
+	private static bool InjectFlag(ImmutableArray<AttributeData> attributes, string flag)
 	{
 		if (!TryGetAwaitenAttribute(attributes, "InjectAttribute", out AttributeData? attribute) || attribute is null)
 		{
@@ -729,7 +776,7 @@ partial class AwaitenGenerator
 
 		foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
 		{
-			if (argument.Key == "Deferred" && argument.Value.Value is bool value)
+			if (argument.Key == flag && argument.Value.Value is bool value)
 			{
 				return value;
 			}

@@ -838,6 +838,36 @@ internal static class Diagnostics
 		isEnabledByDefault: true);
 
 	/// <summary>
+	///     A property marked <c>[Inject(Optional = true)]</c> is <c>required</c>. An optional property is omitted
+	///     from the emitted object initializer when its dependency is not registered, which a <c>required</c>
+	///     member does not allow (the generated construction would fail with <c>CS9035</c> inside generated code).
+	///     Drop <c>required</c>, or drop <c>Optional</c> so the missing dependency is reported as AWT101 instead.
+	/// </summary>
+	public static readonly DiagnosticDescriptor OptionalPropertyIsRequired = new(
+		"AWT157",
+		"Optional injected property is required",
+		"The property '{0}' on '{1}' is marked [Inject(Optional = true)] but is required; an optional property is omitted from the object initializer when its dependency is not registered, which a required member does not allow (the generated construction would fail with CS9035). Drop 'required', or drop 'Optional'.",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A property marked <c>[Inject(Optional = true)]</c> has only an <c>init</c> accessor. It is still
+	///     filled when its dependency is registered, but when the dependency is absent the property is omitted
+	///     from the object initializer and left at its default - and an <c>init</c>-only accessor cannot be
+	///     assigned afterwards, so it stays default with no fallback. A suppressible warning rather than an error:
+	///     the graph is well-defined, but a plain <c>set</c> accessor would let calling code supply a value when
+	///     the dependency is not registered.
+	/// </summary>
+	public static readonly DiagnosticDescriptor OptionalPropertyIsInitOnly = new(
+		"AWT158",
+		"Optional injected property is init-only",
+		"The property '{0}' on '{1}' is marked [Inject(Optional = true)] but is init-only; when its dependency is not registered it is omitted from the object initializer and left at its default, and an init-only accessor cannot be assigned afterwards, so it stays default with no fallback. Give it a plain set accessor if calling code should be able to supply one.",
+		"Awaiten",
+		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true);
+
+	/// <summary>
 	///     A keyed collection (<c>IReadOnlyDictionary&lt;TKey, TService&gt;</c>) declares a key type other than
 	///     <c>string</c>. Keyed registrations carry <c>string</c> keys (the <c>[Key]</c> value), so v1 resolves
 	///     only <c>IReadOnlyDictionary&lt;string, TService&gt;</c>; typed/enum keys are not yet supported.
