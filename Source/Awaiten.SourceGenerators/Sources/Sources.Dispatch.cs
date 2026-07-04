@@ -132,10 +132,12 @@ internal static partial class Sources
 	///     <c>Task&lt;T&gt;</c>; when <paramref name="syncResolveAfterInit" /> is set the container makes such a
 	///     service synchronously resolvable after warm-up, so it is advertised as an ordinary synchronous service.
 	/// </summary>
-	private static void EmitRegistrations(StringBuilder builder, int depth, InstanceModel[] instances, bool syncResolveAfterInit)
+	private static void EmitRegistrations(StringBuilder fields, StringBuilder members, int depth, InstanceModel[] instances, bool syncResolveAfterInit)
 	{
 		// The registrations are compile-time constants for the container type, so they live in one static
 		// array rather than being rebuilt per Root construction.
+		StringBuilder builder = fields;
+		Separate(fields);
 		AppendXmlSummary(builder, depth,
 			"The registration metadata advertised through <c>IAwaitenContainerMetadata.Registrations</c>.");
 		Indent(builder, depth).AppendLine("private static readonly global::Awaiten.AwaitenRegistration[] __registrations =");
@@ -173,8 +175,8 @@ internal static partial class Sources
 		}
 
 		Indent(builder, depth).AppendLine("};");
-		builder.AppendLine();
-		Indent(builder, depth).AppendLine("global::System.Collections.Generic.IReadOnlyList<global::Awaiten.AwaitenRegistration> global::Awaiten.IAwaitenContainerMetadata.Registrations => __registrations;");
+		Separate(members);
+		Indent(members, depth).AppendLine("global::System.Collections.Generic.IReadOnlyList<global::Awaiten.AwaitenRegistration> global::Awaiten.IAwaitenContainerMetadata.Registrations => __registrations;");
 	}
 
 	/// <summary>
@@ -183,27 +185,28 @@ internal static partial class Sources
 	///     requires. The <c>ExternalResolver</c> the container routes those dependencies through is emitted on the
 	///     base <c>Scope</c> (inherited by the Root), so a host can wire each scope independently.
 	/// </summary>
-	private static void EmitExternalMetadata(StringBuilder builder, int depth, InstanceModel[] instances)
+	private static void EmitExternalMetadata(StringBuilder fields, StringBuilder members, int depth, InstanceModel[] instances)
 	{
 		(string Type, string? Key)[] external = ExternalDependencies(instances);
+		Separate(members);
 		if (external.Length == 0)
 		{
-			Indent(builder, depth).AppendLine(
+			Indent(members, depth).AppendLine(
 				"global::System.Collections.Generic.IReadOnlyList<global::Awaiten.AwaitenExternalDependency> global::Awaiten.IAwaitenContainerMetadata.ExternalDependencies => global::System.Array.Empty<global::Awaiten.AwaitenExternalDependency>();");
 			return;
 		}
 
-		Indent(builder, depth).AppendLine("private static readonly global::Awaiten.AwaitenExternalDependency[] __externalDependencies =");
-		Indent(builder, depth).AppendLine("{");
+		Separate(fields);
+		Indent(fields, depth).AppendLine("private static readonly global::Awaiten.AwaitenExternalDependency[] __externalDependencies =");
+		Indent(fields, depth).AppendLine("{");
 		foreach ((string type, string? key) in external)
 		{
-			Indent(builder, depth + 1).Append("new global::Awaiten.AwaitenExternalDependency(typeof(").Append(type).Append("), ")
+			Indent(fields, depth + 1).Append("new global::Awaiten.AwaitenExternalDependency(typeof(").Append(type).Append("), ")
 				.Append(ExternalKeyLiteral(key)).AppendLine("),");
 		}
 
-		Indent(builder, depth).AppendLine("};");
-		builder.AppendLine();
-		Indent(builder, depth).AppendLine(
+		Indent(fields, depth).AppendLine("};");
+		Indent(members, depth).AppendLine(
 			"global::System.Collections.Generic.IReadOnlyList<global::Awaiten.AwaitenExternalDependency> global::Awaiten.IAwaitenContainerMetadata.ExternalDependencies => __externalDependencies;");
 	}
 
@@ -214,11 +217,13 @@ internal static partial class Sources
 		_ => "global::Awaiten.AwaitenLifetime.Scoped",
 	};
 
-	private static void EmitResolutionApi(StringBuilder builder, int depth, EmitContext context, bool strict, bool syncResolveAfterInit, string[] varianceCandidates)
+	private static void EmitResolutionApi(StringBuilder members, StringBuilder fields, StringBuilder helpers, int depth, EmitContext context, bool strict, bool syncResolveAfterInit, string[] varianceCandidates)
 	{
 		InstanceModel[] instances = context.Instances;
 		Names names = context.Names;
 		Dictionary<ServiceKey, int> serviceToIndex = context.ServiceToIndex;
+		StringBuilder builder = members;
+		Separate(members);
 
 		List<DispatchEntry> entries = BuildDispatchEntries(instances, names, serviceToIndex, strict, syncResolveAfterInit);
 		// The runtime variance-fallback candidates: the registered variant closed-generic-interface service
@@ -321,8 +326,7 @@ internal static partial class Sources
 			// be a failed resolution.
 			Indent(builder, depth + 1).AppendLine("return __TryResolveVariant(serviceType, out instance);");
 			Indent(builder, depth).AppendLine("}");
-			builder.AppendLine();
-			EmitVarianceFallback(builder, depth, varianceEntries, hasWithheld);
+			EmitVarianceFallback(fields, helpers, depth, varianceEntries, hasWithheld);
 			return;
 		}
 
@@ -359,23 +363,25 @@ internal static partial class Sources
 	///     throw from <c>Resolve</c> anyway, and unbounded junk types must not grow the cache). A type with
 	///     withheld guidance keeps its targeted error instead of being silently variance-routed.
 	/// </summary>
-	private static void EmitVarianceFallback(StringBuilder builder, int depth, List<string> candidates, bool hasWithheld)
+	private static void EmitVarianceFallback(StringBuilder fields, StringBuilder helpers, int depth, List<string> candidates, bool hasWithheld)
 	{
 		// The candidate service types, in registration order - mirroring the compile-time candidate order so
 		// the registration-order tie-break picks the same target at runtime.
-		Indent(builder, depth).AppendLine("private static readonly global::System.Type[] __varianceCandidates = new global::System.Type[]");
-		Indent(builder, depth).AppendLine("{");
+		Separate(fields);
+		Indent(fields, depth).AppendLine("private static readonly global::System.Type[] __varianceCandidates = new global::System.Type[]");
+		Indent(fields, depth).AppendLine("{");
 		foreach (string candidate in candidates)
 		{
-			Indent(builder, depth + 1).Append("typeof(").Append(candidate).AppendLine("),");
+			Indent(fields, depth + 1).Append("typeof(").Append(candidate).AppendLine("),");
 		}
 
-		Indent(builder, depth).AppendLine("};");
-		builder.AppendLine();
-		Indent(builder, depth).AppendLine(
+		Indent(fields, depth).AppendLine("};");
+		fields.AppendLine();
+		Indent(fields, depth).AppendLine(
 			"private static readonly global::System.Collections.Concurrent.ConcurrentDictionary<global::System.Type, global::System.Type> __varianceRoutes = new global::System.Collections.Concurrent.ConcurrentDictionary<global::System.Type, global::System.Type>();");
-		builder.AppendLine();
 
+		StringBuilder builder = helpers;
+		Separate(helpers);
 		Indent(builder, depth).AppendLine("private bool __TryResolveVariant(global::System.Type serviceType, out object? instance)");
 		Indent(builder, depth).AppendLine("{");
 		Indent(builder, depth + 1).AppendLine("if (__varianceRoutes.TryGetValue(serviceType, out global::System.Type? __route))");
@@ -789,9 +795,11 @@ internal static partial class Sources
 	///     scope and the <c>Root</c>), the <c>__BuildBuckets</c> distributor, and a <c>__R</c> forwarder per
 	///     compound entry. It lives on the base <c>Scope</c>; <c>TryResolve</c> probes the table by Type identity
 	///     hash. The table grows in data, never in a single method's IL, so it cannot hit the JIT optimization
-	///     guards no matter how many registrations there are.
+	///     guards no matter how many registrations there are. The table fields and their <c>static Scope()</c>
+	///     initializer are routed into <paramref name="fields" /> (the fields region); the <c>__Bucket</c> slot
+	///     type, <c>__BuildBuckets</c> and the <c>__R</c> forwarders into <paramref name="helpers" />.
 	/// </summary>
-	private static void EmitBucketDispatch(StringBuilder builder, int depth, List<DispatchEntry> entries)
+	private static void EmitBucketDispatch(StringBuilder fields, StringBuilder helpers, int depth, List<DispatchEntry> entries)
 	{
 		int bucketCount = BucketCount(entries.Count);
 
@@ -807,36 +815,20 @@ internal static partial class Sources
 			forwarders.Add(value);
 		}
 
-		// One table slot: the key type, its resolver delegate, and whether the slot is withheld from by-type
-		// resolution on the Root. A default slot (Key == null) is an empty probe cell and never matches a request.
-		AppendXmlSummary(builder, depth, "One slot of the by-type dispatch table.");
-		Indent(builder, depth).AppendLine("private readonly struct __Bucket");
-		Indent(builder, depth).AppendLine("{");
-		Indent(builder, depth + 1).AppendLine("public readonly global::System.Type? Key;");
-		Indent(builder, depth + 1).AppendLine("public readonly global::System.Func<Scope, object> Resolve;");
-		Indent(builder, depth + 1).AppendLine("public readonly bool RootWithheld;");
-		Indent(builder, depth + 1).AppendLine("public __Bucket(global::System.Type? key, global::System.Func<Scope, object> resolve, bool rootWithheld)");
-		Indent(builder, depth + 1).AppendLine("{");
-		Indent(builder, depth + 2).AppendLine("Key = key;");
-		Indent(builder, depth + 2).AppendLine("Resolve = resolve;");
-		Indent(builder, depth + 2).AppendLine("RootWithheld = rootWithheld;");
-		Indent(builder, depth + 1).AppendLine("}");
-		Indent(builder, depth).AppendLine("}");
-		builder.AppendLine();
-
-		Indent(builder, depth).Append("private const int __bucketCount = ").Append(bucketCount).AppendLine(";");
-		Indent(builder, depth).AppendLine("private static readonly __Bucket[] __buckets;");
-		Indent(builder, depth).AppendLine("private static readonly int __bucketSize;");
-		builder.AppendLine();
+		Separate(fields);
+		Indent(fields, depth).Append("private const int __bucketCount = ").Append(bucketCount).AppendLine(";");
+		Indent(fields, depth).AppendLine("private static readonly __Bucket[] __buckets;");
+		Indent(fields, depth).AppendLine("private static readonly int __bucketSize;");
+		fields.AppendLine();
 
 		// The static ctor lists every entry with its resolver delegate, then distributes them into fixed-width
 		// buckets by the runtime Type identity hash (unknown at generation time). A bare service binds a direct
 		// delegate to its existing virtual resolver; a compound value routes through a __R forwarder that preserves
 		// the expression verbatim, so all owner-context construction (throwaway scopes, __root) is unchanged.
-		Indent(builder, depth).AppendLine("static Scope()");
-		Indent(builder, depth).AppendLine("{");
-		Indent(builder, depth + 1).AppendLine("__Bucket[] __entries =");
-		Indent(builder, depth + 1).AppendLine("{");
+		Indent(fields, depth).AppendLine("static Scope()");
+		Indent(fields, depth).AppendLine("{");
+		Indent(fields, depth + 1).AppendLine("__Bucket[] __entries =");
+		Indent(fields, depth + 1).AppendLine("{");
 		for (int i = 0; i < entries.Count; i++)
 		{
 			string resolve;
@@ -854,29 +846,46 @@ internal static partial class Sources
 				resolve = $"static __s => __R{forwarderOf[entries[i].Value]}(__s)";
 			}
 
-			Indent(builder, depth + 2).Append("new __Bucket(typeof(").Append(entries[i].Type).Append("), ")
+			Indent(fields, depth + 2).Append("new __Bucket(typeof(").Append(entries[i].Type).Append("), ")
 				.Append(resolve).Append(", ").Append(entries[i].RootWithheld ? "true" : "false").AppendLine("),");
 		}
 
-		Indent(builder, depth + 1).AppendLine("};");
-		Indent(builder, depth + 1).AppendLine("__buckets = __BuildBuckets(__entries);");
-		Indent(builder, depth + 1).AppendLine("__bucketSize = __buckets.Length / __bucketCount;");
-		Indent(builder, depth).AppendLine("}");
-		builder.AppendLine();
+		Indent(fields, depth + 1).AppendLine("};");
+		Indent(fields, depth + 1).AppendLine("__buckets = __BuildBuckets(__entries);");
+		Indent(fields, depth + 1).AppendLine("__bucketSize = __buckets.Length / __bucketCount;");
+		Indent(fields, depth).AppendLine("}");
 
-		AppendXmlSummary(builder, depth, "Builds the by-type dispatch table.");
-		Indent(builder, depth).AppendLine("private static __Bucket[] __BuildBuckets(__Bucket[] __entries)");
-		Indent(builder, depth).AppendLine("{");
-		EmitBucketDistribution(builder, depth + 1, "__Bucket", "__bucketCount");
-		Indent(builder, depth).AppendLine("}");
+		// One table slot: the key type, its resolver delegate, and whether the slot is withheld from by-type
+		// resolution on the Root. A default slot (Key == null) is an empty probe cell and never matches a request.
+		Separate(helpers);
+		AppendXmlSummary(helpers, depth, "One slot of the by-type dispatch table.");
+		Indent(helpers, depth).AppendLine("private readonly struct __Bucket");
+		Indent(helpers, depth).AppendLine("{");
+		Indent(helpers, depth + 1).AppendLine("public readonly global::System.Type? Key;");
+		Indent(helpers, depth + 1).AppendLine("public readonly global::System.Func<Scope, object> Resolve;");
+		Indent(helpers, depth + 1).AppendLine("public readonly bool RootWithheld;");
+		Indent(helpers, depth + 1).AppendLine("public __Bucket(global::System.Type? key, global::System.Func<Scope, object> resolve, bool rootWithheld)");
+		Indent(helpers, depth + 1).AppendLine("{");
+		Indent(helpers, depth + 2).AppendLine("Key = key;");
+		Indent(helpers, depth + 2).AppendLine("Resolve = resolve;");
+		Indent(helpers, depth + 2).AppendLine("RootWithheld = rootWithheld;");
+		Indent(helpers, depth + 1).AppendLine("}");
+		Indent(helpers, depth).AppendLine("}");
+		helpers.AppendLine();
+
+		AppendXmlSummary(helpers, depth, "Builds the by-type dispatch table.");
+		Indent(helpers, depth).AppendLine("private static __Bucket[] __BuildBuckets(__Bucket[] __entries)");
+		Indent(helpers, depth).AppendLine("{");
+		EmitBucketDistribution(helpers, depth + 1, "__Bucket", "__bucketCount");
+		Indent(helpers, depth).AppendLine("}");
 
 		// One forwarder per unique compound value, preserving the value expression verbatim over the resolving
 		// scope __s. Each is tiny and individually optimizable; deduplication (above) keeps the six collection
 		// shapes of an element type to one.
 		for (int k = 0; k < forwarders.Count; k++)
 		{
-			builder.AppendLine();
-			Indent(builder, depth).Append("private static object __R").Append(k).Append("(Scope __s) => ").Append(forwarders[k]).AppendLine(";");
+			helpers.AppendLine();
+			Indent(helpers, depth).Append("private static object __R").Append(k).Append("(Scope __s) => ").Append(forwarders[k]).AppendLine(";");
 		}
 	}
 
