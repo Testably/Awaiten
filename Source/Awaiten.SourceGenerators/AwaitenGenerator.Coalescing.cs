@@ -189,7 +189,11 @@ partial class AwaitenGenerator
 			{
 				info = new ImplInfo(
 					reg.ImplementationType, reg.Implementation, reg.Lifetime,
-					LocationInfo.From(reg.Location), reg.Production, reg.ProductionMember, reg.IsScan, reg.Origin);
+					LocationInfo.From(reg.Location), reg.Production, reg.ProductionMember)
+				{
+					IsScan = reg.IsScan,
+					Origin = reg.Origin,
+				};
 				implInfos.Add(reg.ImplementationType, info);
 				implOrder.Add(info);
 			}

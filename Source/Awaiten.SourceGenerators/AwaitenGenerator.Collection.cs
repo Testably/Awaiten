@@ -154,6 +154,7 @@ partial class AwaitenGenerator
 	private static List<ImportedModule> CollectImportedModules(INamedTypeSymbol containerSymbol, List<DiagnosticInfo> diagnostics)
 	{
 		List<ImportedModule> modules = new();
+		HashSet<INamedTypeSymbol> seen = new(SymbolEqualityComparer.Default);
 		foreach (AttributeData attribute in containerSymbol.GetAttributes())
 		{
 			if (attribute.AttributeClass is not { Name: "ImportAttribute", } attributeClass
@@ -173,62 +174,90 @@ partial class AwaitenGenerator
 				continue;
 			}
 
+			// A module imported more than once contributes its registrations, decorators and composites only
+			// once: lifetime registrations coalesce away, but decorators would otherwise double-wrap (the chain
+			// builder does not dedup). Skip the redundant import silently, before validation, so its diagnostics
+			// are not reported twice either.
+			if (!seen.Add(module))
+			{
+				continue;
+			}
+
 			// Every module diagnostic points at the container's [Import] - the line the author actually wrote -
 			// rather than at the module declaration, which may live in another file (or, for a module compiled
 			// into a referenced assembly, in no source at all).
 			Location? importLocation = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation();
-			LocationInfo? location = LocationInfo.From(importLocation);
-			ImmutableArray<AttributeData> moduleAttributes = module.GetAttributes();
-			string moduleName = Display(module.ToDisplayString(FullyQualified));
-
-			// AWT149: only [Module] types can be imported. A non-module target contributes nothing, so it is
-			// skipped and the mistake is surfaced here rather than as a later cascade of missing dependencies.
-			if (!HasAwaitenAttribute(moduleAttributes, "ModuleAttribute"))
+			if (ValidateImportedModule(module, importLocation, diagnostics))
 			{
-				diagnostics.Add(new DiagnosticInfo(
-					Diagnostics.ImportNotAModule, location, new EquatableArray<string>([moduleName,])));
-				continue;
+				modules.Add(new ImportedModule(module, importLocation));
 			}
-
-			// AWT152: like a container, a module is a pure definition (registrations plus static factory and
-			// instance members) and is never instantiated, so it must be a static class - mirroring AWT116.
-			// The module is still imported, so its registrations do not additionally cascade as missing.
-			if (!module.IsStatic)
-			{
-				diagnostics.Add(new DiagnosticInfo(
-					Diagnostics.NonStaticModule, location, new EquatableArray<string>([moduleName,])));
-			}
-
-			// AWT150: a module's own [Import] is not followed, so it is an error that the nested module's
-			// registrations are not pulled in transitively - the container must import the nested module directly.
-			if (HasAwaitenAttribute(moduleAttributes, "ImportAttribute"))
-			{
-				diagnostics.Add(new DiagnosticInfo(
-					Diagnostics.NestedModuleImport, location, new EquatableArray<string>([moduleName,])));
-			}
-
-			// AWT154: [Scan] sweeps an assembly relative to the container and is not collected from modules,
-			// so a module-declared scan would be silently ignored; reject it instead. Reported at the module's
-			// own [Scan] attribute when it is in source, else at the container's [Import].
-			if (TryGetAwaitenAttribute(moduleAttributes, "ScanAttribute", out AttributeData? scan))
-			{
-				diagnostics.Add(new DiagnosticInfo(
-					Diagnostics.ScanOnModule,
-					LocationInfo.From(scan?.ApplicationSyntaxReference?.GetSyntax().GetLocation()) ?? location,
-					new EquatableArray<string>([moduleName,])));
-			}
-
-			// AWT151: a module that declares no lifetime registrations imports nothing useful.
-			if (!DeclaresAnyRegistration(moduleAttributes))
-			{
-				diagnostics.Add(new DiagnosticInfo(
-					Diagnostics.EmptyModule, location, new EquatableArray<string>([moduleName,])));
-			}
-
-			modules.Add(new ImportedModule(module, importLocation));
 		}
 
 		return modules;
+	}
+
+	/// <summary>
+	///     Validates one <c>[Import(typeof(Module))]</c> target, reporting AWT149-154, and returns whether the
+	///     target is importable. A non-<c>[Module]</c> target (AWT149) contributes nothing, so the caller skips
+	///     it (<see langword="false" />); the other faults - non-static (AWT152), a nested <c>[Import]</c>
+	///     (AWT150), a module-declared <c>[Scan]</c> (AWT154), or no registrations (AWT151) - are reported but
+	///     the module is still imported (<see langword="true" />). Every diagnostic defaults to the container's
+	///     <c>[Import]</c> location for a module whose attributes carry no syntax of their own.
+	/// </summary>
+	private static bool ValidateImportedModule(
+		INamedTypeSymbol module,
+		Location? importLocation,
+		List<DiagnosticInfo> diagnostics)
+	{
+		LocationInfo? location = LocationInfo.From(importLocation);
+		ImmutableArray<AttributeData> moduleAttributes = module.GetAttributes();
+		string moduleName = Display(module.ToDisplayString(FullyQualified));
+
+		// AWT149: only [Module] types can be imported. A non-module target contributes nothing, so it is
+		// skipped and the mistake is surfaced here rather than as a later cascade of missing dependencies.
+		if (!HasAwaitenAttribute(moduleAttributes, "ModuleAttribute"))
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.ImportNotAModule, location, new EquatableArray<string>([moduleName,])));
+			return false;
+		}
+
+		// AWT152: like a container, a module is a pure definition (registrations plus static factory and
+		// instance members) and is never instantiated, so it must be a static class - mirroring AWT116.
+		// The module is still imported, so its registrations do not additionally cascade as missing.
+		if (!module.IsStatic)
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.NonStaticModule, location, new EquatableArray<string>([moduleName,])));
+		}
+
+		// AWT150: a module's own [Import] is not followed, so it is an error that the nested module's
+		// registrations are not pulled in transitively - the container must import the nested module directly.
+		if (HasAwaitenAttribute(moduleAttributes, "ImportAttribute"))
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.NestedModuleImport, location, new EquatableArray<string>([moduleName,])));
+		}
+
+		// AWT154: [Scan] sweeps an assembly relative to the container and is not collected from modules,
+		// so a module-declared scan would be silently ignored; reject it instead. Reported at the module's
+		// own [Scan] attribute when it is in source, else at the container's [Import].
+		if (TryGetAwaitenAttribute(moduleAttributes, "ScanAttribute", out AttributeData? scan))
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.ScanOnModule,
+				LocationInfo.From(scan?.ApplicationSyntaxReference?.GetSyntax().GetLocation()) ?? location,
+				new EquatableArray<string>([moduleName,])));
+		}
+
+		// AWT151: a module that declares no lifetime registrations imports nothing useful.
+		if (!DeclaresAnyRegistration(moduleAttributes))
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.EmptyModule, location, new EquatableArray<string>([moduleName,])));
+		}
+
+		return true;
 	}
 
 	/// <summary>

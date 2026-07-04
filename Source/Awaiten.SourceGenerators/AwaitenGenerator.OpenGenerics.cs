@@ -206,13 +206,7 @@ partial class AwaitenGenerator
 		// impls are synthesized, each one depth deeper than the closed service that produced it.
 		Queue<(INamedTypeSymbol Impl, int Depth)> worklist = new();
 		HashSet<INamedTypeSymbol> seen = new(SymbolEqualityComparer.Default);
-		for (int index = 0; index < raw.Count; index++)
-		{
-			if (!droppedWeak.Contains(index) && seen.Add(raw[index].Implementation))
-			{
-				worklist.Enqueue((raw[index].Implementation, 0));
-			}
-		}
+		SeedExpansionWorklist(raw, droppedWeak, worklist, seen);
 
 		ExpansionContext context = new(raw, open, worklist, seen, diagnostics, constraintRejected);
 
@@ -244,6 +238,26 @@ partial class AwaitenGenerator
 				{
 					ExpandClosedService(closed, depth, context);
 				}
+			}
+		}
+	}
+
+	/// <summary>
+	///     Seeds the expansion worklist at depth 0 from every surviving implementation, deduped: an overridable
+	///     default that coalescing drops in full (see <see cref="DroppedOverridableDefaults" />) is skipped, so
+	///     its constructor never synthesizes closed registrations the surviving graph does not need.
+	/// </summary>
+	private static void SeedExpansionWorklist(
+		List<RawRegistration> raw,
+		HashSet<int> droppedWeak,
+		Queue<(INamedTypeSymbol Impl, int Depth)> worklist,
+		HashSet<INamedTypeSymbol> seen)
+	{
+		for (int index = 0; index < raw.Count; index++)
+		{
+			if (!droppedWeak.Contains(index) && seen.Add(raw[index].Implementation))
+			{
+				worklist.Enqueue((raw[index].Implementation, 0));
 			}
 		}
 	}

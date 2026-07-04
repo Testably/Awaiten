@@ -122,9 +122,7 @@ partial class AwaitenGenerator
 			Lifetime lifetime,
 			LocationInfo? location,
 			ProductionKind production,
-			string? productionMember,
-			bool isScan = false,
-			INamedTypeSymbol? origin = null)
+			string? productionMember)
 		{
 			ImplementationType = implementationType;
 			Symbol = symbol;
@@ -132,8 +130,6 @@ partial class AwaitenGenerator
 			Location = location;
 			Production = production;
 			ProductionMember = productionMember;
-			IsScan = isScan;
-			Origin = origin;
 			Services = new List<ServiceKey>();
 		}
 
@@ -145,14 +141,14 @@ partial class AwaitenGenerator
 		public string? ProductionMember { get; }
 
 		/// <summary>Whether the first (winning) registration of this implementation came from a <c>[Scan]</c>.</summary>
-		public bool IsScan { get; }
+		public bool IsScan { get; init; }
 
 		/// <summary>
 		///     The imported module that declared the winning registration, or <see langword="null" /> for the
 		///     container's own (or a scan's). A module's <c>Factory</c>/<c>Instance</c> member is resolved
 		///     against and emitted qualified with this type rather than the container.
 		/// </summary>
-		public INamedTypeSymbol? Origin { get; }
+		public INamedTypeSymbol? Origin { get; init; }
 
 		public List<ServiceKey> Services { get; }
 

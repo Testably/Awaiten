@@ -417,6 +417,42 @@ public class ModuleTests
 	}
 
 	[Fact]
+	public async Task Module_ImportedTwice_ContributesItsDecoratorOnlyOnce()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface IService { }
+		                                       public sealed class Real : IService { }
+		                                       public sealed class LoggingDecorator : IService
+		                                       {
+		                                           public LoggingDecorator(IService inner) { }
+		                                       }
+
+		                                       [Module]
+		                                       [Singleton<Real, IService>]
+		                                       [Decorate<LoggingDecorator, IService>]
+		                                       public static class ServiceModule { }
+
+		                                       [Container]
+		                                       [Import(typeof(ServiceModule))]
+		                                       [Import(typeof(ServiceModule))]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		int wraps = source.Split(["new global::MyCode.LoggingDecorator("], System.StringSplitOptions.None).Length - 1;
+		await That(wraps).IsEqualTo(1)
+			.Because("a module imported twice is deduped, so its [Decorate] wraps the service once, not D(D(service))");
+	}
+
+	[Fact]
 	public async Task Module_Composite_FrontsAServiceLikeAContainerDeclaredComposite()
 	{
 		GeneratorResult result = Generator.Run("""
