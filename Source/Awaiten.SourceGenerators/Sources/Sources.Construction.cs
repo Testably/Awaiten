@@ -6,6 +6,20 @@ namespace Awaiten.SourceGenerators;
 
 internal static partial class Sources
 {
+	/// <summary>
+	///     The name of the synthetic <c>System.Type?</c> parameter a requesting-type factory resolver takes:
+	///     each call site passes <c>typeof(consumer)</c> (or <c>null</c> at a top-level resolve), and the
+	///     resolver forwards it into the factory method's <c>[RequestingType]</c> parameter.
+	/// </summary>
+	private const string RequestingTypeParameterName = "__requestingType";
+
+	/// <summary>
+	///     The <c>typeof(…)</c> literal an instance presents as the requesting type to any requesting-type
+	///     factory it consumes: the declaring type of the member being satisfied - the instance's own
+	///     constructed type.
+	/// </summary>
+	private static string RequestingTypeOf(InstanceModel instance) => $"typeof({instance.ConstructedType})";
+
 	// Whether the __AsyncArray<T> helper is used: some instance injects an IAsyncEnumerable<T>, or some unkeyed,
 	// non-suppressed collection is offered by type as IAsyncEnumerable<T> (a synchronous dispatch entry when
 	// sync-materializable, an async resolver otherwise) - both materialize through the helper. A collection whose
@@ -204,6 +218,9 @@ internal static partial class Sources
 	private static string EmitConstruction(InstanceModel instance, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool asynchronous = false)
 	{
 		ParameterModel[] parameters = instance.ConstructorParameters.AsArray();
+		// The requesting type this instance presents to any requesting-type factory it consumes: its own
+		// constructed type (the declaring type of the member being satisfied). The factory is never the consumer.
+		string requestingType = RequestingTypeOf(instance);
 		StringBuilder arguments = new();
 		int argIndex = 0;
 		for (int p = 0; p < parameters.Length; p++)
@@ -227,9 +244,17 @@ internal static partial class Sources
 				// async path, so this is never reached with asynchronous == false.
 				arguments.Append("cancellationToken");
 			}
+			else if (parameters[p].Kind == DependencyKind.RequestingType)
+			{
+				// Forward the resolver's own __requestingType parameter (each call site supplied it as
+				// typeof(consumer) or null at top level). Null-forgiving: the value is null at a top-level resolve,
+				// but the factory author may declare the parameter non-nullable Type - the ! keeps the generated
+				// call warning-free for either nullability choice.
+				arguments.Append(RequestingTypeParameterName).Append('!');
+			}
 			else
 			{
-				arguments.Append(DependencyValue(parameters[p], instances, names, serviceToIndex, asynchronous));
+				arguments.Append(DependencyValue(parameters[p], instances, names, serviceToIndex, asynchronous, requestingType));
 			}
 		}
 
@@ -261,7 +286,7 @@ internal static partial class Sources
 	///     resolves through <see cref="ResolveExpression" />. Shared by constructor arguments and the
 	///     injected-member initializer so a property resolves exactly like a constructor parameter.
 	/// </summary>
-	private static string DependencyValue(ParameterModel dependency, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool asynchronous)
+	private static string DependencyValue(ParameterModel dependency, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool asynchronous, string requestingType = "null")
 	{
 		if (dependency.Kind == DependencyKind.Enumerable)
 		{
@@ -292,10 +317,17 @@ internal static partial class Sources
 		    && serviceToIndex.TryGetValue(new ServiceKey(dependency.ServiceType, dependency.Key), out int index)
 		    && instances[index].IsAsyncTainted)
 		{
+			// A requesting-type factory's async resolver takes the consumer's typeof(…) (never root-owned); every
+			// other async target resolves through AsyncResolveCall.
+			if (instances[index].IsRequestingTypeFactory)
+			{
+				return $"await {names.AsyncResolver(index)}(__s, {requestingType}, cancellationToken).ConfigureAwait(false)";
+			}
+
 			return $"await {AsyncResolveCall(names.AsyncResolver(index), IsRootOwned(instances[index]), "cancellationToken")}.ConfigureAwait(false)";
 		}
 
-		return ResolveExpression(dependency, instances, names, serviceToIndex);
+		return ResolveExpression(dependency, instances, names, serviceToIndex, requestingType);
 	}
 
 	/// <summary>
@@ -314,6 +346,8 @@ internal static partial class Sources
 			return string.Empty;
 		}
 
+		// The requesting type this instance presents to a requesting-type factory an injected member consumes.
+		string requestingType = RequestingTypeOf(instance);
 		StringBuilder assignments = new();
 		bool first = true;
 		for (int m = 0; m < members.Length; m++)
@@ -332,7 +366,7 @@ internal static partial class Sources
 
 			first = false;
 			assignments.Append(members[m].MemberName).Append(" = ")
-				.Append(DependencyValue(members[m].Dependency, instances, names, serviceToIndex, asynchronous));
+				.Append(DependencyValue(members[m].Dependency, instances, names, serviceToIndex, asynchronous, requestingType));
 		}
 
 		return first ? string.Empty : $" {{ {assignments} }}";
@@ -349,6 +383,7 @@ internal static partial class Sources
 	/// </summary>
 	private static void EmitDeferredAssignments(StringBuilder builder, int depth, InstanceModel instance, string variable, EmitContext context, bool asynchronous)
 	{
+		string requestingType = RequestingTypeOf(instance);
 		foreach (MemberModel member in instance.InjectedMembers.AsArray())
 		{
 			if (!member.Deferred)
@@ -356,7 +391,7 @@ internal static partial class Sources
 				continue;
 			}
 
-			string value = DependencyValue(member.Dependency, context.Instances, context.Names, context.ServiceToIndex, asynchronous);
+			string value = DependencyValue(member.Dependency, context.Instances, context.Names, context.ServiceToIndex, asynchronous, requestingType);
 			Indent(builder, depth).Append(variable).Append('.').Append(member.MemberName).Append(" = ").Append(value).AppendLine(";");
 		}
 	}
@@ -404,7 +439,7 @@ internal static partial class Sources
 	///     scoped/transient target through its <c>Scope</c>-hosted static resolver over the current owner
 	///     <c>__s</c>. A relationship type wraps the target in a deferred <c>Func&lt;T&gt;</c> / <c>Lazy&lt;T&gt;</c>.
 	/// </summary>
-	private static string ResolveExpression(ParameterModel parameter, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex)
+	private static string ResolveExpression(ParameterModel parameter, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, string requestingType = "null")
 	{
 		// An external dependency is not in the Awaiten graph, so it has no resolver of its own (and no entry in
 		// serviceToIndex); it is routed through the container's external resolver instead, forwarding its
@@ -420,6 +455,15 @@ internal static partial class Sources
 
 		string[] funcArgTypes = parameter.FuncArgTypes.AsArray();
 		bool rootOwned = IsRootOwned(target);
+
+		// A requesting-type factory's resolver takes the requesting type, so the consumer passes its own
+		// typeof(…) (or null at a top-level resolve) directly into the call, and any wrapper over it closes over
+		// the same literal. Placed before the relationship/Owned handling below - it produces the supported shapes
+		// itself (see RequestingTypeExpression).
+		if (target.IsRequestingTypeFactory)
+		{
+			return RequestingTypeExpression(parameter, target, resolver, names.AsyncResolver(targetIndex), requestingType);
+		}
 
 		// The async relationship types resolve their target through its async resolver (awaiting
 		// initialization), or wrap a synchronous target in a completed Task. They defer like the synchronous
@@ -462,6 +506,45 @@ internal static partial class Sources
 			DependencyKind.Func => $"new global::System.Func<{parameter.ServiceType}>(() => {value})",
 			DependencyKind.Lazy => $"new global::System.Lazy<{parameter.ServiceType}>(() => {value})",
 			_ => value,
+		};
+	}
+
+	/// <summary>
+	///     The construction expression for a dependency produced by a requesting-type factory, extracted from
+	///     <see cref="ResolveExpression" />. The consumer passes its own <c>typeof(…)</c>
+	///     (<paramref name="requestingType" />, or <c>null</c> at a top-level resolve) directly into the call,
+	///     and any wrapper over it closes over the same literal. The factory is Scope-hosted (never root-owned)
+	///     and called per consumer, never cached by service type. It produces the supported shapes itself: the
+	///     plain dependency, its <c>Func&lt;T&gt;</c>/<c>Lazy&lt;T&gt;</c> wrappers, and, when the factory is
+	///     async-tainted, the awaiting <c>Task&lt;T&gt;</c>/<c>Func&lt;Task&lt;T&gt;&gt;</c>/
+	///     <c>Lazy&lt;Task&lt;T&gt;&gt;</c> forms (a synchronous <c>Func</c>/<c>Lazy</c> over an async-tainted
+	///     factory is AWT119, never reaching here). There is no <c>Owned&lt;T&gt;</c> form (the requesting type
+	///     has no owner scope).
+	/// </summary>
+	private static string RequestingTypeExpression(ParameterModel parameter, InstanceModel target, string resolver, string asyncResolver, string requestingType)
+	{
+		if (parameter.Kind is DependencyKind.Task or DependencyKind.FuncTask or DependencyKind.LazyTask)
+		{
+			string task = $"global::System.Threading.Tasks.Task<{parameter.ServiceType}>";
+			// An async-tainted factory produces its Task through the awaiting async resolver; a synchronous one
+			// wraps its resolver's result in a completed task. By-type deferral carries no ambient token (default).
+			string taskValue = target.IsAsyncTainted
+				? $"{asyncResolver}(__s, {requestingType}, default)"
+				: $"global::System.Threading.Tasks.Task.FromResult<{parameter.ServiceType}>({resolver}(__s, {requestingType}))";
+			return parameter.Kind switch
+			{
+				DependencyKind.FuncTask => $"new global::System.Func<{task}>(() => {taskValue})",
+				DependencyKind.LazyTask => $"new global::System.Lazy<{task}>(() => {taskValue})",
+				_ => taskValue,
+			};
+		}
+
+		string requestingCall = $"{resolver}(__s, {requestingType})";
+		return parameter.Kind switch
+		{
+			DependencyKind.Func => $"new global::System.Func<{parameter.ServiceType}>(() => {requestingCall})",
+			DependencyKind.Lazy => $"new global::System.Lazy<{parameter.ServiceType}>(() => {requestingCall})",
+			_ => requestingCall,
 		};
 	}
 

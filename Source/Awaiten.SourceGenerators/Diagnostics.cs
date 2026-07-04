@@ -909,4 +909,31 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A <c>[RequestingType]</c> factory parameter is declared with a type other than
+	///     <c>System.Type</c>. The generator fills that slot with the requesting consumer's
+	///     <c>typeof(…)</c>, so the parameter must be <c>System.Type</c> to receive it.
+	/// </summary>
+	public static readonly DiagnosticDescriptor InvalidRequestingType = new(
+		"AWT162",
+		"Invalid requesting-type parameter",
+		"The parameter '{0}' of the factory for '{1}' is marked [RequestingType] but is not of type System.Type; a [RequestingType] parameter receives the requesting consumer's typeof(…), so it must be System.Type",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A factory has both a <c>[RequestingType]</c> parameter and an <c>[Arg]</c> runtime-argument
+	///     parameter. A requesting-type factory is built fresh per consumer with the consumer's
+	///     <c>typeof(…)</c> supplied at each site, so it is not reached through a <c>Func&lt;TArg…, T&gt;</c>;
+	///     the two cannot combine.
+	/// </summary>
+	public static readonly DiagnosticDescriptor RequestingTypeWithArg = new(
+		"AWT163",
+		"Requesting-type factory cannot take runtime arguments",
+		"The factory for '{0}' has both a [RequestingType] parameter and an [Arg] runtime-argument parameter; a requesting-type factory is built per consumer and cannot also be a parameterized (Func<TArg…, T>) factory, so remove one",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

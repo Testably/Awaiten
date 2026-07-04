@@ -1,3 +1,5 @@
+using System.Linq;
+
 namespace Awaiten.SourceGenerators.Tests;
 
 public class GeneralTests
@@ -1731,5 +1733,229 @@ public class GeneralTests
 
 		await That(source).Contains("ResolveChannelMap")
 			.Because("the awaited view hands back the keyed registered dictionary behind a task");
+	}
+
+
+	[Fact]
+	public async Task RequestingTypeFactory_EmitsTheConsumerTypeofPerSite()
+	{
+		GeneratorResult result = Generator.Run("""
+			#nullable enable
+			using System;
+			using Awaiten;
+
+			namespace MyCode;
+
+			public interface ILogger { }
+			public sealed class Logger : ILogger { public Logger(string c) { } }
+			public sealed class Alpha { public Alpha(ILogger logger) { } }
+			public sealed class Beta { public Beta(ILogger logger) { } }
+
+			[Container]
+			[Transient<ILogger>(Factory = nameof(CreateLogger))]
+			[Transient<Alpha>]
+			[Transient<Beta>]
+			public static partial class MyContainer
+			{
+				private static ILogger CreateLogger([RequestingType] Type? t) => new Logger(t?.FullName ?? "<root>");
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// The factory resolver takes the requesting type and is never cached by the service type; it forwards the
+		// resolver's own __requestingType parameter into the [RequestingType] slot.
+		await That(source).Contains("internal static global::MyCode.ILogger ResolveILogger(Scope __s, global::System.Type? __requestingType)");
+		await That(source).Contains("CreateLogger(__requestingType!)");
+		// Each construction site embeds its own consumer typeof(…) literal.
+		await That(source).Contains("new global::MyCode.Alpha(ResolveILogger(__s, typeof(global::MyCode.Alpha)))");
+		await That(source).Contains("new global::MyCode.Beta(ResolveILogger(__s, typeof(global::MyCode.Beta)))");
+		// A top-level resolve has no requesting consumer, so the by-type dispatch passes null.
+		await That(source).Contains("ResolveILogger(__s, null)");
+	}
+
+	[Fact]
+	public async Task RequestingTypeFactory_DeclaredSingleton_IsStillBuiltFreshPerCall()
+	{
+		GeneratorResult result = Generator.Run("""
+			#nullable enable
+			using System;
+			using Awaiten;
+
+			namespace MyCode;
+
+			public interface ILogger { }
+			public sealed class Logger : ILogger { public Logger(string c) { } }
+			public sealed class Alpha { public Alpha(ILogger logger) { } }
+
+			[Container]
+			[Singleton<ILogger>(Factory = nameof(CreateLogger))]
+			[Transient<Alpha>]
+			public static partial class MyContainer
+			{
+				private static ILogger CreateLogger([RequestingType] Type? t) => new Logger(t?.FullName ?? "<root>");
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// The declared lifetime is ignored for caching: even a Singleton-declared requesting-type factory gets a
+		// fresh Scope-hosted resolver taking the requesting type - never a cached singleton field or a Root resolver.
+		await That(source).Contains("internal static global::MyCode.ILogger ResolveILogger(Scope __s, global::System.Type? __requestingType)");
+		await That(source).DoesNotContain("Root.ResolveILogger")
+			.Because("a requesting-type factory is never root-owned, even when declared a singleton");
+		await That(source).Contains("new global::MyCode.Alpha(ResolveILogger(__s, typeof(global::MyCode.Alpha)))");
+	}
+
+	[Fact]
+	public async Task RequestingType_OnANonTypeParameter_ReportsAwt162()
+	{
+		GeneratorResult result = Generator.Run("""
+			using System;
+			using Awaiten;
+
+			namespace MyCode;
+
+			public interface ILogger { }
+			public sealed class Logger : ILogger { public Logger(string c) { } }
+
+			[Container]
+			[Transient<ILogger>(Factory = nameof(CreateLogger))]
+			public static partial class MyContainer
+			{
+				private static ILogger CreateLogger([RequestingType] string notAType) => new Logger(notAType);
+			}
+			""");
+
+		await That(result.Diagnostics.Any(d => d.Contains("AWT162"))).IsTrue();
+	}
+
+	[Fact]
+	public async Task RequestingType_WithAnArgParameter_ReportsAwt163()
+	{
+		GeneratorResult result = Generator.Run("""
+			using System;
+			using Awaiten;
+
+			namespace MyCode;
+
+			public interface ILogger { }
+			public sealed class Logger : ILogger { public Logger(string c, int n) { } }
+			public sealed class Alpha { public Alpha(Func<int, ILogger> f) { } }
+
+			[Container]
+			[Transient<ILogger>(Factory = nameof(CreateLogger))]
+			[Transient<Alpha>]
+			public static partial class MyContainer
+			{
+				private static ILogger CreateLogger([RequestingType] Type? t, [Arg] int n) => new Logger(t?.FullName ?? "<root>", n);
+			}
+			""");
+
+		await That(result.Diagnostics.Any(d => d.Contains("AWT163"))).IsTrue();
+	}
+
+	[Fact]
+	public async Task AsyncFactoryRequestingType_EmitsAnAwaitingResolverThatTakesTheRequestingType()
+	{
+		GeneratorResult result = Generator.Run("""
+			#nullable enable
+			using System;
+			using System.Threading.Tasks;
+			using Awaiten;
+
+			namespace MyCode;
+
+			public interface ILogger { }
+			public sealed class Logger : ILogger { public Logger(string c) { } }
+			public sealed class Alpha { public Alpha(ILogger logger) { } }
+
+			[Container]
+			[Transient<ILogger>(Factory = nameof(CreateLogger))]
+			[Transient<Alpha>]
+			public static partial class MyContainer
+			{
+				private static async Task<ILogger> CreateLogger([RequestingType] Type? t) { await Task.Yield(); return new Logger(t?.FullName ?? "<root>"); }
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// An async requesting-type factory gets a fresh async resolver taking the requesting type; its consumer
+		// awaits it with the consumer's own typeof(…), and the top-level ResolveAsync arm passes null.
+		await That(source).Contains("ResolveILoggerAsync(Scope __s, global::System.Type? __requestingType, global::System.Threading.CancellationToken cancellationToken)");
+		await That(source).Contains("await ResolveILoggerAsync(__s, typeof(global::MyCode.Alpha), cancellationToken).ConfigureAwait(false)");
+		await That(source).Contains("ResolveILoggerAsync(__s, null, __ct)");
+	}
+
+	[Fact]
+	public async Task AsyncTaintedRequestingType_ThroughAnAsyncDependency_Compiles()
+	{
+		GeneratorResult result = Generator.Run("""
+			#nullable enable
+			using System;
+			using System.Threading;
+			using System.Threading.Tasks;
+			using Awaiten;
+
+			namespace MyCode;
+
+			public interface ILogger { }
+			public sealed class Db : IAsyncInitializable { public Task InitializeAsync(CancellationToken ct) => Task.CompletedTask; }
+			public sealed class Logger : ILogger { public Logger(string c, Db db) { } }
+			public sealed class Alpha { public Alpha(ILogger logger) { } }
+
+			[Container]
+			[Singleton<Db>]
+			[Transient<ILogger>(Factory = nameof(CreateLogger))]
+			[Transient<Alpha>]
+			public static partial class MyContainer
+			{
+				private static ILogger CreateLogger([RequestingType] Type? t, Db db) => new Logger(t?.FullName ?? "<root>", db);
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("ResolveILoggerAsync(Scope __s, global::System.Type? __requestingType, global::System.Threading.CancellationToken cancellationToken)");
+		await That(source).Contains("await ResolveILoggerAsync(__s, typeof(global::MyCode.Alpha), cancellationToken).ConfigureAwait(false)");
+	}
+
+	[Fact]
+	public async Task AsyncRequestingType_UnderSyncResolveAfterInit_EmitsABlockingSyncResolverTakingTheRequestingType()
+	{
+		GeneratorResult result = Generator.Run("""
+			#nullable enable
+			using System;
+			using System.Threading.Tasks;
+			using Awaiten;
+
+			namespace MyCode;
+
+			public interface ILogger { }
+			public sealed class Logger : ILogger { public Logger(string c) { } }
+			public sealed class Alpha { public Alpha(ILogger logger) { } }
+
+			[Container(SyncResolveAfterInit = true)]
+			[Transient<ILogger>(Factory = nameof(CreateLogger))]
+			[Transient<Alpha>]
+			public static partial class MyContainer
+			{
+				private static async Task<ILogger> CreateLogger([RequestingType] Type? t) { await Task.Yield(); return new Logger(t?.FullName ?? "<root>"); }
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// Pragmatic mode blocks on the async resolver; the blocking sync resolver takes and forwards the requesting
+		// type. The async-tainted consumer (Alpha) still builds through the async resolver, passing its own typeof(…).
+		await That(source).Contains("internal static global::MyCode.ILogger ResolveILogger(Scope __s, global::System.Type? __requestingType)");
+		await That(source).Contains("ResolveILoggerAsync(__s, __requestingType, default).GetAwaiter().GetResult()");
+		await That(source).Contains("new global::MyCode.Alpha(await ResolveILoggerAsync(__s, typeof(global::MyCode.Alpha), cancellationToken).ConfigureAwait(false))");
 	}
 }

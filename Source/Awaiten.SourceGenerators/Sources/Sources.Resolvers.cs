@@ -71,6 +71,20 @@ internal static partial class Sources
 		string type = instance.ConstructedType;
 		string resolver = names.Resolver(index);
 
+		// A requesting-type factory embeds the consumer's typeof(…) per call, so it cannot be lowered to a shared
+		// cached resolver: its resolver takes the requesting type as a parameter and calls the factory on each
+		// invocation (the factory itself may cache, as the canonical logger factory does). It is built fresh per
+		// call - the declared lifetime is ignored for caching, exactly so the per-consumer requesting type
+		// survives - and a disposable output is still tracked for teardown on the resolving scope.
+		if (instance.IsRequestingTypeFactory)
+		{
+			string requestingConstruction = EmitConstruction(instance, context.Instances, names, context.ServiceToIndex);
+			string requestingSignature = $"global::System.Type? {RequestingTypeParameterName}";
+			string requestingSummary = $"Resolves {XmlTypeRef(type)} through its requesting-type factory, passing the requesting consumer's typeof(…) (a new instance per call).";
+			EmitFreshResolver(builder, depth, new FreshResolver("Scope", type, resolver, requestingSignature, requestingConstruction, DisposalOf(instance), requestingSummary), asyncDisposal);
+			return;
+		}
+
 		if (instance.IsParameterized)
 		{
 			string[] argTypes = instance.ArgTypes();
@@ -196,10 +210,10 @@ internal static partial class Sources
 	///     across chunk methods, staying under RyuJIT's optimization guards - the same cliff the synchronous dispatch
 	///     hit before it was chunked.
 	/// </summary>
-	private static List<(string Service, string AsyncResolver, bool RootOwned, string? RootWithheldMessage)> BuildAsyncArms(
+	private static List<(string Service, string AsyncResolver, bool RootOwned, bool RequestingType, string? RootWithheldMessage)> BuildAsyncArms(
 		InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool strict, bool syncResolveAfterInit)
 	{
-		List<(string Service, string AsyncResolver, bool RootOwned, string? RootWithheldMessage)> arms = new();
+		List<(string Service, string AsyncResolver, bool RootOwned, bool RequestingType, string? RootWithheldMessage)> arms = new();
 		for (int i = 0; i < instances.Length; i++)
 		{
 			// A parameterized service is built fresh from its runtime arguments, so it is reached only through
@@ -217,10 +231,13 @@ internal static partial class Sources
 			// the instance). Injection into a singleton stays allowed - that is bounded to one instance.
 			bool rootWithheld = IsWithheld(instances[i], strict);
 			bool rootOwned = IsRootOwned(instances[i]);
+			// A requesting-type factory's async resolver takes the requesting type; a top-level ResolveAsync has no
+			// requesting consumer, so its arm passes null (mirroring the synchronous by-type dispatch).
+			bool requestingType = instances[i].IsRequestingTypeFactory;
 			// Keyed registrations are reached only by [FromKey] injection, never by-type resolution.
 			foreach (string service in instances[i].Services.AsArray().Where(serviceKey => serviceKey.Key is null).Select(serviceKey => serviceKey.Service))
 			{
-				arms.Add((service, asyncResolver, rootOwned, rootWithheld ? AsyncRootWithheldMessage(service) : null));
+				arms.Add((service, asyncResolver, rootOwned, requestingType, rootWithheld ? AsyncRootWithheldMessage(service) : null));
 			}
 		}
 
@@ -240,7 +257,7 @@ internal static partial class Sources
 			bool rootWithheld = membership.Collections.TryGetValue(collectionKey, out List<int>? members)
 			                    && members.Any(member => IsFuncWithheld(instances, member, serviceToIndex, membership, strict));
 			// An async collection resolver is emitted on the base Scope (never root-owned), so it is called with __s.
-			arms.Add((shape, method, false, rootWithheld ? CollectionAsyncRootWithheldMessage(shape) : null));
+			arms.Add((shape, method, false, false, rootWithheld ? CollectionAsyncRootWithheldMessage(shape) : null));
 		}
 
 		return arms;
@@ -260,7 +277,7 @@ internal static partial class Sources
 		StringBuilder builder = members;
 		Separate(members);
 
-		List<(string Service, string AsyncResolver, bool RootOwned, string? RootWithheldMessage)> arms = BuildAsyncArms(instances, names, serviceToIndex, strict, syncResolveAfterInit);
+		List<(string Service, string AsyncResolver, bool RootOwned, bool RequestingType, string? RootWithheldMessage)> arms = BuildAsyncArms(instances, names, serviceToIndex, strict, syncResolveAfterInit);
 
 		AppendXmlSummary(builder, depth,
 			"Asynchronously resolves the service registered for <paramref name=\"serviceType\" />, awaiting any async initialization.");
@@ -314,7 +331,7 @@ internal static partial class Sources
 	///     table fields are routed into <paramref name="fields" /> (the fields region); the <c>__AsyncBucket</c>
 	///     slot type and <c>__BuildAsyncBuckets</c> into <paramref name="helpers" />.
 	/// </summary>
-	private static void EmitAsyncBucketDispatch(StringBuilder fields, StringBuilder helpers, int depth, List<(string Service, string AsyncResolver, bool RootOwned, string? RootWithheldMessage)> arms)
+	private static void EmitAsyncBucketDispatch(StringBuilder fields, StringBuilder helpers, int depth, List<(string Service, string AsyncResolver, bool RootOwned, bool RequestingType, string? RootWithheldMessage)> arms)
 	{
 		const string func = "global::System.Func<Scope, global::System.Threading.CancellationToken, global::System.Threading.Tasks.Task<object>>";
 		int bucketCount = BucketCount(arms.Count);
@@ -343,14 +360,26 @@ internal static partial class Sources
 		Indent(helpers, depth).AppendLine("{");
 		Indent(helpers, depth + 1).AppendLine("__AsyncBucket[] __entries =");
 		Indent(helpers, depth + 1).AppendLine("{");
-		foreach ((string service, string asyncResolver, bool rootOwned, string? rootWithheldMessage) in arms)
+		foreach ((string service, string asyncResolver, bool rootOwned, bool requestingType, string? rootWithheldMessage) in arms)
 		{
 			// A root-owned (singleton) async resolver lives on the Root and caches on the root, so it is called
 			// Root.ResolveXAsync(__s.__root, __ct); a scoped/transient/collection one lives on the Scope, so it is
-			// called ResolveXAsync(__s, __ct) over the resolving scope.
-			string call = rootOwned
-				? $"Root.{asyncResolver}(__s.__root, __ct)"
-				: $"{asyncResolver}(__s, __ct)";
+			// called ResolveXAsync(__s, __ct) over the resolving scope. A requesting-type factory (never root-owned)
+			// takes the requesting type; a top-level ResolveAsync has no consumer, so it passes null.
+			string call;
+			if (rootOwned)
+			{
+				call = $"Root.{asyncResolver}(__s.__root, __ct)";
+			}
+			else if (requestingType)
+			{
+				call = $"{asyncResolver}(__s, null, __ct)";
+			}
+			else
+			{
+				call = $"{asyncResolver}(__s, __ct)";
+			}
+
 			string resolve = rootWithheldMessage is not null
 				? $"static (__s, __ct) => __s is Root ? throw new global::System.InvalidOperationException({rootWithheldMessage}) : __AsObject({call})"
 				: $"static (__s, __ct) => __AsObject({call})";
@@ -392,6 +421,17 @@ internal static partial class Sources
 		// async-tainted member exactly like an async-tainted constructor argument. Null when there is none.
 		Action<int>? emitDeferred = DeferredEmitter(builder, instance, "created", context, asynchronous: true);
 
+		// A requesting-type factory that is async-tainted (an async factory, or one that awaits an async
+		// dependency) builds fresh per call with the consumer's typeof(…) embedded, so - like a parameterized
+		// service - it never caches: a fresh async resolver takes the requesting type alongside the token. AWT162
+		// forbids it from also being parameterized, so it has no runtime arguments to carry.
+		if (instance.IsRequestingTypeFactory)
+		{
+			string requestingSummary = $"Asynchronously resolves {XmlTypeRef(instance.ConstructedType)} through its requesting-type factory, passing the requesting consumer's typeof(…) (a new instance per call).";
+			EmitAsyncFreshResolver(builder, depth, index, context, $"global::System.Type? {RequestingTypeParameterName}, ", emitDeferred, requestingSummary);
+			return;
+		}
+
 		// A parameterized async service is built fresh per call from its runtime arguments AND awaits
 		// initialization, so it is reached only through Func<TArg…, Task<T>>. Its async resolver takes the
 		// arguments alongside the token, never caching (a parameterized service is always transient).
@@ -399,19 +439,18 @@ internal static partial class Sources
 		{
 			string[] argTypes = instance.ArgTypes();
 			string argSignature = string.Join("", argTypes.Select((t, i) => $"{t} a{i}, "));
-			string parameterizedConstruction = EmitConstruction(instance, context.Instances, names, context.ServiceToIndex, asynchronous: true);
-			EmitAsyncFreshResolver(builder, depth, index, context, parameterizedConstruction, argSignature, emitDeferred);
+			EmitAsyncFreshResolver(builder, depth, index, context, argSignature, emitDeferred);
 			return;
 		}
 
-		string construction = EmitConstruction(instance, context.Instances, names, context.ServiceToIndex, asynchronous: true);
 		if (instance.Lifetime == Lifetime.Transient)
 		{
-			EmitAsyncFreshResolver(builder, depth, index, context, construction, emitDeferred: emitDeferred);
+			EmitAsyncFreshResolver(builder, depth, index, context, emitDeferred: emitDeferred);
 			return;
 		}
 
 		// Scoped: a memoized Task on the scope guards construction-and-initialization.
+		string construction = EmitConstruction(instance, context.Instances, names, context.ServiceToIndex, asynchronous: true);
 		EmitAsyncCachingResolver(builder, depth, index, context, construction, "Scope", emitDeferred);
 	}
 
@@ -432,6 +471,14 @@ internal static partial class Sources
 		string[] argTypes = instance.ArgTypes();
 		string signature = string.Join("", argTypes.Select((t, i) => $", {t} a{i}"));
 		string forward = string.Join("", argTypes.Select((_, i) => "a" + i + ", "));
+
+		// A requesting-type factory's async resolver takes the requesting type in place of runtime arguments
+		// (AWT162 forbids both); the blocking sync resolver takes and forwards it identically.
+		if (instance.IsRequestingTypeFactory)
+		{
+			signature = $", global::System.Type? {RequestingTypeParameterName}";
+			forward = RequestingTypeParameterName + ", ";
+		}
 
 		AppendXmlSummary(builder, depth,
 			$"Resolves {XmlTypeRef(instance.ConstructedType)} by blocking on its async resolver (<c>SyncResolveAfterInit</c>).");
@@ -532,17 +579,18 @@ internal static partial class Sources
 	///     transient, or a parameterized service that additionally takes the runtime arguments named in
 	///     <paramref name="argSignature" />). A disposable instance is registered for teardown on the owner.
 	/// </summary>
-	private static void EmitAsyncFreshResolver(StringBuilder builder, int depth, int index, EmitContext context, string construction, string argSignature = "", Action<int>? emitDeferred = null)
+	private static void EmitAsyncFreshResolver(StringBuilder builder, int depth, int index, EmitContext context, string argSignature = "", Action<int>? emitDeferred = null, string? summaryOverride = null)
 	{
 		InstanceModel instance = context.Instances[index];
 		Names names = context.Names;
 		string type = instance.ConstructedType;
+		string construction = EmitConstruction(instance, context.Instances, names, context.ServiceToIndex, asynchronous: true);
 		const string task = "global::System.Threading.Tasks.Task";
 		const string ct = "global::System.Threading.CancellationToken cancellationToken";
 
-		string summary = argSignature.Length > 0
+		string summary = summaryOverride ?? (argSignature.Length > 0
 			? $"Asynchronously resolves {XmlTypeRef(type)} from its <c>[Arg]</c> arguments (a new instance per call)."
-			: $"Asynchronously resolves the transient {XmlTypeRef(type)} (a new instance per call).";
+			: $"Asynchronously resolves the transient {XmlTypeRef(type)} (a new instance per call).");
 		AppendXmlSummary(builder, depth, summary);
 		// A static async resolver over the resolving scope `__s`; fresh per call (transient or parameterized), so
 		// it never caches. Runtime [Arg] arguments, when present, precede the cancellation token.
@@ -690,7 +738,9 @@ internal static partial class Sources
 		List<int> targets = new();
 		for (int i = 0; i < instances.Length; i++)
 		{
-			if (instances[i].IsAsyncTainted && instances[i].Lifetime == lifetime && !instances[i].IsParameterized)
+			// A requesting-type factory is built fresh per consumer (never cached), so there is nothing to warm -
+			// and its async resolver takes the requesting type, which the argument-free warm-up call cannot supply.
+			if (instances[i].IsAsyncTainted && instances[i].Lifetime == lifetime && !instances[i].IsParameterized && !instances[i].IsRequestingTypeFactory)
 			{
 				targets.Add(i);
 			}

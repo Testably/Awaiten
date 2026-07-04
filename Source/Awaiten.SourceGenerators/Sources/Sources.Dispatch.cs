@@ -36,8 +36,10 @@ internal static partial class Sources
 		{
 			// A parameterized service has no typed fast path; a strictly-withheld disposable service is reached
 			// only through Owned<T>, so it gets none either. An async-tainted service in the strict default is
-			// reached only through ResolveAsync, so it gets no synchronous typed resolver either.
-			if (instances[i].IsParameterized || IsWithheld(instances[i], strict) || !EmitsSync(instances[i], syncResolveAfterInit))
+			// reached only through ResolveAsync, so it gets no synchronous typed resolver either. A requesting-type
+			// factory's resolver takes the requesting type, which the typed Resolve<T>() fast path has no place to
+			// supply, so it too gets none - it is reached through the Type-based dispatch, which passes null.
+			if (instances[i].IsParameterized || instances[i].IsRequestingTypeFactory || IsWithheld(instances[i], strict) || !EmitsSync(instances[i], syncResolveAfterInit))
 			{
 				continue;
 			}
@@ -760,6 +762,19 @@ internal static partial class Sources
 			}
 
 			string service = serviceKey.Service;
+
+			// A requesting-type factory's resolver takes the requesting type; a top-level resolve has no
+			// requesting consumer, so the by-type dispatch passes null (the factory decides what a null context
+			// means). It is built fresh per call, so it routes through a forwarder (its call is not a bare
+			// parameterless resolver), and has no Owned<T> form and no root-withholding - the factory itself may
+			// dedup, exactly as the canonical logger factory does.
+			if (instance.IsRequestingTypeFactory)
+			{
+				seen.Add(service);
+				entries.Add(new DispatchEntry(service, $"{resolver}(__s, null)"));
+				continue;
+			}
+
 			if (argTypes.Length > 0)
 			{
 				// The plain Func<TArg…, T> factory accumulates on its owner; under strict safety it is root-withheld
@@ -807,44 +822,81 @@ internal static partial class Sources
 				continue;
 			}
 
-			string service = serviceKey.Service;
-
-			// The plain Func<T> factory accumulates on its owner; under strict safety it is root-withheld
-			// (resolving it by type off the Root throws guidance, steering to Func<Owned<T>>), but it stays
-			// resolvable from a child scope, where the disposables it builds are bounded by the scope.
-			// The deferred call binds the target's static resolver over the forwarder's scope __s (Root-hosted for
-			// a singleton, Scope-hosted otherwise).
-			string call = ResolveCall(resolver, rootOwned);
-			string func = $"global::System.Func<{service}>";
-			if (seen.Add(func))
+			if (instance.IsRequestingTypeFactory)
 			{
-				entries.Add(funcWithheld
-					? new DispatchEntry(func, $"new global::System.Func<{service}>(() => {call})", FuncWithheldMessage(service))
-					: new DispatchEntry(func, $"new global::System.Func<{service}>(() => {call})"));
+				AddRequestingTypeRelationshipEntries(serviceKey.Service, resolver, entries, seen);
 			}
-
-			// Lazy<T> is memoized - it builds at most once and never accumulates - so it stays resolvable even
-			// for a withheld disposable service.
-			string lazy = $"global::System.Lazy<{service}>";
-			if (seen.Add(lazy))
+			else
 			{
-				entries.Add(new DispatchEntry(lazy, $"new global::System.Lazy<{service}>(() => {call})"));
+				AddStandardRelationshipEntries(serviceKey.Service, resolver, rootOwned, funcWithheld, entries, seen);
 			}
+		}
+	}
 
-			// Owned<T> hands the caller a disposal handle over a single resolution; Func<Owned<T>> is the
-			// leak-free factory that produces one per call. Both build into a throwaway child scope, and both
-			// stay resolvable under strict safety - they are the sanctioned way to reach a withheld service.
-			string owned = $"global::Awaiten.Owned<{service}>";
-			if (seen.Add(owned))
-			{
-				entries.Add(new DispatchEntry(owned, OwnedBare(service, resolver, rootOwned)));
-			}
+	/// <summary>
+	///     Adds the synthetic <c>Func&lt;T&gt;</c> and <c>Lazy&lt;T&gt;</c> entries over a requesting-type
+	///     factory's service type: each closes over the null top-level requesting type (the factory is
+	///     Scope-hosted and reached over <c>__s</c>). There is no <c>Owned&lt;T&gt;</c> form - the requesting
+	///     type has no owner scope and the factory decides its own disposal.
+	/// </summary>
+	private static void AddRequestingTypeRelationshipEntries(string service, string resolver, List<DispatchEntry> entries, HashSet<string> seen)
+	{
+		string requestingCall = $"{resolver}(__s, null)";
+		string requestingFunc = $"global::System.Func<{service}>";
+		if (seen.Add(requestingFunc))
+		{
+			entries.Add(new DispatchEntry(requestingFunc, $"new global::System.Func<{service}>(() => {requestingCall})"));
+		}
 
-			string ownedFunc = $"global::System.Func<{owned}>";
-			if (seen.Add(ownedFunc))
-			{
-				entries.Add(new DispatchEntry(ownedFunc, OwnedFuncFactory([], service, resolver, rootOwned)));
-			}
+		string requestingLazy = $"global::System.Lazy<{service}>";
+		if (seen.Add(requestingLazy))
+		{
+			entries.Add(new DispatchEntry(requestingLazy, $"new global::System.Lazy<{service}>(() => {requestingCall})"));
+		}
+	}
+
+	/// <summary>
+	///     Adds the synthetic <c>Func&lt;T&gt;</c>, <c>Lazy&lt;T&gt;</c>, <c>Owned&lt;T&gt;</c> and
+	///     <c>Func&lt;Owned&lt;T&gt;&gt;</c> entries over an ordinary service type, skipping any key an explicit
+	///     registration already claimed (tracked in <paramref name="seen" />).
+	/// </summary>
+	private static void AddStandardRelationshipEntries(string service, string resolver, bool rootOwned, bool funcWithheld, List<DispatchEntry> entries, HashSet<string> seen)
+	{
+		// The plain Func<T> factory accumulates on its owner; under strict safety it is root-withheld
+		// (resolving it by type off the Root throws guidance, steering to Func<Owned<T>>), but it stays
+		// resolvable from a child scope, where the disposables it builds are bounded by the scope.
+		// The deferred call binds the target's static resolver over the forwarder's scope __s (Root-hosted for
+		// a singleton, Scope-hosted otherwise).
+		string call = ResolveCall(resolver, rootOwned);
+		string func = $"global::System.Func<{service}>";
+		if (seen.Add(func))
+		{
+			entries.Add(funcWithheld
+				? new DispatchEntry(func, $"new global::System.Func<{service}>(() => {call})", FuncWithheldMessage(service))
+				: new DispatchEntry(func, $"new global::System.Func<{service}>(() => {call})"));
+		}
+
+		// Lazy<T> is memoized - it builds at most once and never accumulates - so it stays resolvable even
+		// for a withheld disposable service.
+		string lazy = $"global::System.Lazy<{service}>";
+		if (seen.Add(lazy))
+		{
+			entries.Add(new DispatchEntry(lazy, $"new global::System.Lazy<{service}>(() => {call})"));
+		}
+
+		// Owned<T> hands the caller a disposal handle over a single resolution; Func<Owned<T>> is the
+		// leak-free factory that produces one per call. Both build into a throwaway child scope, and both
+		// stay resolvable under strict safety - they are the sanctioned way to reach a withheld service.
+		string owned = $"global::Awaiten.Owned<{service}>";
+		if (seen.Add(owned))
+		{
+			entries.Add(new DispatchEntry(owned, OwnedBare(service, resolver, rootOwned)));
+		}
+
+		string ownedFunc = $"global::System.Func<{owned}>";
+		if (seen.Add(ownedFunc))
+		{
+			entries.Add(new DispatchEntry(ownedFunc, OwnedFuncFactory([], service, resolver, rootOwned)));
 		}
 	}
 

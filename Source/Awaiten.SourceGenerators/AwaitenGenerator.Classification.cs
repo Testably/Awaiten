@@ -88,6 +88,27 @@ partial class AwaitenGenerator
 		List<ParameterModel> parameters = new();
 		foreach (IParameterSymbol parameter in producer.Parameters)
 		{
+			// A [RequestingType] parameter of a Factory method is filled at each construction site with the
+			// consumer's typeof(…) rather than resolved from the graph, so it carries no edge. It is honored only
+			// on a factory producer; the parameter must be System.Type (AWT162). On a constructor it is left to
+			// fall through as an ordinary dependency (an unregistered System.Type surfaces as AWT101).
+			if (info.Production == ProductionKind.Factory && HasRequestingType(parameter.GetAttributes()))
+			{
+				LocationInfo? requestingTypeLocation = LocationInfo.From(parameter.Locations.FirstOrDefault());
+				if (!IsSystemType(parameter.Type))
+				{
+					context.Diagnostics.Add(new DiagnosticInfo(
+						Diagnostics.InvalidRequestingType,
+						requestingTypeLocation ?? info.Location,
+						new EquatableArray<string>([parameter.Name, DisplayInstance(info.ImplementationType),])));
+				}
+
+				parameters.Add(new ParameterModel(
+					parameter.Type.ToDisplayString(FullyQualified), DependencyKind.RequestingType,
+					Location: requestingTypeLocation));
+				continue;
+			}
+
 			ParameterModel parameterModel = ClassifyParameter(parameter, asyncFactory);
 
 			// AWT134: a [FromServices] parameter (External) cannot also be an [Arg] runtime argument - it
@@ -130,6 +151,19 @@ partial class AwaitenGenerator
 
 			parameters.Add(parameterModel);
 			ReportWhenUnregistered(parameterModel, info, context);
+		}
+
+		// AWT163: a requesting-type factory is built fresh per consumer with the consumer's typeof(…) supplied at
+		// each site, so it is not reached through a Func<TArg…, T> - it cannot also be a parameterized ([Arg])
+		// factory. The two together would emit a resolver that takes the requesting type but omits the runtime
+		// arguments (and vice versa at the call site), so reject the combination outright.
+		if (parameters.Any(p => p.Kind == DependencyKind.RequestingType)
+		    && parameters.Any(p => p.Kind == DependencyKind.Arg))
+		{
+			context.Diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.RequestingTypeWithArg,
+				info.Location,
+				new EquatableArray<string>([DisplayInstance(info.ImplementationType),])));
 		}
 
 		return parameters;
@@ -871,6 +905,17 @@ partial class AwaitenGenerator
 
 	private static bool HasArgAttribute(ImmutableArray<AttributeData> attributes)
 		=> HasAwaitenAttribute(attributes, "ArgAttribute");
+
+	// Whether a factory parameter is marked [RequestingType], so it receives the requesting consumer's
+	// typeof(…) rather than being resolved from the graph.
+	private static bool HasRequestingType(ImmutableArray<AttributeData> attributes)
+		=> HasAwaitenAttribute(attributes, "RequestingTypeAttribute");
+
+	// Whether a type is exactly global::System.Type (the required type of a [RequestingType] parameter; any
+	// other type is AWT162). Matched structurally so a user-defined System.Type in a nested namespace does not
+	// qualify.
+	private static bool IsSystemType(ITypeSymbol type)
+		=> type is { Name: "Type", ContainingNamespace: { Name: "System", ContainingNamespace.IsGlobalNamespace: true, }, };
 
 	private static bool HasInject(ImmutableArray<AttributeData> attributes)
 		=> HasAwaitenAttribute(attributes, "InjectAttribute");

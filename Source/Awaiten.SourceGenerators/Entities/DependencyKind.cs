@@ -32,6 +32,15 @@ internal enum DependencyKind
 	Owned,
 	CancellationToken,
 
+	/// <summary>
+	///     The <c>[RequestingType]</c> parameter of a requesting-type <c>Factory =</c> method: the generator
+	///     fills it at each construction site with the consumer's <c>typeof(…)</c> (the declaring type of the
+	///     member being satisfied), or <c>null</c> at a top-level resolve. Like <see cref="Arg" /> it is not
+	///     resolved from the graph, so it contributes no edge and never taints its consumer; the factory's
+	///     resolver takes it as a parameter rather than caching the produced service.
+	/// </summary>
+	RequestingType,
+
 	/// <summary>A <c>Task&lt;T&gt;</c> dependency: an awaitable that resolves (and initializes) <c>T</c>.</summary>
 	Task,
 
