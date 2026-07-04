@@ -1084,7 +1084,12 @@ public partial class AsyncInitializationTests
 	[Fact]
 	public async Task AsyncOwned_FuncOfTaskOfOwned_DisposeAsync_TearsDownAnAsyncDisposableService()
 	{
+		// The transient Valve only ever lives in the Owned<Valve> throwaway scope, drained through the handle's
+		// DisposeAsync below - the root never tracks one, so its synchronous using is safe here (AWT156 checks
+		// per container, not per tracked owner).
+#pragma warning disable AWT156
 		using AsyncDisposableOwnedContainer.Root container = new();
+#pragma warning restore AWT156
 
 		ValvePlant plant = container.Resolve<ValvePlant>();
 		Owned<Valve> handle = await plant.MakeAsync();
@@ -1119,8 +1124,11 @@ public partial class AsyncInitializationTests
 		await container.ResolveAsync<Valve>(Ct);
 
 		// The container now owns an IAsyncDisposable-only instance; a synchronous Dispose cannot tear it down.
+		// This is the very runtime throw AWT156 warns about, provoked deliberately.
+#pragma warning disable AWT156
 		await That(() => container.Dispose()).Throws<InvalidOperationException>()
 			.Because("an IAsyncDisposable-only service requires DisposeAsync; a synchronous Dispose throws rather than leak or block");
+#pragma warning restore AWT156
 	}
 
 	public sealed class Valve : IAsyncInitializable, IAsyncDisposable
@@ -1151,9 +1159,6 @@ public partial class AsyncInitializationTests
 		public Task<Owned<Valve>> MakeAsync() => _factory();
 	}
 
-	// These containers deliberately register the IAsyncDisposable-only Valve to exercise the async drain and
-	// the synchronous-Dispose throw, so the AWT156 heads-up is suppressed rather than heeded.
-#pragma warning disable AWT156
 	[Container]
 	[Transient<Valve>]
 	[Singleton<ValvePlant>]
@@ -1162,6 +1167,5 @@ public partial class AsyncInitializationTests
 	[Container]
 	[Singleton<Valve>]
 	public static partial class ValveSingletonContainer;
-#pragma warning restore AWT156
 #endif
 }

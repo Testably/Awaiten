@@ -9,7 +9,9 @@ namespace Awaiten.SourceGenerators.Tests.TestHelpers;
 
 /// <summary>
 ///     Runs a <see cref="DiagnosticAnalyzer" /> over an in-memory compilation and returns its
-///     diagnostics, for behavior testing of the Awaiten analyzers.
+///     diagnostics, for behavior testing of the Awaiten analyzers. The <see cref="AwaitenGenerator" />
+///     runs first - like in a real build, where analyzers see the post-generation compilation - so a
+///     usage-site diagnostic (AWT156) can resolve the generated <c>Root</c>/<c>Scope</c> types.
 /// </summary>
 public static class Analyzer
 {
@@ -27,7 +29,14 @@ public static class Analyzer
 			References.For(assemblyTypes),
 			new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 
-		CompilationWithAnalyzers withAnalyzers = compilation.WithAnalyzers(
+		GeneratorDriver driver = CSharpGeneratorDriver.Create(
+			[new AwaitenGenerator().AsSourceGenerator(),],
+			[],
+			parseOptions,
+			null);
+		driver.RunGeneratorsAndUpdateCompilation(compilation, out Compilation outputCompilation, out _);
+
+		CompilationWithAnalyzers withAnalyzers = outputCompilation.WithAnalyzers(
 			ImmutableArray.Create<DiagnosticAnalyzer>(new TAnalyzer()));
 		ImmutableArray<Diagnostic> diagnostics = await withAnalyzers.GetAnalyzerDiagnosticsAsync();
 
