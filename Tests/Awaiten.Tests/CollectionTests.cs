@@ -510,6 +510,26 @@ public partial class CollectionTests
 	}
 
 	[Fact]
+	public async Task AwaitedCollection_InjectedIntoAProperty_AwaitsMemberInitializationWithoutTaintingTheConsumer()
+	{
+		using AwaitedPropertyContainer.Root container = new();
+
+		// The awaited collection is filled through an [Inject] property - the object initializer run after
+		// construction - rather than a constructor parameter, yet behaves identically: the host resolves
+		// SYNCHRONOUSLY in the strict default because the awaited collection launders its members' taint, the
+		// await happening inside the produced task rather than at the host's construction.
+		AwaitedPropertyHost host = container.Resolve<AwaitedPropertyHost>();
+
+		IReadOnlyList<IPlugin> plugins = await host.Plugins!;
+
+		await That(plugins).HasCount(2);
+		await That(plugins[0].Name).IsEqualTo("alpha");
+		await That(plugins[1].Name).IsEqualTo("async");
+		await That(plugins.OfType<AsyncPlugin>().Single().Initialized).IsTrue()
+			.Because("awaiting the property-injected collection awaited the async member's initialization in registration order");
+	}
+
+	[Fact]
 	public async Task AwaitedCollection_AllSynchronousMembers_IsACompletedTask()
 	{
 		using SyncAwaitedStreamContainer.Root container = new();
@@ -751,6 +771,14 @@ public partial class CollectionTests
 		public AwaitedPluginHost(Task<IReadOnlyList<IPlugin>> plugins) => Plugins = plugins;
 
 		public Task<IReadOnlyList<IPlugin>> Plugins { get; }
+	}
+
+	// The awaited-collection counterpart to AwaitedPluginHost, filled through an opt-in [Inject] property
+	// instead of a constructor parameter.
+	public sealed class AwaitedPropertyHost
+	{
+		[Inject]
+		public Task<IReadOnlyList<IPlugin>>? Plugins { get; set; }
 	}
 
 	public sealed class AwaitedExtensionHost
@@ -1040,6 +1068,14 @@ public partial class CollectionTests
 	[Singleton<AsyncPlugin, IPlugin>]
 	[Transient<AwaitedPluginHost>]
 	public static partial class AwaitedStreamContainer;
+
+	// Same registrations as AwaitedStreamContainer, but the host receives the awaited collection through an
+	// [Inject] property rather than a constructor parameter.
+	[Container]
+	[Singleton<Alpha, IPlugin>]
+	[Singleton<AsyncPlugin, IPlugin>]
+	[Transient<AwaitedPropertyHost>]
+	public static partial class AwaitedPropertyContainer;
 
 	// Every member is synchronous, so the awaited collection is a completed Task.FromResult.
 	[Container]
