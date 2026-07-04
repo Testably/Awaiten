@@ -136,7 +136,11 @@ partial class AwaitenGenerator
 			RuntimeDisposalCheck: runtimeDisposalCheck,
 			IsAsyncDisposable: asyncDisposable,
 			EmitType: emitType,
-			InjectedMembers: new EquatableArray<MemberModel>(members.ToArray()));
+			InjectedMembers: new EquatableArray<MemberModel>(members.ToArray()),
+			// Eager build-time construction is the synchronous analog of InitializeAsync, which warms singletons,
+			// so it applies to a singleton only. The attribute exposes Eager on [Singleton<…>] alone, but the flag
+			// coalesces onto the implementation, so this guard keeps a coalesced non-singleton from carrying it.
+			Eager: info.Eager && info.Lifetime == Lifetime.Singleton);
 
 		static bool ImplementsInterface(ITypeSymbol type, INamedTypeSymbol @interface)
 		{

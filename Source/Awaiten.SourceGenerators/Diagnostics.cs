@@ -894,4 +894,19 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A <c>[Singleton&lt;T&gt;(Eager = true)]</c> singleton is async-tainted in the strict default: it is
+	///     async-initialized (or reaches one through its non-deferred dependencies), so it cannot be constructed
+	///     synchronously in the generated root's constructor without handing back an uninitialized instance.
+	///     <c>InitializeAsync</c> already warms the async singletons, or opt into
+	///     <c>[Container(SyncResolveAfterInit = true)]</c> to allow synchronous eager construction.
+	/// </summary>
+	public static readonly DiagnosticDescriptor EagerAsyncSingleton = new(
+		"AWT161",
+		"Eager async-initialized singleton",
+		"'{0}' is marked Eager but is async-initialized; it cannot be constructed synchronously at container build time - InitializeAsync already warms the async singletons, or opt into [Container(SyncResolveAfterInit = true)] to allow synchronous eager construction",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

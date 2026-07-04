@@ -30,6 +30,9 @@ namespace Awaiten.SourceGenerators.Entities;
 ///     <see cref="InjectedMembers" /> are the opt-in <c>[Inject]</c> properties filled through an object
 ///     initializer after construction (empty for a factory- or pre-built-instance registration, which is
 ///     produced whole by its source); each is a graph edge exactly like a constructor parameter.
+///     <see cref="Eager" /> marks a singleton constructed at container build time (in the generated root's
+///     constructor, in registration order) rather than lazily on first resolve - set only on a singleton,
+///     so a coalesced non-singleton never carries it.
 /// </summary>
 internal sealed record InstanceModel(
 	string ImplementationType,
@@ -47,7 +50,8 @@ internal sealed record InstanceModel(
 	bool RuntimeDisposalCheck = false,
 	bool IsAsyncDisposable = false,
 	string? EmitType = null,
-	EquatableArray<MemberModel> InjectedMembers = default)
+	EquatableArray<MemberModel> InjectedMembers = default,
+	bool Eager = false)
 {
 	/// <summary>
 	///     The concrete type to construct (<c>new …</c>) and to use for cache fields and resolver return

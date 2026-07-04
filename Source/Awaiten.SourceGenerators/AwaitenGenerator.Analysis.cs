@@ -851,6 +851,33 @@ partial class AwaitenGenerator
 		}
 	}
 
+	/// <summary>
+	///     Reports <see cref="Diagnostics.EagerAsyncSingleton">AWT161</see> for an <c>Eager</c> singleton that is
+	///     async-tainted: it is async-initialized (or reaches one through its non-deferred dependencies), so it
+	///     has no synchronous construction path and cannot be built in the generated root's synchronous
+	///     constructor without handing back an uninitialized instance. Called only in the strict default -
+	///     <c>InitializeAsync</c> warms the async singletons instead; the pragmatic <c>SyncResolveAfterInit</c>
+	///     mode emits a blocking synchronous resolver, so eager construction is allowed and this is not reported.
+	///     Missing-dependency, cycle and captive faults through an eager singleton are already covered by
+	///     AWT101/102/105.
+	/// </summary>
+	private static void DetectEagerAsyncSingletons(
+		List<InstanceModel> instances,
+		List<LocationInfo?> instanceLocations,
+		List<DiagnosticInfo> diagnostics)
+	{
+		for (int i = 0; i < instances.Count; i++)
+		{
+			if (instances[i].Eager && instances[i].IsAsyncTainted)
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.EagerAsyncSingleton,
+					instanceLocations[i],
+					new EquatableArray<string>([DisplayInstance(instances[i].ImplementationType),])));
+			}
+		}
+	}
+
 	private static void DetectCycles(
 		List<InstanceModel> instances,
 		Dictionary<int, List<int>> dependencies,

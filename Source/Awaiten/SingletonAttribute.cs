@@ -97,6 +97,15 @@ public sealed class SingletonAttribute<TImplementation> : Attribute
 	///     existing one.
 	/// </summary>
 	public bool TryAdd { get; set; }
+
+	/// <summary>
+	///     Constructs the singleton eagerly at container build time (in the generated container root's
+	///     constructor, after its fields are initialized) instead of lazily on first resolve - the
+	///     synchronous analog of <c>InitializeAsync</c>, which warms only the async-initialized
+	///     singletons. Construction follows registration order, and a disposable eager singleton is
+	///     tracked and disposed with the container exactly like a lazily-resolved one.
+	/// </summary>
+	public bool Eager { get; set; }
 }
 
 /// <summary>
@@ -145,6 +154,15 @@ public sealed class SingletonAttribute<TImplementation, TService> : Attribute
 	///     existing one.
 	/// </summary>
 	public bool TryAdd { get; set; }
+
+	/// <summary>
+	///     Constructs the singleton eagerly at container build time (in the generated container root's
+	///     constructor, after its fields are initialized) instead of lazily on first resolve - the
+	///     synchronous analog of <c>InitializeAsync</c>, which warms only the async-initialized
+	///     singletons. Construction follows registration order, and a disposable eager singleton is
+	///     tracked and disposed with the container exactly like a lazily-resolved one.
+	/// </summary>
+	public bool Eager { get; set; }
 }
 
 #pragma warning restore S2326

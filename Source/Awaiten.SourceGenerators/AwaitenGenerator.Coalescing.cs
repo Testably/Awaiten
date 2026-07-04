@@ -209,6 +209,7 @@ partial class AwaitenGenerator
 				{
 					IsScan = reg.IsScan,
 					Origin = reg.Origin,
+					Eager = reg.Eager,
 				};
 				implInfos.Add(reg.ImplementationType, info);
 				implOrder.Add(info);
