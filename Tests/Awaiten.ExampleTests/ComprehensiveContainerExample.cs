@@ -1,0 +1,647 @@
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+
+namespace Awaiten.ExampleTests;
+
+/// <summary>
+///     A deliberately exhaustive composition root, themed as a <b>coffee shop</b> so each registration's
+///     role reads from its name: the shop has one <see cref="Menu" /> (singleton); each customer gets one
+///     <see cref="Order" /> (scoped); every <see cref="Receipt" /> is printed fresh (transient); the
+///     <see cref="EspressoMachine" /> must warm up before use (async initialization); a <see cref="Cup" /> is
+///     taken, used and tossed (a disposable reached through <c>Owned&lt;T&gt;</c>); milk comes in named
+///     varieties (keyed); a drink is dressed up by wrapping it (decorators); a full inspection combines the
+///     individual checks (composite); the card reader is owned by the payment provider, not the shop
+///     (external <c>[FromServices]</c>); and the roastery's catalogue is imported (a module). One
+///     <see cref="CoffeeShop" /> container registers every kind, so the source generator emits — and these
+///     tests exercise — the full breadth of its resolution, scoping and disposal code paths. Types in the
+///     parent <c>Awaiten</c> namespace (the attributes, <c>Owned&lt;T&gt;</c>, <c>IAsyncInitializable</c>, …)
+///     are in scope without an explicit <c>using</c>.
+/// </summary>
+/// <remarks>
+///     The shop runs under the strict-safety default: an async-initialized service is reached only through
+///     <c>ResolveAsync</c>, and a build-on-demand disposable is withheld from by-type resolution and reached
+///     through <c>Owned&lt;T&gt;</c>. The direct <c>Func&lt;disposable&gt;</c> and pragmatic
+///     synchronous-after-init paths belong to other container <em>modes</em> and are covered by the small
+///     <see cref="SelfServeKiosk" /> and <see cref="DriveThru" /> variants below. The
+///     <see cref="DishStation" /> (an <c>IAsyncDisposable</c>-only service) is compiled only on modern target
+///     frameworks: on <c>net48</c> the generated container is not <c>IAsyncDisposable</c>, and synchronously
+///     disposing an async-only service throws by design.
+/// </remarks>
+public partial class ComprehensiveContainerExample
+{
+	// ---- Plain lifetimes -------------------------------------------------------------------------------
+
+	// One menu for the whole shop.
+	public interface IMenu
+	{
+		string Special { get; }
+	}
+
+	public sealed class Menu : IMenu
+	{
+		public string Special => "pumpkin-spice";
+	}
+
+	// One order per customer (scope).
+	public interface IOrder;
+
+	public sealed class Order : IOrder;
+
+	// A fresh receipt every time.
+	public sealed class Receipt;
+
+	// ---- Open generic ----------------------------------------------------------------------------------
+
+	// The pantry shelves any kind of ingredient, one shelf per ingredient type.
+	public interface IPantry<T>;
+
+	public sealed class Pantry<T> : IPantry<T>;
+
+	// A closed consumer seeds the open-generic expansion for the int shelf: the generator only emits a closed
+	// Pantry<int> for the type arguments it can see at compile time, so this makes IPantry<int> resolvable.
+	public sealed class BeanBin
+	{
+		public BeanBin(IPantry<int> pantry) => Pantry = pantry;
+
+		public IPantry<int> Pantry { get; }
+	}
+
+	// ---- Factory and pre-built instance ----------------------------------------------------------------
+
+	// Blended by a house recipe (a factory method) rather than a plain constructor.
+	public sealed class HouseBlend
+	{
+		public string Roast { get; init; } = "";
+	}
+
+	// A cash drawer the shop is handed and hands back, but never builds or disposes.
+	public sealed class CashDrawer;
+
+	// ---- Asynchronous initialization (async-tainted) ---------------------------------------------------
+
+	// The espresso machine must warm up before it can pour.
+	public sealed class EspressoMachine : IAsyncInitializable
+	{
+		public bool Warm { get; private set; }
+
+		public Task InitializeAsync(CancellationToken cancellationToken)
+		{
+			Warm = true;
+			return Task.CompletedTask;
+		}
+	}
+
+	// The grinder calibrates itself per order (scoped, async).
+	public sealed class Grinder : IAsyncInitializable
+	{
+		public bool Calibrated { get; private set; }
+
+		public Task InitializeAsync(CancellationToken cancellationToken)
+		{
+			Calibrated = true;
+			return Task.CompletedTask;
+		}
+	}
+
+	// A fresh jug of milk is steamed to temperature each time (transient, async).
+	public sealed class MilkSteamer : IAsyncInitializable
+	{
+		public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+	}
+
+	// ---- Disposable and async-disposable (scope-bounded) -----------------------------------------------
+
+	// A tray is cleared away when the order (scope) ends.
+	public interface ITray;
+
+	public sealed class Tray : ITray, IDisposable
+	{
+		public bool Disposed { get; private set; }
+
+		public void Dispose() => Disposed = true;
+	}
+
+#if NET8_0_OR_GREATER
+	// The dish station needs an asynchronous rinse-down at close. An IAsyncDisposable-only service requires a
+	// container that can DisposeAsync, so it is registered (and covered) only on frameworks whose generated
+	// container implements IAsyncDisposable.
+	public sealed class DishStation : IAsyncDisposable
+	{
+		public bool Disposed { get; private set; }
+
+		public ValueTask DisposeAsync()
+		{
+			Disposed = true;
+			return default;
+		}
+	}
+#endif
+
+	// A cup is a build-on-demand disposable: strict safety withholds it from by-type resolution, so it is
+	// taken through Owned<Cup> / Func<Owned<Cup>>, which bound its disposal to a throwaway scope.
+	public sealed class Cup : IDisposable
+	{
+		public bool Disposed { get; private set; }
+
+		public void Dispose() => Disposed = true;
+	}
+
+	// ---- Keyed registrations + [FromKey] ---------------------------------------------------------------
+
+	// Milk comes in named varieties; a drink maker asks for one by name.
+	public interface IMilk
+	{
+		string Kind { get; }
+	}
+
+	public sealed class OatMilk : IMilk
+	{
+		public string Kind => "oat";
+	}
+
+	public sealed class WholeMilk : IMilk
+	{
+		public string Kind => "whole";
+	}
+
+	public sealed class LatteMaker
+	{
+		public LatteMaker([FromKey("oat")] IMilk milk) => Milk = milk;
+
+		public IMilk Milk { get; }
+	}
+
+	// ---- Decorator chain ------------------------------------------------------------------------------
+
+	// A drink is dressed up by wrapping the one below it: syrup(milk(espresso)).
+	public interface IDrink
+	{
+		string Describe();
+	}
+
+	public sealed class Espresso : IDrink
+	{
+		public string Describe() => "espresso";
+	}
+
+	public sealed class SteamedMilk : IDrink
+	{
+		private readonly IDrink _inner;
+
+		public SteamedMilk(IDrink inner) => _inner = inner;
+
+		public string Describe() => $"milk({_inner.Describe()})";
+	}
+
+	public sealed class VanillaSyrup : IDrink
+	{
+		private readonly IDrink _inner;
+
+		public VanillaSyrup(IDrink inner) => _inner = inner;
+
+		public string Describe() => $"vanilla({_inner.Describe()})";
+	}
+
+	// ---- Composite ------------------------------------------------------------------------------------
+
+	// A full inspection combines every individual quality check, never itself.
+	public interface IQualityCheck
+	{
+		bool Passes();
+	}
+
+	public sealed class FreshnessCheck : IQualityCheck
+	{
+		public bool Passes() => true;
+	}
+
+	public sealed class TemperatureCheck : IQualityCheck
+	{
+		public bool Passes() => true;
+	}
+
+	public sealed class FullInspection : IQualityCheck
+	{
+		private readonly IQualityCheck[] _checks;
+
+		public FullInspection(IQualityCheck[] checks) => _checks = checks;
+
+		public int Count => _checks.Length;
+
+		public bool Passes() => _checks.All(check => check.Passes());
+	}
+
+	// ---- Parameterized ([Arg]) ------------------------------------------------------------------------
+
+	// A coffee is poured to a size chosen at order time; the menu is resolved from the graph.
+	public sealed class Coffee
+	{
+		public Coffee([Arg] int ounces, IMenu menu)
+		{
+			Ounces = ounces;
+			Menu = menu;
+		}
+
+		public int Ounces { get; }
+
+		public IMenu Menu { get; }
+	}
+
+	// ---- Property injection (plain and deferred cycle) -------------------------------------------------
+
+	// The chalkboard is filled in from the menu after it is hung.
+	public sealed class Chalkboard
+	{
+		[Inject]
+		public IMenu Menu { get; set; } = null!;
+	}
+
+	// Front and back of house each reference the other; the mutual cycle is broken by building and caching
+	// both first, then wiring the deferred edges.
+	public sealed class FrontOfHouse
+	{
+		[Inject(Deferred = true)]
+		public BackOfHouse Peer { get; set; } = null!;
+	}
+
+	public sealed class BackOfHouse
+	{
+		[Inject(Deferred = true)]
+		public FrontOfHouse Peer { get; set; } = null!;
+	}
+
+	// ---- External dependency ([FromServices]) ----------------------------------------------------------
+
+	// The card reader is owned by the payment provider (the host), not the shop.
+	public interface IPaymentGateway
+	{
+		string Provider { get; }
+	}
+
+	public sealed class Register
+	{
+		public Register([FromServices] IPaymentGateway gateway) => Gateway = gateway;
+
+		public IPaymentGateway Gateway { get; }
+	}
+
+	// ---- Relationship / collection fan-in --------------------------------------------------------------
+
+	// The counter pulls together the whole relationship surface at once: every collection shape, a
+	// Func<T> / Lazy<T> deferred factory, an Owned<T> handle and its factory, and a parameterized factory.
+	public sealed class Counter
+	{
+		public Counter(
+			IEnumerable<IQualityCheck> allChecks,
+			IReadOnlyList<IQualityCheck> checkList,
+			IQualityCheck[] checkArray,
+			Func<Receipt> receiptPrinter,
+			Lazy<IMenu> lazyMenu,
+			Owned<Cup> cup,
+			Func<Owned<Cup>> cupDispenser,
+			Func<int, Coffee> coffeePourer)
+		{
+			AllChecks = allChecks;
+			CheckList = checkList;
+			CheckArray = checkArray;
+			ReceiptPrinter = receiptPrinter;
+			LazyMenu = lazyMenu;
+			Cup = cup;
+			CupDispenser = cupDispenser;
+			CoffeePourer = coffeePourer;
+		}
+
+		public IEnumerable<IQualityCheck> AllChecks { get; }
+
+		public IReadOnlyList<IQualityCheck> CheckList { get; }
+
+		public IQualityCheck[] CheckArray { get; }
+
+		public Func<Receipt> ReceiptPrinter { get; }
+
+		public Lazy<IMenu> LazyMenu { get; }
+
+		public Owned<Cup> Cup { get; }
+
+		public Func<Owned<Cup>> CupDispenser { get; }
+
+		public Func<int, Coffee> CoffeePourer { get; }
+	}
+
+	// The opening routine holds a Func<Task<EspressoMachine>>: the deferred async factory keeps this service
+	// synchronously resolvable (the task is produced, not awaited, at construction) while covering the
+	// async-factory relationship path.
+	public sealed class OpeningChecklist
+	{
+		public OpeningChecklist(Func<Task<EspressoMachine>> machineWarmer) => MachineWarmer = machineWarmer;
+
+		public Func<Task<EspressoMachine>> MachineWarmer { get; }
+	}
+
+	// ---- Module (imported roastery catalogue) ----------------------------------------------------------
+
+	public interface IBeanSupplier;
+
+	public sealed class BeanSupplier : IBeanSupplier;
+
+	public sealed class DeliveryNote;
+
+	[Module]
+	[Singleton<BeanSupplier, IBeanSupplier>(Default = true)]
+	[Transient<DeliveryNote>]
+	public static class RoasteryModule;
+
+	// ---- The comprehensive container -------------------------------------------------------------------
+
+	[Container]
+	[Import(typeof(RoasteryModule))]
+	[Singleton<Menu, IMenu>]
+	[Scoped<Order, IOrder>]
+	[Transient<Receipt>]
+	[Singleton(typeof(Pantry<>), typeof(IPantry<>))]
+	[Transient<BeanBin>]
+	[Singleton<HouseBlend>(Factory = nameof(BlendHouseBlend))]
+	[Singleton<CashDrawer>(Instance = nameof(CashDrawerInstance))]
+	[Singleton<EspressoMachine>]
+	[Scoped<Grinder>]
+	[Transient<MilkSteamer>]
+	[Scoped<Tray, ITray>]
+#if NET8_0_OR_GREATER
+	[Scoped<DishStation>]
+#endif
+	[Transient<Cup>]
+	[Singleton<OatMilk, IMilk>(Key = "oat")]
+	[Singleton<WholeMilk, IMilk>(Key = "whole")]
+	[Singleton<LatteMaker>]
+	[Singleton<Espresso, IDrink>]
+	[Decorate<SteamedMilk, IDrink>(Order = 1)]
+	[Decorate<VanillaSyrup, IDrink>(Order = 2)]
+	[Singleton<FreshnessCheck, IQualityCheck>]
+	[Singleton<TemperatureCheck, IQualityCheck>]
+	[Composite<FullInspection, IQualityCheck>]
+	[Transient<Coffee>]
+	[Singleton<Chalkboard>]
+	[Singleton<FrontOfHouse>]
+	[Singleton<BackOfHouse>]
+	[Singleton<Register>]
+	[Transient<Counter>]
+	[Singleton<OpeningChecklist>]
+	public static partial class CoffeeShop
+	{
+		// A pre-built instance the shop hands back but never constructs or disposes.
+		internal static readonly CashDrawer CashDrawerInstance = new();
+
+		// A static factory method; its parameters (none here) would resolve from the graph.
+		private static HouseBlend BlendHouseBlend() => new() { Roast = "house" };
+	}
+
+	// ---- Alternate-mode variants (mutually exclusive with the strict default) --------------------------
+
+	// LifetimeSafety.Loose: a build-on-demand disposable is resolvable by type and a Func<disposable> is
+	// allowed, exercising the non-withheld dispatch and Func-over-disposable code paths (a self-serve kiosk
+	// where the customer, not the shop, manages the cup's lifetime).
+	[Container(LifetimeSafety = LifetimeSafety.Loose)]
+	[Transient<Cup>]
+	[Singleton<Menu, IMenu>]
+	public static partial class SelfServeKiosk;
+
+	// SyncResolveAfterInit: an async-initialized service also gets a delegating synchronous resolver that
+	// blocks on the async path once warmed, exercising the pragmatic sync-after-init emission (a drive-thru
+	// that serves synchronously once the machine is hot).
+	[Container(SyncResolveAfterInit = true)]
+	[Singleton<EspressoMachine>]
+	public static partial class DriveThru;
+
+	private sealed class StripeGateway : IPaymentGateway
+	{
+		public string Provider => "stripe";
+	}
+
+	// ---- Tests ----------------------------------------------------------------------------------------
+
+	[Fact]
+	public async Task Singleton_Scoped_Transient_ResolveAndShareCorrectly()
+	{
+		using CoffeeShop.Root shop = new();
+		using IAwaitenScope order = shop.CreateScope();
+
+		await That(shop.Resolve<IMenu>()).IsSameAs(shop.Resolve<IMenu>())
+			.Because("a singleton is one instance per container");
+		await That(order.Resolve<IOrder>()).IsNotSameAs(shop.CreateScope().Resolve<IOrder>())
+			.Because("a scoped service is one instance per scope");
+		await That(shop.Resolve<Receipt>()).IsNotSameAs(shop.Resolve<Receipt>())
+			.Because("a transient is a fresh instance per resolve");
+	}
+
+	[Fact]
+	public async Task OpenGeneric_Factory_And_Instance_Resolve()
+	{
+		using CoffeeShop.Root shop = new();
+
+		await That(shop.Resolve<IPantry<int>>()).IsNotNull()
+			.Because("a closed generic is resolvable once a consumer has seeded its expansion");
+		await That(shop.Resolve<BeanBin>().Pantry).IsNotNull();
+		await That(shop.Resolve<HouseBlend>().Roast).IsEqualTo("house");
+		await That(shop.Resolve<CashDrawer>()).IsSameAs(CoffeeShop.CashDrawerInstance)
+			.Because("a pre-built instance registration hands back the container member");
+	}
+
+	[Fact]
+	public async Task AsyncInitialized_Services_ResolveThroughResolveAsync()
+	{
+		CancellationToken ct = TestContext.Current.CancellationToken;
+		using CoffeeShop.Root shop = new();
+		await shop.InitializeAsync(ct);
+
+		EspressoMachine machine = await shop.ResolveAsync<EspressoMachine>(ct);
+		await That(machine.Warm).IsTrue()
+			.Because("ResolveAsync constructs and initializes the async-tainted singleton");
+
+		using IAwaitenScope order = await shop.CreateScopeAsync(ct);
+		Grinder grinder = await order.ResolveAsync<Grinder>(ct);
+		await That(grinder.Calibrated).IsTrue();
+
+		MilkSteamer first = await shop.ResolveAsync<MilkSteamer>(ct);
+		MilkSteamer second = await shop.ResolveAsync<MilkSteamer>(ct);
+		await That(first).IsNotSameAs(second)
+			.Because("an async transient is a fresh, initialized instance per resolve");
+	}
+
+	[Fact]
+	public async Task ScopedDisposable_IsTornDownWithItsScope()
+	{
+		using CoffeeShop.Root shop = new();
+
+		Tray tray;
+		using (IAwaitenScope order = shop.CreateScope())
+		{
+			tray = (Tray)order.Resolve<ITray>();
+			await That(tray.Disposed).IsFalse();
+		}
+
+		await That(tray.Disposed).IsTrue()
+			.Because("a scoped IDisposable is disposed with its scope");
+	}
+
+#if NET8_0_OR_GREATER
+	[Fact]
+	public async Task ScopedAsyncDisposable_IsTornDownAsynchronouslyWithItsScope()
+	{
+		CancellationToken ct = TestContext.Current.CancellationToken;
+		await using CoffeeShop.Root shop = new();
+
+		IAwaitenScope order = await shop.CreateScopeAsync(ct);
+		DishStation station = order.Resolve<DishStation>();
+		await That(station.Disposed).IsFalse();
+
+		await ((IAsyncDisposable)order).DisposeAsync();
+		await That(station.Disposed).IsTrue()
+			.Because("a scoped IAsyncDisposable is disposed asynchronously with its scope");
+	}
+#endif
+
+	[Fact]
+	public async Task Keyed_Decorated_And_Composite_Resolve()
+	{
+		using CoffeeShop.Root shop = new();
+
+		await That(shop.Resolve<LatteMaker>().Milk.Kind).IsEqualTo("oat")
+			.Because("[FromKey] selects the keyed registration");
+		await That(shop.Resolve<IDrink>().Describe()).IsEqualTo("vanilla(milk(espresso))")
+			.Because("decorators chain by Order, the last declared being outermost");
+
+		IQualityCheck inspection = shop.Resolve<IQualityCheck>();
+		await That(inspection).Is<FullInspection>()
+			.Because("the composite is the single public winner for the service");
+		await That(((FullInspection)inspection).Count).IsEqualTo(2)
+			.Because("the composite fans out to the other two members, never itself");
+	}
+
+	[Fact]
+	public async Task Relationships_Collections_And_Parameterized_Resolve()
+	{
+		using CoffeeShop.Root shop = new();
+
+		Counter counter = shop.Resolve<Counter>();
+
+		await That(counter.CheckArray.Length).IsEqualTo(2)
+			.Because("the collection excludes the composite and holds the bare members");
+		await That(counter.CheckList.Count).IsEqualTo(2);
+		await That(counter.AllChecks.Count()).IsEqualTo(2);
+		await That(counter.ReceiptPrinter()).IsNotSameAs(counter.ReceiptPrinter())
+			.Because("a Func<T> over a transient builds a fresh instance per call");
+		await That(counter.LazyMenu.Value).IsSameAs(shop.Resolve<IMenu>())
+			.Because("a Lazy<T> over a singleton yields the shared instance");
+		await That(counter.CoffeePourer(12).Ounces).IsEqualTo(12)
+			.Because("a Func<TArg, T> forwards the runtime [Arg] argument");
+
+		using (Owned<Cup> cup = counter.CupDispenser())
+		{
+			await That(cup.Value.Disposed).IsFalse();
+		}
+
+		await That(counter.Cup.Value).IsNotNull();
+	}
+
+	[Fact]
+	public async Task Owned_DisposesOnlyItsOwnScope()
+	{
+		using CoffeeShop.Root shop = new();
+
+		Owned<Cup> owned = shop.Resolve<Counter>().Cup;
+		Cup cup = owned.Value;
+		await That(cup.Disposed).IsFalse();
+
+		owned.Dispose();
+		await That(cup.Disposed).IsTrue()
+			.Because("disposing the Owned handle disposes the throwaway scope backing it");
+	}
+
+	[Fact]
+	public async Task PropertyInjection_Plain_And_DeferredCycle_AreWired()
+	{
+		using CoffeeShop.Root shop = new();
+
+		await That(shop.Resolve<Chalkboard>().Menu).IsNotNull()
+			.Because("a plain [Inject] property is filled from the graph");
+
+		FrontOfHouse front = shop.Resolve<FrontOfHouse>();
+		await That(front.Peer).IsNotNull();
+		await That(front.Peer.Peer).IsSameAs(front)
+			.Because("the deferred mutual cycle is wired back to the same cached singletons");
+	}
+
+	[Fact]
+	public async Task AsyncFactoryRelationship_ProducesAnInitializedInstance()
+	{
+		using CoffeeShop.Root shop = new();
+
+		OpeningChecklist checklist = shop.Resolve<OpeningChecklist>();
+		EspressoMachine machine = await checklist.MachineWarmer();
+
+		await That(machine.Warm).IsTrue()
+			.Because("the Func<Task<EspressoMachine>> factory produces an initialized instance on demand");
+	}
+
+	[Fact]
+	public async Task ExternalDependency_ResolvesThroughTheWiredResolver()
+	{
+		using CoffeeShop.Root shop = new();
+		((IExternalResolverHost)shop).ExternalResolver = new GatewayResolver();
+
+		await That(shop.Resolve<Register>().Gateway.Provider).IsEqualTo("stripe")
+			.Because("a [FromServices] parameter is satisfied by the wired external resolver");
+	}
+
+	[Fact]
+	public async Task ImportedModule_ContributesItsRegistrations()
+	{
+		using CoffeeShop.Root shop = new();
+
+		await That(shop.Resolve<IBeanSupplier>()).Is<BeanSupplier>()
+			.Because("the imported module's overridable default fills the gap");
+		await That(shop.Resolve<DeliveryNote>()).IsNotSameAs(shop.Resolve<DeliveryNote>())
+			.Because("the imported transient registration is resolvable and fresh per call");
+	}
+
+	[Fact]
+	public async Task SelfServeKiosk_ResolvesADisposableByTypeAndThroughAFunc()
+	{
+		using SelfServeKiosk.Root kiosk = new();
+
+		await That(kiosk.Resolve<Cup>()).IsNotNull()
+			.Because("loose safety allows by-type resolution of a build-on-demand disposable");
+
+		// Invoke the resolved factory rather than asserting on the delegate itself (a Func handed to That is
+		// treated as a delegate expectation): loose safety allows a Func over a disposable.
+		Func<Cup> dispenser = kiosk.Resolve<Func<Cup>>();
+		await That(dispenser()).IsNotNull();
+	}
+
+	[Fact]
+	public async Task DriveThru_ResolvesAnAsyncServiceSynchronouslyAfterWarmUp()
+	{
+		CancellationToken ct = TestContext.Current.CancellationToken;
+		using DriveThru.Root driveThru = new();
+		await driveThru.InitializeAsync(ct);
+
+		await That(driveThru.Resolve<EspressoMachine>().Warm).IsTrue()
+			.Because("SyncResolveAfterInit serves the warmed async singleton synchronously");
+	}
+
+	private sealed class GatewayResolver : IExternalResolver
+	{
+		public bool TryResolve(Type serviceType, object? serviceKey, out object? instance)
+		{
+			if (serviceType == typeof(IPaymentGateway))
+			{
+				instance = new StripeGateway();
+				return true;
+			}
+
+			instance = null;
+			return false;
+		}
+	}
+}
