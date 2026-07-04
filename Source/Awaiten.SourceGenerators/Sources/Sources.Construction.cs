@@ -65,17 +65,18 @@ internal static partial class Sources
 	}
 
 	/// <summary>
-	///     A <c>new Dictionary&lt;string, TService&gt; { ["a"] = ResolveA(), ["b"] = ResolveB(), … }</c>
-	///     expression: every keyed registration of the service type, materialized eagerly and keyed by its
-	///     <c>[Key]</c>, in registration order (each member keeping its own lifetime). A <c>Dictionary&lt;,&gt;</c>
-	///     satisfies the requested <c>IReadOnlyDictionary&lt;string, TService&gt;</c>; an empty membership yields an
-	///     empty dictionary. The member resolvers are called unqualified against the current owner, exactly like
-	///     <see cref="CollectionLiteral" />, so each member resolves on the scope evaluating the dictionary.
+	///     A <c>new Dictionary&lt;string, TService&gt; { ["a"] = ResolveA(__s), … }</c> expression: every keyed
+	///     registration of the service type, materialized eagerly and keyed by its <c>[Key]</c>, in registration
+	///     order (each member keeping its own lifetime). A <c>Dictionary&lt;,&gt;</c> satisfies the requested
+	///     <c>IReadOnlyDictionary&lt;string, TService&gt;</c>; an empty membership yields an empty dictionary.
+	///     Each member calls its static resolver over the current owner <c>__s</c>, exactly like
+	///     <see cref="CollectionLiteral" />: a singleton member on the <c>Root</c>
+	///     (<c>Root.ResolveX(__s.__root)</c>), a scoped/transient member on the <c>Scope</c> (<c>ResolveX(__s)</c>).
 	/// </summary>
 	private static string KeyedCollectionLiteral(string service, Names names)
 	{
 		string items = string.Join(", ", names.KeyedCollectionResolvers(service)
-			.Select(pair => $"[{SymbolDisplay.FormatLiteral(pair.Key, quote: true)}] = {pair.Resolver}()"));
+			.Select(member => $"[{SymbolDisplay.FormatLiteral(member.Key, quote: true)}] = {ResolveCall(member.Resolver, member.RootOwned)}"));
 		return $"new global::System.Collections.Generic.Dictionary<string, {service}> {{ {items} }}";
 	}
 

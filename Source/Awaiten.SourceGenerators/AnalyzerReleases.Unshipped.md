@@ -58,4 +58,4 @@
  AWT154  | Awaiten   | Error    | An imported module declares a [Scan], which is not collected from modules
  AWT155  | Awaiten   | Warning  | Two imported modules strongly register the same service with different implementations
  AWT156  | Awaiten   | Warning  | A generated Root/Scope is disposed synchronously although its container owns a service that implements IAsyncDisposable but not IDisposable
- AWT156  | Awaiten   | Error    | A keyed collection (IReadOnlyDictionary&lt;TKey, TService&gt;) uses a non-string key type
+ AWT156  | Awaiten   | Error    | A keyed collection (IReadOnlyDictionary<TKey, TService>) uses a non-string key type

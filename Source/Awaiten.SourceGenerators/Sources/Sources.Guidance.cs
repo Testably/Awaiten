@@ -25,10 +25,10 @@ internal static partial class Sources
 	///     into a throwaway scope) is offered; the plain Func stays resolvable from a child scope, which bounds the
 	///     disposables it builds.
 	/// </summary>
-	private static bool IsFuncWithheld(InstanceModel[] instances, int index, Dictionary<ServiceKey, int> serviceToIndex, IReadOnlyDictionary<ServiceKey, List<int>> collectionMembers, IReadOnlyDictionary<string, List<int>> keyedCollectionMembers, bool strict)
+	private static bool IsFuncWithheld(InstanceModel[] instances, int index, Dictionary<ServiceKey, int> serviceToIndex, CollectionMembership membership, bool strict)
 		=> strict
 		   && (instances[index].Lifetime == Lifetime.Transient || instances[index].IsParameterized)
-		   && AwaitenGenerator.BuildsFreshDisposable(instances, serviceToIndex, collectionMembers, keyedCollectionMembers, index);
+		   && AwaitenGenerator.BuildsFreshDisposable(instances, serviceToIndex, membership, index);
 
 	/// <summary>
 	///     The guidance message (a quoted string literal) thrown by Resolve(Type) on the Root when a service

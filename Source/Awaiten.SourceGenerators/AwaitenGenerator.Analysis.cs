@@ -7,12 +7,19 @@ namespace Awaiten.SourceGenerators;
 partial class AwaitenGenerator
 {
 	/// <summary>
-	///     The instance indices of every collection-resolvable service's members, keyed by the collection's
-	///     (element service type, key), for the transitive-disposable walk. Composed from the graph's
-	///     <paramref name="collections" /> and <paramref name="implToIndex" /> (a member absent from the latter
-	///     failed to build and is skipped).
+	///     The built-instance indices of every collection-resolvable service's members - the plain
+	///     <paramref name="collections" /> keyed by (element service type, key) and the
+	///     <paramref name="keyedCollections" /> keyed by service (value) type - for the transitive-disposable
+	///     walk (a member absent from <paramref name="implToIndex" /> failed to build and is skipped).
 	/// </summary>
-	internal static Dictionary<ServiceKey, List<int>> CollectionMemberIndices(
+	internal static CollectionMembership MembershipIndices(
+		IReadOnlyList<ServiceMembers> collections,
+		IReadOnlyList<KeyedServiceMembers> keyedCollections,
+		Dictionary<string, int> implToIndex)
+		=> new(CollectionMemberIndices(collections, implToIndex), KeyedCollectionMemberIndices(keyedCollections, implToIndex));
+
+	// The plain collections' member indices, keyed by the collection's (element service type, key).
+	private static Dictionary<ServiceKey, List<int>> CollectionMemberIndices(
 		IReadOnlyList<ServiceMembers> collections,
 		Dictionary<string, int> implToIndex)
 	{
@@ -34,13 +41,8 @@ partial class AwaitenGenerator
 		return members;
 	}
 
-	/// <summary>
-	///     The instance indices of every keyed-collection-resolvable service's members, keyed by the service
-	///     (value) type, for the transitive-disposable walk. Composed from the graph's
-	///     <paramref name="keyedCollections" /> and <paramref name="implToIndex" /> (a member absent from the
-	///     latter failed to build and is skipped).
-	/// </summary>
-	internal static Dictionary<string, List<int>> KeyedCollectionMemberIndices(
+	// The keyed collections' member indices, keyed by the service (value) type.
+	private static Dictionary<string, List<int>> KeyedCollectionMemberIndices(
 		IReadOnlyList<KeyedServiceMembers> keyedCollections,
 		Dictionary<string, int> implToIndex)
 	{
@@ -78,8 +80,7 @@ partial class AwaitenGenerator
 	internal static bool BuildsFreshDisposable(
 		IReadOnlyList<InstanceModel> instances,
 		Dictionary<ServiceKey, int> serviceToIndex,
-		IReadOnlyDictionary<ServiceKey, List<int>> collectionMembers,
-		IReadOnlyDictionary<string, List<int>> keyedCollectionMembers,
+		CollectionMembership membership,
 		int start)
 	{
 		HashSet<int> visited = new();
@@ -100,7 +101,7 @@ partial class AwaitenGenerator
 				return true;
 			}
 
-			PushFreshTransientDependencies(instance, instances, serviceToIndex, collectionMembers, keyedCollectionMembers, stack);
+			PushFreshTransientDependencies(instance, instances, serviceToIndex, membership, stack);
 		}
 
 		return false;
@@ -115,21 +116,20 @@ partial class AwaitenGenerator
 		InstanceModel instance,
 		IReadOnlyList<InstanceModel> instances,
 		Dictionary<ServiceKey, int> serviceToIndex,
-		IReadOnlyDictionary<ServiceKey, List<int>> collectionMembers,
-		IReadOnlyDictionary<string, List<int>> keyedCollectionMembers,
+		CollectionMembership membership,
 		Stack<int> stack)
 	{
 		foreach (ParameterModel parameter in instance.ConstructorParameters.AsArray())
 		{
 			if (parameter.Kind is DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.AwaitedEnumerable)
 			{
-				PushTransientCollectionMembers(KeyOf(parameter), instances, collectionMembers, stack);
+				PushTransientCollectionMembers(KeyOf(parameter), instances, membership.Collections, stack);
 			}
 			else if (parameter.Kind == DependencyKind.KeyedCollection)
 			{
 				// A keyed dictionary materializes its members eagerly during construction too, so a transient
 				// disposable keyed member is rebuilt on every construction just like a plain collection member.
-				PushTransientKeyedMembers(parameter.ServiceType, instances, keyedCollectionMembers, stack);
+				PushTransientKeyedMembers(parameter.ServiceType, instances, membership.Keyed, stack);
 			}
 			else if (parameter.Kind == DependencyKind.Direct
 			         && serviceToIndex.TryGetValue(KeyOf(parameter), out int dependency)

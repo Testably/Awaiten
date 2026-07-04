@@ -175,13 +175,8 @@ partial class AwaitenGenerator
 			AddCollectionMember(serviceMembers, serviceMemberOrder, serviceKey, registration.ImplementationType);
 			EnsureImpl(implInfos, implOrder, registration);
 
-			// A keyed registration is also a member of its service's keyed collection, indexed by its [Key]. The
-			// first registration per (service, key) wins - mirroring single keyed resolution (a genuine duplicate
-			// is AWT117) - so only the not-yet-chosen registration for this key contributes the member.
-			if (registration.Key is not null && !alreadyChosen)
-			{
-				AddKeyedMember(keyedMembers, keyedMemberOrder, registration.ServiceType, registration.Key, registration.ImplementationType);
-			}
+			// A keyed registration is also a member of its service's keyed collection, indexed by its [Key].
+			AddKeyedMember(keyedMembers, keyedMemberOrder, registration, alreadyChosen);
 
 			if (alreadyChosen)
 			{
@@ -380,23 +375,29 @@ partial class AwaitenGenerator
 
 	// Records a keyed registration as a member of its service's keyed collection: the [Key] and its
 	// implementation, grouped by service (value) type in registration order. keyedMemberOrder preserves the
-	// first-seen service order for deterministic emission. Only the first registration per (service, key) reaches
-	// here (the caller gates on !alreadyChosen), so each key maps to a single implementation.
+	// first-seen service order for deterministic emission. An unkeyed registration contributes nothing, and the
+	// first registration per (service, key) wins - mirroring single keyed resolution (a later one already lost
+	// that slot, alreadyChosen; a genuine duplicate is the caller's AWT117) - so each key maps to a single
+	// implementation.
 	private static void AddKeyedMember(
 		Dictionary<string, List<KeyedMember>> keyedMembers,
 		List<string> keyedMemberOrder,
-		string serviceType,
-		string key,
-		string implementationType)
+		RawRegistration registration,
+		bool alreadyChosen)
 	{
-		if (!keyedMembers.TryGetValue(serviceType, out List<KeyedMember>? members))
+		if (registration.Key is null || alreadyChosen)
 		{
-			members = new List<KeyedMember>();
-			keyedMembers.Add(serviceType, members);
-			keyedMemberOrder.Add(serviceType);
+			return;
 		}
 
-		members.Add(new KeyedMember(key, implementationType));
+		if (!keyedMembers.TryGetValue(registration.ServiceType, out List<KeyedMember>? members))
+		{
+			members = new List<KeyedMember>();
+			keyedMembers.Add(registration.ServiceType, members);
+			keyedMemberOrder.Add(registration.ServiceType);
+		}
+
+		members.Add(new KeyedMember(registration.Key, registration.ImplementationType));
 	}
 
 	// AWT117: two different implementations claim the same service type and key, so a keyed resolution of

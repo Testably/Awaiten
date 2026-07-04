@@ -341,19 +341,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			}
 		}
 
-		// The keyed-collection membership, in first-seen service order and keeping only members that were actually
-		// built (a member whose BuildInstance failed already surfaced its own error and is absent from implToIndex).
-		// A service whose only keyed registrations were pruned (or failed to build) contributes no keyed collection;
-		// a service with no keyed registration at all is simply absent, and injecting its dictionary yields an empty one.
-		List<KeyedServiceMembers> keyedCollections = new();
-		foreach (string service in keyedMemberOrder)
-		{
-			KeyedMember[] members = keyedMembers[service].Where(member => implToIndex.ContainsKey(member.Implementation)).ToArray();
-			if (members.Length > 0)
-			{
-				keyedCollections.Add(new KeyedServiceMembers(service, new EquatableArray<KeyedMember>(members)));
-			}
-		}
+		List<KeyedServiceMembers> keyedCollections = BuiltKeyedCollections(keyedMemberOrder, keyedMembers, implToIndex);
 
 		// The variance candidates' service types (registration order), for the emitter's runtime variance
 		// fallback: an imperative Resolve of a differently-closed generic interface no consumer parameter ever
@@ -365,5 +353,30 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		}
 
 		return new GraphModel(instances, dependencies, constructionDependencies, combinedDependencies, serviceToImpl, implToIndex, instanceLocations, collections, varianceCandidateTypes, keyedCollections);
+	}
+
+	/// <summary>
+	///     The keyed-collection membership, in first-seen service order and keeping only members that were
+	///     actually built (a member whose BuildInstance failed already surfaced its own error and is absent from
+	///     <paramref name="implToIndex" />). A service whose only keyed registrations were pruned (or failed to
+	///     build) contributes no keyed collection. A service with no keyed registration at all is simply absent,
+	///     and injecting its dictionary yields an empty one.
+	/// </summary>
+	private static List<KeyedServiceMembers> BuiltKeyedCollections(
+		List<string> keyedMemberOrder,
+		Dictionary<string, List<KeyedMember>> keyedMembers,
+		Dictionary<string, int> implToIndex)
+	{
+		List<KeyedServiceMembers> keyedCollections = new();
+		foreach (string service in keyedMemberOrder)
+		{
+			KeyedMember[] members = keyedMembers[service].Where(member => implToIndex.ContainsKey(member.Implementation)).ToArray();
+			if (members.Length > 0)
+			{
+				keyedCollections.Add(new KeyedServiceMembers(service, new EquatableArray<KeyedMember>(members)));
+			}
+		}
+
+		return keyedCollections;
 	}
 }

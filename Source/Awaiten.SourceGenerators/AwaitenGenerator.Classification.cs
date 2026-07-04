@@ -62,10 +62,7 @@ partial class AwaitenGenerator
 			ParameterModel parameterModel = ClassifyParameter(parameter, asyncFactory);
 
 			// AWT156: a keyed collection (IReadOnlyDictionary<TKey, T>) must use a string key in v1.
-			if (parameterModel.Kind == DependencyKind.KeyedCollection)
-			{
-				ReportUnsupportedKeyedCollectionKey(parameter.Type, info, parameterModel.Location ?? info.Location, context.Diagnostics);
-			}
+			ReportUnsupportedKeyedCollectionKey(parameterModel, parameter.Type, info, context.Diagnostics);
 
 			// AWT134: a [FromServices] parameter (External) cannot also be an [Arg] runtime argument - it
 			// cannot be both an externally-resolved dependency and a caller-supplied value. Point the diagnostic
@@ -257,10 +254,7 @@ partial class AwaitenGenerator
 			property.Type, property.GetAttributes(), asyncFactory: false, location);
 
 		// AWT156: a keyed collection (IReadOnlyDictionary<TKey, T>) must use a string key in v1.
-		if (dependency.Kind == DependencyKind.KeyedCollection)
-		{
-			ReportUnsupportedKeyedCollectionKey(property.Type, info, location, diagnostics);
-		}
+		ReportUnsupportedKeyedCollectionKey(dependency, property.Type, info, diagnostics);
 
 		// AWT137: runtime arguments flow only through a Func<…> factory into [Arg] constructor parameters, never
 		// through property injection (the member resolves entirely from the graph).
@@ -584,18 +578,21 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     Reports <see cref="Diagnostics.UnsupportedKeyedCollectionKey">AWT156</see> when a keyed collection's
-	///     declared key type is not the supported <c>string</c>. v1 keys are strings (the <c>[Key]</c> registration
-	///     value); typed/enum keys are deferred. The dependency stays classified as a keyed collection, so it is
-	///     never re-reported as a missing dependency (AWT101) on top of this.
+	///     Reports <see cref="Diagnostics.UnsupportedKeyedCollectionKey">AWT156</see> when a dependency classified
+	///     as a keyed collection declares a key type other than the supported <c>string</c>. v1 keys are strings
+	///     (the <c>[Key]</c> registration value); typed/enum keys are deferred. The kind gate lives here so an
+	///     <c>[Arg]</c>/<c>[FromServices]</c>-preempted dictionary parameter is never reported, and the dependency
+	///     stays classified as a keyed collection, so it is never re-reported as a missing dependency (AWT101) on
+	///     top of this.
 	/// </summary>
-	private static void ReportUnsupportedKeyedCollectionKey(ITypeSymbol type, ImplInfo info, LocationInfo? location, List<DiagnosticInfo> diagnostics)
+	private static void ReportUnsupportedKeyedCollectionKey(ParameterModel dependency, ITypeSymbol type, ImplInfo info, List<DiagnosticInfo> diagnostics)
 	{
-		if (TryGetKeyedCollectionElement(type, out _, out string? keyType) && keyType != "string")
+		if (dependency.Kind == DependencyKind.KeyedCollection
+		    && TryGetKeyedCollectionElement(type, out _, out string? keyType) && keyType != "string")
 		{
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.UnsupportedKeyedCollectionKey,
-				location,
+				dependency.Location ?? info.Location,
 				new EquatableArray<string>([DisplayInstance(info.ImplementationType), Display(keyType!),])));
 		}
 	}

@@ -444,8 +444,7 @@ internal static partial class Sources
 			implToIndex[instances[i].ImplementationType] = i;
 		}
 
-		Dictionary<ServiceKey, List<int>> collectionMembers = AwaitenGenerator.CollectionMemberIndices(names.Collections, implToIndex);
-		Dictionary<string, List<int>> keyedCollectionMembers = AwaitenGenerator.KeyedCollectionMemberIndices(names.KeyedCollections, implToIndex);
+		CollectionMembership membership = AwaitenGenerator.MembershipIndices(names.Collections, names.KeyedCollections, implToIndex);
 
 		// Explicit service registrations first, so a directly registered relationship type (e.g. a
 		// registered Lazy<T>) wins the dispatch slot over the synthetic relationship entry below. Service
@@ -460,7 +459,7 @@ internal static partial class Sources
 				continue;
 			}
 
-			AddServiceEntries(instances[i], names.Resolver(i), entries, seen, IsWithheld(instances[i], strict), IsFuncWithheld(instances, i, serviceToIndex, collectionMembers, keyedCollectionMembers, strict));
+			AddServiceEntries(instances[i], names.Resolver(i), entries, seen, IsWithheld(instances[i], strict), IsFuncWithheld(instances, i, serviceToIndex, membership, strict));
 		}
 
 		// Synthetic Func<T>/Lazy<T> over each service, skipping any key an explicit registration already
@@ -471,7 +470,7 @@ internal static partial class Sources
 		{
 			if (!instances[i].IsParameterized && EmitsSync(instances[i], syncResolveAfterInit))
 			{
-				AddRelationshipEntries(instances[i], names.Resolver(i), entries, seen, IsFuncWithheld(instances, i, serviceToIndex, collectionMembers, keyedCollectionMembers, strict));
+				AddRelationshipEntries(instances[i], names.Resolver(i), entries, seen, IsFuncWithheld(instances, i, serviceToIndex, membership, strict));
 			}
 		}
 
@@ -482,18 +481,18 @@ internal static partial class Sources
 		// with an async-tainted member has no synchronous materialization (its shapes throw AWT122-style guidance
 		// via __withheld, and injecting one is AWT122). The seen guard is belt-and-braces against a slot an
 		// explicit registration already claimed.
-		AddCollectionEntries(instances, names, serviceToIndex, collectionMembers, keyedCollectionMembers, strict, entries, seen);
+		AddCollectionEntries(instances, names, serviceToIndex, membership, strict, entries, seen);
 
 		// The awaited-collection view (every Task<C> shape) joins the synchronous dispatch too: it always hands
 		// back a Task synchronously, even for a collection whose members are async-tainted (it awaits them behind
 		// the task), so it is offered by type alongside the synchronous shapes rather than through an async arm.
-		AddAwaitedCollectionEntries(instances, names, serviceToIndex, collectionMembers, keyedCollectionMembers, strict, entries, seen);
+		AddAwaitedCollectionEntries(instances, names, serviceToIndex, membership, strict, entries, seen);
 
 		// Keyed-collection dispatch: every keyed-collection-resolvable service is publicly resolvable as
 		// IReadOnlyDictionary<string, T>, materialized synchronously from its keyed members' resolvers (like the
 		// synchronous collection shapes). A keyed collection with an async-tainted member has no synchronous
 		// materialization - injecting one is AWT122 - so it is omitted.
-		AddKeyedCollectionEntries(instances, names, serviceToIndex, collectionMembers, keyedCollectionMembers, strict, entries, seen);
+		AddKeyedCollectionEntries(instances, names, serviceToIndex, membership, strict, entries, seen);
 
 		return entries;
 	}
@@ -512,29 +511,23 @@ internal static partial class Sources
 		InstanceModel[] instances,
 		Names names,
 		Dictionary<ServiceKey, int> serviceToIndex,
-		IReadOnlyDictionary<ServiceKey, List<int>> collectionMembers,
-		IReadOnlyDictionary<string, List<int>> keyedCollectionMembers,
+		CollectionMembership membership,
 		bool strict,
 		List<DispatchEntry> entries,
 		HashSet<string> seen)
 	{
-		foreach (KeyedServiceMembers keyed in names.KeyedCollections)
+		foreach (string service in names.KeyedCollections.Select(keyed => keyed.Service))
 		{
-			if (!names.IsSyncKeyedCollection(keyed.Service))
+			string type = $"global::System.Collections.Generic.IReadOnlyDictionary<string, {service}>";
+			if (!names.IsSyncKeyedCollection(service) || !seen.Add(type))
 			{
 				continue;
 			}
 
-			string type = $"global::System.Collections.Generic.IReadOnlyDictionary<string, {keyed.Service}>";
-			if (!seen.Add(type))
-			{
-				continue;
-			}
+			bool rootWithheld = membership.Keyed.TryGetValue(service, out List<int>? members)
+			                    && members.Any(member => IsFuncWithheld(instances, member, serviceToIndex, membership, strict));
 
-			bool rootWithheld = keyedCollectionMembers.TryGetValue(keyed.Service, out List<int>? members)
-			                    && members.Any(member => IsFuncWithheld(instances, member, serviceToIndex, collectionMembers, keyedCollectionMembers, strict));
-
-			string literal = KeyedCollectionLiteral(keyed.Service, names);
+			string literal = KeyedCollectionLiteral(service, names);
 			entries.Add(rootWithheld
 				? new DispatchEntry(type, literal, KeyedCollectionWithheldMessage(type))
 				: new DispatchEntry(type, literal));
@@ -556,8 +549,7 @@ internal static partial class Sources
 		InstanceModel[] instances,
 		Names names,
 		Dictionary<ServiceKey, int> serviceToIndex,
-		IReadOnlyDictionary<ServiceKey, List<int>> collectionMembers,
-		IReadOnlyDictionary<string, List<int>> keyedCollectionMembers,
+		CollectionMembership membership,
 		bool strict,
 		List<DispatchEntry> entries,
 		HashSet<string> seen)
@@ -575,8 +567,8 @@ internal static partial class Sources
 				continue;
 			}
 
-			bool rootWithheld = collectionMembers.TryGetValue(collectionKey, out List<int>? members)
-			                    && members.Any(member => IsFuncWithheld(instances, member, serviceToIndex, collectionMembers, keyedCollectionMembers, strict));
+			bool rootWithheld = membership.Collections.TryGetValue(collectionKey, out List<int>? members)
+			                    && members.Any(member => IsFuncWithheld(instances, member, serviceToIndex, membership, strict));
 
 			string array = CollectionLiteral(collectionKey, names, instances);
 			foreach (string shape in AwaitenGenerator.CollectionShapeTypes(collection.Service))
@@ -618,8 +610,7 @@ internal static partial class Sources
 		InstanceModel[] instances,
 		Names names,
 		Dictionary<ServiceKey, int> serviceToIndex,
-		IReadOnlyDictionary<ServiceKey, List<int>> collectionMembers,
-		IReadOnlyDictionary<string, List<int>> keyedCollectionMembers,
+		CollectionMembership membership,
 		bool strict,
 		List<DispatchEntry> entries,
 		HashSet<string> seen)
@@ -636,8 +627,8 @@ internal static partial class Sources
 				continue;
 			}
 
-			bool rootWithheld = collectionMembers.TryGetValue(collectionKey, out List<int>? members)
-			                    && members.Any(member => IsFuncWithheld(instances, member, serviceToIndex, collectionMembers, keyedCollectionMembers, strict));
+			bool rootWithheld = membership.Collections.TryGetValue(collectionKey, out List<int>? members)
+			                    && members.Any(member => IsFuncWithheld(instances, member, serviceToIndex, membership, strict));
 
 			foreach (string shape in AwaitenGenerator.CollectionShapeTypes(collection.Service))
 			{

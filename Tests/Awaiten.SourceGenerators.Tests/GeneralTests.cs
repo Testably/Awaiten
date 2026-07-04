@@ -1069,8 +1069,9 @@ public class GeneralTests
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
 		// The keyed dictionary is a Dictionary<string, TService> of every keyed member's resolver, keyed by its
-		// [Key] in registration order, materialized inline where it is injected.
-		await That(source).Contains("new global::MyCode.Router(new global::System.Collections.Generic.Dictionary<string, global::MyCode.IChannel> { [\"fast\"] = ResolveFast(), [\"slow\"] = ResolveSlow() })");
+		// [Key] in registration order, materialized inline where it is injected. Each member calls its static
+		// resolver over the current owner, exactly like a collection literal (here singletons, so on the Root).
+		await That(source).Contains("new global::MyCode.Router(new global::System.Collections.Generic.Dictionary<string, global::MyCode.IChannel> { [\"fast\"] = Root.ResolveFast(__s.__root), [\"slow\"] = Root.ResolveSlow(__s.__root) })");
 		// IReadOnlyDictionary<string, T> is publicly resolvable by type (its own bucket in the dispatch table).
 		await That(source).Contains("typeof(global::System.Collections.Generic.IReadOnlyDictionary<string, global::MyCode.IChannel>)");
 	}
