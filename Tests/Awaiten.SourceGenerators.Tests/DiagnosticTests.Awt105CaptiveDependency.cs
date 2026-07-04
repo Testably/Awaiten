@@ -251,5 +251,35 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).Contains("*AWT105*").AsWildcard()
 				.Because("a keyed dictionary captures its members eagerly, so a singleton holding one over a scoped member makes that member captive");
 		}
+
+		[Fact]
+		public async Task DoesNotReportForAnAwaitedKeyedDictionaryMember()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+			                                       using System.Collections.Generic;
+			                                       using System.Threading.Tasks;
+
+			                                       namespace MyCode;
+
+			                                       public interface IWork { }
+			                                       public sealed class MainWork : IWork { }
+			                                       public sealed class Host { public Host(Task<IReadOnlyDictionary<string, IWork>> work) { } }
+
+			                                       [Container]
+			                                       [Scoped<MainWork, IWork>(Key = "main")]
+			                                       [Singleton<Host>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			// Unlike the synchronous keyed dictionary, the awaited form launders its members' taint (they are awaited
+			// behind the produced task, not captured at the consumer's construction), so its member edges live only in
+			// the construction graph (AWT102) and not the dependency graph that AWT105 walks - exactly as the awaited
+			// collection Task<C> does. It closes cycles but is not a captive dependency.
+			await That(result.Diagnostics).DoesNotContain("*AWT105*").AsWildcard()
+				.Because("the awaited keyed dictionary launders its members' taint like the awaited collection, so it is not a captive dependency");
+		}
 	}
 }

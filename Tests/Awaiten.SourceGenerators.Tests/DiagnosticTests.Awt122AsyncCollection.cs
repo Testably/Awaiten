@@ -150,5 +150,35 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).Contains("*AWT122*").AsWildcard()
 				.Because("a keyed dictionary is materialized synchronously just like a collection, so it cannot await an async-initialized keyed member");
 		}
+
+		[Fact]
+		public async Task DoesNotReportForAnAwaitedKeyedDictionaryMember()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+			                                       using System.Collections.Generic;
+			                                       using System.Threading;
+			                                       using System.Threading.Tasks;
+
+			                                       namespace MyCode;
+
+			                                       public interface IPlugin { }
+			                                       public sealed class AsyncPlugin : IPlugin, IAsyncInitializable
+			                                       {
+			                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+			                                       }
+			                                       public sealed class Host { public Host(Task<IReadOnlyDictionary<string, IPlugin>> plugins) { } }
+
+			                                       [Container]
+			                                       [Singleton<AsyncPlugin, IPlugin>(Key = "async")]
+			                                       [Singleton<Host>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).DoesNotContain("*AWT122*").AsWildcard()
+				.Because("the awaited keyed dictionary awaits its async-initialized members behind the produced task, exactly as the awaited collection does");
+		}
 	}
 }

@@ -104,4 +104,24 @@ internal enum DependencyKind
 	///     that survives suppression as AWT160 (the synthesized dictionary resolves every key).
 	/// </summary>
 	KeyedCollection,
+
+	/// <summary>
+	///     An awaited keyed-collection dependency (<c>Task&lt;IReadOnlyDictionary&lt;string, T&gt;&gt;</c>): the
+	///     keyed analogue of <see cref="AwaitedEnumerable" />. It resolves every keyed registration of its service
+	///     (value) type <c>T</c>, keyed by each registration's <c>[Key]</c> in registration order (each member
+	///     keeping its own lifetime), materialized eagerly behind the returned task with each async-initialized
+	///     member awaited - so, unlike <see cref="KeyedCollection" />, an async-tainted member is legal (it does not
+	///     trip AWT122). Like <see cref="AwaitedEnumerable" /> it launders the members' taint, exactly as the bare
+	///     <see cref="Task" /> relationship does: the members are awaited inside the produced task, not at the
+	///     consumer's construction, so the consumer stays synchronously constructible, and the task itself is handed
+	///     back synchronously (joining the synchronous dispatch by type). All-sync membership completes synchronously
+	///     (<c>Task.FromResult</c>); an empty index yields a completed empty dictionary, not AWT101. The task still
+	///     starts materializing its members at construction time, so - again like the bare <see cref="Task" /> - it
+	///     closes cycles (the construction graph) even though it contributes no taint/captive edge. Suppression
+	///     mirrors the awaited collection: an explicitly registered <c>Task&lt;IReadOnlyDictionary&lt;string, T&gt;&gt;</c>
+	///     claims its own exact shape, and a registered synchronous <c>IReadOnlyDictionary&lt;string, T&gt;</c> claims
+	///     the awaited view too. AWT159 (non-<c>string</c> key) and AWT160 (<c>[FromKey]</c>) apply exactly as for
+	///     <see cref="KeyedCollection" />, and only while the dependency stays synthesized.
+	/// </summary>
+	AwaitedKeyedCollection,
 }

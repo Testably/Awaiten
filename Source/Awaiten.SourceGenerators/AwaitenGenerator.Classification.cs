@@ -36,9 +36,15 @@ partial class AwaitenGenerator
 		                           && CollectionShapeTypes(parameterModel.ServiceType).Any(shape => serviceToImpl.ContainsKey(new ServiceKey(shape, parameterModel.Key)));
 		bool asyncShapeRegistered = parameterModel.Kind == DependencyKind.AsyncEnumerable
 		                            && serviceToImpl.ContainsKey(new ServiceKey(AsyncEnumerableShapeType(parameterModel.ServiceType), parameterModel.Key));
-		bool awaitedOrKeyedShapeRegistered = parameterModel.Kind is DependencyKind.AwaitedEnumerable or DependencyKind.KeyedCollection
+		bool awaitedOrKeyedShapeRegistered = parameterModel.Kind is DependencyKind.AwaitedEnumerable or DependencyKind.KeyedCollection or DependencyKind.AwaitedKeyedCollection
 		                                     && serviceToImpl.ContainsKey(new ServiceKey(declaredType.ToDisplayString(FullyQualified), parameterModel.Key));
-		if (syncShapeRegistered || asyncShapeRegistered || awaitedOrKeyedShapeRegistered)
+		// A registered synchronous IReadOnlyDictionary<string, T> claims the awaited Task<…> view too, exactly as a
+		// registered synchronous collection shape claims the awaited Task<C> view (the syncShapeRegistered gate). The
+		// inner dictionary type is carried in AwaitedCollectionType; the awaited sibling then resolves the
+		// registration through the bare Task relationship (AWT101 when it is not itself registered).
+		bool keyedSyncShapeRegistered = parameterModel.Kind == DependencyKind.AwaitedKeyedCollection
+		                                && serviceToImpl.ContainsKey(new ServiceKey(parameterModel.AwaitedCollectionType!, parameterModel.Key));
+		if (syncShapeRegistered || asyncShapeRegistered || awaitedOrKeyedShapeRegistered || keyedSyncShapeRegistered)
 		{
 			string collectionType = declaredType.ToDisplayString(FullyQualified);
 			return parameterModel with { ServiceType = collectionType, Kind = DependencyKind.Direct, AwaitedCollectionType = null, };
@@ -129,7 +135,7 @@ partial class AwaitenGenerator
 	/// </summary>
 	private static void ReportWhenUnregistered(ParameterModel parameterModel, ImplInfo info, BuildContext context)
 	{
-		if (parameterModel.Kind is DependencyKind.Arg or DependencyKind.CancellationToken or DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.AwaitedEnumerable or DependencyKind.KeyedCollection or DependencyKind.External
+		if (parameterModel.Kind is DependencyKind.Arg or DependencyKind.CancellationToken or DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.AwaitedEnumerable or DependencyKind.KeyedCollection or DependencyKind.AwaitedKeyedCollection or DependencyKind.External
 		    || context.ServiceToImpl.ContainsKey(KeyOf(parameterModel))
 		    || context.ConstraintRejected.Contains(parameterModel.ServiceType))
 		{
@@ -256,7 +262,7 @@ partial class AwaitenGenerator
 		// shape rules (AWT157/AWT158) nor the Optional drop below apply, exactly as they leave a collection alone.
 		// Measured before synthesis suppression below: a collection whose shape is explicitly registered is still a
 		// collection-typed member here (never omitted), so the shape rules must skip it too.
-		bool isCollection = dependency.Kind is DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.KeyedCollection;
+		bool isCollection = dependency.Kind is DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.KeyedCollection or DependencyKind.AwaitedKeyedCollection;
 
 		// AWT144/AWT157/AWT158: the accessor and modifiers must be compatible with how the member is assigned.
 		if (RejectsInjectedPropertyShape(property, setter, info, deferred, optional, isCollection, diagnostics))
@@ -497,6 +503,21 @@ partial class AwaitenGenerator
 				AwaitedCollectionType: awaitedCollection);
 		}
 
+		// An awaited keyed collection (Task<IReadOnlyDictionary<TKey, T>>) resolves every keyed registration of its
+		// service (value) type T behind the returned task, awaiting each async-initialized member - the keyed
+		// analogue of the awaited collection above, and (like it) legal through an async-tainted member. Recognized
+		// before the bare Task<T> relationship below, so Task<IReadOnlyDictionary<…>> is the awaited keyed dictionary
+		// rather than a Task relationship over the (unregistered) dictionary type itself. The declared dictionary
+		// type is carried for suppression (a registered synchronous dictionary claims the awaited view) and emission;
+		// as for the synchronous dictionary the [FromKey] is carried only for suppression / AWT160, and the declared
+		// key type is not stored (a non-string key is rejected as AWT159 at the classification site).
+		if (TryGetAwaitedKeyedCollection(type, out string? awaitedKeyedService, out _, out string? awaitedKeyedDictionary))
+		{
+			return new ParameterModel(
+				awaitedKeyedService!, DependencyKind.AwaitedKeyedCollection, Key: key, Location: location,
+				AwaitedCollectionType: awaitedKeyedDictionary);
+		}
+
 		// A bare Owned<T> dependency: resolve T into a throwaway scope and hand the caller the disposal handle.
 		if (IsOwned(type, out ITypeSymbol ownedInner))
 		{
@@ -679,15 +700,23 @@ partial class AwaitenGenerator
 	/// </summary>
 	private static void ReportUnsupportedKeyedCollectionKey(ParameterModel dependency, ITypeSymbol type, ImplInfo info, List<DiagnosticInfo> diagnostics)
 	{
-		if (dependency.Kind == DependencyKind.KeyedCollection
-		    && TryGetKeyedCollectionElement(type, out _, out string? keyType) && keyType != "string")
+		if (dependency.Kind is DependencyKind.KeyedCollection or DependencyKind.AwaitedKeyedCollection
+		    && KeyedDependencyKeyType(type) is { } keyType && keyType != "string")
 		{
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.UnsupportedKeyedCollectionKey,
 				dependency.Location ?? info.Location,
-				new EquatableArray<string>([DisplayInstance(info.ImplementationType), Display(keyType!),])));
+				new EquatableArray<string>([DisplayInstance(info.ImplementationType), Display(keyType),])));
 		}
 	}
+
+	// The declared key type of a keyed-dictionary dependency, whether synchronous
+	// (IReadOnlyDictionary<TKey, T>) or awaited (Task<IReadOnlyDictionary<TKey, T>>), or null when the type is
+	// neither shape. Lets the AWT159 report read the key type off either form.
+	private static string? KeyedDependencyKeyType(ITypeSymbol type)
+		=> TryGetKeyedCollectionElement(type, out _, out string? keyType) ? keyType
+			: TryGetAwaitedKeyedCollection(type, out _, out keyType, out _) ? keyType
+			: null;
 
 	/// <summary>
 	///     Reports <see cref="Diagnostics.FromKeyOnKeyedCollection">AWT160</see> when a dependency that stays a
@@ -699,7 +728,7 @@ partial class AwaitenGenerator
 	/// </summary>
 	private static void ReportFromKeyOnKeyedCollection(ParameterModel dependency, ITypeSymbol type, ImplInfo info, List<DiagnosticInfo> diagnostics)
 	{
-		if (dependency is { Kind: DependencyKind.KeyedCollection, Key: not null, })
+		if (dependency is { Kind: DependencyKind.KeyedCollection or DependencyKind.AwaitedKeyedCollection, Key: not null, })
 		{
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.FromKeyOnKeyedCollection,
@@ -730,6 +759,28 @@ partial class AwaitenGenerator
 
 		elementType = null;
 		collectionType = null;
+		return false;
+	}
+
+	/// <summary>
+	///     Recognizes an awaited keyed collection - a <c>Task&lt;IReadOnlyDictionary&lt;TKey, T&gt;&gt;</c> - yielding
+	///     the fully-qualified service (value) type <c>T</c>, the declared key type, and the inner dictionary type.
+	///     The keyed analogue of <see cref="TryGetAwaitedCollection" />; like the synchronous dictionary a
+	///     non-<c>string</c> key type is still recognized here (so the caller reports AWT159 rather than treating the
+	///     dependency as a bare <c>Task&lt;T&gt;</c> relationship over an unregistered dictionary type).
+	///     <c>ValueTask&lt;…&gt;</c> is deliberately not recognized, matching <see cref="TryGetAwaitedCollection" />.
+	/// </summary>
+	private static bool TryGetAwaitedKeyedCollection(ITypeSymbol type, out string? serviceType, out string? keyType, out string? dictionaryType)
+	{
+		if (IsTask(type, out ITypeSymbol result) && TryGetKeyedCollectionElement(result, out serviceType, out keyType))
+		{
+			dictionaryType = result.ToDisplayString(FullyQualified);
+			return true;
+		}
+
+		serviceType = null;
+		keyType = null;
+		dictionaryType = null;
 		return false;
 	}
 

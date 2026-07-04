@@ -267,4 +267,189 @@ public partial class KeyedDictionaryTests
 	[Singleton<ChannelMap, IReadOnlyDictionary<string, IChannel>>]
 	[Singleton<MapConsumer>]
 	public static partial class RegisteredMapContainer;
+
+	// ----- Awaited keyed dictionary (Task<IReadOnlyDictionary<string, TService>>) -----
+
+	[Fact]
+	public async Task AwaitedDictionary_AwaitsMemberInitializationWithoutTaintingTheConsumer()
+	{
+		using AwaitedDictionaryContainer.Root container = new();
+
+		// The router injects Task<IReadOnlyDictionary<string, IFeed>> over an async-initialized member, yet resolves
+		// SYNCHRONOUSLY in the strict default: the awaited keyed dictionary launders its members' taint like the bare
+		// Task<T> relationship - the await happens inside the produced task, not at the router's construction.
+		AwaitedFeedRouter router = container.Resolve<AwaitedFeedRouter>();
+
+		IReadOnlyDictionary<string, IFeed> feeds = await router.Feeds;
+
+		await That(feeds).HasCount(2);
+		await That(feeds["sync"]).Is<SyncFeed>();
+		await That(feeds["async"]).Is<AsyncFeed>();
+		await That(((AsyncFeed)feeds["async"]).Initialized).IsTrue()
+			.Because("awaiting the keyed dictionary awaited the async member's initialization behind the produced task");
+	}
+
+	[Fact]
+	public async Task AwaitedDictionary_InjectedIntoAProperty_AwaitsMemberInitialization()
+	{
+		using AwaitedDictionaryContainer.Root container = new();
+
+		AwaitedFeedPropertyRouter router = container.Resolve<AwaitedFeedPropertyRouter>();
+
+		IReadOnlyDictionary<string, IFeed> feeds = await router.Feeds!;
+
+		await That(feeds).HasCount(2);
+		await That(((AsyncFeed)feeds["async"]).Initialized).IsTrue()
+			.Because("an [Inject] property typed as an awaited keyed dictionary awaits its members exactly like a constructor parameter");
+	}
+
+	[Fact]
+	public async Task AwaitedDictionary_AllSynchronousMembers_IsACompletedTask()
+	{
+		using AwaitedDictionaryContainer.Root container = new();
+
+		// The all-synchronous ITransientFeed dictionary is a completed Task.FromResult over the materialized
+		// dictionary - no async machinery at all.
+		Task<IReadOnlyDictionary<string, ITransientFeed>> task = container.Resolve<Task<IReadOnlyDictionary<string, ITransientFeed>>>();
+
+		await That(task.IsCompleted).IsTrue()
+			.Because("an all-synchronous awaited keyed dictionary carries no async machinery");
+		await That(await task).HasCount(1);
+	}
+
+	[Fact]
+	public async Task AwaitedDictionary_EmptyMembership_YieldsACompletedEmptyDictionary()
+	{
+		using AwaitedDictionaryContainer.Root container = new();
+
+		AwaitedEmptyRouter router = container.Resolve<AwaitedEmptyRouter>();
+
+		IReadOnlyDictionary<string, IEmptyFeed> feeds = await router.Feeds;
+		await That(feeds).HasCount(0)
+			.Because("a service with no keyed registration yields a completed empty awaited keyed dictionary, not AWT101");
+	}
+
+	[Fact]
+	public async Task AwaitedDictionary_IsPubliclyResolvableByType()
+	{
+		using AwaitedDictionaryContainer.Root container = new();
+
+		IReadOnlyDictionary<string, IFeed> feeds = await container.Resolve<Task<IReadOnlyDictionary<string, IFeed>>>();
+
+		await That(feeds).HasCount(2);
+		await That(((AsyncFeed)feeds["async"]).Initialized).IsTrue()
+			.Because("the awaited keyed dictionary joins the by-type dispatch and awaits its async member when awaited");
+	}
+
+	[Fact]
+	public async Task AwaitedDictionary_SingletonMembers_AreSharedAcrossResolutions()
+	{
+		using AwaitedDictionaryContainer.Root container = new();
+
+		IFeed first = (await container.Resolve<Task<IReadOnlyDictionary<string, IFeed>>>())["sync"];
+		IFeed second = (await container.Resolve<Task<IReadOnlyDictionary<string, IFeed>>>())["sync"];
+
+		await That(first).IsSameAs(second)
+			.Because("a singleton keyed member is shared across every awaited dictionary that includes it");
+	}
+
+	[Fact]
+	public async Task AwaitedDictionary_TransientMembers_AreFreshOnEachResolution()
+	{
+		using AwaitedDictionaryContainer.Root container = new();
+
+		ITransientFeed first = (await container.Resolve<Task<IReadOnlyDictionary<string, ITransientFeed>>>())["t"];
+		ITransientFeed second = (await container.Resolve<Task<IReadOnlyDictionary<string, ITransientFeed>>>())["t"];
+
+		await That(first).IsNotSameAs(second)
+			.Because("a transient keyed member is built fresh for each awaited dictionary");
+	}
+
+	[Fact]
+	public async Task AwaitedDictionary_ScopedMembers_AreResolvedPerScope()
+	{
+		using AwaitedDictionaryContainer.Root container = new();
+		using IAwaitenScope scope1 = container.CreateScope();
+		using IAwaitenScope scope2 = container.CreateScope();
+
+		IScopedFeed first = (await scope1.Resolve<Task<IReadOnlyDictionary<string, IScopedFeed>>>())["main"];
+		IScopedFeed again = (await scope1.Resolve<Task<IReadOnlyDictionary<string, IScopedFeed>>>())["main"];
+		IScopedFeed other = (await scope2.Resolve<Task<IReadOnlyDictionary<string, IScopedFeed>>>())["main"];
+
+		await That(first).IsSameAs(again)
+			.Because("a scoped keyed member is shared within the scope that materializes the awaited dictionary");
+		await That(first).IsNotSameAs(other)
+			.Because("a different scope materializes its own scoped keyed member");
+	}
+
+	[Fact]
+	public async Task Strict_AwaitedKeyedDictionaryOfDisposableTransients_IsWithheldFromTheRootButResolvesFromAScope()
+	{
+		using WidgetContainer.Root container = new();
+
+		// Materializing the awaited dictionary by type off the Root would accumulate its disposable transient members
+		// for the container's lifetime (the task materializes them at construction), so under strict lifetime safety
+		// it is withheld there, exactly like the synchronous dictionary and the awaited collection.
+		await That(() => container.Resolve<Task<IReadOnlyDictionary<string, IWidget>>>()).Throws<InvalidOperationException>()
+			.Because("an awaited keyed dictionary with a build-on-demand disposable member is root-withheld under strict safety");
+
+		using IAwaitenScope scope = container.CreateScope();
+		await That(await scope.Resolve<Task<IReadOnlyDictionary<string, IWidget>>>()).HasCount(1)
+			.Because("a child scope bounds the disposable members the awaited dictionary materializes");
+	}
+
+	public interface IFeed;
+
+	public sealed class SyncFeed : IFeed;
+
+	public sealed class AsyncFeed : IFeed, IAsyncInitializable
+	{
+		public bool Initialized { get; private set; }
+
+		public Task InitializeAsync(System.Threading.CancellationToken cancellationToken)
+		{
+			Initialized = true;
+			return Task.CompletedTask;
+		}
+	}
+
+	public sealed class AwaitedFeedRouter
+	{
+		public AwaitedFeedRouter(Task<IReadOnlyDictionary<string, IFeed>> feeds) => Feeds = feeds;
+
+		public Task<IReadOnlyDictionary<string, IFeed>> Feeds { get; }
+	}
+
+	public sealed class AwaitedFeedPropertyRouter
+	{
+		[Inject]
+		public Task<IReadOnlyDictionary<string, IFeed>>? Feeds { get; set; }
+	}
+
+	public interface ITransientFeed;
+
+	public sealed class TransientFeed : ITransientFeed;
+
+	public interface IScopedFeed;
+
+	public sealed class ScopedFeed : IScopedFeed;
+
+	public interface IEmptyFeed;
+
+	public sealed class AwaitedEmptyRouter
+	{
+		public AwaitedEmptyRouter(Task<IReadOnlyDictionary<string, IEmptyFeed>> feeds) => Feeds = feeds;
+
+		public Task<IReadOnlyDictionary<string, IEmptyFeed>> Feeds { get; }
+	}
+
+	[Container]
+	[Singleton<SyncFeed, IFeed>(Key = "sync")]
+	[Singleton<AsyncFeed, IFeed>(Key = "async")]
+	[Transient<TransientFeed, ITransientFeed>(Key = "t")]
+	[Scoped<ScopedFeed, IScopedFeed>(Key = "main")]
+	[Transient<AwaitedFeedRouter>]
+	[Transient<AwaitedFeedPropertyRouter>]
+	[Singleton<AwaitedEmptyRouter>]
+	public static partial class AwaitedDictionaryContainer;
 }

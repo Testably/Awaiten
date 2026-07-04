@@ -20,7 +20,10 @@ namespace Awaiten.SourceGenerators.Entities;
 ///     <c>AwaitedCollectionType</c> is the inner collection shape of an
 ///     <see cref="DependencyKind.AwaitedEnumerable" /> (e.g. <c>IReadOnlyList&lt;T&gt;</c> for a
 ///     <c>Task&lt;IReadOnlyList&lt;T&gt;&gt;</c> parameter), which the materialized array must be typed as so
-///     the produced task's result type matches the parameter exactly (null for every other kind).
+///     the produced task's result type matches the parameter exactly; for an
+///     <see cref="DependencyKind.AwaitedKeyedCollection" /> it is the inner dictionary shape
+///     (<c>IReadOnlyDictionary&lt;string, T&gt;</c>), used both to type the produced task and, for suppression, to
+///     recognize a registered synchronous dictionary that claims the awaited view (null for every other kind).
 /// </summary>
 internal sealed record ParameterModel(
 	string ServiceType,
