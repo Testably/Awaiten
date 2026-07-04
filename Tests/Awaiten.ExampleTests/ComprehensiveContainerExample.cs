@@ -544,6 +544,13 @@ public partial class ComprehensiveContainerExample
 
 	// ---- Tests ----------------------------------------------------------------------------------------
 
+	// The coffee-shop tests below tear their Root down with a synchronous `using`: the example compiles for
+	// net48 too, whose generated Root has no DisposeAsync surface to `await using`. That is safe here - the
+	// shop's only IAsyncDisposable-only service, the scoped DishStation (net8.0+), is resolved solely in
+	// ScopedAsyncDisposable_IsTornDownAsynchronouslyWithItsScope inside a child scope drained through
+	// DisposeAsync, so a root never tracks one and its synchronous drain has nothing async-only to reach
+	// (AWT156 warns on what the disposed owner could track, not on what it actually tracked).
+#pragma warning disable AWT156
 	[Fact]
 	public async Task Singleton_Scoped_Transient_ResolveAndShareCorrectly()
 	{
@@ -788,6 +795,7 @@ public partial class ComprehensiveContainerExample
 		await That(shop.Resolve<IRoaster>()).Is<HouseRoaster>()
 			.Because("a module TryAdd registration stands when the container registers none of its own");
 	}
+#pragma warning restore AWT156
 
 	[Fact]
 	public async Task SelfServeKiosk_ResolvesADisposableByTypeAndThroughAFunc()

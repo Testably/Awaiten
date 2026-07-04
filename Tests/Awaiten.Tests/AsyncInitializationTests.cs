@@ -1086,7 +1086,7 @@ public partial class AsyncInitializationTests
 	{
 		// The transient Valve only ever lives in the Owned<Valve> throwaway scope, drained through the handle's
 		// DisposeAsync below - the root never tracks one, so its synchronous using is safe here (AWT156 checks
-		// per container, not per tracked owner).
+		// what the disposed owner could track, not what it actually tracked, and a root could track a transient).
 #pragma warning disable AWT156
 		using AsyncDisposableOwnedContainer.Root container = new();
 #pragma warning restore AWT156
