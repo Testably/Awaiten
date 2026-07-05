@@ -149,10 +149,12 @@ partial class AwaitenGenerator
 		return parameters;
 	}
 
-	// The single predicate every gate uses to treat all collection kinds alike (AWT101/AWT141 exemption,
-	// constructor eligibility, the guarded graph indexer), so adding a collection kind is a one-line change here. A
-	// collection is synthesized from its element type's registrations and always satisfiable: an unregistered
-	// element type yields an empty collection, never a missing dependency.
+	/// <summary>
+	///     The single predicate every gate uses to treat all collection kinds alike (AWT101/AWT141 exemption,
+	///     constructor eligibility, the guarded graph indexer), so adding a collection kind is a one-line change here.
+	///     A collection is synthesized from its element type's registrations and always satisfiable: an unregistered
+	///     element type yields an empty collection, never a missing dependency.
+	/// </summary>
 	private static bool IsSynthesizedCollection(DependencyKind kind)
 		=> kind is DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.AwaitedEnumerable or DependencyKind.KeyedCollection or DependencyKind.AwaitedKeyedCollection;
 
@@ -628,10 +630,13 @@ partial class AwaitenGenerator
 			? key
 			: null;
 
-	// Whether a type is a System.Threading.Tasks.Task<T>, yielding its result type T. Used to recognize the async
-	// relationship types (Task<T>, Func<…, Task<T>>, Lazy<Task<T>>). ValueTask<T> is deliberately not a
-	// relationship type (a stored ValueTask may only be awaited once); it is supported solely as an async factory's
-	// return type, on the producer side.
+	/// <summary>
+	///     Whether a type is a <c>System.Threading.Tasks.Task&lt;T&gt;</c>, yielding its result type T. Used to
+	///     recognize the async relationship types (<c>Task&lt;T&gt;</c>, <c>Func&lt;…, Task&lt;T&gt;&gt;</c>,
+	///     <c>Lazy&lt;Task&lt;T&gt;&gt;</c>). <c>ValueTask&lt;T&gt;</c> is deliberately not a relationship type (a
+	///     stored ValueTask may only be awaited once); it is supported solely as an async factory's return type, on
+	///     the producer side.
+	/// </summary>
 	private static bool IsTask(ITypeSymbol type, out ITypeSymbol result)
 	{
 		if (type is INamedTypeSymbol { IsGenericType: true, Name: "Task", TypeArguments.Length: 1, } named
@@ -791,9 +796,12 @@ partial class AwaitenGenerator
 		return false;
 	}
 
-	// Whether a type is a System.Collections.Generic.IAsyncEnumerable<T> asynchronous collection, yielding its
-	// fully-qualified element type T. The one collection shape that awaits its members, so it is classified apart
-	// from the synchronous shapes in TryGetCollectionElement (which materialize eagerly into an array).
+	/// <summary>
+	///     Whether a type is a <c>System.Collections.Generic.IAsyncEnumerable&lt;T&gt;</c> asynchronous collection,
+	///     yielding its fully-qualified element type T. The one collection shape that awaits its members, so it is
+	///     classified apart from the synchronous shapes in <c>TryGetCollectionElement</c> (which materialize eagerly
+	///     into an array).
+	/// </summary>
 	private static bool IsAsyncEnumerable(ITypeSymbol type, out string? elementType)
 	{
 		if (type is INamedTypeSymbol { IsGenericType: true, Name: "IAsyncEnumerable", TypeArguments.Length: 1, } named
@@ -807,17 +815,21 @@ partial class AwaitenGenerator
 		return false;
 	}
 
-	// The fully-qualified IAsyncEnumerable<T> shape of <paramref name="elementType" />, in the exact form
-	// registrations are stored under, so a membership check against serviceToImpl recognizes an explicitly
-	// registered async-collection type (the async analogue of CollectionShapeTypes). Its own shape, so a single
-	// string rather than a set.
+	/// <summary>
+	///     The fully-qualified <c>IAsyncEnumerable&lt;T&gt;</c> shape of <paramref name="elementType" />, in the exact
+	///     form registrations are stored under, so a membership check against <c>serviceToImpl</c> recognizes an
+	///     explicitly registered async-collection type (the async analogue of <c>CollectionShapeTypes</c>). Its own
+	///     shape, so a single string rather than a set.
+	/// </summary>
 	internal static string AsyncEnumerableShapeType(string elementType)
 		=> $"global::System.Collections.Generic.IAsyncEnumerable<{elementType}>";
 
-	// The fully-qualified type strings of every collection shape of <paramref name="elementType" /> (the five
-	// generic collection interfaces and the rank-1 array), in the exact form registrations are stored under, so a
-	// membership check against serviceToImpl recognizes an explicitly registered collection type. Shared by the
-	// generator (injection classification) and the emitter (public dispatch) so the two never drift.
+	/// <summary>
+	///     The fully-qualified type strings of every collection shape of <paramref name="elementType" /> (the five
+	///     generic collection interfaces and the rank-1 array), in the exact form registrations are stored under, so a
+	///     membership check against <c>serviceToImpl</c> recognizes an explicitly registered collection type. Shared
+	///     by the generator (injection classification) and the emitter (public dispatch) so the two never drift.
+	/// </summary>
 	internal static IEnumerable<string> CollectionShapeTypes(string elementType)
 	{
 		yield return $"global::System.Collections.Generic.IEnumerable<{elementType}>";
@@ -828,7 +840,7 @@ partial class AwaitenGenerator
 		yield return $"{elementType}[]";
 	}
 
-	// Whether a type is an Awaiten.Owned<T> disposal handle, yielding the owned service type T.
+	/// <summary>Whether a type is an <c>Awaiten.Owned&lt;T&gt;</c> disposal handle, yielding the owned service type T.</summary>
 	private static bool IsOwned(ITypeSymbol type, out ITypeSymbol inner)
 	{
 		if (type is INamedTypeSymbol { Name: "Owned", TypeArguments.Length: 1, } named
@@ -845,31 +857,39 @@ partial class AwaitenGenerator
 	private static bool HasArgAttribute(ImmutableArray<AttributeData> attributes)
 		=> HasAwaitenAttribute(attributes, "ArgAttribute");
 
-	// Whether a factory parameter is marked [RequestingType], so it receives the requesting consumer's
-	// typeof(…) rather than being resolved from the graph.
+	/// <summary>
+	///     Whether a factory parameter is marked <c>[RequestingType]</c>, so it receives the requesting consumer's
+	///     typeof(…) rather than being resolved from the graph.
+	/// </summary>
 	private static bool HasRequestingType(ImmutableArray<AttributeData> attributes)
 		=> HasAwaitenAttribute(attributes, "RequestingTypeAttribute");
 
-	// Whether a type is exactly global::System.Type (the required type of a [RequestingType] parameter; any
-	// other type is AWT162). Matched structurally so a user-defined System.Type in a nested namespace does not
-	// qualify.
+	/// <summary>
+	///     Whether a type is exactly <c>global::System.Type</c> (the required type of a <c>[RequestingType]</c>
+	///     parameter; any other type is AWT162). Matched structurally so a user-defined System.Type in a nested
+	///     namespace does not qualify.
+	/// </summary>
 	private static bool IsSystemType(ITypeSymbol type)
 		=> type is { Name: "Type", ContainingNamespace: { Name: "System", ContainingNamespace.IsGlobalNamespace: true, }, };
 
 	private static bool HasInject(ImmutableArray<AttributeData> attributes)
 		=> HasAwaitenAttribute(attributes, "InjectAttribute");
 
-	// Whether an [Inject] attribute sets Deferred = true, so the member is assigned after construction and
-	// caching (breaking a mutual constructor cycle) rather than filled inside the object initializer.
+	/// <summary>
+	///     Whether an <c>[Inject]</c> attribute sets Deferred = true, so the member is assigned after construction and
+	///     caching (breaking a mutual constructor cycle) rather than filled inside the object initializer.
+	/// </summary>
 	private static bool IsInjectDeferred(ImmutableArray<AttributeData> attributes)
 		=> InjectFlag(attributes, "Deferred");
 
-	// Whether an [Inject] attribute sets Optional = true, so the member is left unassigned (rather than
-	// reported as AWT101) when its service type is not registered.
+	/// <summary>
+	///     Whether an <c>[Inject]</c> attribute sets Optional = true, so the member is left unassigned (rather than
+	///     reported as AWT101) when its service type is not registered.
+	/// </summary>
 	private static bool IsInjectOptional(ImmutableArray<AttributeData> attributes)
 		=> InjectFlag(attributes, "Optional");
 
-	// The value of a named bool flag on the [Inject] attribute (Deferred/Optional), false when absent.
+	/// <summary>The value of a named bool flag on the <c>[Inject]</c> attribute (Deferred/Optional), false when absent.</summary>
 	private static bool InjectFlag(ImmutableArray<AttributeData> attributes, string flag)
 	{
 		if (!TryGetAwaitenAttribute(attributes, "InjectAttribute", out AttributeData? attribute) || attribute is null)
@@ -917,13 +937,17 @@ partial class AwaitenGenerator
 		return false;
 	}
 
-	// Whether a parameter is marked [FromServices], so it is resolved from the container's external provider
-	// rather than the Awaiten graph.
+	/// <summary>
+	///     Whether a parameter is marked <c>[FromServices]</c>, so it is resolved from the container's external
+	///     provider rather than the Awaiten graph.
+	/// </summary>
 	private static bool HasFromServices(IParameterSymbol parameter)
 		=> HasAwaitenAttribute(parameter.GetAttributes(), "FromServicesAttribute");
 
-	// Whether the container is marked [ImportServices], so every otherwise-unresolved direct dependency is
-	// satisfied from the external provider rather than reported as missing.
+	/// <summary>
+	///     Whether the container is marked <c>[ImportServices]</c>, so every otherwise-unresolved direct dependency is
+	///     satisfied from the external provider rather than reported as missing.
+	/// </summary>
 	private static bool ContainerImportsServices(INamedTypeSymbol containerSymbol)
 		=> HasAwaitenAttribute(containerSymbol.GetAttributes(), "ImportServicesAttribute");
 

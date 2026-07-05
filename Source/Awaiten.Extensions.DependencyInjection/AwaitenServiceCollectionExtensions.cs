@@ -60,8 +60,10 @@ public static class AwaitenServiceCollectionExtensions
 		return AddGeneratedContainer(services, new TRoot());
 	}
 
-	// Takes an existing root so AwaitenServiceProviderFactory can project the root it handed to the host's
-	// ConfigureContainer callbacks instead of a fresh one.
+	/// <summary>
+	///     Takes an existing root so <see cref="AwaitenServiceProviderFactory{TRoot}" /> can project the root it
+	///     handed to the host's ConfigureContainer callbacks instead of a fresh one.
+	/// </summary>
 	internal static IServiceCollection AddGeneratedContainer<TRoot>(IServiceCollection services, TRoot root)
 		where TRoot : class, IAwaitenContainerMetadata, new()
 	{
@@ -135,26 +137,32 @@ public static class AwaitenServiceCollectionExtensions
 		return services;
 	}
 
-	// The Awaiten scope a service resolves from: singletons from the container root; scoped services from the
-	// Awaiten scope aligned to the current MS.DI scope; transients from that aligned scope too when resolved
-	// inside a scope (so their disposables are bounded by the scope), falling back to the root only when resolved
-	// from the root provider itself.
+	/// <summary>
+	///     The Awaiten scope a service resolves from: singletons from the container root; scoped services from the
+	///     Awaiten scope aligned to the current MS.DI scope; transients from that aligned scope too when resolved
+	///     inside a scope (so their disposables are bounded by the scope), falling back to the root only when
+	///     resolved from the root provider itself.
+	/// </summary>
 	private static IAwaitenScope ScopeFor<TRoot>(IServiceProvider provider, AwaitenLifetime lifetime, TRoot root)
 		where TRoot : class, IAwaitenContainerMetadata, new()
 		=> lifetime == AwaitenLifetime.Singleton || (lifetime == AwaitenLifetime.Transient && IsRootProvider(provider))
 			? root
 			: provider.GetRequiredService<AwaitenScopeHolder<TRoot>>().Scope;
 
-	// The captured probe identifies the root provider: a factory whose current provider is that same instance is
-	// resolving from the root provider, not from a scope.
+	/// <summary>
+	///     The captured probe identifies the root provider: a factory whose current provider is that same instance
+	///     is resolving from the root provider, not from a scope.
+	/// </summary>
 	private static bool IsRootProvider(IServiceProvider provider)
 		=> ReferenceEquals(provider.GetRequiredService<AwaitenRootProviderProbe>().RootProvider, provider);
 
-	// Wires the container root's external resolver to the root provider on first use. The root resolves singletons
-	// (and root-provider transients), so their external dependencies stay valid for the app's lifetime; scoped
-	// external resolution is wired per scope on the aligned Awaiten scope (see the scope factory above). A
-	// resolver a caller wired explicitly is left untouched. Guarded by a double-checked lock on the internal probe
-	// singleton so concurrent first resolutions wire it exactly once.
+	/// <summary>
+	///     Wires the container root's external resolver to the root provider on first use. The root resolves
+	///     singletons (and root-provider transients), so their external dependencies stay valid for the app's
+	///     lifetime; scoped external resolution is wired per scope on the aligned Awaiten scope (see the scope
+	///     factory above). A resolver a caller wired explicitly is left untouched. Guarded by a double-checked lock
+	///     on the internal probe singleton so concurrent first resolutions wire it exactly once.
+	/// </summary>
 	private static void EnsureExternalWired<TRoot>(IServiceProvider provider, TRoot root, bool hasExternal)
 		where TRoot : class, IAwaitenContainerMetadata, new()
 	{

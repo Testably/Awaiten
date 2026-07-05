@@ -259,9 +259,11 @@ partial class AwaitenGenerator
 		return null;
 	}
 
-	// A module's lifecycle hook is emitted qualified with the module type (the generated container is another
-	// class, so the simple name would not bind); the container's own hooks stay unqualified - they are in scope
-	// inside the generated partial. Mirrors QualifiedProductionMember for Factory/Instance members.
+	/// <summary>
+	///     A module's lifecycle hook is emitted qualified with the module type (the generated container is another
+	///     class, so the simple name would not bind); the container's own hooks stay unqualified, in scope inside
+	///     the generated partial. Mirrors <c>QualifiedProductionMember</c> for Factory/Instance members.
+	/// </summary>
 	private static string QualifiedHook(ImplInfo info, string hookName)
 		=> info.Origin is { } origin ? $"{origin.ToDisplayString(FullyQualified)}.{hookName}" : hookName;
 
@@ -477,9 +479,11 @@ partial class AwaitenGenerator
 			new EquatableArray<string>([Display(info.OwningServiceOrImpl), info.ProductionMember!, DescribeOwner(info),])));
 	}
 
-	// AWT153: the module declares a member matching the Factory/Instance registration, but the generated
-	// container cannot access it (e.g. a private member of a source module). A cross-assembly internal member
-	// without InternalsVisibleTo is not imported into the symbol tables at all and surfaces as AWT108/AWT109.
+	/// <summary>
+	///     AWT153: the module declares a member matching the Factory/Instance registration, but the generated
+	///     container cannot access it (e.g. a private member of a source module). A cross-assembly internal member
+	///     without InternalsVisibleTo is not imported into the symbol tables at all and surfaces as AWT108/AWT109.
+	/// </summary>
 	private static void ReportInaccessibleModuleMember(ImplInfo info, List<DiagnosticInfo> diagnostics)
 		=> diagnostics.Add(new DiagnosticInfo(
 			Diagnostics.InaccessibleModuleMember,
@@ -490,14 +494,18 @@ partial class AwaitenGenerator
 				info.ProductionMember!,
 			])));
 
-	// Names the owner of a Factory/Instance member in a diagnostic: the module that declared the
-	// registration, or the container for its own registrations.
+	/// <summary>
+	///     Names the owner of a Factory/Instance member in a diagnostic: the module that declared the
+	///     registration, or the container for its own registrations.
+	/// </summary>
 	private static string DescribeOwner(ImplInfo info)
 		=> info.Origin is { } origin ? $"the module '{Display(origin.ToDisplayString(FullyQualified))}'" : "the container";
 
-	// A module's Factory/Instance member is emitted qualified with the module type (the generated container is
-	// another class, so the simple name would not bind); the container's own members stay unqualified, being
-	// in scope inside the generated partial.
+	/// <summary>
+	///     A module's Factory/Instance member is emitted qualified with the module type (the generated container is
+	///     another class, so the simple name would not bind); the container's own members stay unqualified, being
+	///     in scope inside the generated partial.
+	/// </summary>
 	private static string? QualifiedProductionMember(ImplInfo info)
 		=> info.ProductionMember is null || info.Origin is null
 			? info.ProductionMember

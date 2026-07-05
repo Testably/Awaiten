@@ -25,8 +25,11 @@ public sealed class AwaitenServiceProvider : IServiceProvider, IServiceScopeFact
 	private readonly IAwaitenScope _container;
 	private readonly bool _ownsContainer;
 
-	// The container's registration metadata (implemented by the generated Root), flowed into scope providers
-	// so async services stay resolvable as Task<T> from scopes too. Null when the scope offers no metadata.
+	/// <summary>
+	///     The container's registration metadata (implemented by the generated Root), flowed into scope providers
+	///     so async services stay resolvable as <c>Task&lt;T&gt;</c> from scopes too. Null when the scope offers no
+	///     metadata.
+	/// </summary>
 	private readonly IAwaitenContainerMetadata? _metadata;
 
 	/// <summary>Adapts the given container to <see cref="IServiceProvider" />.</summary>
@@ -117,8 +120,11 @@ public sealed class AwaitenServiceProvider : IServiceProvider, IServiceScopeFact
 		return default;
 	}
 
-	// The generator-emitted Task<object>->Task<T> converter for an async-advertised service type, or null when
-	// the type is not an async registration. Reflection-free: the closed converter is carried by the metadata.
+	/// <summary>
+	///     The generator-emitted <c>Task&lt;object&gt;</c> to <c>Task&lt;T&gt;</c> converter for an async-advertised
+	///     service type, or null when the type is not an async registration. Reflection-free: the closed converter
+	///     is carried by the metadata.
+	/// </summary>
 	private Func<Task<object>, object>? AsyncConverterFor(Type serviceType)
 	{
 		IReadOnlyList<AwaitenRegistration> registrations = _metadata!.Registrations;

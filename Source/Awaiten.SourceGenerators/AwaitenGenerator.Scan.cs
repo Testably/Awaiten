@@ -36,10 +36,12 @@ partial class AwaitenGenerator
 		return result;
 	}
 
-	// Expands one [Scan] over its candidate types, registering each match per ScanAs. An unbound generic marker
-	// matches implementers of any closed form of it, registered under that closed interface, while a closed
-	// marker matches types assignable to it. Every assignable match is counted even when an explicit
-	// registration overrides it, so AWT138 fires only when nothing matched.
+	/// <summary>
+	///     Expands one <c>[Scan]</c> over its candidate types, registering each match per <c>ScanAs</c>. An unbound
+	///     generic marker matches implementers of any closed form of it, registered under that closed interface,
+	///     while a closed marker matches types assignable to it. Every assignable match is counted even when an
+	///     explicit registration overrides it, so AWT138 fires only when nothing matched.
+	/// </summary>
 	private static void ExpandScan(
 		AttributeData attribute,
 		INamedTypeSymbol marker,
@@ -86,9 +88,11 @@ partial class AwaitenGenerator
 		}
 	}
 
-	// Registers one scan match per ScanAs: as its own concrete type and under each contract interface. An
-	// interfaces-only scan that found no contract to register under reports AWT139 (usual cause: a base-type
-	// marker). SelfAndImplementedInterfaces is exempt, since its self registration still covers the type.
+	/// <summary>
+	///     Registers one scan match per <c>ScanAs</c>: as its own concrete type and under each contract interface.
+	///     An interfaces-only scan that found no contract to register under reports AWT139 (usual cause: a base-type
+	///     marker). <c>SelfAndImplementedInterfaces</c> is exempt, since its self registration still covers the type.
+	/// </summary>
 	private static void RegisterScanMatch(
 		INamedTypeSymbol type,
 		List<INamedTypeSymbol> contracts,
@@ -126,19 +130,26 @@ partial class AwaitenGenerator
 		}
 	}
 
-	// The interfaces a closed marker registers a match under: every implemented interface assignable to the
-	// marker (itself and any more-derived service interfaces), never unrelated interfaces such as IDisposable.
+	/// <summary>
+	///     The interfaces a closed marker registers a match under: every implemented interface assignable to the
+	///     marker (itself and any more-derived service interfaces), never unrelated interfaces such as
+	///     <c>IDisposable</c>.
+	/// </summary>
 	private static List<INamedTypeSymbol> MarkerInterfaces(INamedTypeSymbol type, INamedTypeSymbol marker, Compilation compilation)
 		=> type.AllInterfaces.Where(contract => compilation.HasImplicitConversion(contract, marker)).ToList();
 
-	// The interfaces an open marker registers a match under: the closed forms of the marker the type implements,
-	// restricted to interfaces. A base-type marker yields none, which surfaces as AWT139.
+	/// <summary>
+	///     The interfaces an open marker registers a match under: the closed forms of the marker the type
+	///     implements, restricted to interfaces. A base-type marker yields none, which surfaces as AWT139.
+	/// </summary>
 	private static List<INamedTypeSymbol> ClosedMarkerInterfaces(INamedTypeSymbol type, INamedTypeSymbol markerDefinition)
 		=> ClosedMarkerForms(type, markerDefinition).Where(contract => contract.TypeKind == TypeKind.Interface).ToList();
 
-	// The per-scan settings shared by every match of one [Scan]: how matches are exposed, the lifetime, the
-	// attribute location for diagnostics, and whether an unconstructable match is skipped with a warning
-	// (SkipUnconstructable) instead of erroring. Bundled so the per-match registration takes one handle.
+	/// <summary>
+	///     The per-scan settings shared by every match of one <c>[Scan]</c>: how matches are exposed, the lifetime,
+	///     the attribute location for diagnostics, and whether an unconstructable match is skipped with a warning
+	///     (<c>SkipUnconstructable</c>) instead of erroring. Bundled so the per-match registration takes one handle.
+	/// </summary>
 	private sealed record ScanMatch(ScanExposure Exposure, Lifetime Lifetime, Location? Location, bool SkipUnconstructable)
 	{
 		public bool RegisterSelf => Exposure is ScanExposure.Self or ScanExposure.SelfAndImplementedInterfaces;
@@ -146,9 +157,11 @@ partial class AwaitenGenerator
 		public bool RegisterInterfaces => Exposure is ScanExposure.ImplementedInterfaces or ScanExposure.SelfAndImplementedInterfaces;
 	}
 
-	// Whether the scanned marker is an unbound/open generic definition (typeof(IView<>)): either Roslyn flagged
-	// it IsUnboundGenericType, or it has arity and is its own definition (its type arguments are the bare
-	// type parameters).
+	/// <summary>
+	///     Whether the scanned marker is an unbound/open generic definition (<c>typeof(IView&lt;&gt;)</c>): either
+	///     Roslyn flagged it <c>IsUnboundGenericType</c>, or it has arity and is its own definition (its type
+	///     arguments are the bare type parameters).
+	/// </summary>
 	private static bool IsOpenGenericMarker(INamedTypeSymbol marker)
 		=> marker.IsUnboundGenericType
 		   || (marker.Arity > 0 && SymbolEqualityComparer.Default.Equals(marker, marker.OriginalDefinition));
@@ -181,8 +194,10 @@ partial class AwaitenGenerator
 		return closed;
 	}
 
-	// A type and every base type up its inheritance chain, so a marker closed as a base type is found alongside
-	// one closed as an interface.
+	/// <summary>
+	///     A type and every base type up its inheritance chain, so a marker closed as a base type is found
+	///     alongside one closed as an interface.
+	/// </summary>
 	private static IEnumerable<INamedTypeSymbol> SelfAndBaseTypes(INamedTypeSymbol type)
 	{
 		for (INamedTypeSymbol? current = type; current is not null; current = current.BaseType)
@@ -228,9 +243,11 @@ partial class AwaitenGenerator
 		return candidates;
 	}
 
-	// The assemblies named by InAssembliesOf (each entry's containing assembly, deduped). Null when the argument
-	// is unset or explicitly null, meaning the container's own assembly is scanned instead; an empty list means
-	// the argument was set but resolved to no assembly (AWT143).
+	/// <summary>
+	///     The assemblies named by <c>InAssembliesOf</c> (each entry's containing assembly, deduped). Null when the
+	///     argument is unset or explicitly null, meaning the container's own assembly is scanned instead; an empty
+	///     list means the argument was set but resolved to no assembly (AWT143).
+	/// </summary>
 	private static List<IAssemblySymbol>? ScanAssemblies(AttributeData attribute)
 	{
 		List<IAssemblySymbol>? assemblies = null;
@@ -255,8 +272,10 @@ partial class AwaitenGenerator
 		return assemblies;
 	}
 
-	// Appends one referenced assembly's scan candidates, reporting AWT140 when it holds none (almost always a
-	// missing ProjectReference or the wrong marker type).
+	/// <summary>
+	///     Appends one referenced assembly's scan candidates, reporting AWT140 when it holds none (almost always a
+	///     missing <c>ProjectReference</c> or the wrong marker type).
+	/// </summary>
 	private static void AddAssemblyCandidates(
 		IAssemblySymbol assembly,
 		INamedTypeSymbol marker,
@@ -278,10 +297,12 @@ partial class AwaitenGenerator
 		}
 	}
 
-	// Whether a type is a concrete class assignable to the marker (and not the marker itself), shared by candidate
-	// gathering and the AWT140 emptiness check. An unbound generic marker requires the type to implement a closed
-	// form of it. Generic type definitions and inaccessible types are skipped, since neither can be referenced from
-	// generated code.
+	/// <summary>
+	///     Whether a type is a concrete class assignable to the marker (and not the marker itself), shared by
+	///     candidate gathering and the AWT140 emptiness check. An unbound generic marker requires the type to
+	///     implement a closed form of it. Generic type definitions and inaccessible types are skipped, since
+	///     neither can be referenced from generated code.
+	/// </summary>
 	private static bool IsScanCandidate(INamedTypeSymbol type, INamedTypeSymbol marker, Compilation compilation)
 	{
 		if (type is not { TypeKind: TypeKind.Class, IsAbstract: false, IsStatic: false, IsImplicitClass: false, }
@@ -297,8 +318,10 @@ partial class AwaitenGenerator
 			: compilation.HasImplicitConversion(type, marker);
 	}
 
-	// Whether a type declares type parameters of its own or is nested inside a type that does. Either way there
-	// is no single closed type the generated container could construct.
+	/// <summary>
+	///     Whether a type declares type parameters of its own or is nested inside a type that does. Either way
+	///     there is no single closed type the generated container could construct.
+	/// </summary>
 	private static bool HasOpenTypeParameters(INamedTypeSymbol type)
 	{
 		for (INamedTypeSymbol? current = type; current is not null; current = current.ContainingType)
@@ -312,14 +335,20 @@ partial class AwaitenGenerator
 		return false;
 	}
 
-	// A single overridable, collection-eligible registration contributed by a [Scan]: IsScan so it never
-	// conflicts with an explicit registration over the same implementation and always joins its service's
-	// collection, carrying the scan's SkipUnconstructable opt-in for the unconstructable-match prune.
+	/// <summary>
+	///     A single overridable, collection-eligible registration contributed by a <c>[Scan]</c>: <c>IsScan</c> so
+	///     it never conflicts with an explicit registration over the same implementation and always joins its
+	///     service's collection, carrying the scan's <c>SkipUnconstructable</c> opt-in for the
+	///     unconstructable-match prune.
+	/// </summary>
 	private static RawRegistration ScanRegistration(string service, string implementation, INamedTypeSymbol type, INamedTypeSymbol serviceSymbol, ScanMatch match)
 		=> new(service, implementation, match.Lifetime, type, match.Location, ProductionKind.Constructor, null, false, null, serviceSymbol, true, match.SkipUnconstructable);
 
-	// The scanned marker: the type argument of the generic [Scan<TMarker>], or the typeof(...) constructor
-	// argument of [Scan(typeof(TMarker))]. Null when the attribute is malformed.
+	/// <summary>
+	///     The scanned marker: the type argument of the generic <c>[Scan&lt;TMarker&gt;]</c>, or the
+	///     <c>typeof(...)</c> constructor argument of <c>[Scan(typeof(TMarker))]</c>. Null when the attribute is
+	///     malformed.
+	/// </summary>
 	private static INamedTypeSymbol? ScanMarker(AttributeData attribute, INamedTypeSymbol attributeClass)
 	{
 		if (attributeClass.IsGenericType)
@@ -334,8 +363,11 @@ partial class AwaitenGenerator
 			: null;
 	}
 
-	// The lifetime named on a [Scan] (Lifetime = AwaitenLifetime.X); its underlying int lines up with the
-	// generator's Lifetime enum. Defaults to Transient when unset, matching the attribute default.
+	/// <summary>
+	///     The lifetime named on a <c>[Scan]</c> (<c>Lifetime = AwaitenLifetime.X</c>); its underlying int lines up
+	///     with the generator's <c>Lifetime</c> enum. Defaults to <c>Transient</c> when unset, matching the
+	///     attribute default.
+	/// </summary>
 	private static Lifetime ScanLifetime(AttributeData attribute)
 	{
 		foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
@@ -349,8 +381,11 @@ partial class AwaitenGenerator
 		return Lifetime.Transient;
 	}
 
-	// The SkipUnconstructable flag named on a [Scan]: when set, a match the container cannot construct is
-	// skipped with AWT141 instead of erroring. Defaults to false when unset, matching the attribute default.
+	/// <summary>
+	///     The <c>SkipUnconstructable</c> flag named on a <c>[Scan]</c>: when set, a match the container cannot
+	///     construct is skipped with AWT141 instead of erroring. Defaults to false when unset, matching the
+	///     attribute default.
+	/// </summary>
 	private static bool ScanSkipsUnconstructable(AttributeData attribute)
 	{
 		foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
@@ -364,8 +399,10 @@ partial class AwaitenGenerator
 		return false;
 	}
 
-	// The exposure named on a [Scan] (As = ScanAs.X); its underlying int lines up with the generator's
-	// ScanExposure enum. Defaults to Self when unset, matching the attribute default.
+	/// <summary>
+	///     The exposure named on a <c>[Scan]</c> (<c>As = ScanAs.X</c>); its underlying int lines up with the
+	///     generator's <c>ScanExposure</c> enum. Defaults to <c>Self</c> when unset, matching the attribute default.
+	/// </summary>
 	private static ScanExposure ScanExposureOf(AttributeData attribute)
 	{
 		foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
@@ -379,8 +416,10 @@ partial class AwaitenGenerator
 		return ScanExposure.Self;
 	}
 
-	// Every named type in an assembly, walking nested types and child namespaces, so a [Scan] can consider
-	// every concrete class the container's assembly declares.
+	/// <summary>
+	///     Every named type in an assembly, walking nested types and child namespaces, so a <c>[Scan]</c> can
+	///     consider every concrete class the container's assembly declares.
+	/// </summary>
 	private static IEnumerable<INamedTypeSymbol> EnumerateTypes(INamespaceSymbol ns)
 	{
 		foreach (INamedTypeSymbol type in ns.GetTypeMembers())
@@ -583,9 +622,11 @@ partial class AwaitenGenerator
 		return null;
 	}
 
-	// Whether a Direct/Func dependency with no exact registration would be satisfied by variance redirection
-	// (mirroring RedirectVariance): the declared type unwraps to the classified service and a
-	// variance-compatible registration exists.
+	/// <summary>
+	///     Whether a Direct/Func dependency with no exact registration would be satisfied by variance redirection
+	///     (mirroring <c>RedirectVariance</c>): the declared type unwraps to the classified service and a
+	///     variance-compatible registration exists.
+	/// </summary>
 	private static bool IsVarianceSatisfiable(ParameterModel model, ITypeSymbol declaredType, VarianceState variance)
 		=> model.Key is null
 		   && model.Kind is DependencyKind.Direct or DependencyKind.Func

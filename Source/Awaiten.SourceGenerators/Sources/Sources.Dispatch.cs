@@ -692,20 +692,29 @@ internal static partial class Sources
 		}
 	}
 
-	// Under all-or-nothing synthesis, an element type with any collection shape explicitly registered (unkeyed) is
-	// not synthesized at all. The registered shape is dispatched as an ordinary service and the other shapes are
-	// unresolvable. Mirrors the injection-side suppression in AwaitenGenerator.ClassifyParameters.
+	/// <summary>
+	///     Under all-or-nothing synthesis, an element type with any collection shape explicitly registered
+	///     (unkeyed) is not synthesized at all. The registered shape is dispatched as an ordinary service and the
+	///     other shapes are unresolvable. Mirrors the injection-side suppression in
+	///     <c>AwaitenGenerator.ClassifyParameters</c>.
+	/// </summary>
 	private static bool SynthesisSuppressed(Dictionary<ServiceKey, int> serviceToIndex, string elementType)
 		=> AwaitenGenerator.CollectionShapeTypes(elementType).Any(shape => serviceToIndex.ContainsKey(new ServiceKey(shape, null)));
 
-	// A registered IAsyncEnumerable<T> claims only its own async shape: the synthesized async view steps aside for
-	// it (on the sync dispatch, the async arm and the withheld guidance alike) while the synchronous shapes stay
-	// synthesized. Mirrors the injection-side asyncShapeRegistered gate in AwaitenGenerator.ClassifyParameters.
+	/// <summary>
+	///     A registered <c>IAsyncEnumerable&lt;T&gt;</c> claims only its own async shape: the synthesized async
+	///     view steps aside for it (on the sync dispatch, the async arm and the withheld guidance alike) while the
+	///     synchronous shapes stay synthesized. Mirrors the injection-side <c>asyncShapeRegistered</c> gate in
+	///     <c>AwaitenGenerator.ClassifyParameters</c>.
+	/// </summary>
 	private static bool AsyncShapeRegistered(Dictionary<ServiceKey, int> serviceToIndex, string elementType)
 		=> serviceToIndex.ContainsKey(new ServiceKey(AwaitenGenerator.AsyncEnumerableShapeType(elementType), null));
 
-	// Adds one collection shape's dispatch entry, unless an explicit registration already claimed the slot (the
-	// seen guard). A root-withheld collection carries the guidance thrown by Resolve(Type) on the Root.
+	/// <summary>
+	///     Adds one collection shape's dispatch entry, unless an explicit registration already claimed the slot
+	///     (the <c>seen</c> guard). A root-withheld collection carries the guidance thrown by <c>Resolve(Type)</c>
+	///     on the Root.
+	/// </summary>
 	private static void AddCollectionShape(
 		string serviceType, string array, bool rootWithheld, List<DispatchEntry> entries, HashSet<string> seen)
 	{
@@ -1087,14 +1096,20 @@ internal static partial class Sources
 
 		public string? Guidance { get; } = guidance;
 
-		// A bare-service entry keeps its resolver method name so the bucket table can bind a direct delegate to the
-		// static resolver (__s => ResolveX(__s), or __s => Root.ResolveX(__s.__root) for a singleton) instead of
-		// routing through a per-entry forwarder. Null for compound values (Func/Lazy/Owned/collection literals),
-		// which need their expression preserved verbatim in a __R forwarder.
+		/// <summary>
+		///     A bare-service entry keeps its resolver method name so the bucket table can bind a direct delegate
+		///     to the static resolver (<c>__s =&gt; ResolveX(__s)</c>, or <c>__s =&gt; Root.ResolveX(__s.__root)</c>
+		///     for a singleton) instead of routing through a per-entry forwarder. Null for compound values
+		///     (<c>Func</c>/<c>Lazy</c>/<c>Owned</c>/collection literals), which need their expression preserved
+		///     verbatim in a <c>__R</c> forwarder.
+		/// </summary>
 		public string? DirectResolver { get; } = directResolver;
 
-		// Whether a bare-service DirectResolver is root-owned (a singleton or pre-built Instance): its static
-		// resolver lives on the Root and is bound as Root.ResolveX(__s.__root); otherwise it lives on the Scope.
+		/// <summary>
+		///     Whether a bare-service <c>DirectResolver</c> is root-owned (a singleton or pre-built Instance): its
+		///     static resolver lives on the Root and is bound as <c>Root.ResolveX(__s.__root)</c>; otherwise it
+		///     lives on the Scope.
+		/// </summary>
 		public bool RootOwnedDirect { get; } = rootOwnedDirect;
 
 		public bool RootWithheld => Guidance is not null;

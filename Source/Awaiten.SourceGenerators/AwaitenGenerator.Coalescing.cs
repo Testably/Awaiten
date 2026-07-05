@@ -242,10 +242,12 @@ partial class AwaitenGenerator
 		return dropped;
 	}
 
-	// Reports the coalescing conflicts a re-registration of an already-seen implementation raises: a different
-	// lifetime (AWT107), a different production strategy (AWT111), or a contradicting OnActivated/OnRelease/Eager
-	// directive (AWT166). Lifetime and production conflicts are reported once per implementation, each directive
-	// conflict once per (implementation, directive), since coalescing keeps the first registration.
+	/// <summary>
+	///     Reports the coalescing conflicts a re-registration of an already-seen implementation raises: a different
+	///     lifetime (AWT107), a different production strategy (AWT111), or a contradicting OnActivated/OnRelease/Eager
+	///     directive (AWT166). Lifetime and production conflicts are reported once per implementation, each directive
+	///     conflict once per (implementation, directive), since coalescing keeps the first registration.
+	/// </summary>
 	private static void ReportCoalescingConflicts(
 		ImplInfo? info,
 		RawRegistration registration,
@@ -303,13 +305,15 @@ partial class AwaitenGenerator
 		}
 	}
 
-	// Every per-instance directive (OnActivated, OnRelease, or Eager) this registration sets to a value the
-	// coalesced instance will not use, each yielded independently so it can be reported on its own. Coalescing
-	// keeps the first (winning) registration's directives, so a conflict is a later registration explicitly
-	// naming a directive value that differs from the winner's: a differing hook, or opting into Eager the winner
-	// did not. A registration that leaves a directive unset (a null hook, or Eager left at its default false)
-	// states no opinion and merges with the winner rather than conflicting - so the winner's own directives,
-	// which this registration inherits, are never a conflict against themselves.
+	/// <summary>
+	///     Every per-instance directive (OnActivated, OnRelease, or Eager) this registration sets to a value the
+	///     coalesced instance will not use, each yielded independently so it can be reported on its own. Coalescing
+	///     keeps the first (winning) registration's directives, so a conflict is a later registration explicitly
+	///     naming a directive value that differs from the winner's: a differing hook, or opting into Eager the winner
+	///     did not. A registration that leaves a directive unset (a null hook, or Eager left at its default false)
+	///     states no opinion and merges with the winner rather than conflicting, so the winner's own directives,
+	///     which this registration inherits, are never a conflict against themselves.
+	/// </summary>
 	private static IEnumerable<(string Directive, string Winner, string Loser)> ConflictingDirectives(ImplInfo info, RawRegistration registration)
 	{
 		if (registration.OnActivated is not null && !string.Equals(registration.OnActivated, info.OnActivated, StringComparison.Ordinal))
@@ -330,8 +334,10 @@ partial class AwaitenGenerator
 
 	private static string DescribeHook(string? hook) => hook is null ? "unset" : $"'{hook}'";
 
-	// Records a registration's implementation as a member of the collection for its (service type, key), in
-	// registration order and deduped by implementation. serviceMemberOrder preserves first-seen (type, key) order.
+	/// <summary>
+	///     Records a registration's implementation as a member of the collection for its (service type, key), in
+	///     registration order and deduped by implementation. <c>serviceMemberOrder</c> preserves first-seen (type, key) order.
+	/// </summary>
 	private static void AddCollectionMember(
 		Dictionary<ServiceKey, List<string>> serviceMembers,
 		List<ServiceKey> serviceMemberOrder,
@@ -351,9 +357,11 @@ partial class AwaitenGenerator
 		}
 	}
 
-	// AWT155: two different imported modules register the same unkeyed service with different implementations at
-	// the same precedence tier, so which wins is decided only by [Import] order, invisible at either module. A
-	// cross-tier loss, scans, overridable defaults, container-over-module and keyed collisions (AWT117) stay silent.
+	/// <summary>
+	///     AWT155: two different imported modules register the same unkeyed service with different implementations at
+	///     the same precedence tier, so which wins is decided only by [Import] order, invisible at either module. A
+	///     cross-tier loss, scans, overridable defaults, container-over-module and keyed collisions (AWT117) stay silent.
+	/// </summary>
 	private static void ReportCrossModuleDuplicate(
 		RawRegistration registration,
 		RawRegistration winner,
@@ -381,9 +389,11 @@ partial class AwaitenGenerator
 			])));
 	}
 
-	// Records a keyed registration as a member of its service's keyed collection ([Key] and implementation),
-	// grouped by service (value) type in registration order. An unkeyed registration contributes nothing, and the
-	// first registration per (service, key) wins (a genuine duplicate is the caller's AWT117).
+	/// <summary>
+	///     Records a keyed registration as a member of its service's keyed collection ([Key] and implementation),
+	///     grouped by service (value) type in registration order. An unkeyed registration contributes nothing, and the
+	///     first registration per (service, key) wins (a genuine duplicate is the caller's AWT117).
+	/// </summary>
 	private static void AddKeyedMember(
 		Dictionary<string, List<KeyedMember>> keyedMembers,
 		List<string> keyedMemberOrder,
@@ -405,8 +415,10 @@ partial class AwaitenGenerator
 		members.Add(new KeyedMember(registration.Key, registration.ImplementationType));
 	}
 
-	// AWT117: two different implementations claim the same service type and key, so a keyed resolution would be
-	// ambiguous. The same implementation re-registered, or an unkeyed duplicate, is just first-wins and not reported.
+	/// <summary>
+	///     AWT117: two different implementations claim the same service type and key, so a keyed resolution would be
+	///     ambiguous. The same implementation re-registered, or an unkeyed duplicate, is just first-wins and not reported.
+	/// </summary>
 	private static void ReportDuplicateKey(RawRegistration registration, string existingImpl, List<DiagnosticInfo> diagnostics)
 	{
 		if (registration.Key is null || existingImpl == registration.ImplementationType)
@@ -420,8 +432,10 @@ partial class AwaitenGenerator
 			new EquatableArray<string>([Display(registration.ServiceType), registration.Key,])));
 	}
 
-	// Two registrations of the same implementation conflict when they produce it differently: a different kind
-	// (constructor vs factory vs instance), a different member, or the same member name on different owners.
+	/// <summary>
+	///     Two registrations of the same implementation conflict when they produce it differently: a different kind
+	///     (constructor vs factory vs instance), a different member, or the same member name on different owners.
+	/// </summary>
 	private static bool ConflictsWith(ImplInfo info, RawRegistration registration)
 		=> info.Production != registration.Production
 		   || !string.Equals(info.ProductionMember, registration.ProductionMember, StringComparison.Ordinal)

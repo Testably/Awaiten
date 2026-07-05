@@ -7,14 +7,18 @@ namespace Awaiten.SourceGenerators;
 
 partial class AwaitenGenerator
 {
-	// The deepest open generic expansion nests a closed type argument before it is treated as an unbounded
-	// recursion (AWT129) rather than a real dependency. Well beyond any hand-written generic graph, but far
-	// below the point where the synthesized registrations would exhaust memory.
+	/// <summary>
+	///     The deepest open generic expansion nests a closed type argument before it is treated as an unbounded
+	///     recursion (AWT129) rather than a real dependency. Well beyond any hand-written generic graph, but far
+	///     below the point where the synthesized registrations would exhaust memory.
+	/// </summary>
 	private const int MaxExpansionDepth = 100;
 
-	// A hard ceiling on the total number of closed implementations expansion may synthesize. The depth limit
-	// bounds a linear recursion (Node<T> -> Node<List<T>> -> ...); this also bounds a branching one that would
-	// otherwise explode across breadth before ever reaching that depth.
+	/// <summary>
+	///     A hard ceiling on the total number of closed implementations expansion may synthesize. The depth limit
+	///     bounds a linear recursion (<c>Node&lt;T&gt;</c> -&gt; <c>Node&lt;List&lt;T&gt;&gt;</c> -&gt; ...); this also
+	///     bounds a branching one that would otherwise explode across breadth before ever reaching that depth.
+	/// </summary>
 	private const int MaxExpansionCount = 10_000;
 
 	/// <summary>

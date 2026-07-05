@@ -31,64 +31,94 @@ internal static partial class Sources
 			_keyed = keyed;
 		}
 
-		// The collection-resolvable services in first-seen (type, key) order, driving the public IEnumerable<T> /
-		// T[] dispatch (unkeyed collections only) and the injected collection literals.
+		/// <summary>
+		///     The collection-resolvable services in first-seen (type, key) order, driving the public
+		///     <c>IEnumerable&lt;T&gt;</c> / <c>T[]</c> dispatch (unkeyed collections only) and the injected
+		///     collection literals.
+		/// </summary>
 		public ServiceMembers[] Collections => _collections;
 
 		public string Resolver(int index) => _resolvers[index];
 
 		public string Field(int index) => _fields[index];
 
-		// The resolver method names of a collection's members, in registration order (empty when the (type, key)
-		// has no registration, which materializes an empty array).
+		/// <summary>
+		///     The resolver method names of a collection's members, in registration order (empty when the
+		///     (type, key) has no registration, which materializes an empty array).
+		/// </summary>
 		public string[] CollectionResolvers(ServiceKey collection)
 			=> _collectionResolvers.TryGetValue(collection, out string[]? resolvers) ? resolvers : System.Array.Empty<string>();
 
-		// The instance indices of a collection's members, in the same registration order as CollectionResolvers, so
-		// the async-collection materialization can test each member's async taint and pick its resolver accordingly.
+		/// <summary>
+		///     The instance indices of a collection's members, in the same registration order as
+		///     <see cref="CollectionResolvers" />, so the async-collection materialization can test each member's
+		///     async taint and pick its resolver accordingly.
+		/// </summary>
 		public int[] CollectionMemberIndices(ServiceKey collection)
 			=> _collectionMemberIndices.TryGetValue(collection, out int[]? indices) ? indices : System.Array.Empty<int>();
 
-		// Whether a collection can be materialized synchronously, meaning every member has a synchronous resolver.
-		// A collection with an async-tainted member (strict mode) is omitted from the public sync dispatch, so no
-		// synchronous resolver is referenced where none is emitted; injecting such a collection is AWT122.
+		/// <summary>
+		///     Whether a collection can be materialized synchronously, meaning every member has a synchronous
+		///     resolver. A collection with an async-tainted member (strict mode) is omitted from the public sync
+		///     dispatch, so no synchronous resolver is referenced where none is emitted; injecting such a
+		///     collection is AWT122.
+		/// </summary>
 		public bool IsSyncCollection(ServiceKey collection) => _syncCollections.Contains(collection);
 
-		// The keyed-collection-resolvable services in first-seen order, driving the public
-		// IReadOnlyDictionary<string, T> dispatch.
+		/// <summary>
+		///     The keyed-collection-resolvable services in first-seen order, driving the public
+		///     <c>IReadOnlyDictionary&lt;string, T&gt;</c> dispatch.
+		/// </summary>
 		public KeyedServiceMembers[] KeyedCollections => _keyed.Collections;
 
-		// The (key, resolver, root-ownedness) of a keyed collection's members, in registration order (empty when
-		// the service has no keyed registration, which materializes an empty dictionary). RootOwned picks the call
-		// form of the member's static resolver (Root.ResolveX(__s.__root) vs ResolveX(__s)).
+		/// <summary>
+		///     The (key, resolver, root-ownedness) of a keyed collection's members, in registration order (empty
+		///     when the service has no keyed registration, which materializes an empty dictionary). RootOwned picks
+		///     the call form of the member's static resolver (<c>Root.ResolveX(__s.__root)</c> vs
+		///     <c>ResolveX(__s)</c>).
+		/// </summary>
 		public (string Key, string Resolver, bool RootOwned)[] KeyedCollectionResolvers(string service)
 			=> _keyed.Resolvers.TryGetValue(service, out (string Key, string Resolver, bool RootOwned)[]? resolvers) ? resolvers : System.Array.Empty<(string, string, bool)>();
 
-		// The instance indices of a keyed collection's members, in the same registration order as
-		// KeyedCollectionResolvers, so the awaited-keyed materialization can test each member's async taint and pick
-		// its async resolver accordingly (the keyed analogue of CollectionMemberIndices).
+		/// <summary>
+		///     The instance indices of a keyed collection's members, in the same registration order as
+		///     <see cref="KeyedCollectionResolvers" />, so the awaited-keyed materialization can test each member's
+		///     async taint and pick its async resolver accordingly (the keyed analogue of
+		///     <see cref="CollectionMemberIndices" />).
+		/// </summary>
 		public int[] KeyedCollectionMemberIndices(string service)
 			=> _keyed.Indices.TryGetValue(service, out int[]? indices) ? indices : System.Array.Empty<int>();
 
-		// Whether a keyed collection can be materialized synchronously, meaning every keyed member has a synchronous
-		// resolver. One with an async-tainted member is omitted from the public sync dispatch (injecting it is AWT122).
+		/// <summary>
+		///     Whether a keyed collection can be materialized synchronously, meaning every keyed member has a
+		///     synchronous resolver. One with an async-tainted member is omitted from the public sync dispatch
+		///     (injecting it is AWT122).
+		/// </summary>
 		public bool IsSyncKeyedCollection(string service) => _keyed.Sync.Contains(service);
 
-		// The async members are named off the synchronous resolver/field so they stay collision-safe
-		// together: ResolveFoo -> ResolveFooAsync / CreateFooAsync, _foo -> _fooAsyncTask.
+		/// <summary>
+		///     The async members are named off the synchronous resolver/field so they stay collision-safe together:
+		///     <c>ResolveFoo -&gt; ResolveFooAsync</c> / <c>CreateFooAsync</c>, <c>_foo -&gt; _fooAsyncTask</c>.
+		/// </summary>
 		public string AsyncResolver(int index) => _resolvers[index] + "Async";
 
-		// The local async function inside the memoizing async resolver. Named off the resolver (ResolveFoo ->
-		// CreateFooAsync) rather than a fixed literal so it cannot shadow a container factory/instance member the
-		// construction expression references by simple name (e.g. a user factory named 'Create').
+		/// <summary>
+		///     The local async function inside the memoizing async resolver. Named off the resolver
+		///     (<c>ResolveFoo -&gt; CreateFooAsync</c>) rather than a fixed literal so it cannot shadow a container
+		///     factory/instance member the construction expression references by simple name (e.g. a user factory
+		///     named <c>Create</c>).
+		/// </summary>
 		public string AsyncCreator(int index) => "Create" + _resolvers[index].Substring("Resolve".Length) + "Async";
 
 		public string AsyncField(int index) => _fields[index] + "AsyncTask";
 
-		// The "wiring complete" flag for a synchronously-cached instance with deferred ([Inject(Deferred = true)])
-		// members: _foo -> _fooWired. It gates the lock-free fast path so a concurrent caller returns the cached
-		// instance only once its deferred members are wired, while the mid-wiring re-entrant resolve (which sees it
-		// still false) skips the fast path and terminates the cycle through the lock instead.
+		/// <summary>
+		///     The "wiring complete" flag for a synchronously-cached instance with deferred
+		///     (<c>[Inject(Deferred = true)]</c>) members: <c>_foo -&gt; _fooWired</c>. It gates the lock-free fast
+		///     path so a concurrent caller returns the cached instance only once its deferred members are wired,
+		///     while the mid-wiring re-entrant resolve (which sees it still false) skips the fast path and
+		///     terminates the cycle through the lock instead.
+		/// </summary>
 		public string WiredField(int index) => _fields[index] + "Wired";
 
 		public static Names Build(InstanceModel[] instances, ServiceMembers[] collections, KeyedServiceMembers[] keyedCollections, bool syncResolveAfterInit)
@@ -155,9 +185,11 @@ internal static partial class Sources
 				BuildKeyedNames(instances, keyedCollections, implToResolver, implToIndex, syncImpls));
 		}
 
-		// Maps each keyed collection's (key, implementation) members to their (key, resolver, root-ownedness)
-		// entries, preserving registration order; the keyed dictionary is materialized synchronously, so it is
-		// sync-materializable only when every member has a synchronous resolver.
+		/// <summary>
+		///     Maps each keyed collection's (key, implementation) members to their (key, resolver, root-ownedness)
+		///     entries, preserving registration order; the keyed dictionary is materialized synchronously, so it is
+		///     sync-materializable only when every member has a synchronous resolver.
+		/// </summary>
 		private static KeyedNames BuildKeyedNames(
 			InstanceModel[] instances,
 			KeyedServiceMembers[] keyedCollections,
@@ -194,21 +226,26 @@ internal static partial class Sources
 			return new KeyedNames(keyedCollections, keyedResolvers, keyedIndices, syncKeyedCollections);
 		}
 
-		// The keyed-collection naming state, grouped so it travels as one unit: the keyed-collection-resolvable
-		// services (first-seen order), each service's (key, resolver, root-ownedness) members, each service's member
-		// instance indices (parallel to the members, for the awaited-keyed async materialization), and the services
-		// whose every member is synchronously resolvable.
+		/// <summary>
+		///     The keyed-collection naming state, grouped so it travels as one unit: the keyed-collection-resolvable
+		///     services (first-seen order), each service's (key, resolver, root-ownedness) members, each service's
+		///     member instance indices (parallel to the members, for the awaited-keyed async materialization), and
+		///     the services whose every member is synchronously resolvable.
+		/// </summary>
 		private readonly record struct KeyedNames(
 			KeyedServiceMembers[] Collections,
 			Dictionary<string, (string Key, string Resolver, bool RootOwned)[]> Resolvers,
 			Dictionary<string, int[]> Indices,
 			HashSet<string> Sync);
 
-		// Reserves a base name together with the derived member names generated off it (the 'Async', 'AsyncTask'
-		// and 'Wired' suffixes). The base names alone are not enough: a service type named e.g. 'FooWired' would
-		// collide with the '_fooWired' wiring flag of a deferred-member service named 'Foo' (CS0102), and likewise
-		// 'FooAsync'/'FooAsyncTask' against the async members. Rejecting a name when any of the four is taken keeps
-		// every derived name unique in both directions.
+		/// <summary>
+		///     Reserves a base name together with the derived member names generated off it (the <c>Async</c>,
+		///     <c>AsyncTask</c> and <c>Wired</c> suffixes). The base names alone are not enough: a service type
+		///     named e.g. <c>FooWired</c> would collide with the <c>_fooWired</c> wiring flag of a deferred-member
+		///     service named <c>Foo</c> (CS0102), and likewise <c>FooAsync</c>/<c>FooAsyncTask</c> against the async
+		///     members. Rejecting a name when any of the four is taken keeps every derived name unique in both
+		///     directions.
+		/// </summary>
 		private static bool TryReserve(HashSet<string> used, string name)
 		{
 			string asyncName = name + "Async";

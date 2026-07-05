@@ -6,9 +6,11 @@ namespace Awaiten.SourceGenerators;
 
 partial class AwaitenGenerator
 {
-	// The prefix for a decorator chain link's synthetic key and identity. DisplayInstance keys off it to trim
-	// the synthetic suffix from diagnostics. Kept on the enclosing type so both DecoratorChainBuilder and
-	// DisplayInstance reach it (a nested type's private member is not visible here).
+	/// <summary>
+	///     The prefix for a decorator chain link's synthetic key and identity. <c>DisplayInstance</c> keys off it to
+	///     trim the synthetic suffix from diagnostics. Kept on the enclosing type so both <c>DecoratorChainBuilder</c>
+	///     and <c>DisplayInstance</c> reach it (a nested type's private member is not visible here).
+	/// </summary>
 	private const string DecoratorKeyPrefix = "__dec:";
 
 	/// <summary>
@@ -29,8 +31,10 @@ partial class AwaitenGenerator
 		private readonly bool _importServices;
 		private readonly List<DiagnosticInfo> _diagnostics;
 
-		// The coalesced implementations by identity, so a base impl's ImplInfo can be moved onto a synthetic key
-		// and each new chain link's ImplInfo can be appended for BuildInstance to build.
+		/// <summary>
+		///     The coalesced implementations by identity, so a base impl's <c>ImplInfo</c> can be moved onto a
+		///     synthetic key and each new chain link's <c>ImplInfo</c> can be appended for <c>BuildInstance</c> to build.
+		/// </summary>
 		private readonly Dictionary<string, ImplInfo> _byImpl;
 
 		public DecoratorChainBuilder(
@@ -65,7 +69,7 @@ partial class AwaitenGenerator
 			}
 		}
 
-		// Group decorators by decorated service, preserving first-seen service order for determinism.
+		/// <summary>Groups decorators by decorated service, preserving first-seen service order for determinism.</summary>
 		private static List<(string Service, List<DecorateRegistration> Chain)> GroupByService(List<DecorateRegistration> decorators)
 		{
 			List<(string, List<DecorateRegistration>)> ordered = new();
@@ -85,8 +89,10 @@ partial class AwaitenGenerator
 			return ordered;
 		}
 
-		// The base implementations to wrap: every unkeyed collection member (so the collection view is also
-		// decorated), or the single-dispatch winner when the service has no collection membership.
+		/// <summary>
+		///     The base implementations to wrap: every unkeyed collection member (so the collection view is also
+		///     decorated), or the single-dispatch winner when the service has no collection membership.
+		/// </summary>
 		private static List<string> CollectBaseImpls(List<string>? members, string? winner)
 		{
 			if (members is { Count: > 0, })
@@ -132,9 +138,11 @@ partial class AwaitenGenerator
 			}
 		}
 
-		// Each decorator's inner-parameter type in chain order, or null (having reported AWT124, or AWT135 when
-		// the would-be inner is marked [FromServices]) when any decorator has no single constructor parameter
-		// that can receive the inner instance.
+		/// <summary>
+		///     Each decorator's inner-parameter type in chain order, or <see langword="null" /> (having reported
+		///     AWT124, or AWT135 when the would-be inner is marked <c>[FromServices]</c>) when any decorator has no
+		///     single constructor parameter that can receive the inner instance.
+		/// </summary>
 		private List<string>? ResolveInnerParameterTypes(string service, List<DecorateRegistration> ordered)
 		{
 			List<string> innerParameterTypes = new();
@@ -214,9 +222,11 @@ partial class AwaitenGenerator
 			_serviceToImpl[new ServiceKey(service, baseKey)] = baseImpl;
 		}
 
-		// Registers one chain link and returns its synthetic identity. The outermost link of the winner chain
-		// (isPublic) takes the public service key; every other link is keyed so it is reached only as the inner
-		// of the link above it (or as a rewritten collection member).
+		/// <summary>
+		///     Registers one chain link and returns its synthetic identity. The outermost link of the winner chain
+		///     (<c>isPublic</c>) takes the public service key; every other link is keyed so it is reached only as the
+		///     inner of the link above it (or as a rewritten collection member).
+		/// </summary>
 		private string AddChainLink(ServiceChain chain, int baseIndex, int linkIndex, bool isPublic, Lifetime lifetime, LocationInfo? location, string innerKey)
 		{
 			string service = chain.Service;
@@ -262,9 +272,11 @@ partial class AwaitenGenerator
 			_diagnostics.Add(new DiagnosticInfo(descriptor, LocationInfo.From(location), new EquatableArray<string>(displayed)));
 		}
 
-		// The per-service state threaded through WrapBaseImpl / AddChainLink: the decorated service, its
-		// single-dispatch winner (if any), its collection membership (if any), the decorators innermost-first,
-		// and each decorator's inner-parameter type (positionally matching Ordered).
+		/// <summary>
+		///     The per-service state threaded through <c>WrapBaseImpl</c> / <c>AddChainLink</c>: the decorated service,
+		///     its single-dispatch winner (if any), its collection membership (if any), the decorators innermost-first,
+		///     and each decorator's inner-parameter type (positionally matching <c>Ordered</c>).
+		/// </summary>
 		private readonly record struct ServiceChain(
 			string Service,
 			string? Winner,
@@ -387,9 +399,11 @@ partial class AwaitenGenerator
 		}
 	}
 
-	// AWT132: whether this composite duplicates one already chosen for its service (so the caller skips it),
-	// recording the first composite per service. A second composite of a DIFFERENT type is reported; the same
-	// type declared twice is idempotent and left silent.
+	/// <summary>
+	///     AWT132: whether this composite duplicates one already chosen for its service (so the caller skips it),
+	///     recording the first composite per service. A second composite of a DIFFERENT type is reported; the same
+	///     type declared twice is idempotent and left silent.
+	/// </summary>
 	private static bool IsDuplicateComposite(
 		CompositeRegistration composite,
 		string compositeType,
@@ -413,9 +427,11 @@ partial class AwaitenGenerator
 		return true;
 	}
 
-	// Whether the composite's collection parameter is valid (the caller proceeds), reporting AWT130 for a missing
-	// collection parameter and AWT133 for a collection of a base type of the service (which, since collections are
-	// keyed by exact element type, would resolve a different collection than the composed service's registrations).
+	/// <summary>
+	///     Whether the composite's collection parameter is valid (the caller proceeds), reporting AWT130 for a missing
+	///     collection parameter and AWT133 for a collection of a base type of the service (which, since collections are
+	///     keyed by exact element type, would resolve a different collection than the composed service's registrations).
+	/// </summary>
 	private static bool ValidateCompositeCollection(
 		CompositeRegistration composite,
 		string compositeType,
@@ -453,9 +469,11 @@ partial class AwaitenGenerator
 		}
 	}
 
-	// Registers the composite as an ordinary instance (constructed, cached and disposed by index) and returns its
-	// ImplInfo, reusing the existing one if the type was already registered (idempotent when named twice or when
-	// the composite type is also a normal service).
+	/// <summary>
+	///     Registers the composite as an ordinary instance (constructed, cached and disposed by index) and returns its
+	///     <c>ImplInfo</c>, reusing the existing one if the type was already registered (idempotent when named twice or
+	///     when the composite type is also a normal service).
+	/// </summary>
 	private static ImplInfo EnsureCompositeInstance(
 		CompositeRegistration composite,
 		string compositeType,
@@ -475,10 +493,12 @@ partial class AwaitenGenerator
 		return compositeInfo;
 	}
 
-	// AWT131: the composite type is also registered as a bare member of the service it composes (e.g. a
-	// [Transient<C, S>] alongside [Composite<C, S>]). A composite is excluded from its own fan-out, so drop it
-	// from every collection of the composed service and warn. Without the removal its own collection edge would
-	// include itself and surface as a confusing AWT102 dependency cycle.
+	/// <summary>
+	///     AWT131: the composite type is also registered as a bare member of the service it composes (e.g. a
+	///     <c>[Transient&lt;C, S&gt;]</c> alongside <c>[Composite&lt;C, S&gt;]</c>). A composite is excluded from its
+	///     own fan-out, so drop it from every collection of the composed service and warn. Without the removal its own
+	///     collection edge would include itself and surface as a confusing AWT102 dependency cycle.
+	/// </summary>
 	private static void DropRedundantSelfMembership(
 		CompositeRegistration composite,
 		string compositeType,
@@ -508,10 +528,12 @@ partial class AwaitenGenerator
 			])));
 	}
 
-	// Makes the composite the public single-dispatch winner: takes the unkeyed service off whatever impl
-	// currently holds it (a former winner stays a collection member, just no longer the façade) and hands it to
-	// the composite. The composite is never a serviceMembers entry, so it stays excluded from every
-	// IEnumerable<TService>.
+	/// <summary>
+	///     Makes the composite the public single-dispatch winner: takes the unkeyed service off whatever impl
+	///     currently holds it (a former winner stays a collection member, just no longer the façade) and hands it to
+	///     the composite. The composite is never a <c>serviceMembers</c> entry, so it stays excluded from every
+	///     <c>IEnumerable&lt;TService&gt;</c>.
+	/// </summary>
 	private static void MakeCompositeThePublicWinner(
 		CompositeRegistration composite,
 		string compositeType,

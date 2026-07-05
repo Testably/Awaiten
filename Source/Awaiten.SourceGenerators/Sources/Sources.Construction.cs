@@ -18,8 +18,11 @@ internal static partial class Sources
 	/// </summary>
 	private static string RequestingTypeOf(InstanceModel instance) => $"typeof({instance.ConstructedType})";
 
-	// Whether the __AsyncArray<T> helper is used: some instance injects an IAsyncEnumerable<T>, or some unkeyed,
-	// non-suppressed collection is offered by type as IAsyncEnumerable<T> (skipping a registered async shape).
+	/// <summary>
+	///     Whether the <c>__AsyncArray&lt;T&gt;</c> helper is used: some instance injects an
+	///     <c>IAsyncEnumerable&lt;T&gt;</c>, or some unkeyed, non-suppressed collection is offered by type as
+	///     <c>IAsyncEnumerable&lt;T&gt;</c> (skipping a registered async shape).
+	/// </summary>
 	private static bool NeedsAsyncArrayHelper(InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex)
 		=> instances.Any(instance => instance.ConstructorParameters.AsArray().Any(p => p.Kind == DependencyKind.AsyncEnumerable))
 		   || names.Collections.Any(collection => collection.Key is null
@@ -602,8 +605,10 @@ internal static partial class Sources
 		return $"new global::System.Func<{generics}>(({lambdaArgs}) => {ownedValue})";
 	}
 
-	// The [FromKey] key of an external dependency as a C# literal to forward to the resolver: the escaped
-	// string literal, or "null" for an unkeyed dependency.
+	/// <summary>
+	///     The <c>[FromKey]</c> key of an external dependency as a C# literal to forward to the resolver: the
+	///     escaped string literal, or <c>"null"</c> for an unkeyed dependency.
+	/// </summary>
 	private static string ExternalKeyLiteral(string? key)
 		=> key is null ? "null" : SymbolDisplay.FormatLiteral(key, quote: true);
 
@@ -636,8 +641,11 @@ internal static partial class Sources
 		Indent(builder, depth).AppendLine("}");
 	}
 
-	// The throwaway Owned scope inherits the creating scope's external resolver, so an external dependency built
-	// inside it resolves from the same provider. Emitted only when the container has external dependencies.
+	/// <summary>
+	///     The throwaway Owned scope inherits the creating scope's external resolver, so an external dependency
+	///     built inside it resolves from the same provider. Emitted only when the container has external
+	///     dependencies.
+	/// </summary>
 	private static void EmitOwnedExternalPropagation(StringBuilder builder, int depth, bool hasExternal)
 	{
 		if (hasExternal)
