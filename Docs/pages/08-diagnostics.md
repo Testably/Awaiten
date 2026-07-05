@@ -548,7 +548,7 @@ public static partial class CoffeeShop;
 ### AWT123
 
 :::danger[Error]
-A `[Decorate]` names a service with no registration to decorate.
+A `[Decorate]` names a service with no registration to decorate. Also raised when an open generic `[Decorate(typeof(D<>), typeof(IService<>))]` matches no closing of its service in the graph.
 :::
 
 ```csharp
@@ -653,7 +653,7 @@ public static partial class CoffeeShop;
 ### AWT125
 
 :::danger[Error]
-An open generic registration's implementation and service have different arity.
+An open generic registration's implementation and service have different arity. The open `[Decorate]`/`[Composite]` `typeof` forms are held to the same rule (decorator/composite arity must match the service).
 :::
 
 ```csharp
@@ -665,7 +665,7 @@ public static partial class CoffeeShop;
 ### AWT126
 
 :::danger[Error]
-A required closed type violates the open generic implementation's type-parameter constraints.
+A required closed type violates the open generic implementation's type-parameter constraints. Also raised when a closing's type arguments violate an open `[Decorate]`/`[Composite]` decorator's or composite's constraints (that closing is skipped).
 :::
 
 ```csharp
@@ -681,7 +681,7 @@ public static partial class CoffeeShop;
 ### AWT127
 
 :::danger[Error]
-The `typeof`-argument form of a lifetime attribute must receive an unbound open generic type.
+The `typeof`-argument form of a lifetime, `[Decorate]` or `[Composite]` attribute must receive an unbound open generic type.
 :::
 
 ```csharp
@@ -693,7 +693,7 @@ public static partial class CoffeeShop;
 ### AWT128
 
 :::danger[Error]
-An open generic implementation does not expose its service with type parameters in declaration order.
+An open generic implementation does not expose its service with type parameters in declaration order. The open `[Decorate]`/`[Composite]` `typeof` forms are held to the same rule.
 :::
 
 ```csharp

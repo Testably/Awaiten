@@ -209,14 +209,29 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		// the container cannot construct. Scans without the opt-in, and explicit registrations, keep the error.
 		PruneUnconstructableScanMatches(raw, containerSymbol, compilation, importServices, constraintRejected, diagnostics);
 
-		List<DecorateRegistration> decorators = CollectDecorators(containerSymbol, modules);
-		List<CompositeRegistration> composites = CollectComposites(containerSymbol, modules);
+		(List<DecorateRegistration> decorators, List<OpenDecorateRegistration> openDecorators) =
+			CollectDecorators(containerSymbol, modules, diagnostics);
+		(List<CompositeRegistration> composites, List<OpenCompositeRegistration> openComposites) =
+			CollectComposites(containerSymbol, modules, diagnostics);
 
 		// Coalesce registrations by (service type, key): first per key wins, and registrations of the same
 		// implementation share one instance. Conflicting lifetimes are AWT107; a duplicate key is AWT117.
 		(List<ImplInfo> implOrder, Dictionary<ServiceKey, string> serviceToImpl, Dictionary<ServiceKey, List<string>> serviceMembers, List<ServiceKey> serviceMemberOrder, List<(string ServiceType, INamedTypeSymbol Symbol)> varianceCandidates, Dictionary<string, List<KeyedMember>> keyedMembers, List<string> keyedMemberOrder) =
 			CoalesceByImplementation(raw, diagnostics);
 		CoalescedGraph graph = new(serviceToImpl, implOrder, serviceMembers);
+
+		// The closed generic service symbols the coalesced graph holds (recovered from the raw registrations,
+		// which carry each closing's symbol), so an open decorator/composite can find every closing to expand onto.
+		List<(string Display, INamedTypeSymbol Symbol)> closedServices = openDecorators.Count > 0 || openComposites.Count > 0
+			? ClosedGenericServices(raw)
+			: new List<(string, INamedTypeSymbol)>();
+
+		// Open generic decorators: synthesize a closed [Decorate] per matching closing before building the chains,
+		// so they flow through the same DecoratorChainBuilder as the closed form and interleave with it.
+		if (openDecorators.Count > 0)
+		{
+			ExpandOpenDecorators(decorators, openDecorators, closedServices, graph, diagnostics);
+		}
 
 		// Decorator chains: for each [Decorate]d service, move the base impl(s) onto a synthetic key and register
 		// each decorator as a chain link whose inner parameter redirects to the next-lower key. decoratorInner
@@ -226,6 +241,13 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		{
 			new DecoratorChainBuilder(containerSymbol, compilation, graph, decoratorInner, importServices, diagnostics)
 				.Build(decorators);
+		}
+
+		// Open generic composites: synthesize a closed [Composite] per matching closing before building the
+		// composites, so they flow through the same BuildComposites as the closed form (fronting the decorated members).
+		if (openComposites.Count > 0)
+		{
+			ExpandOpenComposites(composites, openComposites, closedServices, graph, diagnostics);
 		}
 
 		// Composites: each [Composite<TComposite, TService>] registers the composite and makes it the public

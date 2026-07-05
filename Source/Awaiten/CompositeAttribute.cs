@@ -37,3 +37,43 @@ public sealed class CompositeAttribute<TComposite, TService> : Attribute
 	/// </summary>
 	public AwaitenLifetime Lifetime { get; set; } = AwaitenLifetime.Transient;
 }
+
+/// <summary>
+///     Fronts every closing of an open generic service with the matching closing of an open generic composite, so
+///     one attribute installs a façade over all closings of <c>IHandler&lt;&gt;</c>. Resolving
+///     <c>IHandler&lt;Order&gt;</c> yields the <c>CompositeHandler&lt;Order&gt;</c> fanning out to the other
+///     <c>IHandler&lt;Order&gt;</c> registrations. Uses <see cref="Type" /> arguments because an unbound generic
+///     like <c>typeof(IHandler&lt;&gt;)</c> cannot be a type argument.
+/// </summary>
+/// <remarks>
+///     A closed composite is synthesized for every closing already present in the graph. The composite's arity must
+///     equal the service's, and it must expose the service with its type parameters in declaration order
+///     (<c>CompositeHandler&lt;T&gt; : IHandler&lt;T&gt;</c>); a closing whose type arguments violate the composite's
+///     constraints is skipped with a diagnostic. Each closing then follows the closed <c>[Composite&lt;_, _&gt;]</c>
+///     rules (one façade per closing, excluded from its own fan-out).
+/// </remarks>
+/// <example><c>[Composite(typeof(CompositeHandler&lt;&gt;), typeof(IHandler&lt;&gt;))]</c></example>
+[AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
+public sealed class CompositeAttribute : Attribute
+{
+	/// <summary>Fronts every closing of <paramref name="service" /> with the matching closing of <paramref name="composite" />.</summary>
+	/// <param name="composite">The open generic composite, e.g. <c>typeof(CompositeHandler&lt;&gt;)</c>.</param>
+	/// <param name="service">The open generic service to front, e.g. <c>typeof(IHandler&lt;&gt;)</c>.</param>
+	public CompositeAttribute(Type composite, Type service)
+	{
+		Composite = composite;
+		Service = service;
+	}
+
+	/// <summary>The open generic composite type, e.g. <c>typeof(CompositeHandler&lt;&gt;)</c>.</summary>
+	public Type Composite { get; }
+
+	/// <summary>The open generic service type whose closings are fronted, e.g. <c>typeof(IHandler&lt;&gt;)</c>.</summary>
+	public Type Service { get; }
+
+	/// <summary>
+	///     The composite's lifetime, applied to every synthesized closing. Defaults to
+	///     <see cref="AwaitenLifetime.Transient" />, so each closing re-materializes its member array on every resolve.
+	/// </summary>
+	public AwaitenLifetime Lifetime { get; set; } = AwaitenLifetime.Transient;
+}

@@ -49,61 +49,83 @@ partial class AwaitenGenerator
 		LocationInfo? location = LocationInfo.From(
 			attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? fallbackLocation);
 
+		if (TryReadOpenGenericPair(implementation, service, location, diagnostics) is not { } pair)
+		{
+			return;
+		}
+
+		open.Add(new OpenRegistration(pair.Service, pair.Mapped, lifetime, NamedArgument(attribute, "Key"), location, origin));
+	}
+
+	/// <summary>
+	///     Validates and unbinds an open generic <c>typeof</c> pair shared by the open lifetime, decorator and
+	///     composite registrations: the mapped type (the implementation, decorator or composite) and the service it
+	///     maps onto. Both must be unbound generics (AWT127); after reducing to their unbound definitions their arity
+	///     must match (AWT125); and the mapped type must expose the service with its type parameters in declaration
+	///     order (AWT128), so a closed service's type arguments apply onto the mapped type by position. Returns the
+	///     two unbound definitions, or <see langword="null" /> when any check fails (having reported it).
+	/// </summary>
+	private static (INamedTypeSymbol Mapped, INamedTypeSymbol Service)? TryReadOpenGenericPair(
+		INamedTypeSymbol mapped,
+		INamedTypeSymbol service,
+		LocationInfo? location,
+		List<DiagnosticInfo> diagnostics)
+	{
 		// AWT127: the typeof-ctor form exists for open generics and must receive unbound generics
 		// (typeof(Repository<>)). A closed generic (typeof(Repository<int>)) would otherwise be silently reduced
 		// to its open definition by ConstructedFrom below, dropping the type arguments, and a non-generic type
 		// would match no closed service, so reject both and point at the generic attribute form.
-		if (!implementation.IsUnboundGenericType || !service.IsUnboundGenericType)
+		if (!mapped.IsUnboundGenericType || !service.IsUnboundGenericType)
 		{
-			INamedTypeSymbol offending = implementation.IsUnboundGenericType ? service : implementation;
+			INamedTypeSymbol offending = mapped.IsUnboundGenericType ? service : mapped;
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.OpenGenericNotUnbound,
 				location,
 				new EquatableArray<string>([
 					AwaitenGenerator.Display(offending.ToDisplayString(FullyQualified)),
 				])));
-			return;
+			return null;
 		}
 
 		// The original, unbound definition (typeof(Repository<>) is the unbound generic).
-		implementation = implementation.ConstructedFrom;
+		mapped = mapped.ConstructedFrom;
 		service = service.ConstructedFrom;
 
-		// AWT125: the implementation's type parameters must line up with the service's, so a closed service
-		// can be re-mapped onto the implementation. v1 matches the open form exactly, so the arities must be equal.
-		if (implementation.Arity != service.Arity)
+		// AWT125: the mapped type's type parameters must line up with the service's, so a closed service
+		// can be re-mapped onto it. v1 matches the open form exactly, so the arities must be equal.
+		if (mapped.Arity != service.Arity)
 		{
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.OpenGenericArityMismatch,
 				location,
 				new EquatableArray<string>([
-					AwaitenGenerator.Display(implementation.ToDisplayString(FullyQualified)),
+					AwaitenGenerator.Display(mapped.ToDisplayString(FullyQualified)),
 					AwaitenGenerator.Display(service.ToDisplayString(FullyQualified)),
-					implementation.Arity.ToString(),
+					mapped.Arity.ToString(),
 					service.Arity.ToString(),
 				])));
-			return;
+			return null;
 		}
 
-		// AWT128: expansion maps the closed service's type arguments onto the implementation's type parameters
-		// positionally, which is only correct when the implementation exposes the service with its own type
+		// AWT128: expansion maps the closed service's type arguments onto the mapped type's type parameters
+		// positionally, which is only correct when the mapped type exposes the service with its own type
 		// parameters in declaration order (Repository<T> : IRepository<T>). A reordered or remapped
-		// implementation (Repository<TKey, TValue> : IRepository<TValue, TKey>) would construct a closed type
+		// type (Repository<TKey, TValue> : IRepository<TValue, TKey>) would construct a closed type
 		// that does not satisfy the requested service, so reject it rather than emit a broken registration.
-		if (!SymbolEqualityComparer.Default.Equals(service, implementation)
-		    && !ExposesServiceInOrder(implementation, service))
+		if (!SymbolEqualityComparer.Default.Equals(service, mapped)
+		    && !ExposesServiceInOrder(mapped, service))
 		{
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.OpenGenericServiceRemapped,
 				location,
 				new EquatableArray<string>([
-					AwaitenGenerator.Display(implementation.ToDisplayString(FullyQualified)),
+					AwaitenGenerator.Display(mapped.ToDisplayString(FullyQualified)),
 					AwaitenGenerator.Display(service.ToDisplayString(FullyQualified)),
 				])));
-			return;
+			return null;
 		}
 
-		open.Add(new OpenRegistration(service, implementation, lifetime, NamedArgument(attribute, "Key"), location, origin));
+		return (mapped, service);
 	}
 
 	/// <summary>

@@ -57,6 +57,14 @@ namespace Awaiten
         public static System.Threading.Tasks.Task<T> AsTask<T>(System.Threading.Tasks.Task<object> resolution) { }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
+    public sealed class CompositeAttribute : System.Attribute
+    {
+        public CompositeAttribute(System.Type composite, System.Type service) { }
+        public System.Type Composite { get; }
+        public Awaiten.AwaitenLifetime Lifetime { get; set; }
+        public System.Type Service { get; }
+    }
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
     public sealed class CompositeAttribute<TComposite, TService> : System.Attribute
         where TComposite :  class, TService
     {
@@ -69,6 +77,14 @@ namespace Awaiten
         public ContainerAttribute() { }
         public Awaiten.LifetimeSafety LifetimeSafety { get; set; }
         public bool SyncResolveAfterInit { get; set; }
+    }
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
+    public sealed class DecorateAttribute : System.Attribute
+    {
+        public DecorateAttribute(System.Type decorator, System.Type service) { }
+        public System.Type Decorator { get; }
+        public int Order { get; set; }
+        public System.Type Service { get; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
     public sealed class DecorateAttribute<TDecorator, TService> : System.Attribute
