@@ -3,7 +3,7 @@ namespace Awaiten.Tests;
 /// <summary>
 ///     Runtime behavior of modules: a container imports a module's registrations with
 ///     <c>[Import(typeof(Module))]</c>, its own registrations override the module's overridable
-///     <c>Default</c>/<c>TryAdd</c> registrations, and an imported default is used only when the container
+///     <c>Fallback.Warn</c>/<c>Fallback.Silent</c> registrations, and an imported default is used only when the container
 ///     does not provide its own, so an overridden default is absent even from the service's collection.
 /// </summary>
 public partial class ModuleTests
@@ -33,7 +33,7 @@ public partial class ModuleTests
 	}
 
 	[Fact]
-	public async Task ImportedTryAddRegistration_ContributesWhenNothingElseProvidesTheService()
+	public async Task ImportedSilentFallbackRegistration_ContributesWhenNothingElseProvidesTheService()
 	{
 		using DefaultsContainer.Root container = new();
 
@@ -81,9 +81,9 @@ public partial class ModuleTests
 	public sealed class MemoryCache : ICache;
 
 	[Module]
-	[Singleton<ModuleClock, IClock>(Default = true)]
+	[Singleton<ModuleClock, IClock>(Fallback = Fallback.Warn)]
 	[Singleton<Logger>]
-	[Singleton<MemoryCache, ICache>(TryAdd = true)]
+	[Singleton<MemoryCache, ICache>(Fallback = Fallback.Silent)]
 	public static class InfrastructureModule;
 
 	[Module]

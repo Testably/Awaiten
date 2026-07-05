@@ -28,7 +28,7 @@ public sealed class SupportLogger;
 /// </summary>
 [Module]
 [Singleton<SupportLogger>]
-[Singleton<SupportClock, ICrossAssemblyClock>(Default = true)]
+[Singleton<SupportClock, ICrossAssemblyClock>(Fallback = Fallback.Warn)]
 [Singleton<SupportGreeter>(Factory = nameof(CreateGreeter))]
 [Singleton<SupportCache>(Instance = nameof(Cache))]
 public static class CrossAssemblySupportModule

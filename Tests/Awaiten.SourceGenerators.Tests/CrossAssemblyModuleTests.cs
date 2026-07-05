@@ -18,7 +18,7 @@ public class CrossAssemblyModuleTests
 	                                            public sealed class Logger { }
 
 	                                            [Module]
-	                                            [Singleton<ModuleClock, IClock>(Default = true)]
+	                                            [Singleton<ModuleClock, IClock>(Fallback = Fallback.Warn)]
 	                                            [Singleton<Logger>]
 	                                            public static class InfrastructureModule { }
 	                                            """;
@@ -88,7 +88,7 @@ public class CrossAssemblyModuleTests
 			public sealed class AppClock : IClock { }
 
 			[Module]
-			[Singleton<AppClock, IClock>(Default = true)]
+			[Singleton<AppClock, IClock>(Fallback = Fallback.Warn)]
 			public static class AppModule { }
 
 			[Container]

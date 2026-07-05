@@ -23,7 +23,7 @@ public class ModuleTests
 		                                       public sealed class Logger { }
 
 		                                       [Module]
-		                                       [Singleton<ModuleClock, IClock>(Default = true)]
+		                                       [Singleton<ModuleClock, IClock>(Fallback = Fallback.Warn)]
 		                                       [Singleton<Logger>]
 		                                       public static class InfrastructureModule { }
 
@@ -58,7 +58,7 @@ public class ModuleTests
 		                                       public sealed class ModuleClock : IClock { }
 
 		                                       [Module]
-		                                       [Singleton<ModuleClock, IClock>(Default = true)]
+		                                       [Singleton<ModuleClock, IClock>(Fallback = Fallback.Warn)]
 		                                       public static class InfrastructureModule { }
 
 		                                       [Container]
@@ -88,7 +88,7 @@ public class ModuleTests
 		                                       public sealed class ScannedClock : IClock { }
 
 		                                       [Module]
-		                                       [Singleton<AaModuleClock, IClock>(Default = true)]
+		                                       [Singleton<AaModuleClock, IClock>(Fallback = Fallback.Warn)]
 		                                       public static class ClockModule { }
 
 		                                       [Container]
@@ -119,7 +119,7 @@ public class ModuleTests
 		                                       public sealed class ZzModuleClock : IClock { }
 
 		                                       [Module]
-		                                       [Singleton<ZzModuleClock, IClock>(Default = true)]
+		                                       [Singleton<ZzModuleClock, IClock>(Fallback = Fallback.Warn)]
 		                                       public static class ClockModule { }
 
 		                                       [Container]
@@ -150,7 +150,7 @@ public class ModuleTests
 		                                       public sealed class ZzModuleClock : IClock { }
 
 		                                       [Module]
-		                                       [Singleton<ZzModuleClock, IClock>(Default = true)]
+		                                       [Singleton<ZzModuleClock, IClock>(Fallback = Fallback.Warn)]
 		                                       public static class ClockModule { }
 
 		                                       [Container]
@@ -180,7 +180,7 @@ public class ModuleTests
 		                                       public sealed class ModuleClock : IClock { }
 
 		                                       [Module]
-		                                       [Transient<ModuleClock, IClock>(Default = true)]
+		                                       [Transient<ModuleClock, IClock>(Fallback = Fallback.Warn)]
 		                                       public static class ClockModule { }
 
 		                                       [Container]
@@ -212,7 +212,7 @@ public class ModuleTests
 		                                       public sealed class ZzDefaultClock : IClock { }
 
 		                                       [Container]
-		                                       [Singleton<ZzDefaultClock, IClock>(Default = true)]
+		                                       [Singleton<ZzDefaultClock, IClock>(Fallback = Fallback.Warn)]
 		                                       [Scan(typeof(IClock), As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton)]
 		                                       public static partial class MyContainer
 		                                       {
@@ -223,7 +223,7 @@ public class ModuleTests
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
 		await That(source).Contains("__Bucket(typeof(global::MyCode.IClock), static __s => Root.ResolveZzDefaultClock(__s.__root)")
-			.Because("Default = true on the container itself also beats a scan match");
+			.Because("Fallback.Warn on the container itself also beats a scan match");
 	}
 
 	[Fact]
@@ -244,7 +244,7 @@ public class ModuleTests
 		                                       }
 
 		                                       [Module]
-		                                       [Singleton<CachedRepo, IRepo<Foo>>(Default = true)]
+		                                       [Singleton<CachedRepo, IRepo<Foo>>(Fallback = Fallback.Warn)]
 		                                       public static class RepositoryModule { }
 
 		                                       [Container]
@@ -282,11 +282,11 @@ public class ModuleTests
 		                                       }
 
 		                                       [Module]
-		                                       [Singleton<AClock, IClock>(TryAdd = true)]
+		                                       [Singleton<AClock, IClock>(Fallback = Fallback.Silent)]
 		                                       public static class ModuleA { }
 
 		                                       [Module]
-		                                       [Singleton<BClock, IClock>(TryAdd = true)]
+		                                       [Singleton<BClock, IClock>(Fallback = Fallback.Silent)]
 		                                       public static class ModuleB { }
 
 		                                       [Container]
@@ -324,7 +324,7 @@ public class ModuleTests
 		                                       public sealed class AppClock : IClock { }
 
 		                                       [Module]
-		                                       [Singleton<ModuleClock, IClock>(Default = true)]
+		                                       [Singleton<ModuleClock, IClock>(Fallback = Fallback.Warn)]
 		                                       public static class ClockModule { }
 
 		                                       [Container]
@@ -361,7 +361,7 @@ public class ModuleTests
 		                                       }
 
 		                                       [Module]
-		                                       [Singleton<ModuleClock, IClock>(Default = true)]
+		                                       [Singleton<ModuleClock, IClock>(Fallback = Fallback.Warn)]
 		                                       public static class ClockModule { }
 
 		                                       [Container]
@@ -560,8 +560,8 @@ public class ModuleTests
 		                                       public sealed class AppClock : IClock { }
 
 		                                       [Module]
-		                                       [Singleton<ModuleClockA, IClock>(Default = true, Key = "a")]
-		                                       [Singleton<ModuleClockB, IClock>(Default = true, Key = "b")]
+		                                       [Singleton<ModuleClockA, IClock>(Fallback = Fallback.Warn, Key = "a")]
+		                                       [Singleton<ModuleClockB, IClock>(Fallback = Fallback.Warn, Key = "b")]
 		                                       public static class ClockModule { }
 
 		                                       [Container]
@@ -594,7 +594,7 @@ public class ModuleTests
 		                                       public sealed class AppClock : IClock { }
 
 		                                       [Container]
-		                                       [Singleton<DefaultClock, IClock>(Default = true)]
+		                                       [Singleton<DefaultClock, IClock>(Fallback = Fallback.Warn)]
 		                                       [Singleton<AppClock, IClock>]
 		                                       public static partial class MyContainer
 		                                       {
@@ -605,7 +605,7 @@ public class ModuleTests
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
 		await That(source).Contains("global::MyCode.AppClock")
-			.Because("Default/TryAdd work on the container itself, yielding to strong registrations even when declared first");
+			.Because("Fallback.Warn/Fallback.Silent work on the container itself, yielding to strong registrations even when declared first");
 		await That(source).DoesNotContain("DefaultClock")
 			.Because("the container's own overridden default is dropped in full, like a module's");
 	}

@@ -19,11 +19,11 @@ public partial class DiagnosticTests
 			                                       public sealed class ClockB : IClock { }
 
 			                                       [Module]
-			                                       [Singleton<ClockA, IClock>(Default = true)]
+			                                       [Singleton<ClockA, IClock>(Fallback = Fallback.Warn)]
 			                                       public static class ModuleA { }
 
 			                                       [Module]
-			                                       [Singleton<ClockB, IClock>(Default = true)]
+			                                       [Singleton<ClockB, IClock>(Fallback = Fallback.Warn)]
 			                                       public static class ModuleB { }
 
 			                                       [Container]
@@ -52,11 +52,11 @@ public partial class DiagnosticTests
 			                                       public sealed class AppClock : IClock { }
 
 			                                       [Module]
-			                                       [Singleton<ClockA, IClock>(Default = true)]
+			                                       [Singleton<ClockA, IClock>(Fallback = Fallback.Warn)]
 			                                       public static class ModuleA { }
 
 			                                       [Module]
-			                                       [Singleton<ClockB, IClock>(Default = true)]
+			                                       [Singleton<ClockB, IClock>(Fallback = Fallback.Warn)]
 			                                       public static class ModuleB { }
 
 			                                       [Container]
@@ -73,7 +73,7 @@ public partial class DiagnosticTests
 		}
 
 		[Fact]
-		public async Task DoesNotReportForTryAddCollisions()
+		public async Task DoesNotReportForSilentFallbackCollisions()
 		{
 			GeneratorResult result = Generator.Run("""
 			                                       using Awaiten;
@@ -85,11 +85,11 @@ public partial class DiagnosticTests
 			                                       public sealed class ClockB : IClock { }
 
 			                                       [Module]
-			                                       [Singleton<ClockA, IClock>(TryAdd = true)]
+			                                       [Singleton<ClockA, IClock>(Fallback = Fallback.Silent)]
 			                                       public static class ModuleA { }
 
 			                                       [Module]
-			                                       [Singleton<ClockB, IClock>(TryAdd = true)]
+			                                       [Singleton<ClockB, IClock>(Fallback = Fallback.Silent)]
 			                                       public static class ModuleB { }
 
 			                                       [Container]
@@ -101,11 +101,11 @@ public partial class DiagnosticTests
 			                                       """);
 
 			await That(result.Diagnostics.Any(d => d.Contains("AWT148"))).IsFalse()
-				.Because("TryAdd opts out of the ambiguity warning: the first contributor simply wins");
+				.Because("Fallback.Silent opts out of the ambiguity warning: the first contributor simply wins");
 		}
 
 		[Fact]
-		public async Task DoesNotReportWhenADefaultLosesToAnEarlierTryAdd()
+		public async Task DoesNotReportWhenAWarnFallbackLosesToAnEarlierSilentFallback()
 		{
 			GeneratorResult result = Generator.Run("""
 			                                       using Awaiten;
@@ -117,11 +117,11 @@ public partial class DiagnosticTests
 			                                       public sealed class ClockB : IClock { }
 
 			                                       [Module]
-			                                       [Singleton<ClockA, IClock>(TryAdd = true)]
+			                                       [Singleton<ClockA, IClock>(Fallback = Fallback.Silent)]
 			                                       public static class ModuleA { }
 
 			                                       [Module]
-			                                       [Singleton<ClockB, IClock>(Default = true)]
+			                                       [Singleton<ClockB, IClock>(Fallback = Fallback.Warn)]
 			                                       public static class ModuleB { }
 
 			                                       [Container]
@@ -133,10 +133,10 @@ public partial class DiagnosticTests
 			                                       """);
 
 			await That(result.Diagnostics.Any(d => d.Contains("AWT148"))).IsFalse()
-				.Because("the earlier TryAdd wins silently; AWT148 requires the current winner to be a Default");
+				.Because("the earlier Fallback.Silent wins silently; AWT148 requires the current winner to be a Fallback.Warn");
 			string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 			await That(source).Contains("global::MyCode.ClockA")
-				.Because("the earlier TryAdd claims the service");
+				.Because("the earlier Fallback.Silent claims the service");
 			await That(source).DoesNotContain("ClockB")
 				.Because("the losing default is dropped in full");
 		}
@@ -155,15 +155,15 @@ public partial class DiagnosticTests
 			                                       public sealed class ClockC : IClock { }
 
 			                                       [Module]
-			                                       [Singleton<ClockA, IClock>(Default = true)]
+			                                       [Singleton<ClockA, IClock>(Fallback = Fallback.Warn)]
 			                                       public static class ModuleA { }
 
 			                                       [Module]
-			                                       [Singleton<ClockB, IClock>(Default = true)]
+			                                       [Singleton<ClockB, IClock>(Fallback = Fallback.Warn)]
 			                                       public static class ModuleB { }
 
 			                                       [Module]
-			                                       [Singleton<ClockC, IClock>(Default = true)]
+			                                       [Singleton<ClockC, IClock>(Fallback = Fallback.Warn)]
 			                                       public static class ModuleC { }
 
 			                                       [Container]
@@ -192,11 +192,11 @@ public partial class DiagnosticTests
 			                                       public sealed class ClockB : IClock { }
 
 			                                       [Module]
-			                                       [Singleton<ClockA, IClock>(Default = true, Key = "a")]
+			                                       [Singleton<ClockA, IClock>(Fallback = Fallback.Warn, Key = "a")]
 			                                       public static class ModuleA { }
 
 			                                       [Module]
-			                                       [Singleton<ClockB, IClock>(Default = true, Key = "b")]
+			                                       [Singleton<ClockB, IClock>(Fallback = Fallback.Warn, Key = "b")]
 			                                       public static class ModuleB { }
 
 			                                       [Container]

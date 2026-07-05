@@ -689,7 +689,7 @@ internal static class Diagnostics
 	///     strong (non-default) registration, so which default applies is decided only by declaration order. A
 	///     warning rather than an error: the graph still resolves (the first-declared default wins), but the
 	///     ambiguity is likely unintended: mark one as the winner with a strong registration, or use
-	///     <c>TryAdd</c> to opt out of the warning.
+	///     <c>Fallback.Silent</c> to opt out of the warning.
 	/// </summary>
 	public static readonly DiagnosticDescriptor AmbiguousDefault = new(
 		"AWT148",
@@ -791,7 +791,7 @@ internal static class Diagnostics
 	///     invisible at either module. A warning rather than an error: the graph still resolves (the earlier
 	///     import wins, and both implementations stay collection members), but the collision is likely
 	///     unintended: override the service on the container, or mark one module's registration
-	///     Default/TryAdd. A cross-tier loss (an explicit registration beating another module's expanded
+	///     Fallback.Warn or Fallback.Silent. A cross-tier loss (an explicit registration beating another module's expanded
 	///     template) is deterministic regardless of import order and stays silent, as does the container
 	///     overriding a module: that is the intended override mechanism.
 	/// </summary>

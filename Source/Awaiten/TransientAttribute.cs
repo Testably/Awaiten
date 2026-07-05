@@ -77,16 +77,12 @@ public sealed class TransientAttribute<TImplementation> : Attribute
 	public Type? WhenInjectedInto { get; set; }
 
 	/// <summary>
-	///     Marks this as an overridable default, usually declared in a module. It applies only when
-	///     nothing else registers the same service, so a container or another module can replace it.
+	///     Marks this as an overridable default, usually declared in a module: it applies only when nothing else
+	///     registers the same service, so a container or another module can replace it. <c>Fallback.Warn</c>
+	///     reports AWT148 if another overridable default competes with nothing stronger to resolve it;
+	///     <c>Fallback.Silent</c> defers without a warning. Defaults to <c>Fallback.None</c>, a normal registration.
 	/// </summary>
-	public bool Default { get; set; }
-
-	/// <summary>
-	///     Adds this registration only if the service is not already registered. Like <see cref="Default" />,
-	///     for contributing a service from a module without overriding an existing one.
-	/// </summary>
-	public bool TryAdd { get; set; }
+	public Fallback Fallback { get; set; }
 
 	/// <summary>
 	///     The name of a <c>static void</c> method on the container accepting a
@@ -136,16 +132,12 @@ public sealed class TransientAttribute<TImplementation, TService> : Attribute
 	public Type? WhenInjectedInto { get; set; }
 
 	/// <summary>
-	///     Marks this as an overridable default, usually declared in a module. It applies only when
-	///     nothing else registers the same service, so a container or another module can replace it.
+	///     Marks this as an overridable default, usually declared in a module: it applies only when nothing else
+	///     registers the same service, so a container or another module can replace it. <c>Fallback.Warn</c>
+	///     reports AWT148 if another overridable default competes with nothing stronger to resolve it;
+	///     <c>Fallback.Silent</c> defers without a warning. Defaults to <c>Fallback.None</c>, a normal registration.
 	/// </summary>
-	public bool Default { get; set; }
-
-	/// <summary>
-	///     Adds this registration only if the service is not already registered. Like <see cref="Default" />,
-	///     for contributing a service from a module without overriding an existing one.
-	/// </summary>
-	public bool TryAdd { get; set; }
+	public Fallback Fallback { get; set; }
 
 	/// <summary>
 	///     The name of a <c>static void</c> method on the container accepting a

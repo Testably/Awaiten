@@ -8,8 +8,9 @@ namespace Awaiten.SourceGenerators;
 ///     and implementation, lifetime, source location, production (constructor, or a <c>Factory</c>/<c>Instance</c>
 ///     member), optional <c>Key</c>, and the closed generic service symbol for variance matching. The flags mark
 ///     provenance and precedence: <c>IsScan</c> / <c>ScanSkipsUnconstructable</c> (a <c>[Scan]</c> contribution),
-///     <c>Weak</c> / <c>IsDefault</c> (an overridable module default, filling only a gap; AWT148 on colliding
-///     Defaults), <c>Origin</c> (the imported module that declared it), <c>IsSynthesized</c> (from open generic
+///     <c>Weak</c> / <c>IsDefault</c> (an overridable module default, filling only a gap; <c>IsDefault</c> is
+///     Fallback.Warn, which reports AWT148 on colliding defaults), <c>Origin</c> (the imported module that
+///     declared it), <c>IsSynthesized</c> (from open generic
 ///     expansion, yielding to explicit registrations), and <c>Eager</c> (build-time construction, singletons only).
 ///     <c>WhenInjectedInto</c> names a consumer type for a contextual binding: the registration is stored under a
 ///     synthetic context key and reached only from that consumer's constructor parameters (AWT167 when it never applies).

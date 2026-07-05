@@ -186,7 +186,7 @@ partial class AwaitenGenerator
 			openServices.Add(registration.Service);
 		}
 
-		// An overridable default (Default/TryAdd) whose service key a stronger (or earlier) registration claims
+		// An overridable default (Fallback.Warn/Silent) whose service key a stronger (or earlier) registration claims
 		// is dropped in full by coalescing (not built, not a collection member), so it must not seed the
 		// expansion either; otherwise an overridden default's constructor would synthesize (and the container
 		// would emit) closed registrations nothing in the surviving graph needs. The drop set is computed by the
