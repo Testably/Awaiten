@@ -79,14 +79,6 @@ public static class AwaitenServiceCollectionExtensions
 
 	// The projection core, taking an existing root so AwaitenServiceProviderFactory can project the root it
 	// handed to the host's ConfigureContainer callbacks instead of a fresh one.
-#if NET
-	[System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("AOT", "IL3050",
-		Justification =
-			"Reached only for RequiresAsync registrations, whose service types are reference types (DI service " +
-			"types). Task<T> over a reference type binds to NativeAOT's shared canonical instantiation, so " +
-			"Task<>.MakeGenericType does not generate code at runtime. Async value-type service types are the one " +
-			"shape not supported under native AOT.")]
-#endif
 	internal static IServiceCollection AddGeneratedContainer<TRoot>(IServiceCollection services, TRoot root)
 		where TRoot : class, IAwaitenContainerMetadata, new()
 	{
@@ -137,9 +129,10 @@ public static class AwaitenServiceCollectionExtensions
 				// No synchronous resolution path: expose it as Task<TService>, resolved through ResolveAsync.
 				// MS.DI captures only the returned Task, so the awaited instance is handed to a transient
 				// slot resolved alongside it - captured by MS.DI at the same position, and therefore disposed
-				// in the same reverse order as a natively registered instance.
-				Type taskType = typeof(Task<>).MakeGenericType(serviceType);
-				Func<Task<object>, object> asTypedTask = AwaitenTaskConverter.For(serviceType);
+				// in the same reverse order as a natively registered instance. The closed Task<TService> type
+				// and the Task<object>->Task<T> converter are emitted by the generator (reflection-free).
+				Type taskType = registration.AsyncTaskType!;
+				Func<Task<object>, object> asTypedTask = registration.AsyncTaskConverter!;
 				services.Add(new ServiceDescriptor(
 					taskType,
 					sp =>

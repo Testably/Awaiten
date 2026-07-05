@@ -78,9 +78,10 @@ public sealed class AwaitenServiceProvider : IServiceProvider, IServiceScopeFact
 		    && serviceType.GetGenericTypeDefinition() == typeof(Task<>))
 		{
 			Type innerType = serviceType.GenericTypeArguments[0];
-			if (RequiresAsync(innerType))
+			Func<Task<object>, object>? asTypedTask = AsyncConverterFor(innerType);
+			if (asTypedTask is not null)
 			{
-				return AwaitenTaskConverter.For(innerType)(_container.ResolveAsync(innerType));
+				return asTypedTask(_container.ResolveAsync(innerType));
 			}
 		}
 
@@ -119,17 +120,20 @@ public sealed class AwaitenServiceProvider : IServiceProvider, IServiceScopeFact
 		return default;
 	}
 
-	private bool RequiresAsync(Type serviceType)
+	// The generator-emitted Task<object>->Task<T> converter for an async-advertised service type, or null when
+	// the type is not an async registration. Reflection-free: the closed converter is carried by the metadata.
+	private Func<Task<object>, object>? AsyncConverterFor(Type serviceType)
 	{
 		IReadOnlyList<AwaitenRegistration> registrations = _metadata!.Registrations;
 		for (int index = 0; index < registrations.Count; index++)
 		{
-			if (registrations[index].ServiceType == serviceType)
+			AwaitenRegistration registration = registrations[index];
+			if (registration.ServiceType == serviceType && registration.RequiresAsync)
 			{
-				return registrations[index].RequiresAsync;
+				return registration.AsyncTaskConverter;
 			}
 		}
 
-		return false;
+		return null;
 	}
 }
