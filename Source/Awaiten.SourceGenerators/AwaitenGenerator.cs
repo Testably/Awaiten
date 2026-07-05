@@ -162,6 +162,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		HashSet<string> ConstraintRejected,
 		bool ImportServices,
 		VarianceState Variance,
+		HashSet<ServiceKey> ConsumedConditionals,
 		List<DiagnosticInfo> Diagnostics);
 
 	/// <summary>
@@ -243,7 +244,13 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		// consumer parameters, drained after the instance loop below.
 		VarianceState variance = new(varianceCandidates, compilation);
 
-		BuildContext buildContext = new(containerSymbol, compilation, serviceToImpl, decoratorInner, wellKnown, constraintRejected, importServices, variance, diagnostics);
+		// Contextual (WhenInjectedInto) bindings: every one recorded up front, and the set of synthetic context keys
+		// a consumer parameter actually redirects to, filled by ClassifyParameters. A binding whose key stays absent
+		// never applied and is reported (AWT167) once every instance is built.
+		List<ConditionalRegistration> conditionals = CollectConditionalRegistrations(raw);
+		HashSet<ServiceKey> consumedConditionals = new();
+
+		BuildContext buildContext = new(containerSymbol, compilation, serviceToImpl, decoratorInner, wellKnown, constraintRejected, importServices, variance, consumedConditionals, diagnostics);
 
 		// Validate each implementation, select its constructor and build the instance.
 		foreach (ImplInfo info in implOrder)
@@ -255,6 +262,20 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 				implToIndex[info.ImplementationType] = instances.Count;
 				instances.Add(instance);
 				instanceLocations.Add(info.Location);
+			}
+		}
+
+		// AWT167: a contextual (WhenInjectedInto) registration whose named consumer has no constructor dependency on
+		// the service is never reached, so its synthetic context key stays unconsumed. Reported here, once every
+		// consumer's parameters have had the chance to redirect to it in ClassifyParameters.
+		foreach (ConditionalRegistration conditional in conditionals)
+		{
+			if (!consumedConditionals.Contains(conditional.Key))
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.ContextualBindingNeverApplies,
+					conditional.Location,
+					new EquatableArray<string>([Display(conditional.Service), Display(conditional.Consumer),])));
 			}
 		}
 

@@ -77,7 +77,10 @@ partial class AwaitenGenerator
 		{
 			// Record an unkeyed closed-generic-interface registration as a variance candidate, so a
 			// differently-closed consumer request can be redirected to it (even when it loses the resolution slot).
+			// A contextual (WhenInjectedInto) registration is excluded: it must reach only its named consumer, not
+			// stand in for every differently-closed request of the service.
 			if (registration.Key is null
+			    && registration.WhenInjectedInto is null
 			    && registration.ServiceSymbol is { IsGenericType: true, TypeKind: TypeKind.Interface, } variantService
 			    && HasDeclaredVariance(variantService)
 			    && varianceSeen.Add(registration.ServiceType))
@@ -99,7 +102,11 @@ partial class AwaitenGenerator
 			// compares the current registration against.
 			implInfos.TryGetValue(registration.ImplementationType, out ImplInfo? info);
 
-			ServiceKey serviceKey = new(registration.ServiceType, registration.Key);
+			// A WhenInjectedInto registration is stored under a synthetic context key so it is reached only from the
+			// named consumer's parameters (ClassifyParameters), never from the public unkeyed dispatch. Its real Key
+			// stays null, so it also never joins a keyed collection (AddKeyedMember) nor triggers an AWT117 report.
+			string? effectiveKey = registration.WhenInjectedInto is { } consumer ? ContextKey(consumer) : registration.Key;
+			ServiceKey serviceKey = new(registration.ServiceType, effectiveKey);
 			bool alreadyChosen = winners.TryGetValue(serviceKey, out RawRegistration? winner);
 
 			// A lifetime (AWT107) or production (AWT111) conflict is a property of the implementation, so it is
@@ -186,6 +193,46 @@ partial class AwaitenGenerator
 
 			return info;
 		}
+	}
+
+	/// <summary>
+	///     The synthetic resolution key a contextual (WhenInjectedInto) registration is stored under: unique per
+	///     consumer type and prefixed so it cannot collide with a user <c>Key</c>. Reached only from that consumer's
+	///     parameters in <see cref="ClassifyParameters" />, so the contextual implementation never surfaces on the
+	///     public unkeyed dispatch or in a keyed collection.
+	/// </summary>
+	private const string ContextKeyPrefix = "__ctx:";
+
+	private static string ContextKey(string consumerType) => ContextKeyPrefix + consumerType;
+
+	/// <summary>
+	///     A contextual (WhenInjectedInto) registration recorded for AWT167: the synthetic context key it is stored
+	///     under, the service and consumer types (for the message) and the registration location. Once every instance
+	///     is built, one whose context key no consumer parameter consumed never applied and is reported.
+	/// </summary>
+	private sealed record ConditionalRegistration(ServiceKey Key, string Service, string Consumer, LocationInfo? Location);
+
+	/// <summary>
+	///     Every contextual (WhenInjectedInto) registration in declaration order, each paired with the synthetic
+	///     context key it is stored under, so <see cref="BuildGraph" /> can report AWT167 for any whose named
+	///     consumer never consumes it.
+	/// </summary>
+	private static List<ConditionalRegistration> CollectConditionalRegistrations(List<RawRegistration> raw)
+	{
+		List<ConditionalRegistration> conditionals = new();
+		foreach (RawRegistration registration in raw)
+		{
+			if (registration.WhenInjectedInto is { } consumer)
+			{
+				conditionals.Add(new ConditionalRegistration(
+					new ServiceKey(registration.ServiceType, ContextKey(consumer)),
+					registration.ServiceType,
+					consumer,
+					LocationInfo.From(registration.Location)));
+			}
+		}
+
+		return conditionals;
 	}
 
 	/// <summary>

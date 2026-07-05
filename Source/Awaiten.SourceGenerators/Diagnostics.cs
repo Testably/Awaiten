@@ -977,4 +977,16 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A <c>WhenInjectedInto</c> contextual binding never applies, because the named consumer type has no
+	///     constructor dependency on the registered service, so the binding is dead.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ContextualBindingNeverApplies = new(
+		"AWT167",
+		"Contextual binding never applies",
+		"The registration of '{0}' for '{1}' is never applied: '{1}' has no constructor dependency on '{0}'",
+		"Awaiten",
+		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true);
 }

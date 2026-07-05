@@ -68,3 +68,4 @@
  AWT164  | Awaiten   | Error    | An OnActivated/OnRelease registration names a member that is not a usable lifecycle hook
  AWT165  | Awaiten   | Error    | An OnActivated/OnRelease lifecycle hook is set on a pre-built Instance registration, which the container does not own
  AWT166  | Awaiten   | Error    | An implementation is registered with conflicting OnActivated/OnRelease/Eager directives that coalescing would silently drop
+ AWT167  | Awaiten   | Warning  | A WhenInjectedInto contextual binding never applies because the named consumer has no constructor dependency on the service

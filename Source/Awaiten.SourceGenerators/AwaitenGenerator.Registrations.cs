@@ -11,6 +11,8 @@ namespace Awaiten.SourceGenerators;
 ///     <c>Weak</c> / <c>IsDefault</c> (an overridable module default, filling only a gap; AWT148 on colliding
 ///     Defaults), <c>Origin</c> (the imported module that declared it), <c>IsSynthesized</c> (from open generic
 ///     expansion, yielding to explicit registrations), and <c>Eager</c> (build-time construction, singletons only).
+///     <c>WhenInjectedInto</c> names a consumer type for a contextual binding: the registration is stored under a
+///     synthetic context key and reached only from that consumer's constructor parameters (AWT167 when it never applies).
 /// </summary>
 /// <remarks>
 ///     <see cref="Location" /> is the live Roslyn location (with its syntax tree), not an equatable
@@ -36,7 +38,8 @@ internal sealed record RawRegistration(
 	bool IsSynthesized = false,
 	bool Eager = false,
 	string? OnActivated = null,
-	string? OnRelease = null);
+	string? OnRelease = null,
+	string? WhenInjectedInto = null);
 
 /// <summary>
 ///     An imported module: its symbol and the location of the container's <c>[Import]</c> attribute that

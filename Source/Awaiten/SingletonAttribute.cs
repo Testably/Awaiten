@@ -76,6 +76,13 @@ public sealed class SingletonAttribute<TImplementation> : Attribute
 	public string? Key { get; set; }
 
 	/// <summary>
+	///     Restricts this registration to constructor parameters of the given consumer type: the service
+	///     resolves to this implementation only when injected into <see cref="WhenInjectedInto" />, and to
+	///     the unconditional registration everywhere else (contextual binding).
+	/// </summary>
+	public Type? WhenInjectedInto { get; set; }
+
+	/// <summary>
 	///     Marks this as an overridable default, usually declared in a module. It applies only when
 	///     nothing else registers the same service, so a container or another module can replace it.
 	/// </summary>
@@ -140,6 +147,13 @@ public sealed class SingletonAttribute<TImplementation, TService> : Attribute
 	///     Consumers select one with <c>[FromKey]</c>.
 	/// </summary>
 	public string? Key { get; set; }
+
+	/// <summary>
+	///     Restricts this registration to constructor parameters of the given consumer type: the service
+	///     resolves to this implementation only when injected into <see cref="WhenInjectedInto" />, and to
+	///     the unconditional registration everywhere else (contextual binding).
+	/// </summary>
+	public Type? WhenInjectedInto { get; set; }
 
 	/// <summary>
 	///     Marks this as an overridable default, usually declared in a module. It applies only when

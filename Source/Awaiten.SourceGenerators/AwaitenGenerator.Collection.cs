@@ -139,7 +139,10 @@ partial class AwaitenGenerator
 				// this reads false there. BuildInstance honors it only for a singleton lifetime.
 				Eager: NamedFlag(attribute, "Eager"),
 				OnActivated: NamedArgument(attribute, "OnActivated"),
-				OnRelease: NamedArgument(attribute, "OnRelease")));
+				OnRelease: NamedArgument(attribute, "OnRelease"),
+				// A [Singleton<…>(WhenInjectedInto = typeof(Consumer))] contextual binding; absent (null) on the
+				// open-generic Type-ctor form, which exposes no such property. Resolved to the consumer's context key.
+				WhenInjectedInto: NamedTypeArgument(attribute, "WhenInjectedInto")));
 		}
 	}
 

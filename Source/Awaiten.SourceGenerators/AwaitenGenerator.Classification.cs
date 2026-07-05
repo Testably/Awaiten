@@ -104,6 +104,20 @@ partial class AwaitenGenerator
 
 			parameterModel = RedirectDecoratorInner(parameterModel, info, context.DecoratorInner);
 
+			// Contextual binding: when a WhenInjectedInto registration targets this consumer, redirect the parameter
+			// to its synthetic context key. Gated on an unkeyed Direct dependency, so an explicit [FromKey] and a
+			// decorator's inner redirect both take precedence, and the redirect keeps it off the [ImportServices]
+			// external fall-through below. Consuming the key marks the binding applied (else AWT167).
+			if (parameterModel is { Kind: DependencyKind.Direct, Key: null, })
+			{
+				ServiceKey contextKey = new(parameterModel.ServiceType, ContextKey(info.ImplementationType));
+				if (context.ServiceToImpl.ContainsKey(contextKey))
+				{
+					parameterModel = parameterModel with { Key = contextKey.Key, };
+					context.ConsumedConditionals.Add(contextKey);
+				}
+			}
+
 			parameterModel = SuppressRegisteredCollectionSynthesis(parameterModel, parameter.Type, context.ServiceToImpl);
 
 			// AWT159/AWT160: keyed-collection misuse is reported only for a dictionary that stays synthesized. An
