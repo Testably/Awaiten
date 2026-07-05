@@ -962,4 +962,21 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     The same implementation is registered more than once with contradicting per-instance directives -
+	///     a different <c>OnActivated</c> or <c>OnRelease</c> lifecycle hook, or one registration opting into
+	///     <c>Eager</c> construction that another does not. Coalescing keeps the first registration's directives
+	///     and shares a single instance, so a later registration's differing directive would be silently dropped.
+	///     A registration that leaves a directive unset expresses no opinion and merges with the winner's rather
+	///     than conflicting; only a directive explicitly set to a value the coalesced instance will not use is
+	///     reported.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ConflictingLifecycleDirectives = new(
+		"AWT166",
+		"Conflicting lifecycle directives",
+		"'{0}' is registered with conflicting {1} directives ({2} and {3}); coalescing keeps the first registration's directives, so the other is silently dropped. Declare a single {1} for the implementation.",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }
