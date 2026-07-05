@@ -556,7 +556,7 @@ internal static class Diagnostics
 	/// </summary>
 	public static readonly DiagnosticDescriptor ScanNoImplementedInterfaces = new(
 		"AWT139",
-		"Assembly scan matched a type with no implemented interfaces",
+		"Assembly scan matched a type with no interface assignable to the marker",
 		"'{0}' matched the scan but implements no interface assignable to '{1}', so it is not registered; scan a marker interface or use ScanAs.SelfAndMarker",
 		"Awaiten",
 		DiagnosticSeverity.Warning,
