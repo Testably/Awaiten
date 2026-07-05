@@ -236,4 +236,115 @@ public class ModuleProductionTests
 		await That(result.Diagnostics).Contains("*AWT108*the container has no accessible method 'CreateClock'*").AsWildcard()
 			.Because("the container's own registrations keep the existing wording");
 	}
+
+	[Fact]
+	public async Task ModuleHook_ResolvesAgainstTheModule_AndIsEmittedQualified()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class ModuleClock { }
+
+		                                       [Module]
+		                                       [Singleton<ModuleClock>(OnActivated = nameof(Started), OnRelease = nameof(Stopping))]
+		                                       public static class ClockModule
+		                                       {
+		                                           public static void Started(ModuleClock c) { }
+		                                           public static void Stopping(ModuleClock c) { }
+		                                       }
+
+		                                       [Container]
+		                                       [Import(typeof(ClockModule))]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("global::MyCode.ClockModule.Started(")
+			.Because("a module's activation hook is called qualified with the module type - the generated container is another class");
+		await That(source).Contains("global::MyCode.ClockModule.Stopping(")
+			.Because("a module's release hook is likewise qualified with the module type");
+	}
+
+	[Fact]
+	public async Task ModuleHook_DoesNotFallBackToAContainerMemberOfTheSameName()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class ModuleClock { }
+
+		                                       [Module]
+		                                       [Singleton<ModuleClock>(OnActivated = "Started")]
+		                                       public static class ClockModule
+		                                       {
+		                                       }
+
+		                                       [Container]
+		                                       [Import(typeof(ClockModule))]
+		                                       public static partial class MyContainer
+		                                       {
+		                                           private static void Started(ModuleClock c) { }
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).Contains("*AWT164*the module 'MyCode.ClockModule'*").AsWildcard()
+			.Because("a module registration's hook must live on the module; a same-named container member is not a silent fallback");
+	}
+
+	[Fact]
+	public async Task ModuleHook_PrivateMember_ReportsAwt164()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class ModuleClock { }
+
+		                                       [Module]
+		                                       [Singleton<ModuleClock>(OnActivated = nameof(Started))]
+		                                       public static class ClockModule
+		                                       {
+		                                           private static void Started(ModuleClock c) { }
+		                                       }
+
+		                                       [Container]
+		                                       [Import(typeof(ClockModule))]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).Contains("*AWT164*the module 'MyCode.ClockModule' has no accessible static void method 'Started'*").AsWildcard()
+			.Because("a private module hook cannot be called from the generated container, so it is not a usable hook");
+	}
+
+	[Fact]
+	public async Task ContainerHook_MessageStillNamesTheContainer()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class Service { }
+
+		                                       [Container]
+		                                       [Singleton<Service>(OnActivated = "Started")]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).Contains("*AWT164*the container has no accessible static void method 'Started'*").AsWildcard()
+			.Because("the container's own registrations keep the container wording");
+	}
 }

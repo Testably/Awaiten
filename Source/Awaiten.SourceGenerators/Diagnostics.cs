@@ -945,7 +945,7 @@ internal static class Diagnostics
 	public static readonly DiagnosticDescriptor InvalidLifecycleHook = new(
 		"AWT164",
 		"Invalid lifecycle hook",
-		"'{0}' cannot use the lifecycle hook '{1}': the container has no accessible static void method '{1}' accepting '{0}'",
+		"'{0}' cannot use the lifecycle hook '{1}': {2} has no accessible static void method '{1}' accepting '{0}'",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);

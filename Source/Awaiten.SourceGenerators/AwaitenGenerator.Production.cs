@@ -221,12 +221,16 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     Resolves an <c>OnActivated</c> / <c>OnRelease</c> lifecycle hook to a container method
-	///     <c>static void M(TImplementation)</c>, returning its simple name (or <see langword="null" /> when the
-	///     registration named none). A <c>[Container]</c> is a static class, so the hook is a static method
-	///     reached by simple name from the generated Root/Scope, exactly like a factory method - no receiver and
-	///     no instance/static distinction. Container members are reachable at any accessibility from the generated
-	///     partial, so a <c>private</c> hook qualifies. Reports
+	///     Resolves an <c>OnActivated</c> / <c>OnRelease</c> lifecycle hook to a <c>static void M(TImplementation)</c>
+	///     method on its owner - the container, or the module that declared the registration for an imported one
+	///     (never falling back to the container) - returning the name the generated Root/Scope calls it by, or
+	///     <see langword="null" /> when the registration named none. The owner is a static class, so the hook is a
+	///     static method reached by simple name, exactly like a factory method - no receiver and no instance/static
+	///     distinction; a module hook is qualified with the module type (the generated container is another class,
+	///     so the simple name would not bind). The container's own members are reachable at any accessibility from
+	///     the generated partial, so a <c>private</c> hook qualifies, but a module's are not: a module method that
+	///     matches yet is inaccessible from the container is skipped (it cannot be called from the generated code),
+	///     falling through to AWT164. Reports
 	///     <see cref="Diagnostics.InvalidLifecycleHook">AWT164</see> and returns <see langword="null" /> when no
 	///     accessible ordinary void method of that name accepts the implementation type.
 	/// </summary>
@@ -242,21 +246,30 @@ partial class AwaitenGenerator
 			return null;
 		}
 
-		foreach (ISymbol member in AccessibleMembers(containerSymbol, hookName))
+		foreach (ISymbol member in AccessibleMembers(info.Origin ?? containerSymbol, hookName))
 		{
+			// A module hook must also be accessible from the generated container (its own private members are
+			// reachable from the partial, a module's are not); an inaccessible module method is not a usable hook.
 			if (member is IMethodSymbol { MethodKind: MethodKind.Ordinary, ReturnsVoid: true, Parameters.Length: 1, } method
-			    && compilation.HasImplicitConversion(info.Symbol, method.Parameters[0].Type))
+			    && compilation.HasImplicitConversion(info.Symbol, method.Parameters[0].Type)
+			    && (info.Origin is null || compilation.IsSymbolAccessibleWithin(method, containerSymbol)))
 			{
-				return hookName;
+				return QualifiedHook(info, hookName);
 			}
 		}
 
 		diagnostics.Add(new DiagnosticInfo(
 			Diagnostics.InvalidLifecycleHook,
 			info.Location,
-			new EquatableArray<string>([Display(info.OwningServiceOrImpl), hookName,])));
+			new EquatableArray<string>([Display(info.OwningServiceOrImpl), hookName, DescribeOwner(info),])));
 		return null;
 	}
+
+	// A module's lifecycle hook is emitted qualified with the module type (the generated container is another
+	// class, so the simple name would not bind); the container's own hooks stay unqualified - they are in scope
+	// inside the generated partial. Mirrors QualifiedProductionMember for Factory/Instance members.
+	private static string QualifiedHook(ImplInfo info, string hookName)
+		=> info.Origin is { } origin ? $"{origin.ToDisplayString(FullyQualified)}.{hookName}" : hookName;
 
 	/// <summary>
 	///     Reports <see cref="Diagnostics.FactoryHidesAsyncInitialization">AWT106</see> when a synchronous
