@@ -26,8 +26,8 @@ namespace Awaiten
     }
     public readonly struct AwaitenRegistration : System.IEquatable<Awaiten.AwaitenRegistration>
     {
+        public AwaitenRegistration(System.Type serviceType, Awaiten.AwaitenLifetime lifetime, bool externallyOwned = false) { }
         public AwaitenRegistration(System.Type serviceType, Awaiten.AwaitenLifetime lifetime, System.Type asyncTaskType, System.Func<System.Threading.Tasks.Task<object>, object> asyncTaskConverter) { }
-        public AwaitenRegistration(System.Type serviceType, Awaiten.AwaitenLifetime lifetime, bool requiresAsync = false, bool externallyOwned = false) { }
         public System.Func<System.Threading.Tasks.Task<object>, object>? AsyncTaskConverter { get; }
         public System.Type? AsyncTaskType { get; }
         public bool ExternallyOwned { get; }

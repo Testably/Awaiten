@@ -24,20 +24,21 @@ public readonly struct AwaitenRegistration : IEquatable<AwaitenRegistration>
 	/// </summary>
 	/// <param name="serviceType">The service type that can be resolved.</param>
 	/// <param name="lifetime">The lifetime under which the container owns the service.</param>
-	/// <param name="requiresAsync">
-	///     Whether the service must be resolved asynchronously (through <c>ResolveAsync</c>) - it is
-	///     <c>IAsyncInitializable</c>, produced by an async factory, or depends on one.
-	/// </param>
 	/// <param name="externallyOwned">
 	///     Whether the instance is a pre-built member of the container that the container exposes but does
 	///     not own - it neither constructs nor disposes it.
 	/// </param>
+	/// <remarks>
+	///     Builds a synchronous registration (<see cref="RequiresAsync" /> is <see langword="false" />). An
+	///     asynchronous registration carries the closed generics the bridge projects it with, so it is built
+	///     through the <c>(serviceType, lifetime, asyncTaskType, asyncTaskConverter)</c> overload instead.
+	/// </remarks>
 	/// <exception cref="ArgumentNullException"><paramref name="serviceType" /> is <see langword="null" />.</exception>
-	public AwaitenRegistration(Type serviceType, AwaitenLifetime lifetime, bool requiresAsync = false, bool externallyOwned = false)
+	public AwaitenRegistration(Type serviceType, AwaitenLifetime lifetime, bool externallyOwned = false)
 	{
 		ServiceType = serviceType ?? throw new ArgumentNullException(nameof(serviceType));
 		Lifetime = lifetime;
-		RequiresAsync = requiresAsync;
+		RequiresAsync = false;
 		ExternallyOwned = externallyOwned;
 		AsyncTaskType = null;
 		AsyncTaskConverter = null;
