@@ -115,9 +115,9 @@ partial class AwaitenGenerator
 			(ProductionKind production, string? productionMember, bool conflictingDirectives) =
 				ReadProduction(attribute);
 
-			// Fallback.Warn (1) and Fallback.Silent (2) both mark an overridable default that only fills a gap;
-			// Warn additionally opts into the AWT148 warning when two collide with nothing stronger to resolve
-			// them. Fallback.None (0, the default) is a normal strong registration.
+			// Both overridable-default modes only fill a gap, so both are weak and yield to a stronger or earlier
+			// registration. The Warn mode additionally opts into the AWT148 ambiguity warning when two collide
+			// with nothing stronger to resolve them; None is a normal strong registration.
 			int fallback = NamedFallback(attribute);
 			bool weak = fallback != 0;
 			bool isDefault = fallback == 1;
@@ -356,7 +356,8 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     Reads the <c>Fallback</c> enum named argument off a lifetime attribute as its underlying int
-	///     (0 = None, 1 = Warn, 2 = Silent), defaulting to 0 (None, a normal registration) when unset.
+	///     (0 = None, 1 = Warn, 2 = Silent), defaulting to 0 (None, a normal registration) when unset. These
+	///     values must stay in step with the <c>Fallback</c> enum, which the generator cannot reference directly.
 	/// </summary>
 	private static int NamedFallback(AttributeData attribute)
 	{
