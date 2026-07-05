@@ -1,4 +1,6 @@
 using System;
+using System.Threading;
+using System.Threading.Tasks;
 using Awaiten;
 using Awaiten.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection;
@@ -39,14 +41,32 @@ public sealed class Report
 	public string Render() => $"{_banner.Text} @ {_clock.Today()}";
 }
 
+/// <summary>
+///     An async-initialized Awaiten service. Because it is <see cref="IAsyncInitializable" />, the bridge has
+///     no synchronous resolution path for it and projects it as <c>Task&lt;Warmup&gt;</c> - the path that
+///     builds the closed <c>Task&lt;T&gt;</c> and its converter from generator-emitted metadata, so it
+///     publishes natively without reflection.
+/// </summary>
+public sealed class Warmup : IAsyncInitializable
+{
+	public bool Ready { get; private set; }
+
+	public Task InitializeAsync(CancellationToken cancellationToken)
+	{
+		Ready = true;
+		return Task.CompletedTask;
+	}
+}
+
 [Container]
 [Singleton<SystemClock, IClock>]
 [Transient<Report>]
+[Singleton<Warmup>]
 public static partial class SampleContainer;
 
 public static class Program
 {
-	public static int Main()
+	public static async Task<int> Main()
 	{
 		ServiceCollection services = new();
 		services.AddSingleton<Banner>();
@@ -60,6 +80,11 @@ public static class Program
 		string rendered = report.Render();
 		Console.WriteLine(rendered);
 
-		return rendered == "Awaiten on AOT @ 2026-06-24" ? 0 : 1;
+		// The async path: an IAsyncInitializable service is bridged as Task<T>, resolved through ResolveAsync
+		// and initialized exactly once. This is what previously forced runtime MakeGenericType/MakeGenericMethod.
+		Warmup warmup = await scope.ServiceProvider.GetRequiredService<Task<Warmup>>();
+		Console.WriteLine($"warmup ready: {warmup.Ready}");
+
+		return rendered == "Awaiten on AOT @ 2026-06-24" && warmup.Ready ? 0 : 1;
 	}
 }
