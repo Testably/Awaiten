@@ -60,10 +60,10 @@ partial class Build
 				}
 				File.WriteAllText(ArtifactsDirectory / "BranchName.txt", branchName);
 
-				// coverage-analysis is "off" (not the "perTest" default) because the C# 14 extension
-				// member blocks (e.g. AwaitenResolverExtensions) lower into [CompilerGenerated] methods
-				// that per-test coverage cannot attribute, so their mutants were wrongly reported as
-				// uncovered (0% score). Running every test per mutant restores a real score.
+				// coverage-analysis is "off" (not the "perTest" default) because C# 14 extension member
+				// blocks (e.g. AwaitenResolverExtensions) lower into [CompilerGenerated] methods that
+				// per-test coverage cannot attribute, so their mutants were wrongly scored as uncovered.
+				// Running every test per mutant restores a real score.
 				string configText = $$"""
 				                      {
 				                      	"stryker-config": {

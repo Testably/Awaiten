@@ -8,10 +8,8 @@ partial class AwaitenGenerator
 {
 	/// <summary>
 	///     Removes parameterized ([Arg]) and requesting-type-factory implementations from every collection's
-	///     membership: a parameterized service is built fresh from its runtime arguments and reachable only
-	///     through its <c>Func&lt;TArg…, T&gt;</c> factory, and a requesting-type factory needs the consumer's
-	///     <c>typeof(…)</c> at each site (which a collection materialization does not supply) - so neither is
-	///     ever a collection member.
+	///     membership: a parameterized service is reachable only through its <c>Func&lt;TArg…, T&gt;</c> factory, and
+	///     a requesting-type factory needs the consumer's <c>typeof(…)</c>, so neither is ever a collection member.
 	/// </summary>
 	private static void PruneParameterizedMembers(List<InstanceModel> instances, Dictionary<ServiceKey, List<string>> serviceMembers, Dictionary<string, List<KeyedMember>> keyedMembers)
 	{
@@ -51,46 +49,34 @@ partial class AwaitenGenerator
 		HashSet<string> reportedProductionConflicts = new(StringComparer.Ordinal);
 		HashSet<string> reportedDirectiveConflicts = new(StringComparer.Ordinal);
 
-		// Collection membership: every registration of a service, keyed by (service type, resolution key) and
-		// deduped by implementation, kept in registration order - so an unkeyed IEnumerable<T> resolves the
-		// unkeyed registrations and a [FromKey("k")] IEnumerable<T> the registrations under "k".
-		// serviceMemberOrder preserves the first-seen (type, key) order for deterministic emission.
+		// Collection membership: every registration of a service, keyed by (service type, key) and deduped by
+		// implementation, in registration order. serviceMemberOrder preserves first-seen order for emission.
 		Dictionary<ServiceKey, List<string>> serviceMembers = new();
 		List<ServiceKey> serviceMemberOrder = new();
 
-		// Keyed-collection membership: every real keyed registration of a service (its [Key] and implementation),
-		// grouped by service (value) type in registration order, so an IReadOnlyDictionary<string, T> resolves to
-		// all of them keyed by their [Key]. Only real [Key] registrations join here - the synthetic keys minted
-		// for decorator chains are added to serviceMembers/serviceToImpl by a later phase, never to the raw
-		// registrations this loop sees, so a keyed dictionary never surfaces a decorator's internal chain link.
+		// Keyed-collection membership: every real keyed registration of a service ([Key] and implementation),
+		// grouped by service (value) type in registration order. Only real [Key] registrations join here, so a
+		// keyed dictionary never surfaces a decorator's synthetic chain link (minted by a later phase).
 		Dictionary<string, List<KeyedMember>> keyedMembers = new(StringComparer.Ordinal);
 		List<string> keyedMemberOrder = new();
 
 		// Variance: every unkeyed registration of a closed generic interface whose definition declares variance
-		// (in/out), keyed by its fully-qualified string, in registration order. When a consumer requests a closed
-		// generic interface with no exact registration, the request is redirected to a variance-compatible
-		// candidate here (a registered IHandler<DomainEvent> satisfying a requested IHandler<OrderPlaced> via
-		// `in T`). Keyed registrations are reached only through their key, so they are never variance-redirect
-		// targets; an invariant interface can never satisfy a different closure, so it is not a candidate.
+		// (in/out), in registration order. A consumer request with no exact registration is redirected to a
+		// variance-compatible candidate here. Keyed and invariant registrations are never candidates.
 		List<(string ServiceType, INamedTypeSymbol Symbol)> varianceCandidates = new();
 		HashSet<string> varianceSeen = new(StringComparer.Ordinal);
 
-		// The registration that currently owns each service key, so a later loser can be judged against the
-		// full winner: a Default losing to another Default is an ambiguous-default warning (AWT148), two
-		// same-tier module registrations colliding is AWT155, and a default losing to another default with a
-		// contradicting lifetime/production is an AWT107/AWT111 conflict - while a default correctly
-		// overridden by a strong registration, and the container overriding a module (the intended
-		// mechanisms), stay silent.
+		// The registration that currently owns each service key, so a later loser can be judged against the full
+		// winner: two Defaults colliding is AWT148, two same-tier module registrations is AWT155, a contradicting
+		// lifetime/production is AWT107/AWT111. The intended overrides stay silent.
 		Dictionary<ServiceKey, RawRegistration> winners = new();
 
 		// Registrations are processed in precedence order (see PrecedenceRank): a losing default is dropped
-		// entirely below (not built, not a collection member), so a container or module replaces it
-		// transparently; a losing strong, synthesized or scan registration stays a collection member as before.
+		// entirely, so it is replaced transparently; a losing strong/synthesized/scan registration stays a member.
 		foreach ((RawRegistration registration, _) in InPrecedenceOrder(raw))
 		{
 			// Record an unkeyed closed-generic-interface registration as a variance candidate, so a
-			// differently-closed consumer request can be redirected to it. Recorded even when it loses the
-			// single-resolution slot to an earlier registration, since it stays reachable through its resolver.
+			// differently-closed consumer request can be redirected to it (even when it loses the resolution slot).
 			if (registration.Key is null
 			    && registration.ServiceSymbol is { IsGenericType: true, TypeKind: TypeKind.Interface, } variantService
 			    && HasDeclaredVariance(variantService)
@@ -99,10 +85,8 @@ partial class AwaitenGenerator
 				varianceCandidates.Add((registration.ServiceType, variantService));
 			}
 
-			// Setting both Factory and Instance on one attribute is contradictory; the directives are
-			// mutually exclusive, so report AWT110 against the offending registration. Like AWT108/109/112,
-			// this is a fault in a single registration's directives, so it names the service type (the
-			// AWT107/AWT111 coalescing conflicts name the implementation instead).
+			// Setting both Factory and Instance on one attribute is contradictory (AWT110). Like AWT108/109/112 it
+			// is a single-registration fault, so it names the service type (AWT107/AWT111 name the implementation).
 			if (registration.ConflictingDirectives)
 			{
 				diagnostics.Add(new DiagnosticInfo(
@@ -112,30 +96,17 @@ partial class AwaitenGenerator
 			}
 
 			// The implementation's already-recorded ImplInfo (null on first sight), which ReportCoalescingConflicts
-			// compares the current registration against. EnsureImpl below takes implInfos as a parameter rather
-			// than capturing it, so its Add crosses a call boundary and this lookup is not misread as reading an
-			// always-empty dictionary.
+			// compares the current registration against.
 			implInfos.TryGetValue(registration.ImplementationType, out ImplInfo? info);
 
 			ServiceKey serviceKey = new(registration.ServiceType, registration.Key);
 			bool alreadyChosen = winners.TryGetValue(serviceKey, out RawRegistration? winner);
 
-			// A lifetime (AWT107) or production (AWT111) conflict is a property of the implementation, not of any
-			// single service type, so it is checked before the per-service dedup below; otherwise re-registering
-			// the same service type differently would be skipped and the contradiction silently dropped.
-			// Coalescing keeps the first, so the conflicting one is reported rather than ignored. A scan
-			// registration is overridable and yields to whatever an explicit registration (always processed
-			// first) fixed for the implementation, so it is exempt from that check - but two scans that match
-			// the same implementation with different lifetimes contradict each other with nothing explicit to
-			// yield to, so that is surfaced as AWT142 rather than silently resolved by attribute order.
-			// An overridable default losing its service key to a strong registration is meant to be replaced
-			// transparently - possibly by a strong registration of the same implementation with a different
-			// lifetime - so that one loser yields rather than reporting a conflict. Every other default is
-			// checked like an explicit registration: one that keeps its key still contributes its declared
-			// lifetime/production and must not silently inherit what another registration fixed for the
-			// implementation, and one losing to another default contradicts it with nothing stronger to resolve
-			// them. AWT142 fires only between two scans: a scan whose implementation was first fixed by an
-			// explicit registration (strong or default, both processed earlier) yields to it silently instead.
+			// A lifetime (AWT107) or production (AWT111) conflict is a property of the implementation, so it is
+			// checked before the per-service dedup below (else re-registering a service type differently would drop
+			// the contradiction silently). A scan yields to an explicit registration and is exempt, but two scans
+			// with different lifetimes are AWT142. An overridable default losing its key yields transparently; every
+			// other default is checked like an explicit registration.
 			if (!registration.IsScan && (!registration.Weak || !alreadyChosen || winner!.Weak))
 			{
 				ReportCoalescingConflicts(info, registration, reportedConflicts, reportedProductionConflicts, reportedDirectiveConflicts, diagnostics);
@@ -153,10 +124,8 @@ partial class AwaitenGenerator
 					])));
 			}
 
-			// An overridable default whose service is already claimed is dropped in full - not built and not a
-			// collection member - so the stronger (or earlier) registration replaces it transparently. When both
-			// the loser and the current winner are Defaults, which one applies is left to declaration order, so
-			// AWT148 warns; a TryAdd default (or a default correctly overridden by a strong registration) is silent.
+			// An overridable default whose service is already claimed is dropped in full, so the stronger (or
+			// earlier) registration replaces it transparently. Two colliding Defaults warn (AWT148); TryAdd is silent.
 			if (registration.Weak && alreadyChosen)
 			{
 				if (registration.IsDefault && winner!.IsDefault
@@ -171,10 +140,8 @@ partial class AwaitenGenerator
 				continue;
 			}
 
-			// Every registration is a member of the collection for its (service type, key): an unkeyed
-			// IEnumerable<T> resolves the unkeyed registrations, a [FromKey("k")] IEnumerable<T> the ones under
-			// "k". A member is built even when it loses the single-resolution slot to an earlier registration,
-			// since it is reachable through the collection.
+			// Every registration is a member of the collection for its (service type, key), built even when it
+			// loses the single-resolution slot, since it is reachable through the collection.
 			AddCollectionMember(serviceMembers, serviceMemberOrder, serviceKey, registration.ImplementationType);
 			EnsureImpl(implInfos, implOrder, registration);
 
@@ -196,12 +163,9 @@ partial class AwaitenGenerator
 
 		return (implOrder, serviceToImpl, serviceMembers, serviceMemberOrder, varianceCandidates, keyedMembers, keyedMemberOrder);
 
-		// Creates the single ImplInfo for a registration's implementation (idempotent): the first registration seen
-		// for an implementation fixes its lifetime/production, and the same instance is shared by every registration
-		// of that implementation (multi-service or collection member). A collection member that is not the
-		// single-resolution winner is still built here - it is reached only through the collection. Takes implInfos
-		// and implOrder as parameters (rather than being a capturing local function) so the caller's pre-loop lookup
-		// sees the Add across a call boundary.
+		// Creates the single ImplInfo for a registration's implementation (idempotent): the first registration
+		// fixes its lifetime/production, shared by every registration of that implementation. Takes implInfos and
+		// implOrder as parameters so the caller's pre-loop lookup sees the Add across a call boundary.
 		static ImplInfo EnsureImpl(Dictionary<string, ImplInfo> implInfos, List<ImplInfo> implOrder, RawRegistration reg)
 		{
 			if (!implInfos.TryGetValue(reg.ImplementationType, out ImplInfo? info))
@@ -225,12 +189,9 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     The single encoding of coalescing precedence. Explicit strong registrations claim their service
-	///     first; overridable defaults (<c>Default</c>/<c>TryAdd</c>) fill the remaining gaps; closed
-	///     registrations synthesized by open generic expansion yield to both - a deliberate declaration,
-	///     even an overridable default, beats the blanket expansion, mirroring how a default beats a
-	///     blanket scan; scan matches come last. Consumed by the coalescing loop and by the open generic
-	///     expansion seed (<see cref="DroppedOverridableDefaults" />), which must agree on who wins.
+	///     The single encoding of coalescing precedence: explicit strong registrations first, then overridable
+	///     defaults (<c>Default</c>/<c>TryAdd</c>), then open-generic-synthesized registrations, then scan matches.
+	///     Consumed by the coalescing loop and the open generic expansion seed, which must agree on who wins.
 	/// </summary>
 	private static int PrecedenceRank(RawRegistration registration)
 		=> registration switch
@@ -242,11 +203,9 @@ partial class AwaitenGenerator
 		};
 
 	/// <summary>
-	///     Enumerates registrations in coalescing precedence order (see <see cref="PrecedenceRank" />),
-	///     preserving declaration order within each tier - so the container's own registrations still win
-	///     over an imported module's, and an earlier import's over a later one's. Each registration is
-	///     paired with its index into <paramref name="raw" /> for consumers that track identity across
-	///     passes (value equality cannot: two identical attributes coalesce into equal records).
+	///     Enumerates registrations in coalescing precedence order (see <see cref="PrecedenceRank" />), preserving
+	///     declaration order within each tier. Each registration is paired with its index into <paramref name="raw" />
+	///     for consumers that track identity across passes (value equality cannot).
 	/// </summary>
 	private static IEnumerable<(RawRegistration Registration, int Index)> InPrecedenceOrder(List<RawRegistration> raw)
 	{
@@ -263,11 +222,10 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     The registrations (by index into <paramref name="raw" />) that coalescing will drop in full: an
-	///     overridable default whose service key a higher-tier or earlier registration claims. Losing
-	///     strong, synthesized and scan registrations are not dropped - they stay collection members and
-	///     are built. Sound to compute before open generic expansion runs: synthesized registrations rank
-	///     below defaults, so nothing expansion adds to <paramref name="raw" /> can claim a key ahead of one.
+	///     The registrations (by index into <paramref name="raw" />) coalescing will drop in full: an overridable
+	///     default whose service key a higher-tier or earlier registration claims. Losing strong/synthesized/scan
+	///     registrations stay collection members. Sound to compute before open generic expansion (synthesized ranks
+	///     below defaults).
 	/// </summary>
 	private static HashSet<int> DroppedOverridableDefaults(List<RawRegistration> raw)
 	{
@@ -284,11 +242,12 @@ partial class AwaitenGenerator
 		return dropped;
 	}
 
-	// Reports the coalescing conflicts a re-registration of an already-seen implementation raises: a different
-	// lifetime (AWT107), a different production strategy (AWT111), or a contradicting per-instance directive -
-	// OnActivated/OnRelease/Eager (AWT166). The lifetime and production conflicts are reported at most once per
-	// implementation, and each directive conflict at most once per (implementation, directive) - the reported
-	// sets guard that - since coalescing keeps the first registration.
+	/// <summary>
+	///     Reports the coalescing conflicts a re-registration of an already-seen implementation raises: a different
+	///     lifetime (AWT107), a different production strategy (AWT111), or a contradicting OnActivated/OnRelease/Eager
+	///     directive (AWT166). Lifetime and production conflicts are reported once per implementation, each directive
+	///     conflict once per (implementation, directive), since coalescing keeps the first registration.
+	/// </summary>
 	private static void ReportCoalescingConflicts(
 		ImplInfo? info,
 		RawRegistration registration,
@@ -346,13 +305,15 @@ partial class AwaitenGenerator
 		}
 	}
 
-	// Every per-instance directive (OnActivated, OnRelease, or Eager) this registration sets to a value the
-	// coalesced instance will not use, each yielded independently so it can be reported on its own. Coalescing
-	// keeps the first (winning) registration's directives, so a conflict is a later registration explicitly
-	// naming a directive value that differs from the winner's: a differing hook, or opting into Eager the winner
-	// did not. A registration that leaves a directive unset (a null hook, or Eager left at its default false)
-	// states no opinion and merges with the winner rather than conflicting - so the winner's own directives,
-	// which this registration inherits, are never a conflict against themselves.
+	/// <summary>
+	///     Every per-instance directive (OnActivated, OnRelease, or Eager) this registration sets to a value the
+	///     coalesced instance will not use, each yielded independently so it can be reported on its own. Coalescing
+	///     keeps the first (winning) registration's directives, so a conflict is a later registration explicitly
+	///     naming a directive value that differs from the winner's: a differing hook, or opting into Eager the winner
+	///     did not. A registration that leaves a directive unset (a null hook, or Eager left at its default false)
+	///     states no opinion and merges with the winner rather than conflicting, so the winner's own directives,
+	///     which this registration inherits, are never a conflict against themselves.
+	/// </summary>
 	private static IEnumerable<(string Directive, string Winner, string Loser)> ConflictingDirectives(ImplInfo info, RawRegistration registration)
 	{
 		if (registration.OnActivated is not null && !string.Equals(registration.OnActivated, info.OnActivated, StringComparison.Ordinal))
@@ -373,8 +334,10 @@ partial class AwaitenGenerator
 
 	private static string DescribeHook(string? hook) => hook is null ? "unset" : $"'{hook}'";
 
-	// Records a registration's implementation as a member of the collection for its (service type, key), in
-	// registration order and deduped by implementation. serviceMemberOrder preserves first-seen (type, key) order.
+	/// <summary>
+	///     Records a registration's implementation as a member of the collection for its (service type, key), in
+	///     registration order and deduped by implementation. <c>serviceMemberOrder</c> preserves first-seen (type, key) order.
+	/// </summary>
 	private static void AddCollectionMember(
 		Dictionary<ServiceKey, List<string>> serviceMembers,
 		List<ServiceKey> serviceMemberOrder,
@@ -394,13 +357,11 @@ partial class AwaitenGenerator
 		}
 	}
 
-	// AWT155: two different imported modules register the same unkeyed service with different
-	// implementations at the same precedence tier - two strong registrations, or two closed registrations
-	// expanded from open typeof templates - so which wins is decided only by [Import] order, invisible at
-	// either module. A cross-tier loss is deterministic by design (an explicit registration beats an
-	// expanded one regardless of import order), so it stays silent, as do scans and overridable defaults
-	// (which yield by design), the container overriding a module (the intended override mechanism), and
-	// keyed collisions (already surfaced as AWT117).
+	/// <summary>
+	///     AWT155: two different imported modules register the same unkeyed service with different implementations at
+	///     the same precedence tier, so which wins is decided only by [Import] order, invisible at either module. A
+	///     cross-tier loss, scans, overridable defaults, container-over-module and keyed collisions (AWT117) stay silent.
+	/// </summary>
 	private static void ReportCrossModuleDuplicate(
 		RawRegistration registration,
 		RawRegistration winner,
@@ -428,12 +389,11 @@ partial class AwaitenGenerator
 			])));
 	}
 
-	// Records a keyed registration as a member of its service's keyed collection: the [Key] and its
-	// implementation, grouped by service (value) type in registration order. keyedMemberOrder preserves the
-	// first-seen service order for deterministic emission. An unkeyed registration contributes nothing, and the
-	// first registration per (service, key) wins - mirroring single keyed resolution (a later one already lost
-	// that slot, alreadyChosen; a genuine duplicate is the caller's AWT117) - so each key maps to a single
-	// implementation.
+	/// <summary>
+	///     Records a keyed registration as a member of its service's keyed collection ([Key] and implementation),
+	///     grouped by service (value) type in registration order. An unkeyed registration contributes nothing, and the
+	///     first registration per (service, key) wins (a genuine duplicate is the caller's AWT117).
+	/// </summary>
 	private static void AddKeyedMember(
 		Dictionary<string, List<KeyedMember>> keyedMembers,
 		List<string> keyedMemberOrder,
@@ -455,9 +415,10 @@ partial class AwaitenGenerator
 		members.Add(new KeyedMember(registration.Key, registration.ImplementationType));
 	}
 
-	// AWT117: two different implementations claim the same service type and key, so a keyed resolution of
-	// that key would be ambiguous. The same implementation re-registered under one key is just a coalesce
-	// (first wins), and an unkeyed duplicate keeps the existing first-wins behavior, so neither is reported.
+	/// <summary>
+	///     AWT117: two different implementations claim the same service type and key, so a keyed resolution would be
+	///     ambiguous. The same implementation re-registered, or an unkeyed duplicate, is just first-wins and not reported.
+	/// </summary>
 	private static void ReportDuplicateKey(RawRegistration registration, string existingImpl, List<DiagnosticInfo> diagnostics)
 	{
 		if (registration.Key is null || existingImpl == registration.ImplementationType)
@@ -471,11 +432,10 @@ partial class AwaitenGenerator
 			new EquatableArray<string>([Display(registration.ServiceType), registration.Key,])));
 	}
 
-	// Two registrations of the same implementation conflict when they produce it differently: a different
-	// kind (constructor vs factory vs instance), the same kind naming a different member, or the same
-	// member name declared by different owners (a container member and a module member of the same name
-	// are different methods). Coalescing keeps the first, so the second would otherwise be dropped
-	// without a trace.
+	/// <summary>
+	///     Two registrations of the same implementation conflict when they produce it differently: a different kind
+	///     (constructor vs factory vs instance), a different member, or the same member name on different owners.
+	/// </summary>
 	private static bool ConflictsWith(ImplInfo info, RawRegistration registration)
 		=> info.Production != registration.Production
 		   || !string.Equals(info.ProductionMember, registration.ProductionMember, StringComparison.Ordinal)

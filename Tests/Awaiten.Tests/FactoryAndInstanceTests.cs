@@ -1,10 +1,9 @@
 namespace Awaiten.Tests;
 
 /// <summary>
-///     Runtime behavior of the factory-method and pre-built-instance registrations: a <c>Factory</c>
-///     registration produces the service by calling a static container method (respecting the declared
-///     lifetime), and an <c>Instance</c> registration hands back a static member the container does not own.
-///     The containers and services are nested types, so the enclosing class is <c>partial</c>.
+///     Runtime behavior of <c>Factory</c> and <c>Instance</c> registrations: a factory produces the service
+///     by calling a static container method (respecting the declared lifetime), and an instance hands back a
+///     static member the container does not own.
 /// </summary>
 public partial class FactoryAndInstanceTests
 {
@@ -184,9 +183,8 @@ public partial class FactoryAndInstanceTests
 	[Fact]
 	public async Task Factory_ReturningInterfaceButBuildingANonDisposable_IsNotRetained()
 	{
-		// A non-disposable factory output must not be retained: resolving it (and disposing the container)
-		// must not throw, and the output is simply not tracked. The interesting half is that the generated
-		// runtime `is IDisposable` check leaves it untracked rather than mis-casting it.
+		// A non-disposable factory output must resolve and dispose without throwing: the runtime
+		// `is IDisposable` check leaves it untracked rather than mis-casting it.
 		using (HiddenDisposableContainer.Root container = new())
 		{
 			object plain = container.Resolve<IPlain>();
@@ -276,9 +274,8 @@ public partial class FactoryAndInstanceTests
 
 	public interface IPlain;
 
-	// A concrete IDisposable behind a non-disposable service interface: the factory's *declared* return type
-	// is the interface, so static disposability analysis misses it - the container must track it at runtime.
-	// DisposeCount proves the runtime check tracks the instance exactly once, not twice.
+	// Concrete IDisposable behind a non-disposable service interface. Static analysis sees only the interface
+	// return type, so the container must track it at runtime. DisposeCount proves it disposes exactly once.
 	public sealed class HiddenDisposable : IHidden, IScopedHidden, ITransientHidden, IDisposable
 	{
 		public int DisposeCount { get; private set; }

@@ -7,10 +7,8 @@ namespace Awaiten.SourceGenerators;
 partial class AwaitenGenerator
 {
 	/// <summary>
-	///     The built-instance indices of every collection-resolvable service's members - the plain
-	///     <paramref name="collections" /> keyed by (element service type, key) and the
-	///     <paramref name="keyedCollections" /> keyed by service (value) type - for the transitive-disposable
-	///     walk (a member absent from <paramref name="implToIndex" /> failed to build and is skipped).
+	///     The built-instance indices of every collection-resolvable service's members for the
+	///     transitive-disposable walk. A member absent from <paramref name="implToIndex" /> failed to build and is skipped.
 	/// </summary>
 	internal static CollectionMembership MembershipIndices(
 		IReadOnlyList<ServiceMembers> collections,
@@ -18,7 +16,7 @@ partial class AwaitenGenerator
 		Dictionary<string, int> implToIndex)
 		=> new(CollectionMemberIndices(collections, implToIndex), KeyedCollectionMemberIndices(keyedCollections, implToIndex));
 
-	// The plain collections' member indices, keyed by the collection's (element service type, key).
+	/// <summary>The plain collections' member indices, keyed by the collection's (element service type, key).</summary>
 	private static Dictionary<ServiceKey, List<int>> CollectionMemberIndices(
 		IReadOnlyList<ServiceMembers> collections,
 		Dictionary<string, int> implToIndex)
@@ -41,7 +39,7 @@ partial class AwaitenGenerator
 		return members;
 	}
 
-	// The keyed collections' member indices, keyed by the service (value) type.
+	/// <summary>The keyed collections' member indices, keyed by the service (value) type.</summary>
 	private static Dictionary<string, List<int>> KeyedCollectionMemberIndices(
 		IReadOnlyList<KeyedServiceMembers> keyedCollections,
 		Dictionary<string, int> implToIndex)
@@ -67,15 +65,9 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     Whether building the service at <paramref name="start" /> on its owner tracks a fresh disposable
 	///     there: the service itself is disposable, or its construction transitively rebuilds one. The walk
-	///     follows only <em>transient</em> dependency edges, because a scoped or singleton dependency is
-	///     cached/shared (built at most once on the owner) and so is bounded, whereas a transient dependency is
-	///     rebuilt - and, if disposable, re-tracked - on every construction. A collection (Enumerable) edge - and a
-	///     keyed collection (IReadOnlyDictionary&lt;string, T&gt;) edge - is followed too: each materializes its
-	///     members eagerly into the owner, so a transient disposable member is rebuilt on every construction just
-	///     like a direct transient dependency. Used to decide whether a plain
-	///     <c>Func&lt;…&gt;</c> over the service accumulates on the container root (AWT118 / strict withholding):
-	///     a non-disposable transient that injects a disposable transient leaks just the same when built
-	///     repeatedly through a root-bound factory.
+	///     follows only transient edges (a scoped/singleton dependency is cached, so bounded) and collection
+	///     (Enumerable / keyed) edges, which materialize members eagerly. Used to decide whether a plain
+	///     <c>Func&lt;…&gt;</c> over the service accumulates on the container root (AWT118 / strict withholding).
 	/// </summary>
 	internal static bool BuildsFreshDisposable(
 		IReadOnlyList<InstanceModel> instances,
@@ -107,11 +99,11 @@ partial class AwaitenGenerator
 		return false;
 	}
 
-	// Pushes the dependencies of <paramref name="instance" /> that are rebuilt as part of constructing it: a
-	// direct (non-deferred) transient dependency, and each transient member of a collection (a collection -
-	// including the awaited Task<C> form, whose task starts materializing at construction - builds its members
-	// eagerly during construction). A relationship/Owned/Arg parameter defers, and a scoped/singleton dependency
-	// is cached/shared, so neither is followed.
+	/// <summary>
+	///     Pushes the dependencies of <paramref name="instance" /> rebuilt as part of constructing it: a direct
+	///     transient dependency and each transient collection member (materialized eagerly). A relationship/Owned/Arg
+	///     parameter defers and a scoped/singleton dependency is cached, so neither is followed.
+	/// </summary>
 	private static void PushFreshTransientDependencies(
 		InstanceModel instance,
 		IReadOnlyList<InstanceModel> instances,
@@ -127,10 +119,8 @@ partial class AwaitenGenerator
 			}
 			else if (parameter.Kind is DependencyKind.KeyedCollection or DependencyKind.AwaitedKeyedCollection)
 			{
-				// A keyed dictionary materializes its members eagerly during construction too, so a transient
-				// disposable keyed member is rebuilt on every construction just like a plain collection member. The
-				// awaited keyed dictionary (Task<…>) starts materializing its members at construction as well, so it
-				// accumulates disposables on the owner exactly like the synchronous dictionary and the awaited collection.
+				// A keyed dictionary materializes its members eagerly too, so a transient disposable keyed member
+				// is rebuilt like a plain collection member (the awaited Task<…> form as well).
 				PushTransientKeyedMembers(parameter.ServiceType, instances, membership.Keyed, stack);
 			}
 			else if (parameter.Kind == DependencyKind.Direct
@@ -142,8 +132,10 @@ partial class AwaitenGenerator
 		}
 	}
 
-	// Pushes each transient member of the collection reached under <paramref name="collectionKey" /> (its
-	// element service type plus resolution key; a non-transient member is cached/shared, so it is bounded).
+	/// <summary>
+	///     Pushes each transient member of the collection reached under <paramref name="collectionKey" /> (its
+	///     element service type plus resolution key; a non-transient member is cached/shared, so it is bounded).
+	/// </summary>
 	private static void PushTransientCollectionMembers(
 		ServiceKey collectionKey,
 		IReadOnlyList<InstanceModel> instances,
@@ -164,9 +156,10 @@ partial class AwaitenGenerator
 		}
 	}
 
-	// Pushes each transient member of the keyed collection for <paramref name="serviceType" /> (a non-transient
-	// member is cached/shared, so it is bounded). The keyed analogue of PushTransientCollectionMembers, grouped
-	// by service (value) type rather than (element type, key).
+	/// <summary>
+	///     Pushes each transient member of the keyed collection for <paramref name="serviceType" /> (a non-transient
+	///     member is cached, so bounded). The keyed analogue of <c>PushTransientCollectionMembers</c>.
+	/// </summary>
 	private static void PushTransientKeyedMembers(
 		string serviceType,
 		IReadOnlyList<InstanceModel> instances,
@@ -187,14 +180,13 @@ partial class AwaitenGenerator
 		}
 	}
 
-	// The direct-dependency graph over instance indices (resolvable edges to built instances): the edge set
-	// for captive-dependency analysis (AWT105), async-taint propagation, and the synchronous-async checks
-	// (AWT119/AWT120). The relationship types (Func<T>/Lazy<T>/…) and the bare eager relationships
-	// (Owned<T>/Task<T>) all defer or launder, so only direct (and eager collection) dependencies contribute
-	// edges here. A deferred [Inject(Deferred = true)] member is included: its post-construction assignment still
-	// captures its target for the owner's lifetime (captive) and awaits an async target (taint), so for every use
-	// but cycle detection it behaves exactly like a constructor edge. Only cycle detection excludes it (that
-	// exclusion is what lets it break a mutual constructor cycle - AWT102), which uses BuildConstructionGraph.
+	/// <summary>
+	///     The direct-dependency graph over instance indices, for captive analysis (AWT105), async-taint propagation
+	///     and the sync-async checks (AWT119/AWT120). Relationship types and bare eager <c>Owned&lt;T&gt;</c>/<c>Task&lt;T&gt;</c>
+	///     defer or launder, so only direct (and eager collection) dependencies edge here. A deferred
+	///     <c>[Inject(Deferred = true)]</c> member is included (it captures and awaits its target); only cycle
+	///     detection excludes it, so it can break a mutual constructor cycle (AWT102).
+	/// </summary>
 	private static Dictionary<int, List<int>> BuildDependencyGraph(
 		List<InstanceModel> instances,
 		Dictionary<ServiceKey, string> serviceToImpl,
@@ -203,15 +195,13 @@ partial class AwaitenGenerator
 		Dictionary<string, List<KeyedMember>> keyedMembers)
 		=> BuildEdges(instances, serviceToImpl, implToIndex, serviceMembers, keyedMembers, includeEagerBare: false, includeDeferredMembers: true);
 
-	// The construction graph over instance indices, for cycle detection (AWT102): the direct edges plus the bare
-	// eager relationships Owned<T> and Task<T> (the latter also covering Task<Owned<T>>). Unlike their deferred
-	// Func/Lazy wrappers - which are stored as a closure and invoked later - these resolve their target during the
-	// owner's construction: synchronously for a synchronous target, and in the synchronous prefix (before the
-	// first await, and before the memoized task is published) of an async resolver. A cycle closed through one of
-	// them therefore re-enters an as-yet-uncached resolver and overflows the stack at runtime rather than being
-	// broken, so it is reported as a dependency cycle (AWT102). Deferred [Inject(Deferred = true)] members are
-	// excluded here (that exclusion is what lets them break a cycle); unlike BuildDependencyGraph, which includes
-	// them for captive/taint, so neither graph is a strict superset of the other.
+	/// <summary>
+	///     The construction graph over instance indices, for cycle detection (AWT102): the direct edges plus the bare
+	///     eager <c>Owned&lt;T&gt;</c> and <c>Task&lt;T&gt;</c>, which resolve their target during the owner's
+	///     construction (a cycle through one re-enters an as-yet-uncached resolver and overflows at runtime, so
+	///     AWT102). Deferred <c>[Inject(Deferred = true)]</c> members are excluded here so they can break a cycle,
+	///     while <c>BuildDependencyGraph</c> includes them for captive/taint.
+	/// </summary>
 	private static Dictionary<int, List<int>> BuildConstructionGraph(
 		List<InstanceModel> instances,
 		Dictionary<ServiceKey, string> serviceToImpl,
@@ -220,13 +210,12 @@ partial class AwaitenGenerator
 		Dictionary<string, List<KeyedMember>> keyedMembers)
 		=> BuildEdges(instances, serviceToImpl, implToIndex, serviceMembers, keyedMembers, includeEagerBare: true);
 
-	// The combined construction-plus-deferred graph over instance indices, for the deferred-cycle analysis
-	// (AWT145/AWT146/AWT147): the construction edges plus the edges a deferred [Inject(Deferred = true)] member
-	// contributes when its post-construction assignment runs. Deferred members are excluded from the cycle
-	// (AWT102) and captive (AWT105) graphs - that exclusion is what lets a deferred property break a mutual
-	// constructor cycle - so cycles that involve them are vetted over this union instead. Uses construction-graph
-	// semantics (includeEagerBare) because a deferred assignment resolves its target during the owner's
-	// construction episode, exactly like a construction edge.
+	/// <summary>
+	///     The combined construction-plus-deferred graph over instance indices, for the deferred-cycle analysis
+	///     (AWT145/AWT146/AWT147): the construction edges plus a deferred <c>[Inject(Deferred = true)]</c> member's
+	///     edges. Deferred members are excluded from the cycle (AWT102) and captive (AWT105) graphs, so cycles
+	///     involving them are vetted over this union instead. Uses construction-graph semantics (<c>includeEagerBare</c>).
+	/// </summary>
 	private static Dictionary<int, List<int>> BuildCombinedGraph(
 		List<InstanceModel> instances,
 		Dictionary<ServiceKey, string> serviceToImpl,
@@ -236,9 +225,8 @@ partial class AwaitenGenerator
 		=> BuildEdges(instances, serviceToImpl, implToIndex, serviceMembers, keyedMembers, includeEagerBare: true, includeDeferredMembers: true);
 
 	/// <summary>
-	///     Whether any built instance has a deferred (<c>[Inject(Deferred = true)]</c>) member - the gate for
-	///     building and walking the combined construction-plus-deferred graph at all (without one, that graph is
-	///     the construction graph and every cycle in it is AWT102's business).
+	///     Whether any built instance has a deferred (<c>[Inject(Deferred = true)]</c>) member: the gate for
+	///     building and walking the combined construction-plus-deferred graph at all.
 	/// </summary>
 	internal static bool AnyDeferredMember(List<InstanceModel> instances)
 	{
@@ -256,17 +244,14 @@ partial class AwaitenGenerator
 		return false;
 	}
 
-	// Builds the edge set over instance indices, keeping only the parameters that contribute an edge and that
-	// resolve to a built instance. A direct dependency always contributes; the bare eager relationships
-	// Owned<T> and Task<T> contribute only when <paramref name="includeEagerBare" /> is set (the construction
-	// graph), since they resolve eagerly and so close cycles even though they launder async taint. A collection
-	// (Enumerable) contributes an edge to each of its members in both graphs: it materializes them eagerly into
-	// an array, so it captures them (taint/captive) and closes cycles through them just like a direct dependency.
-	// A deferred [Inject(Deferred = true)] member contributes only when <paramref name="includeDeferredMembers" />
-	// is set (the taint graph): its assignment is excluded from cycle (AWT102) and captive (AWT105) analysis - that
-	// exclusion is what lets it break a mutual constructor cycle - but a deferred Direct/collection member to an
-	// async-tainted target is awaited at assignment time, so its taint must still reach the owner (otherwise a
-	// synchronous owner would emit a synchronous resolve of an async-only service and fail to compile).
+	/// <summary>
+	///     Builds the edge set over instance indices, keeping only parameters that contribute an edge to a built
+	///     instance. A direct dependency always contributes; the bare eager <c>Owned&lt;T&gt;</c>/<c>Task&lt;T&gt;</c>
+	///     only when <c>includeEagerBare</c> (the construction graph); a collection edges to each member in both
+	///     graphs. A deferred <c>[Inject(Deferred = true)]</c> member contributes only when
+	///     <c>includeDeferredMembers</c> (the taint graph): excluded from cycle/captive analysis, but its taint must
+	///     still reach the owner or a sync owner would emit a sync resolve of an async-only service.
+	/// </summary>
 	private static Dictionary<int, List<int>> BuildEdges(
 		List<InstanceModel> instances,
 		Dictionary<ServiceKey, string> serviceToImpl,
@@ -285,10 +270,8 @@ partial class AwaitenGenerator
 				AddParameterEdges(parameter, serviceToImpl, implToIndex, serviceMembers, keyedMembers, includeEagerBare, nodeEdges);
 			}
 
-			// An injected [Inject] member is a full graph edge just like a constructor parameter: a Direct
-			// member captures its target (and, resolved at construction, closes a cycle through it), a collection
-			// member edges to each of its members, and a relationship member defers - so AddParameterEdges
-			// classifies it identically to a constructor edge.
+			// An injected [Inject] member is a full graph edge like a constructor parameter; AddParameterEdges
+			// classifies it identically.
 			foreach (MemberModel member in instances[i].InjectedMembers.AsArray())
 			{
 				if (member.Deferred && !includeDeferredMembers)
@@ -305,14 +288,13 @@ partial class AwaitenGenerator
 		return edges;
 	}
 
-	// Appends the edge(s) a single parameter contributes to its node's edge list. A collection - synchronous
-	// (Enumerable) or asynchronous (AsyncEnumerable) - edges to each of its members; a direct dependency (and, in
-	// the construction graph, a bare eager Owned<T>/Task<T>) edges to its single resolved instance; everything else
-	// defers and contributes nothing. Both collection kinds materialize their members eagerly, so both capture them
-	// (taint/captive) and close cycles through them; they differ only in that AsyncEnumerable awaits its members.
-	// An awaited collection (AwaitedEnumerable) is the collection form of the bare Task<T>: its members are awaited
-	// behind the produced task, not at the consumer's construction, so it launders their taint - but the task starts
-	// materializing them during construction, so its member edges still close cycles (the construction graph only).
+	/// <summary>
+	///     Appends the edge(s) a single parameter contributes. A collection (Enumerable or AsyncEnumerable) edges to
+	///     each member; a direct dependency (and, in the construction graph, a bare eager <c>Owned&lt;T&gt;</c>/<c>Task&lt;T&gt;</c>)
+	///     edges to its single instance; everything else defers. An awaited collection (AwaitedEnumerable) launders
+	///     its members' taint but its task materializes them during construction, so its member edges close cycles
+	///     (construction graph only).
+	/// </summary>
 	private static void AddParameterEdges(
 		ParameterModel parameter,
 		Dictionary<ServiceKey, string> serviceToImpl,
@@ -322,12 +304,9 @@ partial class AwaitenGenerator
 		bool includeEagerBare,
 		List<int> nodeEdges)
 	{
-		// A keyed collection materializes every keyed member eagerly into a dictionary, so - like a synchronous
-		// collection - it captures them (taint/captive) and closes cycles through them, in both graphs. The awaited
-		// keyed dictionary (Task<…>) is the keyed form of the bare Task<T>: it launders its members' taint (they are
-		// awaited behind the produced task, not at the consumer's construction), so its member edges appear only in
-		// the construction graph, where the task's eager materialization still closes cycles - exactly as
-		// AwaitedEnumerable does below.
+		// A keyed collection materializes its members eagerly, so like a synchronous collection it captures them
+		// and closes cycles in both graphs. The awaited keyed dictionary launders their taint, so its member edges
+		// appear only in the construction graph (like AwaitedEnumerable below).
 		if (parameter.Kind == DependencyKind.KeyedCollection
 		    || (includeEagerBare && parameter.Kind == DependencyKind.AwaitedKeyedCollection))
 		{
@@ -352,8 +331,11 @@ partial class AwaitenGenerator
 		}
 	}
 
-	// Appends an edge to each built member of the collection reached under <paramref name="collectionKey" />
-	// (its element service type plus resolution key; a member absent from implToIndex failed to build and is skipped).
+	/// <summary>
+	///     Appends an edge to each built member of the collection reached under <paramref name="collectionKey" />
+	///     (its element service type plus resolution key; a member absent from <c>implToIndex</c> failed to build and
+	///     is skipped).
+	/// </summary>
 	private static void AddCollectionMemberEdges(
 		ServiceKey collectionKey,
 		Dictionary<ServiceKey, List<string>> serviceMembers,
@@ -374,10 +356,10 @@ partial class AwaitenGenerator
 		}
 	}
 
-	// Appends an edge to each built keyed member of the keyed collection for <paramref name="serviceType" />
-	// (a member absent from implToIndex failed to build and is skipped). Mirrors AddCollectionMemberEdges, but the
-	// membership is grouped by service (value) type - a keyed collection spans every key of the service, not a
-	// single (type, key) collection.
+	/// <summary>
+	///     Appends an edge to each built keyed member of the keyed collection for <paramref name="serviceType" />.
+	///     Mirrors <c>AddCollectionMemberEdges</c>, but grouped by service (value) type across every key of the service.
+	/// </summary>
 	private static void AddKeyedCollectionMemberEdges(
 		string serviceType,
 		Dictionary<string, List<KeyedMember>> keyedMembers,
@@ -399,11 +381,9 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     Marks every instance that is an async-taint source - its implementation is async-initialized, or it
-	///     is produced by an asynchronous factory (Task&lt;T&gt; / ValueTask&lt;T&gt;), which the container can
-	///     only reach by awaiting - or that reaches one through non-deferred (Direct) edges, by fixpoint over
-	///     the dependency graph. The edges already exclude relationship/Owned/Arg parameters, so the taint is
-	///     laundered by exactly the deferrals that break cycles.
+	///     Marks every instance that is an async-taint source (async-initialized, or produced by an asynchronous
+	///     factory the container reaches only by awaiting) or reaches one through non-deferred (Direct) edges, by
+	///     fixpoint over the dependency graph.
 	/// </summary>
 	private static bool[] PropagateAsyncTaint(List<InstanceModel> instances, Dictionary<int, List<int>> dependencies)
 	{
@@ -441,15 +421,11 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     AWT119 / AWT120 (strict mode): a synchronous <c>Func&lt;T&gt;</c> / <c>Lazy&lt;T&gt;</c> /
-	///     <c>Owned&lt;T&gt;</c> relationship resolves its target on demand without awaiting initialization,
-	///     so it must not target an async-tainted service. AWT119 fires when the target is itself
-	///     async-initialized; AWT120 fires when it only reaches one transitively, and reports the dependency
-	///     path. (The prototype checked only <c>Func</c>/<c>Lazy</c>; <c>Owned</c> is included here because
-	///     it is the same synchronous deferral and an async-tainted service emits no synchronous resolver
-	///     for the <c>Owned</c> handle to build into.) An injected <c>[Inject]</c> member resolves through
-	///     the same synchronous expression as a constructor parameter - and a deferred one still resolves
-	///     synchronously at wiring time, while its <c>Func</c>/<c>Lazy</c>/<c>Owned</c> wrapper launders the
-	///     async taint off the owner - so member relationships are checked exactly like parameters here.
+	///     <c>Owned&lt;T&gt;</c> relationship resolves its target without awaiting initialization, so it must not
+	///     target an async-tainted service. AWT119 fires when the target is itself async-initialized; AWT120 when
+	///     it only reaches one transitively, reporting the path. <c>Owned</c> is included (an async-tainted service
+	///     emits no synchronous resolver for its handle). An injected <c>[Inject]</c> member is checked like a
+	///     constructor parameter.
 	/// </summary>
 	private static void DetectSynchronousAsyncResolution(
 		List<InstanceModel> instances,
@@ -474,10 +450,8 @@ partial class AwaitenGenerator
 
 		void CheckDependency(int consumer, ParameterModel parameter)
 		{
-			// Guard the implToIndex lookup: serviceToImpl can name an implementation whose BuildInstance
-			// failed (so it is absent from implToIndex), and an unguarded indexer would crash the generator
-			// (KeyNotFoundException) instead of surfacing the real registration error. Mirrors the guard in
-			// BuildDependencyGraph / ValidateRuntimeArguments.
+			// Guard the implToIndex lookup: serviceToImpl can name an implementation whose BuildInstance failed,
+			// and an unguarded indexer would crash the generator instead of surfacing the real registration error.
 			if (parameter.Kind is not (DependencyKind.Func or DependencyKind.Lazy or DependencyKind.Owned)
 			    || !serviceToImpl.TryGetValue(KeyOf(parameter), out string? targetImpl)
 			    || !implToIndex.TryGetValue(targetImpl, out int target))
@@ -518,13 +492,9 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     AWT122: a collection dependency is materialized synchronously, so a member whose implementation is
-	///     async-tainted would be resolved without awaiting its initialization. Collections are synchronous-only,
-	///     so this is reported rather than silently emitting a synchronous resolver for an async-tainted member
-	///     (which the synchronous path does not even generate for such a member). Like AWT119/AWT120 this is a
-	///     synchronous-resolution-of-async concern independent of lifetime safety, so it is reported under both
-	///     strict and loose safety; only the pragmatic SyncResolveAfterInit mode suppresses it (the caller gates
-	///     on that, as it does for AWT119/AWT120).
+	///     AWT122: a collection dependency is materialized synchronously, so an async-tainted member would be
+	///     resolved without awaiting its initialization. Reported under both strict and loose safety; only
+	///     SyncResolveAfterInit suppresses it.
 	/// </summary>
 	private static void DetectSynchronousAsyncCollection(
 		List<InstanceModel> instances,
@@ -575,7 +545,7 @@ partial class AwaitenGenerator
 			}
 
 			// A keyed collection is also materialized synchronously into a dictionary, so an async-tainted keyed
-			// member cannot have its initialization awaited - the same AWT122 concern as a synchronous collection.
+			// member cannot have its initialization awaited: the same AWT122 concern as a synchronous collection.
 			if (dependency.Kind == DependencyKind.KeyedCollection
 			    && byKeyedService.TryGetValue(dependency.ServiceType, out KeyedServiceMembers keyed))
 			{
@@ -586,10 +556,10 @@ partial class AwaitenGenerator
 		}
 	}
 
-	// Reports AWT122 for each async-tainted member of the collection <paramref name="consumer" /> injects
-	// through <paramref name="parameter" /> (a member absent from implToIndex failed to build and is skipped).
-	// <paramref name="members" /> is the member implementations, shared by the synchronous collection and the
-	// synchronous keyed dictionary - both materialize their members eagerly with no place to await one.
+	/// <summary>
+	///     Reports AWT122 for each async-tainted member of the collection <paramref name="consumer" /> injects
+	///     through <paramref name="parameter" />. Shared by the synchronous collection and keyed dictionary.
+	/// </summary>
 	private static void ReportAsyncTaintedMembers(
 		int consumer,
 		ParameterModel parameter,
@@ -658,24 +628,11 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     Validates how parameterized services (those with <c>[Arg]</c>-marked parameters) are registered
-	///     and consumed:
-	///     <list type="bullet">
-	///         <item>
-	///             AWT114: a parameterized service is built fresh from its runtime arguments on every
-	///             request, so a non-<c>Transient</c> lifetime cannot be honored.
-	///         </item>
-	///         <item>
-	///             AWT113: a <c>Func&lt;TArg…, T&gt;</c> relationship must request exactly the runtime
-	///             arguments that <c>T</c>'s <c>[Arg]</c> parameters expect, in order (a plain
-	///             <c>Func&lt;T&gt;</c> over a parameterized service requests none, so it mismatches).
-	///         </item>
-	///         <item>
-	///             AWT115: a parameterized service requested as a plain dependency or a <c>Lazy&lt;T&gt;</c>
-	///             cannot be supplied its runtime arguments, so it is reachable only through a
-	///             <c>Func&lt;TArg…, T&gt;</c>.
-	///         </item>
-	///     </list>
+	///     Validates how parameterized services (those with <c>[Arg]</c> parameters) are registered and consumed:
+	///     AWT114 (a parameterized service is built per request, so it must be Transient), AWT113 (a
+	///     <c>Func&lt;TArg…, T&gt;</c> must request exactly the target's <c>[Arg]</c> types, in order), and
+	///     AWT115 (a plain or <c>Lazy&lt;T&gt;</c> dependency cannot supply them, so a parameterized target is
+	///     reachable only through a <c>Func</c>).
 	/// </summary>
 	private static void ValidateRuntimeArguments(
 		List<InstanceModel> instances,
@@ -697,23 +654,15 @@ partial class AwaitenGenerator
 					new EquatableArray<string>([Display(instance.ImplementationType), instance.Lifetime.ToString(),])));
 			}
 
-			// A parameterized async service (an [Arg] service that is IAsyncInitializable, is produced by an
-			// asynchronous Task<T> / ValueTask<T> factory, or transitively reaches one) is built fresh per call
-			// from its runtime arguments AND must await initialization, so its correct resolution path is the
-			// async parameterized factory relationship Func<TArg…, Task<T>>, which forwards the arguments to the
-			// async resolver. Misuse is caught at the consumption site rather than the registration: a synchronous
-			// Func<TArg…, T> over it is AWT119 (cannot await), and a plain / Lazy<T> / Task<T> dependency that
-			// supplies no arguments is AWT115 (parameterized requires a Func). There is therefore no
-			// registration-time diagnostic for the [Arg]-plus-async combination itself.
+			// A parameterized async service is built fresh per call AND must await initialization, so its path is
+			// Func<TArg…, Task<T>>. Misuse is caught at the consumption site (AWT119 or AWT115), not the
+			// registration, so there is no registration-time diagnostic for [Arg]-plus-async.
 			foreach (ParameterModel parameter in instance.ConstructorParameters.AsArray())
 			{
-				// A collection (Enumerable, AsyncEnumerable or AwaitedEnumerable) resolves to a set of members, not
-				// a single registration whose [Arg] parameters could be supplied, so runtime-argument matching does
-				// not apply to it (its element type may coincidentally be singly registered, so it is excluded
-				// explicitly rather than by the serviceToImpl lookup below). Guard the implToIndex lookup the same
-				// way BuildDependencyGraph does: serviceToImpl can name an implementation whose BuildInstance failed
-				// (so it is absent from implToIndex), and an unguarded indexer would crash the generator
-				// (KeyNotFoundException) instead of surfacing the real registration error (e.g. AWT103).
+				// A collection resolves to a set of members, not a single registration whose [Arg] parameters could
+				// be supplied, so runtime-argument matching does not apply (excluded explicitly). Guard the
+				// implToIndex lookup: serviceToImpl can name an impl whose BuildInstance failed, and an unguarded
+				// indexer would crash the generator instead of surfacing the real registration error.
 				if (parameter.Kind == DependencyKind.Arg
 				    || IsSynthesizedCollection(parameter.Kind)
 				    || !serviceToImpl.TryGetValue(KeyOf(parameter), out string? targetImpl)
@@ -729,11 +678,9 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     Validates a single (non-<c>[Arg]</c>) dependency against its target's runtime arguments
-	///     (<paramref name="expected" />): a <c>Func&lt;TArg…, T&gt;</c> or its async form
-	///     <c>Func&lt;TArg…, Task&lt;T&gt;&gt;</c> must request exactly them (AWT113); a plain, <c>Lazy&lt;T&gt;</c>
-	///     or <c>Task&lt;T&gt;</c> dependency cannot supply them at all, so a parameterized target must instead be
-	///     reached through a <c>Func</c> (AWT115).
+	///     Validates a single (non-<c>[Arg]</c>) dependency against its target's runtime arguments: a
+	///     <c>Func&lt;TArg…, T&gt;</c> (or async <c>Func&lt;TArg…, Task&lt;T&gt;&gt;</c>) must request exactly them
+	///     (AWT113); a plain, <c>Lazy&lt;T&gt;</c> or <c>Task&lt;T&gt;</c> dependency cannot, so AWT115.
 	/// </summary>
 	private static void ValidateDependency(
 		InstanceModel consumer,
@@ -770,8 +717,11 @@ partial class AwaitenGenerator
 		}
 	}
 
-	// Renders a runtime-argument type list for a diagnostic message, reading as "none" when empty so a
-	// mismatch against a service with no [Arg] parameters (or a Func that supplies none) is not an empty "()".
+	/// <summary>
+	///     Renders a runtime-argument type list for a diagnostic message, reading as "none" when empty so a
+	///     mismatch against a service with no <c>[Arg]</c> parameters (or a <c>Func</c> that supplies none) is not an
+	///     empty "()".
+	/// </summary>
 	private static string FormatTypeList(string[] types)
 		=> types.Length == 0 ? "none" : string.Join(", ", types.Select(Display));
 
@@ -797,10 +747,9 @@ partial class AwaitenGenerator
 		List<LocationInfo?> instanceLocations,
 		List<DiagnosticInfo> diagnostics)
 	{
-		// Walk the singleton's graph through its transient dependencies (which are baked into it).
-		// Reaching a scoped service means the singleton would capture it for the container's life. Each
-		// node carries the index of the dependency that referenced it, so the diagnostic can name the
-		// service alias the developer actually wrote rather than an arbitrary one of its service types.
+		// Walk the singleton's graph through its transient dependencies (baked into it). Reaching a scoped
+		// service means the singleton captures it for the container's life. Each node carries its referencing
+		// dependency so the diagnostic names the alias the developer wrote.
 		HashSet<int> visited = new();
 		Stack<(int Node, int Parent)> stack = new();
 		foreach (int dependency in dependencies[singleton])
@@ -838,11 +787,9 @@ partial class AwaitenGenerator
 			}
 		}
 
-		// The service key the parent's constructor used to reach this dependency - the alias the developer
-		// wrote, including any [FromKey] - which is the one of the dependency's service keys that a parent
-		// parameter selects. Falls back to the first service key if no parameter matches, or - when the
-		// dependency is a collection member reached only through the collection and so exposes no service of
-		// its own - to its implementation type, so the diagnostic still names it.
+		// The service key the parent's constructor used to reach this dependency (the alias the developer wrote,
+		// including any [FromKey]). Falls back to the first service key, or the implementation type when the
+		// dependency exposes no service of its own, so the diagnostic still names it.
 		static ServiceKey ReferencedService(InstanceModel parent, InstanceModel dependency)
 		{
 			ServiceKey[] dependencyServices = dependency.Services.AsArray();
@@ -860,14 +807,9 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     Reports <see cref="Diagnostics.EagerAsyncSingleton">AWT161</see> for an <c>Eager</c> singleton that is
-	///     async-tainted: it is async-initialized (or reaches one through its non-deferred dependencies), so it
-	///     has no synchronous construction path and cannot be built in the generated root's synchronous
-	///     constructor without handing back an uninitialized instance. Called only in the strict default -
-	///     <c>InitializeAsync</c> warms the async singletons instead; the pragmatic <c>SyncResolveAfterInit</c>
-	///     mode emits a blocking synchronous resolver, so eager construction is allowed and this is not reported.
-	///     Missing-dependency, cycle and captive faults through an eager singleton are already covered by
-	///     AWT101/102/105.
+	///     Reports <see cref="Diagnostics.EagerAsyncSingleton">AWT161</see> for an async-tainted <c>Eager</c>
+	///     singleton: it has no synchronous construction path, so it cannot be built in the root's synchronous
+	///     constructor. Strict default only; <c>SyncResolveAfterInit</c> emits a blocking resolver and allows it.
 	/// </summary>
 	private static void DetectEagerAsyncSingletons(
 		List<InstanceModel> instances,
@@ -948,13 +890,10 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     AWT145/AWT146/AWT147: a deferred property breaks a mutual cycle only because the owning instance is
 	///     cached before its deferred members are wired, so a re-entrant resolve returns the cached instance. Any
-	///     cycle that involves a deferred edge escapes AWT102 (which walks only the construction graph, from which
-	///     deferred edges are absent), so it must be vetted here. The verdict is computed per strongly connected
-	///     component of the combined construction-plus-deferred graph rather than per DFS-enumerated cycle: a DFS
-	///     enumerates only some of a component's cycles (a cycle closing through an already-finished node is never
-	///     seen), and unlike AWT102 - where any one found cycle suffices to reject - a component here can mix
-	///     supported and faulty cycles, so a complete verdict must come from the component's whole edge set (every
-	///     intra-component edge lies on some cycle). See <see cref="ClassifyDeferredComponent" /> for the faults.
+	///     cycle involving a deferred edge escapes AWT102 (which walks only the construction graph), so it is
+	///     vetted here, per strongly connected component of the combined graph rather than per DFS-enumerated cycle
+	///     (a component can mix supported and faulty cycles, so a complete verdict needs the whole edge set). See
+	///     <see cref="ClassifyDeferredComponent" /> for the faults.
 	/// </summary>
 	private static void DetectNonTerminatingDeferredCycles(
 		List<InstanceModel> instances,
@@ -964,7 +903,7 @@ partial class AwaitenGenerator
 		List<DiagnosticInfo> diagnostics)
 	{
 		// Without a deferred member the combined graph IS the construction graph and every cycle in it is
-		// AWT102's business - the (common) deferred-free container pays one member scan and no graph walk.
+		// AWT102's business; the (common) deferred-free container pays one member scan and no graph walk.
 		if (!AnyDeferredMember(instances))
 		{
 			return;
@@ -980,21 +919,16 @@ partial class AwaitenGenerator
 		}
 	}
 
-	// Classifies one non-trivial strongly connected component of the combined construction-plus-deferred graph
-	// and reports its fault, if any (one diagnostic per component, rendering a concrete demonstrating cycle):
-	// - A construction edge whose source is cached (singleton/scoped) re-enters that source before it is cached
-	//   when resolution flows around the cycle, constructing a duplicate of it (AWT147).
-	// - With no cached participant at all nothing terminates the re-entry, so the cycle recurses forever: AWT147
-	//   when a construction edge remains in the mix, AWT145 for the all-deferred all-transient cycle.
-	// - An async-tainted participant publishes its memoized task only after the re-entrant resolve has already
-	//   returned, so a deferred cycle through it cannot terminate either (AWT146).
-	// What remains - every construction edge sourced at a transient, no async participant, and at least one
-	// synchronously-cached participant whose cache terminates the re-entry - is the supported case: the cycle
-	// terminates from every entry point (transients are merely rebuilt a bounded number of times), so nothing is
-	// reported. A component with no deferred edge is a pure construction cycle and is left to AWT102; a component
-	// whose construction edges already close a cycle on their own is also left to AWT102 (the verdicts above
-	// assume every cycle through a construction edge also traverses a deferred edge), and is re-vetted here once
-	// the developer has broken that pure construction cycle.
+	/// <summary>
+	///     Classifies one non-trivial strongly connected component of the combined graph and reports its fault, if
+	///     any (one diagnostic per component, rendering a demonstrating cycle). A construction edge whose source is
+	///     cached (singleton/scoped) re-enters that source before it is cached (AWT147). With no cached participant
+	///     nothing terminates the re-entry: AWT147 with a construction edge in the mix, AWT145 for the all-deferred
+	///     all-transient cycle. An async-tainted participant publishes its memoized task too late, so a deferred
+	///     cycle through it cannot terminate (AWT146). The supported case (nothing reported) has every construction
+	///     edge sourced at a transient, no async participant, and at least one synchronously-cached participant whose
+	///     cache terminates the re-entry. A pure construction cycle is left to AWT102.
+	/// </summary>
 	private static void ClassifyDeferredComponent(
 		List<int> component,
 		List<InstanceModel> instances,
@@ -1012,9 +946,8 @@ partial class AwaitenGenerator
 			return;
 		}
 
-		// The construction edges alone already close a cycle, which AWT102 reports. The verdicts below assume
-		// every cycle through a construction edge also traverses a deferred edge, so defer to AWT102 here rather
-		// than stacking a second, possibly-spurious deferred verdict onto the same component.
+		// The construction edges alone already close a cycle (AWT102 reports it). The verdicts below assume every
+		// cycle through a construction edge also traverses a deferred edge, so defer to AWT102 here.
 		if (edges.Construction is not null && HasConstructionCycle(component, members, constructionEdges))
 		{
 			return;
@@ -1061,10 +994,11 @@ partial class AwaitenGenerator
 		}
 	}
 
-	// The intra-component edges that drive the classification: the first <see cref="ComponentEdges.Deferred" />
-	// edge (its presence alone marks the component as a deferred cycle), the first <see cref="ComponentEdges.Construction" />
-	// edge, and the first construction edge whose source is cached (a singleton/scoped re-entered before it is
-	// cached - the duplicating case, <see cref="ComponentEdges.CachedSourceConstruction" />). Any may be absent.
+	/// <summary>
+	///     The intra-component edges that drive the classification: the first deferred edge (its presence marks the
+	///     component as a deferred cycle), the first construction edge, and the first construction edge whose source
+	///     is cached (a singleton/scoped re-entered before it is cached). Any may be absent.
+	/// </summary>
 	private static ComponentEdges FindComponentEdges(
 		List<int> component,
 		HashSet<int> members,
@@ -1102,9 +1036,10 @@ partial class AwaitenGenerator
 		return new ComponentEdges(deferredEdge, constructionEdge, cachedSourceConstructionEdge);
 	}
 
-	// Scans the component once for the two participant facts the classification needs: whether any participant is
-	// synchronously cached (a non-transient lifetime, which can terminate the re-entry) and the first async-tainted
-	// participant (-1 when none), whose memoized task publishes too late for a deferred cycle to terminate through.
+	/// <summary>
+	///     Scans the component once for the two participant facts the classification needs: whether any participant
+	///     is synchronously cached (can terminate the re-entry) and the first async-tainted participant (-1 when none).
+	/// </summary>
 	private static (bool AnyCached, int AsyncParticipant) ScanParticipants(List<int> component, List<InstanceModel> instances)
 	{
 		bool anyCached = false;
@@ -1130,8 +1065,10 @@ partial class AwaitenGenerator
 		public (int Source, int Target)? CachedSourceConstruction { get; } = cachedSourceConstruction;
 	}
 
-	// Whether the construction edges alone close a cycle within the component (a visited/on-stack DFS restricted
-	// to the component's nodes).
+	/// <summary>
+	///     Whether the construction edges alone close a cycle within the component (a visited/on-stack DFS restricted
+	///     to the component's nodes).
+	/// </summary>
 	private static bool HasConstructionCycle(List<int> component, HashSet<int> members, Dictionary<int, List<int>> constructionEdges)
 	{
 		HashSet<int> visited = new();
@@ -1155,10 +1092,10 @@ partial class AwaitenGenerator
 		}
 	}
 
-	// A concrete cycle through the intra-component edge source -> target, for a diagnostic message: the edge
-	// followed by the shortest path (over the component's edges) from the target back to the source, rendered
-	// head-first with the head repeated at the tail ("A -> B -> A"). The path exists because source and target
-	// share a strongly connected component.
+	/// <summary>
+	///     A concrete cycle through the intra-component edge source -&gt; target, for a diagnostic: the edge followed
+	///     by the shortest path from target back to source, rendered "A -&gt; B -&gt; A".
+	/// </summary>
 	private static List<int> CycleThroughEdge(int source, int target, HashSet<int> members, Dictionary<int, List<int>> edges)
 	{
 		List<int> cycle = new() { source, };
@@ -1166,8 +1103,10 @@ partial class AwaitenGenerator
 		return cycle;
 	}
 
-	// The shortest path from one component node to another (inclusive on both ends) over the component's edges,
-	// by breadth-first search; a from == to path is the single node.
+	/// <summary>
+	///     The shortest path from one component node to another (inclusive on both ends) over the component's edges,
+	///     by breadth-first search; a from == to path is the single node.
+	/// </summary>
 	private static List<int> PathBetween(int from, int to, HashSet<int> members, Dictionary<int, List<int>> edges)
 	{
 		if (from == to)
@@ -1286,14 +1225,17 @@ partial class AwaitenGenerator
 		return symbol.TypeKind == TypeKind.Struct ? "struct" : "class";
 	}
 
-	// Strip every 'global::' alias (the leading one and any nested in generic type arguments) so
-	// diagnostics read 'System.Func<MyCode.Leaf>' rather than 'System.Func<global::MyCode.Leaf>'.
+	/// <summary>
+	///     Strips every <c>global::</c> alias (the leading one and any nested in generic type arguments) so
+	///     diagnostics read <c>System.Func&lt;MyCode.Leaf&gt;</c> rather than <c>System.Func&lt;global::MyCode.Leaf&gt;</c>.
+	/// </summary>
 	internal static string Display(string fullyQualified)
 		=> fullyQualified.Replace("global::", string.Empty);
 
-	// Renders an instance identity for diagnostics. A decorator chain link carries a synthetic
-	// '<type>@__dec:…' identity (see DecoratorIdentity); trim the synthetic suffix so an error names the real
-	// decorator type ('MyCode.Deco') rather than the internal key ('MyCode.Deco@__dec:MyCode.IService:0:1').
+	/// <summary>
+	///     Renders an instance identity for diagnostics. A decorator chain link carries a synthetic
+	///     <c>&lt;type&gt;@__dec:…</c> identity; trim the synthetic suffix so an error names the real decorator type.
+	/// </summary>
 	internal static string DisplayInstance(string implementationType)
 	{
 		int marker = implementationType.IndexOf("@" + DecoratorKeyPrefix, StringComparison.Ordinal);

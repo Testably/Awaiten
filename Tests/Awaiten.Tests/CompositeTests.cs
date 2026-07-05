@@ -8,8 +8,7 @@ namespace Awaiten.Tests;
 ///     composite as the single public <c>INotifier</c>, fanning out to every OTHER registration of the service.
 ///     A plain <c>INotifier</c> parameter (and <c>Resolve&lt;INotifier&gt;()</c>) gets the composite, the
 ///     composite's own collection parameter gets the bare channels (never itself), and a separate consumer
-///     requesting <c>IEnumerable&lt;INotifier&gt;</c> also gets the bare channels. The containers and services
-///     are nested types, so the enclosing class is <c>partial</c>.
+///     requesting <c>IEnumerable&lt;INotifier&gt;</c> also gets the bare channels.
 /// </summary>
 public partial class CompositeTests
 {
@@ -30,7 +29,7 @@ public partial class CompositeTests
 
 		CompositeNotifier composite = (CompositeNotifier)container.Resolve<INotifier>();
 
-		// The composite receives the three channels — Email, Sms, Push — and NOT itself.
+		// The composite receives the three channels (email, sms, push) and NOT itself.
 		await That(string.Join(",", composite.Channels.Select(c => c.Name))).IsEqualTo("email,sms,push");
 		await That(composite.Channels.Any(c => c is CompositeNotifier)).IsFalse()
 			.Because("the composite is excluded from its own collection parameter");
@@ -157,7 +156,6 @@ public partial class CompositeTests
 		public string Send(string message) => $"log({inner.Send(message)})";
 	}
 
-	// The composite fans the message out to every other channel, joined for assertion.
 	public sealed class CompositeNotifier(IEnumerable<INotifier> channels) : INotifier
 	{
 		public IReadOnlyList<INotifier> Channels { get; } = channels.ToList();

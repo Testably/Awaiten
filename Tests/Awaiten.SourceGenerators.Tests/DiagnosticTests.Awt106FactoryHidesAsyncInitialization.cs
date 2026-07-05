@@ -217,8 +217,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			// The body returns the value of a helper call typed as IFoo; the concrete FooImpl is not provable
-			// without interprocedural analysis, so the lint stays silent.
+			// The concrete FooImpl is behind a helper call typed IFoo, not provable without interprocedural analysis, so the lint stays silent.
 			await That(result.Diagnostics).DoesNotContain("*AWT106*").AsWildcard();
 		}
 
@@ -279,8 +278,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			// The 'new FooImpl()' belongs to the nested lambda, not the factory's own return; the factory
-			// returns an IFoo-typed local, so nothing is provable.
+			// The 'new FooImpl()' is in the nested lambda, not the factory's return; the factory returns an IFoo-typed local, so nothing is provable.
 			await That(result.Diagnostics).DoesNotContain("*AWT106*").AsWildcard();
 		}
 
@@ -314,8 +312,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			// An async Task<T> factory is the explicit manual-initialization escape hatch: the container awaits
-			// the factory and does not drive InitializeAsync itself, so the lint must not nag a correct one.
+			// An async Task<T> factory is the manual-initialization escape hatch: the container awaits it and does not drive InitializeAsync, so the lint stays silent.
 			await That(result.Diagnostics).DoesNotContain("*AWT106*").AsWildcard();
 		}
 
@@ -376,8 +373,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			// A hidden IDisposable is not reported: the container disposes factory outputs behind a runtime
-			// `is IDisposable` check (RuntimeDisposalCheck), so there is no leak to warn about.
+			// A hidden IDisposable is not reported: the container disposes factory outputs behind a runtime `is IDisposable` check, so there is no leak.
 			await That(result.Diagnostics).DoesNotContain("*AWT106*").AsWildcard();
 		}
 

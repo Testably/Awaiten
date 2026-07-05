@@ -1,11 +1,10 @@
 namespace Awaiten.SourceGenerators.Tests;
 
 /// <summary>
-///     The generated shape of assembly scanning: <c>[Scan(typeof(TMarker))]</c> synthesizes an overridable
-///     self-registration for every concrete class in the container's assembly assignable to the marker, skipping
-///     abstract/static classes and the marker itself. The synthesized registrations are ordinary self
-///     registrations, so the existing dispatch, construction and lifetime plumbing emits them — no new emission
-///     is introduced. An explicit registration of the same type takes precedence over the scan.
+///     Assembly scanning: <c>[Scan(typeof(TMarker))]</c> synthesizes a self-registration for every concrete
+///     class assignable to the marker, skipping abstract/static classes and the marker itself. The synthesized
+///     registrations reuse the ordinary dispatch/construction/lifetime plumbing, so no new emission is introduced.
+///     An explicit registration of the same type takes precedence over the scan.
 /// </summary>
 public class ScanTests
 {
@@ -32,7 +31,6 @@ public class ScanTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// Both concrete plugins are registered and dispatched as themselves.
 		await That(source).Contains("new __Bucket(typeof(global::MyCode.AlphaPlugin)")
 			.Because("the concrete AlphaPlugin is self-registered by the scan");
 		await That(source).Contains("new __Bucket(typeof(global::MyCode.BetaPlugin)")
@@ -40,7 +38,6 @@ public class ScanTests
 		await That(source).Contains("new global::MyCode.AlphaPlugin()")
 			.And.Contains("new global::MyCode.BetaPlugin()");
 
-		// The abstract base and the marker interface itself are not instantiable and must not be registered.
 		await That(source).DoesNotContain("PluginBase")
 			.Because("an abstract class is skipped by the scan");
 	}
@@ -68,8 +65,8 @@ public class ScanTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// The explicit transient BetaPlugin wins the single-dispatch slot, so it is not cached as a singleton
-		// while the scanned AlphaPlugin is - a scan provides bulk defaults that a specific registration refines.
+		// A specific registration refines the scan's bulk defaults, so explicit transient BetaPlugin wins the
+		// single-dispatch slot while scanned AlphaPlugin stays a singleton.
 		await That(source).Contains("new __Bucket(typeof(global::MyCode.BetaPlugin)")
 			.And.Contains("new __Bucket(typeof(global::MyCode.AlphaPlugin)");
 		int betaConstructions = source.Split(new[]
@@ -105,8 +102,7 @@ public class ScanTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// Both matches register under IHandler and become members of its collection, resolved by their concrete
-		// resolvers; the concrete types themselves are not self-registered for single dispatch.
+		// ImplementedInterfaces registers matches under the marker collection, not as self-dispatched concrete types.
 		await That(source).Contains("new global::MyCode.Dispatcher(new global::MyCode.IHandler[] { Root.ResolveEmailHandler(__s.__root), Root.ResolveSmsHandler(__s.__root) })");
 		await That(source).DoesNotContain("new __Bucket(typeof(global::MyCode.EmailHandler)")
 			.Because("ImplementedInterfaces registers under the marker interface, not the concrete type");
@@ -136,7 +132,6 @@ public class ScanTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// Resolvable both as its own concrete type and as a member of the marker's collection.
 		await That(source).Contains("new __Bucket(typeof(global::MyCode.SalesReport)")
 			.Because("SelfAndImplementedInterfaces keeps the concrete self registration");
 		await That(source).Contains("new global::MyCode.IReport[] { Root.ResolveSalesReport(__s.__root) }")
@@ -162,7 +157,6 @@ public class ScanTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// Both concrete plugins from the referenced support assembly are registered; the abstract base is skipped.
 		await That(source).Contains("new __Bucket(typeof(global::Awaiten.Tests.Support.GammaPlugin)");
 		await That(source).Contains("new __Bucket(typeof(global::Awaiten.Tests.Support.DeltaPlugin)");
 		await That(source).DoesNotContain("PluginBase")
@@ -219,8 +213,8 @@ public class ScanTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// Each view registers under the closed marker interface(s) it implements (not its concrete type); a view
-		// closing the marker at two type arguments registers under both, and each closed form is a collection.
+		// Each view registers under the closed marker interface(s) it implements, not its concrete type; a view
+		// closing two type args registers under both.
 		await That(source).Contains("new __Bucket(typeof(global::MyCode.IView<global::MyCode.ViewModelOne>)");
 		await That(source).Contains("new __Bucket(typeof(global::MyCode.IView<global::MyCode.ViewModelTwo>)");
 		await That(source).Contains("new global::MyCode.IView<global::MyCode.ViewModelOne>[] { Root.ResolveDualView(__s.__root), Root.ResolveViewOne(__s.__root) }");

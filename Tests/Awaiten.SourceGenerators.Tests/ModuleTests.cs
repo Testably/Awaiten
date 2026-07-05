@@ -3,10 +3,9 @@ using System.Linq;
 namespace Awaiten.SourceGenerators.Tests;
 
 /// <summary>
-///     Generator behavior of modules: a container pulls a module's registrations in with
-///     <c>[Import(typeof(Module))]</c>, the module's strong registrations are emitted like the container's
-///     own, and the container's own registration overrides an imported overridable <c>Default</c> - so the
-///     overridden default is not emitted at all.
+///     Module generator behavior. A container pulls a module's registrations in with
+///     <c>[Import(typeof(Module))]</c>, and the container's own registration overrides an imported overridable
+///     <c>Default</c>, dropping the overridden default entirely.
 /// </summary>
 public class ModuleTests
 {
@@ -39,8 +38,6 @@ public class ModuleTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// The module contributes Logger; the container's IClock overrides the module's overridable default,
-		// so the overridden ModuleClock is not emitted at all.
 		await That(source).Contains("global::MyCode.Logger")
 			.Because("a module's strong registrations are pulled into the container");
 		await That(source).Contains("global::MyCode.AppClock")
@@ -711,8 +708,8 @@ public class ModuleTests
 		                                       }
 		                                       """);
 
-		// The nested import is rejected (AWT150), but the erroring module's own registrations are still
-		// imported so they do not additionally cascade as AWT101 missing dependencies.
+		// The nested import is rejected (AWT150), but the module's own registrations still import, so they do
+		// not cascade as AWT101 missing dependencies.
 		await That(result.Diagnostics).Contains("*AWT150*InfrastructureModule*").AsWildcard();
 		await That(result.Diagnostics.Any(d => d.Contains("AWT101"))).IsFalse()
 			.Because("the module's own registrations are imported despite its rejected nested [Import]");

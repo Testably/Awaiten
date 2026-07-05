@@ -19,8 +19,8 @@ internal static partial class Sources
 	/// <summary>
 	///     Whether a plain <c>Func&lt;…&gt;</c> over this service is withheld from by-type resolution on the Root
 	///     under strict lifetime safety: the service is built on demand (transient or parameterized) and building
-	///     it tracks a fresh disposable on its owner - the service itself is disposable, or its construction
-	///     transitively rebuilds one. Such a Func re-invoked off a root binding accumulates those disposables for
+	///     it tracks a fresh disposable on its owner (the service itself is disposable, or its construction
+	///     transitively rebuilds one). Such a Func re-invoked off a root binding accumulates those disposables for
 	///     the container's lifetime, so off the Root only the <c>Func&lt;…, Owned&lt;T&gt;&gt;</c> form (which drains
 	///     into a throwaway scope) is offered; the plain Func stays resolvable from a child scope, which bounds the
 	///     disposables it builds.
@@ -34,7 +34,7 @@ internal static partial class Sources
 	///     The guidance message (a quoted string literal) thrown by Resolve(Type) on the Root when a service
 	///     withheld there under strict lifetime safety is requested by its bare type: it is itself a disposable
 	///     build-on-demand service, reachable from the Root only by injection or through an <c>Owned&lt;T&gt;</c>
-	///     handle - but still resolvable from a child scope, which bounds its lifetime.
+	///     handle, but still resolvable from a child scope, which bounds its lifetime.
 	/// </summary>
 	private static string BareWithheldMessage(string service)
 	{
@@ -96,8 +96,8 @@ internal static partial class Sources
 	/// <summary>
 	///     The guidance thrown by Resolve(Type) for a collection (<c>IEnumerable&lt;T&gt;</c> / <c>T[]</c>) that
 	///     holds an async-tainted member: a collection is materialized synchronously (built eagerly into an array,
-	///     with no place to await an initialization), so there is no synchronous - and no asynchronous - resolution
-	///     of it on any scope. Mirrors AWT122; the pragmatic SyncResolveAfterInit mode (which warms the graph) is
+	///     with no place to await an initialization), so it has no synchronous and no asynchronous resolution
+	///     on any scope. Mirrors AWT122; the pragmatic SyncResolveAfterInit mode (which warms the graph) is
 	///     the way to make it synchronously resolvable after InitializeAsync.
 	/// </summary>
 	private static string CollectionAsyncMessage(string collection)
@@ -108,7 +108,7 @@ internal static partial class Sources
 
 	/// <summary>
 	///     The guidance thrown by Resolve(Type) for an <c>IAsyncEnumerable&lt;T&gt;</c> collection that holds an
-	///     async-tainted member: unlike the synchronous shapes it is resolvable - it awaits each member - but only
+	///     async-tainted member: unlike the synchronous shapes it is resolvable (it awaits each member) but only
 	///     asynchronously, so synchronous resolution steers to <c>ResolveAsync</c> (the async counterpart of
 	///     <see cref="AsyncWithheldMessage" /> for the collection shape).
 	/// </summary>
@@ -144,9 +144,9 @@ internal static partial class Sources
 
 	/// <summary>
 	///     The guidance message (a quoted string literal) thrown by Resolve(Type) when an async-tainted service is
-	///     requested by type: it is async-initialized - it implements IAsyncInitializable, is produced by an
+	///     requested by type: it is async-initialized. It implements IAsyncInitializable, is produced by an
 	///     asynchronous Task&lt;T&gt; / ValueTask&lt;T&gt; factory, or reaches one through its non-deferred
-	///     dependencies - so it has no synchronous resolution path in the strict default and must be obtained
+	///     dependencies, so it has no synchronous resolution path in the strict default and must be obtained
 	///     asynchronously.
 	/// </summary>
 	private static string AsyncWithheldMessage(string service)
@@ -159,7 +159,7 @@ internal static partial class Sources
 	///     The guidance message (a quoted string literal) thrown by ResolveAsync(Type) on the Root when a disposable
 	///     build-on-demand service that needs asynchronous initialization is requested by its bare type: building it
 	///     on demand from the Root tracks a fresh disposable on the root for the container's lifetime (an unbounded
-	///     leak), so the Root withholds it. It stays resolvable from a child scope, whose disposal bounds it - the
+	///     leak), so the Root withholds it. It stays resolvable from a child scope, whose disposal bounds it. The
 	///     async counterpart to BareWithheldMessage (a synchronous <c>Owned&lt;T&gt;</c> cannot await
 	///     initialization, so the async owned form <c>Func&lt;…, Task&lt;Owned&lt;T&gt;&gt;&gt;</c> is offered).
 	/// </summary>
@@ -170,7 +170,7 @@ internal static partial class Sources
 	}
 
 	/// <summary>
-	///     The root-withheld entries (dispatchable, but carrying guidance) - their types and messages populate the
+	///     The root-withheld entries (dispatchable, but carrying guidance). Their types and messages populate the
 	///     <c>__withheld</c> table that Resolve throws from on the Root, while the parallel <c>__rootWithheld</c>
 	///     mask (keyed by dispatch case) is what TryResolve consults to return false for them on the Root only.
 	/// </summary>
@@ -192,7 +192,7 @@ internal static partial class Sources
 	///     The (service type, guidance) pairs that populate the static <c>__withheld</c> table: the
 	///     dispatchable root-withheld disposable services (<paramref name="rootWithheld" />), plus the
 	///     async-tainted services excluded from synchronous resolution entirely. Deduplicated by service type
-	///     (the two sources are disjoint - an async-tainted service emits no dispatch entry - but a
+	///     (the two sources are disjoint, since an async-tainted service emits no dispatch entry, but a
 	///     belt-and-braces dedup keeps the emitted dictionary initializer free of a duplicate-key throw).
 	/// </summary>
 	private static List<(string Type, string Guidance)> WithheldTypes(
@@ -254,9 +254,9 @@ internal static partial class Sources
 				yield return (shape, CollectionAsyncMessage(shape));
 			}
 
-			// The IAsyncEnumerable<T> shape IS resolvable - it awaits its members - but only asynchronously, so its
+			// The IAsyncEnumerable<T> shape IS resolvable (it awaits its members) but only asynchronously, so its
 			// synchronous Resolve throws guidance toward ResolveAsync (an async arm serves ResolveAsync itself).
-			// Unless that shape is explicitly registered - then the registration owns the slot and its own dispatch
+			// Unless that shape is explicitly registered: then the registration owns the slot and its own dispatch
 			// entry or guidance applies, not the synthesized view's.
 			if (!AsyncShapeRegistered(serviceToIndex, collection.Service))
 			{
@@ -273,7 +273,7 @@ internal static partial class Sources
 	///     synchronous dispatch entry, so without this they would surface as a generic "no registration".
 	///     A parameterized service is excluded: it is never resolvable by its bare type (it needs its runtime
 	///     arguments through a <c>Func&lt;TArg…, …&gt;</c>), so the "resolve through ResolveAsync" guidance would
-	///     not fit - its bare-type unavailability is governed by parameterization, not asynchronous initialization.
+	///     not fit; its bare-type unavailability is governed by parameterization, not asynchronous initialization.
 	/// </summary>
 	private static IEnumerable<(string Service, string Guidance)> AsyncWithheldServices(
 		InstanceModel[] instances, bool syncResolveAfterInit)
@@ -307,7 +307,7 @@ internal static partial class Sources
 	/// <summary>
 	///     Emits the static <c>__withheld</c> table mapping each withheld service type to its guidance message.
 	///     <c>Resolve</c> consults it (after <c>TryResolve</c> returned <see langword="false" />) to throw the
-	///     targeted guidance instead of the generic "no registration" message - for a root-withheld disposable
+	///     targeted guidance instead of the generic "no registration" message: for a root-withheld disposable
 	///     on the Root, or an async-only service on any scope.
 	/// </summary>
 	private static void EmitWithheldTable(StringBuilder builder, int depth, List<(string Type, string Guidance)> entries)

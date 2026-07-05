@@ -1,9 +1,8 @@
 namespace Awaiten.Tests;
 
 /// <summary>
-///     Runtime behavior of a generated container over a small graph. The container
-///     (<see cref="GraphContainer" />) and its services are declared as nested types to exercise the
-///     nested-container support — the enclosing class is therefore <c>partial</c>.
+///     Runtime behavior of a generated container over a small graph. The container and its services are
+///     nested types to exercise nested-container support, so the enclosing class is <c>partial</c>.
 /// </summary>
 public partial class ResolutionTests
 {

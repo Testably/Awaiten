@@ -1,11 +1,10 @@
 namespace Awaiten.SourceGenerators.Tests;
 
 /// <summary>
-///     Generator behavior of eager singleton activation (<c>[Singleton&lt;T&gt;(Eager = true)]</c>): the
-///     generated container root's constructor constructs the eager singleton(s) through their cached static
-///     resolvers, in registration order, while a lazy singleton is left out. An async-initialized eager
-///     singleton has no synchronous construction path in the strict default and is AWT161; the pragmatic
-///     <c>SyncResolveAfterInit</c> mode allows it (a blocking synchronous resolver is emitted).
+///     Eager singleton activation (<c>[Singleton&lt;T&gt;(Eager = true)]</c>): the root constructor warms
+///     eager singletons through their cached resolvers in registration order, leaving lazy ones out. An
+///     async-initialized eager singleton is AWT161 in strict mode; <c>SyncResolveAfterInit</c> allows it
+///     by emitting a blocking synchronous resolver.
 /// </summary>
 public class EagerActivationTests
 {
@@ -29,7 +28,6 @@ public class EagerActivationTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// The root constructor warms the eager singleton through its cached resolver, called with the root.
 		await That(source).Contains("public Root() : base()");
 		await That(source).Contains("ResolveWarm(this);")
 			.Because("the eager singleton is constructed in the root constructor through its cached resolver");
@@ -80,7 +78,6 @@ public class EagerActivationTests
 		                                       """);
 
 		await That(result.Diagnostics).IsEmpty();
-		// The root constructor is always generated, but nothing eager means it warms nothing.
 		await That(result.Sources["Awaiten.MyCode.MyContainer.g.cs"]).DoesNotContain("ResolveCold(this);")
 			.Because("a lazy singleton is constructed on first resolve, not at container build time");
 	}

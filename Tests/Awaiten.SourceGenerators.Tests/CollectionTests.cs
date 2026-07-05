@@ -1,12 +1,9 @@
 namespace Awaiten.SourceGenerators.Tests;
 
 /// <summary>
-///     The generated shape of collection dependencies: a collection-typed parameter (
-///     <c>IEnumerable&lt;T&gt;</c> and friends, or <c>T[]</c>) is materialized as an array of every unkeyed
-///     registration of <c>T</c>, in registration order, and <c>IEnumerable&lt;T&gt;</c> / <c>T[]</c> are
-///     added to the public dispatch table. Every member is a real instance (the "losing" registration is not
-///     dropped), an empty collection is a legal empty array, and an async-tainted member is rejected on the
-///     synchronous shapes (AWT122) but legal - awaited - through the <c>IAsyncEnumerable&lt;T&gt;</c> shape.
+///     A collection-typed parameter materializes every unkeyed registration of the element type as an array, in
+///     registration order. An empty collection is a legal empty array. An async-tainted member is rejected on the
+///     synchronous shapes (AWT122) but legal, awaited, through the <c>IAsyncEnumerable&lt;T&gt;</c> shape.
 /// </summary>
 public class CollectionTests
 {
@@ -36,8 +33,6 @@ public class CollectionTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// The collection is an array of every member's resolver, in registration order; both members get their
-		// own backing field (no second instance is fabricated for the "losing" registration).
 		await That(source).Contains("new global::MyCode.Host(new global::MyCode.IPlugin[] { Root.ResolveAlpha(__s.__root), Root.ResolveBeta(__s.__root) })")
 			.Because("the collection dependency materializes every registration in registration order");
 		await That(source).Contains("_alpha")
@@ -45,8 +40,6 @@ public class CollectionTests
 		await That(source).Contains("_beta")
 			.Because("the losing registration is still built - it is reached through the collection");
 
-		// IEnumerable<T> and T[] are added to the public dispatch table; the single IPlugin still dispatches to
-		// the winner.
 		await That(source).Contains("typeof(global::System.Collections.Generic.IEnumerable<global::MyCode.IPlugin>)")
 			.Because("the collection is publicly resolvable as IEnumerable<T>");
 		await That(source).Contains("typeof(global::MyCode.IPlugin[])")
@@ -221,9 +214,8 @@ public class CollectionTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// A collection of a build-on-demand disposable member is root-withheld: materializing it by type off the
-		// Root would accumulate the transient disposables for the container's lifetime, so Resolve on the Root
-		// throws the collection-specific guidance while a child scope still resolves it.
+		// Root-withheld: materializing the collection by type off the Root would accumulate the transient
+		// disposables for the container's lifetime, so Resolve on the Root throws guidance; a child scope resolves it.
 		await That(source).Contains("the collection 'System.Collections.Generic.IEnumerable<MyCode.IPlugin>' has a build-on-demand disposable member")
 			.Because("the IEnumerable<T> collection dispatch is withheld from the Root when a member is a disposable transient");
 		await That(source).Contains("the collection 'MyCode.IPlugin[]' has a build-on-demand disposable member")
@@ -256,14 +248,12 @@ public class CollectionTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// IEnumerable<IPlugin> is itself a registered service, so the parameter is a direct dependency on that
-		// registration - not the collection synthesized from the IPlugin members. Registering a collection type
-		// as an opaque value (e.g. a string[] of command-line arguments) is therefore supported.
+		// IEnumerable<IPlugin> is itself a registered service, so the parameter depends directly on that
+		// registration, not the synthesized collection. Registering a collection type as an opaque value is supported.
 		await That(source).Contains("new global::MyCode.Host(Root.ResolveBundle(__s.__root))")
 			.Because("an explicitly registered collection type wins over the synthesized collection on injection (the singleton member routes through the root)");
 
-		// All-or-nothing synthesis: because a shape of IPlugin (IEnumerable<IPlugin>) is registered, no shape is
-		// synthesized - the IPlugin[] shape is not added to the public dispatch as a synthesized collection.
+		// All-or-nothing synthesis: once one shape of IPlugin is registered, no shape is synthesized.
 		await That(source).DoesNotContain("typeof(global::MyCode.IPlugin[])")
 			.Because("registering one collection shape of IPlugin suppresses synthesis for every shape of IPlugin");
 	}
@@ -293,8 +283,8 @@ public class CollectionTests
 		                                       """);
 
 		// All-or-nothing synthesis: registering IEnumerable<IPlugin> suppresses synthesis for IPlugin[] too, so an
-		// injected IPlugin[] is an unregistered direct dependency (AWT101) rather than a silently synthesized
-		// collection that would disagree with the registered IEnumerable<IPlugin>.
+		// injected IPlugin[] is an unregistered dependency (AWT101), not a synthesized collection that would
+		// disagree with the registered IEnumerable<IPlugin>.
 		await That(result.Diagnostics).Contains("*AWT101*").AsWildcard()
 			.Because("an unregistered sibling collection shape is a missing dependency once any shape of the element type is explicitly registered");
 	}
@@ -316,8 +306,8 @@ public class CollectionTests
 		                                       }
 		                                       """);
 
-		// A multidimensional array is not a collection shape (only a rank-1 array is), so an unregistered one is a
-		// plain missing dependency rather than a synthesized rank-1 literal that would not even compile.
+		// Only a rank-1 array is a collection shape, so an unregistered int[,] is a plain missing dependency
+		// (AWT101), not a synthesized literal that would not compile.
 		await That(result.Diagnostics).Contains("*AWT101*").AsWildcard()
 			.Because("a multidimensional array (int[,]) is an ordinary direct dependency, so an unregistered one is AWT101 - not broken collection codegen");
 	}
@@ -348,13 +338,11 @@ public class CollectionTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// The [FromKey("primary")] collection materializes only the 'primary' member, not the unkeyed Plain. (A
-		// key identifies at most one registration per service type here, so the keyed collection holds one member.)
+		// The keyed collection materializes only the 'primary' member, not the unkeyed Plain.
 		await That(source).Contains("new global::MyCode.Host(new global::MyCode.IPlugin[] { Root.ResolveKeyed(__s.__root) })")
 			.Because("a keyed collection resolves exactly the registrations under that key");
 
-		// The unkeyed collection (publicly resolvable by type) holds only the unkeyed Plain - a keyed member is
-		// never an unkeyed one, so the two buckets stay disjoint.
+		// The unkeyed collection holds only Plain; keyed and unkeyed buckets stay disjoint.
 		await That(source).Contains("(Scope __s) => new global::MyCode.IPlugin[] { Root.ResolvePlain(__s.__root) };")
 			.Because("the public unkeyed collection resolves only the unkeyed registration");
 	}
@@ -413,8 +401,7 @@ public class CollectionTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// Every member is synchronous, so the async collection is a synchronous expression: the members are
-		// materialized into a T[] in registration order and wrapped in the __AsyncArray<T> helper.
+		// All members synchronous, so the async collection is built synchronously and wrapped in __AsyncArray<T>.
 		await That(source).Contains("new __AsyncArray<global::MyCode.IPlugin>(new global::MyCode.IPlugin[] { Root.ResolveAlpha(__s.__root), Root.ResolveBeta(__s.__root) })")
 			.Because("an async collection materializes every registration in registration order, wrapped as an IAsyncEnumerable<T>");
 		await That(source).Contains("private sealed class __AsyncArray<T> : global::System.Collections.Generic.IAsyncEnumerable<T>, global::System.Collections.Generic.IAsyncEnumerator<T>")
@@ -453,8 +440,8 @@ public class CollectionTests
 			.Because("IAsyncEnumerable<T> awaits its members, so an async-tainted member is legal through it");
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// The host captured an async-tainted member, so it is built on the async path: the async member is awaited
-		// through its async resolver (in registration order), the synchronous member resolved directly.
+		// One member is async-tainted, so the collection is built on the async path: the async member is awaited,
+		// the synchronous member resolved directly.
 		await That(source).Contains("new __AsyncArray<global::MyCode.IPlugin>(new global::MyCode.IPlugin[] { Root.ResolveAlpha(__s.__root), await Root.ResolveAsyncPluginAsync(__s.__root, cancellationToken).ConfigureAwait(false) })")
 			.Because("the async-tainted member is awaited while materializing the collection, the synchronous member resolved directly");
 	}
@@ -516,8 +503,8 @@ public class CollectionTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// IAsyncEnumerable<IPlugin> is itself a registered service (an opaque channel), so the parameter is a direct
-		// dependency on that registration - not the async collection synthesized from the IPlugin members.
+		// IAsyncEnumerable<IPlugin> is itself a registered service, so the parameter depends directly on it, not
+		// the synthesized async collection.
 		await That(source).Contains("new global::MyCode.Host(Root.ResolveChannel(__s.__root))")
 			.Because("an explicitly registered IAsyncEnumerable<T> wins over the synthesized async collection on injection");
 	}
@@ -551,10 +538,8 @@ public class CollectionTests
 		                                       }
 		                                       """);
 
-		// An explicitly registered synchronous shape (IReadOnlyList<IPlugin>) makes the whole IPlugin collection an
-		// opaque value, all-or-nothing. By type the IAsyncEnumerable<IPlugin> view is suppressed (SynthesisSuppressed),
-		// so injecting the unregistered async shape is AWT101 - the same missing-dependency outcome - rather than a
-		// second collection silently synthesized from the members behind the opaque IReadOnlyList<IPlugin>.
+		// A registered synchronous shape makes the whole IPlugin collection opaque (all-or-nothing), suppressing
+		// the IAsyncEnumerable<IPlugin> view too, so injecting the unregistered async shape is AWT101.
 		await That(result.Diagnostics).Contains("*AWT101*").AsWildcard()
 			.Because("a registered synchronous collection shape suppresses the IAsyncEnumerable<T> view on injection too, matching the by-type SynthesisSuppressed gate");
 		await That(result.Sources.TryGetValue("Awaiten.MyCode.MyContainer.g.cs", out string? source) ? source : string.Empty)
@@ -585,8 +570,7 @@ public class CollectionTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// Every member is synchronous, so IAsyncEnumerable<T> joins the synchronous shapes in the by-type dispatch,
-		// wrapping the same materialized members in the __AsyncArray<T> replay enumerator.
+		// All members synchronous, so IAsyncEnumerable<T> joins the synchronous shapes in the by-type dispatch.
 		await That(source).Contains("typeof(global::System.Collections.Generic.IAsyncEnumerable<global::MyCode.IPlugin>)")
 			.Because("a synchronous collection is also publicly resolvable as IAsyncEnumerable<T>");
 		await That(source).Contains("new __AsyncArray<global::MyCode.IPlugin>(new global::MyCode.IPlugin[] { Root.ResolveAlpha(__s.__root), Root.ResolveBeta(__s.__root) })")
@@ -619,8 +603,7 @@ public class CollectionTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// The collection holds an async-tainted member, so its IAsyncEnumerable<T> shape is served by an async
-		// dispatch arm routed to a generated async collection resolver that awaits each member.
+		// An async-tainted member routes the IAsyncEnumerable<T> shape through an async dispatch arm that awaits each member.
 		await That(source).Contains("typeof(global::System.Collections.Generic.IAsyncEnumerable<global::MyCode.IPlugin>), static (__s, __ct) => __AsObject(__ResolveAsyncCollection0(__s, __ct))")
 			.Because("the async collection is resolvable by type through ResolveAsync");
 		await That(source).Contains("return new __AsyncArray<global::MyCode.IPlugin>(new global::MyCode.IPlugin[] { await Root.ResolveAsyncPluginAsync(__s.__root, cancellationToken).ConfigureAwait(false) });")
@@ -663,9 +646,8 @@ public class CollectionTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// The registered channel owns typeof(IAsyncEnumerable<IPlugin>) on the synchronous dispatch, and no async
-		// arm is synthesized behind it: ResolveAsync falls through to the same synchronous resolution, so Resolve
-		// and ResolveAsync hand back the same registered service rather than two disagreeing collections.
+		// The registered channel owns the slot on both surfaces: no async arm is synthesized behind it, so Resolve
+		// and ResolveAsync hand back the same registered service, not two disagreeing collections.
 		await That(source).Contains("typeof(global::System.Collections.Generic.IAsyncEnumerable<global::MyCode.IPlugin>), static __s => Root.ResolveChannel(__s.__root)")
 			.Because("the explicitly registered IAsyncEnumerable<T> is dispatched as an ordinary service");
 		await That(source).DoesNotContain("__ResolveAsyncCollection")
@@ -704,9 +686,8 @@ public class CollectionTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// The registered channel is async-tainted, so it is absent from the synchronous dispatch - the synthesized
-		// IPlugin view (whose members are all synchronous) must not claim its vacated slot: synchronous Resolve
-		// throws the channel's own steer-to-ResolveAsync guidance, and ResolveAsync serves the channel.
+		// The registered channel is async-tainted, so it is absent from the synchronous dispatch. The synthesized
+		// IPlugin view must not claim its vacated slot: sync Resolve throws the channel's own guidance, ResolveAsync serves it.
 		await That(source).DoesNotContain("new __AsyncArray<global::MyCode.IPlugin>")
 			.Because("the synthesized async view is not emitted behind the registered async shape");
 		await That(source).Contains("typeof(global::System.Collections.Generic.IAsyncEnumerable<global::MyCode.IPlugin>), static (__s, __ct) => __AsObject(Root.ResolveChannelAsync(__s.__root, __ct))")
@@ -739,9 +720,8 @@ public class CollectionTests
 		                                       }
 		                                       """);
 
-		// The collection is never injected, so there is no AWT122; but it holds an async-tainted member, so it has
-		// no synchronous materialization. Rather than surfacing a generic "no registration", its shapes carry
-		// AWT122-style guidance in the __withheld table, and none is added to the synchronous dispatch.
+		// The collection is never injected (no AWT122) but has an async-tainted member, so it has no synchronous
+		// materialization. Its shapes carry AWT122-style guidance in __withheld instead of a generic no-registration error.
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
@@ -779,8 +759,7 @@ public class CollectionTests
 			.Because("Task<IReadOnlyList<T>> is the awaited collection of T, not a missing dependency on the collection type");
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// Every member is synchronous, so the awaited collection is a completed Task.FromResult over the
-		// synchronously materialized array - no async machinery at all.
+		// All members synchronous, so the awaited collection is a completed Task.FromResult, no async machinery.
 		await That(source).Contains("global::System.Threading.Tasks.Task.FromResult<global::System.Collections.Generic.IReadOnlyList<global::MyCode.IPlugin>>(new global::MyCode.IPlugin[] { Root.ResolveAlpha(__s.__root), Root.ResolveBeta(__s.__root) })")
 			.Because("an all-synchronous awaited collection is a completed task over the members in registration order");
 	}
@@ -817,14 +796,13 @@ public class CollectionTests
 			.Because("an awaited collection awaits its members behind the returned task, so an async-tainted member is legal through it");
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// The async member is awaited inside an immediately-invoked async lambda (with no ambient token - the
-		// consumer is built synchronously), the synchronous member resolved directly, and the array cast to the
-		// requested IReadOnlyList<T> so the task's result type matches the parameter.
+		// The async member is awaited inside an immediately-invoked async lambda (default token, since the consumer
+		// is built synchronously); the array is cast to the requested IReadOnlyList<T> to match the parameter.
 		await That(source).Contains("((global::System.Func<global::System.Threading.Tasks.Task<global::System.Collections.Generic.IReadOnlyList<global::MyCode.IPlugin>>>)(async () => (global::System.Collections.Generic.IReadOnlyList<global::MyCode.IPlugin>)new global::MyCode.IPlugin[] { Root.ResolveAlpha(__s.__root), await Root.ResolveAsyncPluginAsync(__s.__root, default).ConfigureAwait(false) }))()")
 			.Because("the async-tainted member is awaited inside the produced task, in registration order");
 
-		// Unlike IAsyncEnumerable<T>, the awaited collection launders its members' taint - the members are awaited
-		// inside the task, not at construction - so the host stays synchronously constructible and dispatchable.
+		// Unlike IAsyncEnumerable<T>, the awaited collection launders its members' taint (they are awaited inside
+		// the task, not at construction), so the host stays synchronously constructible.
 		await That(source).Contains("typeof(global::MyCode.Host), static __s => Root.ResolveHost(__s.__root)")
 			.Because("a consumer of an awaited collection stays synchronously resolvable even when a member is async-tainted");
 	}
@@ -881,8 +859,8 @@ public class CollectionTests
 		                                       }
 		                                       """);
 
-		// An [Inject] member resolves exactly like a constructor parameter: an awaited collection is always
-		// satisfiable, so an unregistered element type yields a completed empty collection - never AWT101.
+		// An [Inject] member resolves like a constructor parameter: an awaited collection is always satisfiable,
+		// so an unregistered element type yields a completed empty collection, never AWT101.
 		await That(result.Diagnostics).IsEmpty()
 			.Because("an [Inject] awaited collection over an unregistered element type is a completed empty collection, exactly like the constructor parameter");
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
@@ -913,8 +891,8 @@ public class CollectionTests
 		                                       }
 		                                       """);
 
-		// A stored ValueTask may only be awaited once, so - exactly like the bare ValueTask<T> relationship -
-		// ValueTask<C> is deliberately not synthesized; it surfaces as an ordinary missing dependency.
+		// A stored ValueTask may only be awaited once, so ValueTask<C> is deliberately not synthesized (like the
+		// bare ValueTask<T> relationship); it surfaces as an ordinary missing dependency.
 		await That(result.Diagnostics).Contains("*AWT101*").AsWildcard()
 			.Because("ValueTask<C> is not an awaited collection shape, matching the bare ValueTask<T> relationship decision");
 	}
@@ -949,12 +927,9 @@ public class CollectionTests
 		                                       }
 		                                       """);
 
-		// A registered synchronous shape makes the whole IPlugin collection an opaque value, all-or-nothing:
-		// the awaited Task<IReadOnlyList<IPlugin>> view is suppressed alongside the sibling shapes, so injecting
-		// the unregistered awaited shape is AWT101 rather than a second collection synthesized behind the opaque one.
-		// The AWT101 names the awaited Task<C> parameter itself (not some other missing dependency): the awaited
-		// view is suppressed to a direct dependency on the full Task<IReadOnlyList<IPlugin>> type, which is not
-		// registered - and, notably, no bare-Task fallback resolves it through the registered IReadOnlyList<IPlugin>.
+		// A registered synchronous shape makes the whole IPlugin collection opaque, suppressing the awaited
+		// Task<IReadOnlyList<IPlugin>> view too. The AWT101 names that exact awaited shape as the missing
+		// dependency; no bare-Task fallback resolves it through the registered IReadOnlyList<IPlugin>.
 		await That(result.Diagnostics)
 			.Contains("*AWT101*requires 'System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<MyCode.IPlugin>>', which is not registered*").AsWildcard()
 			.Because("suppressing the awaited view rewrites the parameter to a direct dependency on the full Task<IReadOnlyList<IPlugin>> type, so that exact awaited shape is the missing dependency - the registered IReadOnlyList<IPlugin> does not serve it through a bare Task relationship");
@@ -993,8 +968,8 @@ public class CollectionTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// Task<IReadOnlyList<IPlugin>> is itself a registered service (an opaque, pre-built task), so the parameter
-		// is a direct dependency on that registration - not the awaited collection synthesized from the members.
+		// Task<IReadOnlyList<IPlugin>> is itself a registered service, so the parameter depends directly on it,
+		// not the synthesized awaited collection.
 		await That(source).Contains("new global::MyCode.Host(Root.ResolvePluginTask(__s.__root))")
 			.Because("an explicitly registered Task<C> claims its own exact shape, winning over the synthesized awaited collection");
 		await That(source).DoesNotContain("Task.FromResult<global::System.Collections.Generic.IReadOnlyList<global::MyCode.IPlugin>>")
@@ -1030,7 +1005,6 @@ public class CollectionTests
 			.Because("an awaited collection of a closed generic seeds open generic expansion through its inner type (the Task unwrap in RequiredServiceType)");
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// Both open registrations expand at the closed argument and join the awaited collection, in declaration order.
 		await That(source).Contains("global::System.Threading.Tasks.Task.FromResult<global::System.Collections.Generic.IReadOnlyList<global::MyCode.IHandler<global::MyCode.OrderPlaced>>>(new global::MyCode.IHandler<global::MyCode.OrderPlaced>[] {")
 			.Because("the awaited collection completes over the closed member array");
 		await That(source).Contains("new global::MyCode.AuditHandler<global::MyCode.OrderPlaced>()")
@@ -1064,8 +1038,7 @@ public class CollectionTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// The awaited collection joins the by-type dispatch alongside the synchronous shapes and IAsyncEnumerable<T>:
-		// every Task<C> shape gets a dispatch slot, so Resolve<Task<IReadOnlyList<T>>>() (and every sibling) works.
+		// Every Task<C> shape gets a by-type dispatch slot, so Resolve<Task<IReadOnlyList<T>>>() and every sibling works.
 		await That(source).Contains("typeof(global::System.Threading.Tasks.Task<global::System.Collections.Generic.IReadOnlyList<global::MyCode.IPlugin>>)")
 			.Because("the awaited IReadOnlyList<T> shape is publicly resolvable by type");
 		await That(source).Contains("typeof(global::System.Threading.Tasks.Task<global::System.Collections.Generic.IEnumerable<global::MyCode.IPlugin>>)")
@@ -1103,10 +1076,9 @@ public class CollectionTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// Unlike the synchronous shapes (withheld with AWT122-style guidance) and IAsyncEnumerable<T> (served by an
-		// async arm), the awaited collection stays on the SYNCHRONOUS by-type dispatch even with an async-tainted
-		// member: its forwarder hands back an already-started task (default token - no ambient token by type) that
-		// awaits the async member behind it.
+		// Unlike the synchronous shapes and IAsyncEnumerable<T>, the awaited collection stays on the synchronous
+		// by-type dispatch even with an async-tainted member: its forwarder hands back an already-started task
+		// (default token) that awaits the async member behind it.
 		await That(source).Contains("typeof(global::System.Threading.Tasks.Task<global::System.Collections.Generic.IReadOnlyList<global::MyCode.IPlugin>>), static __s => __R")
 			.Because("the awaited collection is a synchronous by-type dispatch entry even with an async member");
 		await That(source).Contains("await Root.ResolveAsyncPluginAsync(__s.__root, default).ConfigureAwait(false)")
@@ -1141,9 +1113,8 @@ public class CollectionTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// The registered Task<IReadOnlyList<IPlugin>> owns its own by-type slot (its bare resolver), and no awaited
-		// collection is synthesized behind it - but the sibling awaited shapes still synthesize, exactly as on the
-		// injection side (the awaitedShapeRegistered gate claims only the exact shape).
+		// The registered Task<IReadOnlyList<IPlugin>> owns only its own slot; sibling awaited shapes still
+		// synthesize (the awaitedShapeRegistered gate claims only the exact shape).
 		await That(source).Contains("typeof(global::System.Threading.Tasks.Task<global::System.Collections.Generic.IReadOnlyList<global::MyCode.IPlugin>>), static __s => Root.ResolvePluginTask(__s.__root)")
 			.Because("the registered awaited shape is served by its own resolver, not a synthesized awaited collection");
 		await That(source).Contains("typeof(global::System.Threading.Tasks.Task<global::MyCode.IPlugin[]>)")

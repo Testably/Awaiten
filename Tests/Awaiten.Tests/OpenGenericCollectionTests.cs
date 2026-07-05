@@ -5,13 +5,11 @@ using System.Threading.Tasks;
 namespace Awaiten.Tests;
 
 /// <summary>
-///     Runtime behavior of open-generic collections: a collection of a closed generic service -
-///     <c>IEnumerable&lt;IHandler&lt;OrderPlaced&gt;&gt;</c> - resolves to every open-generic registration
+///     Runtime behavior of open-generic collections: a collection of a closed generic service such as
+///     <c>IEnumerable&lt;IHandler&lt;OrderPlaced&gt;&gt;</c> resolves to every open-generic registration
 ///     expanded at that closed type argument, in declaration order, each respecting its own lifetime. A
-///     different closed argument expands its own closed set. Expansion is driven at compile time by the
-///     closed services an application actually needs, so each container declares a concrete <c>App</c> root
-///     that depends on them. The containers and services are nested types, so the enclosing class is
-///     <c>partial</c>.
+///     different closed argument expands its own closed set. Expansion is driven at compile time by the closed
+///     services an application actually needs, so each container declares a concrete <c>App</c> root that depends on them.
 /// </summary>
 public partial class OpenGenericCollectionTests
 {
@@ -128,7 +126,7 @@ public partial class OpenGenericCollectionTests
 		using HandlerContainer.Root container = new();
 
 		// A Task<IReadOnlyList<IHandler<OrderPlaced>>> consumer yields every open registration expanded at the
-		// closed argument, awaited behind the task - the open-generic x awaited-collection intersection.
+		// closed argument, awaited behind the task: the open-generic x awaited-collection intersection.
 		AwaitedDispatcher<OrderPlaced> dispatcher = container.Resolve<AwaitedDispatcher<OrderPlaced>>();
 		IReadOnlyList<IHandler<OrderPlaced>> handlers = await dispatcher.Handlers;
 

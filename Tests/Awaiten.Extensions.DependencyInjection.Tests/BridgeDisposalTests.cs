@@ -5,15 +5,15 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Awaiten.Extensions.DependencyInjection.Tests;
 
 /// <summary>
-///     Disposal behaviour of the bridge. For the provider-replacement path (<see cref="AwaitenServiceProvider" />)
-///     the Awaiten container is the single owner:
-///     every instance - and everything built for it - is disposed exactly once; these pin the two cases the
-///     collection projection (<see cref="AwaitenServiceCollectionExtensions.AddGeneratedContainer{TRoot}" />)
-///     documents it does not guarantee (an implementation exposed under several service types, and a
-///     disposable reached only as a nested dependency). For the projection, these pin the ownership rules:
-///     disposable transients are bounded by the MS.DI scope they are resolved in, instances awaited through
-///     the <c>Task&lt;T&gt;</c> projection are disposed with their scope (or the root provider), and a
-///     pre-built <c>Instance</c> member stays user-owned.
+///     Disposal behaviour of the bridge. On the provider-replacement path
+///     (<see cref="AwaitenServiceProvider" />) the Awaiten container is the single owner: every instance,
+///     and everything built for it, is disposed exactly once. These pin the two cases the collection
+///     projection (<see cref="AwaitenServiceCollectionExtensions.AddGeneratedContainer{TRoot}" />) does not
+///     guarantee: an implementation exposed under several service types, and a disposable reached only as a
+///     nested dependency. For the projection, the tests pin its ownership rules: disposable transients are
+///     bounded by the MS.DI scope they resolve in, instances awaited through the <c>Task&lt;T&gt;</c>
+///     projection are disposed with their scope (or the root provider), and a pre-built <c>Instance</c>
+///     member stays user-owned.
 /// </summary>
 public sealed partial class BridgeDisposalTests
 {
@@ -21,7 +21,7 @@ public sealed partial class BridgeDisposalTests
 
 	public interface ISecond;
 
-	// One implementation exposed under two service types. Awaiten shares - and disposes - a single instance.
+	// One implementation exposed under two service types. Awaiten shares and disposes a single instance.
 	public sealed class MultiService : IFirst, ISecond, IDisposable
 	{
 		public int DisposeCount { get; private set; }
@@ -36,7 +36,7 @@ public sealed partial class BridgeDisposalTests
 		public void Dispose() => DisposeCount++;
 	}
 
-	// Reaches InnerDependency only as a constructor dependency - it is never resolved on its own.
+	// Reaches InnerDependency only as a constructor dependency, never resolved on its own.
 	public sealed class OuterService
 	{
 		public OuterService(InnerDependency inner) => Inner = inner;
@@ -126,9 +126,9 @@ public sealed partial class BridgeDisposalTests
 		services.AddGeneratedContainer<TransientContainer.Root>();
 		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
 
-		// Resolved from the root provider the transient resolves on the container root, where the strict
-		// default withholds a disposable transient - each resolution would accumulate on the root for the
-		// container's lifetime - so the container's guidance surfaces instead of a silent leak.
+		// Resolved from the root provider, the transient resolves on the container root, where the strict
+		// default withholds a disposable transient (each resolution would accumulate on the root for the
+		// container's lifetime), so the container's guidance surfaces instead of a silent leak.
 		void Act() => provider.GetRequiredService<DisposableTransient>();
 
 		await That(Act).Throws<InvalidOperationException>();
@@ -266,8 +266,8 @@ public sealed partial class BridgeDisposalTests
 	}
 
 #if NET
-	// The generated async-disposal surface exists only where the Awaiten runtime exposes it (net8.0+);
-	// net48 binds the netstandard2.0 asset, which has none, so an IAsyncDisposable-only service is not
+	// The generated async-disposal surface exists only where the Awaiten runtime exposes it (net8.0+). The
+	// net48 build binds the netstandard2.0 asset, which has none, so an IAsyncDisposable-only service is not
 	// supported there.
 	public sealed class AsyncOnlyDisposable : IAsyncDisposable
 	{
@@ -287,9 +287,9 @@ public sealed partial class BridgeDisposalTests
 	[Fact]
 	public async Task ProviderReplacement_AsyncOnlyDisposable_DisposedThroughAsyncScopeTeardown()
 	{
-		// The scoped AsyncOnlyDisposable only ever lives in the child scope, drained asynchronously below - the
-		// root never tracks one, so its synchronous using is safe here (AWT156 checks what the disposed owner
-		// could track, not what it actually tracked, and the root is itself a scope that could track one).
+		// The scoped AsyncOnlyDisposable only ever lives in the child scope, drained asynchronously below, so
+		// the root never tracks one and its synchronous using is safe here (AWT156 checks what the disposed
+		// owner could track, not what it actually tracked, and the root is itself a scope that could track one).
 #pragma warning disable AWT156
 		using AsyncOnlyDisposalContainer.Root container = new();
 #pragma warning restore AWT156
@@ -299,7 +299,7 @@ public sealed partial class BridgeDisposalTests
 		AsyncOnlyDisposable service = (AsyncOnlyDisposable)scope.ServiceProvider.GetService(typeof(AsyncOnlyDisposable))!;
 
 		// The bridge scope surfaces IAsyncDisposable, so a host tearing it down asynchronously reaches the
-		// generated scope's DisposeAsync - the only way an IAsyncDisposable-only instance can be drained.
+		// generated scope's DisposeAsync, the only way an IAsyncDisposable-only instance can be drained.
 		await ((IAsyncDisposable)scope).DisposeAsync();
 
 		await That(service.DisposeCount).IsEqualTo(1);

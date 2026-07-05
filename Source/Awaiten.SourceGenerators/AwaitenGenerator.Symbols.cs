@@ -8,16 +8,16 @@ partial class AwaitenGenerator
 	private static readonly SymbolDisplayFormat FullyQualified = SymbolDisplayFormat.FullyQualifiedFormat;
 
 	/// <summary>
-	///     The <c>System.IAsyncDisposable</c> symbol when - and only when - the referenced Awaiten runtime
-	///     actually exposes its async-disposal surface, otherwise <see langword="null" />. The runtime gates
-	///     that surface (<c>Owned&lt;T&gt;.DisposeAsync</c> and the awaiting scope drain) behind
-	///     <c>#if NET || NETSTANDARD2_1_OR_GREATER</c>, so a consumer that binds the netstandard2.0 asset -
-	///     net6.0 / net7.0, a netstandard2.1 library, or net48 even with Microsoft.Bcl.AsyncInterfaces - gets an
+	///     The <c>System.IAsyncDisposable</c> symbol only when the referenced Awaiten runtime actually exposes its
+	///     async-disposal surface, otherwise <see langword="null" />. The runtime gates that surface
+	///     (<c>Owned&lt;T&gt;.DisposeAsync</c> and the awaiting scope drain) behind
+	///     <c>#if NET || NETSTANDARD2_1_OR_GREATER</c>, so a consumer that binds the netstandard2.0 asset (net6.0 /
+	///     net7.0, a netstandard2.1 library, or net48 even with Microsoft.Bcl.AsyncInterfaces) gets an
 	///     <c>Owned&lt;T&gt;</c> with no <c>DisposeAsync</c> even though its own compilation can see
 	///     <c>System.IAsyncDisposable</c>. Emitting the surface there would hand back a handle that cannot be
-	///     <c>await using</c>d and would track async-only services the synchronous drain cannot release. Reading
-	///     the capability off <c>Owned&lt;T&gt;</c> keeps the generated container consistent with the exact
-	///     runtime asset it compiles against - the realized result of that same <c>#if</c>.
+	///     <c>await using</c>d and would track async-only services the synchronous drain cannot release. Reading the
+	///     capability off <c>Owned&lt;T&gt;</c> keeps the generated container consistent with the exact runtime
+	///     asset it compiles against, the realized result of that same <c>#if</c>.
 	/// </summary>
 	private static INamedTypeSymbol? AsyncDisposableSupport(Compilation compilation)
 	{

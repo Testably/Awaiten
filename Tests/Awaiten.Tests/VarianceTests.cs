@@ -7,8 +7,7 @@ namespace Awaiten.Tests;
 ///     through contravariance; a registered <c>IFactory&lt;OrderPlaced&gt;</c> (<c>out T</c>) satisfies a request
 ///     for <c>IFactory&lt;DomainEvent&gt;</c> through covariance. An exact registration always wins, an invariant
 ///     interface never matches a different closure, and the same compatibility check drives single-service
-///     resolution, collection union and top-level dispatch. The containers and services are nested types, so the
-///     enclosing class is <c>partial</c>.
+///     resolution, collection union and top-level dispatch.
 /// </summary>
 public partial class VarianceTests
 {
@@ -52,8 +51,8 @@ public partial class VarianceTests
 	{
 		using InvariantContainer.Root container = new();
 
-		// IStore<T> declares no in/out, so a registered IStore<DomainEvent> does NOT satisfy IStore<OrderPlaced>;
-		// the consumer's parameter falls back to the exact registration that is present.
+		// IStore<T> declares no in/out, so a registered IStore<DomainEvent> does NOT satisfy IStore<OrderPlaced>.
+		// The consumer's parameter falls back to the exact registration that is present.
 		StoreConsumer consumer = container.Resolve<StoreConsumer>();
 
 		await That(consumer.Store).Is<OrderPlacedStore>();
@@ -157,8 +156,8 @@ public partial class VarianceTests
 	{
 		using ImperativeContravariantContainer.Root container = new();
 
-		// No consumer parameter ever requests IHandler<OrderPlaced>, so no compile-time dispatch alias exists;
-		// the runtime variance fallback matches the registered IHandler<DomainEvent> (in T) on the first request.
+		// No consumer parameter ever requests IHandler<OrderPlaced>, so no compile-time dispatch alias exists.
+		// The runtime variance fallback matches the registered IHandler<DomainEvent> (in T) on the first request.
 		IHandler<OrderPlaced> handler = container.Resolve<IHandler<OrderPlaced>>();
 
 		await That(handler).Is<DomainEventHandler>();
@@ -233,7 +232,7 @@ public partial class VarianceTests
 		using ImperativeKeyedContainer.Root container = new();
 
 		// The only variance-compatible registration is keyed, and keyed registrations are reached solely
-		// through their key - so the imperative request still throws the standard resolution failure.
+		// through their key, so the imperative request still throws the standard resolution failure.
 		await That(() => container.Resolve<IHandler<OrderPlaced>>()).Throws<InvalidOperationException>();
 	}
 
@@ -243,7 +242,7 @@ public partial class VarianceTests
 		using ImperativeNearestContainer.Root container = new();
 
 		// int converts to object only by boxing, never by a reference conversion, so IHandler<object> does not
-		// satisfy IHandler<int> - exactly as at compile time.
+		// satisfy IHandler<int>, exactly as at compile time.
 		await That(() => container.Resolve<IHandler<int>>()).Throws<InvalidOperationException>();
 	}
 

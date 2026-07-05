@@ -7,25 +7,25 @@ namespace Awaiten.SourceGenerators;
 
 partial class AwaitenGenerator
 {
-	// The deepest open generic expansion nests a closed type argument before it is treated as an unbounded
-	// recursion (AWT129) rather than a real dependency. Well beyond any hand-written generic graph, but far
-	// below the point where the synthesized registrations would exhaust memory.
+	/// <summary>
+	///     The deepest open generic expansion nests a closed type argument before it is treated as an unbounded
+	///     recursion (AWT129) rather than a real dependency. Well beyond any hand-written generic graph, but far
+	///     below the point where the synthesized registrations would exhaust memory.
+	/// </summary>
 	private const int MaxExpansionDepth = 100;
 
-	// A hard ceiling on the total number of closed implementations expansion may synthesize. The depth limit
-	// bounds a linear recursion (Node<T> -> Node<List<T>> -> ...); this also bounds a branching one that would
-	// otherwise explode across breadth before ever reaching that depth.
+	/// <summary>
+	///     A hard ceiling on the total number of closed implementations expansion may synthesize. The depth limit
+	///     bounds a linear recursion (<c>Node&lt;T&gt;</c> -&gt; <c>Node&lt;List&lt;T&gt;&gt;</c> -&gt; ...); this also
+	///     bounds a branching one that would otherwise explode across breadth before ever reaching that depth.
+	/// </summary>
 	private const int MaxExpansionCount = 10_000;
 
 	/// <summary>
 	///     Reads a non-generic <c>[Singleton(typeof(Repository&lt;&gt;), typeof(IRepository&lt;&gt;))]</c>
-	///     registration into an <see cref="OpenRegistration" />. Reports AWT125 when the implementation and
-	///     service have mismatched arity, since no closed service can then be mapped onto the implementation.
-	///     <paramref name="origin" /> and <paramref name="fallbackLocation" /> mirror
-	///     <see cref="CollectLifetimeRegistrations" />: the imported module declaring the registration (so
-	///     the closed registrations expanded from it keep their module identity, e.g. for AWT155), and the
-	///     container's <c>[Import]</c> location for a module read from a referenced assembly whose
-	///     attributes carry no syntax of their own.
+	///     registration into an <see cref="OpenRegistration" />. Reports AWT125 on mismatched arity (no closed
+	///     service could then be mapped onto the implementation). <paramref name="origin" /> and
+	///     <paramref name="fallbackLocation" /> mirror <see cref="CollectLifetimeRegistrations" /> for imported modules.
 	/// </summary>
 	private static void CollectOpenRegistration(
 		AttributeData attribute,
@@ -51,7 +51,7 @@ partial class AwaitenGenerator
 
 		// AWT127: the typeof-ctor form exists for open generics and must receive unbound generics
 		// (typeof(Repository<>)). A closed generic (typeof(Repository<int>)) would otherwise be silently reduced
-		// to its open definition by ConstructedFrom below - dropping the type arguments - and a non-generic type
+		// to its open definition by ConstructedFrom below, dropping the type arguments, and a non-generic type
 		// would match no closed service, so reject both and point at the generic attribute form.
 		if (!implementation.IsUnboundGenericType || !service.IsUnboundGenericType)
 		{
@@ -107,8 +107,8 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     True when <paramref name="implementation" /> declares <paramref name="service" /> - as an interface or
-	///     a base type - with the implementation's own type parameters as the service's type arguments, in
+	///     True when <paramref name="implementation" /> declares <paramref name="service" /> (as an interface or
+	///     a base type) with the implementation's own type parameters as the service's type arguments, in
 	///     declaration order (<c>Repository&lt;T&gt; : IRepository&lt;T&gt;</c>). This is the shape v1's positional
 	///     type-argument mapping requires; a reordered, partially-closed, or otherwise remapped declaration
 	///     returns <see langword="false" />.
@@ -157,18 +157,11 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     The open generic expansion worklist (extended for open-generic collections). Seeds from every
-	///     closed generic service required by an already-known implementation's constructor - including the
-	///     element of a collection parameter (<c>IEnumerable&lt;IHandler&lt;OrderPlaced&gt;&gt;</c> seeds the
-	///     closed service <c>IHandler&lt;OrderPlaced&gt;</c>). For each such service it expands <em>every</em>
-	///     open registration whose open form matches (not just the first), so a collection of a closed generic
-	///     receives one closed implementation per matching open registration in declaration order; constructs
-	///     each closed implementation through Roslyn symbol construction, verifies its type-parameter
-	///     constraints (AWT126), and synthesizes a concrete <see cref="RawRegistration" /> per match. Synthesized
-	///     registrations are ordinary unkeyed registrations from coalescing onward, so the first wins single
-	///     dispatch and all of them become collection members exactly like hand-written duplicates. The
-	///     synthesized implementations' own constructors may reference further closed generics, so the worklist
-	///     iterates to a fixpoint.
+	///     Expands open generic registrations to a fixpoint. Seeds from every closed generic service required by a
+	///     known implementation's constructor (including a collection element). For each, it expands every matching
+	///     open registration in declaration order, constructs the closed implementation through Roslyn, verifies its
+	///     constraints (AWT126), and synthesizes a concrete <see cref="RawRegistration" />. Synthesized registrations
+	///     coalesce like hand-written duplicates, and each synthesized impl's own dependencies expand in turn.
 	/// </summary>
 	private static void ExpandOpenGenerics(
 		List<RawRegistration> raw,
@@ -178,14 +171,14 @@ partial class AwaitenGenerator
 		List<DiagnosticInfo> diagnostics,
 		HashSet<string> constraintRejected)
 	{
-		// Closed services already expanded from the open registrations - expanded once, since a single visit
+		// Closed services already expanded from the open registrations, expanded once since a single visit
 		// synthesizes every matching open registration. An explicitly-registered concrete closed service is
 		// not blocked here: its open-expanded siblings coexist as additional collection members, joining the
 		// explicit one through ordinary coalescing.
 		HashSet<string> expandedServices = new(StringComparer.Ordinal);
 
 		// The open service definitions, so constructor selection recognizes a parameter whose closed generic is
-		// expandable on demand as satisfiable - otherwise the seed would pass over the constructor the emitted
+		// expandable on demand as satisfiable. Otherwise the seed would pass over the constructor the emitted
 		// container actually resolves (its closed generic is not yet in raw) and never expand that dependency.
 		HashSet<INamedTypeSymbol> openServices = new(SymbolEqualityComparer.Default);
 		foreach (OpenRegistration registration in open)
@@ -193,12 +186,12 @@ partial class AwaitenGenerator
 			openServices.Add(registration.Service);
 		}
 
-		// An overridable default (Default/TryAdd) whose service key a stronger (or earlier) registration
-		// claims is dropped in full by coalescing - not built and not a collection member - so it must not
-		// seed the expansion either; otherwise an overridden default's constructor would synthesize (and the
-		// container would emit) closed registrations nothing in the surviving graph needs. The drop set is
-		// computed by the same precedence encoding coalescing runs on (see DroppedOverridableDefaults); a
-		// losing strong or scan registration still seeds, since it stays a collection member and is built.
+		// An overridable default (Default/TryAdd) whose service key a stronger (or earlier) registration claims
+		// is dropped in full by coalescing (not built, not a collection member), so it must not seed the
+		// expansion either; otherwise an overridden default's constructor would synthesize (and the container
+		// would emit) closed registrations nothing in the surviving graph needs. The drop set is computed by the
+		// same precedence encoding coalescing runs on (see DroppedOverridableDefaults); a losing strong or scan
+		// registration still seeds, since it stays a collection member and is built.
 		HashSet<int> droppedWeak = DroppedOverridableDefaults(raw);
 
 		// The constructor parameters to scan for closed generic dependencies, each carried with the expansion
@@ -217,7 +210,7 @@ partial class AwaitenGenerator
 			// AWT129: a self-growing registration (Node<T> depending on Node<List<T>>) synthesizes an
 			// ever-larger closed implementation at every step and would never converge. Once the total count
 			// runs away (a branching recursion), abandon expansion entirely; when a single chain is merely too
-			// deep, skip that branch but let shallower ones continue - so the generator terminates rather than
+			// deep, skip that branch but let shallower ones continue, so the generator terminates rather than
 			// looping until it exhausts memory.
 			if (context.Synthesized > MaxExpansionCount)
 			{
@@ -354,16 +347,11 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     The service types an implementation's constructor depends on, unwrapping the relationship and
-	///     collection shapes so a closed generic reached through <c>Func&lt;T&gt;</c>, <c>Lazy&lt;T&gt;</c>,
-	///     <c>IEnumerable&lt;T&gt;</c> or an awaited collection
-	///     (<c>Task&lt;IReadOnlyList&lt;T&gt;&gt;</c> / <c>ValueTask&lt;T[]&gt;</c>) still seeds open generic
-	///     expansion. The constructor is chosen by the same <see cref="AwaitenGenerator.SelectConstructor" /> the
-	///     container uses to build the implementation, so the seed scans exactly the parameters the emitted
-	///     container resolves - matching its accessible-constructor and resolvable-preference rules rather than a
-	///     divergent greediest-public heuristic. A parameter whose closed generic is expandable from an open
-	///     registration counts as satisfiable for that selection even before it is expanded, so the seed does not
-	///     pass over the constructor the container resolves and fail to expand its dependency.
+	///     The service types an implementation's constructor depends on, unwrapping relationship and collection
+	///     shapes so a closed generic reached through them still seeds expansion. Uses the same
+	///     <see cref="AwaitenGenerator.SelectConstructor" /> the container builds through, treating an
+	///     open-generic-satisfiable parameter as satisfiable before expansion, so the seed scans exactly the
+	///     parameters the emitted container resolves.
 	/// </summary>
 	private static IEnumerable<ITypeSymbol> RequiredServiceTypes(
 		INamedTypeSymbol implementation,
@@ -387,7 +375,7 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     The single service type a constructor parameter resolves, unwrapping one <c>Task</c>/<c>ValueTask</c>
 	///     layer, a collection element (<c>T[]</c> / <c>IEnumerable&lt;T&gt;</c> and friends), and a
-	///     <c>Lazy&lt;T&gt;</c> / <c>Func&lt;TArg…, T&gt;</c> relationship - so a closed generic reached through
+	///     <c>Lazy&lt;T&gt;</c> / <c>Func&lt;TArg…, T&gt;</c> relationship, so a closed generic reached through
 	///     any of them still seeds open generic expansion, and constructor selection sees the same underlying
 	///     service the seed scans.
 	/// </summary>
@@ -456,13 +444,10 @@ partial class AwaitenGenerator
 		   && openServices.Contains(closed.ConstructedFrom);
 
 	/// <summary>
-	///     Verifies that <paramref name="typeArguments" /> satisfy the type-parameter constraints of an open
-	///     generic <paramref name="definition" /> - the reference/value-type and unmanaged kind constraints,
-	///     <c>new()</c>, and each declared base/interface constraint - so the closed construction is legal C#.
-	///     A constraint that mentions a type parameter (<c>where T : IComparable&lt;T&gt;</c>, <c>where T : U</c>)
-	///     is checked after substituting the closed type arguments into it; a constraint that cannot be
-	///     represented after substitution (e.g. one nesting an array as a type argument) is skipped rather than
-	///     treated as a violation.
+	///     Verifies that <paramref name="typeArguments" /> satisfy the type-parameter constraints of open generic
+	///     <paramref name="definition" /> (reference/value-type/unmanaged kinds, <c>new()</c>, and each base/interface
+	///     constraint), so the closed construction is legal C#. A constraint mentioning a type parameter is checked
+	///     after substitution; one that cannot be represented after substitution is skipped rather than failed.
 	/// </summary>
 	private static bool ConstraintsSatisfied(INamedTypeSymbol definition, ITypeSymbol[] typeArguments)
 	{
@@ -518,7 +503,7 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     Rewrites a constraint type by replacing each type parameter with the closed type argument mapped in
-	///     <paramref name="substitution" /> - so <c>IComparable&lt;T&gt;</c> becomes <c>IComparable&lt;Order&gt;</c>
+	///     <paramref name="substitution" />, so <c>IComparable&lt;T&gt;</c> becomes <c>IComparable&lt;Order&gt;</c>
 	///     and a bare <c>U</c> becomes its argument. Returns <see langword="null" /> when the constraint cannot be
 	///     reconstructed from symbols alone (an unmapped type parameter, or an array/pointer type argument), so the
 	///     caller skips that constraint rather than checking a wrong type.
@@ -586,8 +571,8 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     True when <paramref name="argument" /> is the constraint type itself, derives from it, or
-	///     implements it - the assignment a base/interface type-parameter constraint requires.
+	///     True when <paramref name="argument" /> is the constraint type itself, derives from it, or implements
+	///     it, as a base/interface type-parameter constraint requires.
 	/// </summary>
 	private static bool IsAssignableTo(ITypeSymbol argument, ITypeSymbol constraintType)
 		=> SymbolEqualityComparer.Default.Equals(argument, constraintType)
@@ -595,11 +580,12 @@ partial class AwaitenGenerator
 		   || argument.AllInterfaces.Any(@interface => SymbolEqualityComparer.Default.Equals(@interface, constraintType));
 
 	/// <summary>
-	///     An open generic registration template - <c>[Transient(typeof(Repository&lt;&gt;), typeof(IRepository&lt;&gt;))]</c>
-	///     - holding the unbound service and implementation definitions. Not an instance itself; expanded
-	///     into concrete closed <see cref="RawRegistration" />s on demand by <see cref="ExpandOpenGenerics" />.
-	///     <see cref="Origin" /> is the imported module that declared the template (<see langword="null" />
-	///     for the container's own), stamped onto every closed registration expanded from it.
+	///     An open generic registration template
+	///     (<c>[Transient(typeof(Repository&lt;&gt;), typeof(IRepository&lt;&gt;))]</c>) holding the unbound
+	///     service and implementation definitions. Not an instance itself; expanded into concrete closed
+	///     <see cref="RawRegistration" />s on demand by <see cref="ExpandOpenGenerics" />. <see cref="Origin" />
+	///     is the imported module that declared the template (<see langword="null" /> for the container's own),
+	///     stamped onto every closed registration expanded from it.
 	/// </summary>
 	private sealed record OpenRegistration(INamedTypeSymbol Service, INamedTypeSymbol Implementation, Lifetime Lifetime, string? Key, LocationInfo? Location, INamedTypeSymbol? Origin);
 

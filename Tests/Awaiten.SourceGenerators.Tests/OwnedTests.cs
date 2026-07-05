@@ -3,10 +3,9 @@ using System.Linq;
 namespace Awaiten.SourceGenerators.Tests;
 
 /// <summary>
-///     The generated shape of <c>Owned&lt;T&gt;</c> resolution: a bare <c>Owned&lt;T&gt;</c>, a
-///     <c>Func&lt;Owned&lt;T&gt;&gt;</c> factory and a parameterized <c>Func&lt;TArg…, Owned&lt;T&gt;&gt;</c>
-///     all build their service in a throwaway child scope via the <c>__Owned&lt;T&gt;</c> helper and hand
-///     back a disposal handle.
+///     <c>Owned&lt;T&gt;</c> resolution. A bare <c>Owned&lt;T&gt;</c>, a <c>Func&lt;Owned&lt;T&gt;&gt;</c>
+///     factory, and a parameterized <c>Func&lt;TArg…, Owned&lt;T&gt;&gt;</c> each build their service in a
+///     throwaway child scope via the <c>__Owned&lt;T&gt;</c> helper and hand back a disposal handle.
 /// </summary>
 public class OwnedTests
 {
@@ -115,8 +114,8 @@ public class OwnedTests
 		                                       }
 		                                       """);
 
-		// Lazy does not unwrap Owned<T>, so Owned<Widget> is left as the (unregistered) service type; AWT121
-		// reports that with the supported owned forms instead of a bare "Owned<Widget> is not registered".
+		// Lazy does not unwrap Owned<T>, so Owned<Widget> stays the unregistered service type; AWT121 reports
+		// that instead of a bare missing-dependency.
 		await That(result.Diagnostics).Contains("*AWT121*").AsWildcard()
 			.Because("an Owned<T> disposal handle cannot be produced through a Lazy<Owned<T>> relationship");
 		await That(result.Diagnostics.All(d => !d.Contains("AWT101"))).IsTrue()

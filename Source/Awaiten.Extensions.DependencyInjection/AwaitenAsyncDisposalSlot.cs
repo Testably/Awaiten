@@ -6,12 +6,11 @@ namespace Awaiten.Extensions.DependencyInjection;
 
 /// <summary>
 ///     Owns the disposal of one instance resolved through the asynchronous <c>Task&lt;T&gt;</c> projection of
-///     <see cref="AwaitenServiceCollectionExtensions.AddGeneratedContainer{TRoot}(IServiceCollection)" />:
-///     MS.DI captures only
-///     the <c>Task&lt;T&gt;</c> wrapper a factory returns - never the awaited instance - so the factory
-///     resolves one transient slot per resolution and fills it with the awaited instance. Because MS.DI
-///     captures the slot at the position the <c>Task&lt;T&gt;</c> was resolved, its reverse-order teardown
-///     disposes the awaited instance exactly where a natively registered instance would be disposed.
+///     <see cref="AwaitenServiceCollectionExtensions.AddGeneratedContainer{TRoot}(IServiceCollection)" />. MS.DI
+///     captures only the <c>Task&lt;T&gt;</c> wrapper a factory returns, never the awaited instance, so the factory
+///     resolves one transient slot per resolution and fills it with the awaited instance. MS.DI captures the slot
+///     at the position the <c>Task&lt;T&gt;</c> was resolved, so reverse-order teardown disposes the awaited
+///     instance exactly where a natively registered instance would be.
 /// </summary>
 internal sealed class AwaitenAsyncDisposalSlot : IDisposable, IAsyncDisposable
 {
@@ -65,7 +64,7 @@ internal sealed class AwaitenAsyncDisposalSlot : IDisposable, IAsyncDisposable
 				// Mirrors the generated scope's synchronous drain: a sync Dispose over an async-only-disposable
 				// service throws (matching MS.DI) rather than blocking on async disposal. The slot stays filled,
 				// so a follow-up DisposeAsync can still tear the instance down.
-#pragma warning disable S3877 // Exceptions should not be thrown from unexpected methods - deliberate, matches MS.DI.
+#pragma warning disable S3877 // Throwing here is deliberate and matches MS.DI.
 				throw new InvalidOperationException(
 					"Awaiten: a service resolved through the Task<T> projection requires asynchronous disposal (it implements IAsyncDisposable but not IDisposable); dispose the provider or scope with DisposeAsync ('await using') instead of a synchronous Dispose().");
 #pragma warning restore S3877

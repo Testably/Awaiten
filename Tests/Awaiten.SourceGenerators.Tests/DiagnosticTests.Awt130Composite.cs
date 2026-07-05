@@ -42,7 +42,7 @@ public partial class DiagnosticTests
 
 			                                       public interface INotifier { }
 			                                       public sealed class Email : INotifier { }
-			                                       // A collection parameter, but of string — not of the composed INotifier.
+			                                       // A collection parameter, but of string, not of the composed INotifier.
 			                                       public sealed class BadComposite : INotifier { public BadComposite(IEnumerable<string> names) { } }
 
 			                                       [Container]

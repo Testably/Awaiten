@@ -10,8 +10,7 @@ namespace Awaiten.Tests;
 ///     Runtime behavior of decorators: <c>[Decorate&lt;D, IService&gt;]</c> wraps the registered service
 ///     so consumers receive <c>D(inner)</c>. Multiple decorators chain in declaration order (last declared
 ///     is outermost), a decorated service injected anywhere receives the outermost decorator, and a
-///     collection view of the service yields the decorated chain (the decorator is unbypassable). The
-///     containers and services are nested types, so the enclosing class is <c>partial</c>.
+///     collection view of the service yields the decorated chain (the decorator is unbypassable).
 /// </summary>
 public partial class DecoratorTests
 {
@@ -67,7 +66,7 @@ public partial class DecoratorTests
 
 		IService[] services = container.Resolve<IService[]>();
 
-		// A single base impl yields exactly one element — the full decorated chain, never the bare Real.
+		// A single base impl yields exactly one element: the full decorated chain, never the bare Real.
 		await That(services).HasCount(1);
 		await That(services[0]).Is<LoggingDecorator>();
 		await That(services[0].Describe()).IsEqualTo("Logging(Real)");
@@ -187,8 +186,7 @@ public partial class DecoratorTests
 			container.Resolve<IService>();
 		}
 
-		// Both the decorator and the implementation it wraps are container-owned and disposed; the decorator is
-		// built after its inner, so it is disposed first (outermost-first) - see the DecorateAttribute remarks.
+		// The decorator is built after its inner, so it is disposed first (outermost-first).
 		await That(log.Order).HasCount(2);
 		await That(log.Order[0]).IsEqualTo("Decorator");
 		await That(log.Order[1]).IsEqualTo("Real");
@@ -286,8 +284,8 @@ public partial class DecoratorTests
 		public string Describe() => $"D2({inner.Describe()})";
 	}
 
-	// An extra dependency the AuditingDecorator resolves from the graph and calls as an instance member; it
-	// carries instance state so Now() is genuinely instance-bound (not a static utility).
+	// An extra dependency the AuditingDecorator resolves from the graph. Carries instance state so Now() is
+	// genuinely instance-bound, not a static utility.
 	public sealed class Clock
 	{
 		private readonly string _label = "clock";

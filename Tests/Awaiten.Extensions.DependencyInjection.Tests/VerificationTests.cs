@@ -43,7 +43,7 @@ public sealed class VerificationTests
 	public async Task VerifyAwaitenContainers_PassesWhenKeyedExternalDependencyIsRegisteredUnderItsKey()
 	{
 		// Regression: a [FromKey] dependency resolves the keyed registration, so verification must probe the
-		// keyed surface - an unkeyed IsService check would wrongly report the keyed registration missing.
+		// keyed surface. An unkeyed IsService check would wrongly report the keyed registration missing.
 		ServiceCollection services = new();
 		services.AddKeyedSingleton<ExternalDependencyTests.IClock>("utc", new ExternalDependencyTests.FixedClock());
 		services.AddGeneratedContainer<ExternalDependencyTests.KeyedExternalContainer.Root>();
@@ -55,8 +55,8 @@ public sealed class VerificationTests
 	[Fact]
 	public async Task VerifyAwaitenContainers_ThrowsWhenKeyedExternalDependencyIsRegisteredUnderTheWrongKey()
 	{
-		// An unkeyed registration and a differently-keyed one both leave the requested "utc" key unsatisfied;
-		// verification must not be fooled into passing (the false-negative direction of the same bug).
+		// An unkeyed registration and a differently-keyed one both leave the requested "utc" key unsatisfied.
+		// Verification must not be fooled into passing (the false-negative direction of the same bug).
 		ServiceCollection services = new();
 		services.AddSingleton<ExternalDependencyTests.IClock>(new ExternalDependencyTests.FixedClock());
 		services.AddKeyedSingleton<ExternalDependencyTests.IClock>("local", new ExternalDependencyTests.FixedClock());

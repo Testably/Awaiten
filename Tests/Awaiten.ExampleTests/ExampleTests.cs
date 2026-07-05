@@ -3,8 +3,8 @@ using Awaiten.ExampleTests.TestHelpers;
 namespace Awaiten.ExampleTests;
 
 /// <summary>
-///     End-to-end usage examples that double as documentation: declaring a <c>[Container]</c>
-///     (see <see cref="Container" />) and resolving a registered service from it.
+///     Usage example: declare a <c>[Container]</c> (see <see cref="Container" />) and resolve a registered
+///     service from it.
 /// </summary>
 public partial class ExampleTests
 {
@@ -19,9 +19,8 @@ public partial class ExampleTests
 	}
 
 	/// <summary>
-	///     A minimal composition root: <see cref="MyService" /> is registered as a singleton exposed
-	///     through <see cref="IMyService" />. The source generator emits the resolution logic on this
-	///     <see langword="partial" /> class.
+	///     A minimal composition root: <see cref="MyService" /> registered as a singleton exposed through
+	///     <see cref="IMyService" />. The source generator emits the resolution logic on this partial class.
 	/// </summary>
 	[Container]
 	[Singleton<MyService, IMyService>]

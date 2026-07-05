@@ -3,8 +3,8 @@ namespace Awaiten.Benchmarks.Helpers;
 internal static class Markers
 {
 	/// <summary>
-	///     The first <paramref name="size" /> of the B0..B255 markers, in registration order — exactly the
-	///     types each container of that size registers.
+	///     The first <paramref name="size" /> B0..B255 markers in registration order, matching the types
+	///     each container of that size registers.
 	/// </summary>
 	public static Type[] ServiceTypes(int size)
 	{

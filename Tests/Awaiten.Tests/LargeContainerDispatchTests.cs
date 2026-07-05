@@ -1,10 +1,8 @@
 namespace Awaiten.Tests;
 
 /// <summary>
-///     Runtime behavior of the generated dispatch table: a container whose resolution is routed through a
-///     static <see cref="System.Collections.Generic.Dictionary{TKey,TValue}" /> + <c>switch</c>. It proves the
-///     table resolves the first, middle and last registrations, shares singletons, falls through for
-///     unregistered types, and is reused by a created scope.
+///     Runtime behavior when resolution routes through the generated static
+///     <see cref="System.Collections.Generic.Dictionary{TKey,TValue}" /> + <c>switch</c> dispatch table.
 /// </summary>
 public partial class LargeContainerDispatchTests
 {
@@ -17,8 +15,7 @@ public partial class LargeContainerDispatchTests
 			.Because("the first registration exercises one end of the switch");
 		await That(container.Resolve<S19>()).IsNotNull()
 			.Because("the last registration exercises the other end of the switch");
-		// Resolve a middle registration by runtime Type so the Dictionary + switch dispatch table is
-		// exercised (the generic Resolve<T> takes the typed fast path and never touches the table).
+		// By runtime Type so the dispatch table is exercised; the generic Resolve<T> takes the typed fast path.
 		await That(container.TryResolve(typeof(S10), out object? middle)).IsTrue();
 		await That(middle).Is<S10>();
 	}
@@ -93,8 +90,7 @@ public partial class LargeContainerDispatchTests
 
 	public sealed class S19;
 
-	// A container with many registrations, resolved through the generated static Dictionary<Type, int> +
-	// switch dispatch table.
+	// Many registrations, to force the generated Dictionary + switch dispatch table.
 	[Container]
 	[Singleton<S00>]
 	[Singleton<S01>]

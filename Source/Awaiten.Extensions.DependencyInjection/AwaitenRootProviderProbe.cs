@@ -3,9 +3,9 @@ using System;
 namespace Awaiten.Extensions.DependencyInjection;
 
 /// <summary>
-///     Captures the provider its singleton factory executes against - Microsoft.Extensions.DependencyInjection
-///     realizes singletons on the root provider - so a transient factory (whose <c>sp</c> argument is the
-///     provider it is resolving from) can tell whether it is resolving from the root provider or from a scope.
+///     Captures the provider its singleton factory executes against. MS.DI realizes singletons on the root
+///     provider, so a transient factory (whose <c>sp</c> argument is the provider it resolves from) can tell
+///     whether it is resolving from the root provider or from a scope.
 /// </summary>
 internal sealed class AwaitenRootProviderProbe
 {

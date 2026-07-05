@@ -1,10 +1,8 @@
 namespace Awaiten.Tests;
 
 /// <summary>
-///     Runtime behavior of keyed registration: several implementations share one service type under
-///     different keys, and a consumer selects one with <c>[FromKey]</c>. An unkeyed resolution still
-///     returns the unkeyed registration. The containers and services are nested types, so the enclosing
-///     class is <c>partial</c>.
+///     Runtime behavior of keyed registration: implementations share one service type under different keys,
+///     a consumer selects one with <c>[FromKey]</c>, and an unkeyed resolution returns the unkeyed registration.
 /// </summary>
 public partial class KeyedTests
 {
@@ -124,8 +122,7 @@ public partial class KeyedTests
 		public IClock Clock { get; }
 	}
 
-	// A service type registered both unkeyed and under a key: the unkeyed registration backs the bare
-	// resolution, the keyed one is reachable only through [FromKey].
+	// Registered both unkeyed and under a key: the keyed one is reachable only through [FromKey].
 	[Container]
 	[Singleton<DefaultClock, IClock>]
 	[Singleton<FastChannelClock, IClock>(Key = "fast")]
@@ -138,8 +135,8 @@ public partial class KeyedTests
 
 	public sealed class TransientSlow : IWork;
 
-	// A singleton may only capture a shorter-lived dependency through a relationship (a direct capture is
-	// AWT105), so the keyed scoped/transient targets are reached via Func<T>/Lazy<T>.
+	// A singleton can capture a shorter-lived dependency only through a relationship (direct capture is AWT105),
+	// so the keyed scoped/transient targets are reached via Func<T>/Lazy<T>.
 	public sealed class Capturer
 	{
 		public Capturer([FromKey("fast")] Func<IWork> scoped, [FromKey("slow")] Lazy<IWork> transient)

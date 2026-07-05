@@ -4,8 +4,7 @@ namespace Awaiten.Tests;
 ///     Runtime behavior of <see cref="LifetimeSafety" />. Under the default <see cref="LifetimeSafety.Strict" />
 ///     a disposable transient is withheld from by-type resolution (it throws guidance pointing at
 ///     <see cref="Owned{T}" />), while <see cref="Owned{T}" /> and <c>Func&lt;Owned&lt;T&gt;&gt;</c> stay
-///     resolvable; under <see cref="LifetimeSafety.Loose" /> it resolves like any other service. The
-///     containers and services are nested types, so the enclosing class is <c>partial</c>.
+///     resolvable; under <see cref="LifetimeSafety.Loose" /> it resolves like any other service.
 /// </summary>
 public partial class StrictModeTests
 {
@@ -157,8 +156,7 @@ public partial class StrictModeTests
 	{
 		using StrictContainer.Root container = new();
 
-		// Consumer takes a bare Widget in its constructor - bounded to one instance per Consumer, so it is not
-		// withheld even under strict safety.
+		// A bare Widget in a constructor is bounded to one instance per Consumer, so it is not withheld under strict.
 		Consumer consumer = container.Resolve<Consumer>();
 
 		await That(consumer.Widget).IsNotNull()
@@ -183,8 +181,7 @@ public partial class StrictModeTests
 
 		Vault vault = container.Resolve<Vault>();
 
-		// Lazy<T> is memoized (bounded to one), so it is not withheld even under strict safety; forcing it must
-		// build the widget rather than throw the by-type withholding guidance.
+		// Lazy<T> is memoized (bounded to one), so it is not withheld under strict; forcing it must build, not throw.
 		Widget widget = vault.Widget.Value;
 
 		await That(widget).IsNotNull()
@@ -207,8 +204,8 @@ public partial class StrictModeTests
 		public void Dispose() => Disposed = true;
 	}
 
-	// A disposable parameterized service: built fresh from its [Arg] on every call, so under strict safety its
-	// only entry - the Func<int, Gizmo> factory - is withheld on the root but resolvable from a child scope.
+	// A disposable parameterized service. Under strict safety its only entry, the Func<int, Gizmo> factory,
+	// is withheld on the root but resolvable from a child scope.
 	public sealed class Gizmo : IDisposable
 	{
 		public Gizmo([Arg] int id) => Id = id;

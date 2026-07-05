@@ -7,9 +7,7 @@ using System.Threading;
 namespace Awaiten.Tests;
 
 /// <summary>
-///     Runtime behavior of scopes, lifetimes, disposal and multi-service single-instance
-///     registration. The containers and services are nested types, so the enclosing class is
-///     <c>partial</c>.
+///     Runtime behavior of scopes, lifetimes, disposal and multi-service single-instance registration.
 /// </summary>
 public partial class LifetimeTests
 {
@@ -230,7 +228,7 @@ public partial class LifetimeTests
 		scope.Dispose();
 
 		// A disposed scope rejects every resolution, not just its own scoped services: a root-owned singleton
-		// is reached through the (live) root, so the resolving scope's disposal is enforced at the entry point -
+		// is reached through the (live) root, so the resolving scope's disposal is enforced at the entry point,
 		// on both the generic typed fast path and the Type-based path (which take different routes to the resolver).
 		await That(() => scope.Resolve<ISingletonService>()).Throws<ObjectDisposedException>();
 		await That(() => scope.Resolve(typeof(ISingletonService))).Throws<ObjectDisposedException>();
@@ -262,7 +260,7 @@ public partial class LifetimeTests
 	}
 
 	// Loose: these tests resolve the disposable transient directly by type and assert it is tracked and
-	// disposed with its owning scope - the permissive path that strict lifetime safety withholds in favor of
+	// disposed with its owning scope, the permissive path that strict lifetime safety withholds in favor of
 	// Owned<T>.
 	[Container(LifetimeSafety = LifetimeSafety.Loose)]
 	[Singleton<SingletonService, ISingletonService>]
@@ -333,7 +331,7 @@ public partial class LifetimeTests
 	}
 
 	// Loose: this test resolves the disposable transient directly by type and asserts every concurrently
-	// tracked instance is disposed with the container - the permissive path that strict withholds.
+	// tracked instance is disposed with the container, the permissive path that strict withholds.
 	[Container(LifetimeSafety = LifetimeSafety.Loose)]
 	[Singleton<ConstructionCounter>]
 	[Singleton<CountedSingleton>]

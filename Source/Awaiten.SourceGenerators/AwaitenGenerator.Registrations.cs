@@ -4,34 +4,18 @@ using Microsoft.CodeAnalysis;
 namespace Awaiten.SourceGenerators;
 
 /// <summary>
-///     A single lifetime registration read from a <c>[Singleton]</c>/<c>[Transient]</c>/<c>[Scoped]</c>
-///     attribute on a container: the service and implementation type names, the lifetime, the
-///     implementation symbol, the attribute's source location, how the instance is produced (a
-///     constructor by default, or the container member named by the attribute's <c>Factory</c>/
-///     <c>Instance</c> argument), the attribute's optional resolution <c>Key</c> (so several
-///     implementations can share one service type), whether the attribute set both directives at
-///     once (an error), and - for variance matching - the closed generic service symbol (so a
-///     differently-closed consumer request can be redirected to a variance-compatible registration),
-///     whether the registration was contributed by a <c>[Scan]</c> (an overridable registration that
-///     never conflicts with an explicit one over the same implementation), whether that scan opted
-///     into skipping unconstructable matches (<c>SkipUnconstructable</c>, degrading the AWT101 error to
-///     the AWT141 warning), whether the registration is an overridable module default (<c>Weak</c>:
-///     <c>Default</c> or <c>TryAdd</c>, contributing its service only when nothing stronger claimed it),
-///     whether that default was a <c>Default</c> specifically (<c>IsDefault</c>, so two colliding
-///     <c>Default</c>s can be surfaced as AWT148 while <c>TryAdd</c> stays silent), the imported
-///     module that declared the registration (<c>Origin</c>, <see langword="null" /> for the container's
-///     own registrations - a module's <c>Factory</c>/<c>Instance</c> member is resolved against and
-///     emitted qualified with the module type, not the container), and whether the registration was
-///     synthesized by open generic expansion rather than written by hand (<c>IsSynthesized</c> - such a
-///     registration yields to every explicit one, including an overridable default, in coalescing), and
-///     whether the registration opted into eager build-time construction (<c>Eager</c>, honored only for
-///     a singleton).
+///     A single <c>[Singleton]</c>/<c>[Transient]</c>/<c>[Scoped]</c> registration on a container: the service
+///     and implementation, lifetime, source location, production (constructor, or a <c>Factory</c>/<c>Instance</c>
+///     member), optional <c>Key</c>, and the closed generic service symbol for variance matching. The flags mark
+///     provenance and precedence: <c>IsScan</c> / <c>ScanSkipsUnconstructable</c> (a <c>[Scan]</c> contribution),
+///     <c>Weak</c> / <c>IsDefault</c> (an overridable module default, filling only a gap; AWT148 on colliding
+///     Defaults), <c>Origin</c> (the imported module that declared it), <c>IsSynthesized</c> (from open generic
+///     expansion, yielding to explicit registrations), and <c>Eager</c> (build-time construction, singletons only).
 /// </summary>
 /// <remarks>
 ///     <see cref="Location" /> is the live Roslyn location (with its syntax tree), not an equatable
-///     <see cref="LocationInfo" />: an analyzer needs the syntax tree for <c>#pragma</c> suppression to
-///     apply. This type is intermediate (consumed within a single analysis pass), so it never flows
-///     through the generator's incremental cache and does not need to be equatable.
+///     <see cref="LocationInfo" />, because an analyzer needs the syntax tree for <c>#pragma</c> suppression. This
+///     type is intermediate (one analysis pass), so it never flows through the generator's incremental cache.
 /// </remarks>
 internal sealed record RawRegistration(
 	string ServiceType,
@@ -57,28 +41,17 @@ internal sealed record RawRegistration(
 /// <summary>
 ///     An imported module: its symbol and the location of the container's <c>[Import]</c> attribute that
 ///     pulled it in. The location doubles as the diagnostic fallback for module attributes read from a
-///     referenced assembly, which carry no syntax of their own.
+///     referenced assembly, which carry no syntax.
 /// </summary>
-/// <remarks>
-///     Like <see cref="RawRegistration" /> this is an intermediate type consumed within a single analysis
-///     pass, so it carries the live Roslyn <see cref="Location" /> and never flows through the generator's
-///     incremental cache.
-/// </remarks>
+/// <remarks>An intermediate type carrying a live Roslyn <see cref="Location" />; see <see cref="RawRegistration" />.</remarks>
 internal sealed record ImportedModule(INamedTypeSymbol Symbol, Location? ImportLocation);
 
 /// <summary>
-///     A single <c>[Decorate&lt;TDecorator, TService&gt;]</c> registration read from a container: the
-///     decorated service type name, the service and decorator symbols, the requested chain
-///     <see cref="Order" />, and the declaration index used to break ties between equal orders (so
-///     decorators chain in declaration order by default). Collected apart from the lifetime registrations
-///     and expanded after coalescing by <c>AwaitenGenerator.BuildDecoratorChains</c> into synthetic-keyed
-///     chain links.
+///     A single <c>[Decorate&lt;TDecorator, TService&gt;]</c> registration: the decorated service, the service and
+///     decorator symbols, the chain <see cref="Order" />, and the declaration index breaking ties. Expanded after
+///     coalescing into synthetic-keyed chain links.
 /// </summary>
-/// <remarks>
-///     Like <see cref="RawRegistration" /> this is an intermediate type consumed within a single analysis
-///     pass, so it carries the live Roslyn <see cref="Location" /> (not an equatable
-///     <c>LocationInfo</c>) and never flows through the generator's incremental cache.
-/// </remarks>
+/// <remarks>An intermediate type carrying a live Roslyn <see cref="Location" />; see <see cref="RawRegistration" />.</remarks>
 internal sealed record DecorateRegistration(
 	string Service,
 	INamedTypeSymbol ServiceSymbol,
@@ -88,18 +61,11 @@ internal sealed record DecorateRegistration(
 	Location? Location);
 
 /// <summary>
-///     A single <c>[Composite&lt;TComposite, TService&gt;]</c> registration read from a container: the
-///     composed service type name, the service and composite symbols, and the composite's chosen lifetime
-///     (defaulting to transient). Collected apart from the lifetime registrations and applied after
-///     coalescing (and after decorator chains, so a composite fronts the decorated members) by
-///     <c>AwaitenGenerator.BuildComposites</c>, which registers the composite as the public single-dispatch
-///     winner while excluding it from collection membership.
+///     A single <c>[Composite&lt;TComposite, TService&gt;]</c> registration: the composed service, the service and
+///     composite symbols, and the lifetime (default transient). Applied after coalescing (and decorator chains) as
+///     the public single-dispatch winner, excluded from collection membership.
 /// </summary>
-/// <remarks>
-///     Like <see cref="RawRegistration" /> this is an intermediate type consumed within a single analysis
-///     pass, so it carries the live Roslyn <see cref="Location" /> (not an equatable
-///     <c>LocationInfo</c>) and never flows through the generator's incremental cache.
-/// </remarks>
+/// <remarks>An intermediate type carrying a live Roslyn <see cref="Location" />; see <see cref="RawRegistration" />.</remarks>
 internal sealed record CompositeRegistration(
 	string Service,
 	INamedTypeSymbol ServiceSymbol,
@@ -110,12 +76,10 @@ internal sealed record CompositeRegistration(
 partial class AwaitenGenerator
 {
 	/// <summary>
-	///     Redirects a decorator instance's inner parameter to the next-lower chain link. <see cref="ParameterServiceType" />
-	///     is the parameter's own declared type (as <see cref="ClassifyParameter" /> classifies it), used to pick the single
-	///     inner parameter out of the constructor. <see cref="ServiceType" /> is the decorated service type - the type under
-	///     which every chain link is registered - so the redirect keys the parameter to <c>(ServiceType, InnerKey)</c> even
-	///     when the parameter is declared as a base type of the service (its declared type is not a registration key).
-	///     Consumed by <see cref="ClassifyParameters" /> when it classifies the decorator link.
+	///     Redirects a decorator instance's inner parameter to the next-lower chain link.
+	///     <see cref="ParameterServiceType" /> is the parameter's own declared type (used to pick the single inner
+	///     parameter), and <see cref="ServiceType" /> is the decorated service the links are registered under, so the
+	///     redirect keys to <c>(ServiceType, InnerKey)</c> even when the parameter is declared as a base of the service.
 	/// </summary>
 	private readonly record struct DecoratorInner(string ParameterServiceType, string ServiceType, string InnerKey);
 
@@ -176,9 +140,9 @@ partial class AwaitenGenerator
 		public List<ServiceKey> Services { get; }
 
 		/// <summary>
-		///     The service type to name this implementation by in a diagnostic: its first winning service, or -
-		///     when it won none (a collection member reached only through the collection) - the implementation
-		///     type itself, so the message still identifies it rather than crashing on an empty service list.
+		///     The service type to name this implementation by in a diagnostic: its first winning service, or the
+		///     implementation type itself when it won none (a collection member reached only through the
+		///     collection), so the message still identifies it rather than crashing on an empty service list.
 		/// </summary>
 		public string OwningServiceOrImpl => Services.Count > 0 ? Services[0].Service : ImplementationType;
 	}

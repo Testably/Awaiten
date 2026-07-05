@@ -1,10 +1,9 @@
 namespace Awaiten.SourceGenerators.Tests;
 
 /// <summary>
-///     <c>Factory</c>/<c>Instance</c> members on module registrations: the named member is resolved against
-///     the module that declared the registration (never the container), the generated code calls it qualified
-///     with the module type, a missing member is AWT108/AWT109 naming the module, and a member that exists on
-///     the module but is hidden from the container is AWT153.
+///     <c>Factory</c>/<c>Instance</c> members on module registrations resolve against the declaring module,
+///     never the container, and are emitted qualified with the module type. A missing member is AWT108/AWT109
+///     naming the module; a member hidden from the container is AWT153.
 /// </summary>
 public class ModuleProductionTests
 {

@@ -69,7 +69,7 @@ internal static class Diagnostics
 	///     A synchronous <c>Factory</c> method's body provably constructs (or returns a local of) a concrete
 	///     type that implements <c>IAsyncInitializable</c>, while its declared return type does not expose it.
 	///     The container reads async-initialization taint off the declared return type, so it cannot see that
-	///     the produced instance needs initialization - the hidden <c>InitializeAsync</c> never runs and the
+	///     the produced instance needs initialization, so the hidden <c>InitializeAsync</c> never runs and the
 	///     instance is handed out uninitialized. A hidden <c>IDisposable</c> is <em>not</em> reported: the
 	///     container disposes factory outputs behind a runtime check, so it does not leak. An asynchronous
 	///     <c>Task&lt;T&gt;</c> / <c>ValueTask&lt;T&gt;</c> factory is <em>not</em> reported either: it owns its
@@ -138,7 +138,7 @@ internal static class Diagnostics
 
 	/// <summary>
 	///     The same implementation is registered with more than one production (a different kind -
-	///     constructor, factory or instance - or the same kind naming a different member); coalescing into
+	///     constructor, factory or instance, or the same kind naming a different member); coalescing into
 	///     a single instance would silently drop one of them.
 	/// </summary>
 	public static readonly DiagnosticDescriptor ConflictingProduction = new(
@@ -225,14 +225,14 @@ internal static class Diagnostics
 	/// <summary>
 	///     A root-owned instance (a singleton or pre-built instance), directly or through its transitive
 	///     transient dependencies, holds a <c>Func&lt;…&gt;</c> over a build-on-demand service (a transient or
-	///     parameterized service) whose construction tracks a fresh disposable on the root - the produced
+	///     parameterized service) whose construction tracks a fresh disposable on the root: the produced
 	///     service is itself disposable, or it transitively rebuilds a disposable transient. Each call to that
 	///     factory builds and re-tracks those disposables on the container's root, so they accumulate for its
-	///     entire lifetime - an unbounded leak. The leak-free remedy is the <c>{2}</c> message argument, since it
+	///     entire lifetime, an unbounded leak. The leak-free remedy is the <c>{2}</c> message argument, since it
 	///     differs by relationship: a synchronous <c>Func&lt;…&gt;</c> is redirected to a
 	///     <c>Func&lt;…, Owned&lt;T&gt;&gt;</c> disposal handle (draining into a throwaway scope), while an
-	///     asynchronous <c>Func&lt;…, Task&lt;T&gt;&gt;</c> cannot use <c>Owned&lt;T&gt;</c> - a synchronous handle
-	///     that cannot await initialization (AWT119) - so it is pointed at an explicitly scoped resolution instead.
+	///     asynchronous <c>Func&lt;…, Task&lt;T&gt;&gt;</c> cannot use <c>Owned&lt;T&gt;</c> (a synchronous handle
+	///     that cannot await initialization, AWT119), so it is pointed at an explicitly scoped resolution instead.
 	/// </summary>
 	/// <remarks>
 	///     Unlike the retired per-registration check, this is flow-based: it fires only for the statically
@@ -253,15 +253,15 @@ internal static class Diagnostics
 	///     The strict-lifetime-safety form of <see cref="RootAccumulatingFactory">AWT118</see>: the same
 	///     diagnostic, reported at error severity (by the analyzer) and carrying
 	///     <see cref="WellKnownDiagnosticTags.NotConfigurable" /> so it cannot be silenced by
-	///     <c>#pragma warning disable</c>, <c>&lt;NoWarn&gt;</c> or an editorconfig severity override - the only
+	///     <c>#pragma warning disable</c>, <c>&lt;NoWarn&gt;</c> or an editorconfig severity override. The only
 	///     way to opt out is to set <c>LifetimeSafety.Loose</c> on the <c>[Container]</c>, which switches back
 	///     to the suppressible <see cref="RootAccumulatingFactory" />. This is what makes the root-accumulation
 	///     leak structurally impossible under strict lifetime safety rather than merely warned-about.
 	/// </summary>
 	/// <remarks>
-	///     Its declared default severity is <see cref="DiagnosticSeverity.Warning" /> - identical to
-	///     <see cref="RootAccumulatingFactory" /> - so that release tracking sees a single, consistent AWT118;
-	///     the analyzer raises it to an error per report. <see cref="WellKnownDiagnosticTags.NotConfigurable" />,
+	///     Its declared default severity is <see cref="DiagnosticSeverity.Warning" /> (identical to
+	///     <see cref="RootAccumulatingFactory" />), so that release tracking sees a single, consistent AWT118.
+	///     The analyzer raises it to an error per report. <see cref="WellKnownDiagnosticTags.NotConfigurable" />,
 	///     not the severity, is what makes it non-suppressible.
 	/// </remarks>
 	public static readonly DiagnosticDescriptor RootAccumulatingFactoryStrict = new(
@@ -307,7 +307,7 @@ internal static class Diagnostics
 	///     An <c>Owned&lt;T&gt;</c> disposal handle is requested through a <c>Lazy&lt;Owned&lt;T&gt;&gt;</c> or
 	///     <c>Lazy&lt;Task&lt;Owned&lt;T&gt;&gt;&gt;</c> relationship. <c>Lazy</c> does not unwrap
 	///     <c>Owned&lt;T&gt;</c> (memoizing a single disposal handle would hand back a disposed handle after the
-	///     first teardown), so the handle's inner type is treated as the service - which is not registered. This
+	///     first teardown), so the handle's inner type is treated as the service, which is not registered. This
 	///     reports that mismatch with the supported owned forms instead of a bare "missing dependency" for the
 	///     <c>Owned&lt;T&gt;</c> type itself.
 	/// </summary>
@@ -349,8 +349,8 @@ internal static class Diagnostics
 		isEnabledByDefault: true);
 
 	/// <summary>
-	///     A decorator's constructor has no — or more than one ambiguous — parameter assignable to the
-	///     decorated service type, so Awaiten cannot tell which parameter receives the inner instance
+	///     A decorator's constructor has no parameter assignable to the decorated service type, or more than
+	///     one ambiguous one, so Awaiten cannot tell which parameter receives the inner instance
 	///     (e.g. <c>LoggingDecorator(IService a, IService b)</c> or one that takes no <c>IService</c> at all).
 	/// </summary>
 	public static readonly DiagnosticDescriptor DecoratorMissingInnerParameter = new(
@@ -419,7 +419,7 @@ internal static class Diagnostics
 
 	/// <summary>
 	///     Open generic expansion nested deeper than the supported limit, which almost always means the
-	///     registrations form an unbounded generic recursion - a closed implementation whose constructor
+	///     registrations form an unbounded generic recursion: a closed implementation whose constructor
 	///     depends on an ever-larger closed generic of the same open registration
 	///     (<c>Node&lt;T&gt;</c> depending on <c>Node&lt;List&lt;T&gt;&gt;</c>). Expansion is stopped at the
 	///     limit so the generator terminates rather than looping until it exhausts memory.
@@ -476,7 +476,7 @@ internal static class Diagnostics
 	///     A <c>[Composite&lt;TComposite, TService&gt;]</c> has a collection constructor parameter, but its element
 	///     type is a base (or otherwise related) type of the composed service rather than the composed service
 	///     itself. Collections are resolved by exact element type, so such a parameter would fan out over a
-	///     different collection than <c>TService</c>'s registrations - never the intended members.
+	///     different collection than <c>TService</c>'s registrations, never the intended members.
 	/// </summary>
 	public static readonly DiagnosticDescriptor CompositeCollectionNotOfComposedService = new(
 		"AWT133",
@@ -514,7 +514,7 @@ internal static class Diagnostics
 	/// <summary>
 	///     A property marked <c>[Inject]</c> has no <c>set</c> or <c>init</c> accessor the container can assign
 	///     through the object initializer (the container is not a derived context, so a protected/private-protected
-	///     setter - and a cross-assembly internal one - is out of reach), so there is nothing for Awaiten to fill.
+	///     setter, and a cross-assembly internal one, is out of reach), so there is nothing for Awaiten to fill.
 	/// </summary>
 	public static readonly DiagnosticDescriptor InjectedPropertyNotSettable = new(
 		"AWT136",
@@ -526,7 +526,7 @@ internal static class Diagnostics
 
 	/// <summary>
 	///     An injected property is marked <c>[Arg]</c>, but runtime arguments flow only through a
-	///     <c>Func&lt;…&gt;</c> factory into <c>[Arg]</c> constructor parameters - never through property
+	///     <c>Func&lt;…&gt;</c> factory into <c>[Arg]</c> constructor parameters, never through property
 	///     injection, which resolves entirely from the graph.
 	/// </summary>
 	public static readonly DiagnosticDescriptor InjectedPropertyIsArg = new(
@@ -539,7 +539,7 @@ internal static class Diagnostics
 
 	/// <summary>
 	///     A <c>[Scan]</c> matched no concrete type assignable to its marker in the container's assembly, so
-	///     the scan contributes nothing - usually a typo in the marker or an empty marker.
+	///     the scan contributes nothing, usually a typo in the marker or an empty marker.
 	/// </summary>
 	public static readonly DiagnosticDescriptor ScanMatchedNothing = new(
 		"AWT138",
@@ -551,7 +551,7 @@ internal static class Diagnostics
 
 	/// <summary>
 	///     A <c>[Scan(As = ScanAs.ImplementedInterfaces)]</c> matched a concrete type that implements no
-	///     interface assignable to the scanned marker, so the match contributes no registration - typically a
+	///     interface assignable to the scanned marker, so the match contributes no registration, typically a
 	///     base-class marker. Use a marker interface, or <c>ScanAs.SelfAndImplementedInterfaces</c> to keep the
 	///     self registration.
 	/// </summary>
@@ -565,7 +565,7 @@ internal static class Diagnostics
 
 	/// <summary>
 	///     A <c>[Scan(InAssembliesOf = …)]</c> names an assembly that holds no concrete type assignable to the
-	///     scanned marker, so the scan of that assembly contributes nothing - most often a missing
+	///     scanned marker, so the scan of that assembly contributes nothing, most often a missing
 	///     <c>ProjectReference</c> or the wrong marker type.
 	/// </summary>
 	public static readonly DiagnosticDescriptor ScanAssemblyHasNoCandidates = new(
@@ -577,8 +577,8 @@ internal static class Diagnostics
 		isEnabledByDefault: true);
 
 	/// <summary>
-	///     A <c>[Scan(SkipUnconstructable = true)]</c> matched a concrete type the container cannot construct -
-	///     a dependency with no registration, or no accessible constructor - so the match is skipped instead of
+	///     A <c>[Scan(SkipUnconstructable = true)]</c> matched a concrete type the container cannot construct
+	///     (a dependency with no registration, or no accessible constructor), so the match is skipped instead of
 	///     failing the build. A scan sweeps every assignable concrete class, so the opt-in degrades an
 	///     incidental unconstructable match to this warning; without it the match stays the AWT101 error.
 	/// </summary>
@@ -669,8 +669,8 @@ internal static class Diagnostics
 	///     A cycle that involves at least one <c>[Inject(Deferred = true)]</c> property is only partly broken: it
 	///     still traverses a construction-time edge (a constructor parameter, a plain <c>[Inject]</c> property, or a
 	///     bare eager <c>Owned&lt;T&gt;</c>/<c>Task&lt;T&gt;</c>) that misbehaves at runtime. A construction edge
-	///     whose source is a cached (singleton/scoped) participant resolves its target - and, around the cycle, the
-	///     source itself again - <em>before</em> the source is cached, so the source is constructed twice (a
+	///     whose source is a cached (singleton/scoped) participant resolves its target (and, around the cycle, the
+	///     source itself again) <em>before</em> the source is cached, so the source is constructed twice (a
 	///     duplicate of a cached instance). When every participant is a transient, nothing is ever cached and the
 	///     re-entry recurses forever instead. Only a construction edge that starts at a <em>transient</em> in a
 	///     cycle that also has a synchronously-cached participant terminates (the cached participant's re-entrant
@@ -689,7 +689,7 @@ internal static class Diagnostics
 	///     Two overridable <c>Default</c> registrations provide the same service and neither is overridden by a
 	///     strong (non-default) registration, so which default applies is decided only by declaration order. A
 	///     warning rather than an error: the graph still resolves (the first-declared default wins), but the
-	///     ambiguity is likely unintended - mark one as the winner with a strong registration, or use
+	///     ambiguity is likely unintended: mark one as the winner with a strong registration, or use
 	///     <c>TryAdd</c> to opt out of the warning.
 	/// </summary>
 	public static readonly DiagnosticDescriptor AmbiguousDefault = new(
@@ -702,7 +702,7 @@ internal static class Diagnostics
 
 	/// <summary>
 	///     An <c>[Import]</c> names a type that is not marked <c>[Module]</c>. Only modules can be imported, so
-	///     the target contributes nothing and is skipped - most likely the wrong type was named. An error rather
+	///     the target contributes nothing and is skipped, most likely the wrong type was named. An error rather
 	///     than a warning: an import that pulls in no registrations is silently useless, so the mistake is caught
 	///     here rather than surfacing later as a cascade of missing dependencies.
 	/// </summary>
@@ -730,7 +730,7 @@ internal static class Diagnostics
 
 	/// <summary>
 	///     An imported <c>[Module]</c> declares no <c>[Singleton]</c>/<c>[Transient]</c>/<c>[Scoped]</c>
-	///     registrations, so the import contributes nothing - most likely the module is incomplete or the wrong
+	///     registrations, so the import contributes nothing, most likely the module is incomplete or the wrong
 	///     type was named.
 	/// </summary>
 	public static readonly DiagnosticDescriptor EmptyModule = new(
@@ -743,7 +743,7 @@ internal static class Diagnostics
 
 	/// <summary>
 	///     An imported <c>[Module]</c> class is not declared <c>static</c>. Like a container, a module is a
-	///     pure definition - registrations plus static factory and instance members - and is never
+	///     pure definition (registrations plus static factory and instance members) and is never
 	///     instantiated, so it must be a static class (mirroring <see cref="NonStaticContainer">AWT116</see>).
 	/// </summary>
 	public static readonly DiagnosticDescriptor NonStaticModule = new(
@@ -757,7 +757,7 @@ internal static class Diagnostics
 	/// <summary>
 	///     A module registration's <c>Factory</c>/<c>Instance</c> member exists on the module but is not
 	///     accessible from the generated container (e.g. a private member of a source module). Unlike the
-	///     container's own members - which the generated partial can reach at any accessibility - a module's
+	///     container's own members (which the generated partial can reach at any accessibility), a module's
 	///     members are called from outside the module, so they must be public, or internal within the
 	///     container's assembly (or one granting it internals). An internal member of another assembly
 	///     without <c>InternalsVisibleTo</c> is not even imported into the compilation's symbol tables, so
@@ -774,8 +774,8 @@ internal static class Diagnostics
 	/// <summary>
 	///     An imported <c>[Module]</c> carries a <c>[Scan]</c>. Assembly scanning is a container concern (it
 	///     sweeps assemblies relative to the container) and is not collected from modules, so a module-declared
-	///     scan would contribute nothing; an error rather than a warning so the scan is not silently dropped -
-	///     move it onto the container.
+	///     scan would contribute nothing. This is an error rather than a warning so the scan is not silently
+	///     dropped. Move it onto the container.
 	/// </summary>
 	public static readonly DiagnosticDescriptor ScanOnModule = new(
 		"AWT154",
@@ -787,11 +787,11 @@ internal static class Diagnostics
 
 	/// <summary>
 	///     Two different imported modules register the same service key with different implementations at
-	///     the same precedence tier - both strongly, or both through open generic templates expanded to the
-	///     same closed service - so which one wins single resolution is decided only by [Import] order -
+	///     the same precedence tier (both strongly, or both through open generic templates expanded to the
+	///     same closed service), so which one wins single resolution is decided only by [Import] order,
 	///     invisible at either module. A warning rather than an error: the graph still resolves (the earlier
 	///     import wins, and both implementations stay collection members), but the collision is likely
-	///     unintended - override the service on the container, or mark one module's registration
+	///     unintended: override the service on the container, or mark one module's registration
 	///     Default/TryAdd. A cross-tier loss (an explicit registration beating another module's expanded
 	///     template) is deterministic regardless of import order and stays silent, as does the container
 	///     overriding a module: that is the intended override mechanism.
@@ -812,22 +812,20 @@ internal static class Diagnostics
 	///     rather than leaking it or blocking on its <c>DisposeAsync</c>); <c>await using</c> tears it down
 	///     correctly. Reported at the disposal site, not the registration: registering an async-only disposable
 	///     is fully supported, and a container that is always disposed with <c>await using</c> is entirely
-	///     correct. A warning rather than an error because the throw is conditional at runtime - the drain only
-	///     reaches an instance that was actually resolved and tracked on the disposed owner (e.g. a scoped
-	///     async-only service warns on a Root <c>using</c> too, since the root is itself a scope, but throws
-	///     only if it tracked one). The check is per disposed owner: a root-owned instance (a singleton or
-	///     pre-built instance) always tracks on the <c>Root</c> - its resolver runs against the root even when
-	///     it is first resolved inside a child scope - so a child <c>Scope</c>'s drain can never reach it, and
-	///     a container whose only async-only disposables are root-owned does not warn on a <c>Scope</c>
-	///     disposal. Reported by <see cref="AwaitenAnalyzer" /> (not the generator) so a
-	///     deliberate site can be suppressed in source, and a team that wants to forbid it outright can raise it
+	///     correct. A warning rather than an error because the throw is conditional at runtime: the drain only
+	///     reaches an instance that was actually resolved and tracked on the disposed owner. The check is per
+	///     disposed owner: a root-owned instance (a singleton or pre-built instance) always tracks on the
+	///     <c>Root</c> (its resolver runs against the root even when first resolved inside a child scope), so a
+	///     child <c>Scope</c>'s drain can never reach it, and a container whose only async-only disposables are
+	///     root-owned does not warn on a <c>Scope</c> disposal. Reported by <see cref="AwaitenAnalyzer" /> (not
+	///     the generator) so a deliberate site can be suppressed in source, and a team can forbid it outright
 	///     per project (<c>dotnet_diagnostic.AWT156.severity = error</c>). Only a receiver statically typed as
 	///     the generated <c>Root</c>/<c>Scope</c> is recognized: a dispose through <c>IAwaitenScope</c> /
-	///     <c>IDisposable</c>, from another assembly, or by a host framework - and a factory output hiding the
-	///     async-only disposable behind a non-disposable declared type - stay invisible to this check, as does
-	///     a <c>Root</c>/<c>Scope</c> of a container declared in a referenced assembly (its graph cannot be
-	///     rebuilt faithfully from the consuming compilation); the runtime throw in the generated synchronous
-	///     drain remains the backstop there.
+	///     <c>IDisposable</c>, from another assembly, by a host framework, a factory output hiding the
+	///     async-only disposable behind a non-disposable declared type, or a <c>Root</c>/<c>Scope</c> of a
+	///     container declared in a referenced assembly (whose graph cannot be rebuilt faithfully from the
+	///     consuming compilation) all stay invisible to this check; the runtime throw in the generated
+	///     synchronous drain remains the backstop there.
 	/// </summary>
 	public static readonly DiagnosticDescriptor AsyncOnlyDisposal = new(
 		"AWT156",
@@ -854,7 +852,7 @@ internal static class Diagnostics
 	/// <summary>
 	///     A property marked <c>[Inject(Optional = true)]</c> has only an <c>init</c> accessor. It is still
 	///     filled when its dependency is registered, but when the dependency is absent the property is omitted
-	///     from the object initializer and left at its default - and an <c>init</c>-only accessor cannot be
+	///     from the object initializer and left at its default, and an <c>init</c>-only accessor cannot be
 	///     assigned afterwards, so it stays default with no fallback. A suppressible warning rather than an error:
 	///     the graph is well-defined, but a plain <c>set</c> accessor would let calling code supply a value when
 	///     the dependency is not registered.
@@ -926,8 +924,8 @@ internal static class Diagnostics
 	/// <summary>
 	///     A factory has both a <c>[RequestingType]</c> parameter and an <c>[Arg]</c> runtime-argument
 	///     parameter. A requesting-type factory is built fresh per consumer with the consumer's
-	///     <c>typeof(…)</c> supplied at each site, so it is not reached through a <c>Func&lt;TArg…, T&gt;</c>;
-	///     the two cannot combine.
+	///     <c>typeof(…)</c> supplied at each site, so it is not reached through a <c>Func&lt;TArg…, T&gt;</c>.
+	///     The two cannot combine.
 	/// </summary>
 	public static readonly DiagnosticDescriptor RequestingTypeWithArg = new(
 		"AWT163",

@@ -9,7 +9,7 @@ public sealed partial class HostInitializationTests
 {
 	public sealed class AsyncResource : IAsyncInitializable
 	{
-		// Counted statically so the test can observe initialization without resolving the singleton - a
+		// Counted statically so the test observes initialization without resolving the singleton. A
 		// synchronous resolve of a SyncResolveAfterInit service before warm-up would itself drive it.
 		internal static int InitializeCount;
 
@@ -97,12 +97,11 @@ public sealed partial class HostInitializationTests
 		await That(ExternalAsyncResource.InitializeCount).IsEqualTo(0);
 
 		// Without the hosted service wiring the external resolver, constructing the singleton's [FromServices]
-		// dependency during warm-up would throw - the resolver is null until a bridged resolution wires it.
+		// dependency during warm-up would throw. The resolver is null until a bridged resolution wires it.
 		await host.StartAsync(TestContext.Current.CancellationToken);
 
 		await That(ExternalAsyncResource.InitializeCount).IsEqualTo(1);
 
-		// The external dependency was resolved from the host provider, and the singleton is warm.
 		ExternalAsyncResource resource = host.Services.GetRequiredService<ExternalAsyncResource>();
 		await That(resource.Clock.Now).IsEqualTo("noon");
 		await That(ExternalAsyncResource.InitializeCount).IsEqualTo(1);
@@ -122,8 +121,8 @@ public sealed partial class HostInitializationTests
 		services.AddAwaitenInitialization<DoubleContainer.Root>();
 		services.AddAwaitenInitialization<DoubleContainer.Root>();
 
-		// TryAddEnumerable dedupes on (IHostedService, implementation type), so the second call is a no-op;
-		// a bare service collection holds no other hosted services.
+		// TryAddEnumerable dedupes on (IHostedService, implementation type), so the second call is a no-op.
+		// A bare service collection holds no other hosted services.
 		int hostedServices = services.Count(descriptor => descriptor.ServiceType == typeof(IHostedService));
 		await That(hostedServices).IsEqualTo(1);
 	}

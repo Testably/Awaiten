@@ -4,11 +4,10 @@ namespace Awaiten.Tests;
 
 /// <summary>
 ///     Runtime behavior of a <c>[Module]</c> compiled into a real referenced assembly (Awaiten.Tests.Support):
-///     a container in this assembly <c>[Import]</c>s it and resolves its registrations end to end - a strong
+///     a container in this assembly <c>[Import]</c>s it and resolves its registrations end to end: a strong
 ///     registration, an overridable <c>Default</c> the container can override, and <c>Factory</c>/<c>Instance</c>
-///     members the generated container must call qualified with (and accessible on) the cross-assembly module.
-///     This exercises the real metadata-import path, complementing the generator-level in-memory tests. The
-///     containers and the overriding clock are nested types, so the enclosing class is <c>partial</c>.
+///     members the generated container must call qualified on the cross-assembly module. This exercises the real
+///     metadata-import path, complementing the generator-level in-memory tests.
 /// </summary>
 public partial class CrossAssemblyModuleTests
 {

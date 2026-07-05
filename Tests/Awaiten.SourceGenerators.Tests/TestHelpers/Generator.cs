@@ -8,8 +8,8 @@ using Microsoft.CodeAnalysis.CSharp;
 namespace Awaiten.SourceGenerators.Tests.TestHelpers;
 
 /// <summary>
-///     Drives the <see cref="AwaitenGenerator" /> over an in-memory compilation and returns the
-///     generated sources plus any diagnostics, for snapshot/behavior testing.
+///     Drives the <see cref="AwaitenGenerator" /> over an in-memory compilation and returns the generated
+///     sources plus any diagnostics.
 /// </summary>
 public static class Generator
 {
@@ -22,9 +22,9 @@ public static class Generator
 		=> Run(source, additionalReferences: [], assemblyTypes);
 
 	/// <summary>
-	///     Runs the generator over <paramref name="source" /> with <paramref name="referencedSource" />
-	///     compiled into a separate referenced assembly first - for cross-assembly scenarios such as a
-	///     <c>[Module]</c> living in another project.
+	///     Compiles <paramref name="referencedSource" /> into a separate referenced assembly first, then runs the
+	///     generator over <paramref name="source" />. For cross-assembly scenarios such as a <c>[Module]</c> in
+	///     another project.
 	/// </summary>
 	public static GeneratorResult RunWithReferencedAssembly(
 		[StringSyntax("c#-test")] string referencedSource,
@@ -61,10 +61,9 @@ public static class Generator
 	}
 
 	/// <summary>
-	///     The single generator-driver bootstrap shared by <see cref="Generator" /> and
-	///     <see cref="Analyzer" />: parses <paramref name="source" />, runs the <see cref="AwaitenGenerator" />
-	///     over it and returns the post-generation compilation plus the driver's run result (which carries the
-	///     generator diagnostics and the generated sources).
+	///     The single generator-driver bootstrap shared by <see cref="Generator" /> and <see cref="Analyzer" />.
+	///     Returns the post-generation compilation plus the driver's run result (generator diagnostics and
+	///     generated sources).
 	/// </summary>
 	internal static (Compilation Output, GeneratorDriverRunResult Result) RunGenerator(
 		[StringSyntax("c#-test")] string source,

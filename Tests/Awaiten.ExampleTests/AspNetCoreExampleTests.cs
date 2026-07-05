@@ -11,18 +11,16 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Awaiten.ExampleTests;
 
-// These examples are written as a consumer would write them, so the HTTP, startup and initialization calls
-// are shown without threading the xUnit test-cancellation token (xUnit1051): that token is test plumbing
-// that would obscure the usage pattern being documented.
+// These examples read as a consumer would write them, so calls omit the xUnit test-cancellation token
+// (xUnit1051). That token is test plumbing that would obscure the usage pattern being documented.
 #pragma warning disable xUnit1051
 
 /// <summary>
-///     End-to-end examples of consuming a generated Awaiten container through the
-///     <c>Awaiten.Extensions.DependencyInjection</c> bridge. They double as documentation of the three
-///     supported use cases: hosting an Awaiten container inside an ASP.NET Core app with
-///     <see cref="AwaitenServiceProviderFactory{TRoot}" /> (so endpoints inject Awaiten-owned services),
-///     projecting the container into a plain <see cref="IServiceCollection" />, and adapting the container
-///     itself to an <see cref="IServiceProvider" /> with <see cref="AwaitenServiceProvider" />.
+///     Examples of consuming a generated Awaiten container through the
+///     <c>Awaiten.Extensions.DependencyInjection</c> bridge, documenting the three supported use cases:
+///     hosting inside an ASP.NET Core app with <see cref="AwaitenServiceProviderFactory{TRoot}" />,
+///     projecting into a plain <see cref="IServiceCollection" />, and adapting the container to an
+///     <see cref="IServiceProvider" /> with <see cref="AwaitenServiceProvider" />.
 /// </summary>
 /// <remarks>
 ///     ASP.NET Core ships only on .NET (net8.0+), so this whole file is compiled out on net48.
@@ -30,10 +28,9 @@ namespace Awaiten.ExampleTests;
 public partial class AspNetCoreExampleTests
 {
 	/// <summary>
-	///     Hosting use case (the common one): hand an <see cref="AwaitenServiceProviderFactory{TRoot}" /> to
-	///     the host with <c>UseServiceProviderFactory</c>, and the container's services resolve into the app's
-	///     dependency injection - here a minimal-API endpoint injects the Awaiten <see cref="IGreeter" />
-	///     singleton straight from its handler parameters.
+	///     Hosting use case: hand an <see cref="AwaitenServiceProviderFactory{TRoot}" /> to the host with
+	///     <c>UseServiceProviderFactory</c>, and the container's services resolve into the app's dependency
+	///     injection. Here an endpoint injects the Awaiten <see cref="IGreeter" /> singleton from its handler.
 	/// </summary>
 	[Fact]
 	public async Task AspNetCore_InjectsAwaitenSingletonIntoEndpoint()
@@ -52,9 +49,8 @@ public partial class AspNetCoreExampleTests
 	}
 
 	/// <summary>
-	///     One Awaiten scope is aligned to each ASP.NET Core request scope, so an Awaiten scoped service is a
-	///     single instance within a request and a fresh instance across requests - the same lifetime a natively
-	///     registered scoped service would have.
+	///     One Awaiten scope aligns to each ASP.NET Core request scope, so an Awaiten scoped service is one
+	///     instance within a request and fresh across requests, the same lifetime a native scoped service has.
 	/// </summary>
 	[Fact]
 	public async Task AspNetCore_ResolvesScopedServiceOncePerRequest()
@@ -103,8 +99,7 @@ public partial class AspNetCoreExampleTests
 
 	/// <summary>
 	///     Standalone use case: project the container into a plain <see cref="IServiceCollection" /> with
-	///     <c>AddGeneratedContainer</c>. Awaiten lifetimes map to the matching <c>ServiceLifetime</c> - a
-	///     singleton is shared, a scoped service is one instance per scope.
+	///     <c>AddGeneratedContainer</c>. Awaiten lifetimes map to the matching <c>ServiceLifetime</c>.
 	/// </summary>
 	[Fact]
 	public async Task Collection_ProjectsServicesWithTheirLifetimes()

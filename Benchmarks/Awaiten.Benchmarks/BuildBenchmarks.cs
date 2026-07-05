@@ -10,10 +10,10 @@ namespace Awaiten.Benchmarks;
 
 /// <summary>
 ///     Container construction (cold-start) cost for a graph of <see cref="Size" /> singletons. The
-///     compile-time containers (Awaiten, Jab, Pure.DI) only allocate an instance — their wiring is baked in
-///     at build time — whereas the runtime containers (MS.DI, Autofac, DryIoc, Simple Injector) register
-///     every service and build a resolution map on construction, so their cost grows with the registration
-///     count. Each benchmark builds the same B0..B255 graph it is named for.
+///     compile-time containers (Awaiten, Jab, Pure.DI) only allocate an instance since their wiring is baked
+///     in at build time, whereas the runtime containers (MS.DI, Autofac, DryIoc, Simple Injector) register
+///     every service and build a resolution map on construction, so their cost grows with registration count.
+///     Each benchmark builds the same B0..B255 graph it is named for.
 /// </summary>
 public class BuildBenchmarks : BenchmarksBase
 {

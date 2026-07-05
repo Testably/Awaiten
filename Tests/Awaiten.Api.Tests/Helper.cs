@@ -94,7 +94,7 @@ public static class Helper
 			}
 			catch
 			{
-				// Still locked by a lingering test host - leave it for a later run to reclaim.
+				// Still locked by a lingering test host. A later run reclaims it.
 			}
 		}
 

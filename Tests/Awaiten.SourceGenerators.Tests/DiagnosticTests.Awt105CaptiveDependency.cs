@@ -102,8 +102,8 @@ public partial class DiagnosticTests
 		[Fact]
 		public async Task NamesTheServiceAliasTheConstructorReferenced()
 		{
-			// Store is exposed as both IReader (first) and IWriter, but the singleton depends on IWriter, so
-			// the diagnostic must name IWriter rather than the implementation's first service type.
+			// Store is registered as IReader (first) then IWriter; the diagnostic must name IWriter, the
+			// alias the constructor referenced, not the first service type.
 			GeneratorResult result = Generator.Run("""
 			                                       using Awaiten;
 
@@ -274,10 +274,9 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			// Unlike the synchronous keyed dictionary, the awaited form launders its members' taint (they are awaited
-			// behind the produced task, not captured at the consumer's construction), so its member edges live only in
-			// the construction graph (AWT102) and not the dependency graph that AWT105 walks - exactly as the awaited
-			// collection Task<C> does. It closes cycles but is not a captive dependency.
+			// The awaited form launders its members' taint (awaited behind the produced task, not captured at
+			// construction), so its edges live in the construction graph (AWT102), not the AWT105 dependency
+			// graph, like the awaited collection Task<C>. It closes cycles but is not a captive dependency.
 			await That(result.Diagnostics).DoesNotContain("*AWT105*").AsWildcard()
 				.Because("the awaited keyed dictionary launders its members' taint like the awaited collection, so it is not a captive dependency");
 		}

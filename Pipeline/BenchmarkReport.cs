@@ -353,10 +353,10 @@ sealed record BenchmarkReportFile(string[] ReportLines, string[]? BaselineLines)
 sealed record TableRow(int RowIndex, string[] Tokens);
 
 /// <summary>
-///     Parses the markdown tables produced by BenchmarkDotNet's GitHub exporter.
-///     Tables are framed by a header row (index 0), a separator row like <c>|---|---|</c> (index 1), and one or more
-///     data rows (index >= <see cref="DataRowStartIndex" />). The parser auto-resets on the first non-table line that
-///     follows a table, so a single instance can walk a document that contains multiple tables.
+///     Parses the markdown tables produced by BenchmarkDotNet's GitHub exporter. Tables are framed by a
+///     header row (index 0), a separator row (index 1), and data rows (index >= <see cref="DataRowStartIndex" />).
+///     Auto-resets on the first non-table line after a table, so one instance can walk a document with
+///     multiple tables.
 /// </summary>
 sealed class BenchmarkTableParser
 {

@@ -501,13 +501,10 @@ public class GeneralTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// The resolver takes the runtime argument and is internal so a root-owned singleton's Func - and a
-		// throwaway Owned<T> scope - can bind it; its graph dependency is still read straight off the root scope.
+		// The resolver is internal so a root-owned singleton's Func or a throwaway Owned<T> scope can bind it.
 		await That(source).Contains("internal static global::MyCode.Robot ResolveRobot(Scope __s, string a0)");
 		await That(source).Contains("new global::MyCode.Robot(Root.ResolveEngine(__s.__root), a0)");
-		// The consumer receives a Func that forwards the runtime argument to that resolver.
 		await That(source).Contains("new global::System.Func<string, global::MyCode.Robot>((a0) => ResolveRobot(__s, a0))");
-		// A parameterized service is reachable only through its Func factory, never directly.
 		await That(source).Contains("typeof(global::System.Func<string, global::MyCode.Robot>)");
 		await That(source).DoesNotContain("typeof(global::MyCode.Robot)")
 			.Because("the bare parameterized service type is not dispatchable");
@@ -539,8 +536,6 @@ public class GeneralTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// The open registration is expanded into the closed Repository<Order>, dispatched under the closed
-		// service IRepository<Order> and constructed for the Root consumer.
 		await That(source).Contains("new global::MyCode.Repository<global::MyCode.Order>()");
 		await That(source).Contains("typeof(global::MyCode.IRepository<global::MyCode.Order>)");
 	}
@@ -571,8 +566,7 @@ public class GeneralTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// Handler<Order> is expanded from the self-registration; its own IValidator<Order> dependency drives a
-		// further expansion of Validator<Order> - the worklist iterates to a fixpoint.
+		// Handler<Order>'s IValidator<Order> dependency drives a further expansion of Validator<Order>. The worklist iterates to a fixpoint.
 		await That(source).Contains("new global::MyCode.Validator<global::MyCode.Order>()");
 		await That(source).Contains("new global::MyCode.Handler<global::MyCode.Order>(");
 	}
@@ -604,8 +598,7 @@ public class GeneralTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// Both open registrations are expanded at OrderPlaced, so the collection of IHandler<OrderPlaced> is a
-		// closed array over both expanded implementations (the winner still takes the single-dispatch slot).
+		// Both open registrations expand at OrderPlaced into a closed array; the winner still takes the single-dispatch slot.
 		await That(source).Contains("new global::MyCode.IHandler<global::MyCode.OrderPlaced>[] {");
 		await That(source).Contains("new global::MyCode.AuditHandler<global::MyCode.OrderPlaced>()");
 		await That(source).Contains("new global::MyCode.ProjectionHandler<global::MyCode.OrderPlaced>()");
@@ -636,11 +629,9 @@ public class GeneralTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// IHandler<OrderPlaced> has no exact registration; the contravariant IHandler<DomainEvent> (in T) is
-		// redirected to, reusing its resolver in the consumer's construction.
+		// IHandler<OrderPlaced> has no exact registration, so the contravariant IHandler<DomainEvent> is redirected to.
 		await That(source).Contains("return new global::MyCode.OrderConsumer(ResolveDomainEventHandler(__s));");
-		// The requested closed type is a top-level dispatch alias on the same target (Part B): Resolve(typeof(
-		// IHandler<OrderPlaced>)) routes to the DomainEventHandler resolver too.
+		// The requested closed type is also a top-level dispatch alias routing to the DomainEventHandler resolver.
 		await That(source).Contains("new __Bucket(typeof(global::MyCode.IHandler<global::MyCode.OrderPlaced>), static __s => ResolveDomainEventHandler(__s), false)");
 	}
 
@@ -672,8 +663,7 @@ public class GeneralTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// The collection of IHandler<OrderPlaced> unions the exact OrderPlacedHandler (leading) with the
-		// contravariant IHandler<DomainEvent> registration (following).
+		// The collection unions the exact OrderPlacedHandler (leading) with the contravariant IHandler<DomainEvent> (following).
 		await That(source).Contains("new global::MyCode.IHandler<global::MyCode.OrderPlaced>[] { ResolveOrderPlacedHandler(__s), ResolveDomainEventHandler(__s) }");
 	}
 
@@ -703,9 +693,7 @@ public class GeneralTests
 			}
 			""");
 
-		// Lazy<T> and Task<T> are invariant in T: no conversion exists from a wrapper over the registered
-		// IHandler<DomainEvent> to the declared wrapper over IHandler<OrderPlaced>, so redirecting would emit an
-		// argument the parameter cannot accept. The wrapped request stays a plain missing dependency instead.
+		// Lazy<T> and Task<T> are invariant in T, so no variance conversion exists to the declared wrapper. The wrapped request stays a plain missing dependency (AWT101).
 		await That(result.Diagnostics).Contains("*AWT101*").AsWildcard();
 	}
 
@@ -729,8 +717,7 @@ public class GeneralTests
 			}
 			""");
 
-		// int converts to object only by boxing, not by a reference conversion, so C# variance does not apply:
-		// IHandler<object> never satisfies IHandler<int>, and the request is a plain missing dependency.
+		// int converts to object only by boxing, not a reference conversion, so variance does not apply. IHandler<object> never satisfies IHandler<int>.
 		await That(result.Diagnostics).Contains("*AWT101*").AsWildcard();
 	}
 
@@ -772,10 +759,7 @@ public class GeneralTests
 		await That(variant.Diagnostics).IsEmpty();
 		await That(invariant.Diagnostics).IsEmpty();
 
-		// A registered variant closed generic interface makes the by-type dispatch fall back to runtime variance
-		// matching on a miss, so a purely imperative Resolve of a differently-closed request (which no consumer
-		// parameter turned into a compile-time alias) still routes. An invariant interface can never satisfy a
-		// different closure, so such a container emits no fallback machinery at all.
+		// A variant closed generic makes by-type dispatch fall back to runtime variance matching on a miss, so an imperative Resolve of a differently-closed request still routes. An invariant interface needs no fallback machinery.
 		await That(variant.Sources["Awaiten.MyCode.MyContainer.g.cs"]).Contains("__TryResolveVariant");
 		await That(invariant.Sources["Awaiten.MyCode.MyContainer.g.cs"]).DoesNotContain("__TryResolveVariant");
 	}
@@ -806,9 +790,7 @@ public class GeneralTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// A variance match makes the dependency container-resolved, so it is not "otherwise-unresolved" and
-		// never falls through to the external provider: the redirect to the registered IHandler<DomainEvent>
-		// wins over [ImportServices].
+		// A variance match makes the dependency container-resolved, so it never falls through to [ImportServices].
 		await That(source).Contains("return new global::MyCode.OrderConsumer(ResolveDomainEventHandler(__s));");
 		await That(source).DoesNotContain("__s.__ResolveExternal(typeof(global::MyCode.IHandler<global::MyCode.OrderPlaced>)");
 	}
@@ -839,7 +821,6 @@ public class GeneralTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// The internal constructor's IRepository<Order> dependency seeded expansion of Repository<Order>.
 		await That(source).Contains("new global::MyCode.Repository<global::MyCode.Order>()");
 	}
 
@@ -879,7 +860,6 @@ public class GeneralTests
 			.Because("the resolvable constructor's open generic dependency is expandable, so no AWT101 is reported");
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// The seed picked the resolvable one-parameter constructor and expanded its open generic dependency.
 		await That(source).Contains("new global::MyCode.Repository<global::MyCode.Order>()");
 	}
 
@@ -906,7 +886,7 @@ public class GeneralTests
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 		await That(source).Contains("protected object __ResolveExternal(global::System.Type serviceType, object? serviceKey)");
 		await That(source).Contains("new global::MyCode.Service((global::MyCode.ILogger)__s.__ResolveExternal(typeof(global::MyCode.ILogger), null))");
-		// The external dependency is advertised in the container metadata (explicitly, off the Root's own surface).
+		// The external dependency is advertised in the container metadata.
 		await That(source).Contains("global::Awaiten.IAwaitenContainerMetadata.ExternalDependencies");
 		await That(source).Contains("typeof(global::MyCode.ILogger)");
 	}
@@ -973,8 +953,7 @@ public class GeneralTests
 			.Because("the open generic dependency of the import-selected constructor is expandable");
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// The seed scanned the same (greedier) constructor the container builds through, so the open generic
-		// was expanded from the Awaiten registration; only ILogger is external.
+		// The seed scanned the same constructor the container builds through, so the open generic expands from the registration; only ILogger is external.
 		await That(source).Contains("new global::MyCode.Repository<global::MyCode.Order>()");
 		await That(source).DoesNotContain("__s.__ResolveExternal(typeof(global::MyCode.IRepository<global::MyCode.Order>)");
 		await That(source).Contains("(global::MyCode.ILogger)__s.__ResolveExternal(typeof(global::MyCode.ILogger), null)");
@@ -1070,11 +1049,9 @@ public class GeneralTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// The keyed dictionary is a Dictionary<string, TService> of every keyed member's resolver, keyed by its
-		// [Key] in registration order, materialized inline where it is injected. Each member calls its static
-		// resolver over the current owner, exactly like a collection literal (here singletons, so on the Root).
+		// The keyed dictionary materializes inline, keyed by each member's [Key] in registration order, each calling its static resolver over the current owner.
 		await That(source).Contains("new global::MyCode.Router(new global::System.Collections.Generic.Dictionary<string, global::MyCode.IChannel> { [\"fast\"] = Root.ResolveFast(__s.__root), [\"slow\"] = Root.ResolveSlow(__s.__root) })");
-		// IReadOnlyDictionary<string, T> is publicly resolvable by type (its own bucket in the dispatch table).
+		// IReadOnlyDictionary<string, T> is also publicly resolvable by type.
 		await That(source).Contains("typeof(global::System.Collections.Generic.IReadOnlyDictionary<string, global::MyCode.IChannel>)");
 	}
 
@@ -1126,7 +1103,7 @@ public class GeneralTests
 			}
 			""");
 
-		// v1 supports only string keys; a non-string key type is rejected rather than treated as a plain dependency.
+		// v1 supports only string keys, so a non-string key type is rejected (AWT159).
 		await That(result.Diagnostics).Contains("*AWT159*").AsWildcard();
 	}
 
@@ -1156,13 +1133,11 @@ public class GeneralTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// IReadOnlyDictionary<string, IChannel> is itself a registered service, so the parameter is a direct
-		// dependency on that registration - not the dictionary synthesized from the keyed IChannel registrations.
+		// The dictionary is itself a registered service, so the parameter is a direct dependency on it, not the synthesized keyed dictionary.
 		await That(source).Contains("new global::MyCode.Router(Root.ResolveChannelMap(__s.__root))")
 			.Because("an explicitly registered dictionary service wins over the synthesized keyed dictionary on injection");
 
-		// The synthesized dictionary is suppressed outright: no dictionary literal is emitted anywhere - the
-		// by-type dispatch resolves the registration, never a second dictionary synthesized behind it.
+		// The synthesized dictionary is suppressed outright; no dictionary literal is emitted anywhere.
 		await That(source).DoesNotContain("new global::System.Collections.Generic.Dictionary<string, global::MyCode.IChannel>")
 			.Because("a registered dictionary suppresses the synthesized keyed dictionary, mirroring the collection SynthesisSuppressed gate");
 	}
@@ -1197,8 +1172,7 @@ public class GeneralTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// An [Inject] member resolves exactly like a constructor parameter: the registered dictionary service
-		// preempts synthesis for the property too.
+		// An [Inject] member resolves like a constructor parameter, so the registered dictionary preempts synthesis for the property too.
 		await That(source).Contains("Channels = Root.ResolveChannelMap(__s.__root)")
 			.Because("an explicitly registered dictionary service preempts the synthesized keyed dictionary on property injection");
 	}
@@ -1226,8 +1200,7 @@ public class GeneralTests
 			}
 			""");
 
-		// An explicitly registered dictionary resolves as an ordinary direct dependency whatever its key type -
-		// AWT159 gates only the synthesized dictionary, which supports string keys.
+		// An explicitly registered dictionary is an ordinary direct dependency whatever its key type; AWT159 gates only the synthesized dictionary.
 		await That(result.Diagnostics).IsEmpty()
 			.Because("an explicitly registered non-string-keyed dictionary is an opaque registered value, not a rejected synthesized collection");
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
@@ -1255,8 +1228,7 @@ public class GeneralTests
 			}
 			""");
 
-		// The synthesized dictionary resolves every keyed registration; a [FromKey] cannot select within it and
-		// is rejected rather than silently ignored.
+		// A [FromKey] cannot select within the synthesized dictionary, so it is rejected (AWT160).
 		await That(result.Diagnostics).Contains("*AWT160*").AsWildcard();
 	}
 
@@ -1283,8 +1255,7 @@ public class GeneralTests
 			}
 			""");
 
-		// A dictionary service registered under the requested key preempts synthesis, so the [FromKey] is a
-		// legitimate keyed selection of that registration - no AWT160.
+		// A dictionary registered under the requested key preempts synthesis, so the [FromKey] is a legitimate keyed selection (no AWT160).
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 		await That(source).Contains("new global::MyCode.Router(Root.ResolveChannelMap(__s.__root))")
@@ -1316,8 +1287,7 @@ public class GeneralTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// One implementation registered under two keys yields two dictionary entries sharing the single resolver
-		// (and, being a singleton, the single instance).
+		// One implementation under two keys yields two dictionary entries sharing the single resolver (and, as a singleton, the single instance).
 		await That(source).Contains("[\"fast\"] = Root.ResolveFast(__s.__root), [\"turbo\"] = Root.ResolveFast(__s.__root)");
 	}
 
@@ -1349,8 +1319,7 @@ public class GeneralTests
 			.Because("Task<IReadOnlyDictionary<string, T>> is the awaited keyed dictionary of T, not a missing dependency on the dictionary type");
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// Every keyed member is synchronous, so the awaited keyed dictionary is a completed Task.FromResult over the
-		// synchronous Dictionary<string, T>, keyed by each registration's [Key] in registration order.
+		// Every keyed member is synchronous, so the awaited dictionary is a completed Task.FromResult over the synchronous dictionary.
 		await That(source).Contains("new global::MyCode.Router(global::System.Threading.Tasks.Task.FromResult<global::System.Collections.Generic.IReadOnlyDictionary<string, global::MyCode.IChannel>>(new global::System.Collections.Generic.Dictionary<string, global::MyCode.IChannel> { [\"fast\"] = Root.ResolveFast(__s.__root), [\"slow\"] = Root.ResolveSlow(__s.__root) }))")
 			.Because("an all-synchronous awaited keyed dictionary completes immediately over the materialized dictionary");
 	}
@@ -1383,20 +1352,16 @@ public class GeneralTests
 			}
 			""");
 
-		// The awaited keyed dictionary awaits its members behind the returned task, so an async-tainted keyed member
-		// is legal through it - it is never AWT122 (unlike the synchronous IReadOnlyDictionary<string, T>).
+		// The awaited dictionary awaits its members behind the returned task, so an async-tainted member is legal (never AWT122, unlike the synchronous dictionary).
 		await That(result.Diagnostics).DoesNotContain("*AWT122*").AsWildcard()
 			.Because("an awaited keyed dictionary awaits its async-initialized members behind the produced task");
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// The async-tainted member is awaited inside an immediately-invoked async lambda (no ambient token - the
-		// consumer is built synchronously), the synchronous member resolved directly, and the dictionary cast to the
-		// requested IReadOnlyDictionary<string, T> so the task's result type matches the parameter.
+		// The async-tainted member is awaited inside an immediately-invoked async lambda (no ambient token; the consumer is built synchronously); the sync member resolves directly.
 		await That(source).Contains("((global::System.Func<global::System.Threading.Tasks.Task<global::System.Collections.Generic.IReadOnlyDictionary<string, global::MyCode.IChannel>>>)(async () => (global::System.Collections.Generic.IReadOnlyDictionary<string, global::MyCode.IChannel>)new global::System.Collections.Generic.Dictionary<string, global::MyCode.IChannel> { [\"fast\"] = Root.ResolveFast(__s.__root), [\"slow\"] = await Root.ResolveAsyncSlowAsync(__s.__root, default).ConfigureAwait(false) }))()")
 			.Because("the async-tainted keyed member is awaited inside the produced task, in registration order");
 
-		// Like the awaited collection, the awaited keyed dictionary launders its members' taint - so the router stays
-		// synchronously constructible and dispatchable even though a member is async-tainted.
+		// The awaited keyed dictionary launders its members' taint, so the router stays synchronously constructible even with an async-tainted member.
 		await That(source).Contains("typeof(global::MyCode.Router), static __s => Root.ResolveRouter(__s.__root)")
 			.Because("a consumer of an awaited keyed dictionary stays synchronously resolvable even when a member is async-tainted");
 	}
@@ -1479,8 +1444,7 @@ public class GeneralTests
 			}
 			""");
 
-		// The synthesized awaited keyed dictionary resolves every keyed registration; a [FromKey] cannot select
-		// within it and is rejected rather than silently ignored, exactly as for the synchronous dictionary.
+		// A [FromKey] cannot select within the synthesized awaited dictionary, so it is rejected (AWT160), like the synchronous one.
 		await That(result.Diagnostics).Contains("*AWT160*").AsWildcard()
 			.Because("a [FromKey] on a synthesized awaited keyed dictionary is rejected just as on the synchronous one");
 	}
@@ -1515,8 +1479,7 @@ public class GeneralTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// Task<IReadOnlyDictionary<string, IChannel>> is itself a registered service (an opaque, pre-built task), so
-		// the parameter is a direct dependency on that registration - not a synthesized awaited keyed dictionary.
+		// The Task<…> is itself a registered service, so the parameter is a direct dependency on it, not a synthesized awaited dictionary.
 		await That(source).Contains("new global::MyCode.Router(Root.ResolveChannelMapTask(__s.__root))")
 			.Because("an explicitly registered Task<IReadOnlyDictionary<…>> claims its own exact shape, winning over the synthesized awaited keyed dictionary");
 		await That(source).DoesNotContain("global::System.Threading.Tasks.Task.FromResult<global::System.Collections.Generic.IReadOnlyDictionary<string, global::MyCode.IChannel>>(new global::System.Collections.Generic.Dictionary")
@@ -1547,9 +1510,7 @@ public class GeneralTests
 			}
 			""");
 
-		// A registered synchronous IReadOnlyDictionary<string, IChannel> claims the awaited Task<…> view too
-		// (all-or-nothing), so the awaited sibling is suppressed to a direct dependency on the full Task<…> type -
-		// which is not itself registered, so it is a plain missing dependency rather than a second synthesized view.
+		// A registered synchronous dictionary claims the awaited Task<…> view too (all-or-nothing), so the awaited sibling becomes a plain missing dependency on the unregistered Task<…> type.
 		await That(result.Diagnostics)
 			.Contains("*AWT101*requires 'System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyDictionary<string, MyCode.IChannel>>', which is not registered*").AsWildcard()
 			.Because("a registered synchronous keyed dictionary suppresses the awaited view, mirroring how a registered sync collection shape suppresses Task<C>");
@@ -1587,9 +1548,7 @@ public class GeneralTests
 		await That(result.Diagnostics).DoesNotContain("*AWT122*").AsWildcard();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// Even though a keyed member is async-tainted (so the synchronous IReadOnlyDictionary<string, T> shape is
-		// withheld with AWT122-style guidance), the awaited Task<…> view is always synchronously obtainable and gets
-		// its own by-type dispatch slot.
+		// Even when a keyed member is async-tainted (withholding the synchronous shape), the awaited Task<…> view is always synchronously obtainable and gets its own dispatch slot.
 		await That(source).Contains("typeof(global::System.Threading.Tasks.Task<global::System.Collections.Generic.IReadOnlyDictionary<string, global::MyCode.IChannel>>), static __s => __R")
 			.Because("the awaited keyed dictionary joins the synchronous by-type dispatch even when a member is async-tainted");
 	}
@@ -1619,8 +1578,7 @@ public class GeneralTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// The registered synchronous dictionary owns the IReadOnlyDictionary<string, IChannel> slot; no awaited
-		// Task<…> view is synthesized behind it (all-or-nothing).
+		// The registered synchronous dictionary owns the slot; no awaited Task<…> view is synthesized behind it (all-or-nothing).
 		await That(source).DoesNotContain("typeof(global::System.Threading.Tasks.Task<global::System.Collections.Generic.IReadOnlyDictionary<string, global::MyCode.IChannel>>)")
 			.Because("a registered synchronous keyed dictionary suppresses the synthesized awaited view on the by-type dispatch too");
 	}
@@ -1655,10 +1613,7 @@ public class GeneralTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// The async-tainted registration is excluded from the synchronous dispatch that seeds the seen guard, so
-		// the guard alone would not hold its Task<IReadOnlyDictionary<…>> slot - the synthesized dictionary would
-		// silently claim it on the sync Resolve path (masking the registration's ResolveAsync guidance) while
-		// injection resolves the registration. The registration is therefore checked directly.
+		// The async-tainted registration is excluded from the sync dispatch that seeds the seen guard, so the synthesized dictionary could silently claim its slot on the sync path. The registration is therefore checked directly.
 		await That(source).DoesNotContain("global::System.Threading.Tasks.Task.FromResult<global::System.Collections.Generic.IReadOnlyDictionary<string, global::MyCode.IChannel>>")
 			.Because("no awaited keyed dictionary is synthesized behind the explicitly registered Task<…>, even when that registration is async-tainted");
 		await That(source).Contains("ResolveChannelMapTaskAsync")
@@ -1689,9 +1644,7 @@ public class GeneralTests
 			}
 			""");
 
-		// A non-string key admits no synthesized awaited view at all (unregistered it is AWT159), so over a
-		// registered dictionary the dependency stays what it was before the awaited keyed dictionary existed: the
-		// bare Task relationship, resolving the registration - neither AWT159 nor AWT101.
+		// A non-string key admits no synthesized awaited view (unregistered it is AWT159), so over a registered dictionary it stays the bare Task relationship resolving the registration (neither AWT159 nor AWT101).
 		await That(result.Diagnostics).IsEmpty()
 			.Because("Task<IReadOnlyDictionary<int, T>> over a registered IReadOnlyDictionary<int, T> resolves the registration through the bare Task relationship");
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
@@ -1724,9 +1677,7 @@ public class GeneralTests
 			}
 			""");
 
-		// A [FromKey] selection admits no synthesized awaited view (surviving synthesis it would be AWT160), so
-		// over a dictionary registered under that key it stays the bare Task relationship and resolves the
-		// registration - neither AWT160 nor AWT101, exactly as the synchronous [FromKey] dictionary counterpart.
+		// A [FromKey] selection admits no synthesized awaited view (it would be AWT160), so over a dictionary registered under that key it stays the bare Task relationship resolving the registration (neither AWT160 nor AWT101).
 		await That(result.Diagnostics).IsEmpty()
 			.Because("[FromKey] Task<IReadOnlyDictionary<string, T>> over a dictionary registered under that key resolves the registration");
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
@@ -1764,8 +1715,7 @@ public class GeneralTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// The factory resolver takes the requesting type and is never cached by the service type; it forwards the
-		// resolver's own __requestingType parameter into the [RequestingType] slot.
+		// The factory resolver takes the requesting type (never cached) and forwards it into the [RequestingType] slot.
 		await That(source).Contains("internal static global::MyCode.ILogger ResolveILogger(Scope __s, global::System.Type? __requestingType)");
 		await That(source).Contains("CreateLogger(__requestingType!)");
 		// Each construction site embeds its own consumer typeof(…) literal.
@@ -1801,8 +1751,7 @@ public class GeneralTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// The declared lifetime is ignored for caching: even a Singleton-declared requesting-type factory gets a
-		// fresh Scope-hosted resolver taking the requesting type - never a cached singleton field or a Root resolver.
+		// The declared lifetime is ignored for caching: even a Singleton-declared requesting-type factory gets a fresh Scope-hosted resolver, never a cached field or Root resolver.
 		await That(source).Contains("internal static global::MyCode.ILogger ResolveILogger(Scope __s, global::System.Type? __requestingType)");
 		await That(source).DoesNotContain("Root.ResolveILogger")
 			.Because("a requesting-type factory is never root-owned, even when declared a singleton");
@@ -1884,8 +1833,7 @@ public class GeneralTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// An async requesting-type factory gets a fresh async resolver taking the requesting type; its consumer
-		// awaits it with the consumer's own typeof(…), and the top-level ResolveAsync arm passes null.
+		// An async requesting-type factory gets a fresh async resolver; its consumer awaits it with its own typeof(…), and the top-level arm passes null.
 		await That(source).Contains("ResolveILoggerAsync(Scope __s, global::System.Type? __requestingType, global::System.Threading.CancellationToken cancellationToken)");
 		await That(source).Contains("await ResolveILoggerAsync(__s, typeof(global::MyCode.Alpha), cancellationToken).ConfigureAwait(false)");
 		await That(source).Contains("ResolveILoggerAsync(__s, null, __ct)");
@@ -1952,8 +1900,7 @@ public class GeneralTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// Pragmatic mode blocks on the async resolver; the blocking sync resolver takes and forwards the requesting
-		// type. The async-tainted consumer (Alpha) still builds through the async resolver, passing its own typeof(…).
+		// Pragmatic mode's blocking sync resolver forwards the requesting type. The async-tainted consumer still builds through the async resolver with its own typeof(…).
 		await That(source).Contains("internal static global::MyCode.ILogger ResolveILogger(Scope __s, global::System.Type? __requestingType)");
 		await That(source).Contains("ResolveILoggerAsync(__s, __requestingType, default).GetAwaiter().GetResult()");
 		await That(source).Contains("new global::MyCode.Alpha(await ResolveILoggerAsync(__s, typeof(global::MyCode.Alpha), cancellationToken).ConfigureAwait(false))");

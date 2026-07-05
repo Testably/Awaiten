@@ -12,9 +12,6 @@ public sealed class ServiceProviderExternalResolver : IExternalResolver
 {
 	private readonly IServiceProvider _provider;
 
-	/// <summary>
-	///     Initializes a new instance of the <see cref="ServiceProviderExternalResolver" /> class.
-	/// </summary>
 	/// <param name="provider">The provider to resolve external dependencies from.</param>
 	public ServiceProviderExternalResolver(IServiceProvider provider)
 		=> _provider = provider ?? throw new ArgumentNullException(nameof(provider));
@@ -27,9 +24,9 @@ public sealed class ServiceProviderExternalResolver : IExternalResolver
 			throw new ArgumentNullException(nameof(serviceType));
 		}
 
-		// A keyed [FromKey] dependency resolves through the provider's keyed surface (available on the MS.DI
-		// provider); an unkeyed one through the ordinary one. A provider that does not support keyed services
-		// simply yields no instance, which surfaces as the container's clear "not available" message.
+		// A keyed [FromKey] dependency resolves through the provider's keyed surface, an unkeyed one through the
+		// ordinary one. A provider without keyed support simply yields no instance, which surfaces as the
+		// container's clear "not available" message.
 		instance = serviceKey is null
 			? _provider.GetService(serviceType)
 			: (_provider as IKeyedServiceProvider)?.GetKeyedService(serviceType, serviceKey);

@@ -6,9 +6,8 @@ namespace Awaiten.Tests;
 
 /// <summary>
 ///     Runtime behavior of assembly scanning: <c>[Scan]</c> registers every concrete type assignable to the
-///     marker with the chosen lifetime - as itself and/or under its implemented interfaces - and an explicit
-///     registration of the same type takes precedence over the scan for single resolution. The container and
-///     services are nested types, so the enclosing class is <c>partial</c>.
+///     marker with the chosen lifetime (as itself and/or under its implemented interfaces), and an explicit
+///     registration of the same type takes precedence over the scan for single resolution.
 /// </summary>
 public partial class ScanTests
 {
@@ -108,7 +107,7 @@ public partial class ScanTests
 	{
 		using GenericScanContainer.Root container = new();
 
-		// [Scan<IReport>] is the generic spelling of [Scan(typeof(IReport))] - resolvable both as the concrete
+		// [Scan<IReport>] is the generic spelling of [Scan(typeof(IReport))]: resolvable both as the concrete
 		// type and as a member of the marker's collection.
 		await That(container.Resolve<SalesReport>()).IsNotNull();
 		await That(container.Resolve<IEnumerable<IReport>>().Count()).IsEqualTo(1);
@@ -230,7 +229,7 @@ public partial class ScanTests
 	{
 		using ClosedTypesOfScanContainer.Root container = new();
 
-		// DualView : IView<ViewModelOne>, IView<ViewModelTwo> - resolvable as both closed forms.
+		// DualView : IView<ViewModelOne>, IView<ViewModelTwo>: resolvable as both closed forms.
 		await That(container.Resolve<IEnumerable<IView<ViewModelOne>>>().Select(v => v.GetType()))
 			.Contains(typeof(DualView));
 		await That(container.Resolve<IEnumerable<IView<ViewModelTwo>>>().Select(v => v.GetType()))

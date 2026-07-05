@@ -5,16 +5,15 @@ namespace Awaiten.Tests;
 /// <summary>
 ///     Failure semantics of asynchronous construction: when a service's own <c>InitializeAsync</c>, or a
 ///     deferred <c>[Inject(Deferred = true)]</c> member's wiring, throws, the instance that was already
-///     constructed must be disposed rather than leaked - and disposed exactly once (it is registered for
+///     constructed must be disposed rather than leaked, and disposed exactly once (it is registered for
 ///     teardown only on success, so the failure-path cleanup never double-disposes). This holds identically
 ///     for the transient (fresh) resolver and the memoized (scoped/singleton) resolver. A throw from the
 ///     instance's own disposal on that failure path must not mask the original failure.
 ///     <para>
 ///         The probes are built by the container, and on the failure paths the resolve throws, so the test
 ///         never receives the instance to inspect. Each probe therefore records its construction and disposal
-///         on a <see cref="Recorder" /> injected into it - a per-container singleton the test resolves and
-///         reads. Because every test builds its own container, each has its own recorder (no shared state).
-///         The containers and services are nested types, so the enclosing class is <c>partial</c>.
+///         on a per-container <see cref="Recorder" /> singleton the test resolves and reads. Because every test
+///         builds its own container, each has its own recorder (no shared state).
 ///     </para>
 /// </summary>
 public partial class AsyncInitializationFailureTests

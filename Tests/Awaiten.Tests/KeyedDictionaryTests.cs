@@ -7,8 +7,7 @@ namespace Awaiten.Tests;
 ///     property typed <c>IReadOnlyDictionary&lt;string, TService&gt;</c> resolves to every <em>keyed</em>
 ///     registration of that service, keyed by each registration's <c>[Key]</c>, each respecting its own
 ///     lifetime. The dictionary is always satisfiable (an empty index yields an empty dictionary) and is also
-///     publicly resolvable by type. The containers and services are nested types, so the enclosing class is
-///     <c>partial</c>.
+///     publicly resolvable by type.
 /// </summary>
 public partial class KeyedDictionaryTests
 {
@@ -46,7 +45,7 @@ public partial class KeyedDictionaryTests
 		IReadOnlyDictionary<string, IChannel> channels = container.Resolve<IReadOnlyDictionary<string, IChannel>>();
 
 		// PlainChannel is registered unkeyed, so it wins the unkeyed single resolution but is NOT a member of the
-		// keyed dictionary - the dictionary is every keyed registration, never the unkeyed ones.
+		// keyed dictionary. The dictionary is every keyed registration, never the unkeyed ones.
 		await That(container.Resolve<IChannel>()).Is<PlainChannel>()
 			.Because("the unkeyed registration is the unkeyed single-resolution winner");
 
@@ -221,7 +220,7 @@ public partial class KeyedDictionaryTests
 		MapConsumer consumer = container.Resolve<MapConsumer>();
 
 		// IReadOnlyDictionary<string, IChannel> is itself registered (ChannelMap), so injection and by-type
-		// resolution both hand out that registration - never a dictionary synthesized from the keyed
+		// resolution both hand out that registration, never a dictionary synthesized from the keyed
 		// registrations, which would contain FastChannel under "fast".
 		await That(consumer.Channels).Is<ChannelMap>()
 			.Because("an explicitly registered dictionary service preempts the synthesized keyed dictionary");
@@ -277,7 +276,7 @@ public partial class KeyedDictionaryTests
 
 		// The router injects Task<IReadOnlyDictionary<string, IFeed>> over an async-initialized member, yet resolves
 		// SYNCHRONOUSLY in the strict default: the awaited keyed dictionary launders its members' taint like the bare
-		// Task<T> relationship - the await happens inside the produced task, not at the router's construction.
+		// Task<T> relationship. The await happens inside the produced task, not at the router's construction.
 		AwaitedFeedRouter router = container.Resolve<AwaitedFeedRouter>();
 
 		IReadOnlyDictionary<string, IFeed> feeds = await router.Feeds;
@@ -309,7 +308,7 @@ public partial class KeyedDictionaryTests
 		using AwaitedDictionaryContainer.Root container = new();
 
 		// The all-synchronous ITransientFeed dictionary is a completed Task.FromResult over the materialized
-		// dictionary - no async machinery at all.
+		// dictionary, no async machinery at all.
 		Task<IReadOnlyDictionary<string, ITransientFeed>> task = container.Resolve<Task<IReadOnlyDictionary<string, ITransientFeed>>>();
 
 		await That(task.IsCompleted).IsTrue()
@@ -462,7 +461,7 @@ public partial class KeyedDictionaryTests
 		IReadOnlyDictionary<string, IChannel> channels = await router.Channels;
 
 		// A [FromKey] selection admits no synthesized awaited view (that would be AWT160), so the parameter is the
-		// bare Task relationship over the dictionary registered under that key - never a synthesized dictionary of
+		// bare Task relationship over the dictionary registered under that key, never a synthesized dictionary of
 		// the keyed IChannel registrations.
 		await That(channels).Is<KeyedChannelMap>()
 			.Because("[FromKey] resolves the dictionary registered under that key through the bare Task relationship");

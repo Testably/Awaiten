@@ -1,27 +1,17 @@
 namespace Awaiten.SourceGenerators.Entities;
 
 /// <summary>
-///     How a constructor parameter is satisfied from the graph. <see cref="Direct" /> resolves the
-///     service itself; <see cref="Func" /> and <see cref="Lazy" /> are relationship types that defer
-///     resolution behind a <c>Func&lt;T&gt;</c> / <c>Lazy&lt;T&gt;</c> over the owning container or scope.
-///     <see cref="Arg" /> is supplied at resolve time from a <c>Func&lt;TArg…, T&gt;</c> relationship
-///     rather than from the graph. <see cref="Owned" /> resolves the service into a dedicated throwaway
-///     scope and hands the caller an <c>Owned&lt;T&gt;</c> disposal handle (it defers like a relationship
-///     type, so it contributes no graph edge). <see cref="CancellationToken" /> is an asynchronous factory
-///     method's <c>System.Threading.CancellationToken</c> parameter, satisfied by forwarding the resolve-time
-///     token (the async creator's) rather than from the graph - so, like <see cref="Arg" />, it contributes no
-///     edge. A synchronous factory or a constructor has no ambient token, so its <c>CancellationToken</c> is an
-///     ordinary <see cref="Direct" /> dependency instead. <see cref="Task" />, <see cref="FuncTask" /> and
-///     <see cref="LazyTask" /> are the asynchronous counterparts of <see cref="Direct" />/<see cref="Func" />/
-///     <see cref="Lazy" />: awaitable relationships that resolve (and initialize) the target through its async
-///     resolver. All of these hand back a handle/awaitable rather than the resolved-and-initialized value, so
-///     they launder async taint - which is what lets a synchronously-resolvable consumer hold one over an
-///     async-initialized service without becoming async-tainted (and without tripping AWT119/AWT120). The
-///     <see cref="Func" />/<see cref="Lazy" /> forms (and <see cref="FuncTask" />/<see cref="LazyTask" />)
-///     additionally defer resolution behind a stored closure, so they also break dependency cycles. A bare
-///     <see cref="Owned" /> or <see cref="Task" />, by contrast, resolves its target at construction time
-///     (synchronously, or in an async resolver's synchronous prefix), so a cycle closed through one of them
-///     still overflows at runtime and is reported as AWT102 (the construction graph in BuildConstructionGraph).
+///     How a constructor parameter is satisfied. <see cref="Direct" /> resolves the service itself. Relationship
+///     kinds (<see cref="Func" />, <see cref="Lazy" />, <see cref="Owned" />, <see cref="Task" />,
+///     <see cref="FuncTask" />, <see cref="LazyTask" />) hand back a handle or awaitable rather than the resolved
+///     value, so they launder async taint and let a synchronous consumer hold an async-initialized service without
+///     tripping AWT119/AWT120. <see cref="Func" />/<see cref="Lazy" /> (and their Task forms) also defer behind a
+///     stored closure, so they break cycles; a bare <see cref="Owned" /> or <see cref="Task" /> resolves at
+///     construction time and so still closes a cycle as AWT102. <see cref="Owned" /> resolves into a dedicated
+///     throwaway scope and hands back an <c>Owned&lt;T&gt;</c> disposal handle. <see cref="Arg" />,
+///     <see cref="RequestingType" /> and <see cref="External" /> are supplied at resolve time, contributing no
+///     edge. <see cref="CancellationToken" /> forwards an async factory's resolve-time token (no edge); a
+///     synchronous factory or constructor has none, so there it is an ordinary <see cref="Direct" />.
 /// </summary>
 internal enum DependencyKind
 {
@@ -33,11 +23,9 @@ internal enum DependencyKind
 	CancellationToken,
 
 	/// <summary>
-	///     The <c>[RequestingType]</c> parameter of a requesting-type <c>Factory =</c> method: the generator
-	///     fills it at each construction site with the consumer's <c>typeof(…)</c> (the declaring type of the
-	///     member being satisfied), or <c>null</c> at a top-level resolve. Like <see cref="Arg" /> it is not
-	///     resolved from the graph, so it contributes no edge and never taints its consumer; the factory's
-	///     resolver takes it as a parameter rather than caching the produced service.
+	///     The <c>[RequestingType]</c> parameter of a <c>Factory =</c> method: filled at each construction site with
+	///     the consumer's <c>typeof(…)</c>, or <c>null</c> at a top-level resolve. Not resolved from the graph, so
+	///     it contributes no edge.
 	/// </summary>
 	RequestingType,
 
@@ -51,86 +39,53 @@ internal enum DependencyKind
 	LazyTask,
 
 	/// <summary>
-	///     A collection dependency (<c>IEnumerable&lt;T&gt;</c>, <c>IReadOnlyList&lt;T&gt;</c>,
-	///     <c>IReadOnlyCollection&lt;T&gt;</c>, <c>IList&lt;T&gt;</c>, <c>ICollection&lt;T&gt;</c> or
-	///     <c>T[]</c>): resolves to every registration of the element type <c>T</c> (the parameter's
-	///     <c>ServiceType</c>) under the parameter's <c>Key</c> - the unkeyed registrations by default, the
-	///     registrations under a <c>[FromKey]</c> key when one is present - materialized eagerly into an array
-	///     in registration order. Unlike the relationship kinds it captures its members, so it contributes a
-	///     graph edge to each of them (for cycle, captive and async-taint analysis) and never launders their taint.
+	///     A collection dependency (<c>IEnumerable&lt;T&gt;</c>, <c>IReadOnlyList&lt;T&gt;</c>, <c>T[]</c>, etc.):
+	///     resolves to every registration of element type <c>T</c> under the parameter's <c>Key</c>, materialized
+	///     eagerly into an array in registration order. Unlike the relationship kinds it captures its members,
+	///     contributing a graph edge to each (cycle, captive, async taint), so a synchronous collection over an
+	///     async-initialized member trips AWT122.
 	/// </summary>
 	Enumerable,
 
 	/// <summary>
-	///     An asynchronous collection dependency (<c>IAsyncEnumerable&lt;T&gt;</c>): like <see cref="Enumerable" />
-	///     it resolves to every registration of the element type <c>T</c> under the parameter's <c>Key</c> and
-	///     materializes them eagerly in registration order, but it <em>awaits</em> each async-initialized member -
-	///     so, unlike <see cref="Enumerable" />, an async-tainted member is legal (and does not trip AWT122). It
-	///     captures its members exactly like <see cref="Enumerable" />, contributing the same graph edge to each of
-	///     them (cycle, captive and async-taint analysis) and never laundering their taint: a consumer that injects
-	///     an async-tainted async-collection is itself async-tainted and is built through its asynchronous resolver.
+	///     An async collection (<c>IAsyncEnumerable&lt;T&gt;</c>): like <see cref="Enumerable" /> but awaits each
+	///     async-initialized member, so an async-tainted member is legal (no AWT122). It still captures its members
+	///     (same edges) and does not launder their taint, so a consumer injecting one is itself async-tainted.
 	/// </summary>
 	AsyncEnumerable,
 
 	/// <summary>
 	///     An external dependency: a <c>[FromServices]</c> parameter (or, under <c>[ImportServices]</c>, an
-	///     otherwise-unresolved direct dependency) that is satisfied from the container's
-	///     <c>IExternalResolver</c> rather than the Awaiten graph. Its <c>ServiceType</c> is the external
-	///     service type. It is not registered in the graph, so - like <see cref="Arg" /> - it contributes no
-	///     edge and never taints the async analysis; it is resolved at construction time through the container's
-	///     external resolver.
+	///     otherwise-unresolved direct dependency) satisfied from the container's <c>IExternalResolver</c>, not the
+	///     graph. Contributes no edge.
 	/// </summary>
 	External,
 
 	/// <summary>
-	///     An awaited collection dependency (<c>Task&lt;C&gt;</c> where <c>C</c> is one of the
-	///     <see cref="Enumerable" /> shapes, e.g. <c>Task&lt;IReadOnlyList&lt;T&gt;&gt;</c> or
-	///     <c>Task&lt;T[]&gt;</c>): resolves to every registration of the element type <c>T</c> under the
-	///     parameter's <c>Key</c>, materialized eagerly in registration order with each async-initialized member
-	///     awaited behind the returned task - the second shape (besides <see cref="AsyncEnumerable" />) through
-	///     which an async-tainted member is legal. Unlike <see cref="AsyncEnumerable" /> it launders the members'
-	///     taint, exactly as the bare <see cref="Task" /> relationship does: the members are awaited inside the
-	///     produced task, not at the consumer's construction, so the consumer stays synchronously constructible.
-	///     The task still starts materializing at construction time, so - again like the bare <see cref="Task" /> -
-	///     it closes cycles (the construction graph) even though it contributes no taint/captive edge.
-	///     <c>ValueTask&lt;C&gt;</c> is deliberately not recognized, for the same reason a bare
-	///     <c>ValueTask&lt;T&gt;</c> is not a relationship type: a stored ValueTask may only be awaited once.
+	///     An awaited collection (<c>Task&lt;C&gt;</c> where <c>C</c> is an <see cref="Enumerable" /> shape):
+	///     resolves the members eagerly with each async-initialized one awaited behind the returned task. Like the
+	///     bare <see cref="Task" /> it launders the members' taint (awaited in the task, not at construction), so the
+	///     consumer stays synchronously constructible, but it still closes cycles. <c>ValueTask&lt;C&gt;</c> is not
+	///     recognized: a stored ValueTask may be awaited only once.
 	/// </summary>
 	AwaitedEnumerable,
 
 	/// <summary>
-	///     A keyed-collection dependency (<c>IReadOnlyDictionary&lt;string, T&gt;</c>): resolves to every
-	///     <em>keyed</em> registration of the service type <c>T</c> (the parameter's <c>ServiceType</c>),
-	///     materialized eagerly into a dictionary keyed by each registration's <c>[Key]</c>, in registration
-	///     order (each member keeping its own lifetime). Like <see cref="Enumerable" /> it captures its members,
-	///     so it contributes a graph edge to each of them (cycle, captive and async-taint analysis) and never
-	///     launders their taint - a synchronous dictionary cannot await an async-initialized member, so such a
-	///     member trips AWT122 exactly as it does through <see cref="Enumerable" />. An empty index is legal (it
-	///     yields an empty dictionary, not AWT101). An explicitly registered dictionary service of the exact
-	///     declared type (under the dependency's key) preempts synthesis: the dependency is rewritten to
-	///     <see cref="Direct" /> and resolves that registration, whatever its key type. v1 synthesis supports
-	///     <c>string</c> keys only; a non-<c>string</c> key type is reported as AWT159, and a <c>[FromKey]</c>
-	///     that survives suppression as AWT160 (the synthesized dictionary resolves every key).
+	///     A keyed-collection dependency (<c>IReadOnlyDictionary&lt;string, T&gt;</c>): resolves every keyed
+	///     registration of <c>T</c> into a dictionary keyed by each <c>[Key]</c>, in registration order. Captures
+	///     its members like <see cref="Enumerable" /> (a synchronous dictionary over an async member trips AWT122).
+	///     An empty index yields an empty dictionary. An explicitly registered dictionary of the exact type preempts
+	///     synthesis (rewritten to <see cref="Direct" />). Synthesis supports <c>string</c> keys only: a non-string
+	///     key is AWT159, and a surviving <c>[FromKey]</c> is AWT160.
 	/// </summary>
 	KeyedCollection,
 
 	/// <summary>
-	///     An awaited keyed-collection dependency (<c>Task&lt;IReadOnlyDictionary&lt;string, T&gt;&gt;</c>): the
-	///     keyed analogue of <see cref="AwaitedEnumerable" />. It resolves every keyed registration of its service
-	///     (value) type <c>T</c>, keyed by each registration's <c>[Key]</c> in registration order (each member
-	///     keeping its own lifetime), materialized eagerly behind the returned task with each async-initialized
-	///     member awaited - so, unlike <see cref="KeyedCollection" />, an async-tainted member is legal (it does not
-	///     trip AWT122). Like <see cref="AwaitedEnumerable" /> it launders the members' taint, exactly as the bare
-	///     <see cref="Task" /> relationship does: the members are awaited inside the produced task, not at the
-	///     consumer's construction, so the consumer stays synchronously constructible, and the task itself is handed
-	///     back synchronously (joining the synchronous dispatch by type). All-sync membership completes synchronously
-	///     (<c>Task.FromResult</c>); an empty index yields a completed empty dictionary, not AWT101. The task still
-	///     starts materializing its members at construction time, so - again like the bare <see cref="Task" /> - it
-	///     closes cycles (the construction graph) even though it contributes no taint/captive edge. Suppression
-	///     mirrors the awaited collection: an explicitly registered <c>Task&lt;IReadOnlyDictionary&lt;string, T&gt;&gt;</c>
-	///     claims its own exact shape, and a registered synchronous <c>IReadOnlyDictionary&lt;string, T&gt;</c> claims
-	///     the awaited view too. AWT159 (non-<c>string</c> key) and AWT160 (<c>[FromKey]</c>) apply exactly as for
-	///     <see cref="KeyedCollection" />, and only while the dependency stays synthesized.
+	///     An awaited keyed-collection (<c>Task&lt;IReadOnlyDictionary&lt;string, T&gt;&gt;</c>): the keyed analogue
+	///     of <see cref="AwaitedEnumerable" />. Resolves every keyed registration of <c>T</c> behind the returned
+	///     task with each async member awaited, so an async-tainted member is legal and the consumer stays
+	///     synchronously constructible; the task still closes cycles. Suppression mirrors <see cref="AwaitedEnumerable" />,
+	///     and AWT159/AWT160 apply as for <see cref="KeyedCollection" /> while it stays synthesized.
 	/// </summary>
 	AwaitedKeyedCollection,
 }
