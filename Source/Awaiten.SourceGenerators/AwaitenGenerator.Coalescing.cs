@@ -326,20 +326,23 @@ partial class AwaitenGenerator
 				])));
 		}
 
-		foreach ((string Directive, string Winner, string Loser) directive in ConflictingDirectives(info, registration))
+		// Deduped per (implementation, directive) rather than per implementation: a registration that
+		// contradicts the winner on more than one directive (say a differing OnActivated and an opted-into
+		// Eager) drops each independently, so each is reported once - mirroring how AWT107 and AWT111 keep
+		// separate reported sets rather than collapsing a lifetime and a production conflict into one. The
+		// Add doubles as the dedup filter, the same short-circuiting guard the AWT107/AWT111 reports use above.
+		foreach ((string Directive, string Winner, string Loser) directive in ConflictingDirectives(info, registration)
+			         .Where(directive => reportedDirectiveConflicts.Add(registration.ImplementationType + "\0" + directive.Directive)))
 		{
-			if (reportedDirectiveConflicts.Add(registration.ImplementationType + "\0" + directive.Directive))
-			{
-				diagnostics.Add(new DiagnosticInfo(
-					Diagnostics.ConflictingLifecycleDirectives,
-					LocationInfo.From(registration.Location),
-					new EquatableArray<string>([
-						Display(registration.ImplementationType),
-						directive.Directive,
-						directive.Winner,
-						directive.Loser,
-					])));
-			}
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.ConflictingLifecycleDirectives,
+				LocationInfo.From(registration.Location),
+				new EquatableArray<string>([
+					Display(registration.ImplementationType),
+					directive.Directive,
+					directive.Winner,
+					directive.Loser,
+				])));
 		}
 	}
 
