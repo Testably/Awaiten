@@ -13,6 +13,14 @@ public sealed class FromKeyAttribute : Attribute
 	/// <param name="key">The resolution key to select.</param>
 	public FromKeyAttribute(string key) => Key = key;
 
+	/// <summary>
+	///     Selects the keyed registration under a non-string constant key - an enum value
+	///     (<c>[FromKey(PaymentProvider.Stripe)]</c>) or a <c>typeof(...)</c>. Enum keys refactor safely and make
+	///     typos compile errors, unlike string keys.
+	/// </summary>
+	/// <param name="key">The resolution key to select.</param>
+	public FromKeyAttribute(object key) => Key = key;
+
 	/// <summary>The resolution key to select.</summary>
-	public string Key { get; }
+	public object Key { get; }
 }

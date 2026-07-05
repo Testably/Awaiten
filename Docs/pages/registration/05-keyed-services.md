@@ -24,6 +24,23 @@ public sealed class LatteRecipe([FromKey("Oat")] IMilk milk);
 
 A keyed registration is reachable only through `[FromKey]`. A plain `Resolve<IMilk>()` will not return it. You can mix a keyed set with one unkeyed registration, and the unkeyed one is what a plain resolve gives you.
 
+## Typed keys
+
+A key can be an `enum` constant (or a `typeof(...)`) instead of a string. An enum key refactors safely, turns a typo into a compile error, and makes the valid keys discoverable.
+
+```csharp
+public enum MilkKind { Oat, Whole, Soy }
+
+[Container]
+[Singleton<OatMilk, IMilk>(Key = MilkKind.Oat)]
+[Singleton<WholeMilk, IMilk>(Key = MilkKind.Whole)]
+public static partial class CoffeeShop;
+
+public sealed class LatteRecipe([FromKey(MilkKind.Oat)] IMilk milk);
+```
+
+Keys of different kinds stay distinct: the enum `MilkKind.Oat` and the string `"Oat"` are two different keys.
+
 ## Through relationships
 
 `[FromKey]` works through `Func<T>` and `Lazy<T>` too, so a long-lived service can pull a keyed one on demand.

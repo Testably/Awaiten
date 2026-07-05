@@ -43,7 +43,7 @@ public sealed class SingletonAttribute : Attribute
 	///     Optional resolution key. Several implementations can share a service type under different keys.
 	///     The key flows onto every closed implementation expanded from this registration.
 	/// </summary>
-	public string? Key { get; set; }
+	public object? Key { get; set; }
 }
 
 /// <summary>
@@ -73,7 +73,7 @@ public sealed class SingletonAttribute<TImplementation> : Attribute
 	///     Optional resolution key. Several implementations can share a service type under different keys.
 	///     Consumers select one with <c>[FromKey]</c>.
 	/// </summary>
-	public string? Key { get; set; }
+	public object? Key { get; set; }
 
 	/// <summary>
 	///     Restricts this registration to the constructor parameters and [Inject] properties of the given consumer
@@ -142,7 +142,7 @@ public sealed class SingletonAttribute<TImplementation, TService> : Attribute
 	///     Optional resolution key. Several implementations can share a service type under different keys.
 	///     Consumers select one with <c>[FromKey]</c>.
 	/// </summary>
-	public string? Key { get; set; }
+	public object? Key { get; set; }
 
 	/// <summary>
 	///     Restricts this registration to the constructor parameters and [Inject] properties of the given consumer

@@ -1082,7 +1082,7 @@ public class GeneralTests
 	}
 
 	[Fact]
-	public async Task NonStringKeyedDictionary_ReportsAwt159()
+	public async Task MismatchedKeyedDictionaryKeyKind_ReportsAwt159()
 	{
 		GeneratorResult result = Generator.Run("""
 			using Awaiten;
@@ -1103,8 +1103,144 @@ public class GeneralTests
 			}
 			""");
 
-		// v1 supports only string keys, so a non-string key type is rejected (AWT159).
+		// An enum-keyed dictionary is requested but the sole registration is string-keyed: the key kinds mismatch, so
+		// no coherent dictionary synthesizes (AWT159).
 		await That(result.Diagnostics).Contains("*AWT159*").AsWildcard();
+	}
+
+	[Fact]
+	public async Task FromKeyEnum_WithNoMatchingRegistration_ReportsAwt101WithTheTypedKey()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace MyCode;
+
+			public enum ProcessType { Fast, Slow }
+			public interface IChannel { }
+			public sealed class FastChannel : IChannel { }
+			public sealed class Consumer { public Consumer([FromKey(ProcessType.Slow)] IChannel channel) { } }
+
+			[Container]
+			[Singleton<FastChannel, IChannel>(Key = ProcessType.Fast)]
+			[Singleton<Consumer>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		// No registration is keyed ProcessType.Slow, so the dependency is missing (AWT101), and the message renders the
+		// enum key in its user-written form rather than the internal encoding.
+		await That(result.Diagnostics).Contains("*AWT101*").AsWildcard();
+		await That(result.Diagnostics).Contains("*ProcessType.Slow*").AsWildcard()
+			.Because("the missing-dependency message renders the typed key faithfully");
+	}
+
+	[Fact]
+	public async Task UnsupportedKeyedDictionaryKeyType_ReportsAwt159()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+			using System.Collections.Generic;
+
+			namespace MyCode;
+
+			public interface IChannel { }
+			public sealed class Fast : IChannel { }
+			public sealed class Host { public Host(IReadOnlyDictionary<int, IChannel> channels) { } }
+
+			[Container]
+			[Singleton<Fast, IChannel>(Key = "fast")]
+			[Singleton<Host>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		// int is neither string nor an enum, so a keyed dictionary cannot synthesize under it (AWT159).
+		await That(result.Diagnostics).Contains("*AWT159*").AsWildcard();
+	}
+
+	[Fact]
+	public async Task RegistrationKeyOfUnsupportedType_ReportsAwt170()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace MyCode;
+
+			public interface IChannel { }
+			public sealed class Fast : IChannel { }
+
+			[Container]
+			[Singleton<Fast, IChannel>(Key = 5)]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		// int is not a supported key type for a [Key], so it is rejected rather than silently registered unkeyed.
+		await That(result.Diagnostics).Contains("*AWT170*").AsWildcard();
+		await That(result.Diagnostics).Contains("*int*").AsWildcard()
+			.Because("the diagnostic names the unsupported key type");
+	}
+
+	[Fact]
+	public async Task FromKeyOfUnsupportedType_ReportsAwt170()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace MyCode;
+
+			public interface IChannel { }
+			public sealed class Fast : IChannel { }
+			public sealed class Consumer { public Consumer([FromKey(5)] IChannel channel) { } }
+
+			[Container]
+			[Singleton<Fast, IChannel>(Key = "fast")]
+			[Singleton<Consumer>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		// int is not a supported key type for a [FromKey], so it is rejected rather than silently treated as unkeyed.
+		await That(result.Diagnostics).Contains("*AWT170*").AsWildcard();
+	}
+
+	[Fact]
+	public async Task EnumKeyedDictionary_SynthesizesUnderTheEnumKeyType()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+			using System.Collections.Generic;
+
+			namespace MyCode;
+
+			public enum ProcessType { Fast, Slow }
+			public interface IChannel { }
+			public sealed class FastChannel : IChannel { }
+			public sealed class SlowChannel : IChannel { }
+			public sealed class Host { public Host(IReadOnlyDictionary<ProcessType, IChannel> channels) { } }
+
+			[Container]
+			[Singleton<FastChannel, IChannel>(Key = ProcessType.Fast)]
+			[Singleton<SlowChannel, IChannel>(Key = ProcessType.Slow)]
+			[Singleton<Host>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		// Every keyed registration is a constant of ProcessType, so the dictionary synthesizes under that enum type,
+		// keyed by the user-written enum member access rather than a string.
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+		await That(source).Contains("new global::System.Collections.Generic.Dictionary<global::MyCode.ProcessType, global::MyCode.IChannel>")
+			.Because("the dictionary is synthesized under the enum key type");
+		await That(source).Contains("[global::MyCode.ProcessType.Fast] =")
+			.Because("the member is keyed by the user-written enum constant, not an encoded string");
 	}
 
 	[Fact]

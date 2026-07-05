@@ -102,8 +102,9 @@ namespace Awaiten
     [System.AttributeUsage(System.AttributeTargets.Property | System.AttributeTargets.Parameter, AllowMultiple=false, Inherited=false)]
     public sealed class FromKeyAttribute : System.Attribute
     {
+        public FromKeyAttribute(object key) { }
         public FromKeyAttribute(string key) { }
-        public string Key { get; }
+        public object Key { get; }
     }
     [System.AttributeUsage(System.AttributeTargets.Parameter, AllowMultiple=false, Inherited=false)]
     public sealed class FromServicesAttribute : System.Attribute
@@ -219,7 +220,7 @@ namespace Awaiten
         public ScopedAttribute(System.Type implementation) { }
         public ScopedAttribute(System.Type implementation, System.Type service) { }
         public System.Type Implementation { get; }
-        public string? Key { get; set; }
+        public object? Key { get; set; }
         public System.Type Service { get; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
@@ -229,7 +230,7 @@ namespace Awaiten
         public ScopedAttribute() { }
         public string? Factory { get; set; }
         public Awaiten.Fallback Fallback { get; set; }
-        public string? Key { get; set; }
+        public object? Key { get; set; }
         public string? OnActivated { get; set; }
         public string? OnRelease { get; set; }
         public System.Type? WhenInjectedInto { get; set; }
@@ -241,7 +242,7 @@ namespace Awaiten
         public ScopedAttribute() { }
         public string? Factory { get; set; }
         public Awaiten.Fallback Fallback { get; set; }
-        public string? Key { get; set; }
+        public object? Key { get; set; }
         public string? OnActivated { get; set; }
         public string? OnRelease { get; set; }
         public System.Type? WhenInjectedInto { get; set; }
@@ -252,7 +253,7 @@ namespace Awaiten
         public SingletonAttribute(System.Type implementation) { }
         public SingletonAttribute(System.Type implementation, System.Type service) { }
         public System.Type Implementation { get; }
-        public string? Key { get; set; }
+        public object? Key { get; set; }
         public System.Type Service { get; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
@@ -264,7 +265,7 @@ namespace Awaiten
         public string? Factory { get; set; }
         public Awaiten.Fallback Fallback { get; set; }
         public string? Instance { get; set; }
-        public string? Key { get; set; }
+        public object? Key { get; set; }
         public string? OnActivated { get; set; }
         public string? OnRelease { get; set; }
         public System.Type? WhenInjectedInto { get; set; }
@@ -278,7 +279,7 @@ namespace Awaiten
         public string? Factory { get; set; }
         public Awaiten.Fallback Fallback { get; set; }
         public string? Instance { get; set; }
-        public string? Key { get; set; }
+        public object? Key { get; set; }
         public string? OnActivated { get; set; }
         public string? OnRelease { get; set; }
         public System.Type? WhenInjectedInto { get; set; }
@@ -289,7 +290,7 @@ namespace Awaiten
         public TransientAttribute(System.Type implementation) { }
         public TransientAttribute(System.Type implementation, System.Type service) { }
         public System.Type Implementation { get; }
-        public string? Key { get; set; }
+        public object? Key { get; set; }
         public System.Type Service { get; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
@@ -299,7 +300,7 @@ namespace Awaiten
         public TransientAttribute() { }
         public string? Factory { get; set; }
         public Awaiten.Fallback Fallback { get; set; }
-        public string? Key { get; set; }
+        public object? Key { get; set; }
         public string? OnActivated { get; set; }
         public string? OnRelease { get; set; }
         public System.Type? WhenInjectedInto { get; set; }
@@ -311,7 +312,7 @@ namespace Awaiten
         public TransientAttribute() { }
         public string? Factory { get; set; }
         public Awaiten.Fallback Fallback { get; set; }
-        public string? Key { get; set; }
+        public object? Key { get; set; }
         public string? OnActivated { get; set; }
         public string? OnRelease { get; set; }
         public System.Type? WhenInjectedInto { get; set; }

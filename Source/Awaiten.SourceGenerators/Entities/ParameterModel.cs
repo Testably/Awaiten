@@ -24,6 +24,9 @@ namespace Awaiten.SourceGenerators.Entities;
 ///     <see cref="DependencyKind.AwaitedKeyedCollection" /> it is the inner dictionary shape
 ///     (<c>IReadOnlyDictionary&lt;string, T&gt;</c>), used both to type the produced task and, for suppression, to
 ///     recognize a registered synchronous dictionary that claims the awaited view (null for every other kind).
+///     <c>KeyType</c> is the requested dictionary key type of a keyed collection (the <c>string</c> keyword or a
+///     fully-qualified enum type), used to synthesize a <c>Dictionary&lt;TKey, T&gt;</c> of the right key type,
+///     including the empty case where no keyed registration exists to derive it from (null for every other kind).
 /// </summary>
 internal sealed record ParameterModel(
 	string ServiceType,
@@ -32,4 +35,5 @@ internal sealed record ParameterModel(
 	string? Key = null,
 	LocationInfo? Location = null,
 	bool ProducesOwned = false,
-	string? AwaitedCollectionType = null);
+	string? AwaitedCollectionType = null,
+	string? KeyType = null);

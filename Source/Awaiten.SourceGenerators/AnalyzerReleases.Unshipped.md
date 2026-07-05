@@ -60,7 +60,7 @@
  AWT156  | Awaiten   | Warning  | A generated Root/Scope is disposed synchronously although its container owns a service that implements IAsyncDisposable but not IDisposable
  AWT157  | Awaiten   | Error    | An [Inject(Optional = true)] property is required and cannot be omitted from the object initializer
  AWT158  | Awaiten   | Warning  | An [Inject(Optional = true)] property is init-only, so an unregistered dependency leaves it permanently at its default
- AWT159  | Awaiten   | Error    | A keyed collection (IReadOnlyDictionary<TKey, TService>) uses a non-string key type
+ AWT159  | Awaiten   | Error    | A keyed dictionary (IReadOnlyDictionary<TKey, TService>) has a key type that is neither string nor an enum, or that mismatches its keyed registrations
  AWT160  | Awaiten   | Error    | A [FromKey] is applied to a synthesized keyed collection (IReadOnlyDictionary<string, TService>), which resolves every key
  AWT161  | Awaiten   | Error    | An Eager singleton is async-initialized and cannot be constructed synchronously at container build time
  AWT162  | Awaiten   | Error    | A [RequestingType] factory parameter is not of type System.Type
@@ -71,4 +71,5 @@
  AWT167  | Awaiten   | Warning  | A WhenInjectedInto contextual binding never applies because the named consumer has no unkeyed direct constructor parameter to redirect
  AWT168  | Awaiten   | Error    | A registration sets both WhenInjectedInto and Key, which claim the same resolution slot, so the Key is silently dropped
  AWT169  | Awaiten   | Error    | Two implementations set WhenInjectedInto for the same service and consumer, so the contextual resolution would be ambiguous
+ AWT170  | Awaiten   | Error    | A [Key] or [FromKey] uses a constant whose type is not a supported key type (string, enum, or typeof)
  AWT171  | Awaiten   | Warning  | A closing of an open generic [Decorate]/[Composite] violates the decorator's or composite's constraints and is skipped

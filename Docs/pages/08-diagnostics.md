@@ -1063,11 +1063,11 @@ public static partial class CoffeeShop;
 ### AWT159
 
 :::danger[Error]
-A keyed collection (`IReadOnlyDictionary<TKey, TService>`) uses a non-string key type.
+A keyed dictionary (`IReadOnlyDictionary<TKey, TService>`) has a key type that is neither `string` nor an enum, or one whose keyed registrations do not all match it.
 :::
 
 ```csharp
-public sealed class Router(IReadOnlyDictionary<int, IMilk> milks);   // the key must be string
+public sealed class Router(IReadOnlyDictionary<int, IMilk> milks);   // the key must be string or an enum
 
 [Container]
 [Singleton<OatMilk, IMilk>(Key = "Oat")]
@@ -1133,5 +1133,20 @@ Two different implementations set `WhenInjectedInto` for the same service and co
 [Singleton<WidePrinter, IReceiptPrinter>(WhenInjectedInto = typeof(DriveThroughRegister))]
 [Singleton<ThermalPrinter, IReceiptPrinter>(WhenInjectedInto = typeof(DriveThroughRegister))]   // two bindings for one consumer
 [Singleton<DriveThroughRegister>]
+public static partial class CoffeeShop;
+```
+
+### AWT170
+
+:::danger[Error]
+A `[Key]` or `[FromKey]` uses a constant whose type is not a supported key type. A resolution key must be a `string`, an `enum` value, or a `typeof(...)`.
+:::
+
+```csharp
+public sealed class LatteRecipe([FromKey(5)] IMilk milk);   // int is not a supported key type
+
+[Container]
+[Singleton<OatMilk, IMilk>(Key = "Oat")]
+[Singleton<LatteRecipe>]
 public static partial class CoffeeShop;
 ```
