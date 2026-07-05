@@ -64,7 +64,7 @@ public partial class DiagnosticTests
 			                                       public sealed class Cache : ICacheA, ICacheB { }
 
 			                                       [Module]
-			                                       [Transient<Cache, ICacheB>(TryAdd = true)]
+			                                       [Transient<Cache, ICacheB>(Fallback = Fallback.Silent)]
 			                                       public static class CacheModule { }
 
 			                                       [Container]
@@ -76,7 +76,7 @@ public partial class DiagnosticTests
 			                                       """);
 
 			await That(result.Diagnostics).Contains("*AWT107*").AsWildcard()
-				.Because("the TryAdd keeps its service key, so its declared Transient lifetime would be silently replaced by the Singleton the strong registration fixed - a contradiction, not a transparent override");
+				.Because("the Fallback.Silent keeps its service key, so its declared Transient lifetime would be silently replaced by the Singleton the strong registration fixed - a contradiction, not a transparent override");
 		}
 
 		[Fact]
@@ -91,11 +91,11 @@ public partial class DiagnosticTests
 			                                       public sealed class SharedClock : IClock { }
 
 			                                       [Module]
-			                                       [Singleton<SharedClock, IClock>(Default = true)]
+			                                       [Singleton<SharedClock, IClock>(Fallback = Fallback.Warn)]
 			                                       public static class ModuleA { }
 
 			                                       [Module]
-			                                       [Transient<SharedClock, IClock>(Default = true)]
+			                                       [Transient<SharedClock, IClock>(Fallback = Fallback.Warn)]
 			                                       public static class ModuleB { }
 
 			                                       [Container]
@@ -122,7 +122,7 @@ public partial class DiagnosticTests
 			                                       public sealed class Cache : ICache { }
 
 			                                       [Module]
-			                                       [Transient<Cache, ICache>(Default = true)]
+			                                       [Transient<Cache, ICache>(Fallback = Fallback.Warn)]
 			                                       public static class CacheModule { }
 
 			                                       [Container]

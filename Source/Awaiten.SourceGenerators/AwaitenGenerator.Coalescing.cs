@@ -131,7 +131,7 @@ partial class AwaitenGenerator
 			}
 
 			// An overridable default whose service is already claimed is dropped in full, so the stronger (or
-			// earlier) registration replaces it transparently. Two colliding Defaults warn (AWT148); TryAdd is silent.
+			// earlier) registration replaces it transparently. Two colliding Fallback.Warn defaults warn (AWT148); Fallback.Silent is silent.
 			if (registration.Weak && alreadyChosen)
 			{
 				if (registration.IsDefault && winner!.IsDefault
@@ -254,7 +254,7 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     The single encoding of coalescing precedence: explicit strong registrations first, then overridable
-	///     defaults (<c>Default</c>/<c>TryAdd</c>), then open-generic-synthesized registrations, then scan matches.
+	///     defaults (<c>Fallback.Warn</c>/<c>Fallback.Silent</c>), then open-generic-synthesized registrations, then scan matches.
 	///     Consumed by the coalescing loop and the open generic expansion seed, which must agree on who wins.
 	/// </summary>
 	private static int PrecedenceRank(RawRegistration registration)

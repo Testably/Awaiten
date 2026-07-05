@@ -27,7 +27,7 @@ partial class AwaitenGenerator
 		CollectLifetimeRegistrations(containerSymbol, result, open, diagnostics, origin: null, fallbackLocation: null);
 
 		// [Import(typeof(Module))] pulls a module's registrations in after the container's own, so the container
-		// wins ties and a module's overridable defaults (Default/TryAdd) only fill the gaps it leaves. Resolved
+		// wins ties and a module's overridable defaults (Fallback.Warn/Silent) only fill the gaps it leaves. Resolved
 		// one level deep; a module's own [Import] is not followed.
 		foreach (ImportedModule module in modules)
 		{
@@ -115,10 +115,12 @@ partial class AwaitenGenerator
 			(ProductionKind production, string? productionMember, bool conflictingDirectives) =
 				ReadProduction(attribute);
 
-			// Default and TryAdd both mark an overridable default that only fills a gap; Default additionally
-			// opts into the AWT148 warning when two Defaults collide with nothing stronger to resolve them.
-			bool isDefault = NamedFlag(attribute, "Default");
-			bool weak = isDefault || NamedFlag(attribute, "TryAdd");
+			// Fallback.Warn (1) and Fallback.Silent (2) both mark an overridable default that only fills a gap;
+			// Warn additionally opts into the AWT148 warning when two collide with nothing stronger to resolve
+			// them. Fallback.None (0, the default) is a normal strong registration.
+			int fallback = NamedFallback(attribute);
+			bool weak = fallback != 0;
+			bool isDefault = fallback == 1;
 
 			string? key = NamedArgument(attribute, "Key");
 
@@ -350,6 +352,23 @@ partial class AwaitenGenerator
 		}
 
 		return false;
+	}
+
+	/// <summary>
+	///     Reads the <c>Fallback</c> enum named argument off a lifetime attribute as its underlying int
+	///     (0 = None, 1 = Warn, 2 = Silent), defaulting to 0 (None, a normal registration) when unset.
+	/// </summary>
+	private static int NamedFallback(AttributeData attribute)
+	{
+		foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
+		{
+			if (argument.Key == "Fallback" && argument.Value.Value is int value)
+			{
+				return value;
+			}
+		}
+
+		return 0;
 	}
 
 	/// <summary>

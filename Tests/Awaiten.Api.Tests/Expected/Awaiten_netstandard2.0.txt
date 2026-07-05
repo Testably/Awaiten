@@ -77,6 +77,12 @@ namespace Awaiten
         public DecorateAttribute() { }
         public int Order { get; set; }
     }
+    public enum Fallback
+    {
+        None = 0,
+        Warn = 1,
+        Silent = 2,
+    }
     [System.AttributeUsage(System.AttributeTargets.Property | System.AttributeTargets.Parameter, AllowMultiple=false, Inherited=false)]
     public sealed class FromKeyAttribute : System.Attribute
     {
@@ -205,12 +211,11 @@ namespace Awaiten
         where TImplementation :  class
     {
         public ScopedAttribute() { }
-        public bool Default { get; set; }
         public string? Factory { get; set; }
+        public Awaiten.Fallback Fallback { get; set; }
         public string? Key { get; set; }
         public string? OnActivated { get; set; }
         public string? OnRelease { get; set; }
-        public bool TryAdd { get; set; }
         public System.Type? WhenInjectedInto { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
@@ -218,12 +223,11 @@ namespace Awaiten
         where TImplementation :  class, TService
     {
         public ScopedAttribute() { }
-        public bool Default { get; set; }
         public string? Factory { get; set; }
+        public Awaiten.Fallback Fallback { get; set; }
         public string? Key { get; set; }
         public string? OnActivated { get; set; }
         public string? OnRelease { get; set; }
-        public bool TryAdd { get; set; }
         public System.Type? WhenInjectedInto { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
@@ -240,14 +244,13 @@ namespace Awaiten
         where TImplementation :  class
     {
         public SingletonAttribute() { }
-        public bool Default { get; set; }
         public bool Eager { get; set; }
         public string? Factory { get; set; }
+        public Awaiten.Fallback Fallback { get; set; }
         public string? Instance { get; set; }
         public string? Key { get; set; }
         public string? OnActivated { get; set; }
         public string? OnRelease { get; set; }
-        public bool TryAdd { get; set; }
         public System.Type? WhenInjectedInto { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
@@ -255,14 +258,13 @@ namespace Awaiten
         where TImplementation :  class, TService
     {
         public SingletonAttribute() { }
-        public bool Default { get; set; }
         public bool Eager { get; set; }
         public string? Factory { get; set; }
+        public Awaiten.Fallback Fallback { get; set; }
         public string? Instance { get; set; }
         public string? Key { get; set; }
         public string? OnActivated { get; set; }
         public string? OnRelease { get; set; }
-        public bool TryAdd { get; set; }
         public System.Type? WhenInjectedInto { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
@@ -279,12 +281,11 @@ namespace Awaiten
         where TImplementation :  class
     {
         public TransientAttribute() { }
-        public bool Default { get; set; }
         public string? Factory { get; set; }
+        public Awaiten.Fallback Fallback { get; set; }
         public string? Key { get; set; }
         public string? OnActivated { get; set; }
         public string? OnRelease { get; set; }
-        public bool TryAdd { get; set; }
         public System.Type? WhenInjectedInto { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
@@ -292,12 +293,11 @@ namespace Awaiten
         where TImplementation :  class, TService
     {
         public TransientAttribute() { }
-        public bool Default { get; set; }
         public string? Factory { get; set; }
+        public Awaiten.Fallback Fallback { get; set; }
         public string? Key { get; set; }
         public string? OnActivated { get; set; }
         public string? OnRelease { get; set; }
-        public bool TryAdd { get; set; }
         public System.Type? WhenInjectedInto { get; set; }
     }
 }

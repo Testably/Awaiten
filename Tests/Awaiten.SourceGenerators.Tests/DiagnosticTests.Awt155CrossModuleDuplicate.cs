@@ -190,7 +190,7 @@ public partial class DiagnosticTests
 			                                       public static class ModuleA { }
 
 			                                       [Module]
-			                                       [Singleton<ClockB, IClock>(Default = true)]
+			                                       [Singleton<ClockB, IClock>(Fallback = Fallback.Warn)]
 			                                       public static class ModuleB { }
 
 			                                       [Container]

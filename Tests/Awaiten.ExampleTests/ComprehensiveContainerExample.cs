@@ -399,18 +399,18 @@ public partial class ComprehensiveContainerExample
 
 	public sealed class CustomGrind : IGrind;
 
-	// The roaster: contributed with TryAdd, so the roastery's choice stands when the shop registers none.
+	// The roaster: contributed with Fallback.Silent, so the roastery's choice stands when the shop registers none.
 	public interface IRoaster;
 
 	public sealed class HouseRoaster : IRoaster;
 
 	[Module]
 	// An unopposed overridable default: nothing else registers IBeanSupplier, so this is used.
-	[Singleton<BeanSupplier, IBeanSupplier>(Default = true)]
+	[Singleton<BeanSupplier, IBeanSupplier>(Fallback = Fallback.Warn)]
 	// An overridable default the shop replaces: the container's own IGrind registration wins over this.
-	[Singleton<HouseGrind, IGrind>(Default = true)]
-	// A TryAdd contribution: added because the shop registers no IRoaster of its own.
-	[Singleton<HouseRoaster, IRoaster>(TryAdd = true)]
+	[Singleton<HouseGrind, IGrind>(Fallback = Fallback.Warn)]
+	// A Fallback.Silent contribution: added because the shop registers no IRoaster of its own.
+	[Singleton<HouseRoaster, IRoaster>(Fallback = Fallback.Silent)]
 	[Transient<DeliveryNote>]
 	public static class RoasteryModule;
 
@@ -788,7 +788,7 @@ public partial class ComprehensiveContainerExample
 		await That(shop.Resolve<IGrind>()).Is<CustomGrind>()
 			.Because("the container's own registration overrides the module's overridable default");
 		await That(shop.Resolve<IRoaster>()).Is<HouseRoaster>()
-			.Because("a module TryAdd registration stands when the container registers none of its own");
+			.Because("a module Fallback.Silent registration stands when the container registers none of its own");
 	}
 #pragma warning restore AWT156
 
