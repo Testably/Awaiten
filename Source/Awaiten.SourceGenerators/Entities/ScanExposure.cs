@@ -7,6 +7,6 @@ namespace Awaiten.SourceGenerators.Entities;
 internal enum ScanExposure
 {
 	Self,
-	ImplementedInterfaces,
-	SelfAndImplementedInterfaces,
+	Marker,
+	SelfAndMarker,
 }

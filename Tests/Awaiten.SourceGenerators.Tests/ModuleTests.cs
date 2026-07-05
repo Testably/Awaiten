@@ -93,7 +93,7 @@ public class ModuleTests
 
 		                                       [Container]
 		                                       [Import(typeof(ClockModule))]
-		                                       [Scan(typeof(IClock), As = ScanAs.ImplementedInterfaces, Lifetime = AwaitenLifetime.Singleton)]
+		                                       [Scan(typeof(IClock), As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton)]
 		                                       public static partial class MyContainer
 		                                       {
 		                                       }
@@ -124,7 +124,7 @@ public class ModuleTests
 
 		                                       [Container]
 		                                       [Import(typeof(ClockModule))]
-		                                       [Scan(typeof(IClock), As = ScanAs.ImplementedInterfaces, Lifetime = AwaitenLifetime.Singleton)]
+		                                       [Scan(typeof(IClock), As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton)]
 		                                       public static partial class MyContainer
 		                                       {
 		                                       }
@@ -154,7 +154,7 @@ public class ModuleTests
 		                                       public static class ClockModule { }
 
 		                                       [Container]
-		                                       [Scan(typeof(IClock), As = ScanAs.ImplementedInterfaces, Lifetime = AwaitenLifetime.Singleton)]
+		                                       [Scan(typeof(IClock), As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton)]
 		                                       [Import(typeof(ClockModule))]
 		                                       public static partial class MyContainer
 		                                       {
@@ -185,7 +185,7 @@ public class ModuleTests
 
 		                                       [Container]
 		                                       [Import(typeof(ClockModule))]
-		                                       [Scan(typeof(IClock), As = ScanAs.ImplementedInterfaces, Lifetime = AwaitenLifetime.Singleton)]
+		                                       [Scan(typeof(IClock), As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton)]
 		                                       public static partial class MyContainer
 		                                       {
 		                                       }
@@ -213,7 +213,7 @@ public class ModuleTests
 
 		                                       [Container]
 		                                       [Singleton<ZzDefaultClock, IClock>(Default = true)]
-		                                       [Scan(typeof(IClock), As = ScanAs.ImplementedInterfaces, Lifetime = AwaitenLifetime.Singleton)]
+		                                       [Scan(typeof(IClock), As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton)]
 		                                       public static partial class MyContainer
 		                                       {
 		                                       }

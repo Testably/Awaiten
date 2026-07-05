@@ -78,7 +78,7 @@ public class ScanTests
 	}
 
 	[Fact]
-	public async Task ScanAsImplementedInterfaces_RegistersMatchesUnderTheMarkerAsACollection()
+	public async Task ScanAsMarker_RegistersMatchesUnderTheMarkerAsACollection()
 	{
 		GeneratorResult result = Generator.Run("""
 		                                       using Awaiten;
@@ -92,7 +92,7 @@ public class ScanTests
 		                                       public sealed class Dispatcher { public Dispatcher(IEnumerable<IHandler> handlers) { } }
 
 		                                       [Container]
-		                                       [Scan(typeof(IHandler), As = ScanAs.ImplementedInterfaces, Lifetime = AwaitenLifetime.Singleton)]
+		                                       [Scan(typeof(IHandler), As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton)]
 		                                       [Singleton<Dispatcher>]
 		                                       public static partial class MyContainer
 		                                       {
@@ -102,14 +102,14 @@ public class ScanTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// ImplementedInterfaces registers matches under the marker collection, not as self-dispatched concrete types.
+		// Marker registers matches under the marker collection, not as self-dispatched concrete types.
 		await That(source).Contains("new global::MyCode.Dispatcher(new global::MyCode.IHandler[] { Root.ResolveEmailHandler(__s.__root), Root.ResolveSmsHandler(__s.__root) })");
 		await That(source).DoesNotContain("new __Bucket(typeof(global::MyCode.EmailHandler)")
-			.Because("ImplementedInterfaces registers under the marker interface, not the concrete type");
+			.Because("Marker registers under the marker interface, not the concrete type");
 	}
 
 	[Fact]
-	public async Task ScanAsSelfAndImplementedInterfaces_RegistersBoth()
+	public async Task ScanAsSelfAndMarker_RegistersBoth()
 	{
 		GeneratorResult result = Generator.Run("""
 		                                       using Awaiten;
@@ -122,7 +122,7 @@ public class ScanTests
 		                                       public sealed class Consumer { public Consumer(SalesReport self, IEnumerable<IReport> all) { } }
 
 		                                       [Container]
-		                                       [Scan(typeof(IReport), As = ScanAs.SelfAndImplementedInterfaces, Lifetime = AwaitenLifetime.Singleton)]
+		                                       [Scan(typeof(IReport), As = ScanAs.SelfAndMarker, Lifetime = AwaitenLifetime.Singleton)]
 		                                       [Singleton<Consumer>]
 		                                       public static partial class MyContainer
 		                                       {
@@ -133,9 +133,9 @@ public class ScanTests
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
 		await That(source).Contains("new __Bucket(typeof(global::MyCode.SalesReport)")
-			.Because("SelfAndImplementedInterfaces keeps the concrete self registration");
+			.Because("SelfAndMarker keeps the concrete self registration");
 		await That(source).Contains("new global::MyCode.IReport[] { Root.ResolveSalesReport(__s.__root) }")
-			.Because("SelfAndImplementedInterfaces also registers the match under the marker collection");
+			.Because("SelfAndMarker also registers the match under the marker collection");
 	}
 
 	[Fact]
@@ -204,7 +204,7 @@ public class ScanTests
 		                                       public sealed class DualView : IView<ViewModelOne>, IView<ViewModelTwo> { }
 
 		                                       [Container]
-		                                       [Scan(typeof(IView<>), As = ScanAs.ImplementedInterfaces, Lifetime = AwaitenLifetime.Singleton)]
+		                                       [Scan(typeof(IView<>), As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton)]
 		                                       public static partial class MyContainer
 		                                       {
 		                                       }
@@ -220,7 +220,7 @@ public class ScanTests
 		await That(source).Contains("new global::MyCode.IView<global::MyCode.ViewModelOne>[] { Root.ResolveDualView(__s.__root), Root.ResolveViewOne(__s.__root) }");
 		await That(source).Contains("new global::MyCode.IView<global::MyCode.ViewModelTwo>[] { Root.ResolveDualView(__s.__root), Root.ResolveViewTwo(__s.__root) }");
 		await That(source).DoesNotContain("new __Bucket(typeof(global::MyCode.ViewOne)")
-			.Because("ImplementedInterfaces registers under the closed marker interface, not the concrete view");
+			.Because("Marker registers under the closed marker interface, not the concrete view");
 	}
 
 	[Fact]
@@ -246,10 +246,10 @@ public class ScanTests
 		                    """;
 
 		string typeofForm = Generator.Run(
-				body.Replace("{0}", "[Scan(typeof(IHandler), As = ScanAs.ImplementedInterfaces, Lifetime = AwaitenLifetime.Singleton)]"))
+				body.Replace("{0}", "[Scan(typeof(IHandler), As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton)]"))
 			.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 		string genericForm = Generator.Run(
-				body.Replace("{0}", "[Scan<IHandler>(As = ScanAs.ImplementedInterfaces, Lifetime = AwaitenLifetime.Singleton)]"))
+				body.Replace("{0}", "[Scan<IHandler>(As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton)]"))
 			.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
 		await That(genericForm).IsEqualTo(typeofForm)
@@ -297,7 +297,7 @@ public class ScanTests
 		                                       public sealed class ClosedView : IView<ViewModel> { }
 
 		                                       [Container]
-		                                       [Scan(typeof(IView<>), As = ScanAs.ImplementedInterfaces)]
+		                                       [Scan(typeof(IView<>), As = ScanAs.Marker)]
 		                                       public static partial class MyContainer
 		                                       {
 		                                       }
