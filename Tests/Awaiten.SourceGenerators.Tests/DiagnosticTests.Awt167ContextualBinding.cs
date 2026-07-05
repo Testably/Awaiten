@@ -85,5 +85,87 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics.Any(d => d.Contains("AWT167"))).IsTrue()
 				.Because("the [FromKey] parameter takes precedence, so the contextual binding is never applied");
 		}
+
+		[Fact]
+		public async Task ReportsWhenTheConsumerDependsOnlyThroughAFuncRelationship()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using System;
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IClock { }
+			                                       public sealed class DefaultClock : IClock { }
+			                                       public sealed class TestClock : IClock { }
+			                                       public sealed class NeedsFunc { public NeedsFunc(Func<IClock> clock) { } }
+
+			                                       [Container]
+			                                       [Singleton<DefaultClock, IClock>]
+			                                       [Singleton<TestClock, IClock>(WhenInjectedInto = typeof(NeedsFunc))]
+			                                       [Singleton<NeedsFunc>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics.Any(d => d.Contains("AWT167"))).IsTrue()
+				.Because("a Func-deferred dependency is not an unkeyed direct parameter, so the contextual binding is never applied");
+		}
+	}
+
+	public class Awt168ContextualBindingWithKey
+	{
+		[Fact]
+		public async Task ReportsWhenARegistrationSetsBothWhenInjectedIntoAndKey()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IClock { }
+			                                       public sealed class DefaultClock : IClock { }
+			                                       public sealed class TestClock : IClock { }
+			                                       public sealed class NeedsTest { public NeedsTest(IClock clock) { } }
+
+			                                       [Container]
+			                                       [Singleton<DefaultClock, IClock>]
+			                                       [Singleton<TestClock, IClock>(Key = "test", WhenInjectedInto = typeof(NeedsTest))]
+			                                       [Singleton<NeedsTest>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics.Any(d => d.Contains("AWT168"))).IsTrue()
+				.Because("WhenInjectedInto and Key claim the same resolution slot, so the Key is silently dropped");
+		}
+
+		[Fact]
+		public async Task DoesNotReportForWhenInjectedIntoAlone()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IClock { }
+			                                       public sealed class DefaultClock : IClock { }
+			                                       public sealed class TestClock : IClock { }
+			                                       public sealed class NeedsTest { public NeedsTest(IClock clock) { } }
+
+			                                       [Container]
+			                                       [Singleton<DefaultClock, IClock>]
+			                                       [Singleton<TestClock, IClock>(WhenInjectedInto = typeof(NeedsTest))]
+			                                       [Singleton<NeedsTest>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("WhenInjectedInto without a Key is the ordinary contextual binding");
+		}
 	}
 }

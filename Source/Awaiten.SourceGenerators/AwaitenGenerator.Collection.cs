@@ -120,7 +120,25 @@ partial class AwaitenGenerator
 			bool isDefault = NamedFlag(attribute, "Default");
 			bool weak = isDefault || NamedFlag(attribute, "TryAdd");
 
+			string? key = NamedArgument(attribute, "Key");
+
+			// A [Singleton<…>(WhenInjectedInto = typeof(Consumer))] contextual binding; absent (null) on the
+			// open-generic Type-ctor form, which exposes no such property. Resolved to the consumer's context key.
+			string? whenInjectedInto = NamedTypeArgument(attribute, "WhenInjectedInto");
+
 			Location? location = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? fallbackLocation;
+
+			// AWT168: a contextual binding is stored under a synthetic per-consumer key (see ContextKey), which
+			// overrides an explicit Key entirely, so the two together silently drop the Key. Report it rather than
+			// let a [FromKey] the author expects to select this registration quietly never match.
+			if (key is not null && whenInjectedInto is not null)
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.ContextualBindingWithKey,
+					LocationInfo.From(location),
+					new EquatableArray<string>([Display(implementation.ToDisplayString(FullyQualified)),])));
+			}
+
 			result.Add(new RawRegistration(
 				service.ToDisplayString(FullyQualified),
 				implementation.ToDisplayString(FullyQualified),
@@ -130,7 +148,7 @@ partial class AwaitenGenerator
 				production,
 				productionMember,
 				conflictingDirectives,
-				NamedArgument(attribute, "Key"),
+				key,
 				service as INamedTypeSymbol,
 				Weak: weak,
 				IsDefault: isDefault,
@@ -140,9 +158,7 @@ partial class AwaitenGenerator
 				Eager: NamedFlag(attribute, "Eager"),
 				OnActivated: NamedArgument(attribute, "OnActivated"),
 				OnRelease: NamedArgument(attribute, "OnRelease"),
-				// A [Singleton<…>(WhenInjectedInto = typeof(Consumer))] contextual binding; absent (null) on the
-				// open-generic Type-ctor form, which exposes no such property. Resolved to the consumer's context key.
-				WhenInjectedInto: NamedTypeArgument(attribute, "WhenInjectedInto")));
+				WhenInjectedInto: whenInjectedInto));
 		}
 	}
 
