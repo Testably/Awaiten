@@ -22,12 +22,12 @@ dotnet publish Samples/Awaiten.AotSample -c Release -r win-x64 -p:GeneratePackag
 # prints: Awaiten on AOT @ 2026-06-24   (exit code 0)
 ```
 
-Use the runtime identifier for your platform (`linux-x64`, `osx-arm64`, …). The generated container and the
-synchronous bridge path use explicit factory/instance delegates, so no reflection-based activation is
-involved. The bridge's **async** projection builds `Task<TService>` via `MakeGenericType` /
-`MakeGenericMethod`; this is safe under native AOT because DI service types are reference types and resolve to
-the shared canonical instantiation, so the two call sites carry `[UnconditionalSuppressMessage]` with that
-justification. The one shape not supported under native AOT is an async **value-type** service type.
+Use the runtime identifier for your platform (`linux-x64`, `osx-arm64`, …). The whole graph projects with
+explicit factory/instance delegates, so no reflection-based activation is involved. The **async** projection
+(a service bridged as `Task<TService>`, exercised here by `Warmup`) is reflection-free too: the generator
+emits the closed `typeof(Task<TService>)` and the `Task<object>`→`Task<T>` converter into the container's
+registration metadata, so the bridge never calls `MakeGenericType` / `MakeGenericMethod` at runtime and needs
+no trim/AOT suppressions.
 
 ## Run without the AOT toolchain
 

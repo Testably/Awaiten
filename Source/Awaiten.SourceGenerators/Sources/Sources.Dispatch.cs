@@ -164,10 +164,12 @@ internal static partial class Sources
 					.Append("), ").Append(AwaitenLifetimeOf(instance.Lifetime));
 				if (requiresAsync)
 				{
-					builder.Append(", requiresAsync: true");
+					// The async ctor carries the closed generics the bridge projects with, so it never
+					// constructs Task<TService> or the Task<object>->Task<T> converter reflectively.
+					builder.Append(", typeof(global::System.Threading.Tasks.Task<").Append(service.Service).Append(">), ")
+						.Append("__t => global::Awaiten.AwaitenTaskProjection.AsTask<").Append(service.Service).Append(">(__t)");
 				}
-
-				if (externallyOwned)
+				else if (externallyOwned)
 				{
 					builder.Append(", externallyOwned: true");
 				}
