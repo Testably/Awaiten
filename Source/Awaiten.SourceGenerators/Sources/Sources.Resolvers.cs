@@ -154,7 +154,27 @@ internal static partial class Sources
 		if (resolver.Disposal != DisposalTracking.None || emitDeferred is not null)
 		{
 			Indent(builder, depth + 1).Append(type).Append(" created = ").Append(construction).AppendLine(";");
-			emitDeferred?.Invoke(depth + 1);
+			if (emitDeferred is not null && resolver.Disposal != DisposalTracking.None)
+			{
+				// Guard the deferred wiring: if wiring a member throws, dispose the freshly built instance rather
+				// than leak it. It is registered for teardown only on success (below), so this never double-disposes.
+				Indent(builder, depth + 1).AppendLine("try");
+				Indent(builder, depth + 1).AppendLine("{");
+				emitDeferred(depth + 2);
+				Indent(builder, depth + 1).AppendLine("}");
+				Indent(builder, depth + 1).AppendLine("catch");
+				Indent(builder, depth + 1).AppendLine("{");
+				EmitGuardedTeardown(builder, depth + 2, asyncDisposal, asyncContext: false);
+				builder.AppendLine();
+				Indent(builder, depth + 2).AppendLine("throw;");
+				Indent(builder, depth + 1).AppendLine("}");
+				builder.AppendLine();
+			}
+			else
+			{
+				emitDeferred?.Invoke(depth + 1);
+			}
+
 			if (resolver.Disposal != DisposalTracking.None)
 			{
 				EmitFreshDisposalTracking(builder, depth + 1, resolver.Disposal == DisposalTracking.Runtime, asyncDisposal, asyncContext: false);
@@ -561,17 +581,56 @@ internal static partial class Sources
 		// The construction-and-initialization is a local async function so the synchronous disposed-guard above
 		// runs eagerly; it captures `__s` and `cancellationToken`. Deferred members are wired before the owner's
 		// own disposal registration, so a dependency first built during wiring registers earlier and is disposed
-		// later than this owner (reverse teardown order). A failed wiring faults the memoized task, which the
-		// resolver evicts, so a later call retries.
+		// later than this owner (reverse teardown order). A failed wiring or InitializeAsync faults the memoized
+		// task, which the resolver evicts, so a later call retries; the constructed instance is disposed on that
+		// failure (see EmitGuardedWiringAndInit) rather than leaking, since it is registered only on success.
 		Indent(builder, depth + 1).Append("async ").Append(task).Append('<').Append(type).Append("> ").Append(creator).AppendLine("()");
 		Indent(builder, depth + 1).AppendLine("{");
 		Indent(builder, depth + 2).Append(type).Append(" created = ").Append(construction).AppendLine(";");
-		emitDeferred?.Invoke(depth + 2);
-		EmitAsyncDisposableRegistration(builder, depth + 2, instance, context.AsyncDisposal);
-		EmitAsyncInitialization(builder, depth + 2, instance, "created");
+		EmitGuardedWiringAndInit(builder, depth + 2, instance, context, emitDeferred);
 		Indent(builder, depth + 2).AppendLine("return created;");
 		Indent(builder, depth + 1).AppendLine("}");
 		Indent(builder, depth).AppendLine("}");
+	}
+
+	/// <summary>
+	///     Wires the deferred members and awaits <c>InitializeAsync</c> for a freshly built <c>created</c>
+	///     instance, then registers it for disposal - shared by the transient (<see cref="EmitAsyncFreshResolver" />)
+	///     and memoized (<see cref="EmitAsyncCachingResolver" />) async resolvers so both handle failure
+	///     identically. For a disposable instance the wiring and initialization run inside a <c>try</c> whose
+	///     <c>catch</c> disposes <c>created</c> and rethrows, so a failure in deferred wiring or
+	///     <c>InitializeAsync</c> tears down the instance we already constructed rather than leaking it (a
+	///     memoized task is additionally faulted and evicted, so the instance is otherwise unreachable). The
+	///     teardown is itself guarded: a throw from the instance's own <c>Dispose</c>/<c>DisposeAsync</c> is
+	///     swallowed so it cannot mask the original wiring/initialization failure that the rethrow propagates.
+	///     Registration stays after the deferred wiring - preserving reverse-teardown order (a dependency first
+	///     built during wiring registers earlier and so is disposed after this owner) - and runs only on success,
+	///     so the caught instance is never double-disposed. A non-disposable instance has nothing to leak, so it
+	///     wires and initializes directly.
+	/// </summary>
+	private static void EmitGuardedWiringAndInit(StringBuilder builder, int depth, InstanceModel instance, EmitContext context, Action<int>? emitDeferred)
+	{
+		if (DisposalOf(instance) == DisposalTracking.None)
+		{
+			emitDeferred?.Invoke(depth);
+			EmitAsyncInitialization(builder, depth, instance, "created");
+			return;
+		}
+
+		Indent(builder, depth).AppendLine("try");
+		Indent(builder, depth).AppendLine("{");
+		emitDeferred?.Invoke(depth + 1);
+		EmitAsyncInitialization(builder, depth + 1, instance, "created");
+		Indent(builder, depth).AppendLine("}");
+		Indent(builder, depth).AppendLine("catch");
+		Indent(builder, depth).AppendLine("{");
+		// Dispose the instance we constructed but failed to wire/initialize, then rethrow the original failure.
+		EmitGuardedTeardown(builder, depth + 1, context.AsyncDisposal, asyncContext: true);
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("throw;");
+		Indent(builder, depth).AppendLine("}");
+		builder.AppendLine();
+		EmitAsyncDisposableRegistration(builder, depth, instance, context.AsyncDisposal);
 	}
 
 	/// <summary>
@@ -599,9 +658,7 @@ internal static partial class Sources
 		Indent(builder, depth).AppendLine("{");
 		EmitDisposedGuard(builder, depth + 1, "__s.");
 		Indent(builder, depth + 1).Append(type).Append(" created = ").Append(construction).AppendLine(";");
-		EmitAsyncDisposableRegistration(builder, depth + 1, instance, context.AsyncDisposal);
-		emitDeferred?.Invoke(depth + 1);
-		EmitAsyncInitialization(builder, depth + 1, instance, "created");
+		EmitGuardedWiringAndInit(builder, depth + 1, instance, context, emitDeferred);
 		Indent(builder, depth + 1).AppendLine("return created;");
 		Indent(builder, depth).AppendLine("}");
 	}
@@ -823,6 +880,18 @@ internal static partial class Sources
 			// outermost frame - every other instance the failed episode published (their flags are still false),
 			// so the next resolve rebuilds instead. Peers cached in the failed episode may keep a reference to an
 			// unpublished instance; they are unpublished with it, so nothing published survives half-consistent.
+			if (disposal != DisposalTracking.None)
+			{
+				// This field is published but not yet registered (registration is the try's last step), so dispose it
+				// here rather than leak it. Every frame of the episode disposes its own field as the throw unwinds;
+				// a peer already registered in an inner frame stays in __disposables and is disposed at teardown, so
+				// rollback (which only unpublishes) never leaves it disposed twice. `!` suppresses CS8600 on the
+				// nullable field under the (object) cast that guards against a sealed-type CS8121; when construction
+				// itself threw the field is still null, but the teardown's `is` check makes that a no-op.
+				EmitGuardedTeardown(builder, depth + 4, asyncDisposal, asyncContext: false, "__s." + field + "!");
+				builder.AppendLine();
+			}
+
 			Indent(builder, depth + 4).Append("__s.").Append(field).AppendLine(" = null;");
 			Indent(builder, depth + 4).AppendLine("if (__s.__wiring == 1)");
 			Indent(builder, depth + 4).AppendLine("{");
