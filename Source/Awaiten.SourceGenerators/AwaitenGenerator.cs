@@ -266,16 +266,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 
 		// AWT167: a contextual registration whose named consumer never redirected to its context key (no unkeyed
 		// direct dependency on the service) is never reached, so report it now that every instance is built.
-		foreach (ConditionalRegistration conditional in conditionals)
-		{
-			if (!consumedConditionals.Contains(conditional.Key))
-			{
-				diagnostics.Add(new DiagnosticInfo(
-					Diagnostics.ContextualBindingNeverApplies,
-					conditional.Location,
-					new EquatableArray<string>([Display(conditional.Service), Display(conditional.Consumer),])));
-			}
-		}
+		ReportUnappliedContextualBindings(conditionals, consumedConditionals, diagnostics);
 
 		// Variance for collections (Part C): union every variance-compatible registration's members into each
 		// requested closed-generic collection. Before the parameterized prune and edge building so the unioned

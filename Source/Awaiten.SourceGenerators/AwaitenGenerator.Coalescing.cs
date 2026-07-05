@@ -234,6 +234,25 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
+	///     AWT167: reports every contextual (WhenInjectedInto) registration whose named consumer never redirected to
+	///     its context key, so it was never reached. Called once every instance is built, so a consumer's every
+	///     dependency has had the chance to consume the key.
+	/// </summary>
+	private static void ReportUnappliedContextualBindings(
+		List<ConditionalRegistration> conditionals,
+		HashSet<ServiceKey> consumedConditionals,
+		List<DiagnosticInfo> diagnostics)
+	{
+		foreach (ConditionalRegistration conditional in conditionals.Where(c => !consumedConditionals.Contains(c.Key)))
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.ContextualBindingNeverApplies,
+				conditional.Location,
+				new EquatableArray<string>([Display(conditional.Service), Display(conditional.Consumer),])));
+		}
+	}
+
+	/// <summary>
 	///     The single encoding of coalescing precedence: explicit strong registrations first, then overridable
 	///     defaults (<c>Default</c>/<c>TryAdd</c>), then open-generic-synthesized registrations, then scan matches.
 	///     Consumed by the coalescing loop and the open generic expansion seed, which must agree on who wins.

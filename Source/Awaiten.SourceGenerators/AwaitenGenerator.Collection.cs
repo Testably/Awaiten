@@ -128,16 +128,7 @@ partial class AwaitenGenerator
 
 			Location? location = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? fallbackLocation;
 
-			// AWT168: a contextual binding is stored under a synthetic per-consumer key (see ContextKey), which
-			// overrides an explicit Key entirely, so the two together silently drop the Key. Report it rather than
-			// let a [FromKey] the author expects to select this registration quietly never match.
-			if (key is not null && whenInjectedInto is not null)
-			{
-				diagnostics.Add(new DiagnosticInfo(
-					Diagnostics.ContextualBindingWithKey,
-					LocationInfo.From(location),
-					new EquatableArray<string>([Display(implementation.ToDisplayString(FullyQualified)),])));
-			}
+			ReportContextualBindingWithKey(key, whenInjectedInto, implementation, location, diagnostics);
 
 			result.Add(new RawRegistration(
 				service.ToDisplayString(FullyQualified),
@@ -160,6 +151,29 @@ partial class AwaitenGenerator
 				OnRelease: NamedArgument(attribute, "OnRelease"),
 				WhenInjectedInto: whenInjectedInto));
 		}
+	}
+
+	/// <summary>
+	///     AWT168: a contextual binding is stored under a synthetic per-consumer key (see <c>ContextKey</c>), which
+	///     overrides an explicit <c>Key</c> entirely, so the two together silently drop the <c>Key</c>. Report it
+	///     rather than let a <c>[FromKey]</c> the author expects to select this registration quietly never match.
+	/// </summary>
+	private static void ReportContextualBindingWithKey(
+		string? key,
+		string? whenInjectedInto,
+		ITypeSymbol implementation,
+		Location? location,
+		List<DiagnosticInfo> diagnostics)
+	{
+		if (key is null || whenInjectedInto is null)
+		{
+			return;
+		}
+
+		diagnostics.Add(new DiagnosticInfo(
+			Diagnostics.ContextualBindingWithKey,
+			LocationInfo.From(location),
+			new EquatableArray<string>([Display(implementation.ToDisplayString(FullyQualified)),])));
 	}
 
 	/// <summary>
