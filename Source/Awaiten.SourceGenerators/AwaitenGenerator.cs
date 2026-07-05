@@ -227,11 +227,9 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			: new List<(string, INamedTypeSymbol)>();
 
 		// Open generic decorators: synthesize a closed [Decorate] per matching closing before building the chains,
-		// so they flow through the same DecoratorChainBuilder as the closed form and interleave with it.
-		if (openDecorators.Count > 0)
-		{
-			ExpandOpenDecorators(decorators, openDecorators, closedServices, graph, diagnostics);
-		}
+		// so they flow through the same DecoratorChainBuilder as the closed form and interleave with it. A no-op
+		// when there are none (closedServices is then empty and the expansion has nothing to iterate).
+		ExpandOpenDecorators(decorators, openDecorators, closedServices, graph, diagnostics);
 
 		// Decorator chains: for each [Decorate]d service, move the base impl(s) onto a synthetic key and register
 		// each decorator as a chain link whose inner parameter redirects to the next-lower key. decoratorInner
@@ -244,11 +242,9 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		}
 
 		// Open generic composites: synthesize a closed [Composite] per matching closing before building the
-		// composites, so they flow through the same BuildComposites as the closed form (fronting the decorated members).
-		if (openComposites.Count > 0)
-		{
-			ExpandOpenComposites(composites, openComposites, closedServices, graph, diagnostics);
-		}
+		// composites, so they flow through the same BuildComposites as the closed form (fronting the decorated
+		// members). A no-op when there are none, as with the open decorators above.
+		ExpandOpenComposites(composites, openComposites, closedServices, graph, diagnostics);
 
 		// Composites: each [Composite<TComposite, TService>] registers the composite and makes it the public
 		// winner for TService, excluded from its own collection so its collection parameter fans out to the
