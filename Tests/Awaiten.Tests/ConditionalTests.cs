@@ -1,3 +1,6 @@
+using System.Collections.Generic;
+using System.Linq;
+
 namespace Awaiten.Tests;
 
 /// <summary>
@@ -21,6 +24,12 @@ public partial class ConditionalTests
 			.Because("every other consumer gets the unconditional DefaultClock");
 		await That(container.Resolve<IClock>()).Is<DefaultClock>()
 			.Because("the contextual implementation is not exposed on the public resolution");
+
+		IClock[] all = container.Resolve<IEnumerable<IClock>>().ToArray();
+		await That(all).HasCount(1)
+			.Because("the contextual implementation is excluded from the public collection, which sees only the unconditional registration");
+		await That(all[0]).Is<DefaultClock>()
+			.Because("the sole public collection member is the unconditional DefaultClock, not the contextual TestClock");
 	}
 
 	[Fact]
