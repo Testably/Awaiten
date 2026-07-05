@@ -949,4 +949,17 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     An <c>OnActivated</c> / <c>OnRelease</c> lifecycle hook is set on a pre-built <c>Instance</c>
+	///     registration. The container does not own a pre-built instance - it is constructed, and disposed, by
+	///     the caller - so it never runs the hook around it; the hook would be a silent no-op.
+	/// </summary>
+	public static readonly DiagnosticDescriptor LifecycleHookOnInstance = new(
+		"AWT165",
+		"Lifecycle hook on a pre-built instance",
+		"'{0}' sets an OnActivated/OnRelease lifecycle hook on a pre-built Instance, which the container does not own and never runs the hook around; remove the hook, or register the type for construction instead of as an Instance",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

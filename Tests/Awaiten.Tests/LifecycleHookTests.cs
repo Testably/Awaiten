@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Awaiten.Tests;
 
@@ -77,6 +79,113 @@ public partial class LifecycleHookTests
 		await That(Probe.Log).Contains("released:Alpha");
 	}
 
+	[Fact]
+	public async Task OnActivated_Throwing_UnpublishesTheSingleton_SoResolveRetries_AndReleasesOnlyTheActivatedInstance()
+	{
+		Probe.Reset();
+		using (ThrowingActivationContainer.Root container = new())
+		{
+			// The first activation throws; the resolve fails and must not leave a cached, half-activated instance.
+			await That(() => container.Resolve<Flaky>()).Throws<InvalidOperationException>();
+
+			// A later resolve rebuilds (rather than serving the un-activated instance from the fast path) and
+			// activates - proving the throwing activation unpublished the cache field.
+			Flaky rebuilt = container.Resolve<Flaky>();
+			await That(rebuilt).IsNotNull();
+			await That(Probe.Constructions).IsEqualTo(2);
+			await That(Probe.Log).Contains("activated:Flaky");
+		}
+
+		// OnRelease ran exactly once - only for the successfully activated instance, not the one whose activation
+		// threw (a release is queued only after activation succeeds).
+		await That(Probe.Log.Count(entry => entry == "released:Flaky")).IsEqualTo(1);
+
+		// The instance whose activation threw was still constructed, so it is disposed with the container rather
+		// than leaked: two constructed instances, two disposals.
+		await That(Probe.Log.Count(entry => entry == "disposed:Flaky")).IsEqualTo(2);
+	}
+
+	[Fact]
+	public async Task TransientOnActivated_Throwing_DoesNotQueueARelease_ButTheConstructedInstanceIsStillDisposed()
+	{
+		Probe.Reset();
+		using (ThrowingTransientContainer.Root container = new())
+		{
+			// A disposable transient is owned by the resolving scope (strict lifetime safety withholds it from the
+			// root), so resolve it there; the scope's disposal then releases and disposes what it built.
+			using (var scope = container.CreateScope())
+			{
+				// The first transient's activation throws; the resolve fails, but the instance was already
+				// constructed and registered for disposal (registration precedes activation).
+				await That(() => scope.Resolve<Flaky>()).Throws<InvalidOperationException>();
+
+				// A transient is built fresh per call, so the next resolve activates successfully.
+				scope.Resolve<Flaky>();
+				await That(Probe.Log).Contains("activated:Flaky");
+			}
+
+			// OnRelease ran only for the successfully activated transient - a failed activation queues no release.
+			await That(Probe.Log.Count(entry => entry == "released:Flaky")).IsEqualTo(1);
+
+			// Both constructed transients are disposed (the failed one is tracked before activation), so neither
+			// leaks.
+			await That(Probe.Log.Count(entry => entry == "disposed:Flaky")).IsEqualTo(2);
+		}
+	}
+
+	[Fact]
+	public async Task AsyncOnActivated_Throwing_RetriesAndReleasesOnlyTheActivatedInstance()
+	{
+		Probe.Reset();
+		using (ThrowingAsyncContainer.Root container = new())
+		{
+			// The first activation throws; the faulted task is evicted rather than caching a half-activated instance.
+			Func<Task> resolve = () => container.ResolveAsync<AsyncFlaky>(TestContext.Current.CancellationToken);
+			await That(resolve).Throws<InvalidOperationException>();
+
+			// A later resolve rebuilds and activates successfully.
+			AsyncFlaky rebuilt = await container.ResolveAsync<AsyncFlaky>(TestContext.Current.CancellationToken);
+			await That(rebuilt).IsNotNull();
+			await That(Probe.Log).Contains("activated:AsyncFlaky");
+		}
+
+		// OnRelease ran once - only for the successfully activated instance, not the one whose activation threw.
+		await That(Probe.Log.Count(entry => entry == "released:AsyncFlaky")).IsEqualTo(1);
+	}
+
+	[Fact]
+	public async Task AsyncHooks_ActivationRunsBeforeAsyncInitialization_AndReleaseRunsOnDisposal()
+	{
+		Probe.Reset();
+		using (AsyncHookContainer.Root container = new())
+		{
+			await container.ResolveAsync<AsyncService>(TestContext.Current.CancellationToken);
+
+			// OnActivated runs post-construction, before the instance drives its own asynchronous initialization.
+			await That(Probe.Log.IndexOf("activated:AsyncService") < Probe.Log.IndexOf("initialized:AsyncService")).IsTrue();
+		}
+
+		await That(Probe.Log).Contains("released:AsyncService");
+	}
+
+	[Fact]
+	public async Task DeferredMemberHooks_ActivationRunsAfterWiring_AndReleaseRunsOnDisposal()
+	{
+		Probe.Reset();
+		using (DeferredHookContainer.Root container = new())
+		{
+			Widget widget = container.Resolve<Widget>();
+
+			// The deferred member is wired and the activation hook ran once the instance was constructed (the
+			// caching resolver's deferred wiring-episode branch).
+			await That(widget.Gadget).IsNotNull();
+			await That(Probe.Log).Contains("activated:Widget");
+			await That(Probe.Log).DoesNotContain("released:Widget");
+		}
+
+		await That(Probe.Log).Contains("released:Widget");
+	}
+
 	public sealed class Alpha;
 
 	public sealed class Beta;
@@ -86,9 +195,49 @@ public partial class LifecycleHookTests
 		public void Dispose() => Probe.Log.Add("disposed:Tracked");
 	}
 
+	public sealed class Flaky : IDisposable
+	{
+		public Flaky() => Probe.Constructions++;
+
+		public void Dispose() => Probe.Log.Add("disposed:Flaky");
+	}
+
+	public sealed class AsyncService : IAsyncInitializable
+	{
+		public Task InitializeAsync(CancellationToken cancellationToken)
+		{
+			Probe.Log.Add("initialized:AsyncService");
+			return Task.CompletedTask;
+		}
+	}
+
+	public sealed class AsyncFlaky : IAsyncInitializable
+	{
+		public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+	}
+
+	public sealed class Gadget;
+
+	public sealed class Widget
+	{
+		[Inject(Deferred = true)]
+		public Gadget? Gadget { get; set; }
+	}
+
 	private static class Probe
 	{
 		public static readonly List<string> Log = new();
+
+		public static int Constructions;
+
+		public static int Activations;
+
+		public static void Reset()
+		{
+			Log.Clear();
+			Constructions = 0;
+			Activations = 0;
+		}
 	}
 
 	[Container]
@@ -122,5 +271,77 @@ public partial class LifecycleHookTests
 	public static partial class ScopedHookContainer
 	{
 		private static void Released(Alpha instance) => Probe.Log.Add("released:Alpha");
+	}
+
+	[Container]
+	[Singleton<Flaky>(OnActivated = nameof(Activate), OnRelease = nameof(Release))]
+	public static partial class ThrowingActivationContainer
+	{
+		private static void Activate(Flaky flaky)
+		{
+			// Fail only the first activation, so a later resolve can prove the container rebuilds rather than
+			// serving a cached, un-activated instance.
+			if (++Probe.Activations == 1)
+			{
+				throw new InvalidOperationException("activation failed");
+			}
+
+			Probe.Log.Add("activated:Flaky");
+		}
+
+		private static void Release(Flaky flaky) => Probe.Log.Add("released:Flaky");
+	}
+
+	[Container]
+	[Transient<Flaky>(OnActivated = nameof(Activate), OnRelease = nameof(Release))]
+	public static partial class ThrowingTransientContainer
+	{
+		private static void Activate(Flaky flaky)
+		{
+			if (++Probe.Activations == 1)
+			{
+				throw new InvalidOperationException("activation failed");
+			}
+
+			Probe.Log.Add("activated:Flaky");
+		}
+
+		private static void Release(Flaky flaky) => Probe.Log.Add("released:Flaky");
+	}
+
+	[Container]
+	[Singleton<AsyncFlaky>(OnActivated = nameof(Activate), OnRelease = nameof(Release))]
+	public static partial class ThrowingAsyncContainer
+	{
+		private static void Activate(AsyncFlaky instance)
+		{
+			if (++Probe.Activations == 1)
+			{
+				throw new InvalidOperationException("activation failed");
+			}
+
+			Probe.Log.Add("activated:AsyncFlaky");
+		}
+
+		private static void Release(AsyncFlaky instance) => Probe.Log.Add("released:AsyncFlaky");
+	}
+
+	[Container]
+	[Singleton<AsyncService>(OnActivated = nameof(Activated), OnRelease = nameof(Released))]
+	public static partial class AsyncHookContainer
+	{
+		private static void Activated(AsyncService service) => Probe.Log.Add("activated:AsyncService");
+
+		private static void Released(AsyncService service) => Probe.Log.Add("released:AsyncService");
+	}
+
+	[Container]
+	[Singleton<Gadget>]
+	[Singleton<Widget>(OnActivated = nameof(Activated), OnRelease = nameof(Released))]
+	public static partial class DeferredHookContainer
+	{
+		private static void Activated(Widget instance) => Probe.Log.Add("activated:Widget");
+
+		private static void Released(Widget instance) => Probe.Log.Add("released:Widget");
 	}
 }

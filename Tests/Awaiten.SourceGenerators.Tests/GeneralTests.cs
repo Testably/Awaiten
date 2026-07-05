@@ -1983,9 +1983,12 @@ public class GeneralTests
 
 		// A reverse-drained release queue is emitted, the activation hook runs post-construction, and the release
 		// hook is queued as an action that is drained (reverse creation order) before the disposables on teardown.
+		// The release captures the instance into a local (by value) rather than reading the cache field lazily, so
+		// a wiring-episode rollback that nulls the field cannot orphan it.
 		await That(source).Contains("global::System.Collections.Generic.List<global::System.Action>? __releases;");
 		await That(source).Contains("Started(__s.");
-		await That(source).Contains(".Add(() => Stopping(__s.");
+		await That(source).Contains("__released = __s.");
+		await That(source).Contains(".Add(() => Stopping(__released));");
 		await That(source).Contains("__toRelease[__index]();");
 	}
 }

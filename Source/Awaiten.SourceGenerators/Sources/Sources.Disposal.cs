@@ -63,14 +63,58 @@ internal static partial class Sources
 	// Queues the OnRelease hook for a freshly built instance on the owner's __releases list:
 	// (__s.__releases ??= new List<Action>()).Add(() => OnRelease(variable));. The queue is drained (reverse
 	// creation order) ahead of __disposables when the owner is disposed. The caller registers it only where the
-	// owner is known not disposed (a caching resolver's locked miss block, or a fresh resolver's !__raced branch),
-	// so a release is queued exactly when the instance is retained. Nothing when the instance names no hook.
+	// owner is known not disposed (a fresh resolver's !__raced branch), and only after OnActivated has run, so a
+	// release is queued exactly when a fully-activated instance is retained. The variable is a resolver local
+	// (`created`), captured by value, so a later teardown releases the instance it was queued for. Nothing when
+	// the instance names no hook. The cached (singleton/scoped) path uses EmitCachedReleaseRegistration instead,
+	// which captures the published field into a local for the same by-value guarantee under wiring rollback.
 	private static void EmitReleaseRegistration(StringBuilder builder, int depth, InstanceModel instance, string variable)
 	{
 		if (instance.OnRelease is not null)
 		{
 			Indent(builder, depth).Append("(__s.__releases ??= new global::System.Collections.Generic.List<global::System.Action>()).Add(() => ")
 				.Append(instance.OnRelease).Append('(').Append(variable).AppendLine("));");
+		}
+	}
+
+	// Runs OnActivated on the just-published cached instance, unpublishing the field and rethrowing when the hook
+	// throws: a caching resolver serves a non-null field from its lock-free fast path, so leaving a half-activated
+	// instance published would hand it out un-activated forever. Nulling the field makes a later resolve rebuild
+	// instead; the constructed instance stays registered for disposal (added by value before this), so it is still
+	// torn down rather than leaked. Used on the non-deferred cache-miss path, whose field assignment is not already
+	// inside a wiring episode's try; the deferred path runs the plain EmitActivation inside that try, which
+	// unpublishes and rolls the episode back on the same throw. Nothing when the instance names no activation hook.
+	private static void EmitCachedActivation(StringBuilder builder, int depth, InstanceModel instance, string field)
+	{
+		if (instance.OnActivated is null)
+		{
+			return;
+		}
+
+		Indent(builder, depth).AppendLine("try");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).Append(instance.OnActivated).Append("(__s.").Append(field).AppendLine(");");
+		Indent(builder, depth).AppendLine("}");
+		Indent(builder, depth).AppendLine("catch");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).Append("__s.").Append(field).AppendLine(" = null;");
+		Indent(builder, depth + 1).AppendLine("throw;");
+		Indent(builder, depth).AppendLine("}");
+	}
+
+	// Queues the OnRelease hook for a just-published cached (singleton/scoped) instance, capturing it into a local
+	// first: (var __released = __s.field; __releases.Add(() => OnRelease(__released));). The by-value capture
+	// mirrors the disposal registration (which adds __s.field by value) so a wiring-episode rollback - which nulls
+	// the field of every instance the failed episode published, including peers that had already queued a release -
+	// cannot orphan the closure onto a null-or-rebuilt field. Emitted after OnActivated has run, so only a
+	// successfully-activated instance is ever released. Nothing when the instance names no hook.
+	private static void EmitCachedReleaseRegistration(StringBuilder builder, int depth, InstanceModel instance, string field, string type)
+	{
+		if (instance.OnRelease is not null)
+		{
+			Indent(builder, depth).Append(type).Append(" __released = __s.").Append(field).AppendLine(";");
+			Indent(builder, depth).Append("(__s.__releases ??= new global::System.Collections.Generic.List<global::System.Action>()).Add(() => ")
+				.Append(instance.OnRelease).AppendLine("(__released));");
 		}
 	}
 
@@ -138,27 +182,25 @@ internal static partial class Sources
 	}
 
 	/// <summary>
-	///     Emits the teardown tracking for a freshly built <c>created</c> instance: under <c>lock (__gate)</c>,
+	///     Emits the disposal tracking for a freshly built <c>created</c> instance: under <c>lock (__gate)</c>,
 	///     re-check <c>__disposed</c> so one built during a concurrent dispose is torn down here rather than
-	///     leaked, otherwise add a disposable instance to <c>__disposables</c> and queue an <c>OnRelease</c> hook
-	///     on <c>__releases</c>. A factory output whose declared return type may hide a concrete disposable is
-	///     added behind a runtime test so only genuinely-disposable outputs are retained; with no release hook the
-	///     whole block is skipped when the runtime test fails, but a release must be queued regardless of
-	///     disposability, so a hooked instance always takes the lock and the runtime test then guards only the
-	///     <c>__disposables</c> add. When <paramref name="asyncDisposal" /> is set the tracked set and the
-	///     raced-teardown also cover <c>IAsyncDisposable</c>; the teardown runs outside the lock (an <c>await</c>
-	///     cannot occur inside one) and, in an <paramref name="asyncContext" /> (the async fresh resolver), awaits
-	///     <c>DisposeAsync</c>. Shared by the synchronous and asynchronous fresh resolvers.
+	///     leaked, otherwise add it to <c>__disposables</c>. A factory output whose declared return type may hide
+	///     a concrete disposable is added behind a runtime test so only genuinely-disposable outputs are retained,
+	///     and the whole lock is skipped when that test fails. When <paramref name="asyncDisposal" /> is set the
+	///     tracked set and the raced-teardown also cover <c>IAsyncDisposable</c>; the teardown runs outside the
+	///     lock (an <c>await</c> cannot occur inside one) and, in an <paramref name="asyncContext" /> (the async
+	///     fresh resolver), awaits <c>DisposeAsync</c>. Shared by the synchronous and asynchronous fresh resolvers.
+	///     Callers emit this before OnActivated (so a constructed disposable is torn down even if activation
+	///     throws), and register the OnRelease hook separately after activation succeeds
+	///     (<see cref="EmitFreshReleaseRegistration" />), so a failed activation queues no release.
 	/// </summary>
 	private static void EmitFreshDisposalTracking(StringBuilder builder, int depth, InstanceModel instance, bool asyncDisposal, bool asyncContext)
 	{
 		DisposalTracking disposal = DisposalOf(instance);
-		bool hasRelease = instance.HasReleaseHook;
 
-		// A runtime disposal check normally lets the whole lock be skipped for a realized output that turns out
-		// not to be disposable. A release must be queued regardless of disposability, so when one is present the
-		// lock is always taken and the runtime check instead guards only the disposables.Add inside it.
-		bool wrapInRuntimeCheck = disposal == DisposalTracking.Runtime && !hasRelease;
+		// A runtime disposal check lets the whole lock be skipped for a realized output that turns out not to be
+		// disposable (release, when present, takes its own lock after activation, so it no longer forces this one).
+		bool wrapInRuntimeCheck = disposal == DisposalTracking.Runtime;
 		if (wrapInRuntimeCheck)
 		{
 			string test = asyncDisposal
@@ -172,16 +214,15 @@ internal static partial class Sources
 		// Record whether the scope was already disposed under the lock, then tear down the raced instance outside
 		// it (so an async teardown can await, and user code never runs under the lock). The owner is the static
 		// resolver's `__s` parameter (the scope for a scoped/transient resolver, the root for a singleton one). A
-		// disposable is tracked for teardown and a release hook queued only when the owner is not disposed - a
-		// raced instance is torn down and never released (it was never activated either).
+		// raced instance is torn down here and the resolver throws before reaching OnActivated, so it is never
+		// activated (and so never released).
 		Indent(builder, depth).AppendLine("bool __raced;");
 		Indent(builder, depth).AppendLine("lock (__s.__gate)");
 		Indent(builder, depth).AppendLine("{");
 		Indent(builder, depth + 1).AppendLine("__raced = __s.__disposed;");
 		Indent(builder, depth + 1).AppendLine("if (!__raced)");
 		Indent(builder, depth + 1).AppendLine("{");
-		EmitFreshDisposablesAdd(builder, depth + 2, disposal, guardRuntime: disposal == DisposalTracking.Runtime && hasRelease, asyncDisposal);
-		EmitReleaseRegistration(builder, depth + 2, instance, "created");
+		Indent(builder, depth + 2).AppendLine("(__s.__disposables ??= new global::System.Collections.Generic.List<object>()).Add(created);");
 		Indent(builder, depth + 1).AppendLine("}");
 		Indent(builder, depth).AppendLine("}");
 		builder.AppendLine();
@@ -198,30 +239,25 @@ internal static partial class Sources
 		}
 	}
 
-	// Emits the disposables.Add(created) inside the fresh resolver's raced-safe lock: nothing for a
-	// non-disposable instance (only a release forced the lock), an unconditional add for a statically disposable
-	// one, and - when a release forced the lock to be taken unconditionally - a runtime-guarded add for a factory
-	// output that could hide a disposable behind a non-disposable return type.
-	private static void EmitFreshDisposablesAdd(StringBuilder builder, int depth, DisposalTracking disposal, bool guardRuntime, bool asyncDisposal)
+	// Queues the OnRelease hook for a freshly built fresh-resolver instance after OnActivated has run, under a
+	// raced-safe lock: the instance is captured by value (`created`), and the release is added only when the owner
+	// is not disposed. When the owner was disposed since construction - a rare resolve-during-dispose race - the
+	// release is skipped (a disposable instance was already registered before activation, so that concurrent
+	// dispose tears it down; a non-disposable one simply is not released). Nothing when the instance names no hook.
+	private static void EmitFreshReleaseRegistration(StringBuilder builder, int depth, InstanceModel instance)
 	{
-		if (disposal == DisposalTracking.None)
+		if (instance.OnRelease is null)
 		{
 			return;
 		}
 
-		if (guardRuntime)
-		{
-			string test = asyncDisposal
-				? "created is global::System.IDisposable or global::System.IAsyncDisposable"
-				: "created is global::System.IDisposable";
-			Indent(builder, depth).Append("if (").Append(test).AppendLine(")");
-			Indent(builder, depth).AppendLine("{");
-			Indent(builder, depth + 1).AppendLine("(__s.__disposables ??= new global::System.Collections.Generic.List<object>()).Add(created);");
-			Indent(builder, depth).AppendLine("}");
-			return;
-		}
-
-		Indent(builder, depth).AppendLine("(__s.__disposables ??= new global::System.Collections.Generic.List<object>()).Add(created);");
+		Indent(builder, depth).AppendLine("lock (__s.__gate)");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).AppendLine("if (!__s.__disposed)");
+		Indent(builder, depth + 1).AppendLine("{");
+		EmitReleaseRegistration(builder, depth + 2, instance, "created");
+		Indent(builder, depth + 1).AppendLine("}");
+		Indent(builder, depth).AppendLine("}");
 	}
 
 	/// <summary>
@@ -262,9 +298,9 @@ internal static partial class Sources
 	/// </summary>
 	private static void EmitAsyncDisposableRegistration(StringBuilder builder, int depth, InstanceModel instance, bool asyncDisposal)
 	{
-		// Nothing to track when the instance is neither disposable nor releasable; otherwise the raced-safe lock
-		// registers its disposal and/or queues its release exactly as on the synchronous fresh path.
-		if (DisposalOf(instance) == DisposalTracking.None && !instance.HasReleaseHook)
+		// Only disposal is registered here (before activation); the release hook is queued after activation runs,
+		// via EmitFreshReleaseRegistration, exactly as on the synchronous fresh path.
+		if (DisposalOf(instance) == DisposalTracking.None)
 		{
 			return;
 		}

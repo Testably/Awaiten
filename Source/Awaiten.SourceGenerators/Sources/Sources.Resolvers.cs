@@ -157,15 +157,23 @@ internal static partial class Sources
 		{
 			Indent(builder, depth + 1).Append(type).Append(" created = ").Append(construction).AppendLine(";");
 			emitDeferred?.Invoke(depth + 1);
-			if (tracks)
+			// Register disposal before OnActivated, so a constructed disposable is torn down even if activation
+			// throws (rather than leaked). For a disposable instance this raced-safe block also throws on a
+			// concurrent dispose, so a raced instance is torn down and never activated.
+			if (resolver.Disposal != DisposalTracking.None)
 			{
 				EmitFreshDisposalTracking(builder, depth + 1, instance, asyncDisposal, asyncContext: false);
 				builder.AppendLine();
 			}
 
-			// OnActivated runs only past the disposal/release registration, which throws on a race, so a transient
-			// torn down during a concurrent dispose is never activated.
 			EmitActivation(builder, depth + 1, instance, "created");
+			// Queue OnRelease only after OnActivated has run, so a failed activation queues no release; the
+			// raced-safe block skips the queue when the owner was disposed since construction.
+			if (instance.HasReleaseHook)
+			{
+				EmitFreshReleaseRegistration(builder, depth + 1, instance);
+			}
+
 			Indent(builder, depth + 1).AppendLine("return created;");
 		}
 		else
@@ -573,8 +581,12 @@ internal static partial class Sources
 		Indent(builder, depth + 2).Append(type).Append(" created = ").Append(construction).AppendLine(";");
 		emitDeferred?.Invoke(depth + 2);
 		EmitAsyncDisposableRegistration(builder, depth + 2, instance, context.AsyncDisposal);
-		// OnActivated runs post-construction, before the instance's own asynchronous initialization.
+		// OnActivated runs post-construction, before the instance's own asynchronous initialization; OnRelease is
+		// queued only after activation succeeds, so a faulted activation (whose task is evicted and retried) leaves
+		// no release behind. A faulted initialization is evicted and retried too, but the instance was activated, so
+		// its release is queued here to keep the activation/release counts balanced (as its disposal is).
 		EmitActivation(builder, depth + 2, instance, "created");
+		EmitFreshReleaseRegistration(builder, depth + 2, instance);
 		EmitAsyncInitialization(builder, depth + 2, instance, "created");
 		Indent(builder, depth + 2).AppendLine("return created;");
 		Indent(builder, depth + 1).AppendLine("}");
@@ -608,8 +620,10 @@ internal static partial class Sources
 		Indent(builder, depth + 1).Append(type).Append(" created = ").Append(construction).AppendLine(";");
 		EmitAsyncDisposableRegistration(builder, depth + 1, instance, context.AsyncDisposal);
 		emitDeferred?.Invoke(depth + 1);
-		// OnActivated runs post-construction, before the instance's own asynchronous initialization.
+		// OnActivated runs post-construction, before the instance's own asynchronous initialization; OnRelease is
+		// queued only after activation succeeds, so a throwing activation queues no release.
 		EmitActivation(builder, depth + 1, instance, "created");
+		EmitFreshReleaseRegistration(builder, depth + 1, instance);
 		EmitAsyncInitialization(builder, depth + 1, instance, "created");
 		Indent(builder, depth + 1).AppendLine("return created;");
 		Indent(builder, depth).AppendLine("}");
@@ -770,6 +784,7 @@ internal static partial class Sources
 	/// </summary>
 	private static void EmitCachingResolver(StringBuilder builder, int depth, in CachingResolver resolver, InstanceModel instance, bool asyncDisposal, Action<int>? emitDeferred = null)
 	{
+		string type = resolver.Type;
 		string field = resolver.Field;
 		string construction = resolver.Construction;
 		DisposalTracking disposal = resolver.Disposal;
@@ -810,11 +825,12 @@ internal static partial class Sources
 		{
 			Indent(builder, depth + 3).Append("__s.").Append(field).Append(" = ").Append(construction).AppendLine(";");
 			EmitCachedDisposalRegistration(builder, depth + 3, field, disposal, asyncDisposal);
-			// Queue OnRelease and run OnActivated once, under the lock that guards this cache-miss (the owner is
-			// known not disposed here, so no separate raced check is needed). The cached field is the retained
-			// instance, read back at release time.
-			EmitReleaseRegistration(builder, depth + 3, instance, "__s." + field);
-			EmitActivation(builder, depth + 3, instance, "__s." + field);
+			// Run OnActivated (unpublishing the field and rethrowing if it throws, so a failed activation is not
+			// served un-activated from the fast path), then queue OnRelease - after activation, so only a
+			// successfully-activated instance is released - all under the lock that guards this cache-miss (the
+			// owner is known not disposed here, so no separate raced check is needed).
+			EmitCachedActivation(builder, depth + 3, instance, field);
+			EmitCachedReleaseRegistration(builder, depth + 3, instance, field, type);
 		}
 		else
 		{
@@ -829,10 +845,12 @@ internal static partial class Sources
 			Indent(builder, depth + 4).Append("__s.").Append(field).Append(" = ").Append(construction).AppendLine(";");
 			emitDeferred?.Invoke(depth + 4);
 			EmitCachedDisposalRegistration(builder, depth + 4, field, disposal, asyncDisposal);
-			// Queue OnRelease and run OnActivated inside the wiring episode's try, so a throwing hook rolls the
-			// episode back (unpublishing the field) rather than leaving a published, half-activated instance.
-			EmitReleaseRegistration(builder, depth + 4, instance, "__s." + field);
+			// Run OnActivated then queue OnRelease inside the wiring episode's try: a throwing hook rolls the
+			// episode back (unpublishing the field) rather than leaving a published, half-activated instance, and
+			// the release is queued only after activation succeeds. The release captures the instance by value, so
+			// a rollback triggered by a later peer in the same episode cannot orphan it onto the nulled field.
 			EmitActivation(builder, depth + 4, instance, "__s." + field);
+			EmitCachedReleaseRegistration(builder, depth + 4, instance, field, type);
 			Indent(builder, depth + 3).AppendLine("}");
 			Indent(builder, depth + 3).AppendLine("catch");
 			Indent(builder, depth + 3).AppendLine("{");

@@ -29,6 +29,16 @@ partial class AwaitenGenerator
 		if (info.Production == ProductionKind.Instance)
 		{
 			ValidateInstanceMember(containerSymbol, info, compilation, diagnostics);
+			// AWT165: a lifecycle hook on a pre-built Instance is a silent no-op (the caller, not the container,
+			// owns and tears down the instance), so reject it rather than construct with hooks that never run.
+			if (info.OnActivated is not null || info.OnRelease is not null)
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.LifecycleHookOnInstance,
+					info.Location,
+					new EquatableArray<string>([Display(info.OwningServiceOrImpl),])));
+			}
+
 			return new InstanceModel(
 				info.ImplementationType,
 				info.Symbol.Name,
