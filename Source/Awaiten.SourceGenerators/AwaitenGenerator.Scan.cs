@@ -91,7 +91,7 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     Registers one scan match per <c>ScanAs</c>: as its own concrete type and under each contract interface.
 	///     An interfaces-only scan that found no contract to register under reports AWT139 (usual cause: a base-type
-	///     marker). <c>SelfAndImplementedInterfaces</c> is exempt, since its self registration still covers the type.
+	///     marker). <c>SelfAndMarker</c> is exempt, since its self registration still covers the type.
 	/// </summary>
 	private static void RegisterScanMatch(
 		INamedTypeSymbol type,
@@ -118,7 +118,7 @@ partial class AwaitenGenerator
 			result.Add(ScanRegistration(contract.ToDisplayString(FullyQualified), typeName, type, contract, match));
 		}
 
-		if (contracts.Count == 0 && match.Exposure == ScanExposure.ImplementedInterfaces)
+		if (contracts.Count == 0 && match.Exposure == ScanExposure.Marker)
 		{
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.ScanNoImplementedInterfaces,
@@ -152,9 +152,9 @@ partial class AwaitenGenerator
 	/// </summary>
 	private sealed record ScanMatch(ScanExposure Exposure, Lifetime Lifetime, Location? Location, bool SkipUnconstructable)
 	{
-		public bool RegisterSelf => Exposure is ScanExposure.Self or ScanExposure.SelfAndImplementedInterfaces;
+		public bool RegisterSelf => Exposure is ScanExposure.Self or ScanExposure.SelfAndMarker;
 
-		public bool RegisterInterfaces => Exposure is ScanExposure.ImplementedInterfaces or ScanExposure.SelfAndImplementedInterfaces;
+		public bool RegisterInterfaces => Exposure is ScanExposure.Marker or ScanExposure.SelfAndMarker;
 	}
 
 	/// <summary>

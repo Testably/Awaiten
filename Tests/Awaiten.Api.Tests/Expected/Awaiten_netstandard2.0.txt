@@ -169,8 +169,8 @@ namespace Awaiten
     public enum ScanAs
     {
         Self = 0,
-        ImplementedInterfaces = 1,
-        SelfAndImplementedInterfaces = 2,
+        Marker = 1,
+        SelfAndMarker = 2,
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
     public sealed class ScanAttribute : System.Attribute

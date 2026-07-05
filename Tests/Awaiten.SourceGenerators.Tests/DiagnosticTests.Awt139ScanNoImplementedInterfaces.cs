@@ -20,7 +20,7 @@ public partial class DiagnosticTests
 			                                       public sealed class RealHandler : HandlerBase { }
 
 			                                       [Container]
-			                                       [Scan(typeof(HandlerBase), As = ScanAs.ImplementedInterfaces)]
+			                                       [Scan(typeof(HandlerBase), As = ScanAs.Marker)]
 			                                       public static partial class MyContainer
 			                                       {
 			                                       }
@@ -32,7 +32,7 @@ public partial class DiagnosticTests
 		}
 
 		[Fact]
-		public async Task DoesNotReportForSelfAndImplementedInterfaces()
+		public async Task DoesNotReportForSelfAndMarker()
 		{
 			GeneratorResult result = Generator.Run("""
 			                                       using Awaiten;
@@ -43,14 +43,14 @@ public partial class DiagnosticTests
 			                                       public sealed class RealHandler : HandlerBase { }
 
 			                                       [Container]
-			                                       [Scan(typeof(HandlerBase), As = ScanAs.SelfAndImplementedInterfaces)]
+			                                       [Scan(typeof(HandlerBase), As = ScanAs.SelfAndMarker)]
 			                                       public static partial class MyContainer
 			                                       {
 			                                       }
 			                                       """);
 
 			await That(result.Diagnostics.Any(d => d.Contains("AWT139"))).IsFalse()
-				.Because("SelfAndImplementedInterfaces still registers the match as its own concrete type");
+				.Because("SelfAndMarker still registers the match as its own concrete type");
 		}
 
 		[Fact]
@@ -65,7 +65,7 @@ public partial class DiagnosticTests
 			                                       public sealed class RealHandler : IHandler { }
 
 			                                       [Container]
-			                                       [Scan(typeof(IHandler), As = ScanAs.ImplementedInterfaces)]
+			                                       [Scan(typeof(IHandler), As = ScanAs.Marker)]
 			                                       public static partial class MyContainer
 			                                       {
 			                                       }

@@ -6,7 +6,7 @@ namespace Awaiten.Tests;
 
 /// <summary>
 ///     Runtime behavior of assembly scanning: <c>[Scan]</c> registers every concrete type assignable to the
-///     marker with the chosen lifetime (as itself and/or under its implemented interfaces), and an explicit
+///     marker with the chosen lifetime (as itself and/or under the scanned marker interface), and an explicit
 ///     registration of the same type takes precedence over the scan for single resolution.
 /// </summary>
 public partial class ScanTests
@@ -36,7 +36,7 @@ public partial class ScanTests
 	}
 
 	[Fact]
-	public async Task ScanAsImplementedInterfaces_MakesMatchesACollectionOfTheMarker()
+	public async Task ScanAsMarker_MakesMatchesACollectionOfTheMarker()
 	{
 		using InterfaceScanContainer.Root container = new();
 
@@ -48,7 +48,7 @@ public partial class ScanTests
 	}
 
 	[Fact]
-	public async Task ScanAsImplementedInterfaces_RegistersUnderTheInterfaceNotTheConcreteType()
+	public async Task ScanAsMarker_RegistersUnderTheInterfaceNotTheConcreteType()
 	{
 		using InterfaceScanContainer.Root container = new();
 
@@ -58,7 +58,7 @@ public partial class ScanTests
 	}
 
 	[Fact]
-	public async Task ScanAsSelfAndImplementedInterfaces_RegistersBoth()
+	public async Task ScanAsSelfAndMarker_RegistersBoth()
 	{
 		using SelfAndInterfaceScanContainer.Root container = new();
 
@@ -90,7 +90,7 @@ public partial class ScanTests
 	}
 
 	[Container]
-	[Scan(typeof(INotification), As = ScanAs.ImplementedInterfaces, Lifetime = AwaitenLifetime.Singleton)]
+	[Scan(typeof(INotification), As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton)]
 	[Singleton<NotificationHub>]
 	public static partial class InterfaceScanContainer;
 
@@ -99,7 +99,7 @@ public partial class ScanTests
 	public sealed class SalesReport : IReport;
 
 	[Container]
-	[Scan(typeof(IReport), As = ScanAs.SelfAndImplementedInterfaces, Lifetime = AwaitenLifetime.Singleton)]
+	[Scan(typeof(IReport), As = ScanAs.SelfAndMarker, Lifetime = AwaitenLifetime.Singleton)]
 	public static partial class SelfAndInterfaceScanContainer;
 
 	[Fact]
@@ -114,7 +114,7 @@ public partial class ScanTests
 	}
 
 	[Container]
-	[Scan<IReport>(As = ScanAs.SelfAndImplementedInterfaces, Lifetime = AwaitenLifetime.Singleton)]
+	[Scan<IReport>(As = ScanAs.SelfAndMarker, Lifetime = AwaitenLifetime.Singleton)]
 	public static partial class GenericScanContainer;
 
 	[Fact]
@@ -130,7 +130,7 @@ public partial class ScanTests
 	}
 
 	[Fact]
-	public async Task ScanInAssembliesOf_AsImplementedInterfaces_MakesMatchesACollectionOfTheMarker()
+	public async Task ScanInAssembliesOf_AsMarker_MakesMatchesACollectionOfTheMarker()
 	{
 		using CrossAssemblyInterfaceScanContainer.Root container = new();
 
@@ -191,7 +191,7 @@ public partial class ScanTests
 	public static partial class CrossAssemblyScanContainer;
 
 	[Container]
-	[Scan(typeof(ICrossAssemblyPlugin), InAssembliesOf = new[] { typeof(ICrossAssemblyPlugin) }, As = ScanAs.ImplementedInterfaces, Lifetime = AwaitenLifetime.Singleton)]
+	[Scan(typeof(ICrossAssemblyPlugin), InAssembliesOf = new[] { typeof(ICrossAssemblyPlugin) }, As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton)]
 	[Singleton<CrossAssemblyHub>]
 	public static partial class CrossAssemblyInterfaceScanContainer;
 
@@ -279,7 +279,7 @@ public partial class ScanTests
 	public sealed class DualView : IView<ViewModelOne>, IView<ViewModelTwo>;
 
 	[Container]
-	[Scan(typeof(IView<>), As = ScanAs.ImplementedInterfaces, Lifetime = AwaitenLifetime.Singleton)]
+	[Scan(typeof(IView<>), As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton)]
 	[Transient<ViewTwo, IView<ViewModelTwo>>]
 	public static partial class ClosedTypesOfScanContainer;
 
@@ -288,6 +288,6 @@ public partial class ScanTests
 	public static partial class ClosedTypesOfSelfScanContainer;
 
 	[Container]
-	[Scan(typeof(ICrossAssemblyView<>), InAssembliesOf = new[] { typeof(ICrossAssemblyView<>) }, As = ScanAs.ImplementedInterfaces, Lifetime = AwaitenLifetime.Singleton)]
+	[Scan(typeof(ICrossAssemblyView<>), InAssembliesOf = new[] { typeof(ICrossAssemblyView<>) }, As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton)]
 	public static partial class CrossAssemblyClosedTypesOfScanContainer;
 }

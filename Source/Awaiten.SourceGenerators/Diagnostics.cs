@@ -550,15 +550,14 @@ internal static class Diagnostics
 		isEnabledByDefault: true);
 
 	/// <summary>
-	///     A <c>[Scan(As = ScanAs.ImplementedInterfaces)]</c> matched a concrete type that implements no
-	///     interface assignable to the scanned marker, so the match contributes no registration, typically a
-	///     base-class marker. Use a marker interface, or <c>ScanAs.SelfAndImplementedInterfaces</c> to keep the
-	///     self registration.
+	///     A <c>[Scan(As = ScanAs.Marker)]</c> matched a concrete type that implements no interface assignable to
+	///     the scanned marker, so the match contributes no registration, typically a base-class marker. Use a
+	///     marker interface, or <c>ScanAs.SelfAndMarker</c> to keep the self registration.
 	/// </summary>
 	public static readonly DiagnosticDescriptor ScanNoImplementedInterfaces = new(
 		"AWT139",
 		"Assembly scan matched a type with no implemented interfaces",
-		"'{0}' matched the scan but implements no interface assignable to '{1}', so it is not registered; scan a marker interface or use ScanAs.SelfAndImplementedInterfaces",
+		"'{0}' matched the scan but implements no interface assignable to '{1}', so it is not registered; scan a marker interface or use ScanAs.SelfAndMarker",
 		"Awaiten",
 		DiagnosticSeverity.Warning,
 		isEnabledByDefault: true);
