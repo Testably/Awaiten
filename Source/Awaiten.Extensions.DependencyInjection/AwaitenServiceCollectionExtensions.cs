@@ -79,6 +79,14 @@ public static class AwaitenServiceCollectionExtensions
 
 	// The projection core, taking an existing root so AwaitenServiceProviderFactory can project the root it
 	// handed to the host's ConfigureContainer callbacks instead of a fresh one.
+#if NET
+	[System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("AOT", "IL3050",
+		Justification =
+			"Reached only for RequiresAsync registrations, whose service types are reference types (DI service " +
+			"types). Task<T> over a reference type binds to NativeAOT's shared canonical instantiation, so " +
+			"Task<>.MakeGenericType does not generate code at runtime. Async value-type service types are the one " +
+			"shape not supported under native AOT.")]
+#endif
 	internal static IServiceCollection AddGeneratedContainer<TRoot>(IServiceCollection services, TRoot root)
 		where TRoot : class, IAwaitenContainerMetadata, new()
 	{
