@@ -212,6 +212,7 @@ namespace Awaiten
         public string? OnActivated { get; set; }
         public string? OnRelease { get; set; }
         public bool TryAdd { get; set; }
+        public System.Type? WhenInjectedInto { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
     public sealed class ScopedAttribute<TImplementation, TService> : System.Attribute
@@ -224,6 +225,7 @@ namespace Awaiten
         public string? OnActivated { get; set; }
         public string? OnRelease { get; set; }
         public bool TryAdd { get; set; }
+        public System.Type? WhenInjectedInto { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
     public sealed class SingletonAttribute : System.Attribute
@@ -247,6 +249,7 @@ namespace Awaiten
         public string? OnActivated { get; set; }
         public string? OnRelease { get; set; }
         public bool TryAdd { get; set; }
+        public System.Type? WhenInjectedInto { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
     public sealed class SingletonAttribute<TImplementation, TService> : System.Attribute
@@ -261,6 +264,7 @@ namespace Awaiten
         public string? OnActivated { get; set; }
         public string? OnRelease { get; set; }
         public bool TryAdd { get; set; }
+        public System.Type? WhenInjectedInto { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
     public sealed class TransientAttribute : System.Attribute
@@ -282,6 +286,7 @@ namespace Awaiten
         public string? OnActivated { get; set; }
         public string? OnRelease { get; set; }
         public bool TryAdd { get; set; }
+        public System.Type? WhenInjectedInto { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
     public sealed class TransientAttribute<TImplementation, TService> : System.Attribute
@@ -294,5 +299,6 @@ namespace Awaiten
         public string? OnActivated { get; set; }
         public string? OnRelease { get; set; }
         public bool TryAdd { get; set; }
+        public System.Type? WhenInjectedInto { get; set; }
     }
 }

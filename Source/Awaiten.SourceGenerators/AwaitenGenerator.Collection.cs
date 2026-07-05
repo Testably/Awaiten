@@ -120,7 +120,16 @@ partial class AwaitenGenerator
 			bool isDefault = NamedFlag(attribute, "Default");
 			bool weak = isDefault || NamedFlag(attribute, "TryAdd");
 
+			string? key = NamedArgument(attribute, "Key");
+
+			// A [Singleton<…>(WhenInjectedInto = typeof(Consumer))] contextual binding; absent (null) on the
+			// open-generic Type-ctor form, which exposes no such property. Resolved to the consumer's context key.
+			string? whenInjectedInto = NamedTypeArgument(attribute, "WhenInjectedInto");
+
 			Location? location = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? fallbackLocation;
+
+			ReportContextualBindingWithKey(key, whenInjectedInto, implementation, location, diagnostics);
+
 			result.Add(new RawRegistration(
 				service.ToDisplayString(FullyQualified),
 				implementation.ToDisplayString(FullyQualified),
@@ -130,7 +139,7 @@ partial class AwaitenGenerator
 				production,
 				productionMember,
 				conflictingDirectives,
-				NamedArgument(attribute, "Key"),
+				key,
 				service as INamedTypeSymbol,
 				Weak: weak,
 				IsDefault: isDefault,
@@ -139,8 +148,32 @@ partial class AwaitenGenerator
 				// this reads false there. BuildInstance honors it only for a singleton lifetime.
 				Eager: NamedFlag(attribute, "Eager"),
 				OnActivated: NamedArgument(attribute, "OnActivated"),
-				OnRelease: NamedArgument(attribute, "OnRelease")));
+				OnRelease: NamedArgument(attribute, "OnRelease"),
+				WhenInjectedInto: whenInjectedInto));
 		}
+	}
+
+	/// <summary>
+	///     AWT168: a contextual binding is stored under a synthetic per-consumer key (see <c>ContextKey</c>), which
+	///     overrides an explicit <c>Key</c> entirely, so the two together silently drop the <c>Key</c>. Report it
+	///     rather than let a <c>[FromKey]</c> the author expects to select this registration quietly never match.
+	/// </summary>
+	private static void ReportContextualBindingWithKey(
+		string? key,
+		string? whenInjectedInto,
+		ITypeSymbol implementation,
+		Location? location,
+		List<DiagnosticInfo> diagnostics)
+	{
+		if (key is null || whenInjectedInto is null)
+		{
+			return;
+		}
+
+		diagnostics.Add(new DiagnosticInfo(
+			Diagnostics.ContextualBindingWithKey,
+			LocationInfo.From(location),
+			new EquatableArray<string>([Display(implementation.ToDisplayString(FullyQualified)),])));
 	}
 
 	/// <summary>

@@ -977,4 +977,46 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A <c>WhenInjectedInto</c> contextual binding never applies, because the named consumer type has no
+	///     dependency it can redirect: the binding targets an unkeyed direct constructor parameter or
+	///     <c>[Inject]</c> property only, so a <c>[FromKey]</c> dependency, one deferred behind <c>Func</c>/<c>Lazy</c>,
+	///     or a collection does not qualify (nor does a consumer that is not registered, or does not take the service
+	///     at all). The binding is dead.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ContextualBindingNeverApplies = new(
+		"AWT167",
+		"Contextual binding never applies",
+		"The registration of '{0}' for '{1}' is never applied: '{1}' has no unkeyed direct '{0}' constructor parameter or [Inject] property to redirect (a [FromKey] dependency, one deferred behind Func/Lazy, or a collection does not qualify)",
+		"Awaiten",
+		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A registration sets both <c>WhenInjectedInto</c> and <c>Key</c>. A contextual binding is stored under a
+	///     synthetic per-consumer key and reached only through that consumer's parameters, so the explicit
+	///     <c>Key</c> is silently dropped: the registration could never be selected by a <c>[FromKey]</c>. The two
+	///     claim the same resolution slot, so only one can apply.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ContextualBindingWithKey = new(
+		"AWT168",
+		"Contextual binding with a key",
+		"The registration of '{0}' sets both WhenInjectedInto and Key; a contextual binding is reached only through its consumer, so the Key is silently dropped. Remove one of the two.",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     Two different implementations set <c>WhenInjectedInto</c> for the same service and consumer, so both
+	///     claim the one contextual slot for that consumer. Coalescing keeps the first, so the later binding is
+	///     silently dropped; the contextual analogue of <see cref="DuplicateKey">AWT117</see>.
+	/// </summary>
+	public static readonly DiagnosticDescriptor DuplicateContextualBinding = new(
+		"AWT169",
+		"Duplicate contextual binding",
+		"'{0}' has more than one contextual binding for '{1}'; the contextual resolution into '{1}' would be ambiguous",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

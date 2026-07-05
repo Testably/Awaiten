@@ -47,7 +47,7 @@ partial class AwaitenGenerator
 		List<MemberModel> members = new();
 		if (info.Production == ProductionKind.Constructor)
 		{
-			DiscoverInjectedMembers(info, containerSymbol, serviceToImpl, context.ConstraintRejected, members, diagnostics);
+			DiscoverInjectedMembers(info, containerSymbol, serviceToImpl, context.ConstraintRejected, context.ConsumedConditionals, members, diagnostics);
 		}
 
 		// Disposability follows the owned type: a factory's produced type (for an async factory the awaited T,

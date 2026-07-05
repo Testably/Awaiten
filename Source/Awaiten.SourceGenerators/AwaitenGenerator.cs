@@ -162,6 +162,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		HashSet<string> ConstraintRejected,
 		bool ImportServices,
 		VarianceState Variance,
+		HashSet<ServiceKey> ConsumedConditionals,
 		List<DiagnosticInfo> Diagnostics);
 
 	/// <summary>
@@ -243,7 +244,12 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		// consumer parameters, drained after the instance loop below.
 		VarianceState variance = new(varianceCandidates, compilation);
 
-		BuildContext buildContext = new(containerSymbol, compilation, serviceToImpl, decoratorInner, wellKnown, constraintRejected, importServices, variance, diagnostics);
+		// Contextual (WhenInjectedInto) bindings recorded up front, plus the set of context keys a consumer
+		// dependency actually redirects to. A binding whose key stays absent is reported (AWT167) below.
+		List<ConditionalRegistration> conditionals = CollectConditionalRegistrations(raw);
+		HashSet<ServiceKey> consumedConditionals = new();
+
+		BuildContext buildContext = new(containerSymbol, compilation, serviceToImpl, decoratorInner, wellKnown, constraintRejected, importServices, variance, consumedConditionals, diagnostics);
 
 		// Validate each implementation, select its constructor and build the instance.
 		foreach (ImplInfo info in implOrder)
@@ -257,6 +263,10 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 				instanceLocations.Add(info.Location);
 			}
 		}
+
+		// AWT167: a contextual registration whose named consumer never redirected to its context key (no unkeyed
+		// direct dependency on the service) is never reached, so report it now that every instance is built.
+		ReportUnappliedContextualBindings(conditionals, consumedConditionals, diagnostics);
 
 		// Variance for collections (Part C): union every variance-compatible registration's members into each
 		// requested closed-generic collection. Before the parameterized prune and edge building so the unioned

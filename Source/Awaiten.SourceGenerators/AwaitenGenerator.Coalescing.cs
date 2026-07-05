@@ -77,7 +77,10 @@ partial class AwaitenGenerator
 		{
 			// Record an unkeyed closed-generic-interface registration as a variance candidate, so a
 			// differently-closed consumer request can be redirected to it (even when it loses the resolution slot).
+			// A contextual (WhenInjectedInto) registration is excluded: it must reach only its named consumer, not
+			// stand in for every differently-closed request of the service.
 			if (registration.Key is null
+			    && registration.WhenInjectedInto is null
 			    && registration.ServiceSymbol is { IsGenericType: true, TypeKind: TypeKind.Interface, } variantService
 			    && HasDeclaredVariance(variantService)
 			    && varianceSeen.Add(registration.ServiceType))
@@ -99,7 +102,10 @@ partial class AwaitenGenerator
 			// compares the current registration against.
 			implInfos.TryGetValue(registration.ImplementationType, out ImplInfo? info);
 
-			ServiceKey serviceKey = new(registration.ServiceType, registration.Key);
+			// A WhenInjectedInto registration is stored under a synthetic context key, reached only from its named
+			// consumer's dependencies. Its real Key stays null, so it never joins a keyed collection (AddKeyedMember).
+			string? effectiveKey = registration.WhenInjectedInto is { } consumer ? ContextKey(consumer) : registration.Key;
+			ServiceKey serviceKey = new(registration.ServiceType, effectiveKey);
 			bool alreadyChosen = winners.TryGetValue(serviceKey, out RawRegistration? winner);
 
 			// A lifetime (AWT107) or production (AWT111) conflict is a property of the implementation, so it is
@@ -151,6 +157,7 @@ partial class AwaitenGenerator
 			if (alreadyChosen)
 			{
 				ReportDuplicateKey(registration, winner!.ImplementationType, diagnostics);
+				ReportDuplicateContextualBinding(registration, winner, diagnostics);
 				ReportCrossModuleDuplicate(registration, winner, diagnostics);
 				continue;
 			}
@@ -185,6 +192,63 @@ partial class AwaitenGenerator
 			}
 
 			return info;
+		}
+	}
+
+	/// <summary>
+	///     The synthetic resolution key a contextual (WhenInjectedInto) registration is stored under: unique per
+	///     consumer type and prefixed so it is very unlikely to collide with a user <c>Key</c>. Reached only from
+	///     that consumer's dependencies, so the contextual implementation never surfaces on the public dispatch.
+	/// </summary>
+	private const string ContextKeyPrefix = "__ctx:";
+
+	private static string ContextKey(string consumerType) => ContextKeyPrefix + consumerType;
+
+	/// <summary>
+	///     A contextual (WhenInjectedInto) registration recorded for AWT167: its context key, the service and
+	///     consumer types (for the message) and the registration location. One whose key no consumer dependency
+	///     consumed never applied and is reported.
+	/// </summary>
+	private sealed record ConditionalRegistration(ServiceKey Key, string Service, string Consumer, LocationInfo? Location);
+
+	/// <summary>
+	///     Every contextual (WhenInjectedInto) registration paired with its context key, so <see cref="BuildGraph" />
+	///     can report AWT167 for any whose named consumer never consumes it.
+	/// </summary>
+	private static List<ConditionalRegistration> CollectConditionalRegistrations(List<RawRegistration> raw)
+	{
+		List<ConditionalRegistration> conditionals = new();
+		foreach (RawRegistration registration in raw)
+		{
+			if (registration.WhenInjectedInto is { } consumer)
+			{
+				conditionals.Add(new ConditionalRegistration(
+					new ServiceKey(registration.ServiceType, ContextKey(consumer)),
+					registration.ServiceType,
+					consumer,
+					LocationInfo.From(registration.Location)));
+			}
+		}
+
+		return conditionals;
+	}
+
+	/// <summary>
+	///     AWT167: reports every contextual (WhenInjectedInto) registration whose named consumer never redirected to
+	///     its context key, so it was never reached. Called once every instance is built, so a consumer's every
+	///     dependency has had the chance to consume the key.
+	/// </summary>
+	private static void ReportUnappliedContextualBindings(
+		List<ConditionalRegistration> conditionals,
+		HashSet<ServiceKey> consumedConditionals,
+		List<DiagnosticInfo> diagnostics)
+	{
+		foreach (ConditionalRegistration conditional in conditionals.Where(c => !consumedConditionals.Contains(c.Key)))
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.ContextualBindingNeverApplies,
+				conditional.Location,
+				new EquatableArray<string>([Display(conditional.Service), Display(conditional.Consumer),])));
 		}
 	}
 
@@ -430,6 +494,24 @@ partial class AwaitenGenerator
 			Diagnostics.DuplicateKey,
 			LocationInfo.From(registration.Location),
 			new EquatableArray<string>([Display(registration.ServiceType), registration.Key,])));
+	}
+
+	/// <summary>
+	///     AWT169: a second implementation targets the same service and consumer via <c>WhenInjectedInto</c>, so
+	///     which one the consumer resolves would be ambiguous. Both share the synthetic context key, so this is
+	///     reached from the <c>alreadyChosen</c> branch; the same implementation re-registered is left silent.
+	/// </summary>
+	private static void ReportDuplicateContextualBinding(RawRegistration registration, RawRegistration winner, List<DiagnosticInfo> diagnostics)
+	{
+		if (registration.WhenInjectedInto is not { } consumer || winner.ImplementationType == registration.ImplementationType)
+		{
+			return;
+		}
+
+		diagnostics.Add(new DiagnosticInfo(
+			Diagnostics.DuplicateContextualBinding,
+			LocationInfo.From(registration.Location),
+			new EquatableArray<string>([Display(registration.ServiceType), Display(consumer),])));
 	}
 
 	/// <summary>

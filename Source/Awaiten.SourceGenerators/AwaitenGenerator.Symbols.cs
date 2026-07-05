@@ -87,6 +87,23 @@ partial class AwaitenGenerator
 		return null;
 	}
 
+	/// <summary>
+	///     Reads a <c>System.Type</c> named argument (a <c>typeof(…)</c>) off an attribute, returning its
+	///     fully-qualified display, or <see langword="null" /> when unset. Used for <c>WhenInjectedInto</c>.
+	/// </summary>
+	private static string? NamedTypeArgument(AttributeData attribute, string name)
+	{
+		foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
+		{
+			if (argument.Key == name && argument.Value.Value is INamedTypeSymbol type)
+			{
+				return type.ToDisplayString(FullyQualified);
+			}
+		}
+
+		return null;
+	}
+
 	private static void ImmutableArrayGuard(
 		ImmutableArray<ITypeSymbol> typeArguments,
 		out ITypeSymbol? implementation,
