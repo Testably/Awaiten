@@ -37,7 +37,7 @@ dotnet add package Awaiten
 ## Features
 
 - **Async initialization.** `IAsyncInitializable` services are initialized in dependency order, and reaching one synchronously is a compile error.
-- **Compile-time safety.** Around 67 diagnostics turn wiring mistakes into build errors instead of startup crashes.
+- **Compile-time safety.** Around 70 diagnostics turn wiring mistakes into build errors instead of startup crashes.
 - **No reflection.** The generated code is plain C#, so the container is native-AOT clean and trim-safe.
 - **A full toolbox.** Lifetimes, scopes, keyed services, decorators, composites, open generics, collections, factories, modules, assembly scanning, property injection, and `Owned<T>` for disposable transients.
 - **MS.DI interop.** A separate package bridges into Microsoft.Extensions.DependencyInjection for ASP.NET Core and the generic host.

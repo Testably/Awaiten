@@ -28,11 +28,11 @@ Everything the module registers is now part of the container.
 
 ## Overridable defaults
 
-A module can offer a default that the container is free to replace. Mark it `Default = true`. If the container registers the same service, its own registration wins and the default is dropped entirely, even from collections. Use `TryAdd = true` for a registration that contributes only when nothing else provides the service.
+A module can offer a default that the container is free to replace. Mark it `Fallback = Fallback.Warn`. If the container registers the same service, its own registration wins and the default is dropped entirely, even from collections. Use `Fallback = Fallback.Silent` for a registration that contributes only when nothing else provides the service; unlike `Warn`, it stays quiet when another overridable default competes with it (`Warn` reports [AWT148](../diagnostics#awt148) in that case).
 
 ```csharp
 [Module]
-[Singleton<SystemClock, IClock>(Default = true)]
+[Singleton<SystemClock, IClock>(Fallback = Fallback.Warn)]
 public static class InfrastructureModule;
 
 [Container]

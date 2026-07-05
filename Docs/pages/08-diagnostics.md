@@ -152,11 +152,11 @@ Two overridable default registrations provide the same service ambiguously.
 
 ```csharp
 [Module]
-[Singleton<SystemClock, IClock>(Default = true)]
+[Singleton<SystemClock, IClock>(Fallback = Fallback.Warn)]
 public static class ClockModuleA;
 
 [Module]
-[Singleton<UtcClock, IClock>(Default = true)]
+[Singleton<UtcClock, IClock>(Fallback = Fallback.Warn)]
 public static class ClockModuleB;
 
 [Container]
@@ -513,8 +513,8 @@ public static partial class CoffeeShop;
 
 ### AWT118
 
-:::warning[Warning]
-A root-owned instance holds a `Func` or `Func<…,Task<T>>` over a disposable build-on-demand service.
+:::danger[Error]
+A root-owned instance holds a `Func` or `Func<…,Task<T>>` over a disposable build-on-demand service. Under strict lifetime safety (the default) this is a non-suppressible error; under `LifetimeSafety.Loose` it relaxes to a suppressible warning.
 :::
 
 ```csharp
@@ -1087,5 +1087,33 @@ public sealed class KitchenDisplay;   // has no IReceiptPrinter parameter to red
 [Singleton<ThermalPrinter, IReceiptPrinter>]
 [Singleton<WidePrinter, IReceiptPrinter>(WhenInjectedInto = typeof(KitchenDisplay))]
 [Singleton<KitchenDisplay>]
+public static partial class CoffeeShop;
+```
+
+### AWT168
+
+:::danger[Error]
+A registration sets both `WhenInjectedInto` and `Key`. A contextual binding is reached only through its consumer, so the `Key` could never be selected by a `[FromKey]` and is silently dropped. Remove one of the two.
+:::
+
+```csharp
+[Container]
+[Singleton<ThermalPrinter, IReceiptPrinter>]
+[Singleton<WidePrinter, IReceiptPrinter>(WhenInjectedInto = typeof(DriveThroughRegister), Key = "wide")]   // Key is dropped
+[Singleton<DriveThroughRegister>]
+public static partial class CoffeeShop;
+```
+
+### AWT169
+
+:::danger[Error]
+Two different implementations set `WhenInjectedInto` for the same service and consumer, so both claim the one contextual slot for that consumer.
+:::
+
+```csharp
+[Container]
+[Singleton<WidePrinter, IReceiptPrinter>(WhenInjectedInto = typeof(DriveThroughRegister))]
+[Singleton<ThermalPrinter, IReceiptPrinter>(WhenInjectedInto = typeof(DriveThroughRegister))]   // two bindings for one consumer
+[Singleton<DriveThroughRegister>]
 public static partial class CoffeeShop;
 ```

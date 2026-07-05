@@ -25,7 +25,7 @@ Strict mode does not get in your way for the safe shapes:
 - A disposable transient resolved from a child scope, because the scope bounds its lifetime.
 - A singleton's `Lazy<T>` over a disposable, because it is memoized and bounded.
 
-What strict withholds is the leak-prone shape: a plain `Func<T>` or `Func<TArg, T>` over a disposable, held by a root-owned service. That is a warning ([AWT118](../diagnostics#awt118)), because each call would strand another undisposed instance on the root.
+What strict withholds is the leak-prone shape: a plain `Func<T>` or `Func<TArg, T>` over a disposable, held by a root-owned service. That is a non-suppressible error ([AWT118](../diagnostics#awt118)), because each call would strand another undisposed instance on the root. Under `Loose` it relaxes to a suppressible warning.
 
 ## Loose when you want MS.DI semantics
 
