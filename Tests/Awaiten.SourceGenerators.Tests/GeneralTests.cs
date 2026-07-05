@@ -1958,4 +1958,42 @@ public class GeneralTests
 		await That(source).Contains("ResolveILoggerAsync(__s, __requestingType, default).GetAwaiter().GetResult()");
 		await That(source).Contains("new global::MyCode.Alpha(await ResolveILoggerAsync(__s, typeof(global::MyCode.Alpha), cancellationToken).ConfigureAwait(false))");
 	}
+
+	[Fact]
+	public async Task LifecycleHooks_CallActivationAndQueueReleaseRunAheadOfDisposal()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace MyCode;
+
+			public sealed class Service { }
+
+			[Container]
+			[Singleton<Service>(OnActivated = nameof(Started), OnRelease = nameof(Stopping))]
+			public static partial class MyContainer
+			{
+				private static void Started(Service service) { }
+				private static void Stopping(Service service) { }
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// A reverse-drained release queue is emitted, the activation hook runs on a local post-construction, and
+		// the release hook is queued as an action (capturing that same local by value) that is drained (reverse
+		// creation order) before the disposables on teardown.
+		await That(source).Contains("global::System.Collections.Generic.List<global::System.Action>? __releases;");
+		await That(source).Contains("Started(created);");
+		await That(source).Contains(".Add(() => Stopping(created));");
+		await That(source).Contains("__toRelease[__index]();");
+
+		// The cache field is published (= created;) only after the activation hook has run, so the lock-free fast
+		// path never hands a concurrent caller a published-but-not-yet-activated instance.
+		int activationAt = source.IndexOf("Started(created);");
+		int publishAt = source.IndexOf("= created;");
+		await That(activationAt >= 0 && publishAt > activationAt).IsTrue()
+			.Because("the cache field must be published only after activation completes");
+	}
 }

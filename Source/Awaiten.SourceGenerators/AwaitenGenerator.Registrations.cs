@@ -50,7 +50,9 @@ internal sealed record RawRegistration(
 	bool IsDefault = false,
 	INamedTypeSymbol? Origin = null,
 	bool IsSynthesized = false,
-	bool Eager = false);
+	bool Eager = false,
+	string? OnActivated = null,
+	string? OnRelease = null);
 
 /// <summary>
 ///     An imported module: its symbol and the location of the container's <c>[Import]</c> attribute that
@@ -159,6 +161,17 @@ partial class AwaitenGenerator
 		///     against and emitted qualified with this type rather than the container.
 		/// </summary>
 		public INamedTypeSymbol? Origin { get; init; }
+
+		/// <summary>
+		///     The names of the <c>static void M(TImplementation)</c> container methods to run once the instance
+		///     is constructed (<see cref="OnActivated" />) and when its owner is disposed (<see cref="OnRelease" />),
+		///     or <see langword="null" /> when the winning registration named none. Resolved against the container
+		///     in <c>BuildInstance</c> (AWT164 when no matching method exists).
+		/// </summary>
+		public string? OnActivated { get; init; }
+
+		/// <inheritdoc cref="OnActivated" />
+		public string? OnRelease { get; init; }
 
 		public List<ServiceKey> Services { get; }
 

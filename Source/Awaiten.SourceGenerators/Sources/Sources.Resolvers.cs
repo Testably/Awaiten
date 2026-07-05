@@ -81,7 +81,7 @@ internal static partial class Sources
 			string requestingConstruction = EmitConstruction(instance, context.Instances, names, context.ServiceToIndex);
 			string requestingSignature = $"global::System.Type? {RequestingTypeParameterName}";
 			string requestingSummary = $"Resolves {XmlTypeRef(type)} through its requesting-type factory, passing the requesting consumer's typeof(…) (a new instance per call).";
-			EmitFreshResolver(builder, depth, new FreshResolver("Scope", type, resolver, requestingSignature, requestingConstruction, DisposalOf(instance), requestingSummary), asyncDisposal);
+			EmitFreshResolver(builder, depth, new FreshResolver("Scope", type, resolver, requestingSignature, requestingConstruction, DisposalOf(instance), requestingSummary), instance, asyncDisposal);
 			return;
 		}
 
@@ -91,7 +91,7 @@ internal static partial class Sources
 			string signature = string.Join(", ", argTypes.Select((t, i) => $"{t} a{i}"));
 			string parameterizedConstruction = EmitConstruction(instance, context.Instances, names, context.ServiceToIndex);
 			string parameterizedSummary = $"Resolves {XmlTypeRef(type)} from its <c>[Arg]</c> arguments (a new instance per call).";
-			EmitFreshResolver(builder, depth, new FreshResolver("Scope", type, resolver, signature, parameterizedConstruction, DisposalOf(instance), parameterizedSummary), asyncDisposal, DeferredEmitter(builder, instance, "created", context, asynchronous: false));
+			EmitFreshResolver(builder, depth, new FreshResolver("Scope", type, resolver, signature, parameterizedConstruction, DisposalOf(instance), parameterizedSummary), instance, asyncDisposal, DeferredEmitter(builder, instance, "created", context, asynchronous: false));
 			return;
 		}
 
@@ -100,14 +100,14 @@ internal static partial class Sources
 		if (instance.Lifetime == Lifetime.Transient)
 		{
 			string transientSummary = $"Resolves the transient {XmlTypeRef(type)} (a new instance per call).";
-			EmitFreshResolver(builder, depth, new FreshResolver("Scope", type, resolver, string.Empty, construction, DisposalOf(instance), transientSummary), asyncDisposal, DeferredEmitter(builder, instance, "created", context, asynchronous: false));
+			EmitFreshResolver(builder, depth, new FreshResolver("Scope", type, resolver, string.Empty, construction, DisposalOf(instance), transientSummary), instance, asyncDisposal, DeferredEmitter(builder, instance, "created", context, asynchronous: false));
 			return;
 		}
 
 		string scopedSummary = $"Resolves the scoped {XmlTypeRef(type)} (one instance per scope).";
 		string scopedWiredFlag = HasDeferredMembers(instance) ? names.WiredField(index) : string.Empty;
 		// The deferred members are wired onto the cached field on the owner (__s.<field>), inside the static resolver.
-		EmitCachingResolver(builder, depth, new CachingResolver("Scope", type, resolver, (names.Field(index), scopedWiredFlag), construction, DisposalOf(instance), scopedSummary), asyncDisposal, DeferredEmitter(builder, instance, "__s." + names.Field(index), context, asynchronous: false));
+		EmitCachingResolver(builder, depth, new CachingResolver("Scope", type, resolver, (names.Field(index), scopedWiredFlag), construction, DisposalOf(instance), scopedSummary), instance, asyncDisposal, DeferredEmitter(builder, instance, "__s." + names.Field(index), context, asynchronous: false));
 	}
 
 	/// <summary>
@@ -127,7 +127,7 @@ internal static partial class Sources
 	///     registered for teardown on the owner under the lock, re-checking <c>__disposed</c> so one built
 	///     during a concurrent dispose is disposed here rather than leaked.
 	/// </summary>
-	private static void EmitFreshResolver(StringBuilder builder, int depth, in FreshResolver resolver, bool asyncDisposal, Action<int>? emitDeferred = null)
+	private static void EmitFreshResolver(StringBuilder builder, int depth, in FreshResolver resolver, InstanceModel instance, bool asyncDisposal, Action<int>? emitDeferred = null)
 	{
 		string type = resolver.Type;
 		string construction = resolver.Construction;
@@ -146,12 +146,14 @@ internal static partial class Sources
 		Indent(builder, depth).AppendLine("{");
 		EmitDisposedGuard(builder, depth + 1, "__s.");
 
-		// A transient is not cached, so its deferred members never participate in a terminating cycle (AWT145
-		// rejects a transient deferred cycle); they are still wired after construction here - before the owner's
-		// own disposal registration, so a dependency first built during wiring registers earlier and is disposed
-		// later than this owner. Deferred members also force the `created` variable form so there is an instance
-		// to assign through.
-		if (resolver.Disposal != DisposalTracking.None || emitDeferred is not null)
+		// The `created` variable form is needed whenever there is post-construction work: registering the instance
+		// for disposal, wiring its deferred members, queuing its OnRelease hook, or running its OnActivated hook. A
+		// transient is not cached, so its deferred members never participate in a terminating cycle (AWT145 rejects
+		// a transient deferred cycle); they are still wired here before the owner's own disposal/release
+		// registration, so a dependency first built during wiring registers earlier and is torn down later than
+		// this owner.
+		bool tracks = resolver.Disposal != DisposalTracking.None || instance.HasReleaseHook;
+		if (tracks || emitDeferred is not null || instance.OnActivated is not null)
 		{
 			Indent(builder, depth + 1).Append(type).Append(" created = ").Append(construction).AppendLine(";");
 			if (emitDeferred is not null && resolver.Disposal != DisposalTracking.None)
@@ -175,10 +177,21 @@ internal static partial class Sources
 				emitDeferred?.Invoke(depth + 1);
 			}
 
+			// Register disposal before OnActivated, so a constructed disposable is torn down even if activation
+			// throws (rather than leaked). For a disposable instance this raced-safe block also throws on a
+			// concurrent dispose, so a raced instance is torn down and never activated.
 			if (resolver.Disposal != DisposalTracking.None)
 			{
-				EmitFreshDisposalTracking(builder, depth + 1, resolver.Disposal == DisposalTracking.Runtime, asyncDisposal, asyncContext: false);
+				EmitFreshDisposalTracking(builder, depth + 1, instance, asyncDisposal, asyncContext: false);
 				builder.AppendLine();
+			}
+
+			EmitActivation(builder, depth + 1, instance, "created");
+			// Queue OnRelease only after OnActivated has run, so a failed activation queues no release; the
+			// raced-safe block skips the queue when the owner was disposed since construction.
+			if (instance.HasReleaseHook)
+			{
+				EmitFreshReleaseRegistration(builder, depth + 1, instance);
 			}
 
 			Indent(builder, depth + 1).AppendLine("return created;");
@@ -219,7 +232,7 @@ internal static partial class Sources
 		string singletonSummary = $"Resolves the singleton {XmlTypeRef(type)} (one instance per container).";
 		string singletonWiredFlag = HasDeferredMembers(instance) ? names.WiredField(index) : string.Empty;
 		// The deferred members are wired onto the cached field on the owner (__s.<field>), inside the static resolver.
-		EmitCachingResolver(builder, depth, new CachingResolver("Root", type, resolver, (names.Field(index), singletonWiredFlag), construction, DisposalOf(instance), singletonSummary), context.AsyncDisposal, DeferredEmitter(builder, instance, "__s." + names.Field(index), context, asynchronous: false));
+		EmitCachingResolver(builder, depth, new CachingResolver("Root", type, resolver, (names.Field(index), singletonWiredFlag), construction, DisposalOf(instance), singletonSummary), instance, context.AsyncDisposal, DeferredEmitter(builder, instance, "__s." + names.Field(index), context, asynchronous: false));
 	}
 
 	/// <summary>
@@ -594,43 +607,55 @@ internal static partial class Sources
 	}
 
 	/// <summary>
-	///     Wires the deferred members and awaits <c>InitializeAsync</c> for a freshly built <c>created</c>
-	///     instance, then registers it for disposal - shared by the transient (<see cref="EmitAsyncFreshResolver" />)
-	///     and memoized (<see cref="EmitAsyncCachingResolver" />) async resolvers so both handle failure
-	///     identically. For a disposable instance the wiring and initialization run inside a <c>try</c> whose
-	///     <c>catch</c> disposes <c>created</c> and rethrows, so a failure in deferred wiring or
+	///     Wires the deferred members, runs the <c>OnActivated</c> hook and awaits <c>InitializeAsync</c> for a
+	///     freshly built <c>created</c> instance, then registers it for disposal and queues its <c>OnRelease</c>
+	///     hook - shared by the transient (<see cref="EmitAsyncFreshResolver" />) and memoized
+	///     (<see cref="EmitAsyncCachingResolver" />) async resolvers so both handle failure identically. For a
+	///     disposable instance the wiring, activation and initialization run inside a <c>try</c> whose <c>catch</c>
+	///     disposes <c>created</c> and rethrows, so a failure in deferred wiring, activation or
 	///     <c>InitializeAsync</c> tears down the instance we already constructed rather than leaking it (a
 	///     memoized task is additionally faulted and evicted, so the instance is otherwise unreachable). The
 	///     teardown is itself guarded: a throw from the instance's own <c>Dispose</c>/<c>DisposeAsync</c> is
-	///     swallowed so it cannot mask the original wiring/initialization failure that the rethrow propagates.
-	///     Registration stays after the deferred wiring - preserving reverse-teardown order (a dependency first
-	///     built during wiring registers earlier and so is disposed after this owner) - and runs only on success,
-	///     so the caught instance is never double-disposed. A non-disposable instance has nothing to leak, so it
-	///     wires and initializes directly.
+	///     swallowed so it cannot mask the original failure that the rethrow propagates. Disposal registration and
+	///     the release-hook queue both stay after the wiring - preserving reverse-teardown order (a dependency first
+	///     built during wiring registers earlier and so is torn down after this owner) - and run only on success,
+	///     so a torn-down instance leaves behind neither a disposal nor a release (keeping the two balanced) and is
+	///     never double-disposed. <c>OnActivated</c> always runs post-construction, before initialization; the
+	///     release is queued only once initialization has succeeded, so a faulted init (evicted and retried) leaves
+	///     no release for the instance it drops. A non-disposable instance has nothing to leak, so it wires,
+	///     activates and initializes directly.
 	/// </summary>
 	private static void EmitGuardedWiringAndInit(StringBuilder builder, int depth, InstanceModel instance, EmitContext context, Action<int>? emitDeferred)
 	{
 		if (DisposalOf(instance) == DisposalTracking.None)
 		{
 			emitDeferred?.Invoke(depth);
+			EmitActivation(builder, depth, instance, "created");
 			EmitAsyncInitialization(builder, depth, instance, "created");
+			EmitFreshReleaseRegistration(builder, depth, instance);
 			return;
 		}
 
 		Indent(builder, depth).AppendLine("try");
 		Indent(builder, depth).AppendLine("{");
 		emitDeferred?.Invoke(depth + 1);
+		// OnActivated runs post-construction, before initialization; inside the guarded try, so a throwing
+		// activation tears the constructed instance down (like a throwing wiring/init) rather than leaking it.
+		EmitActivation(builder, depth + 1, instance, "created");
 		EmitAsyncInitialization(builder, depth + 1, instance, "created");
 		Indent(builder, depth).AppendLine("}");
 		Indent(builder, depth).AppendLine("catch");
 		Indent(builder, depth).AppendLine("{");
-		// Dispose the instance we constructed but failed to wire/initialize, then rethrow the original failure.
+		// Dispose the instance we constructed but failed to wire/activate/initialize, then rethrow the original failure.
 		EmitGuardedTeardown(builder, depth + 1, context.AsyncDisposal, asyncContext: true);
 		builder.AppendLine();
 		Indent(builder, depth + 1).AppendLine("throw;");
 		Indent(builder, depth).AppendLine("}");
 		builder.AppendLine();
+		// Register disposal and queue the release only on success, so a failure that tore the instance down above
+		// leaves neither behind.
 		EmitAsyncDisposableRegistration(builder, depth, instance, context.AsyncDisposal);
+		EmitFreshReleaseRegistration(builder, depth, instance);
 	}
 
 	/// <summary>
@@ -816,8 +841,9 @@ internal static partial class Sources
 	///     transitively through a peer), and a failed episode unpublishes what it built so a later resolve retries
 	///     instead of silently returning a half-wired instance forever.
 	/// </summary>
-	private static void EmitCachingResolver(StringBuilder builder, int depth, in CachingResolver resolver, bool asyncDisposal, Action<int>? emitDeferred = null)
+	private static void EmitCachingResolver(StringBuilder builder, int depth, in CachingResolver resolver, InstanceModel instance, bool asyncDisposal, Action<int>? emitDeferred = null)
 	{
+		string type = resolver.Type;
 		string field = resolver.Field;
 		string construction = resolver.Construction;
 		DisposalTracking disposal = resolver.Disposal;
@@ -856,8 +882,31 @@ internal static partial class Sources
 		Indent(builder, depth + 2).AppendLine("{");
 		if (!deferred)
 		{
-			Indent(builder, depth + 3).Append("__s.").Append(field).Append(" = ").Append(construction).AppendLine(";");
-			EmitCachedDisposalRegistration(builder, depth + 3, field, disposal, asyncDisposal);
+			if (instance.OnActivated is not null)
+			{
+				// Publish the cache field only after OnActivated has run: build into a local, activate it, then
+				// store. The lock-free fast path gates on the field alone, so publishing before activation would let
+				// a concurrent caller return a not-yet-activated instance (the same hazard the deferred wiring flag
+				// guards against). The volatile field's release-write happens-after the activation, so a fast-path
+				// acquire-read sees a fully-activated instance. Disposal is registered against the local, so a
+				// throwing activation still tears the constructed instance down - the field stays null, so a later
+				// resolve rebuilds - with no unpublish/rethrow needed. OnRelease is queued after activation (only a
+				// successfully-activated instance is released), capturing the local by value.
+				Indent(builder, depth + 3).Append(type).Append(" created = ").Append(construction).AppendLine(";");
+				EmitCachedDisposalRegistration(builder, depth + 3, "created", disposal, asyncDisposal);
+				EmitActivation(builder, depth + 3, instance, "created");
+				EmitReleaseRegistration(builder, depth + 3, instance, "created");
+				Indent(builder, depth + 3).Append("__s.").Append(field).AppendLine(" = created;");
+			}
+			else
+			{
+				// No activation hook, so nothing must happen between publishing the field and returning it: publish
+				// directly and register disposal/release against the field, all under the lock that guards this
+				// cache-miss (the owner is known not disposed here, so no separate raced check is needed).
+				Indent(builder, depth + 3).Append("__s.").Append(field).Append(" = ").Append(construction).AppendLine(";");
+				EmitCachedDisposalRegistration(builder, depth + 3, "__s." + field, disposal, asyncDisposal);
+				EmitCachedReleaseRegistration(builder, depth + 3, instance, field, type);
+			}
 		}
 		else
 		{
@@ -871,7 +920,13 @@ internal static partial class Sources
 			Indent(builder, depth + 3).AppendLine("{");
 			Indent(builder, depth + 4).Append("__s.").Append(field).Append(" = ").Append(construction).AppendLine(";");
 			emitDeferred?.Invoke(depth + 4);
-			EmitCachedDisposalRegistration(builder, depth + 4, field, disposal, asyncDisposal);
+			EmitCachedDisposalRegistration(builder, depth + 4, "__s." + field, disposal, asyncDisposal);
+			// Run OnActivated then queue OnRelease inside the wiring episode's try: a throwing hook rolls the
+			// episode back (unpublishing the field) rather than leaving a published, half-activated instance, and
+			// the release is queued only after activation succeeds. The release captures the instance by value, so
+			// a rollback triggered by a later peer in the same episode cannot orphan it onto the nulled field.
+			EmitActivation(builder, depth + 4, instance, "__s." + field);
+			EmitCachedReleaseRegistration(builder, depth + 4, instance, field, type);
 			Indent(builder, depth + 3).AppendLine("}");
 			Indent(builder, depth + 3).AppendLine("catch");
 			Indent(builder, depth + 3).AppendLine("{");
@@ -923,25 +978,27 @@ internal static partial class Sources
 
 	/// <summary>
 	///     Emits the disposal registration of a freshly cached instance, inside the cache-miss block (under the
-	///     lock that guards the field assignment). With <see cref="DisposalTracking.Runtime" /> (a factory output,
-	///     whose declared return type may hide a concrete disposable) the add is gated on a runtime test so only
-	///     genuinely-disposable outputs are retained.
+	///     lock that guards the field assignment). <paramref name="target" /> is the expression naming the instance
+	///     to track - the published field (<c>__s.&lt;field&gt;</c>), or a not-yet-published local when the field
+	///     is stored only after an activation hook has run. With <see cref="DisposalTracking.Runtime" /> (a factory
+	///     output, whose declared return type may hide a concrete disposable) the add is gated on a runtime test so
+	///     only genuinely-disposable outputs are retained.
 	/// </summary>
-	private static void EmitCachedDisposalRegistration(StringBuilder builder, int depth, string field, DisposalTracking disposal, bool asyncDisposal)
+	private static void EmitCachedDisposalRegistration(StringBuilder builder, int depth, string target, DisposalTracking disposal, bool asyncDisposal)
 	{
 		if (disposal == DisposalTracking.Runtime)
 		{
 			string test = asyncDisposal
 				? " is global::System.IDisposable or global::System.IAsyncDisposable)"
 				: " is global::System.IDisposable)";
-			Indent(builder, depth).Append("if (__s.").Append(field).AppendLine(test);
+			Indent(builder, depth).Append("if (").Append(target).AppendLine(test);
 			Indent(builder, depth).AppendLine("{");
-			Indent(builder, depth + 1).Append("(__s.__disposables ??= new global::System.Collections.Generic.List<object>()).Add(__s.").Append(field).AppendLine(");");
+			Indent(builder, depth + 1).Append("(__s.__disposables ??= new global::System.Collections.Generic.List<object>()).Add(").Append(target).AppendLine(");");
 			Indent(builder, depth).AppendLine("}");
 		}
 		else if (disposal == DisposalTracking.Static)
 		{
-			Indent(builder, depth).Append("(__s.__disposables ??= new global::System.Collections.Generic.List<object>()).Add(__s.").Append(field).AppendLine(");");
+			Indent(builder, depth).Append("(__s.__disposables ??= new global::System.Collections.Generic.List<object>()).Add(").Append(target).AppendLine(");");
 		}
 	}
 

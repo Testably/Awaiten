@@ -28,17 +28,7 @@ partial class AwaitenGenerator
 		// implements IAsyncInitializable), not as a pre-built Instance.
 		if (info.Production == ProductionKind.Instance)
 		{
-			ValidateInstanceMember(containerSymbol, info, compilation, diagnostics);
-			return new InstanceModel(
-				info.ImplementationType,
-				info.Symbol.Name,
-				info.Lifetime,
-				new EquatableArray<ServiceKey>(info.Services.ToArray()),
-				new EquatableArray<ParameterModel>([]),
-				false,
-				info.Symbol.IsReferenceType,
-				ProductionKind.Instance,
-				QualifiedProductionMember(info));
+			return BuildPrebuiltInstance(info, containerSymbol, compilation, diagnostics);
 		}
 
 		// Select the producer: a container method (Factory) or the implementation's constructor (the
@@ -121,6 +111,12 @@ partial class AwaitenGenerator
 		string realType = info.Symbol.ToDisplayString(FullyQualified);
 		string? emitType = info.ImplementationType == realType ? null : realType;
 
+		// Lifecycle hooks (AWT164 when a named member is not a usable static void M(TImplementation)). Applied to
+		// constructed and factory-produced instances - the ones the container owns; a pre-built Instance returns
+		// above (the caller owns it, so activation/release do not apply).
+		string? onActivated = ResolveHook(containerSymbol, info, info.OnActivated, compilation, diagnostics);
+		string? onRelease = ResolveHook(containerSymbol, info, info.OnRelease, compilation, diagnostics);
+
 		return new InstanceModel(
 			info.ImplementationType,
 			info.Symbol.Name,
@@ -140,7 +136,9 @@ partial class AwaitenGenerator
 			// Eager build-time construction is the synchronous analog of InitializeAsync, which warms singletons,
 			// so it applies to a singleton only. The attribute exposes Eager on [Singleton<…>] alone, but the flag
 			// coalesces onto the implementation, so this guard keeps a coalesced non-singleton from carrying it.
-			Eager: info.Eager && info.Lifetime == Lifetime.Singleton);
+			Eager: info.Eager && info.Lifetime == Lifetime.Singleton,
+			OnActivated: onActivated,
+			OnRelease: onRelease);
 
 		static bool ImplementsInterface(ITypeSymbol type, INamedTypeSymbol @interface)
 		{
@@ -156,6 +154,40 @@ partial class AwaitenGenerator
 		static bool CouldHideDisposable(ITypeSymbol type)
 			=> type.TypeKind is TypeKind.Interface or TypeKind.TypeParameter
 			   || (type.TypeKind == TypeKind.Class && !type.IsSealed);
+	}
+
+	/// <summary>
+	///     Builds the model for a pre-built <c>Instance</c> registration - handed back from a container member,
+	///     never constructed here. It validates the named member (AWT109/AWT153) and rejects a lifecycle hook
+	///     (AWT165), since the container does not own the instance and so never runs a hook around it.
+	/// </summary>
+	private static InstanceModel BuildPrebuiltInstance(
+		ImplInfo info,
+		INamedTypeSymbol containerSymbol,
+		Compilation compilation,
+		List<DiagnosticInfo> diagnostics)
+	{
+		ValidateInstanceMember(containerSymbol, info, compilation, diagnostics);
+		// AWT165: a lifecycle hook on a pre-built Instance is a silent no-op (the caller, not the container,
+		// owns and tears down the instance), so reject it rather than construct with hooks that never run.
+		if (info.OnActivated is not null || info.OnRelease is not null)
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.LifecycleHookOnInstance,
+				info.Location,
+				new EquatableArray<string>([Display(info.OwningServiceOrImpl),])));
+		}
+
+		return new InstanceModel(
+			info.ImplementationType,
+			info.Symbol.Name,
+			info.Lifetime,
+			new EquatableArray<ServiceKey>(info.Services.ToArray()),
+			new EquatableArray<ParameterModel>([]),
+			false,
+			info.Symbol.IsReferenceType,
+			ProductionKind.Instance,
+			QualifiedProductionMember(info));
 	}
 
 	/// <summary>
@@ -201,6 +233,57 @@ partial class AwaitenGenerator
 
 		return constructor;
 	}
+
+	/// <summary>
+	///     Resolves an <c>OnActivated</c> / <c>OnRelease</c> lifecycle hook to a <c>static void M(TImplementation)</c>
+	///     method on its owner - the container, or the module that declared the registration for an imported one
+	///     (never falling back to the container) - returning the name the generated Root/Scope calls it by, or
+	///     <see langword="null" /> when the registration named none. The owner is a static class, so the hook is a
+	///     static method reached by simple name, exactly like a factory method - no receiver and no instance/static
+	///     distinction; a module hook is qualified with the module type (the generated container is another class,
+	///     so the simple name would not bind). The container's own members are reachable at any accessibility from
+	///     the generated partial, so a <c>private</c> hook qualifies, but a module's are not: a module method that
+	///     matches yet is inaccessible from the container is skipped (it cannot be called from the generated code),
+	///     falling through to AWT164. Reports
+	///     <see cref="Diagnostics.InvalidLifecycleHook">AWT164</see> and returns <see langword="null" /> when no
+	///     accessible ordinary void method of that name accepts the implementation type.
+	/// </summary>
+	private static string? ResolveHook(
+		INamedTypeSymbol containerSymbol,
+		ImplInfo info,
+		string? hookName,
+		Compilation compilation,
+		List<DiagnosticInfo> diagnostics)
+	{
+		if (hookName is null)
+		{
+			return null;
+		}
+
+		foreach (ISymbol member in AccessibleMembers(info.Origin ?? containerSymbol, hookName))
+		{
+			// A module hook must also be accessible from the generated container (its own private members are
+			// reachable from the partial, a module's are not); an inaccessible module method is not a usable hook.
+			if (member is IMethodSymbol { MethodKind: MethodKind.Ordinary, IsStatic: true, ReturnsVoid: true, Parameters.Length: 1, } method
+			    && compilation.HasImplicitConversion(info.Symbol, method.Parameters[0].Type)
+			    && (info.Origin is null || compilation.IsSymbolAccessibleWithin(method, containerSymbol)))
+			{
+				return QualifiedHook(info, hookName);
+			}
+		}
+
+		diagnostics.Add(new DiagnosticInfo(
+			Diagnostics.InvalidLifecycleHook,
+			info.Location,
+			new EquatableArray<string>([Display(info.OwningServiceOrImpl), hookName, DescribeOwner(info),])));
+		return null;
+	}
+
+	// A module's lifecycle hook is emitted qualified with the module type (the generated container is another
+	// class, so the simple name would not bind); the container's own hooks stay unqualified - they are in scope
+	// inside the generated partial. Mirrors QualifiedProductionMember for Factory/Instance members.
+	private static string QualifiedHook(ImplInfo info, string hookName)
+		=> info.Origin is { } origin ? $"{origin.ToDisplayString(FullyQualified)}.{hookName}" : hookName;
 
 	/// <summary>
 	///     Reports <see cref="Diagnostics.FactoryHidesAsyncInitialization">AWT106</see> when a synchronous

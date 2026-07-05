@@ -209,6 +209,8 @@ namespace Awaiten
         public bool Default { get; set; }
         public string? Factory { get; set; }
         public string? Key { get; set; }
+        public string? OnActivated { get; set; }
+        public string? OnRelease { get; set; }
         public bool TryAdd { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
@@ -219,6 +221,8 @@ namespace Awaiten
         public bool Default { get; set; }
         public string? Factory { get; set; }
         public string? Key { get; set; }
+        public string? OnActivated { get; set; }
+        public string? OnRelease { get; set; }
         public bool TryAdd { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
@@ -240,6 +244,8 @@ namespace Awaiten
         public string? Factory { get; set; }
         public string? Instance { get; set; }
         public string? Key { get; set; }
+        public string? OnActivated { get; set; }
+        public string? OnRelease { get; set; }
         public bool TryAdd { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
@@ -252,6 +258,8 @@ namespace Awaiten
         public string? Factory { get; set; }
         public string? Instance { get; set; }
         public string? Key { get; set; }
+        public string? OnActivated { get; set; }
+        public string? OnRelease { get; set; }
         public bool TryAdd { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
@@ -271,6 +279,8 @@ namespace Awaiten
         public bool Default { get; set; }
         public string? Factory { get; set; }
         public string? Key { get; set; }
+        public string? OnActivated { get; set; }
+        public string? OnRelease { get; set; }
         public bool TryAdd { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
@@ -281,6 +291,8 @@ namespace Awaiten
         public bool Default { get; set; }
         public string? Factory { get; set; }
         public string? Key { get; set; }
+        public string? OnActivated { get; set; }
+        public string? OnRelease { get; set; }
         public bool TryAdd { get; set; }
     }
 }

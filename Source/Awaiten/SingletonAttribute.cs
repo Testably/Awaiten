@@ -106,6 +106,21 @@ public sealed class SingletonAttribute<TImplementation> : Attribute
 	///     tracked and disposed with the container exactly like a lazily-resolved one.
 	/// </summary>
 	public bool Eager { get; set; }
+
+	/// <summary>
+	///     The name of a <c>static void</c> method on the container accepting a
+	///     <typeparamref name="TImplementation" />, invoked once the instance has been constructed - a
+	///     synchronous post-construction initialization hook.
+	/// </summary>
+	public string? OnActivated { get; set; }
+
+	/// <summary>
+	///     The name of a <c>static void</c> method on the container accepting a
+	///     <typeparamref name="TImplementation" />, invoked when the owning container or scope is disposed -
+	///     in reverse creation order and before the instance's own disposal (it runs in addition to, not
+	///     instead of, that disposal).
+	/// </summary>
+	public string? OnRelease { get; set; }
 }
 
 /// <summary>
@@ -163,6 +178,21 @@ public sealed class SingletonAttribute<TImplementation, TService> : Attribute
 	///     tracked and disposed with the container exactly like a lazily-resolved one.
 	/// </summary>
 	public bool Eager { get; set; }
+
+	/// <summary>
+	///     The name of a <c>static void</c> method on the container accepting a
+	///     <typeparamref name="TImplementation" />, invoked once the instance has been constructed - a
+	///     synchronous post-construction initialization hook.
+	/// </summary>
+	public string? OnActivated { get; set; }
+
+	/// <summary>
+	///     The name of a <c>static void</c> method on the container accepting a
+	///     <typeparamref name="TImplementation" />, invoked when the owning container or scope is disposed -
+	///     in reverse creation order and before the instance's own disposal (it runs in addition to, not
+	///     instead of, that disposal).
+	/// </summary>
+	public string? OnRelease { get; set; }
 }
 
 #pragma warning restore S2326
