@@ -49,6 +49,7 @@ partial class AwaitenGenerator
 		Dictionary<ServiceKey, string> serviceToImpl = new();
 		HashSet<string> reportedConflicts = new(StringComparer.Ordinal);
 		HashSet<string> reportedProductionConflicts = new(StringComparer.Ordinal);
+		HashSet<string> reportedDirectiveConflicts = new(StringComparer.Ordinal);
 
 		// Collection membership: every registration of a service, keyed by (service type, resolution key) and
 		// deduped by implementation, kept in registration order - so an unkeyed IEnumerable<T> resolves the
@@ -137,7 +138,7 @@ partial class AwaitenGenerator
 			// explicit registration (strong or default, both processed earlier) yields to it silently instead.
 			if (!registration.IsScan && (!registration.Weak || !alreadyChosen || winner!.Weak))
 			{
-				ReportCoalescingConflicts(info, registration, reportedConflicts, reportedProductionConflicts, diagnostics);
+				ReportCoalescingConflicts(info, registration, reportedConflicts, reportedProductionConflicts, reportedDirectiveConflicts, diagnostics);
 			}
 			else if (registration.IsScan && info is { IsScan: true, } && info.Lifetime != registration.Lifetime
 			         && reportedConflicts.Add(registration.ImplementationType))
@@ -284,13 +285,15 @@ partial class AwaitenGenerator
 	}
 
 	// Reports the coalescing conflicts a re-registration of an already-seen implementation raises: a different
-	// lifetime (AWT107) or a different production strategy (AWT111). Each is reported at most once per
-	// implementation (the reported sets guard that), since coalescing keeps the first registration.
+	// lifetime (AWT107), a different production strategy (AWT111), or a contradicting per-instance directive -
+	// OnActivated/OnRelease/Eager (AWT166). Each is reported at most once per implementation (the reported sets
+	// guard that), since coalescing keeps the first registration.
 	private static void ReportCoalescingConflicts(
 		ImplInfo? info,
 		RawRegistration registration,
 		HashSet<string> reportedConflicts,
 		HashSet<string> reportedProductionConflicts,
+		HashSet<string> reportedDirectiveConflicts,
 		List<DiagnosticInfo> diagnostics)
 	{
 		if (info is null)
@@ -321,7 +324,49 @@ partial class AwaitenGenerator
 					DescribeProduction(registration.Production, registration.ProductionMember),
 				])));
 		}
+
+		if (ConflictingDirective(info, registration) is { } directive && reportedDirectiveConflicts.Add(registration.ImplementationType))
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.ConflictingLifecycleDirectives,
+				LocationInfo.From(registration.Location),
+				new EquatableArray<string>([
+					Display(registration.ImplementationType),
+					directive.Directive,
+					directive.Winner,
+					directive.Loser,
+				])));
+		}
 	}
+
+	// The first per-instance directive (OnActivated, OnRelease, or Eager) this registration sets to a value the
+	// coalesced instance will not use, or null when none does. Coalescing keeps the first (winning) registration's
+	// directives, so a conflict is a later registration explicitly naming a directive value that differs from the
+	// winner's: a differing hook, or opting into Eager the winner did not. A registration that leaves a directive
+	// unset (a null hook, or Eager left at its default false) states no opinion and merges with the winner rather
+	// than conflicting - so the winner's own directives, which this registration inherits, are never a conflict
+	// against themselves.
+	private static (string Directive, string Winner, string Loser)? ConflictingDirective(ImplInfo info, RawRegistration registration)
+	{
+		if (registration.OnActivated is not null && !string.Equals(registration.OnActivated, info.OnActivated, StringComparison.Ordinal))
+		{
+			return ("OnActivated", DescribeHook(info.OnActivated), $"'{registration.OnActivated}'");
+		}
+
+		if (registration.OnRelease is not null && !string.Equals(registration.OnRelease, info.OnRelease, StringComparison.Ordinal))
+		{
+			return ("OnRelease", DescribeHook(info.OnRelease), $"'{registration.OnRelease}'");
+		}
+
+		if (registration.Eager && !info.Eager)
+		{
+			return ("Eager", "false", "true");
+		}
+
+		return null;
+	}
+
+	private static string DescribeHook(string? hook) => hook is null ? "unset" : $"'{hook}'";
 
 	// Records a registration's implementation as a member of the collection for its (service type, key), in
 	// registration order and deduped by implementation. serviceMemberOrder preserves first-seen (type, key) order.
