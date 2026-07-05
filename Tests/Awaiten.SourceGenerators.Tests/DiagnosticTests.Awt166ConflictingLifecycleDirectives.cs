@@ -1,3 +1,5 @@
+using System.Linq;
+
 namespace Awaiten.SourceGenerators.Tests;
 
 public partial class DiagnosticTests
@@ -154,6 +156,64 @@ public partial class DiagnosticTests
 
 			await That(result.Diagnostics).DoesNotContain("*AWT166*").AsWildcard()
 				.Because("a registration that leaves a directive unset states no opinion and merges with the winner's directive rather than conflicting");
+		}
+
+		[Fact]
+		public async Task PointsAtTheLosingRegistrationNotTheWinner()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IRead { }
+			                                       public interface IWrite { }
+			                                       public sealed class Store : IRead, IWrite { }
+
+			                                       [Container]
+			                                       [Singleton<Store, IRead>(OnActivated = nameof(Started))]
+			                                       [Singleton<Store, IWrite>(OnActivated = nameof(Woken))]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       	private static void Started(Store store) { }
+			                                       	private static void Woken(Store store) { }
+			                                       }
+			                                       """);
+
+			string diagnostic = result.Diagnostics.Single(d => d.Contains("AWT166"));
+			await That(diagnostic).Contains("(11,")
+				.Because("the diagnostic points at the losing registration whose directive is silently dropped");
+			await That(diagnostic).DoesNotContain("(10,")
+				.Because("not the winning registration, whose directive survives");
+		}
+
+		[Fact]
+		public async Task ReportsEachContradictedDirectiveOfOneRegistrationIndependently()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IRead { }
+			                                       public interface IWrite { }
+			                                       public sealed class Store : IRead, IWrite { }
+
+			                                       [Container]
+			                                       [Singleton<Store, IRead>]
+			                                       [Singleton<Store, IWrite>(OnActivated = nameof(Woken), Eager = true)]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       	private static void Woken(Store store) { }
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics.Count(d => d.Contains("AWT166"))).IsEqualTo(2)
+				.Because("a registration contradicting the winner on two directives drops each independently, so each is reported");
+			await That(result.Diagnostics).Contains("*AWT166*OnActivated*").AsWildcard()
+				.Because("the winner names no OnActivated, so the later hook it will not run is one dropped directive");
+			await That(result.Diagnostics).Contains("*AWT166*Eager*").AsWildcard()
+				.Because("the winner is not eager, so the later Eager = true is a second, separately dropped directive");
 		}
 	}
 }

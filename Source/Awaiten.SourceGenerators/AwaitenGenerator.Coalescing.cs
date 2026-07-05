@@ -286,8 +286,9 @@ partial class AwaitenGenerator
 
 	// Reports the coalescing conflicts a re-registration of an already-seen implementation raises: a different
 	// lifetime (AWT107), a different production strategy (AWT111), or a contradicting per-instance directive -
-	// OnActivated/OnRelease/Eager (AWT166). Each is reported at most once per implementation (the reported sets
-	// guard that), since coalescing keeps the first registration.
+	// OnActivated/OnRelease/Eager (AWT166). The lifetime and production conflicts are reported at most once per
+	// implementation, and each directive conflict at most once per (implementation, directive) - the reported
+	// sets guard that - since coalescing keeps the first registration.
 	private static void ReportCoalescingConflicts(
 		ImplInfo? info,
 		RawRegistration registration,
@@ -325,45 +326,46 @@ partial class AwaitenGenerator
 				])));
 		}
 
-		if (ConflictingDirective(info, registration) is { } directive && reportedDirectiveConflicts.Add(registration.ImplementationType))
+		foreach ((string Directive, string Winner, string Loser) directive in ConflictingDirectives(info, registration))
 		{
-			diagnostics.Add(new DiagnosticInfo(
-				Diagnostics.ConflictingLifecycleDirectives,
-				LocationInfo.From(registration.Location),
-				new EquatableArray<string>([
-					Display(registration.ImplementationType),
-					directive.Directive,
-					directive.Winner,
-					directive.Loser,
-				])));
+			if (reportedDirectiveConflicts.Add(registration.ImplementationType + "\0" + directive.Directive))
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.ConflictingLifecycleDirectives,
+					LocationInfo.From(registration.Location),
+					new EquatableArray<string>([
+						Display(registration.ImplementationType),
+						directive.Directive,
+						directive.Winner,
+						directive.Loser,
+					])));
+			}
 		}
 	}
 
-	// The first per-instance directive (OnActivated, OnRelease, or Eager) this registration sets to a value the
-	// coalesced instance will not use, or null when none does. Coalescing keeps the first (winning) registration's
-	// directives, so a conflict is a later registration explicitly naming a directive value that differs from the
-	// winner's: a differing hook, or opting into Eager the winner did not. A registration that leaves a directive
-	// unset (a null hook, or Eager left at its default false) states no opinion and merges with the winner rather
-	// than conflicting - so the winner's own directives, which this registration inherits, are never a conflict
-	// against themselves.
-	private static (string Directive, string Winner, string Loser)? ConflictingDirective(ImplInfo info, RawRegistration registration)
+	// Every per-instance directive (OnActivated, OnRelease, or Eager) this registration sets to a value the
+	// coalesced instance will not use, each yielded independently so it can be reported on its own. Coalescing
+	// keeps the first (winning) registration's directives, so a conflict is a later registration explicitly
+	// naming a directive value that differs from the winner's: a differing hook, or opting into Eager the winner
+	// did not. A registration that leaves a directive unset (a null hook, or Eager left at its default false)
+	// states no opinion and merges with the winner rather than conflicting - so the winner's own directives,
+	// which this registration inherits, are never a conflict against themselves.
+	private static IEnumerable<(string Directive, string Winner, string Loser)> ConflictingDirectives(ImplInfo info, RawRegistration registration)
 	{
 		if (registration.OnActivated is not null && !string.Equals(registration.OnActivated, info.OnActivated, StringComparison.Ordinal))
 		{
-			return ("OnActivated", DescribeHook(info.OnActivated), $"'{registration.OnActivated}'");
+			yield return ("OnActivated", DescribeHook(info.OnActivated), $"'{registration.OnActivated}'");
 		}
 
 		if (registration.OnRelease is not null && !string.Equals(registration.OnRelease, info.OnRelease, StringComparison.Ordinal))
 		{
-			return ("OnRelease", DescribeHook(info.OnRelease), $"'{registration.OnRelease}'");
+			yield return ("OnRelease", DescribeHook(info.OnRelease), $"'{registration.OnRelease}'");
 		}
 
 		if (registration.Eager && !info.Eager)
 		{
-			return ("Eager", "false", "true");
+			yield return ("Eager", "false", "true");
 		}
-
-		return null;
 	}
 
 	private static string DescribeHook(string? hook) => hook is null ? "unset" : $"'{hook}'";
