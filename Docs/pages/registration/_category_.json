@@ -1,0 +1,11 @@
+{
+	"label": "Registration",
+	"collapsed": false,
+	"position": 2,
+	"link": {
+		"type": "generated-index"
+	},
+	"customProps": {
+		"description": "Tell the container what to build and how long each instance should live. Lifetimes, factories, decorators, composites, keyed services, open generics, scanning, and modules."
+	}
+}

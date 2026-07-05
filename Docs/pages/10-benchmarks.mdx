@@ -1,0 +1,56 @@
+---
+title: Benchmarks
+sidebar_position: 10
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+import AwaitenBenchmarkResult from '@site/src/components/AwaitenBenchmarkResult';
+
+Awaiten wires the graph at build time, so there is nothing to reflect over at runtime. These benchmarks compare it against
+[Microsoft.Extensions.DependencyInjection](https://learn.microsoft.com/dotnet/core/extensions/dependency-injection),
+[Autofac](https://autofac.org/),
+[Jab](https://github.com/pakrym/jab),
+[Pure.DI](https://github.com/DevTeam/Pure.DI),
+[DryIoc](https://github.com/dadhi/DryIoc) and
+[Simple Injector](https://simpleinjector.org/) across the same graphs.
+
+:::info[Methodology]
+
+- **Suite**: [`Awaiten.Benchmarks`](https://github.com/Testably/Awaiten/tree/main/Benchmarks/Awaiten.Benchmarks) driven by [BenchmarkDotNet](https://benchmarkdotnet.org/).
+- **Job**: `MediumRun` with the in-process toolchain.
+- **Runner**: `ubuntu-latest` GitHub Actions agent, refreshed on every push to `main`.
+- Each row shows time and allocated memory, sorted fastest-first; bars are scaled within the row so length corresponds to magnitude. The Awaiten row is highlighted as the baseline (`1.00x`) and every other row shows its ratio relative to Awaiten. **Lower is better.**
+- Click a row to hide that container so the others spread out. Build and Resolve are measured at container sizes of 8, 64, and 256 registrations; switch between them with the inline tabs.
+
+:::
+
+<Tabs groupId="awaitenBenchmark">
+
+<TabItem value="Resolve" label="Resolve" default>
+
+Steady-state resolution of a service by type once the container is built.
+
+<AwaitenBenchmarkResult name="Resolve" />
+
+</TabItem>
+
+<TabItem value="Build" label="Build">
+
+Container construction from cold, over a graph of singletons.
+
+<AwaitenBenchmarkResult name="Build" />
+
+</TabItem>
+
+<TabItem value="Realistic" label="Realistic">
+
+A per-request pattern, the shape a web app actually runs: open a scope, resolve a deep graph of mixed lifetimes rooted at a request handler, then dispose the scope.
+
+<AwaitenBenchmarkResult name="Realistic" />
+
+</TabItem>
+
+</Tabs>
+
+[View the benchmark source on GitHub →](https://github.com/Testably/Awaiten/tree/main/Benchmarks/Awaiten.Benchmarks)

@@ -1,0 +1,11 @@
+{
+	"label": "Lifetime & disposal",
+	"collapsed": false,
+	"position": 5,
+	"link": {
+		"type": "generated-index"
+	},
+	"customProps": {
+		"description": "Control when instances are created and destroyed. Scopes, disposal, Owned handles, lifetime safety, and lifecycle hooks."
+	}
+}

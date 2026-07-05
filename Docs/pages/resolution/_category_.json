@@ -1,0 +1,11 @@
+{
+	"label": "Resolution",
+	"collapsed": false,
+	"position": 3,
+	"link": {
+		"type": "generated-index"
+	},
+	"customProps": {
+		"description": "Ask the container for services. The resolve surface, relationship shapes like Func and Lazy, collections, keyed dictionaries, property injection, and runtime arguments."
+	}
+}
