@@ -18,7 +18,7 @@ public sealed class SystemClock : IClock
 /// <summary>A host-owned (external) service, registered directly in the service collection.</summary>
 public sealed class Banner
 {
-	public string Text => "Awaiten on AOT";
+	public string Text { get; } = "Awaiten on AOT";
 }
 
 /// <summary>
