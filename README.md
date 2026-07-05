@@ -8,41 +8,57 @@
 
 **The async-first dependency injection container for .NET.**
 
-Awaiten is a Roslyn source generator that wires your object graph at build time. There is no runtime reflection, the configuration is verified by the compiler (missing, cyclic, ambiguous and lifetime-mismatched registrations are build errors), and the generated code is plain, readable C#.
+Awaiten is a Roslyn source generator that wires your object graph at build time. There is no runtime reflection, the generated code is plain readable C#, and your container is native-AOT clean. The configuration is verified by the compiler: missing, cyclic, ambiguous, and lifetime-mismatched registrations are build errors.
 
-Its headline differentiator is **async initialization**: services that need asynchronous setup after construction (opening a connection, handshaking with hardware) are tracked through the graph, and touching an uninitialized instance is a compile error.
+Its headline feature is **async initialization**. Services that need asynchronous setup after construction, like opening a connection or handshaking with hardware, are tracked through the graph. Reaching one before it is ready is a compile error.
+
+## Quick start
 
 ```csharp
-[Container]
-[Singleton<RealTimeSystem, ITimeSystem>]
-[Scoped<StorageService, IStorageService>]
-[Transient<OrderService, IOrderService>]
-public static partial class AppContainer { }
+using Awaiten;
 
-await using var app = new AppContainer.Root();
-await app.InitializeAsync();          // async-initialized services are warmed up
-var service = app.Get<IOrderService>();
+[Container]
+[Singleton<EspressoMachine>]
+[Scoped<Order>]
+[Transient<Cup>]
+public static partial class CoffeeShop;
+
+await using var shop = new CoffeeShop.Root();
+await shop.InitializeAsync();        // async-initialized services are warmed up
+var cup = shop.Resolve<Cup>();
 ```
+
+Install with:
+
+```sh
+dotnet add package Awaiten
+```
+
+## Features
+
+- **Async initialization.** `IAsyncInitializable` services are initialized in dependency order, and reaching one synchronously is a compile error.
+- **Compile-time safety.** Around 70 diagnostics turn wiring mistakes into build errors instead of startup crashes.
+- **No reflection.** The generated code is plain C#, so the container is native-AOT clean and trim-safe.
+- **A full toolbox.** Lifetimes, scopes, keyed services, decorators, composites, open generics, collections, factories, modules, assembly scanning, property injection, and `Owned<T>` for disposable transients.
+- **MS.DI interop.** A separate package bridges into Microsoft.Extensions.DependencyInjection for ASP.NET Core and the generic host.
 
 ## Packages
 
 | Package | Description |
 |---|---|
-| `Awaiten` | Pure core: attributes, the source generator, and the runtime seams. No third-party dependencies. |
+| `Awaiten` | The core: attributes, the source generator, and the runtime seams. No third-party dependencies. |
 | `Awaiten.Extensions.DependencyInjection` | Microsoft.Extensions.DependencyInjection interop (ASP.NET Core, generic host, and other containers). |
 
-## Status
+## Documentation
 
-Early scaffolding. See the design documents for the full specification, the diagnostic catalogue, and integration recipes (ASP.NET Core, WPF, MS.DI, Autofac).
+Full documentation lives at [docs.testably.org/Awaiten](https://docs.testably.org/Awaiten).
 
-## Building
-
-```sh
-./build.sh          # or build.cmd / build.ps1 on Windows
-```
-
-The build uses [NUKE](https://nuke.build/). Targets include compile, unit tests, API checks, code analysis and packaging.
-
-## License
-
-MIT © Valentin Breuß
+- [Getting started](https://docs.testably.org/Awaiten/getting-started)
+- Registration: [lifetimes](https://docs.testably.org/Awaiten/registration/lifetimes), [factories and instances](https://docs.testably.org/Awaiten/registration/factories-and-instances), [decorators](https://docs.testably.org/Awaiten/registration/decorators), [composites](https://docs.testably.org/Awaiten/registration/composites), [keyed services](https://docs.testably.org/Awaiten/registration/keyed-services), [open generics](https://docs.testably.org/Awaiten/registration/open-generics), [scanning](https://docs.testably.org/Awaiten/registration/scanning), [modules](https://docs.testably.org/Awaiten/registration/modules)
+- Resolution: [resolving services](https://docs.testably.org/Awaiten/resolution/resolving-services), [relationships](https://docs.testably.org/Awaiten/resolution/relationships), [collections](https://docs.testably.org/Awaiten/resolution/collections), [keyed dictionaries](https://docs.testably.org/Awaiten/resolution/keyed-dictionaries), [property injection](https://docs.testably.org/Awaiten/resolution/property-injection), [runtime arguments](https://docs.testably.org/Awaiten/resolution/runtime-arguments), [context-aware factories](https://docs.testably.org/Awaiten/resolution/context-aware-factories)
+- [Async initialization](https://docs.testably.org/Awaiten/async-initialization)
+- Lifetime and disposal: [scopes](https://docs.testably.org/Awaiten/lifetime/scopes), [disposal](https://docs.testably.org/Awaiten/lifetime/disposal), [owned](https://docs.testably.org/Awaiten/lifetime/owned), [lifetime safety](https://docs.testably.org/Awaiten/lifetime/lifetime-safety), [lifecycle hooks](https://docs.testably.org/Awaiten/lifetime/lifecycle-hooks)
+- Advanced: [external services](https://docs.testably.org/Awaiten/advanced/external-services), [generic variance](https://docs.testably.org/Awaiten/advanced/generic-variance)
+- [MS.DI bridge](https://docs.testably.org/Awaiten/msdi-bridge)
+- [Diagnostics](https://docs.testably.org/Awaiten/diagnostics)
+- [Complete example](https://docs.testably.org/Awaiten/complete-example)
