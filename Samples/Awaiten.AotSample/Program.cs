@@ -42,10 +42,10 @@ public sealed class Report
 }
 
 /// <summary>
-///     An async-initialized Awaiten service. Because it is <see cref="IAsyncInitializable" />, the bridge has
-///     no synchronous resolution path for it and projects it as <c>Task&lt;Warmup&gt;</c> - the path that
-///     builds the closed <c>Task&lt;T&gt;</c> and its converter from generator-emitted metadata, so it
-///     publishes natively without reflection.
+///     An async-initialized Awaiten service. Because it is <see cref="IAsyncInitializable" />, the bridge
+///     has no synchronous resolution path and projects it as <c>Task&lt;Warmup&gt;</c>, building the closed
+///     <c>Task&lt;T&gt;</c> and its converter from generator-emitted metadata so it publishes natively
+///     without reflection.
 /// </summary>
 public sealed class Warmup : IAsyncInitializable
 {
@@ -80,8 +80,8 @@ public static class Program
 		string rendered = report.Render();
 		Console.WriteLine(rendered);
 
-		// The async path: an IAsyncInitializable service is bridged as Task<T>, resolved through ResolveAsync
-		// and initialized exactly once. This is what previously forced runtime MakeGenericType/MakeGenericMethod.
+		// Async path: an IAsyncInitializable service is bridged as Task<T> and initialized once. This is what
+		// previously forced runtime MakeGenericType/MakeGenericMethod.
 		Warmup warmup = await scope.ServiceProvider.GetRequiredService<Task<Warmup>>();
 		Console.WriteLine($"warmup ready: {warmup.Ready}");
 

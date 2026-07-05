@@ -1,11 +1,9 @@
 namespace Awaiten.Tests;
 
 /// <summary>
-///     Runtime behavior of <see cref="Owned{T}" />: resolving a service as an owned handle (directly, or
-///     through a <c>Func&lt;Owned&lt;T&gt;&gt;</c> / <c>Func&lt;TArg…, Owned&lt;T&gt;&gt;</c> factory) builds
-///     it in a dedicated throwaway scope and transfers disposal to the caller. Disposing the handle releases
-///     only what was built for that one resolution, while shared singletons live on the container. The
-///     containers and services are nested types, so the enclosing class is <c>partial</c>.
+///     Runtime behavior of <see cref="Owned{T}" />: resolving a service as an owned handle builds it in a
+///     dedicated throwaway scope and transfers disposal to the caller. Disposing the handle releases only what
+///     was built for that one resolution, while shared singletons live on the container.
 /// </summary>
 public partial class OwnedTests
 {
@@ -134,7 +132,7 @@ public partial class OwnedTests
 		public void Dispose() => Disposed = true;
 	}
 
-	// Non-disposable, but each construction pulls a fresh disposable Bolt - the transitive-accumulation case.
+	// Non-disposable, but each construction pulls a fresh disposable Bolt: the transitive-accumulation case.
 	public sealed class Gizmo
 	{
 		public Gizmo(Bolt bolt) => Bolt = bolt;

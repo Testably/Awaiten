@@ -6,8 +6,7 @@ namespace Awaiten.Tests;
 ///     closed implementation (<c>Repository&lt;Order&gt;</c>) when a closed service
 ///     (<c>IRepository&lt;Order&gt;</c>) is required. Expansion is driven at compile time by the closed
 ///     services an application actually needs, so the container declares a concrete <c>App</c> root that
-///     depends on them. The containers and services are nested types, so the enclosing class is
-///     <c>partial</c>.
+///     depends on them.
 /// </summary>
 public partial class OpenGenericTests
 {
@@ -96,8 +95,7 @@ public partial class OpenGenericTests
 
 	public sealed class Cache<T> : ICache<T>;
 
-	// A concrete root that depends on the closed generics, seeding open generic expansion for the
-	// type arguments actually used by the application.
+	// A concrete root that seeds open generic expansion for the type arguments the application uses.
 	public sealed class App
 	{
 		public App(

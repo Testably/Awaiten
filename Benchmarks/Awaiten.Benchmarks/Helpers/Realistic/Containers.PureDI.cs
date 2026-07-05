@@ -3,8 +3,8 @@ using static Pure.DI.Lifetime;
 
 namespace Awaiten.Benchmarks.Helpers;
 
-// Pure.DI consumes the Setup() method at compile time to generate the container; it is never invoked at
-// runtime, so the unused-private-member rule does not apply here.
+// Pure.DI consumes the Setup() method at compile time; it is never invoked at runtime, so S1144 does
+// not apply.
 #pragma warning disable S1144
 
 internal sealed partial class PureRealisticContainer

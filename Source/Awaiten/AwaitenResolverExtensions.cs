@@ -23,18 +23,14 @@ public static class AwaitenResolverExtensions
 	/// <inheritdoc cref="AwaitenResolverExtensions" />
 	extension(IAwaitenResolver resolver)
 	{
-		/// <summary>
-		///     Resolves a service of type <typeparamref name="T" />, throwing if it is not registered.
-		/// </summary>
+		/// <summary>Resolves a service of type <typeparamref name="T" />, throwing if it is not registered.</summary>
 		public T Resolve<T>()
 		{
 			ThrowIfNull(resolver);
 
-			// Typed fast path: a generated container/scope implements IAwaitenResolver<T> for each
-			// registered service type, so resolving a compile-time type dispatches through a
-			// JIT-specialized generic check instead of the runtime Type-keyed lookup. Relationship types
-			// (Func<T>/Lazy<T>) and unregistered services are not implemented as IAwaitenResolver<T> and
-			// fall through to the Type-based path below.
+			// Typed fast path: dispatches through a JIT-specialized generic check instead of the runtime
+			// Type-keyed lookup. Relationship types (Func<T>/Lazy<T>) and unregistered services do not
+			// implement IAwaitenResolver<T> and fall through to the Type-based path below.
 			if (resolver is IAwaitenResolver<T> typed)
 			{
 				return typed.Resolve();
@@ -43,9 +39,7 @@ public static class AwaitenResolverExtensions
 			return (T)resolver.Resolve(typeof(T));
 		}
 
-		/// <summary>
-		///     Attempts to resolve a service of type <typeparamref name="T" />.
-		/// </summary>
+		/// <summary>Attempts to resolve a service of type <typeparamref name="T" />.</summary>
 		public bool TryResolve<T>([NotNullWhen(true)] out T? instance)
 		{
 			ThrowIfNull(resolver);
@@ -72,9 +66,8 @@ public static class AwaitenResolverExtensions
 		/// </summary>
 		public Task<T> ResolveAsync<T>(CancellationToken cancellationToken = default)
 		{
-			// The null check runs synchronously (eager argument validation, like Resolve<T> / TryResolve<T>)
-			// rather than being deferred into the returned task by an async method: the await-and-cast lives in
-			// a local async function the synchronous body invokes only after the argument is validated.
+			// Validate eagerly, not deferred into the returned task. The await-and-cast lives in the local
+			// async function below, which the synchronous body invokes only after the argument is checked.
 			ThrowIfNull(resolver);
 
 			return Cast(resolver.ResolveAsync(typeof(T), cancellationToken));

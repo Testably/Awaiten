@@ -63,9 +63,9 @@ public static class AwaitenInitializationServiceCollectionExtensions
 		public Task StartAsync(CancellationToken cancellationToken)
 		{
 			// The bridged registrations wire the external resolver lazily on first resolution, but warming
-			// resolves the root itself (a pre-built singleton, not a factory), which bypasses that wiring.
-			// The provider injected into this singleton hosted service is the root provider - the right scope
-			// for singleton external resolution - so wire it here unless a resolver was set explicitly.
+			// resolves the root itself (a pre-built singleton, not a factory), which bypasses that wiring. The
+			// provider injected into this singleton hosted service is the root provider, the right scope for
+			// singleton external resolution, so wire it here unless a resolver was set explicitly.
 			if (_container.ExternalDependencies.Count > 0 && _container.ExternalResolver is null)
 			{
 				_container.ExternalResolver = new ServiceProviderExternalResolver(_provider);

@@ -9,20 +9,13 @@ partial class AwaitenGenerator
 {
 	/// <summary>
 	///     Redirects a single-service consumer parameter requesting a closed generic interface with no exact
-	///     registration to a variance-compatible registration (Part A): a registered <c>IHandler&lt;DomainEvent&gt;</c>
-	///     (<c>in T</c>) satisfying a request for <c>IHandler&lt;OrderPlaced&gt;</c>, or an
-	///     <c>IFactory&lt;OrderPlaced&gt;</c> (<c>out T</c>) satisfying <c>IFactory&lt;DomainEvent&gt;</c>. It runs
-	///     only when the normal lookup misses, so an exact registration always wins; keyed parameters (reached
-	///     through their key) and collections (a set, handled by <see cref="RecordRequestedCollectionElement" />)
-	///     are out of scope. The redirect reuses the target registration's resolver by rewriting the parameter's
-	///     service type - no new instance is synthesized, exactly as decorator/collection redirection does - and
-	///     records the requested closed type as a top-level dispatch alias (Part B) so an imperative
-	///     <c>Resolve&lt;T&gt;()</c> / <c>Resolve(T)</c> routes to the same target. Only the delivery shapes whose
-	///     emitted expression still converts after the rewrite are redirected: a direct dependency (the resolved
-	///     instance converts by the very variance that matched) and a <c>Func&lt;…, T&gt;</c> (covariant in its
-	///     result). The <c>Lazy&lt;T&gt;</c> / <c>Task&lt;T&gt;</c> wrappers are invariant in <c>T</c>, so a
-	///     differently-closed wrapped request has no conversion to the parameter's declared type and stays a
-	///     missing dependency (AWT101).
+	///     registration to a variance-compatible registration (Part A), e.g. a registered
+	///     <c>IHandler&lt;DomainEvent&gt;</c> (<c>in T</c>) satisfying <c>IHandler&lt;OrderPlaced&gt;</c>. It runs
+	///     only on a miss, so an exact registration always wins; keyed parameters and collections are out of scope.
+	///     The redirect reuses the target's resolver by rewriting the parameter's service type and records a
+	///     top-level dispatch alias (Part B) so imperative resolution routes to the same target. Only direct and
+	///     <c>Func&lt;…, T&gt;</c> shapes redirect; the invariant <c>Lazy&lt;T&gt;</c> / <c>Task&lt;T&gt;</c>
+	///     wrappers stay AWT101.
 	/// </summary>
 	private static ParameterModel RedirectVariance(
 		ParameterModel parameterModel,
@@ -60,14 +53,11 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     Records an unkeyed collection parameter whose element is a closed generic interface (Part C), so after
-	///     the instance loop its members can be unioned with every variance-compatible registration - a collection
-	///     of <c>IHandler&lt;OrderPlaced&gt;</c> then includes a registered <c>IHandler&lt;DomainEvent&gt;</c>
-	///     (<c>in T</c>). The synchronous (<c>IEnumerable&lt;T&gt;</c> / <c>T[]</c>), asynchronous
-	///     (<c>IAsyncEnumerable&lt;T&gt;</c>) and awaited (<c>Task&lt;C&gt;</c>) shapes are all captured - they
-	///     share one membership per (element type, key), so the union reaches every shape alike. A keyed collection
-	///     ([FromKey]) resolves only its keyed registrations, and every variance candidate is unkeyed, so a keyed
-	///     collection is left untouched.
+	///     Records an unkeyed collection parameter whose element is a closed generic interface (Part C), so its
+	///     members can later be unioned with every variance-compatible registration (a collection of
+	///     <c>IHandler&lt;OrderPlaced&gt;</c> includes a registered <c>IHandler&lt;DomainEvent&gt;</c>). All shapes
+	///     (sync, async, awaited) share one membership per (element type, key). Keyed collections are left untouched,
+	///     since every variance candidate is unkeyed.
 	/// </summary>
 	private static void RecordRequestedCollectionElement(
 		ParameterModel parameterModel,
@@ -144,8 +134,8 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     Exposes each closed generic type that was variance-redirected as a single service under its chosen
-	///     target instance (Part B), so <c>Resolve&lt;T&gt;()</c> / <c>Resolve(T)</c> - and the Func/Lazy/Owned
-	///     variants and registration metadata, all driven by an instance's <c>Services</c> - route it to the same
+	///     target instance (Part B), so <c>Resolve&lt;T&gt;()</c> / <c>Resolve(T)</c> (and the Func/Lazy/Owned
+	///     variants and registration metadata, all driven by an instance's <c>Services</c>) route it to the same
 	///     resolver the consumer parameter uses. Skipped when an exact registration already owns the type (it never
 	///     does when the alias was recorded, since a redirect fires only on a miss) or the target failed to build.
 	/// </summary>
@@ -178,11 +168,9 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     The single service type a parameter resolves, as a symbol - the result of a <c>Func&lt;T&gt;</c> /
-	///     <c>Func&lt;TArg…, T&gt;</c> relationship, or the parameter type itself for a direct dependency - so the
-	///     variance redirect can compare it against the registered service symbols. Returns <see langword="null" />
-	///     for a non-named type. The caller cross-checks the display string against the classified
-	///     <c>ServiceType</c>, so a shape the classification treats differently never redirects.
+	///     The single service type a parameter resolves, as a symbol: the result of a <c>Func&lt;…, T&gt;</c>
+	///     relationship, or the parameter type itself for a direct dependency, so the variance redirect can compare
+	///     it against the registered service symbols. Returns <see langword="null" /> for a non-named type.
 	/// </summary>
 	private static INamedTypeSymbol? UnderlyingServiceType(ITypeSymbol type)
 	{
@@ -196,16 +184,9 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     The element type symbol of a collection dependency - a synchronous shape (<c>T[]</c>,
-	///     <c>IEnumerable&lt;T&gt;</c> and friends), an asynchronous one (<c>IAsyncEnumerable&lt;T&gt;</c>) or an
-	///     awaited one (<c>Task&lt;C&gt;</c> over a synchronous shape, e.g. <c>Task&lt;IReadOnlyList&lt;T&gt;&gt;</c>) -
-	///     when that element is a named type, or <see langword="null" /> otherwise. Exactly the shapes
-	///     classification maps to <see cref="DependencyKind.Enumerable" /> / <see cref="DependencyKind.AsyncEnumerable" /> /
-	///     <see cref="DependencyKind.AwaitedEnumerable" /> (the caller's kind gate), so no other wrapper reaches
-	///     here - in particular <c>ValueTask&lt;C&gt;</c> never classifies as a collection, matching
-	///     <see cref="TryGetAwaitedCollection" />. Used to variance-match a requested collection element against
-	///     the registered service symbols (the string-only element in the parameter model is enough for
-	///     membership, but variance needs the symbol).
+	///     The named element type symbol of a collection dependency (a synchronous shape, an
+	///     <c>IAsyncEnumerable&lt;T&gt;</c>, or an awaited <c>Task&lt;C&gt;</c>), or <see langword="null" />
+	///     otherwise. Variance-matching needs the symbol, where the parameter model carries only the element string.
 	/// </summary>
 	private static INamedTypeSymbol? CollectionElementSymbol(ITypeSymbol type)
 	{
@@ -231,14 +212,11 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     Every registered service that satisfies a requested closed generic interface through declared C#
-	///     variance, in registration order: a registered <c>IHandler&lt;DomainEvent&gt;</c> (<c>in T</c>) satisfies
-	///     a request for <c>IHandler&lt;OrderPlaced&gt;</c>; a registered <c>IFactory&lt;OrderPlaced&gt;</c>
-	///     (<c>out T</c>) satisfies <c>IFactory&lt;DomainEvent&gt;</c>. Only candidates of the same generic
-	///     interface definition are considered, and the exact request is skipped (handled by the normal lookup). A
-	///     single-service consumer (<see cref="FindVarianceMatch" />) picks the nearest of these; a collection
-	///     unions them all. An invariant interface (no <c>in</c>/<c>out</c>) and any non-interface request yield
-	///     nothing, so both still report AWT101 when unregistered.
+	///     Every registered service that satisfies a requested closed generic interface through declared C# variance,
+	///     in registration order (e.g. a registered <c>IHandler&lt;DomainEvent&gt;</c> with <c>in T</c> satisfies
+	///     <c>IHandler&lt;OrderPlaced&gt;</c>). The exact request is skipped. A single-service consumer picks the
+	///     nearest (<see cref="FindVarianceMatch" />); a collection unions them all. An invariant or non-interface
+	///     request yields nothing, so it still reports AWT101.
 	/// </summary>
 	private static List<(string ServiceType, INamedTypeSymbol Symbol)> VarianceMatches(
 		INamedTypeSymbol requested,
@@ -273,7 +251,7 @@ partial class AwaitenGenerator
 			}
 
 			// The candidate satisfies the request when an instance of the candidate's service IS-A the requested
-			// service - exactly the implicit reference conversion C# variance defines.
+			// service, exactly the implicit reference conversion C# variance defines.
 			if (VarianceCompatible(candidate.Symbol, requested, variance.Compilation))
 			{
 				matches.Add(candidate);
@@ -285,20 +263,16 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     Whether the generic interface's definition declares at least one variant (<c>in</c>/<c>out</c>) type
-	///     parameter - the precondition for any differently-closed construction of it to be convertible.
+	///     parameter, the precondition for any differently-closed construction of it to be convertible.
 	/// </summary>
 	private static bool HasDeclaredVariance(INamedTypeSymbol service)
 		=> service.OriginalDefinition.TypeParameters.Any(parameter => parameter.Variance is VarianceKind.In or VarianceKind.Out);
 
 	/// <summary>
-	///     The single registered service that best satisfies a requested closed generic interface through declared
-	///     C# variance (Part A). When several candidates match, the nearest one wins - the one whose service every
-	///     other matching candidate's service is itself assignable to (the most-derived argument under
-	///     contravariance, the most-general under covariance): a registered <c>IHandler&lt;DomainEvent&gt;</c>
-	///     beats a registered <c>IHandler&lt;object&gt;</c> for a requested <c>IHandler&lt;OrderPlaced&gt;</c> -
-	///     falling back to registration order for unordered candidates, so the result is deterministic. Returns
-	///     the matching candidate's service-type string (the existing resolver to reuse), or
-	///     <see langword="null" /> when there is no variance match.
+	///     The single registered service that best satisfies a requested closed generic interface through declared C#
+	///     variance (Part A). When several match, the nearest wins (the one every other match's service is assignable
+	///     to), falling back to registration order for determinism. Returns the matching candidate's service-type
+	///     string, or <see langword="null" /> when there is no match.
 	/// </summary>
 	private static string? FindVarianceMatch(
 		INamedTypeSymbol requested,
@@ -311,7 +285,7 @@ partial class AwaitenGenerator
 			// The candidate is nearer the request than the current best when the best's service converts to it:
 			// under contravariance the more-derived closure sits between the request and the more-general one
 			// (IHandler<object> IS-A IHandler<DomainEvent> IS-A IHandler<OrderPlaced>), and under covariance the
-			// more-general closure does - in both cases the conversion target is the better pick.
+			// more-general closure does. In both cases the conversion target is the better pick.
 			if (best is not { } current || VarianceCompatible(current.Symbol, candidate.Symbol, variance.Compilation))
 			{
 				best = candidate;
@@ -324,7 +298,7 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     True when an instance of the constructed generic interface <paramref name="from" /> IS-A
 	///     <paramref name="to" /> through declared C# variance: both must be the same generic interface
-	///     definition, and at each type-argument position the declared variance must hold - covariant (<c>out</c>)
+	///     definition, and at each type-argument position the declared variance must hold. Covariant (<c>out</c>)
 	///     requires the <c>from</c> argument assignable to the <c>to</c> argument, contravariant (<c>in</c>)
 	///     requires the reverse, and an invariant position requires identical arguments. Reference conversions
 	///     only (a value-type argument at a variant position is never variance-convertible in C#).
@@ -366,7 +340,7 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     True when an identity or implicit reference conversion exists from <paramref name="from" /> to
-	///     <paramref name="to" /> - exactly what a variant type-argument position requires. Classified by the
+	///     <paramref name="to" />, exactly what a variant type-argument position requires. Classified by the
 	///     compiler rather than re-derived, so it covers every reference conversion, including an interface to
 	///     <c>object</c>, array covariance, and the variance conversions a nested variant position needs
 	///     (<c>IEnumerable&lt;OrderPlaced&gt;</c> to <c>IEnumerable&lt;DomainEvent&gt;</c>).
@@ -380,8 +354,8 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     The mutable variance state threaded through instance building: the candidate registrations (every
 	///     unkeyed closed-generic-interface registration, from coalescing), the compilation (whose conversion
-	///     classification decides variance compatibility), and the accumulators the redirect fills - the top-level
-	///     dispatch aliases (Part B) and the requested collection elements (Part C) - drained after the instance
+	///     classification decides variance compatibility), and the accumulators the redirect fills (the top-level
+	///     dispatch aliases (Part B) and the requested collection elements (Part C)), drained after the instance
 	///     loop. Empty <see cref="Candidates" /> short-circuits every variance step.
 	/// </summary>
 	private sealed class VarianceState

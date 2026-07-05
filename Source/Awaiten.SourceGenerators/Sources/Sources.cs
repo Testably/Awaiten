@@ -4,13 +4,9 @@ using Awaiten.SourceGenerators.Entities;
 namespace Awaiten.SourceGenerators;
 
 /// <summary>
-///     Emits the generated members of a container from its <see cref="ContainerModel" />: a base
-///     <c>Scope</c> type holding the resolution logic (scoped instances, transient construction, synchronous
-///     disposal) and a sealed <c>Root</c> subclass owning the thread-safe singletons. The <c>[Container]</c>
-///     class itself is a static definition and carries no generated state. Enclosing types are re-opened as
-///     <c>partial</c> so the container can be a nested type. Per-instance members are named after the
-///     implementation type (e.g. <c>ResolveGreeter</c>, <c>_greeter</c>), with a numeric suffix added
-///     only when two implementations would otherwise collide.
+///     Emits a container's members from its <see cref="ContainerModel" />: a base <c>Scope</c> holding the
+///     resolution logic and a sealed <c>Root</c> subclass owning the thread-safe singletons. Enclosing types
+///     are re-opened as <c>partial</c> so the container can be nested.
 /// </summary>
 internal static partial class Sources
 {
@@ -68,10 +64,8 @@ internal static partial class Sources
 	}
 
 	/// <summary>
-	///     The table-wide context shared by the resolver emitters: the full instance list, the name table, the
-	///     service→index dispatch map, and whether the container emits the <c>IAsyncDisposable</c> surface.
-	///     Threading these four as one value keeps the per-resolver signatures within the parameter budget (they
-	///     otherwise travel together through every resolver).
+	///     The context shared by the resolver emitters: the instance list, name table, service→index dispatch
+	///     map, and whether the container emits the <c>IAsyncDisposable</c> surface.
 	/// </summary>
 	private readonly record struct EmitContext(
 		InstanceModel[] Instances,
@@ -89,18 +83,14 @@ internal static partial class Sources
 	{
 		EmitContext context = new(model.Instances.AsArray(), names, serviceToIndex, model.HasAsyncDisposable);
 
-		// The [Container] class is a pure static definition: it carries the registration attributes and any
-		// static factory or instance members they name, and holds the generated Scope/Root types - nothing
-		// generated lives on it directly. All state and resolution live on those types: the base Scope holds
-		// the static dispatch table plus scoped/transient logic and delegates singletons to the root, while
-		// the sealed Root subclass owns the singletons and is the usable instance (new MyContainer.Root()).
+		// The base Scope holds the dispatch table and scoped/transient logic and delegates singletons to the
+		// root; the sealed Root owns the singletons and is the usable instance (new MyContainer.Root()).
 		EmitRootClass(builder, depth, context, model.SyncResolveAfterInit);
 		builder.AppendLine();
 		EmitScopeBaseClass(builder, depth, context, model.Strict, model.SyncResolveAfterInit, model.VarianceCandidates.AsArray());
 
-		// The __AsyncArray<T> backing type for IAsyncEnumerable<T> collections is emitted on the container (a
-		// private nested type reachable from both Scope and Root) only when the async collection materialization is
-		// actually used - by an injection or by a by-type IAsyncEnumerable<T> dispatch entry / async resolver.
+		// The __AsyncArray<T> backing type for IAsyncEnumerable<T> collections is emitted only when the async
+		// collection materialization is actually used.
 		if (NeedsAsyncArrayHelper(context.Instances, names, serviceToIndex))
 		{
 			builder.AppendLine();
@@ -113,18 +103,17 @@ internal static partial class Sources
 		   && (instance.Lifetime == Lifetime.Singleton || instance.Production == ProductionKind.Instance);
 
 	/// <summary>
-	///     Whether synchronous resolution members (resolver, cache field, dispatch entries, typed fast path) are
-	///     emitted for an instance: always for a non-tainted service, and for an async-tainted one only in
-	///     pragmatic mode (SyncResolveAfterInit), where it may be resolved synchronously once InitializeAsync has
-	///     warmed it. In the strict default an async-tainted service is reachable only through ResolveAsync.
+	///     Whether synchronous resolution members are emitted for an instance: always for a non-tainted service,
+	///     and for an async-tainted one only in pragmatic mode (SyncResolveAfterInit). In the strict default an
+	///     async-tainted service is reachable only through ResolveAsync.
 	/// </summary>
 	private static bool EmitsSync(InstanceModel instance, bool syncResolveAfterInit)
 		=> !instance.IsAsyncTainted || syncResolveAfterInit;
 
 	/// <summary>
-	///     Emits the base <c>Scope</c>: the single home of resolution logic. It caches scoped instances on
-	///     itself, constructs transients, and resolves singletons through <c>protected virtual</c> delegators
-	///     that the <c>Root</c> subclass overrides. Child (request) scopes are instances of this type.
+	///     Emits the base <c>Scope</c>: the home of resolution logic. It caches scoped instances, constructs
+	///     transients, and resolves singletons through virtual delegators the <c>Root</c> overrides. Child scopes
+	///     are instances of this type.
 	/// </summary>
 	private static void EmitScopeBaseClass(StringBuilder builder, int depth, EmitContext context, bool strict, bool syncResolveAfterInit, string[] varianceCandidates)
 	{
@@ -138,9 +127,8 @@ internal static partial class Sources
 		Indent(builder, depth).Append("public class Scope : global::Awaiten.IAwaitenScope, global::Awaiten.IExternalResolverHost");
 		if (asyncDisposal)
 		{
-			// IAsyncDisposable is implemented on the concrete Scope (not added to the IAwaitenScope interface,
-			// which would break every hand-implementer): the Root inherits it, and `await using` works on the
-			// concrete container/scope. Emitted only when the compilation can see the type.
+			// IAsyncDisposable is implemented on the concrete Scope, not the IAwaitenScope interface (which would
+			// break every hand-implementer). Emitted only when the compilation can see the type.
 			builder.Append(", global::System.IAsyncDisposable");
 		}
 
@@ -149,35 +137,27 @@ internal static partial class Sources
 		Indent(builder, depth).AppendLine("{");
 		int body = depth + 1;
 
-		// The generated members are collected into per-region buffers and assembled (below) into #region groups,
-		// so a reader meets the fields, the public/ctor surface, the typed IAwaitenResolver<T> implementations, the
-		// per-type resolvers and the private helpers each in their own labelled block. Emit order within a buffer,
-		// not call order, decides layout, so the emitters run in whatever order threads state most simply.
+		// Members are collected into per-region buffers and assembled into #region groups below. Emit order within
+		// a buffer, not call order, decides layout, so emitters run in whatever order threads state most simply.
 		StringBuilder fields = new();
 		StringBuilder members = new();
 		StringBuilder typed = new();
 		StringBuilder resolvers = new();
 		StringBuilder helpers = new();
 
-		// The dispatch table lives on the Scope (the only reader, through TryResolve); it is static, so it is
-		// built once for the whole container, and reached by simple name from this type and its Root subclass.
-		// Every entry is dispatchable; a root-withheld entry additionally appears in the __withheld table (its
-		// guidance, thrown by Resolve on the Root) and carries the RootWithheld flag on its bucket slot (which
-		// TryResolve consults only on the Root), so a child scope resolves it while the Root withholds it.
+		// The static dispatch table lives on the Scope, built once for the whole container. A root-withheld entry
+		// also appears in the __withheld table and carries the RootWithheld slot flag (consulted only on the Root),
+		// so a child scope resolves it while the Root withholds it.
 		List<DispatchEntry> entries = BuildDispatchEntries(instances, names, serviceToIndex, strict, syncResolveAfterInit);
 		List<DispatchEntry> rootWithheld = Withheld(entries);
-		// The __withheld guidance table merges two sources: the root-withheld disposable build-on-demand
-		// services (still dispatchable from a child scope) and the async-tainted services excluded from
-		// synchronous resolution entirely (reachable only through ResolveAsync). Both surface a helpful
-		// message from Resolve instead of the generic "no registration"; only the former needs the
-		// RootWithheld slot flag (it gates TryResolve on the Root), so that rides on the dispatch entries.
+		// The __withheld guidance table merges the root-withheld disposable services and the async-tainted services
+		// excluded from synchronous resolution, so Resolve surfaces a targeted message instead of the generic "no
+		// registration". Only the former needs the RootWithheld slot flag, which rides on the dispatch entries.
 		List<(string Type, string Guidance)> withheldTypes = WithheldTypes(rootWithheld, instances, names, serviceToIndex, syncResolveAfterInit);
 
-		// Fields region. The by-type dispatch table's static fields and static constructor land here; its slot
-		// type, distributor and __R forwarders go to the helpers region. Data-driven by-type dispatch: a hand-tuned
-		// open-addressed table (keyed by Type identity hash) whose slots carry the resolver delegate directly. The
-		// table grows in data, never in a single method's IL, so it cannot exceed the JIT's optimization guards no
-		// matter how many registrations there are; the root-withholding rides on each slot.
+		// Fields region. The dispatch table's static fields and static constructor land here; its slot type,
+		// distributor and __R forwarders go to helpers. An open-addressed table keyed by Type identity hash grows
+		// in data, never in a single method's IL, so it never exceeds the JIT's optimization guards.
 		if (entries.Count > 0)
 		{
 			EmitBucketDispatch(fields, helpers, body, entries);
@@ -189,13 +169,10 @@ internal static partial class Sources
 			EmitWithheldTable(fields, body, withheldTypes);
 		}
 
-		// The (sealed) root scope this scope resolves singletons through. Holding the root directly lets a
-		// child scope reach a singleton with a devirtualized call instead of a virtual override dispatch; it
-		// is the root itself on the Root subclass, and shared down every child scope. Synchronization is on a
-		// private gate object rather than the owner instance: a Scope/Root is publicly reachable, and locking on
-		// it would let consumer code (lock (scope)) interfere with resolution and disposal. The disposables list
-		// is created lazily on first use. These are protected so the Root subclass's singleton overrides share
-		// the same gate and list.
+		// The root scope this scope resolves singletons through: holding it directly devirtualizes the singleton
+		// call. Synchronization is on a private gate object, not the owner, so consumer code (lock (scope)) cannot
+		// interfere with resolution and disposal. The disposables list is lazy. All protected so the Root's
+		// singleton overrides share the same gate and list.
 		Separate(fields);
 		Indent(fields, body).AppendLine("protected readonly Root __root;");
 		Indent(fields, body).AppendLine("protected readonly object __gate = new object();");
@@ -210,30 +187,23 @@ internal static partial class Sources
 
 		if (NeedsWiringSupport(instances))
 		{
-			// The nesting depth of the wiring episode in progress on this owner (touched only under __gate; the
-			// re-entrant resolves of a deferred cycle nest). The outermost frame commits every wiring flag - or
-			// rolls a failed episode back - exactly once, so a nested participant is never flagged as wired while
-			// an outer participant that references it is still half-wired.
+			// The nesting depth of the wiring episode in progress on this owner (touched only under __gate). The
+			// outermost frame commits every wiring flag (or rolls back) once, so a nested participant is never
+			// flagged wired while an outer participant that references it is still half-wired.
 			Indent(fields, body).AppendLine("protected int __wiring;");
 		}
 
 		EmitCacheFields(fields, body, instances, names, Lifetime.Scoped);
 
-		// The external resolver this scope routes its [FromServices] / [ImportServices] dependencies through
-		// (IExternalResolverHost). A host wires each scope to its aligned provider; a child scope left without
-		// one of its own falls back to the root's resolver in __ResolveExternal. Inherited by the Root, where it
-		// is also the IAwaitenContainerMetadata.ExternalResolver a host sets for the singleton (root) path. The
-		// private field lives in the fields region; its explicit IExternalResolverHost.ExternalResolver property
-		// (kept off the concrete surface, reached through the interface a host already holds) lands in the members
-		// region, since an explicit member is not reachable by simple name from within the type.
+		// The external resolver this scope routes its [FromServices] / [ImportServices] dependencies through. A
+		// host wires each scope; a child without its own falls back to the root's in __ResolveExternal. The
+		// explicit IExternalResolverHost.ExternalResolver property lands in the members region.
 		Separate(fields);
 		Indent(fields, body).AppendLine("private global::Awaiten.IExternalResolver? __externalResolver;");
 
-		// Members region (no #region wrapper): the constructors, the public surface and the non-typed explicit
-		// interface implementations. The root is its own __root (the parameterless ctor is only ever reached
-		// through Root's base call, so the cast always holds); child scopes are handed the shared root. The child
-		// ctor is private so a scope is only ever created through CreateScope(), never hand-built with a borrowed
-		// root.
+		// Members region: constructors, public surface and non-typed explicit interface implementations. The root
+		// is its own __root (the parameterless ctor is only reached through Root's base call); child scopes get the
+		// shared root. The child ctor is private so a scope is only created through CreateScope().
 		Indent(members, body).AppendLine("private protected Scope()");
 		Indent(members, body).AppendLine("{");
 		Indent(members, body + 1).AppendLine("__root = (Root)this;");
@@ -255,16 +225,13 @@ internal static partial class Sources
 		EmitResolutionApi(regions, body, context, strict, syncResolveAfterInit, varianceCandidates);
 		Separate(members);
 		EmitGenericResolveMethod(members, body);
-		// The asynchronous surface: ResolveAsync(Type) on every owner, plus CreateScopeAsync. Its by-type dispatch
-		// table fields go to the fields region and its slot type / builder / __AsObject helper to the helpers
-		// region. The Root's InitializeAsync and per-singleton async resolvers are emitted on the Root.
+		// The asynchronous surface: ResolveAsync(Type) on every owner, plus CreateScopeAsync. The Root's
+		// InitializeAsync and per-singleton async resolvers are emitted on the Root.
 		EmitAsyncResolutionApi(regions, body, instances, names, serviceToIndex, strict, syncResolveAfterInit);
 		Separate(members);
 		EmitCreateScopeAsync(members, body);
-		// A scope is the single source of scopes: nesting shares the same root (and therefore the same
-		// singletons), so a child created from a child is no different from one created from the root. A
-		// child scope's lifetime is owned by its caller; the parent does not track it. The concrete return
-		// type spares callers holding a Scope an interface hop; the interface contract is met explicitly.
+		// Nesting shares the same root (same singletons), so a child created from a child is no different from one
+		// created from the root. A child scope's lifetime is owned by its caller; the parent does not track it.
 		Separate(members);
 		AppendXmlSummary(members, body,
 			"Opens a child scope; the caller owns and disposes it.");
@@ -301,9 +268,8 @@ internal static partial class Sources
 			EmitOwnedHelper(helpers, body, HasExternalDependencies(instances));
 		}
 
-		// The __ResolveExternal helper is emitted on the base Scope (reached from the Root through __root) only
-		// when the container actually has [FromServices] / [ImportServices] dependencies, so a container without
-		// them carries no unused helper.
+		// The __ResolveExternal helper is emitted only when the container has [FromServices] / [ImportServices]
+		// dependencies, so a container without them carries no unused helper.
 		if (HasExternalDependencies(instances))
 		{
 			Separate(helpers);
@@ -327,10 +293,8 @@ internal static partial class Sources
 	}
 
 	/// <summary>
-	///     Emits each instance's per-service resolvers into the Scope body: a synchronous resolver - suppressed for
-	///     an async-tainted service in the strict default (reachable only through ResolveAsync), and in pragmatic
-	///     mode delegating to the memoizing async resolver rather than constructing a second, uninitialized instance
-	///     (a parameterized service forwarding its runtime arguments), so there is a single init path - and, for
+	///     Emits each instance's per-service resolvers into the Scope body: a synchronous resolver (suppressed for
+	///     an async-tainted service in the strict default, delegating to the async one in pragmatic mode) and, for
 	///     every async-tainted service, its async resolver.
 	/// </summary>
 	private static void EmitInstanceResolvers(StringBuilder builder, int depth, EmitContext context, InstanceModel[] instances, Names names, bool syncResolveAfterInit)
@@ -366,17 +330,16 @@ internal static partial class Sources
 	}
 
 	/// <summary>
-	///     Whether the container needs the deferred-wiring episode machinery (the <c>__wiring</c> depth counter
-	///     and the <c>__CommitWiring</c>/<c>__RollbackWiring</c> pair): some synchronously-cached instance has a
-	///     deferred (<c>[Inject(Deferred = true)]</c>) member, so its cache-miss block runs a wiring episode.
+	///     Whether the container needs the deferred-wiring machinery (<c>__wiring</c> counter and
+	///     <c>__CommitWiring</c>/<c>__RollbackWiring</c>): some synchronously-cached instance has a deferred
+	///     (<c>[Inject(Deferred = true)]</c>) member.
 	/// </summary>
 	private static bool NeedsWiringSupport(InstanceModel[] instances)
 		=> instances.Any(instance => IsSyncCachedDeferred(instance, Lifetime.Singleton) || IsSyncCachedDeferred(instance, Lifetime.Scoped));
 
 	/// <summary>
-	///     Whether the instance is cached by a synchronous caching resolver of the given lifetime <em>and</em> has
-	///     deferred members - exactly the instances that get a volatile wiring flag (see
-	///     <see cref="EmitCacheFields" />) and participate in wiring episodes.
+	///     Whether the instance is cached by a synchronous caching resolver of the given lifetime and has deferred
+	///     members: exactly the instances that get a wiring flag and participate in wiring episodes.
 	/// </summary>
 	private static bool IsSyncCachedDeferred(InstanceModel instance, Lifetime lifetime)
 		=> instance.Lifetime == lifetime
@@ -386,13 +349,10 @@ internal static partial class Sources
 		   && HasDeferredMembers(instance);
 
 	/// <summary>
-	///     Emits the wiring-episode commit/rollback pair over the owner's deferred-member instances (the scoped
-	///     ones on the base <c>Scope</c>, plus the singletons in the <c>Root</c> override). The outermost frame of
-	///     a wiring episode calls <c>__CommitWiring</c> on success - flagging every instance the episode published
-	///     as fully wired, so the lock-free fast paths may hand them out - and <c>__RollbackWiring</c> on failure,
-	///     unpublishing every instance the failed episode left half-wired so the next resolve rebuilds it. The pair
-	///     is virtual because an episode on the <c>Root</c> can span its inherited scoped instances and its
-	///     singletons under the same gate, so the Root override must flush both sets.
+	///     Emits the wiring-episode commit/rollback pair over the owner's deferred-member instances.
+	///     <c>__CommitWiring</c> flags every published instance as fully wired; <c>__RollbackWiring</c> unpublishes
+	///     a failed episode's half-wired instances so the next resolve rebuilds. Virtual because a Root episode
+	///     spans its inherited scoped instances and its singletons under one gate, so the override must flush both.
 	/// </summary>
 	private static void EmitWiringSupport(StringBuilder builder, int depth, InstanceModel[] instances, Names names, bool root)
 	{
@@ -402,7 +362,7 @@ internal static partial class Sources
 		AppendXmlSummary(builder, depth,
 			"Marks every published deferred-member instance as fully wired: called by the outermost frame of a",
 			"successful wiring episode, so a half-wired instance is never observable through the lock-free fast",
-			"path - not even transitively through an already-published peer.");
+			"path, not even transitively through an already-published peer.");
 		Indent(builder, depth).Append(modifiers).AppendLine(" void __CommitWiring()");
 		Indent(builder, depth).AppendLine("{");
 		if (root)
@@ -449,10 +409,9 @@ internal static partial class Sources
 	}
 
 	/// <summary>
-	///     Emits the <c>Root</c>: the root scope where singletons (and pre-built Instances) physically live,
-	///     and the usable container instance (<c>new MyContainer.Root()</c>). It overrides the base's virtual
-	///     singleton delegators with the real caching/member access, so a child scope delegating through
-	///     <c>__root</c> lands here.
+	///     Emits the <c>Root</c>: where singletons (and pre-built Instances) live, and the usable container
+	///     instance (<c>new MyContainer.Root()</c>). It overrides the base's virtual singleton delegators, so a
+	///     child scope delegating through <c>__root</c> lands here.
 	/// </summary>
 	private static void EmitRootClass(StringBuilder builder, int depth, EmitContext context, bool syncResolveAfterInit)
 	{
@@ -461,17 +420,15 @@ internal static partial class Sources
 
 		// The Root is the composition root (IAwaitenContainerMetadata, which is an IAwaitenRoot): it adds
 		// InitializeAsync to warm the singletons and advertises its registrations for the MS.DI bridge. A
-		// child scope is only an IAwaitenScope - it is warmed when created (CreateScopeAsync), never explicitly.
+		// child scope is only an IAwaitenScope; it is warmed when created (CreateScopeAsync), never explicitly.
 		AppendXmlSummary(builder, depth,
 			"The container root: owns the singleton instances and serves as the default scope.");
 		Indent(builder, depth).AppendLine("public sealed class Root : Scope, global::Awaiten.IAwaitenContainerMetadata");
 		Indent(builder, depth).AppendLine("{");
 		int body = depth + 1;
 
-		// Region buffers, assembled (below) into #region groups: the singleton fields and metadata arrays, the
-		// constructor and the IAwaitenContainerMetadata surface (InitializeAsync plus the advertised lists), the
-		// per-singleton static resolvers, and the wiring helpers. Emit order within a buffer, not call order,
-		// decides layout, so the emitters run in whatever order threads the members into the right buffers.
+		// Region buffers assembled into #region groups below. Emit order within a buffer, not call order, decides
+		// layout, so emitters run in whatever order threads members into the right buffers.
 		StringBuilder fields = new();
 		StringBuilder members = new();
 		StringBuilder resolvers = new();
@@ -481,10 +438,8 @@ internal static partial class Sources
 		// and __externalDependencies when the container has external dependencies).
 		EmitCacheFields(fields, body, instances, names, Lifetime.Singleton);
 
-		// Members region (no #region wrapper): the constructor and the IAwaitenContainerMetadata surface. The
-		// Root is the composition root (IAwaitenContainerMetadata, which is an IAwaitenRoot): it adds
-		// InitializeAsync to warm the singletons and advertises its registrations for the MS.DI bridge. A child
-		// scope is only an IAwaitenScope - it is warmed when created (CreateScopeAsync), never explicitly.
+		// Members region (no #region wrapper): the constructor and the IAwaitenContainerMetadata surface
+		// (InitializeAsync plus the advertised registration lists).
 		AppendXmlSummary(members, body,
 			"Creates the container root: the usable container instance and its default scope.");
 		Indent(members, body).AppendLine("public Root() : base()");
@@ -506,10 +461,8 @@ internal static partial class Sources
 		for (int i = 0; i < instances.Length; i++)
 		{
 			InstanceModel instance = instances[i];
-			// A parameterized service and a requesting-type factory are never cached on the root; their single
-			// fresh-per-call resolver lives on the base Scope (Root inherits it). Only singleton-owned instances
-			// (singletons and pre-built Instances) get a Root override - and a requesting-type factory is not
-			// singleton-owned (IsRootOwned excludes it) even when it is declared a singleton.
+			// A parameterized service and a requesting-type factory are never cached on the root; their
+			// fresh-per-call resolver lives on the base Scope. Only singleton-owned instances get a Root override.
 			if (instance.IsParameterized
 			    || instance.IsRequestingTypeFactory
 			    || (instance.Lifetime != Lifetime.Singleton && instance.Production != ProductionKind.Instance))
@@ -517,10 +470,9 @@ internal static partial class Sources
 				continue;
 			}
 
-			// A synchronously-resolvable, non-async singleton gets its caching static resolver here. An async
-			// singleton in pragmatic mode (SyncResolveAfterInit) instead gets a delegating synchronous resolver
-			// that blocks on its async resolver (both hosted on the Root); in the strict default it has no
-			// synchronous resolver at all (reachable only through ResolveAsync).
+			// A non-async singleton gets its caching static resolver here. An async singleton in pragmatic mode gets
+			// a delegating synchronous resolver that blocks on its async one; in the strict default it has no
+			// synchronous resolver at all.
 			if (EmitsSync(instance, syncResolveAfterInit))
 			{
 				Separate(resolvers);
@@ -542,8 +494,7 @@ internal static partial class Sources
 		}
 
 		// Helpers region. The Root's wiring commit/rollback override adds the deferred singletons to the base
-		// Scope's scoped set: an episode on the Root (whose gate its singleton resolvers and inherited scoped
-		// resolvers share) can publish both kinds, so the outermost frame must flush both.
+		// Scope's scoped set, so an episode on the Root flushes both kinds.
 		if (instances.Any(instance => IsSyncCachedDeferred(instance, Lifetime.Singleton)))
 		{
 			Separate(helpers);
@@ -560,15 +511,10 @@ internal static partial class Sources
 	}
 
 	/// <summary>
-	///     Emits the body of the generated <c>Root</c> constructor: each <c>Eager</c> singleton is constructed at
-	///     build time, in registration (instance) order, after <c>base()</c> has initialized the root's fields -
-	///     the synchronous analog of <c>InitializeAsync</c>, which warms only the async singletons. Every eager
-	///     singleton routes through its own caching static resolver (called with <c>this</c>, the root), so its
-	///     construction is cached and a disposable one is tracked for teardown exactly as on a lazy resolve. Emits
-	///     nothing when no singleton is eager. The model never reaches emission with an async-tainted eager
-	///     singleton in the strict default (its synchronous resolver is not emitted) - that is AWT161, whose error
-	///     yields the throwing error body instead; in pragmatic <c>SyncResolveAfterInit</c> mode the eager
-	///     singleton has a (blocking) synchronous resolver, so the call is always valid here.
+	///     Emits the <c>Root</c> constructor body: each <c>Eager</c> singleton is constructed at build time, in
+	///     registration order, through its caching static resolver (so it is cached and a disposable one tracked).
+	///     The synchronous analog of <c>InitializeAsync</c>. An async-tainted eager singleton in the strict default
+	///     is AWT161 (the throwing error body is emitted instead), so the call here is always valid.
 	/// </summary>
 	private static void EmitEagerActivation(StringBuilder builder, int depth, InstanceModel[] instances, Names names)
 	{
@@ -582,23 +528,20 @@ internal static partial class Sources
 	}
 
 	/// <summary>
-	///     Emits the volatile cache fields for instances of the given lifetime (reference-type fields are
-	///     volatile so the lock-free fast path cannot observe a non-null reference before the constructor's
-	///     writes are visible on weak memory models such as arm64). A pre-built Instance has no field.
+	///     Emits the cache fields for instances of the given lifetime (reference-type fields are volatile so the
+	///     lock-free fast path cannot observe a reference before the constructor's writes are visible on weak
+	///     memory models). A pre-built Instance has no field.
 	/// </summary>
 	private static void EmitCacheFields(StringBuilder builder, int depth, InstanceModel[] instances, Names names, Lifetime lifetime)
 	{
-		// The cache fields form one contiguous block; separate it from any prior content in the region buffer with
-		// a single blank line before the first field written (a no-op when the buffer is still empty, e.g. the
-		// singleton fields opening the Root's fields region). Every non-skipped instance emits exactly one field,
-		// so the separation is done ahead of the first emit.
+		// The cache fields form one contiguous block, separated from any prior region content by one blank line
+		// before the first field (a no-op when the buffer is empty).
 		bool separated = false;
 		for (int i = 0; i < instances.Length; i++)
 		{
 			InstanceModel instance = instances[i];
-			// A pre-built Instance has no field; a parameterized service is rebuilt per call from its runtime
-			// arguments; and a requesting-type factory is rebuilt per call with the consumer's typeof(…) - so
-			// none of the three is ever cached.
+			// A pre-built Instance, a parameterized service and a requesting-type factory are never cached (each is
+			// rebuilt per call).
 			if (instance.Production == ProductionKind.Instance || instance.IsParameterized || instance.IsRequestingTypeFactory || instance.Lifetime != lifetime)
 			{
 				continue;
@@ -629,22 +572,16 @@ internal static partial class Sources
 			return;
 		}
 
-		// The synchronous cache backs synchronous resolution. An async-tainted service is never cached
-		// synchronously: in the strict default it has no synchronous resolver at all, and in pragmatic
-		// mode its synchronous resolver delegates to the (memoizing) async one - so the async cache above
-		// is its single home and there is no second, uninitialized instance to cache here.
+		// The synchronous cache backs synchronous resolution. An async-tainted service is never cached here: the
+		// async cache above is its single home.
 		string modifier = instance.IsReferenceType ? "private volatile " : "private ";
 		Indent(builder, depth).Append(modifier).Append(instance.ConstructedType)
 			.Append("? ").Append(names.Field(i)).AppendLine(";");
 
-		// A deferred ([Inject(Deferred = true)]) member is wired after the cache field is published, so a
-		// separate volatile flag marks when wiring has completed. The lock-free fast path gates on it (rather
-		// than on the field alone) so a concurrent caller never returns a published-but-half-wired instance,
-		// while the mid-wiring re-entrant resolve sees it still false, skips the fast path and terminates the
-		// cycle through the reentrant lock. It is committed by the outermost frame of the wiring episode
-		// (__CommitWiring), so a cycle peer is never flagged while a participant that references it is still
-		// half-wired. Volatile: its release-write happens-after every deferred write of the episode, so a
-		// reader that acquire-reads it as true sees fully-wired instances only.
+		// A deferred ([Inject(Deferred = true)]) member is wired after the field is published, so a volatile flag
+		// marks when wiring completed. The lock-free fast path gates on it (not the field alone) so a concurrent
+		// caller never returns a half-wired instance, while the mid-wiring re-entrant resolve sees it still false
+		// and terminates the cycle through the lock. Committed by the outermost frame of the episode.
 		if (HasDeferredMembers(instance))
 		{
 			Indent(builder, depth).Append("private volatile bool ").Append(names.WiredField(i)).AppendLine(";");
@@ -656,11 +593,8 @@ internal static partial class Sources
 		string message =
 			$"\"Awaiten: container '{typeName}' has registration errors; see the build diagnostics (AWT1xx).\"";
 		// The container has registration errors, so emit a throwing Root that still satisfies the shape
-		// consumers depend on (new MyContainer.Root(), Resolve, CreateScope, InitializeAsync, Dispose). This
-		// keeps the build focused on the actionable AWT diagnostics rather than cascading "type not found"
-		// errors. It implements IAwaitenContainerMetadata (which includes IAwaitenRoot and IAwaitenScope),
-		// matching the real Root - and, when IAsyncDisposable is available, that too (the real Root implements it
-		// concretely), so `await using` over the stub compiles the same way.
+		// consumers depend on, keeping the build focused on the actionable AWT diagnostics rather than cascading
+		// "type not found" errors. It implements IAwaitenContainerMetadata (and IAsyncDisposable when available).
 		Indent(builder, depth).Append("public sealed class Root : global::Awaiten.IAwaitenContainerMetadata");
 		if (asyncDisposal)
 		{
@@ -735,18 +669,15 @@ internal static partial class Sources
 	}
 
 	/// <summary>
-	///     A member section of a generated class: the pre-rendered <see cref="Content" /> (at the class body's
-	///     indentation) and, when <see cref="Region" /> is set, the <c>#region</c> name to wrap it in. An empty
-	///     content buffer is skipped entirely (no region, no blank line), so a container that emits none of a
-	///     section's members - e.g. a Root with no wiring helpers - carries no empty region.
+	///     A member section of a generated class: the pre-rendered <see cref="Content" /> and, when
+	///     <see cref="Region" /> is set, the <c>#region</c> name to wrap it in. An empty content buffer is skipped
+	///     entirely, so a section that emits nothing carries no empty region.
 	/// </summary>
 	private readonly record struct MemberSection(string? Region, StringBuilder Content);
 
 	/// <summary>
-	///     Writes the non-empty <paramref name="sections" /> into the class body in order, separated by a single
-	///     blank line, wrapping each named section in a <c>#region</c>/<c>#endregion</c> pair at
-	///     <paramref name="depth" />. The region markers group the generated members for a reader without
-	///     affecting the emitted code.
+	///     Writes the non-empty <paramref name="sections" /> into the class body in order, separated by a blank
+	///     line, wrapping each named section in a <c>#region</c>/<c>#endregion</c> pair at <paramref name="depth" />.
 	/// </summary>
 	private static void EmitSections(StringBuilder builder, int depth, params MemberSection[] sections)
 	{

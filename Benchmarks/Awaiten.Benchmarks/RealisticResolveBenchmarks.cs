@@ -12,14 +12,13 @@ namespace Awaiten.Benchmarks;
 
 /// <summary>
 ///     End-to-end per-request resolution: open a scope, resolve a deep mixed-lifetime object graph rooted at
-///     <see cref="RequestHandler" />, then dispose the scope. Unlike <see cref="ResolveBenchmarks" /> - which
-///     isolates a single by-<see cref="Type" /> lookup over a flat set of singletons - this measures the work
-///     a real application does on every request: singletons are shared across scopes, scoped instances are
-///     built once per scope and cached, transients are constructed fresh on each resolution. The graph (see
-///     the Realistic helpers) is ~13 concrete classes wired by constructor injection, at least five levels
-///     deep. Each container is built once in <see cref="Setup" /> and registers the same graph; the
-///     compile-time containers (Awaiten, Jab, Pure.DI) are generated, the rest are built at runtime here so a
-///     reader sees every framework's setup and measured call in one place.
+///     <see cref="RequestHandler" />, then dispose the scope. Where <see cref="ResolveBenchmarks" /> isolates
+///     a single by-<see cref="Type" /> lookup over flat singletons, this measures the work a real application
+///     does per request: singletons shared across scopes, scoped instances built once per scope, transients
+///     built fresh each resolution. The graph (see the Realistic helpers) is ~13 concrete classes wired by
+///     constructor injection, at least five levels deep. The compile-time containers (Awaiten, Jab, Pure.DI)
+///     are generated; the rest are built at runtime in <see cref="Setup" /> so every framework's setup and
+///     measured call sit in one place.
 /// </summary>
 public class RealisticResolveBenchmarks : BenchmarksBase
 {

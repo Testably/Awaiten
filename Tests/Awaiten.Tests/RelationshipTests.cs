@@ -1,11 +1,8 @@
 namespace Awaiten.Tests;
 
 /// <summary>
-///     Runtime behavior of the relationship types: <see cref="Func{T}" /> resolves fresh on each call
-///     (respecting the target's lifetime), and each injected <see cref="Lazy{T}" /> memoizes its own
-///     value. A relationship is bound to the owner that constructs the consumer, so a singleton's
-///     <c>Func&lt;Scoped&gt;</c> resolves from the root container, not from a later child scope. The
-///     containers and services are nested types, so the enclosing class is <c>partial</c>.
+///     Runtime behavior of the relationship types. A relationship is bound to the owner that constructs the
+///     consumer, so a singleton's <c>Func&lt;Scoped&gt;</c> resolves from the root, not from a later child scope.
 /// </summary>
 public partial class RelationshipTests
 {

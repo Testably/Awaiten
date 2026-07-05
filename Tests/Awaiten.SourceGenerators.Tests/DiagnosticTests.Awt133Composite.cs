@@ -19,7 +19,7 @@ public partial class DiagnosticTests
 			                                       public interface INotifier : IBase { }
 			                                       public sealed class Email : INotifier { }
 			                                       // IEnumerable<IBase> is convertible-from INotifier, but collections resolve by exact element
-			                                       // type — this would fan out over IBase's registrations, not INotifier's.
+			                                       // type, so this would fan out over IBase's registrations, not INotifier's.
 			                                       public sealed class CompositeNotifier : INotifier { public CompositeNotifier(IEnumerable<IBase> channels) { } }
 
 			                                       [Container]
@@ -33,7 +33,7 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics.Any(d => d.Contains("AWT133"))).IsTrue()
 				.Because("a collection of a base type would fan out over a different collection than the composed service");
 			await That(result.Diagnostics.Any(d => d.Contains("AWT130"))).IsFalse()
-				.Because("the composite has a collection parameter — it is of the wrong element type, not missing");
+				.Because("the composite has a collection parameter, it is of the wrong element type, not missing");
 		}
 
 		[Fact]

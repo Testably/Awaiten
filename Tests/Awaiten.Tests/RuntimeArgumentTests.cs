@@ -1,12 +1,9 @@
 namespace Awaiten.Tests;
 
 /// <summary>
-///     Runtime behavior of resolve-time arguments: a service with one or more <c>[Arg]</c> parameters is
-///     built through an injected <see cref="Func{T, TResult}" /> (or a directly resolved
-///     <c>Func&lt;TArg…, T&gt;</c>) that supplies those arguments, while its remaining dependencies still
-///     come from the graph. Each call constructs a fresh instance, and a disposable one is released by the
-///     owner that the factory is bound to. The containers and services are nested types, so the enclosing
-///     class is <c>partial</c>.
+///     Runtime behavior of resolve-time arguments: a service with <c>[Arg]</c> parameters is built through a
+///     <see cref="Func{T, TResult}" /> that supplies those arguments while remaining dependencies come from the
+///     graph. Each call constructs a fresh instance; a disposable one is released by the owner the factory is bound to.
 /// </summary>
 public partial class RuntimeArgumentTests
 {
@@ -208,9 +205,6 @@ public partial class RuntimeArgumentTests
 	}
 
 	// A singleton holding a Func over a disposable parameterized service: the built tools bind to the root.
-	// This deliberate root accumulation is exactly what Func_BoundToASingleton... asserts, so AWT118 is
-	// suppressed here (the container opts into Loose, where AWT118 is a warning); the leak-free alternative
-	// Func<int, Owned<Tool>> is exercised in OwnedTests.
 #pragma warning disable AWT118 // Root-accumulating factory: intentional here, see above.
 	public sealed class Depot
 	{
@@ -222,10 +216,9 @@ public partial class RuntimeArgumentTests
 	}
 #pragma warning restore AWT118
 
-	// The singleton Depot holds a Func<int, Tool> over the disposable parameterized Tool: tools built through
-	// it accumulate on the root until the container is disposed, which is exactly what Func_BoundToASingleton...
-	// asserts. That deliberate accumulation is an AWT118 error under strict lifetime safety, so this container
-	// opts into Loose; the leak-free alternative (Func<int, Owned<Tool>>) is exercised in OwnedTests.
+	// Depot's tools accumulate on the root until the container is disposed, which Func_BoundToASingleton...
+	// asserts. That is an AWT118 error under strict lifetime safety, so this container opts into Loose. The
+	// leak-free alternative Func<int, Owned<Tool>> is exercised in OwnedTests.
 	[Container(LifetimeSafety = LifetimeSafety.Loose)]
 	[Singleton<Engine>]
 	[Transient<Robot>]

@@ -21,24 +21,20 @@ internal static partial class Sources
 	}
 
 	/// <summary>
-	///     Each registered service type paired with the instance that produces it, deduplicated on the service
-	///     type. Registrations are coalesced upstream so service types are already unique, but deduping here
-	///     keeps the typed base list and its explicit implementations in lockstep: a duplicate base or a
-	///     duplicate explicit implementation would each fail to compile, so neither must be emitted twice.
-	///     A parameterized service is excluded: it is not directly resolvable (only through its
-	///     <c>Func&lt;TArg…, T&gt;</c> factory), so it gets no typed resolution fast path. A keyed registration
-	///     is likewise excluded: it is reached only by <c>[FromKey]</c> injection, never the typed path.
+	///     Each registered service type paired with the instance that produces it, deduplicated on the service type
+	///     so the typed base list and its explicit implementations stay in lockstep (emitting either twice would
+	///     fail to compile). Parameterized services (reachable only through their <c>Func&lt;TArg…, T&gt;</c>) and
+	///     keyed registrations (reached only by <c>[FromKey]</c>) are excluded, since neither has a typed fast path.
 	/// </summary>
 	private static IEnumerable<(string Service, int Index)> UniqueServices(InstanceModel[] instances, bool strict, bool syncResolveAfterInit)
 	{
 		HashSet<string> seen = new(StringComparer.Ordinal);
 		for (int i = 0; i < instances.Length; i++)
 		{
-			// A parameterized service has no typed fast path; a strictly-withheld disposable service is reached
-			// only through Owned<T>, so it gets none either. An async-tainted service in the strict default is
-			// reached only through ResolveAsync, so it gets no synchronous typed resolver either. A requesting-type
-			// factory's resolver takes the requesting type, which the typed Resolve<T>() fast path has no place to
-			// supply, so it too gets none - it is reached through the Type-based dispatch, which passes null.
+			// No typed fast path for: parameterized services, strictly-withheld disposables (reached only through
+			// Owned<T>), async-tainted services in the strict default (reached only through ResolveAsync), and
+			// requesting-type factories (the typed Resolve<T>() has nowhere to supply the requesting type, so they
+			// go through the Type-based dispatch, which passes null).
 			if (instances[i].IsParameterized || instances[i].IsRequestingTypeFactory || IsWithheld(instances[i], strict) || !EmitsSync(instances[i], syncResolveAfterInit))
 			{
 				continue;
@@ -80,15 +76,13 @@ internal static partial class Sources
 	{
 		foreach ((string service, int index) in UniqueServices(instances, strict, syncResolveAfterInit))
 		{
-			// This explicit impl is an instance method on the Scope, so it resolves over `this`: a singleton
-			// through its Root-hosted static resolver over the root, a scoped/transient through its Scope-hosted
-			// static resolver over this scope.
+			// An instance method on the Scope, resolving over `this`: a singleton through its Root-hosted resolver
+			// over the root, a scoped/transient through its Scope-hosted resolver over this scope.
 			if (IsRootOwned(instances[index]))
 			{
-				// A singleton's static resolver guards the root, not this scope, so a disposed scope would still
-				// serve it. Guard `this` here (a block body, unlike the self-guarding scoped/transient impl below)
-				// so resolving any type from a disposed scope throws - this is the typed fast path the generic
-				// Resolve<T> extension takes, which bypasses the Type-based TryResolve guard.
+				// A singleton's static resolver guards the root, not this scope, so guard `this` here (a block
+				// body, unlike the self-guarding scoped/transient impl below) so resolving from a disposed scope
+				// throws. The generic Resolve<T> fast path takes this route, bypassing the Type-based TryResolve guard.
 				Indent(builder, depth).Append(service).Append(" global::Awaiten.IAwaitenResolver<")
 					.Append(service).AppendLine(">.Resolve()");
 				Indent(builder, depth).AppendLine("{");
@@ -123,16 +117,12 @@ internal static partial class Sources
 	}
 
 	/// <summary>
-	///     Emits the <c>IAwaitenContainerMetadata.Registrations</c> list on the Root: the compile-time,
-	///     reflection-free surface of public (unkeyed) registrations with their lifetimes. This is what the
-	///     <c>Awaiten.Extensions.DependencyInjection</c> companion projects into a service collection. A
-	///     parameterized service is omitted (it cannot be resolved by service type without its runtime
-	///     arguments, only through its factory), as are keyed registrations (reached solely by <c>[FromKey]</c>
-	///     injection). Open generic registrations contribute only their expanded closed instances, so every
-	///     advertised service type is a concrete, resolvable type. An async-tainted service (one with no
-	///     synchronous resolution path) is flagged <c>requiresAsync</c> so the bridge projects it as a
-	///     <c>Task&lt;T&gt;</c>; when <paramref name="syncResolveAfterInit" /> is set the container makes such a
-	///     service synchronously resolvable after warm-up, so it is advertised as an ordinary synchronous service.
+	///     Emits the compile-time, reflection-free <c>IAwaitenContainerMetadata.Registrations</c> list on the Root:
+	///     public (unkeyed) registrations with their lifetimes, which the
+	///     <c>Awaiten.Extensions.DependencyInjection</c> companion projects into a service collection. Parameterized
+	///     services and keyed registrations are omitted (neither is resolvable by service type alone). An
+	///     async-tainted service is flagged <c>requiresAsync</c> so the bridge projects it as a <c>Task&lt;T&gt;</c>,
+	///     unless <paramref name="syncResolveAfterInit" /> makes it synchronously resolvable after warm-up.
 	/// </summary>
 	private static void EmitRegistrations(StringBuilder fields, StringBuilder members, int depth, InstanceModel[] instances, bool syncResolveAfterInit)
 	{
@@ -233,7 +223,7 @@ internal static partial class Sources
 		List<DispatchEntry> entries = BuildDispatchEntries(instances, names, serviceToIndex, strict, syncResolveAfterInit);
 		// The runtime variance-fallback candidates: the registered variant closed-generic-interface service
 		// types that are actually by-type dispatchable, in registration order. A candidate excluded from the
-		// synchronous dispatch (async-tainted under the strict default, or failed to build) is dropped - the
+		// synchronous dispatch (async-tainted under the strict default, or failed to build) is dropped. The
 		// fallback can only route a request to an existing bucket.
 		List<string> varianceEntries = VarianceDispatchTypes(varianceCandidates, entries);
 		List<DispatchEntry> rootWithheld = Withheld(entries);
@@ -288,7 +278,7 @@ internal static partial class Sources
 
 		// Open-addressed probe: hash the requested type into its bucket window and scan the (small, fixed-width)
 		// window for an identity match. Each slot carries its resolver delegate directly, so a hit invokes it with
-		// no switch - the dispatch is O(1) and constant-size in IL regardless of the registration count. Matching
+		// no switch, so the dispatch is O(1) and constant-size in IL regardless of the registration count. Matching
 		// is by runtime Type identity (the contract of this dispatch): a Type wrapper such as TypeDelegator, or a
 		// Type without a runtime handle, does not dispatch.
 		Indent(builder, depth + 1).AppendLine("int __i = (int)((uint)serviceType.TypeHandle.GetHashCode() % (uint)__bucketCount) * __bucketSize;");
@@ -327,7 +317,7 @@ internal static partial class Sources
 		{
 			// The exact-match probe missed: hand the request to the variance fallback, which satisfies a
 			// differently-closed generic interface request through a variance-compatible registration. The
-			// exact-match fast path above is untouched - the fallback only ever runs on what would otherwise
+			// exact-match fast path above is untouched. The fallback only ever runs on what would otherwise
 			// be a failed resolution.
 			Indent(builder, depth + 1).AppendLine("return __TryResolveVariant(serviceType, out instance);");
 			Indent(builder, depth).AppendLine("}");
@@ -357,20 +347,16 @@ internal static partial class Sources
 	}
 
 	/// <summary>
-	///     Emits the runtime variance fallback consulted by <c>TryResolve</c> after the exact-match probe missed:
-	///     an imperative <c>Resolve&lt;T&gt;()</c> / <c>Resolve(Type)</c> of a closed generic interface with no
-	///     bucket entry is satisfied by the nearest variance-compatible registered service - the same candidates,
-	///     conversion rule (identity or implicit reference conversion; value-type arguments never convert) and
-	///     nearest-wins selection as the compile-time redirect, so imperative and injected resolution agree even
-	///     for a closed type no consumer parameter ever requested (which a compile-time dispatch alias cannot
-	///     cover). A successful route is memoized in <c>__varianceRoutes</c>, so repeated requests pay one
-	///     dictionary hit plus the target's O(1) probe instead of re-scanning; failures are not memoized (they
-	///     throw from <c>Resolve</c> anyway, and unbounded junk types must not grow the cache). A type with
-	///     withheld guidance keeps its targeted error instead of being silently variance-routed.
+	///     Emits the runtime variance fallback <c>TryResolve</c> consults after the exact-match probe misses: a
+	///     closed generic interface with no bucket entry is satisfied by the nearest variance-compatible registered
+	///     service, using the same conversion rule and nearest-wins selection as the compile-time redirect, so
+	///     imperative and injected resolution agree even for a closed type no consumer ever requested. Successful
+	///     routes are memoized in <c>__varianceRoutes</c>; failures are not (they throw anyway, and junk types must
+	///     not grow the cache). A type with withheld guidance keeps its targeted error instead of being routed.
 	/// </summary>
 	private static void EmitVarianceFallback(StringBuilder fields, StringBuilder helpers, int depth, List<string> candidates, bool hasWithheld)
 	{
-		// The candidate service types, in registration order - mirroring the compile-time candidate order so
+		// The candidate service types, in registration order, mirroring the compile-time candidate order so
 		// the registration-order tie-break picks the same target at runtime.
 		Separate(fields);
 		Indent(fields, depth).AppendLine("private static readonly global::System.Type[] __varianceCandidates = new global::System.Type[]");
@@ -408,7 +394,7 @@ internal static partial class Sources
 		Indent(builder, depth + 1).AppendLine("foreach (global::System.Type __candidate in __varianceCandidates)");
 		Indent(builder, depth + 1).AppendLine("{");
 		// A candidate satisfies the request when it is a different closure of the same generic interface
-		// definition and an instance of it IS-A the request - IsAssignableFrom is exactly the identity-or-
+		// definition and an instance of it IS-A the request. IsAssignableFrom is exactly the identity-or-
 		// implicit-reference-conversion check C# variance defines (a value-type argument never converts).
 		Indent(builder, depth + 2).AppendLine("if ((object)__candidate == (object)serviceType");
 		Indent(builder, depth + 2).AppendLine("    || __candidate.GetGenericTypeDefinition() != __definition");
@@ -417,7 +403,7 @@ internal static partial class Sources
 		Indent(builder, depth + 3).AppendLine("continue;");
 		Indent(builder, depth + 2).AppendLine("}");
 		builder.AppendLine();
-		// Nearest candidate wins - replace the current best when it converts to the candidate - falling back
+		// Nearest candidate wins: replace the current best when it converts to the candidate, falling back
 		// to registration order, mirroring the generator's FindVarianceMatch.
 		Indent(builder, depth + 2).AppendLine("if (__match is null || __candidate.IsAssignableFrom(__match))");
 		Indent(builder, depth + 2).AppendLine("{");
@@ -461,8 +447,8 @@ internal static partial class Sources
 		// registered Lazy<T>) wins the dispatch slot over the synthetic relationship entry below. Service
 		// types are unique across instances (registrations are coalesced), so each is added exactly once.
 		// Seeding 'seen' here lets the synthetic pass skip any key an explicit registration already claimed.
-		// An async-tainted service in the strict default is excluded from synchronous dispatch entirely - it
-		// is reachable only through ResolveAsync - so neither its bare type nor any relationship over it is added.
+		// An async-tainted service in the strict default is excluded from synchronous dispatch entirely. It
+		// is reachable only through ResolveAsync, so neither its bare type nor any relationship over it is added.
 		for (int i = 0; i < instances.Length; i++)
 		{
 			if (!EmitsSync(instances[i], syncResolveAfterInit))
@@ -486,7 +472,7 @@ internal static partial class Sources
 		}
 
 		// Collection dispatch: every unkeyed, sync-materializable collection is publicly resolvable as all six
-		// shapes (IEnumerable<T>, IReadOnlyList<T>, IReadOnlyCollection<T>, IList<T>, ICollection<T>, T[]) - the
+		// shapes (IEnumerable<T>, IReadOnlyList<T>, IReadOnlyCollection<T>, IList<T>, ICollection<T>, T[]). The
 		// eagerly materialized array satisfies each. A keyed collection is reached only by [FromKey] injection; an
 		// element type whose collection was explicitly registered is not synthesized (all-or-nothing); a collection
 		// with an async-tainted member has no synchronous materialization (its shapes throw AWT122-style guidance
@@ -502,7 +488,7 @@ internal static partial class Sources
 		// Keyed-collection dispatch: every keyed-collection-resolvable service is publicly resolvable as
 		// IReadOnlyDictionary<string, T>, materialized synchronously from its keyed members' resolvers (like the
 		// synchronous collection shapes). A keyed collection with an async-tainted member has no synchronous
-		// materialization - injecting one is AWT122 - so it is omitted.
+		// materialization (injecting one is AWT122), so it is omitted.
 		AddKeyedCollectionEntries(instances, names, serviceToIndex, membership, strict, entries, seen);
 
 		// The awaited keyed-dictionary view (Task<IReadOnlyDictionary<string, T>>) joins the synchronous dispatch
@@ -515,20 +501,15 @@ internal static partial class Sources
 	}
 
 	/// <summary>
-	///     Adds the public dispatch entry for the awaited keyed-dictionary view - <c>Task&lt;IReadOnlyDictionary&lt;string, T&gt;&gt;</c> -
-	///     of each keyed-collection-resolvable service. Unlike the synchronous <c>IReadOnlyDictionary&lt;string, T&gt;</c>
-	///     shape, the awaited view is ALWAYS synchronously obtainable: it produces a <c>Task</c> (a completed
-	///     <c>Task.FromResult</c> when every member is synchronous, an already-started task that awaits its async-tainted
-	///     members otherwise), laundering their taint exactly as an injected awaited keyed dictionary does - so it joins
-	///     the synchronous dispatch even for a dictionary whose members are async-tainted, and
-	///     <see cref="Names.IsSyncKeyedCollection" /> is not consulted. By-type resolution has no ambient token, so
-	///     awaited async members receive <c>default</c>. An explicitly registered <c>Task&lt;IReadOnlyDictionary&lt;…&gt;&gt;</c>
-	///     owns its own slot - checked against the registrations directly, because the <paramref name="seen" /> guard
-	///     is seeded only from the synchronous dispatch and would not hold the slot for an async-tainted registration;
-	///     a registered synchronous <c>IReadOnlyDictionary&lt;string, T&gt;</c> suppresses the awaited view outright,
-	///     all-or-nothing, exactly as on the injection side. The root-withholding of a build-on-demand disposable member applies here
-	///     too: materializing the awaited dictionary by type off the Root would accumulate its members for the
-	///     container's lifetime, so it is withheld from the Root (resolvable from a child scope, which bounds them).
+	///     Adds the public dispatch entry for the awaited keyed-dictionary view
+	///     (<c>Task&lt;IReadOnlyDictionary&lt;string, T&gt;&gt;</c>) of each keyed-collection-resolvable service.
+	///     The awaited view is always synchronously obtainable (it hands back a <c>Task</c>, awaiting any
+	///     async-tainted members behind it), so it joins the synchronous dispatch even when the synchronous shape
+	///     cannot. By-type resolution has no ambient token, so awaited async members receive <c>default</c>. An
+	///     explicitly registered <c>Task&lt;IReadOnlyDictionary&lt;…&gt;&gt;</c> owns its own slot (checked against
+	///     the registrations directly, since <paramref name="seen" /> is seeded only from the synchronous dispatch),
+	///     and a registered synchronous dictionary suppresses the awaited view all-or-nothing. A build-on-demand
+	///     disposable member is withheld from the Root (resolvable from a child scope, which bounds it).
 	/// </summary>
 	private static void AddAwaitedKeyedCollectionEntries(
 		InstanceModel[] instances,
@@ -547,7 +528,7 @@ internal static partial class Sources
 			// A registered synchronous dictionary suppresses the awaited view (all-or-nothing); a registered
 			// Task<IReadOnlyDictionary<…>> of this exact shape owns its own slot. The seen guard alone would not
 			// hold that slot when the registration is async-tainted (excluded from the sync dispatch that seeds
-			// seen) - the synthesized dictionary would silently shadow it and mask its ResolveAsync guidance - so
+			// seen). The synthesized dictionary would silently shadow it and mask its ResolveAsync guidance, so
 			// the registration is checked directly, mirroring AsyncShapeRegistered for IAsyncEnumerable<T>.
 			if (serviceToIndex.ContainsKey(new ServiceKey(dictionaryType, null))
 			    || serviceToIndex.ContainsKey(new ServiceKey(awaitedType, null))
@@ -572,8 +553,8 @@ internal static partial class Sources
 	///     members' resolvers, mirroring the synchronous collection dispatch. A keyed collection with an
 	///     async-tainted member has no synchronous materialization (injecting one is AWT122) and is omitted. Like a
 	///     synchronous collection, one whose members include a build-on-demand disposable is root-withheld under
-	///     strict lifetime safety - materializing it by type off the Root would accumulate those disposables for the
-	///     container's lifetime - so it is resolvable from a child scope but carries the withheld guidance on the
+	///     strict lifetime safety. Materializing it by type off the Root would accumulate those disposables for the
+	///     container's lifetime, so it is resolvable from a child scope but carries the withheld guidance on the
 	///     Root. An explicitly registered dictionary of the exact type suppresses the synthesized entry outright
 	///     (mirroring <see cref="SynthesisSuppressed" />): the registration is dispatched as an ordinary service, and
 	///     no second dictionary is synthesized behind it even when the registration itself has no synchronous entry.
@@ -608,14 +589,11 @@ internal static partial class Sources
 
 	/// <summary>
 	///     Adds the public dispatch entries (all six collection shapes) for each unkeyed, sync-materializable
-	///     collection whose synthesis is not suppressed by an explicit registration. A collection materializes its
-	///     members eagerly on the resolving scope, so if any member is a build-on-demand disposable service (its
-	///     plain resolver tracks a fresh disposable on the owner), re-resolving the collection by type off the Root
-	///     would accumulate those disposables for the container's lifetime - the exact leak the singular resolution
-	///     of such a member is root-withheld to prevent. Such a collection is therefore root-withheld too:
-	///     resolvable from a child scope (which bounds its members), but withheld from by-type resolution on the
-	///     Root. There is no <c>Owned&lt;T&gt;</c> form for a collection, so the guidance steers to a child scope,
-	///     direct injection, or LifetimeSafety.Loose.
+	///     collection whose synthesis is not suppressed by an explicit registration. A collection with a
+	///     build-on-demand disposable member is root-withheld, since materializing it by type off the Root would
+	///     accumulate those disposables for the container's lifetime. It stays resolvable from a child scope, which
+	///     bounds its members. There is no <c>Owned&lt;T&gt;</c> form for a collection, so the guidance steers to a
+	///     child scope, direct injection, or LifetimeSafety.Loose.
 	/// </summary>
 	private static void AddCollectionEntries(
 		InstanceModel[] instances,
@@ -651,7 +629,7 @@ internal static partial class Sources
 			// The async view of the same collection: every member is synchronous, so IAsyncEnumerable<T> is also
 			// synchronously constructible (it wraps the same members in the __AsyncArray<T> replay enumerator), and
 			// is offered by type alongside the synchronous shapes. An async-member collection has no synchronous
-			// materialization - its IAsyncEnumerable<T> shape is an asynchronous arm instead (AsyncByTypeCollections).
+			// materialization; its IAsyncEnumerable<T> shape is an asynchronous arm instead (AsyncByTypeCollections).
 			// An explicitly registered IAsyncEnumerable<T> claims the slot instead; the seen guard alone would not
 			// hold it when that registration is async-tainted (excluded from the sync dispatch that seeds seen).
 			if (!AsyncShapeRegistered(serviceToIndex, collection.Service))
@@ -663,20 +641,13 @@ internal static partial class Sources
 	}
 
 	/// <summary>
-	///     Adds the public dispatch entries for the awaited-collection view - every <c>Task&lt;C&gt;</c> shape - of
-	///     each unkeyed, non-synthesis-suppressed collection. Unlike the synchronous shapes and the
-	///     <c>IAsyncEnumerable&lt;T&gt;</c> view, the awaited collection is ALWAYS synchronously obtainable: it
-	///     produces a <c>Task&lt;C&gt;</c> (a completed <c>Task.FromResult</c> when every member is synchronous, an
-	///     already-started task that awaits its async-tainted members otherwise), laundering their taint exactly as
-	///     an injected awaited collection does - so it joins the synchronous dispatch even for a collection whose
-	///     members are async-tainted, and <see cref="Names.IsSyncCollection" /> is not consulted. By-type resolution
-	///     has no ambient token, so awaited async members receive <c>default</c> (mirroring an awaited collection
-	///     injected into a synchronously built consumer). An explicitly registered <c>Task&lt;C&gt;</c> shape owns
-	///     its own slot (the <paramref name="seen" /> guard, seeded from the explicit registrations); a registered
-	///     synchronous shape suppresses the whole element, all-or-nothing, exactly as on the injection side. The
-	///     root-withholding of a build-on-demand disposable member applies here too: materializing the awaited
-	///     collection by type off the Root would accumulate its members for the container's lifetime, so it is
-	///     withheld from the Root (resolvable from a child scope, which bounds them).
+	///     Adds the public dispatch entries for the awaited-collection view (every <c>Task&lt;C&gt;</c> shape) of
+	///     each unkeyed, non-synthesis-suppressed collection. The awaited collection is always synchronously
+	///     obtainable (it hands back a <c>Task&lt;C&gt;</c>, awaiting any async-tainted members behind it), so it
+	///     joins the synchronous dispatch even when the synchronous shapes cannot. By-type resolution has no ambient
+	///     token, so awaited async members receive <c>default</c>. An explicitly registered <c>Task&lt;C&gt;</c>
+	///     shape owns its own slot, and a registered synchronous shape suppresses the whole element all-or-nothing.
+	///     A build-on-demand disposable member is withheld from the Root (resolvable from a child scope, which bounds it).
 	/// </summary>
 	private static void AddAwaitedCollectionEntries(
 		InstanceModel[] instances,
@@ -693,7 +664,7 @@ internal static partial class Sources
 
 			// A keyed collection has no by-type surface; a synthesis-suppressed element is served by its explicit
 			// registration. An async-tainted member does NOT withhold the awaited view (it awaits that member behind
-			// the returned task), so - unlike AddCollectionEntries - IsSyncCollection is deliberately not consulted.
+			// the returned task), so, unlike AddCollectionEntries, IsSyncCollection is deliberately not consulted.
 			if (collection.Key is not null || SynthesisSuppressed(serviceToIndex, collection.Service))
 			{
 				continue;
@@ -722,7 +693,7 @@ internal static partial class Sources
 	}
 
 	// Under all-or-nothing synthesis, an element type with any collection shape explicitly registered (unkeyed) is
-	// not synthesized at all - the registered shape is dispatched as an ordinary service and the other shapes are
+	// not synthesized at all. The registered shape is dispatched as an ordinary service and the other shapes are
 	// unresolvable. Mirrors the injection-side suppression in AwaitenGenerator.ClassifyParameters.
 	private static bool SynthesisSuppressed(Dictionary<ServiceKey, int> serviceToIndex, string elementType)
 		=> AwaitenGenerator.CollectionShapeTypes(elementType).Any(shape => serviceToIndex.ContainsKey(new ServiceKey(shape, null)));
@@ -768,7 +739,7 @@ internal static partial class Sources
 			// A requesting-type factory's resolver takes the requesting type; a top-level resolve has no
 			// requesting consumer, so the by-type dispatch passes null (the factory decides what a null context
 			// means). It is built fresh per call, so it routes through a forwarder (its call is not a bare
-			// parameterless resolver), and has no Owned<T> form and no root-withholding - the factory itself may
+			// parameterless resolver), and has no Owned<T> form and no root-withholding. The factory itself may
 			// dedup, exactly as the canonical logger factory does.
 			if (instance.IsRequestingTypeFactory)
 			{
@@ -838,7 +809,7 @@ internal static partial class Sources
 	/// <summary>
 	///     Adds the synthetic <c>Func&lt;T&gt;</c> and <c>Lazy&lt;T&gt;</c> entries over a requesting-type
 	///     factory's service type: each closes over the null top-level requesting type (the factory is
-	///     Scope-hosted and reached over <c>__s</c>). There is no <c>Owned&lt;T&gt;</c> form - the requesting
+	///     Scope-hosted and reached over <c>__s</c>). There is no <c>Owned&lt;T&gt;</c> form: the requesting
 	///     type has no owner scope and the factory decides its own disposal.
 	/// </summary>
 	private static void AddRequestingTypeRelationshipEntries(string service, string resolver, List<DispatchEntry> entries, HashSet<string> seen)
@@ -878,7 +849,7 @@ internal static partial class Sources
 				: new DispatchEntry(func, $"new global::System.Func<{service}>(() => {call})"));
 		}
 
-		// Lazy<T> is memoized - it builds at most once and never accumulates - so it stays resolvable even
+		// Lazy<T> is memoized: it builds at most once and never accumulates, so it stays resolvable even
 		// for a withheld disposable service.
 		string lazy = $"global::System.Lazy<{service}>";
 		if (seen.Add(lazy))
@@ -888,7 +859,7 @@ internal static partial class Sources
 
 		// Owned<T> hands the caller a disposal handle over a single resolution; Func<Owned<T>> is the
 		// leak-free factory that produces one per call. Both build into a throwaway child scope, and both
-		// stay resolvable under strict safety - they are the sanctioned way to reach a withheld service.
+		// stay resolvable under strict safety. They are the sanctioned way to reach a withheld service.
 		string owned = $"global::Awaiten.Owned<{service}>";
 		if (seen.Add(owned))
 		{
@@ -917,7 +888,7 @@ internal static partial class Sources
 		int bucketCount = BucketCount(entries.Count);
 
 		// Assign a forwarder to each UNIQUE compound value expression. Identical values share one __R method rather
-		// than emitting a body each - notably the six collection shapes of one element type (IEnumerable<T>,
+		// than emitting a body each. Notably the six collection shapes of one element type (IEnumerable<T>,
 		// IReadOnlyList<T>, IReadOnlyCollection<T>, IList<T>, ICollection<T>, T[]) all materialize the very same
 		// array, so they collapse from six method bodies to one. Bare services bind a direct delegate and need none.
 		Dictionary<string, int> forwarderOf = new(StringComparer.Ordinal);
@@ -1036,7 +1007,7 @@ internal static partial class Sources
 
 	/// <summary>
 	///     The bucket count for a table of <paramref name="entryCount" /> entries: the smallest power of two that
-	///     keeps the load factor at or below one half, so collisions - and thus the fixed probe window - stay small.
+	///     keeps the load factor at or below one half, so collisions, and thus the fixed probe window, stay small.
 	///     A power of two lets the runtime lower the <c>% __bucketCount</c> in the probe to a bitwise-and.
 	/// </summary>
 	private static int BucketCount(int entryCount)
@@ -1078,7 +1049,7 @@ internal static partial class Sources
 
 	/// <summary>
 	///     The distinct external (<c>[FromServices]</c> / <c>[ImportServices]</c>) service types across every
-	///     instance's constructor parameters, in first-seen order - advertised by the Root as
+	///     instance's constructor parameters, in first-seen order, advertised by the Root as
 	///     <c>ExternalDependencies</c> and used to decide whether the external-resolution surface is emitted.
 	/// </summary>
 	private static (string Type, string? Key)[] ExternalDependencies(InstanceModel[] instances)
@@ -1102,14 +1073,11 @@ internal static partial class Sources
 	private static bool HasExternalDependencies(InstanceModel[] instances) => ExternalDependencies(instances).Length > 0;
 
 	/// <summary>
-	///     A single dispatch case: the service <see cref="Type" /> requested and the <see cref="Value" />
-	///     assigned to <c>instance</c> (the resolver call). Every entry is dispatchable - it always carries a
-	///     real resolver. When <see cref="Guidance" /> is set the entry is additionally <em>root-withheld</em>
-	///     under strict lifetime safety: it resolves normally from a child scope (where its lifetime is bounded
-	///     by the scope), but the <c>__rootWithheld</c> mask makes <c>TryResolve</c> return
-	///     <see langword="false" /> for it on the Root and <c>Resolve</c> throw the <see cref="Guidance" />
-	///     message (placed in the <c>__withheld</c> table) - so the root-accumulation leak stays impossible
-	///     while the safe scope-bound resolution is allowed.
+	///     A single dispatch case: the service <see cref="Type" /> requested and the <see cref="Value" /> assigned to
+	///     <c>instance</c> (the resolver call). When <see cref="Guidance" /> is set the entry is root-withheld under
+	///     strict lifetime safety: it resolves normally from a child scope, but on the Root <c>TryResolve</c> returns
+	///     <see langword="false" /> and <c>Resolve</c> throws the <see cref="Guidance" /> message, so the
+	///     root-accumulation leak stays impossible while the safe scope-bound resolution is allowed.
 	/// </summary>
 	private readonly struct DispatchEntry(string type, string value, string? guidance = null, string? directResolver = null, bool rootOwnedDirect = false)
 	{

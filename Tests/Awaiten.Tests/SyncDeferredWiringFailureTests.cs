@@ -3,7 +3,7 @@ namespace Awaiten.Tests;
 /// <summary>
 ///     Failure semantics of synchronous deferred wiring: when a <c>[Inject(Deferred = true)]</c> member's wiring
 ///     throws while a disposable owner is being resolved, the already-constructed owner must be disposed rather
-///     than leaked - and disposed exactly once (it is registered for teardown only on success, so the
+///     than leaked, and disposed exactly once (it is registered for teardown only on success, so the
 ///     failure-path cleanup never double-disposes). This is the synchronous counterpart of
 ///     <see cref="AsyncInitializationFailureTests" />, covering the transient (fresh) and memoized
 ///     (scoped/singleton) synchronous resolvers, including the wiring-episode rollback that spans a deferred

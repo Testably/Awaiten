@@ -5,9 +5,8 @@ namespace Awaiten.SourceGenerators.Tests;
 public partial class DiagnosticTests
 {
 	// AWT156 fires at a synchronous disposal site (using / Dispose()) of a generated Root/Scope whose
-	// container owns an IAsyncDisposable-only service - never at the registration, which is fully supported
-	// as long as disposal is asynchronous. It is reported by AwaitenAnalyzer (not the generator) so a
-	// deliberate synchronous site can be suppressed in source; these tests therefore drive the analyzer.
+	// container owns an IAsyncDisposable-only service, not at the registration itself. It is reported by
+	// AwaitenAnalyzer, not the generator, so these tests drive the analyzer.
 	public class Awt156AsyncOnlyDisposal
 	{
 		private const string AsyncOnlyContainer = """

@@ -6,26 +6,18 @@ namespace Awaiten.SourceGenerators;
 
 partial class AwaitenGenerator
 {
-	// A decorator chain link's synthetic key and identity are built from this prefix; DisplayInstance also keys
-	// off it to trim the synthetic suffix out of diagnostics. Kept on the enclosing type so both the nested
-	// DecoratorChainBuilder and DisplayInstance can reach it (a nested type's private member is not visible here).
+	// The prefix for a decorator chain link's synthetic key and identity. DisplayInstance keys off it to trim
+	// the synthetic suffix from diagnostics. Kept on the enclosing type so both DecoratorChainBuilder and
+	// DisplayInstance reach it (a nested type's private member is not visible here).
 	private const string DecoratorKeyPrefix = "__dec:";
 
 	/// <summary>
-	///     Builds the decorator chains after coalescing. For each decorated service it locates the base
-	///     implementation(s) — every collection member, or the single-dispatch winner — and over each base impl
-	///     synthesizes a chain of synthetic-keyed links: the base implementation is moved onto a synthetic key
-	///     (<c>__dec:S:k:0</c>), each decorator is registered as a fresh instance whose single inner parameter is
-	///     redirected to the next-lower key, and the public unkeyed winner is rewritten to the outermost decorator.
-	///     The existing keyed resolver then produces <c>D2(D1(Real))</c> for free. The collection membership of the
-	///     service is rewritten so a collection view yields the decorated chain, never the bare base impl (the
-	///     decorator is unbypassable). Reports AWT123 (nothing to decorate) and AWT124 (no single inner parameter).
+	///     Builds the decorator chains after coalescing. Over each base impl (every collection member, or the
+	///     single-dispatch winner) it synthesizes a chain of synthetic-keyed links: the base moves onto a synthetic
+	///     key, each decorator's inner parameter is redirected to the next-lower key, and the public winner is
+	///     rewritten to the outermost decorator, so the resolver produces <c>D2(D1(Real))</c>. Collection membership
+	///     is rewritten to the chain. Reports AWT123 (nothing to decorate) and AWT124 (no single inner parameter).
 	/// </summary>
-	/// <remarks>
-	///     Holds the mutable graph state (the coalesced <c>serviceToImpl</c>, <c>implOrder</c>, collection
-	///     membership and the decorator-inner map) as fields so the chain-building steps read as small focused
-	///     methods rather than one deeply nested loop.
-	/// </remarks>
 	private sealed class DecoratorChainBuilder
 	{
 		private readonly INamedTypeSymbol _containerSymbol;
@@ -120,7 +112,7 @@ partial class AwaitenGenerator
 				return;
 			}
 
-			// Order the chain by (Order, declaration) — innermost first, outermost last.
+			// Order the chain by (Order, declaration): innermost first, outermost last.
 			List<DecorateRegistration> ordered = chain
 				.OrderBy(d => d.Order)
 				.ThenBy(d => d.DeclarationOrder)
@@ -152,9 +144,9 @@ partial class AwaitenGenerator
 				string? innerType = SingleInnerParameterType(decorator.Decorator, decorator.ServiceSymbol, out IParameterSymbol? externalInner);
 				if (innerType is null)
 				{
-					// The would-be inner is marked [FromServices]: point at the offending parameter (falling back
-					// to the [Decorate] registration when its location is unavailable) rather than reporting the
-					// generic missing-inner AWT124, whose "add a parameter" guidance would mislead here.
+					// The would-be inner is marked [FromServices]: point at the offending parameter (or the
+					// [Decorate] registration when its location is unavailable) rather than the generic
+					// missing-inner AWT124, whose "add a parameter" guidance would mislead here.
 					if (externalInner is not null)
 					{
 						Report(Diagnostics.ExternalDecoratorInner,
@@ -207,7 +199,6 @@ partial class AwaitenGenerator
 			RewriteCollectionMembership(chain.Members, baseImpl, outermostIdentity);
 		}
 
-		// Moves the base implementation off the public service onto the chain's lowest synthetic key.
 		private void MoveBaseToSyntheticKey(string service, string baseImpl, string baseKey)
 		{
 			if (_byImpl.TryGetValue(baseImpl, out ImplInfo? baseInfo))
@@ -223,10 +214,9 @@ partial class AwaitenGenerator
 			_serviceToImpl[new ServiceKey(service, baseKey)] = baseImpl;
 		}
 
-		// Registers one chain link (the decorator at <paramref name="linkIndex" />) and returns its synthetic
-		// identity. The outermost link of the winner chain (<paramref name="isPublic" />) takes the public
-		// service key; every other link is keyed so it is reached only as the inner of the link above it (or as
-		// a rewritten collection member).
+		// Registers one chain link and returns its synthetic identity. The outermost link of the winner chain
+		// (isPublic) takes the public service key; every other link is keyed so it is reached only as the inner
+		// of the link above it (or as a rewritten collection member).
 		private string AddChainLink(ServiceChain chain, int baseIndex, int linkIndex, bool isPublic, Lifetime lifetime, LocationInfo? location, string innerKey)
 		{
 			string service = chain.Service;
@@ -245,7 +235,7 @@ partial class AwaitenGenerator
 			_serviceToImpl[ownKey] = identity;
 
 			// Redirect this link's inner parameter to the link below it. The chain links are all registered under
-			// the decorated service type, so the redirect keys to (service, innerKey) - not to the parameter's own
+			// the decorated service type, so the redirect keys to (service, innerKey), not to the parameter's own
 			// declared type, which may be a base of the service and is not a registration key.
 			_decoratorInner[identity] = new DecoratorInner(chain.InnerParameterTypes[linkIndex], service, innerKey);
 
@@ -284,14 +274,10 @@ partial class AwaitenGenerator
 
 		/// <summary>
 		///     The fully-qualified type of a decorator's single constructor parameter that receives the inner
-		///     instance, or <see langword="null" /> when there is none or it is ambiguous (AWT124) - or when the
-		///     would-be inner is marked <c>[FromServices]</c>, yielded through
-		///     <paramref name="externalInner" /> so the caller reports the specific conflict (AWT135) instead. The
-		///     constructor is chosen by the same <see cref="SelectConstructor" /> the container uses to build the
-		///     decorator, so this validation can never inspect a different constructor than the one constructed - a
-		///     divergence would leave the inner parameter un-redirected and the link resolving itself. The returned
-		///     type string is what <see cref="ClassifyParameter" /> produces for that parameter, so the
-		///     inner-parameter redirect in <see cref="ClassifyParameters" /> can match it.
+		///     instance, or <see langword="null" /> when there is none or it is ambiguous (AWT124). A would-be inner
+		///     marked <c>[FromServices]</c> is yielded through <paramref name="externalInner" /> so the caller
+		///     reports AWT135 instead. Uses the same <see cref="SelectConstructor" /> the container builds through,
+		///     and returns the type string <see cref="ClassifyParameter" /> produces so the redirect can match it.
 		/// </summary>
 		private string? SingleInnerParameterType(INamedTypeSymbol decorator, INamedTypeSymbol service, out IParameterSymbol? externalInner)
 		{
@@ -302,23 +288,16 @@ partial class AwaitenGenerator
 				return null;
 			}
 
-			// The inner is an instance of the decorated service, so its parameter must accept it: the service is
-			// implicitly convertible to the parameter's type (the parameter is the service, or a base of it). A
-			// [FromKey] parameter is excluded - it deliberately selects a specific keyed registration, so it is a
-			// separate dependency, never the chain inner (which is redirected by key and would ignore the [FromKey]
-			// anyway). A [FromServices] parameter is excluded for the same reason: it deliberately resolves from
-			// the external provider, so it is a separate dependency, never the chain inner. More than one parameter
-			// can be assignable at once - e.g. a plain `object` state parameter alongside the inner - so the inner
-			// is the most-derived of them: the one every other assignable parameter is a base of. Exactly one such
-			// maximum makes the inner unambiguous; a tie (two equally-derived assignable parameters, e.g. two
-			// `IService`) is genuinely ambiguous and reported as AWT124, as is a decorator whose only
-			// service-assignable parameter is [FromKey]-ed.
+			// The inner parameter must accept the decorated service (implicitly convertible from it). [FromKey] and
+			// [FromServices] parameters are excluded, since each selects a separate dependency. When several
+			// parameters are assignable, the inner is the most-derived one (every other is a base of it); a tie is
+			// ambiguous and reported as AWT124.
 			List<IParameterSymbol> assignable = constructor.Parameters
 				.Where(p => FromKey(p.GetAttributes()) is null && !HasFromServices(p) && _compilation.HasImplicitConversion(service, p.Type))
 				.ToList();
 
 			// AWT135: nothing is left to receive the inner instance, but a [FromServices] parameter of the
-			// service is present - the would-be inner was marked external, which would silently bypass the
+			// service is present. The would-be inner was marked external, which would silently bypass the
 			// decorator chain. Yield it so the caller reports that specific conflict instead of a generic AWT124.
 			if (assignable.Count == 0)
 			{
@@ -356,21 +335,13 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     Builds the composites after coalescing (and after decorator chains, so a composite fronts the
-	///     decorated members). For each <c>[Composite&lt;TComposite, TService&gt;]</c> it registers the composite
-	///     as an ordinary instance (constructed, cached and disposed by index) with the chosen lifetime and
-	///     rewrites the public unkeyed winner of <c>TService</c> to the composite, so a plain <c>TService</c>
-	///     parameter and <c>Resolve&lt;TService&gt;()</c> both get the composite. The composite is deliberately
-	///     NOT added to <c>serviceMembers</c>: it is excluded from its own - and everyone else's - collection
-	///     membership, so its own collection parameter (and any separate <c>IEnumerable&lt;TService&gt;</c>
-	///     consumer) resolves to the OTHER registrations, never the composite. With no self-edge the cycle
-	///     (AWT102) and captive (AWT105) analysis works unchanged over the composite's eager collection edges. An
-	///     empty member set is legal (the composite fans out to an empty collection). Reports AWT130 when the
-	///     composite has no collection parameter of the composed service, AWT133 when that collection is of a base
-	///     type rather than the service itself, AWT132 for a second composite over an already-composed service, and
-	///     AWT131 (a warning) when the composite type is also registered as a bare member of its own service - in
-	///     which case that membership is dropped, keeping the no-self-edge invariant that would otherwise be
-	///     violated (and surface as a confusing AWT102 cycle).
+	///     Builds the composites after coalescing (and after decorator chains, so a composite fronts the decorated
+	///     members). Each <c>[Composite&lt;TComposite, TService&gt;]</c> is registered as an ordinary instance and
+	///     rewritten to the public winner of <c>TService</c>. The composite is deliberately excluded from
+	///     <c>serviceMembers</c>, so every collection of <c>TService</c> resolves to the other registrations, never
+	///     the composite (no self-edge, so cycle/captive analysis is unchanged). Reports AWT130 (no collection
+	///     parameter of the service), AWT133 (a collection of a base type), AWT132 (a second composite), and AWT131
+	///     (the composite is also a bare member, which is dropped to keep the no-self-edge invariant).
 	/// </summary>
 	private static void BuildComposites(
 		List<CompositeRegistration> composites,
@@ -505,9 +476,9 @@ partial class AwaitenGenerator
 	}
 
 	// AWT131: the composite type is also registered as a bare member of the service it composes (e.g. a
-	// [Transient<C, S>] alongside [Composite<C, S>]). A composite is excluded from its own fan-out, so drop it from
-	// every collection of the composed service and warn - without the removal its own collection edge would include
-	// itself and surface as a confusing AWT102 dependency cycle.
+	// [Transient<C, S>] alongside [Composite<C, S>]). A composite is excluded from its own fan-out, so drop it
+	// from every collection of the composed service and warn. Without the removal its own collection edge would
+	// include itself and surface as a confusing AWT102 dependency cycle.
 	private static void DropRedundantSelfMembership(
 		CompositeRegistration composite,
 		string compositeType,
@@ -537,9 +508,9 @@ partial class AwaitenGenerator
 			])));
 	}
 
-	// Makes the composite the public single-dispatch winner: takes the unkeyed service off whatever impl currently
-	// holds it (a former winner stays a collection member, just no longer the façade) and hands it to the composite.
-	// The composite is never a serviceMembers entry, so it stays excluded from its own - and every other consumer's -
+	// Makes the composite the public single-dispatch winner: takes the unkeyed service off whatever impl
+	// currently holds it (a former winner stays a collection member, just no longer the façade) and hands it to
+	// the composite. The composite is never a serviceMembers entry, so it stays excluded from every
 	// IEnumerable<TService>.
 	private static void MakeCompositeThePublicWinner(
 		CompositeRegistration composite,
@@ -566,30 +537,26 @@ partial class AwaitenGenerator
 	/// <summary>Which collection-parameter shape a composite offers for its composed service.</summary>
 	private enum CompositeCollectionKind
 	{
-		/// <summary>A collection parameter whose element type is exactly the composed service - valid.</summary>
+		/// <summary>A collection parameter whose element type is exactly the composed service. Valid.</summary>
 		Exact,
 
 		/// <summary>
 		///     A collection parameter of a base (or otherwise related) type of the composed service. Collections
-		///     resolve by exact element type, so it would fan out over a different collection - reported as AWT133.
+		///     resolve by exact element type, so it would fan out over a different collection. Reported as AWT133.
 		/// </summary>
 		RelatedElement,
 
-		/// <summary>No collection parameter of the composed service at all - reported as AWT130.</summary>
+		/// <summary>No collection parameter of the composed service at all. Reported as AWT130.</summary>
 		Missing,
 	}
 
 	/// <summary>
 	///     Classifies the collection constructor parameter <paramref name="composite" /> offers for its composed
-	///     <paramref name="service" /> - what it fans out over. <see cref="CompositeCollectionKind.Exact" /> when a
-	///     collection parameter (<c>IEnumerable&lt;TService&gt;</c>, <c>IReadOnlyList&lt;TService&gt;</c>,
-	///     <c>TService[]</c>, …) has element type exactly the service; <see cref="CompositeCollectionKind.RelatedElement" />
-	///     (yielding the offending element type in <paramref name="relatedElement" />) when a collection parameter's
-	///     element is a base type the service is assignable to but is not the service itself - collections resolve
-	///     by exact element type, so it would fan out over a different collection; otherwise
-	///     <see cref="CompositeCollectionKind.Missing" />. An exact match wins over a related one. The constructor
-	///     is chosen by the same <see cref="SelectConstructor" /> the container builds the composite through, so
-	///     this validation can never inspect a different constructor than the one constructed.
+	///     <paramref name="service" />: <see cref="CompositeCollectionKind.Exact" /> for a collection of exactly the
+	///     service, <see cref="CompositeCollectionKind.RelatedElement" /> (yielding the element in
+	///     <paramref name="relatedElement" />) for a collection of a base type (which resolves a different collection),
+	///     otherwise <see cref="CompositeCollectionKind.Missing" />. Exact wins over related. Uses the same
+	///     <see cref="SelectConstructor" /> the container builds the composite through.
 	/// </summary>
 	private static CompositeCollectionKind ClassifyCompositeCollection(
 		INamedTypeSymbol composite,
@@ -654,13 +621,10 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     Redirects a decorator chain link's single inner parameter (a direct, unkeyed dependency assignable to
-	///     the decorated service type) to the synthetic key of the next-lower link - so the keyed resolver
-	///     produces <c>D2(D1(Real))</c> rather than the link resolving its own public service (itself) and
-	///     recursing. Both the service type and key are rewritten: the links are registered under the decorated
-	///     service type, so a parameter declared as a base of the service still resolves the link (its own
-	///     declared type is not a registration key). A non-link instance, or any other parameter, is returned
-	///     unchanged and resolves from the graph.
+	///     Redirects a decorator chain link's single inner parameter to the synthetic key of the next-lower link, so
+	///     the resolver produces <c>D2(D1(Real))</c> rather than the link resolving itself and recursing. Both the
+	///     service type and key are rewritten (the links are registered under the decorated service type). Any other
+	///     parameter is returned unchanged.
 	/// </summary>
 	private static ParameterModel RedirectDecoratorInner(
 		ParameterModel parameterModel,

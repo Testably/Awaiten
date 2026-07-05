@@ -93,8 +93,8 @@ public partial class DiagnosticTests
 
 			                                       namespace MyCode;
 
-			                                       // The service has no constraint, so IRepository<NotComparable> is legal in Root's signature;
-			                                       // the implementation constrains T : IComparable<T>, which NotComparable does not satisfy.
+			                                       // The service has no constraint, so IRepository<NotComparable> is legal in Root's signature.
+			                                       // The implementation constrains T : IComparable<T>, which NotComparable does not satisfy.
 			                                       // Without substituting the closed argument this would emit uncompilable code (CS0311); instead
 			                                       // it must be reported cleanly as AWT126.
 			                                       public sealed class NotComparable { }

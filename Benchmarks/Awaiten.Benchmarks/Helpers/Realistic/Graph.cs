@@ -2,14 +2,11 @@ namespace Awaiten.Benchmarks.Helpers;
 
 // A small, realistic object graph shared by every container in RealisticResolveBenchmarks: a request
 // handler at the root, layered over services, repositories, a unit of work and infrastructure. Lifetimes
-// are mixed deliberately - singletons live for the container, scoped instances for one request, transients
-// are built fresh on every resolution - so the measured per-request resolve exercises singleton sharing,
-// per-scope caching and transient construction in one pass. The scoped resources (DbConnection, UnitOfWork)
-// are IDisposable, as real scope-owned resources are, so disposing the scope also exercises each container's
-// disposal tracking and reverse-order teardown. Every type is a concrete class wired by constructor
-// injection; each holds its collaborators so the parameters are genuinely used.
+// are mixed deliberately so the per-request resolve exercises singleton sharing, per-scope caching and
+// transient construction in one pass. The scoped resources (DbConnection, UnitOfWork) are IDisposable, so
+// disposing the scope also exercises each container's disposal tracking and reverse-order teardown.
 
-// Singletons - one instance for the lifetime of the container.
+// Singletons: one instance for the container's lifetime.
 
 public sealed class Config;
 
@@ -20,7 +17,7 @@ public sealed class Cache(Config config)
 	public Config Config { get; } = config;
 }
 
-// Scoped - one instance per request scope.
+// Scoped: one instance per request scope.
 
 public sealed class DbConnection(Config config) : IDisposable
 {
@@ -73,7 +70,7 @@ public sealed class RequestHandler(UserService userService, OrderService orderSe
 	public Logger Logger { get; } = logger;
 }
 
-// Transient - a fresh instance on every resolution.
+// Transient: a fresh instance per resolution.
 
 public sealed class Mapper;
 

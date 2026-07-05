@@ -13,23 +13,19 @@ namespace Awaiten;
 public sealed class ContainerAttribute : Attribute
 {
 	/// <summary>
-	///     Opt into pragmatic synchronous resolution of async-initialized services after
-	///     <c>InitializeAsync</c> has completed. Defaults to <see langword="false" /> (strict: async-tainted
-	///     services must be resolved through <c>ResolveAsync</c>). When enabled, the synchronous resolver
-	///     shares the asynchronous initialization path: once a service has been warmed (through
-	///     <c>InitializeAsync</c> / <c>CreateScopeAsync</c> or an earlier <c>ResolveAsync</c>) it returns the
-	///     warmed instance immediately, but resolving it synchronously <em>before</em> warm-up blocks the
-	///     calling thread until initialization completes - so prefer warming up first, and beware blocking a
-	///     captured synchronization context.
+	///     Opt into synchronous resolution of async-initialized services after <c>InitializeAsync</c> has
+	///     completed. Defaults to <see langword="false" /> (strict: async-tainted services must be resolved
+	///     through <c>ResolveAsync</c>). When enabled, a warmed service returns immediately from a synchronous
+	///     resolve, but resolving one before warm-up blocks the calling thread until initialization completes.
+	///     Prefer warming up first, and beware blocking a captured synchronization context.
 	/// </summary>
 	public bool SyncResolveAfterInit { get; set; }
 
 	/// <summary>
 	///     How strictly the container guards against unbounded disposal leaks. Defaults to
-	///     <see cref="Awaiten.LifetimeSafety.Strict" />, which makes a root-accumulating
-	///     <c>Func&lt;…&gt;</c> over a disposable service a compile-time error and withholds such services
-	///     from by-type resolution; set <see cref="Awaiten.LifetimeSafety.Loose" /> for full
-	///     Microsoft.Extensions.DependencyInjection interoperability.
+	///     <see cref="Awaiten.LifetimeSafety.Strict" />, which makes a root-accumulating <c>Func&lt;…&gt;</c> over
+	///     a disposable service a compile-time error and withholds such services from by-type resolution. Set
+	///     <see cref="Awaiten.LifetimeSafety.Loose" /> for full Microsoft.Extensions.DependencyInjection interop.
 	/// </summary>
 	public LifetimeSafety LifetimeSafety { get; set; }
 }

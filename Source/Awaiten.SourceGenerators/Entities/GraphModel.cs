@@ -17,7 +17,7 @@ namespace Awaiten.SourceGenerators.Entities;
 ///     collection-resolvable membership (each (service type, key) and the instances registered under it, in
 ///     registration order), which the emitter materializes as <c>IEnumerable&lt;T&gt;</c> / <c>T[]</c>.
 ///     <see cref="VarianceCandidates" /> is every unkeyed registered service type that is a closed generic
-///     interface with declared variance (in registration order) - the candidates a differently-closed request
+///     interface with declared variance (in registration order): the candidates a differently-closed request
 ///     can be satisfied by, which the emitter bakes into the runtime variance fallback of the by-type dispatch.
 ///     <see cref="KeyedCollections" /> is the keyed-collection-resolvable membership (each service type and its
 ///     keyed implementations, in registration order), which the emitter materializes as

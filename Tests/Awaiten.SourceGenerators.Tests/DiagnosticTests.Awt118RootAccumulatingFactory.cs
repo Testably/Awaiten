@@ -4,9 +4,7 @@ namespace Awaiten.SourceGenerators.Tests;
 
 public partial class DiagnosticTests
 {
-	// AWT118 is reported by AwaitenAnalyzer (not the generator) so it can be suppressed in source; these
-	// tests therefore drive the analyzer. The containers use the default (strict) lifetime safety, under
-	// which AWT118 is an error - LifetimeSafetyTests covers the strict-error vs loose-warning escalation.
+	// AWT118 is reported by AwaitenAnalyzer (not the generator) so it can be suppressed in source, so these tests drive the analyzer. LifetimeSafetyTests covers the strict-error vs loose-warning escalation.
 	public class Awt118RootAccumulatingFactory
 	{
 		[Fact]

@@ -7,10 +7,9 @@ namespace Awaiten.Tests;
 /// <summary>
 ///     Runtime behavior of opt-in property injection: a settable or <c>init</c> property marked
 ///     <c>[Inject]</c> is filled after construction through an object initializer (no reflection, never
-///     observed half-set). Property injection is opt-in - a plain property is not auto-injected. A
-///     property edge resolves exactly like a constructor parameter - direct, keyed via <c>[FromKey]</c>,
-///     a relationship type, a collection, or async-initialized (awaited through the async surface). The
-///     containers and services are nested types, so the enclosing class is <c>partial</c>.
+///     observed half-set). Property injection is opt-in: a plain property is not auto-injected. A property
+///     edge resolves exactly like a constructor parameter: direct, keyed via <c>[FromKey]</c>, a relationship
+///     type, a collection, or async-initialized (awaited through the async surface).
 /// </summary>
 public partial class PropertyInjectionTests
 {
@@ -97,8 +96,8 @@ public partial class PropertyInjectionTests
 	{
 		using AsyncContainer.Root container = new();
 
-		// The consumer is async-tainted through its [Inject] Connection, so it is reachable only asynchronously;
-		// the member is awaited inside the initializer, so the connection it injects is already initialized.
+		// The consumer is async-tainted through its [Inject] Connection, so it is reachable only asynchronously.
+		// The member is awaited inside the initializer, so the connection it injects is already initialized.
 		AsyncConsumer consumer = await container.ResolveAsync<AsyncConsumer>(Ct);
 
 		await That(consumer.Connection).Is<Connection>();
@@ -163,7 +162,7 @@ public partial class PropertyInjectionTests
 
 		// The owner is not itself IAsyncInitializable, but its deferred member targets an async-initialized
 		// service, so async taint reaches the owner (reachable only through ResolveAsync) and its deferred
-		// assignment awaits the target - rather than emitting a synchronous resolve of an async-only service.
+		// assignment awaits the target rather than emitting a synchronous resolve of an async-only service.
 		DeferredAsyncConsumer consumer = await container.ResolveAsync<DeferredAsyncConsumer>(Ct);
 
 		await That(consumer.Connection).Is<Connection>();
@@ -540,7 +539,7 @@ public partial class PropertyInjectionTests
 
 		// The dependency was first materialized while wiring the owner's deferred member, so it registers for
 		// disposal before the owner; reverse-order teardown then disposes the owner first and the dependency
-		// after it - the owner's Dispose can still use the dependency, like with plain constructor injection.
+		// after it, so the owner's Dispose can still use the dependency, like with plain constructor injection.
 		await That(writer.Dep).IsNotNull();
 		await That(DisposeOrder).IsEqualTo(new[] { "Writer", "Dep", });
 	}

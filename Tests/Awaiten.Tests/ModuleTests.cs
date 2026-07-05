@@ -4,8 +4,7 @@ namespace Awaiten.Tests;
 ///     Runtime behavior of modules: a container imports a module's registrations with
 ///     <c>[Import(typeof(Module))]</c>, its own registrations override the module's overridable
 ///     <c>Default</c>/<c>TryAdd</c> registrations, and an imported default is used only when the container
-///     does not provide its own - so an overridden default is absent even from the service's collection.
-///     The containers, modules and services are nested types, so the enclosing class is <c>partial</c>.
+///     does not provide its own, so an overridden default is absent even from the service's collection.
 /// </summary>
 public partial class ModuleTests
 {

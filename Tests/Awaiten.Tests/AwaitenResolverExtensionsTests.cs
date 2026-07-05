@@ -3,8 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 namespace Awaiten.Tests;
 
 /// <summary>
-///     The generic <see cref="AwaitenResolverExtensions" /> conveniences over the
-///     <see cref="IAwaitenResolver" /> resolution surface, exercised against a hand-written
+///     The generic <see cref="AwaitenResolverExtensions" /> conveniences, exercised against a hand-written
 ///     <see cref="FakeResolver" /> so each branch is isolated from the generated container.
 /// </summary>
 public sealed class AwaitenResolverExtensionsTests
@@ -90,8 +89,7 @@ public sealed class AwaitenResolverExtensionsTests
 	{
 		IAwaitenAsyncResolver resolver = null!;
 
-		// The null check is eager argument validation, not deferred into the returned task: invoking and
-		// discarding the call (without awaiting it) still throws, proving the guard runs before the task.
+		// Guards eagerly, not deferred into the returned task: the call throws without being awaited.
 		await That(() => { _ = resolver.ResolveAsync<string>(); }).Throws<ArgumentNullException>()
 			.WithParamName("resolver");
 	}

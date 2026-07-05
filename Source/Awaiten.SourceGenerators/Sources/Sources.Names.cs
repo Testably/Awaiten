@@ -49,7 +49,7 @@ internal static partial class Sources
 		public int[] CollectionMemberIndices(ServiceKey collection)
 			=> _collectionMemberIndices.TryGetValue(collection, out int[]? indices) ? indices : System.Array.Empty<int>();
 
-		// Whether a collection can be materialized synchronously - i.e. every member has a synchronous resolver.
+		// Whether a collection can be materialized synchronously, meaning every member has a synchronous resolver.
 		// A collection with an async-tainted member (strict mode) is omitted from the public sync dispatch, so no
 		// synchronous resolver is referenced where none is emitted; injecting such a collection is AWT122.
 		public bool IsSyncCollection(ServiceKey collection) => _syncCollections.Contains(collection);
@@ -70,7 +70,7 @@ internal static partial class Sources
 		public int[] KeyedCollectionMemberIndices(string service)
 			=> _keyed.Indices.TryGetValue(service, out int[]? indices) ? indices : System.Array.Empty<int>();
 
-		// Whether a keyed collection can be materialized synchronously - i.e. every keyed member has a synchronous
+		// Whether a keyed collection can be materialized synchronously, meaning every keyed member has a synchronous
 		// resolver. One with an async-tainted member is omitted from the public sync dispatch (injecting it is AWT122).
 		public bool IsSyncKeyedCollection(string service) => _keyed.Sync.Contains(service);
 
@@ -204,12 +204,11 @@ internal static partial class Sources
 			Dictionary<string, int[]> Indices,
 			HashSet<string> Sync);
 
-		// Reserves a base name together with the derived member names generated off it (the async resolver's
-		// 'Async', the async cache field's 'AsyncTask' and the wiring flag's 'Wired' suffixes). The base names
-		// alone are not enough: a service type literally named e.g. 'FooWired' would otherwise collide with the
-		// '_fooWired' wiring flag derived for a deferred-member service named 'Foo' (CS0102 in the generated
-		// container), and likewise for 'FooAsync'/'FooAsyncTask' against the async members. Rejecting a name when
-		// any of the four is already taken keeps every derived name unique in both directions.
+		// Reserves a base name together with the derived member names generated off it (the 'Async', 'AsyncTask'
+		// and 'Wired' suffixes). The base names alone are not enough: a service type named e.g. 'FooWired' would
+		// collide with the '_fooWired' wiring flag of a deferred-member service named 'Foo' (CS0102), and likewise
+		// 'FooAsync'/'FooAsyncTask' against the async members. Rejecting a name when any of the four is taken keeps
+		// every derived name unique in both directions.
 		private static bool TryReserve(HashSet<string> used, string name)
 		{
 			string asyncName = name + "Async";

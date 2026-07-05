@@ -1,10 +1,9 @@
 namespace Awaiten.SourceGenerators.Tests;
 
 /// <summary>
-///     The generated shape of keyed registration: several implementations share one service type under
-///     different keys, and a <c>[FromKey]</c> parameter is wired to the matching implementation's
-///     resolver. Keyed registrations are reached only through that injection - never the public unkeyed
-///     dispatch table or the typed resolver fast path.
+///     Keyed registration. Implementations share one service type under different keys, and a
+///     <c>[FromKey]</c> parameter wires to the matching resolver. Keyed registrations are reached only through
+///     that injection, never the public unkeyed dispatch table or the typed resolver fast path.
 /// </summary>
 public class KeyedRegistrationTests
 {
@@ -62,8 +61,8 @@ public class KeyedRegistrationTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// The keyed implementations are genuinely registered and constructible - so their absence from the
-		// dispatch table below is because keyed services are excluded from it, not because IClock went away.
+		// The keyed implementations are registered and constructible, so their absence from the dispatch table
+		// is exclusion, not IClock going away.
 		await That(source).Contains("ResolveFastClock")
 			.Because("the keyed implementation is registered and constructible");
 		await That(source).Contains("ResolveSlowClock")

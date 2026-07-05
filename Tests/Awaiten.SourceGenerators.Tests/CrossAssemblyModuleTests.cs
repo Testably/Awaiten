@@ -3,10 +3,8 @@ using System.Linq;
 namespace Awaiten.SourceGenerators.Tests;
 
 /// <summary>
-///     Modules compiled into a referenced assembly: their registrations (read from metadata attributes,
-///     including generic attributes and named arguments like <c>Default</c>) are imported like source
-///     modules, and diagnostics arising from such a module fall back to the container's <c>[Import]</c>
-///     location instead of losing their location entirely.
+///     Modules in a referenced assembly: their registrations are imported like a source module's, and a
+///     module's diagnostics fall back to the container's <c>[Import]</c> location.
 /// </summary>
 public class CrossAssemblyModuleTests
 {
@@ -101,9 +99,7 @@ public class CrossAssemblyModuleTests
 			}
 			""");
 
-		// The metadata module's Default loses to AppModule's, so AWT148 is reported for a registration that
-		// has no syntax of its own; it must fall back to the container's [Import] line instead of having no
-		// location at all. Diagnostic.ToString() prefixes "(line,col): " only when a location exists.
+		// The metadata module's Default loses to AppModule's (AWT148). With no syntax of its own the diagnostic must fall back to the container's [Import] line. ToString() prefixes the location only when one exists.
 		await That(result.Diagnostics.Any(d => d.Contains("AWT148"))).IsTrue()
 			.Because("two Defaults collide across assemblies with nothing stronger to resolve them");
 		await That(result.Diagnostics).Contains("(*,*): *AWT148*").AsWildcard()
@@ -177,11 +173,7 @@ public class CrossAssemblyModuleTests
 			}
 			""");
 
-		// An internal member of another assembly (without InternalsVisibleTo) is not even imported into the
-		// referencing compilation's symbol tables (MetadataImportOptions.Public), so - exactly like the real
-		// compiler - the generator cannot see it at all: the honest outcome is AWT108 "no accessible method"
-		// naming the module, not AWT153 (which covers members the generator can see but the container cannot
-		// call, e.g. a private member of a source module).
+		// A cross-assembly internal member (no InternalsVisibleTo) is not imported into the referencing compilation's symbol tables, so the generator cannot see it. The honest outcome is AWT108 (no accessible method), not AWT153 which covers visible-but-uncallable members.
 		await That(result.Diagnostics).Contains("*AWT108*the module 'ModuleAssembly.ClockModule' has no accessible method 'CreateClock'*").AsWildcard()
 			.Because("an invisible cross-assembly internal member is indistinguishable from a missing one");
 	}
@@ -213,9 +205,7 @@ public class CrossAssemblyModuleTests
 			}
 			""");
 
-		// The metadata module's open typeof registration has no syntax of its own, so its arity-mismatch
-		// error must fall back to the container's [Import] line instead of having no location at all.
-		// Diagnostic.ToString() prefixes "(line,col): " only when a location exists.
+		// The metadata module's open registration has no syntax of its own, so its AWT125 arity error must fall back to the container's [Import] line. ToString() prefixes the location only when one exists.
 		await That(result.Diagnostics).Contains("(*,*): *AWT125*").AsWildcard()
 			.Because("a metadata module's open generic diagnostic falls back to the container's [Import] location");
 	}

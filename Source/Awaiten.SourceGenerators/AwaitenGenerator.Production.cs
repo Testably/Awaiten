@@ -15,99 +15,81 @@ partial class AwaitenGenerator
 		WellKnownTypes wellKnown = context.WellKnown;
 		List<DiagnosticInfo> diagnostics = context.Diagnostics;
 
-		// A pre-built Instance is handed back from a container member, never constructed here. The
-		// container does not own it, so it is not disposed; the registered type may legitimately be an
-		// interface (so the not-instantiable check is skipped) and it contributes no graph edges.
-		//
-		// It is likewise never async-initialized: a pre-built Instance implementing IAsyncInitializable is
-		// NOT awaited by the container and is NOT async-tainted, so it stays synchronously resolvable and is
-		// handed out without InitializeAsync ever running. This mirrors the disposal contract above - a
-		// pre-built instance is the caller's to construct, initialize and own; the container only hands back
-		// what the member produced. A service that needs the container to drive its asynchronous
-		// initialization must be registered for construction (or via a Factory whose concrete return type
-		// implements IAsyncInitializable), not as a pre-built Instance.
+		// A pre-built Instance is handed back from a container member, never constructed here. The container does
+		// not own it: it is not disposed, may be an interface (no not-instantiable check), contributes no edges, and
+		// is never async-initialized (InitializeAsync never runs). The caller owns construction and lifetime.
 		if (info.Production == ProductionKind.Instance)
 		{
 			return BuildPrebuiltInstance(info, containerSymbol, compilation, diagnostics);
 		}
 
-		// Select the producer: a container method (Factory) or the implementation's constructor (the
-		// default). A null result means the registration is unusable and a diagnostic was already reported.
+		// The producer is a container method (Factory) or the implementation's constructor (default). Null
+		// means the registration is unusable and a diagnostic was already reported.
 		IMethodSymbol? producer = SelectProducer(info, containerSymbol, compilation, serviceToImpl, context.ImportServices, diagnostics);
 		if (producer is null)
 		{
 			return null;
 		}
 
-		// An asynchronous factory returns Task<T> / ValueTask<T>: the container awaits it, so the type it
-		// actually owns is the awaited result T, not the Task. A synchronous factory owns its return type
-		// directly, and a constructed implementation owns info.Symbol.
+		// An async factory returns Task<T> / ValueTask<T>: the container awaits it, so the owned type is the
+		// awaited result T, not the Task. A sync factory owns its return type; a constructed impl owns info.Symbol.
 		bool asyncFactory = info.Production == ProductionKind.Factory
 		                    && IsAsyncFactoryReturn(producer.ReturnType, compilation, out _);
 
-		// A factory's parameters resolve from the graph exactly like a constructor's. An async factory
-		// additionally forwards the resolve-time CancellationToken (the async creator's) into a matching
-		// parameter rather than resolving it from the graph.
+		// A factory's parameters resolve from the graph like a constructor's. An async factory additionally
+		// forwards the resolve-time CancellationToken into a matching parameter instead of resolving it.
 		List<ParameterModel> parameters = ClassifyParameters(producer, info, asyncFactory, context);
 
 		// Property injection: after the constructor, fill opt-in [Inject] properties through an object
-		// initializer. Only a constructed instance is filled - a factory or pre-built instance is produced
-		// whole by its source. Each member edge is classified exactly like a Direct constructor parameter, so
-		// it participates fully in cycle, captive and async-taint analysis.
+		// initializer. Only a constructed instance is filled; a factory or pre-built instance is produced whole
+		// by its source. Each member edge is classified like a Direct constructor parameter, so it participates
+		// fully in cycle, captive and async-taint analysis.
 		List<MemberModel> members = new();
 		if (info.Production == ProductionKind.Constructor)
 		{
 			DiscoverInjectedMembers(info, containerSymbol, serviceToImpl, context.ConstraintRejected, members, diagnostics);
 		}
 
-		// Disposability follows the type the container actually owns: a factory's produced type (which may
-		// implement IDisposable behind a non-disposable service interface; for an async factory this is the
-		// awaited T, not the Task), or the constructed implementation type. Using info.Symbol for a factory
-		// would miss a DisposableX behind an IX and leak it.
+		// Disposability follows the owned type: a factory's produced type (for an async factory the awaited T,
+		// not the Task), or the constructed implementation. Using info.Symbol for a factory would miss a
+		// DisposableX behind an IX and leak it.
 		ITypeSymbol disposalType = info.Production == ProductionKind.Factory
 			? ProducedType(producer.ReturnType, compilation)
 			: info.Symbol;
 		bool disposable = wellKnown.Disposable is not null && ImplementsInterface(disposalType, wellKnown.Disposable);
 
-		// Async disposal mirrors synchronous disposal: the container owns an IAsyncDisposable instance for
-		// teardown too, and the drain awaits its DisposeAsync, preferring it over IDisposable when a type is
-		// both. This is recognized only when the runtime exposes async disposal at all - otherwise the generated
-		// container stays synchronous-dispose only.
+		// Async disposal mirrors sync disposal: the drain awaits DisposeAsync, preferring it over IDisposable
+		// when a type is both. Recognized only when the runtime exposes async disposal; otherwise the generated
+		// container stays sync-dispose only.
 		bool asyncDisposable = wellKnown.AsyncDisposable is not null && ImplementsInterface(disposalType, wellKnown.AsyncDisposable);
 
 		// A factory's declared return type can hide a concrete IDisposable (or IAsyncDisposable) behind a
-		// non-disposable service interface (or base class), which the static flags above miss. When that is
-		// possible - the declared type is itself neither yet a subtype could be (an interface or a non-sealed
-		// class) - the emitter tracks the realized instance for disposal behind a runtime
-		// `is IDisposable or IAsyncDisposable` test instead. A sealed declared type that is neither cannot hide
-		// one, so it needs no check (and the runtime test would not even compile). Constructed and pre-built
+		// non-disposable service interface or base class, which the static flags above miss. When a subtype
+		// could be one (the declared type is an interface or a non-sealed class), the emitter tracks the
+		// realized instance behind a runtime `is IDisposable or IAsyncDisposable` test. A sealed declared type
+		// that is neither cannot hide one, and the runtime test would not compile. Constructed and pre-built
 		// Instance production never lie: info.Symbol is the concrete type, and an Instance is not owned.
 		bool runtimeDisposalCheck = info.Production == ProductionKind.Factory
 		                            && !disposable
 		                            && !asyncDisposable
 		                            && CouldHideDisposable(disposalType);
 
-		// Async initialization follows the type the container actually owns - a factory's concrete return type
-		// (which may implement IAsyncInitializable behind a non-async service interface) or the constructed
-		// implementation type - mirroring the disposal-type choice above. A pre-built Instance is returned
-		// early above and is never initialized here (the caller owns it). An async factory is async-tainted
-		// regardless of whether its produced type implements IAsyncInitializable: its result is reached only by
-		// awaiting the Task (see the IsAsyncFactory seed in PropagateAsyncTaint). When the produced type IS
-		// IAsyncInitializable, the container additionally awaits its InitializeAsync after the factory completes.
+		// Async initialization follows the owned type (a factory's concrete return type or the constructed impl),
+		// mirroring the disposal-type choice above. When it is IAsyncInitializable, the container awaits its
+		// InitializeAsync after construction. (An async factory is async-tainted regardless; see PropagateAsyncTaint.)
 		bool asyncInit = wellKnown.AsyncInitializable is not null && ImplementsInterface(disposalType, wellKnown.AsyncInitializable);
 
-		// Best-effort lint (AWT106): a synchronous factory whose declared return type hides the asynchronous
-		// initialization its body provably produces. The container reads async-init taint off producer.ReturnType
-		// (above), so a concrete IAsyncInitializable returned behind a plainer interface is never initialized.
-		// An async Task<T>/ValueTask<T> factory owns its own initialization (the container awaits the factory),
-		// and a hidden IDisposable is disposed at runtime via RuntimeDisposalCheck - neither is reported.
+		// Best-effort lint (AWT106): a sync factory whose declared return type hides the async initialization
+		// its body provably produces. Async-init taint is read off producer.ReturnType (above), so a concrete
+		// IAsyncInitializable returned behind a plainer interface is never initialized. Not reported for an
+		// async factory (it awaits its own initialization) nor a hidden IDisposable (disposed via RuntimeDisposalCheck).
 		if (info.Production == ProductionKind.Factory && !asyncFactory)
 		{
 			ReportFactoryHidingAsyncInitialization(producer, compilation, wellKnown.AsyncInitializable, diagnostics);
 		}
 
 		// A decorator chain link carries a synthetic ImplementationType identity (so one decorator type can be
-		// several distinct instances); the real type to construct is then its symbol, kept apart in EmitType.
+		// several distinct instances); the real type to construct is its symbol, kept apart in EmitType.
 		string realType = info.Symbol.ToDisplayString(FullyQualified);
 		string? emitType = info.ImplementationType == realType ? null : realType;
 
@@ -133,8 +115,8 @@ partial class AwaitenGenerator
 			IsAsyncDisposable: asyncDisposable,
 			EmitType: emitType,
 			InjectedMembers: new EquatableArray<MemberModel>(members.ToArray()),
-			// Eager build-time construction is the synchronous analog of InitializeAsync, which warms singletons,
-			// so it applies to a singleton only. The attribute exposes Eager on [Singleton<…>] alone, but the flag
+			// Eager build-time construction is the sync analog of InitializeAsync warming singletons, so it
+			// applies to a singleton only. The attribute exposes Eager on [Singleton<…>] alone, but the flag
 			// coalesces onto the implementation, so this guard keeps a coalesced non-singleton from carrying it.
 			Eager: info.Eager && info.Lifetime == Lifetime.Singleton,
 			OnActivated: onActivated,
@@ -146,11 +128,10 @@ partial class AwaitenGenerator
 			       || type.AllInterfaces.Any(implemented => SymbolEqualityComparer.Default.Equals(implemented, @interface));
 		}
 
-		// Whether a value of this declared type could be IDisposable at runtime through a subtype the
-		// declaration does not reveal: an interface or type parameter (any implementer qualifies) or a
-		// non-sealed class (a derived type may implement it). A sealed class or a struct that does not
-		// itself implement IDisposable cannot, so a runtime `is IDisposable` test against it is pointless
-		// (and, for a sealed class, a compile error - CS8121/CS0184).
+		// Whether a value of this declared type could be IDisposable at runtime through an unrevealed subtype:
+		// an interface or type parameter (any implementer qualifies) or a non-sealed class (a derived type may
+		// implement it). A sealed class or struct that does not itself implement IDisposable cannot, so a
+		// runtime `is IDisposable` test against it is pointless (and a compile error for a sealed class, CS8121/CS0184).
 		static bool CouldHideDisposable(ITypeSymbol type)
 			=> type.TypeKind is TypeKind.Interface or TypeKind.TypeParameter
 			   || (type.TypeKind == TypeKind.Class && !type.IsSealed);
@@ -193,10 +174,10 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     Selects the method that produces an implementation: a container method for a <c>Factory</c>
 	///     registration, or the implementation's own constructor otherwise. Returns <see langword="null" />
-	///     when the registration is unusable - an unresolved factory (AWT108), a non-instantiable abstract or
-	///     interface type (AWT103), or a type with no accessible constructor (AWT104) - having already appended
-	///     the corresponding diagnostic. A factory produces the instance, so the registered type may be an
-	///     interface and is not subject to the not-instantiable check a constructed type is.
+	///     when the registration is unusable, having already appended the diagnostic: an unresolved factory
+	///     (AWT108), a non-instantiable abstract or interface type (AWT103), or a type with no accessible
+	///     constructor (AWT104). A factory produces the instance, so the registered type may be an interface
+	///     and skips the not-instantiable check a constructed type gets.
 	/// </summary>
 	private static IMethodSymbol? SelectProducer(
 		ImplInfo info,
@@ -211,8 +192,7 @@ partial class AwaitenGenerator
 			return ResolveFactory(containerSymbol, info, compilation, diagnostics);
 		}
 
-		// An abstract type or interface cannot be constructed; reject it instead of emitting a 'new'
-		// against it (which would fail to compile in the generated source).
+		// An abstract type or interface cannot be constructed; reject it rather than emit an uncompilable 'new'.
 		if (info.Symbol.IsAbstract || info.Symbol.TypeKind == TypeKind.Interface)
 		{
 			diagnostics.Add(new DiagnosticInfo(
@@ -288,18 +268,14 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     Reports <see cref="Diagnostics.FactoryHidesAsyncInitialization">AWT106</see> when a synchronous
 	///     factory method's body provably returns a concrete type that implements <c>IAsyncInitializable</c>
-	///     while the method's declared return type does not - so the initialization is invisible to the
-	///     container and never runs.
+	///     while the declared return type does not, so the initialization is invisible to the container and
+	///     never runs.
 	/// </summary>
 	/// <remarks>
-	///     Conservative by design: it inspects only the producer's own <c>return</c> expressions (both
-	///     expression-bodied and block-bodied), never descending into nested lambdas or local functions, and
-	///     fires only when the statically determined type of the returned expression is a non-abstract,
-	///     non-interface named type that is async-initializable. A metadata-only factory (no syntax) or an
-	///     unresolved/unanalyzable return type yields no diagnostic. False negatives (helper-returned or
-	///     runtime-selected implementations) are accepted; false positives are not. A hidden <c>IDisposable</c>
-	///     is not reported (the container disposes factory outputs behind a runtime check); an asynchronous
-	///     factory is excluded by the caller (it owns its own initialization).
+	///     Conservative by design: it inspects only the producer's own <c>return</c> expressions, never descending
+	///     into nested lambdas or local functions, and fires only when the returned static type is a non-abstract,
+	///     non-interface async-initializable type. An unanalyzable return type yields no diagnostic. False negatives
+	///     are accepted; false positives are not.
 	/// </remarks>
 	private static void ReportFactoryHidingAsyncInitialization(
 		IMethodSymbol producer,
@@ -314,8 +290,8 @@ partial class AwaitenGenerator
 
 		ITypeSymbol declaredReturnType = producer.ReturnType;
 
-		// The container already sees the initialization when the declared return type is itself
-		// async-initializable, so nothing it hides could be missed - there is no diagnostic to report.
+		// When the declared return type is itself async-initializable the container already sees the
+		// initialization, so nothing is hidden and there is no diagnostic to report.
 		if (Implements(declaredReturnType, asyncInitializableSymbol))
 		{
 			return;
@@ -328,7 +304,7 @@ partial class AwaitenGenerator
 		foreach (SyntaxReference reference in producer.DeclaringSyntaxReferences)
 		{
 			// A factory must be a method on the container; anything else (or metadata-only, no syntax) is
-			// not analyzable here and is left silent.
+			// not analyzable and is left silent.
 			if (reference.GetSyntax() is not MethodDeclarationSyntax method)
 			{
 				continue;
@@ -370,7 +346,7 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     The expressions a method directly returns: the arrow expression of an expression-bodied method, or
 	///     every <c>return x;</c> in a block body. Nested lambdas and local functions are not descended into,
-	///     so their returns are never attributed to the enclosing factory.
+	///     so their returns are not attributed to the enclosing factory.
 	/// </summary>
 	private static IEnumerable<ExpressionSyntax> CollectReturnExpressions(MethodDeclarationSyntax method)
 	{
@@ -409,10 +385,10 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     Resolves a <c>Factory</c> registration to the method that produces it - a container method, or a
-	///     module method for a registration imported from a module (never falling back to the container). No
-	///     method of that name returns the registered type → <see cref="Diagnostics.InvalidFactory">AWT108</see>
-	///     naming the owner; a module method that matches but is not accessible from the generated container →
+	///     Resolves a <c>Factory</c> registration to the method that produces it: a container method, or a
+	///     module method for an imported registration (never falling back to the container). No method of that
+	///     name returns the registered type → <see cref="Diagnostics.InvalidFactory">AWT108</see> naming the
+	///     owner; a module method that matches but is inaccessible from the generated container →
 	///     <see cref="Diagnostics.InaccessibleModuleMember">AWT153</see>; more than one accessible match (an
 	///     overload) → <see cref="Diagnostics.AmbiguousFactory">AWT112</see>.
 	/// </summary>
@@ -426,10 +402,9 @@ partial class AwaitenGenerator
 		List<IMethodSymbol> candidates = FindFactoryCandidates(
 			owner, info.ProductionMember!, info.Symbol, compilation);
 
-		// A container's own members are reachable by the generated partial at any accessibility, but a
-		// module's members are called from outside the module, so only those the container can actually see
-		// qualify; a match that exists on the module but is hidden from the container is its own error
-		// (AWT153) rather than a confusing not-found AWT108.
+		// The generated partial reaches its container's own members at any accessibility, but a module's
+		// members are called from outside, so only those the container can see qualify. A match hidden from
+		// the container is its own error (AWT153), not a confusing not-found AWT108.
 		if (info.Origin is not null && candidates.Count > 0)
 		{
 			List<IMethodSymbol> accessible = candidates
@@ -457,12 +432,12 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     Validates an <c>Instance</c> registration against the named member of its owner - the container,
-	///     or the declaring module for an imported registration (never falling back to the container) -
-	///     reporting <see cref="Diagnostics.InvalidInstance">AWT109</see> when no field or property of that
-	///     name (on the owner or an accessible base type) holds the registered type, and
+	///     Validates an <c>Instance</c> registration against the named member of its owner (the container, or
+	///     the declaring module for an imported registration, never falling back to the container). Reports
+	///     <see cref="Diagnostics.InvalidInstance">AWT109</see> when no field or property of that name (on the
+	///     owner or an accessible base type) holds the registered type, and
 	///     <see cref="Diagnostics.InaccessibleModuleMember">AWT153</see> when a module member matches but is
-	///     not accessible from the generated container.
+	///     inaccessible from the generated container.
 	/// </summary>
 	private static void ValidateInstanceMember(
 		INamedTypeSymbol containerSymbol,
@@ -502,9 +477,9 @@ partial class AwaitenGenerator
 			new EquatableArray<string>([Display(info.OwningServiceOrImpl), info.ProductionMember!, DescribeOwner(info),])));
 	}
 
-	// AWT153: the module declares a member that matches the Factory/Instance registration, but the generated
-	// container cannot access it (e.g. a private member of a source module; a cross-assembly internal member
-	// without InternalsVisibleTo is not even imported into the symbol tables and surfaces as AWT108/AWT109).
+	// AWT153: the module declares a member matching the Factory/Instance registration, but the generated
+	// container cannot access it (e.g. a private member of a source module). A cross-assembly internal member
+	// without InternalsVisibleTo is not imported into the symbol tables at all and surfaces as AWT108/AWT109.
 	private static void ReportInaccessibleModuleMember(ImplInfo info, List<DiagnosticInfo> diagnostics)
 		=> diagnostics.Add(new DiagnosticInfo(
 			Diagnostics.InaccessibleModuleMember,
@@ -520,9 +495,9 @@ partial class AwaitenGenerator
 	private static string DescribeOwner(ImplInfo info)
 		=> info.Origin is { } origin ? $"the module '{Display(origin.ToDisplayString(FullyQualified))}'" : "the container";
 
-	// A module's Factory/Instance member is emitted qualified with the module type (the generated container
-	// is another class, so the simple name would not bind); the container's own members stay unqualified -
-	// they are in scope inside the generated partial.
+	// A module's Factory/Instance member is emitted qualified with the module type (the generated container is
+	// another class, so the simple name would not bind); the container's own members stay unqualified, being
+	// in scope inside the generated partial.
 	private static string? QualifiedProductionMember(ImplInfo info)
 		=> info.ProductionMember is null || info.Origin is null
 			? info.ProductionMember
@@ -531,10 +506,10 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     Chooses the constructor the container builds <paramref name="implementation" /> through: its single
 	///     accessible constructor, or the greediest whose parameters are all satisfiable (falling back to the
-	///     greediest so unresolved parameters surface as AWT101). <paramref name="additionallySatisfiable" />, when
-	///     supplied, marks parameters the caller can satisfy beyond the registered set - open generic expansion
-	///     passes it so a parameter whose closed generic is expanded on demand does not disqualify a constructor,
-	///     letting the seed scan the same constructor the emitted container resolves.
+	///     greediest so unresolved parameters surface as AWT101). <paramref name="additionallySatisfiable" />,
+	///     when supplied, marks parameters the caller can satisfy beyond the registered set. Open generic
+	///     expansion passes it so a parameter whose closed generic is expanded on demand does not disqualify a
+	///     constructor, letting the seed scan the same constructor the emitted container resolves.
 	/// </summary>
 	internal static IMethodSymbol? SelectConstructor(
 		INamedTypeSymbol implementation,
@@ -556,11 +531,10 @@ partial class AwaitenGenerator
 			.Where(c => c.Parameters.All(p =>
 			{
 				// Selecting a constructor, never an async factory, so no CancellationToken forwarding applies.
-				// A collection - synchronous (Enumerable), asynchronous (AsyncEnumerable) or awaited (AwaitedEnumerable)
-				// - is always satisfiable: an unregistered element type just yields an empty collection, so it never
-				// disqualifies a constructor. A [FromServices] (External) parameter is always satisfiable too; with
-				// [ImportServices] any direct dependency can fall through to the external provider, so it does not
-				// disqualify a constructor either.
+				// A collection (Enumerable, AsyncEnumerable or AwaitedEnumerable) is always satisfiable: an
+				// unregistered element type just yields an empty collection. A [FromServices] (External)
+				// parameter is always satisfiable too, and with [ImportServices] any direct dependency can fall
+				// through to the external provider, so neither disqualifies a constructor.
 				ParameterModel parameter = ClassifyParameter(p, asyncFactory: false);
 				return parameter.Kind is DependencyKind.Arg or DependencyKind.External
 				       || IsSynthesizedCollection(parameter.Kind)
@@ -588,10 +562,10 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     The members named <paramref name="name" /> that the generated container partial can reach: the
-	///     container's own members (any accessibility, since a partial can use its own private members)
-	///     plus members inherited from base types that a derived type can actually access (everything but
-	///     private, with internal / private-protected restricted to the same assembly).
+	///     The members named <paramref name="name" /> the generated container partial can reach: the
+	///     container's own members (any accessibility, since a partial can use its own private members) plus
+	///     inherited members a derived type can access (everything but private, with internal / private-protected
+	///     restricted to the same assembly).
 	/// </summary>
 	private static IEnumerable<ISymbol> AccessibleMembers(INamedTypeSymbol container, string name)
 	{
@@ -619,12 +593,12 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     The ordinary methods named <paramref name="name" /> on the container (or an accessible base
-	///     type) whose return type produces <paramref name="serviceType" /> - the candidate factory methods
-	///     for a <c>Factory</c> registration. A synchronous factory's return type is implicitly convertible to
-	///     the service type; an asynchronous factory returns <c>Task&lt;T&gt;</c> / <c>ValueTask&lt;T&gt;</c>
-	///     and is matched against the unwrapped <c>T</c> (the container awaits it). None means AWT108; more
-	///     than one means an ambiguous factory (AWT112).
+	///     The candidate factory methods for a <c>Factory</c> registration: the ordinary methods named
+	///     <paramref name="name" /> on the container (or an accessible base type) whose return type produces
+	///     <paramref name="serviceType" />. A sync factory's return type is implicitly convertible to the
+	///     service type; an async factory returns <c>Task&lt;T&gt;</c> / <c>ValueTask&lt;T&gt;</c> and is
+	///     matched against the unwrapped <c>T</c>. None means AWT108; more than one means an ambiguous
+	///     factory (AWT112).
 	/// </summary>
 	private static List<IMethodSymbol> FindFactoryCandidates(
 		INamedTypeSymbol container, string name, ITypeSymbol serviceType, Compilation compilation)
@@ -643,20 +617,20 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     The service type a factory's return type produces: the awaited result <c>T</c> for an asynchronous
-	///     factory returning <c>Task&lt;T&gt;</c> / <c>ValueTask&lt;T&gt;</c>, otherwise the return type
-	///     itself. A non-generic <c>Task</c> / <c>ValueTask</c> (no result) is not unwrapped, so it is matched
-	///     as-is and falls out as AWT108 (it produces no service).
+	///     The service type a factory's return type produces: the awaited result <c>T</c> for an async factory
+	///     returning <c>Task&lt;T&gt;</c> / <c>ValueTask&lt;T&gt;</c>, otherwise the return type itself. A
+	///     non-generic <c>Task</c> / <c>ValueTask</c> is not unwrapped, so it is matched as-is and falls out as
+	///     AWT108 (it produces no service).
 	/// </summary>
 	private static ITypeSymbol ProducedType(ITypeSymbol returnType, Compilation compilation)
 		=> IsAsyncFactoryReturn(returnType, compilation, out ITypeSymbol produced) ? produced : returnType;
 
 	/// <summary>
-	///     Whether <paramref name="returnType" /> is an awaitable factory return - <c>Task&lt;T&gt;</c> or
-	///     <c>ValueTask&lt;T&gt;</c> - yielding the produced result type <c>T</c>. Matched by the canonical
+	///     Whether <paramref name="returnType" /> is an awaitable factory return (<c>Task&lt;T&gt;</c> or
+	///     <c>ValueTask&lt;T&gt;</c>), yielding the produced result type <c>T</c>. Matched by the canonical
 	///     metadata symbols so a user-defined <c>Task`1</c> in another namespace is not mistaken for one.
 	///     <c>ValueTask&lt;T&gt;</c> is absent on netstandard2.0; <see cref="Compilation.GetTypeByMetadataName" />
-	///     returns <see langword="null" /> there and that branch is simply skipped.
+	///     returns <see langword="null" /> there and that branch is skipped.
 	/// </summary>
 	private static bool IsAsyncFactoryReturn(ITypeSymbol returnType, Compilation compilation, out ITypeSymbol produced)
 	{

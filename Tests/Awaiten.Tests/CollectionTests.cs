@@ -5,13 +5,11 @@ using System.Threading;
 namespace Awaiten.Tests;
 
 /// <summary>
-///     Runtime behavior of collection dependencies: a constructor parameter typed as a collection of a
-///     service - <see cref="IEnumerable{T}" />, <see cref="IReadOnlyList{T}" />,
-///     <see cref="IReadOnlyCollection{T}" />, <see cref="IList{T}" />, <see cref="ICollection{T}" /> or
-///     <c>T[]</c> - resolves to every unkeyed registration of that service, in registration order, each
-///     member keeping its own lifetime. <see cref="IEnumerable{T}" /> and <c>T[]</c> are also publicly
-///     resolvable. The containers and services are nested types, so the enclosing class is
-///     <c>partial</c>.
+///     Runtime behavior of collection dependencies. A constructor parameter typed as a collection of a service
+///     (<see cref="IEnumerable{T}" />, <see cref="IReadOnlyList{T}" />, <see cref="IReadOnlyCollection{T}" />,
+///     <see cref="IList{T}" />, <see cref="ICollection{T}" /> or <c>T[]</c>) resolves to every unkeyed
+///     registration of that service, in registration order, each member keeping its own lifetime.
+///     <see cref="IEnumerable{T}" /> and <c>T[]</c> are also publicly resolvable.
 /// </summary>
 public partial class CollectionTests
 {
@@ -166,13 +164,13 @@ public partial class CollectionTests
 		BundleHost host = container.Resolve<BundleHost>();
 
 		// IEnumerable<IPlugin> is registered as an opaque value (a Bundle), so both the injected parameter and the
-		// public resolution return that registration - not the collection synthesized from the IPlugin members.
+		// public resolution return that registration, not the collection synthesized from the IPlugin members.
 		await That(host.Plugins).HasCount(1);
 		await That(host.Plugins[0].Name).IsEqualTo("bundle");
 		await That(container.Resolve<IEnumerable<IPlugin>>().Single().Name).IsEqualTo("bundle");
 
 		// All-or-nothing synthesis: because a collection shape of IPlugin (IEnumerable<IPlugin>) is explicitly
-		// registered, no shape is synthesized - the unregistered IPlugin[] shape is unresolvable rather than a
+		// registered, no shape is synthesized. The unregistered IPlugin[] shape is unresolvable rather than a
 		// silently synthesized second collection that would disagree with the registered one.
 		await That(() => container.Resolve<IPlugin[]>()).Throws<InvalidOperationException>()
 			.Because("registering one collection shape of IPlugin suppresses synthesis for every shape of IPlugin");
@@ -206,7 +204,7 @@ public partial class CollectionTests
 		await That(host.Secondary).HasCount(1);
 		await That(host.Secondary[0].Name).IsEqualTo("gamma");
 
-		// The unkeyed collection resolves only the unkeyed registration - a keyed member is never an unkeyed one.
+		// The unkeyed collection resolves only the unkeyed registration; a keyed member is never an unkeyed one.
 		await That(host.Unkeyed).HasCount(1);
 		await That(host.Unkeyed[0].Name).IsEqualTo("plain");
 	}
@@ -220,7 +218,7 @@ public partial class CollectionTests
 
 		// The collection holds an async-initialized member. In the strict default this is AWT122 (a synchronous
 		// materialization cannot await the initialization); SyncResolveAfterInit warms the graph first, so the
-		// collection materializes synchronously and hands back the already-initialized member - both when injected
+		// collection materializes synchronously and hands back the already-initialized member, both when injected
 		// through a host and when resolved publicly by type.
 		AsyncPluginHost host = container.Resolve<AsyncPluginHost>();
 
@@ -327,7 +325,7 @@ public partial class CollectionTests
 		using SyncAsyncStreamContainer.Root container = new();
 
 		// A collection whose members are all synchronous is publicly resolvable as IAsyncEnumerable<T> straight
-		// through Resolve - it wraps the synchronously materialized members.
+		// through Resolve, wrapping the synchronously materialized members.
 		IAsyncEnumerable<IPlugin> stream = container.Resolve<IAsyncEnumerable<IPlugin>>();
 
 		List<IPlugin> plugins = new();
@@ -347,7 +345,7 @@ public partial class CollectionTests
 		using AsyncStreamContainer.Root container = new();
 
 		// The collection holds an async-initialized member, so its IAsyncEnumerable<T> shape is resolvable by type
-		// only asynchronously - ResolveAsync materializes it, awaiting each member's initialization.
+		// only asynchronously: ResolveAsync materializes it, awaiting each member's initialization.
 		IAsyncEnumerable<IPlugin> stream = await container.ResolveAsync<IAsyncEnumerable<IPlugin>>(TestContext.Current.CancellationToken);
 
 		List<IPlugin> plugins = new();
@@ -377,8 +375,8 @@ public partial class CollectionTests
 		using AsyncDisposableCollectionContainer.Root container = new();
 
 		// The member is a build-on-demand disposable, so materializing the async collection by type on the root
-		// would accumulate the transients for the container's lifetime - withheld under strict lifetime safety,
-		// mirroring the synchronous shapes and the singular resolution of such a member.
+		// would accumulate the transients for the container's lifetime, so it is withheld under strict lifetime
+		// safety, mirroring the synchronous shapes and the singular resolution of such a member.
 		Func<Task> resolveOnRoot = () => container.ResolveAsync<IAsyncEnumerable<IWidget>>(TestContext.Current.CancellationToken);
 		await That(resolveOnRoot).Throws<InvalidOperationException>()
 			.Because("the async collection of a build-on-demand disposable is withheld from by-type ResolveAsync on the root");
@@ -417,7 +415,7 @@ public partial class CollectionTests
 		KeyedAsyncStreamHost host = container.Resolve<KeyedAsyncStreamHost>();
 
 		// Each [FromKey] async collection resolves the registration(s) under that key, never the others, and the
-		// unkeyed async collection resolves only the unkeyed registration - the buckets stay disjoint, exactly as
+		// unkeyed async collection resolves only the unkeyed registration. The buckets stay disjoint, exactly as
 		// for the synchronous shapes.
 		List<IPlugin> primary = new();
 		await foreach (IPlugin plugin in host.Primary.WithCancellation(TestContext.Current.CancellationToken))
@@ -480,7 +478,7 @@ public partial class CollectionTests
 		using AsyncChannelContainer.Root container = new();
 
 		// The registered channel requires asynchronous initialization, so it is absent from the synchronous
-		// dispatch - and the async view synthesized from the (all-synchronous) IPlugin members must not claim its
+		// dispatch, and the async view synthesized from the (all-synchronous) IPlugin members must not claim its
 		// vacated slot: synchronous Resolve throws the channel's steer-to-ResolveAsync guidance instead.
 		await That(() => container.Resolve<IAsyncEnumerable<IPlugin>>()).Throws<InvalidOperationException>()
 			.Because("the registered channel's slot is not shadowed by the synthesized async view");
@@ -497,7 +495,7 @@ public partial class CollectionTests
 
 		// The host injects Task<IReadOnlyList<IPlugin>> over an async-initialized member, yet resolves
 		// SYNCHRONOUSLY in the strict default: the awaited collection launders its members' taint like the bare
-		// Task<T> relationship - the await happens inside the produced task, not at the host's construction.
+		// Task<T> relationship. The await happens inside the produced task, not at the host's construction.
 		AwaitedPluginHost host = container.Resolve<AwaitedPluginHost>();
 
 		IReadOnlyList<IPlugin> plugins = await host.Plugins;
@@ -514,8 +512,8 @@ public partial class CollectionTests
 	{
 		using AwaitedPropertyContainer.Root container = new();
 
-		// The awaited collection is filled through an [Inject] property - the object initializer run after
-		// construction - rather than a constructor parameter, yet behaves identically: the host resolves
+		// The awaited collection is filled through an [Inject] property (the object initializer run after
+		// construction) rather than a constructor parameter, yet behaves identically: the host resolves
 		// SYNCHRONOUSLY in the strict default because the awaited collection launders its members' taint, the
 		// await happening inside the produced task rather than at the host's construction.
 		AwaitedPropertyHost host = container.Resolve<AwaitedPropertyHost>();
@@ -537,7 +535,7 @@ public partial class CollectionTests
 		AwaitedPluginHost host = container.Resolve<AwaitedPluginHost>();
 
 		// Every member is synchronous, so the awaited collection is a completed Task.FromResult over the
-		// synchronously materialized array - available without ever leaving the synchronous path.
+		// synchronously materialized array, available without ever leaving the synchronous path.
 		await That(host.Plugins.IsCompleted).IsTrue()
 			.Because("an all-synchronous awaited collection carries no async machinery");
 
@@ -568,7 +566,7 @@ public partial class CollectionTests
 		AwaitedPluginHost second = container.Resolve<AwaitedPluginHost>();
 
 		// The transient hosts each materialize their own awaited collection, but the singleton members inside
-		// are shared - each member keeps its own lifetime on the awaited path, exactly as on the synchronous one.
+		// are shared. Each member keeps its own lifetime on the awaited path, exactly as on the synchronous one.
 		await That((await second.Plugins)[0]).IsSameAs((await first.Plugins)[0]);
 		await That((await second.Plugins)[1]).IsSameAs((await first.Plugins)[1]);
 	}
@@ -581,7 +579,7 @@ public partial class CollectionTests
 		KeyedAwaitedPluginHost host = container.Resolve<KeyedAwaitedPluginHost>();
 
 		// Each [FromKey] awaited collection resolves the registration(s) under that key, never the others, and
-		// the unkeyed one only the unkeyed registration - the buckets stay disjoint, as for every other shape.
+		// the unkeyed one only the unkeyed registration. The buckets stay disjoint, as for every other shape.
 		IReadOnlyList<IPlugin> primary = await host.Primary;
 		IReadOnlyList<IPlugin> unkeyed = await host.Unkeyed;
 
@@ -682,7 +680,7 @@ public partial class CollectionTests
 		using AsyncPathAwaitedContainer.Root container = new();
 		using CancellationTokenSource cts = new();
 
-		// The host is itself async-initialized, so it is built on the async path - where the awaited collection
+		// The host is itself async-initialized, so it is built on the async path, where the awaited collection
 		// forwards the resolve-time token to each awaited member (rather than the default a synchronously built
 		// consumer supplies). The member captures the token it was initialized with.
 		AsyncAwaitedHost host = await container.ResolveAsync<AsyncAwaitedHost>(cts.Token);
@@ -829,7 +827,7 @@ public partial class CollectionTests
 		public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 	}
 
-	// An opaque IAsyncEnumerable<IPlugin> service in its own right - the explicit registration the synthesized
+	// An opaque IAsyncEnumerable<IPlugin> service in its own right: the explicit registration the synthesized
 	// async view must step aside for. The stream is empty (via a nested enumerator, so the service itself is not
 	// IAsyncDisposable); the tests only assert which instance the container serves, never its contents.
 	public sealed class PluginChannel : IAsyncEnumerable<IPlugin>
@@ -999,7 +997,7 @@ public partial class CollectionTests
 	public static partial class AsyncStreamContainer;
 
 	// Every member is synchronous, so the async collection is a synchronous expression and its host stays
-	// synchronously resolvable - the IAsyncEnumerable<T> shape does not by itself force the async path.
+	// synchronously resolvable. The IAsyncEnumerable<T> shape does not by itself force the async path.
 	[Container]
 	[Singleton<Alpha, IPlugin>]
 	[Singleton<Beta, IPlugin>]
@@ -1035,7 +1033,7 @@ public partial class CollectionTests
 	[Transient<AsyncDisposableWidget, IWidget>]
 	public static partial class AsyncDisposableCollectionContainer;
 
-	// Async collections under disjoint key buckets: 'primary' (alpha) and unkeyed (plain) - a [FromKey] async
+	// Async collections under disjoint key buckets: 'primary' (alpha) and unkeyed (plain). A [FromKey] async
 	// collection resolves exactly the members of its bucket, like the synchronous shapes.
 	[Container]
 	[Singleton<Alpha, IPlugin>(Key = "primary")]
@@ -1061,7 +1059,7 @@ public partial class CollectionTests
 
 	// The strict default with an async-initialized member consumed as an awaited Task<IReadOnlyList<T>>: the
 	// awaited collection awaits each member behind the produced task, so the async member is legal (no AWT122)
-	// and - unlike the IAsyncEnumerable<T> shape - the members' taint is laundered, so the transient host stays
+	// and, unlike the IAsyncEnumerable<T> shape, the members' taint is laundered, so the transient host stays
 	// synchronously resolvable.
 	[Container]
 	[Singleton<Alpha, IPlugin>]
@@ -1097,7 +1095,7 @@ public partial class CollectionTests
 
 	// The host is async-initialized (built on the async path) and injects an awaited collection whose member is
 	// async-tainted: the awaited collection is materialized on the async path, forwarding the host's resolve-time
-	// token to the awaited member - which captures it, so the test can assert the forwarding.
+	// token to the awaited member, which captures it, so the test can assert the forwarding.
 	[Container]
 	[Singleton<TokenCapturingPlugin, IPlugin>]
 	[Singleton<AsyncAwaitedHost>]

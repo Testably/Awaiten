@@ -70,7 +70,7 @@ public partial class DiagnosticTests
 			                                       public interface INotifier { }
 			                                       public interface IAuditor { }
 			                                       public sealed class Email : INotifier { }
-			                                       // The composite is a legitimate member of IAuditor's collection — that membership is unrelated to its INotifier fan-out.
+			                                       // The composite is a legitimate member of IAuditor's collection, unrelated to its INotifier fan-out.
 			                                       public sealed class CompositeNotifier : INotifier, IAuditor { public CompositeNotifier(IEnumerable<INotifier> channels) { } }
 
 			                                       [Container]

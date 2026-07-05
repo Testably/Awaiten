@@ -3,8 +3,7 @@ namespace Awaiten.Tests;
 /// <summary>
 ///     Runtime behavior of keyed open generic registration: several open generic implementations share one
 ///     open service under different keys, and a consumer selects one closed instance with <c>[FromKey]</c>.
-///     The key declared on the open registration flows onto every closed implementation expanded from it. The
-///     containers and services are nested types, so the enclosing class is <c>partial</c>.
+///     The key declared on the open registration flows onto every closed implementation expanded from it.
 /// </summary>
 public partial class OpenGenericKeyedTests
 {

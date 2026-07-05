@@ -9,11 +9,9 @@ public sealed class SupportClock : ICrossAssemblyClock;
 /// <summary>A service the module produces through a static <c>Factory</c> member, called across the assembly boundary.</summary>
 public sealed class SupportGreeter
 {
-	/// <summary>Initializes the greeter with the greeting the module's factory hands it.</summary>
-	/// <param name="greeting">The greeting the module's factory supplies.</param>
 	public SupportGreeter(string greeting) => Greeting = greeting;
 
-	/// <summary>The greeting the module's factory supplied - asserted on to prove the module method actually ran.</summary>
+	/// <summary>Asserted on to prove the module's factory method actually ran across the assembly boundary.</summary>
 	public string Greeting { get; }
 }
 
@@ -24,10 +22,9 @@ public sealed class SupportCache;
 public sealed class SupportLogger;
 
 /// <summary>
-///     A <c>[Module]</c> compiled into this referenced support assembly, so a container in the test assembly can
-///     <c>[Import]</c> it and exercise the real metadata-import path end to end at runtime: a strong registration,
-///     an overridable <c>Default</c>, and <c>Factory</c>/<c>Instance</c> members the generated container must call
-///     qualified with (and accessible on) this cross-assembly module type.
+///     A <c>[Module]</c> in a referenced assembly, so an importing container exercises the real cross-assembly
+///     metadata-import path: a strong registration, an overridable <c>Default</c>, and <c>Factory</c>/<c>Instance</c>
+///     members the generated container must call qualified on this module type.
 /// </summary>
 [Module]
 [Singleton<SupportLogger>]

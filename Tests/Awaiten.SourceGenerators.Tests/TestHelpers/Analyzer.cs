@@ -7,10 +7,9 @@ using Microsoft.CodeAnalysis.Diagnostics;
 namespace Awaiten.SourceGenerators.Tests.TestHelpers;
 
 /// <summary>
-///     Runs a <see cref="DiagnosticAnalyzer" /> over an in-memory compilation and returns its
-///     diagnostics, for behavior testing of the Awaiten analyzers. The <see cref="AwaitenGenerator" />
-///     runs first - like in a real build, where analyzers see the post-generation compilation - so a
-///     usage-site diagnostic (AWT156) can resolve the generated <c>Root</c>/<c>Scope</c> types.
+///     Runs a <see cref="DiagnosticAnalyzer" /> over an in-memory compilation and returns its diagnostics.
+///     The <see cref="AwaitenGenerator" /> runs first, as in a real build, so a usage-site diagnostic (AWT156)
+///     can resolve the generated <c>Root</c>/<c>Scope</c> types.
 /// </summary>
 public static class Analyzer
 {
@@ -21,11 +20,10 @@ public static class Analyzer
 		=> Run<TAnalyzer>(source, additionalReferences: [], assemblyTypes);
 
 	/// <summary>
-	///     Runs the analyzer over <paramref name="source" /> with <paramref name="referencedSource" />
-	///     compiled into a separate referenced assembly first - with the <see cref="AwaitenGenerator" />
-	///     applied to it, so a <c>[Container]</c> declared there carries its generated
-	///     <c>Root</c>/<c>Scope</c> into the metadata reference - for cross-assembly scenarios such as
-	///     disposing another project's container.
+	///     Compiles <paramref name="referencedSource" /> into a separate referenced assembly (with the
+	///     <see cref="AwaitenGenerator" /> applied, so a <c>[Container]</c> there carries its generated
+	///     <c>Root</c>/<c>Scope</c> into the metadata reference), then runs the analyzer over
+	///     <paramref name="source" />. For cross-assembly scenarios such as disposing another project's container.
 	/// </summary>
 	public static Task<string[]> RunWithReferencedAssembly<TAnalyzer>(
 		[StringSyntax("c#-test")] string referencedSource,
@@ -45,8 +43,7 @@ public static class Analyzer
 		(Compilation outputCompilation, GeneratorDriverRunResult generatorResult) =
 			Generator.RunGenerator(source, additionalReferences, assemblyTypes);
 
-		// A snippet that does not compile (or trips the generator) would otherwise pass a negative
-		// assertion vacuously, so a generator or compilation error fails the test run loudly instead.
+		// A snippet that fails to compile would pass negative assertions vacuously, so fail loudly instead.
 		string[] errors = generatorResult.Diagnostics
 			.Concat(outputCompilation.GetDiagnostics())
 			.Where(d => d.Severity == DiagnosticSeverity.Error)
@@ -63,8 +60,7 @@ public static class Analyzer
 			ImmutableArray.Create<DiagnosticAnalyzer>(new TAnalyzer()));
 		ImmutableArray<Diagnostic> diagnostics = await withAnalyzers.GetAnalyzerDiagnosticsAsync();
 
-		// GetAnalyzerDiagnosticsAsync returns in-source-suppressed diagnostics too (with IsSuppressed
-		// set); drop them so the result mirrors what a real build reports after #pragma/[SuppressMessage].
+		// GetAnalyzerDiagnosticsAsync includes in-source-suppressed diagnostics; drop them to mirror a real build.
 		return diagnostics.Where(d => !d.IsSuppressed).Select(d => d.ToString()).ToArray();
 	}
 }

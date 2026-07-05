@@ -86,7 +86,7 @@ public partial class DiagnosticTests
 			                                       """);
 
 			await That(result.Diagnostics).IsEmpty()
-				.Because("distinct services may each have their own composite — [Composite] is AllowMultiple for exactly this");
+				.Because("distinct services may each have their own composite, [Composite] is AllowMultiple for exactly this");
 		}
 	}
 }

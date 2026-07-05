@@ -11,11 +11,10 @@ namespace Awaiten.Benchmarks;
 
 /// <summary>
 ///     Steady-state resolution latency: resolve the last-registered service by <see cref="Type" /> from a
-///     container of <see cref="Size" /> singletons. This is the worst case for a linear type-chain (every
-///     earlier comparison misses first); Awaiten's dictionary+switch and the other containers' hash lookups
-///     are size-independent. Each container is built once in <see cref="Setup" /> and registers the same
-///     B0..B255 graph; the compile-time containers (Awaiten, Jab, Pure.DI) are generated, the rest are built
-///     at runtime here so a reader sees every framework's setup and measured call in one place.
+///     container of <see cref="Size" /> singletons. Worst case for a linear type-chain (every earlier
+///     comparison misses first); Awaiten's dictionary+switch and the other containers' hash lookups are
+///     size-independent. The compile-time containers (Awaiten, Jab, Pure.DI) are generated; the rest are
+///     built at runtime in <see cref="Setup" /> so every framework's setup and measured call sit in one place.
 /// </summary>
 public class ResolveBenchmarks : BenchmarksBase
 {

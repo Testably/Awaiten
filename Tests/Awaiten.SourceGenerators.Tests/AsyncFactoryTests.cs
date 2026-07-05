@@ -3,10 +3,9 @@ using System.Linq;
 namespace Awaiten.SourceGenerators.Tests;
 
 /// <summary>
-///     Generator behavior for asynchronous factory methods: a factory whose return type is
-///     <c>Task&lt;T&gt;</c> / <c>ValueTask&lt;T&gt;</c> produces service type <c>T</c> and is an
-///     async-taint source (parallel to <c>IAsyncInitializable</c>), independent of whether <c>T</c>
-///     itself implements <c>IAsyncInitializable</c>. The container awaits the factory on the async path; the
+///     Asynchronous factory methods: a factory returning <c>Task&lt;T&gt;</c> / <c>ValueTask&lt;T&gt;</c> produces
+///     service <c>T</c> and is an async-taint source (parallel to <c>IAsyncInitializable</c>), regardless of whether
+///     <c>T</c> implements <c>IAsyncInitializable</c>. The container awaits the factory on the async path; the
 ///     synchronous path cannot unwrap a <c>Task</c>, so AWT119 / strict withholding falls out for free.
 /// </summary>
 public class AsyncFactoryTests
@@ -193,8 +192,8 @@ public class AsyncFactoryTests
 		                                       }
 		                                       """);
 
-		// A parameterized async factory now has a correct resolution path: Func<string, Task<Foo>> forwards the
-		// runtime argument to the async parameterized resolver, which awaits the factory. There is no AWT121.
+		// Func<string, Task<Foo>> forwards the runtime argument to the async parameterized resolver, which awaits
+		// the factory. There is no AWT121.
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 		await That(source).Contains("await Create(a0).ConfigureAwait(false)")
@@ -225,9 +224,8 @@ public class AsyncFactoryTests
 		                                       }
 		                                       """);
 
-		// A synchronous Func<string, Foo> over an async-tainted (async-factory) parameterized service cannot
-		// await the Task, so it is rejected at the consumption site - the async form Func<string, Task<Foo>> is
-		// the fix.
+		// A synchronous Func<string, Foo> cannot await the async factory's Task, so it is rejected at the
+		// consumption site; the fix is Func<string, Task<Foo>>.
 		await That(result.Diagnostics).Contains("*AWT119*").AsWildcard()
 			.Because("a synchronous Func relationship cannot await an async parameterized factory");
 	}

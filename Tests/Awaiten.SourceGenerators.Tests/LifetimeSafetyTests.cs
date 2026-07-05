@@ -3,10 +3,9 @@ using System.Linq;
 namespace Awaiten.SourceGenerators.Tests;
 
 /// <summary>
-///     The generated effect of <c>LifetimeSafety</c>. Strict (the default) escalates the root-accumulating
-///     factory diagnostic (AWT118) to an error and withholds a disposable transient from by-type resolution
-///     (its bare type and plain Func factory throw guidance, and it gets no typed resolver), while keeping
-///     <c>Owned&lt;T&gt;</c> resolvable. Loose reports AWT118 as a warning and leaves everything resolvable.
+///     The effect of <c>LifetimeSafety</c>. Strict (the default) escalates AWT118 to an error and withholds a
+///     disposable transient from by-type root resolution while keeping <c>Owned&lt;T&gt;</c> resolvable. Loose
+///     reports AWT118 as a warning and withholds nothing.
 /// </summary>
 public class LifetimeSafetyTests
 {
@@ -27,8 +26,7 @@ public class LifetimeSafetyTests
 	                                              }}
 	                                              """;
 
-	// AWT118 is reported by AwaitenAnalyzer (so a loose warning can be #pragma-suppressed), so its severity is
-	// asserted through the analyzer harness rather than the generator's diagnostics.
+	// AWT118 is reported by AwaitenAnalyzer, so severity is asserted through the analyzer harness, not the generator.
 	[Fact]
 	public async Task Strict_EscalatesTheRootAccumulatingFactoryToAnError()
 	{
@@ -106,9 +104,8 @@ public class LifetimeSafetyTests
 	[Fact]
 	public async Task Strict_RootAccumulatingContainer_StillGeneratesCompilableCode()
 	{
-		// AWT118 is now an analyzer (not generator) error, so the generator no longer replaces the container
-		// with a throwing error-body for this pattern - it emits the real (withholding) container. The build
-		// still fails on the analyzer error, but the generated code itself must compile.
+		// AWT118 is an analyzer error now, so the generator emits the real withholding container instead of a
+		// throwing error-body. The generated code must compile even though the build fails on the analyzer error.
 		GeneratorResult result = Generator.Run(string.Format(RootAccumulatingSource, string.Empty));
 
 		await That(result.Diagnostics.Where(d => d.Contains("error"))).IsEmpty()

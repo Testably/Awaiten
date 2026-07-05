@@ -1,14 +1,11 @@
 namespace Awaiten.SourceGenerators.Tests;
 
 /// <summary>
-///     Generator behavior for the asynchronous relationship types <c>Task&lt;T&gt;</c>,
-///     <c>Func&lt;…, Task&lt;T&gt;&gt;</c> and <c>Lazy&lt;Task&lt;T&gt;&gt;</c>: awaitable counterparts of the
-///     synchronous <c>Func&lt;T&gt;</c> / <c>Lazy&lt;T&gt;</c> relationships. They defer resolution and so
-///     launder async taint - a synchronously-resolvable consumer can hold one over an async-initialized
-///     service without becoming async-tainted and without tripping AWT119 / AWT120 - and they resolve their
-///     target through its async resolver (awaiting initialization). A <c>Func&lt;TArg…, Task&lt;T&gt;&gt;</c>
-///     additionally forwards runtime <c>[Arg]</c>s to a parameterized async service through its async
-///     resolver, which is the correct (and only) path for an [Arg]-plus-async service.
+///     The asynchronous relationship types <c>Task&lt;T&gt;</c>, <c>Func&lt;…, Task&lt;T&gt;&gt;</c> and
+///     <c>Lazy&lt;Task&lt;T&gt;&gt;</c>. Like the synchronous Func/Lazy relationships they defer resolution and
+///     launder async taint, so a synchronously-resolvable consumer can hold one over an async service without
+///     tripping AWT119/AWT120, and they resolve the target through its async resolver.
+///     <c>Func&lt;TArg…, Task&lt;T&gt;&gt;</c> also forwards runtime <c>[Arg]</c>s to a parameterized async service.
 /// </summary>
 public class AsyncRelationshipTypesTests
 {
@@ -40,8 +37,7 @@ public class AsyncRelationshipTypesTests
 		                                       }
 		                                       """);
 
-		// The async relationships launder the taint (like Func/Lazy), so Pool stays synchronously resolvable
-		// and there is no AWT119/AWT120.
+		// The async relationships launder the taint (like Func/Lazy), so Pool stays synchronously resolvable (no AWT119/AWT120).
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
@@ -154,9 +150,8 @@ public class AsyncRelationshipTypesTests
 		                                       }
 		                                       """);
 
-		// In pragmatic mode the synchronous Func<int, Robot> is allowed (AWT119 is suppressed); its sync
-		// parameterized resolver must forward the argument and block on the async resolver so initialization
-		// still runs, never building a second uninitialized instance.
+		// Pragmatic mode allows the sync Func<int, Robot> (AWT119 suppressed); its resolver forwards the argument
+		// and blocks on the async resolver so initialization still runs, never building a second uninitialized instance.
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 		await That(source).Contains("internal static global::MyCode.Robot ResolveRobot(Scope __s, int a0)")

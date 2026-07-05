@@ -29,10 +29,7 @@ public sealed class AwaitenServiceProvider : IServiceProvider, IServiceScopeFact
 	// so async services stay resolvable as Task<T> from scopes too. Null when the scope offers no metadata.
 	private readonly IAwaitenContainerMetadata? _metadata;
 
-	/// <summary>
-	///     Initializes a new instance of the <see cref="AwaitenServiceProvider" /> class over the given
-	///     container.
-	/// </summary>
+	/// <summary>Adapts the given container to <see cref="IServiceProvider" />.</summary>
 	/// <param name="container">The Awaiten container to adapt.</param>
 	/// <param name="ownsContainer">
 	///     When <see langword="true" /> (the default), disposing this provider disposes the container.

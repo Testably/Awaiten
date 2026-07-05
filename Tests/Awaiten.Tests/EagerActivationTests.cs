@@ -6,14 +6,13 @@ namespace Awaiten.Tests;
 
 /// <summary>
 ///     Runtime behavior of eager singleton activation (<c>[Singleton&lt;T&gt;(Eager = true)]</c>): an eager
-///     singleton is constructed in the generated container root's constructor - before any <c>Resolve</c> - in
+///     singleton is constructed in the generated container root's constructor (before any <c>Resolve</c>) in
 ///     registration order, it is cached (so a later resolve hands back the same instance), and a disposable
 ///     eager singleton is tracked for disposal by that eager construction alone (no resolve needed). In
 ///     pragmatic <c>SyncResolveAfterInit</c> mode an eager <c>IAsyncInitializable</c> singleton is even
-///     constructed and initialized at build time through its blocking synchronous resolver. The containers and
-///     services are nested types, so the enclosing class is <c>partial</c>. Construction, initialization and
-///     disposal are observed through a static probe because the container is a static definition and the usable
-///     instance is <c>new …Root()</c>.
+///     constructed and initialized at build time through its blocking synchronous resolver. Construction,
+///     initialization and disposal are observed through a static probe because the container is a static
+///     definition and the usable instance is <c>new …Root()</c>.
 /// </summary>
 public partial class EagerActivationTests
 {
@@ -81,7 +80,7 @@ public partial class EagerActivationTests
 
 		using (ProbeDisposableContainer.Root container = new())
 		{
-			// Constructed eagerly, and tracked for disposal by that eager construction alone - no Resolve here.
+			// Constructed eagerly, and tracked for disposal by that eager construction alone. No Resolve here.
 			await That(Probe.Constructed).Contains("ProbeDisposable");
 			await That(Probe.Disposed).DoesNotContain("ProbeDisposable");
 		}
@@ -99,12 +98,12 @@ public partial class EagerActivationTests
 		using PragmaticEagerContainer.Root container = new();
 
 		// The blocking synchronous resolver ran in the constructor, so the async-initialized singleton was both
-		// constructed and initialized at build time - before any Resolve / InitializeAsync.
+		// constructed and initialized at build time, before any Resolve / InitializeAsync.
 		await That(Probe.Constructed).Contains("AsyncEager");
 		await That(Probe.Constructed).Contains("AsyncEager:init");
 
 		// A later synchronous resolve (allowed by SyncResolveAfterInit) hands back that same, already-initialized
-		// instance - constructed exactly once.
+		// instance, constructed exactly once.
 		AsyncEager resolved = container.Resolve<AsyncEager>();
 		await That(resolved.Initialized).IsTrue();
 		await That(Probe.Constructed.Count(name => name == "AsyncEager")).IsEqualTo(1)

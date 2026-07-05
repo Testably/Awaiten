@@ -4,39 +4,21 @@ using Awaiten.SourceGenerators.Internals;
 namespace Awaiten.SourceGenerators.Entities;
 
 /// <summary>
-///     A single constructed instance on a container: one implementation, the implementation's simple
-///     name (used to name generated members), its lifetime, the (one or more) service keys it is
-///     exposed as (a service type plus an optional resolution key), its selected constructor's
-///     parameters (each a service type plus how it is delivered),
-///     whether it needs disposing, and whether it is a reference type (only reference-type cache fields
-///     can be marked <c>volatile</c> for the lock-free fast path). Registrations of the same
-///     implementation are coalesced into one instance, so a multi-service registration shares a single
-///     object. <see cref="Production" /> records how the instance is produced: a constructor (the
-///     default), a container <see cref="ProductionMember">method</see> (Factory), or a pre-built
-///     container <see cref="ProductionMember">member</see> (Instance). The container is a static class, so
-///     a factory method or instance member is always reached by simple name.
-///     <see cref="IsAsyncInitializable" /> is set when the constructed/factory-produced type implements
-///     <c>IAsyncInitializable</c> (so it must be awaited once after construction);
-///     <see cref="IsAsyncFactory" /> is set when the instance is produced by an asynchronous factory
-///     (returning <c>Task&lt;T&gt;</c> / <c>ValueTask&lt;T&gt;</c>), which the container can only reach by
-///     awaiting the factory call - an async-taint source independent of <see cref="IsAsyncInitializable" />;
-///     <see cref="IsAsyncTainted" /> additionally covers an instance that only reaches one through its
-///     non-deferred dependencies, so it too must be resolved asynchronously.
-///     <see cref="RuntimeDisposalCheck" /> is set for a factory whose declared return type is not itself
-///     <c>IDisposable</c> yet could produce one at runtime (an interface or a non-sealed class): the emitted
-///     resolver then tracks the realized instance for disposal behind a runtime <c>is IDisposable</c> test,
-///     rather than trusting <see cref="IsDisposable" /> (which only sees the declared type and would leak a
-///     disposable hidden behind a non-disposable service interface).
-///     <see cref="InjectedMembers" /> are the opt-in <c>[Inject]</c> properties filled through an object
-///     initializer after construction (empty for a factory- or pre-built-instance registration, which is
-///     produced whole by its source); each is a graph edge exactly like a constructor parameter.
-///     <see cref="Eager" /> marks a singleton constructed at container build time (in the generated root's
-///     constructor, in registration order) rather than lazily on first resolve - set only on a singleton,
-///     so a coalesced non-singleton never carries it.
+///     A single constructed instance on a container: one implementation, its lifetime, the service keys it is
+///     exposed as, its selected constructor's parameters, its <c>[Inject]</c> properties, and disposal/async flags.
+///     Registrations of the same implementation are coalesced into one instance, so a multi-service registration
+///     shares a single object. <see cref="Production" /> records how it is produced: a constructor,
+///     a container Factory method, or a pre-built Instance member. The three async flags are distinct taint
+///     sources, any of which forces asynchronous resolution: <see cref="IsAsyncInitializable" /> (implements
+///     <c>IAsyncInitializable</c>), <see cref="IsAsyncFactory" /> (produced by an async factory), and
+///     <see cref="IsAsyncTainted" /> (reaches one through a non-deferred dependency).
+///     <see cref="RuntimeDisposalCheck" /> is set for a factory whose declared return type is not
+///     <c>IDisposable</c> but could produce one at runtime, so the resolver tracks it behind a runtime type test.
+///     <see cref="Eager" /> marks a singleton built at container build time rather than lazily on first resolve.
 ///     <see cref="OnActivated" /> / <see cref="OnRelease" /> are the resolved names of the container's
-///     <c>static void M(TImplementation)</c> lifecycle hooks (or <see langword="null" />): the activation hook
-///     is called once the instance is constructed, and the release hook is queued at construction and run when
-///     the owning Root/Scope is disposed, in reverse creation order and before the instance's own disposal.
+///     <c>static void M(TImplementation)</c> lifecycle hooks. The activation hook runs once the instance is
+///     constructed; the release hook is queued at construction and run when the owning Root/Scope is disposed,
+///     before the instance's own disposal.
 /// </summary>
 internal sealed record InstanceModel(
 	string ImplementationType,
@@ -60,29 +42,23 @@ internal sealed record InstanceModel(
 	string? OnRelease = null)
 {
 	/// <summary>
-	///     The concrete type to construct (<c>new …</c>) and to use for cache fields and resolver return
-	///     types. Normally the same as <see cref="ImplementationType" />, but a decorator chain link reuses
-	///     one decorator type across several distinct instances, so it carries a synthetic
-	///     <see cref="ImplementationType" /> identity while <see cref="EmitType" /> holds the real type. Every
-	///     other use of <see cref="ImplementationType" /> stays the instance identity (keying, caching and
-	///     collection tracking), so ordinary registrations - where <see cref="EmitType" /> is null - are unaffected.
+	///     The concrete type to construct and to use for cache fields and resolver return types. Normally the same
+	///     as <see cref="ImplementationType" />, but a decorator chain link reuses one decorator type across several
+	///     instances, so it carries a synthetic <see cref="ImplementationType" /> identity while
+	///     <see cref="EmitType" /> holds the real type. Ordinary registrations (<see cref="EmitType" /> null) are unaffected.
 	/// </summary>
 	public string ConstructedType => EmitType ?? ImplementationType;
 
 	/// <summary>
-	///     Whether the container owns this instance for disposal in either sense - its declared type implements
-	///     <c>IDisposable</c> or <c>IAsyncDisposable</c> - so it is tracked for teardown and its on-demand
-	///     construction accumulates on the owner. The drain selects the right disposal at runtime;
-	///     <see cref="RuntimeDisposalCheck" /> covers a factory whose declared type could hide either behind a
-	///     non-disposable service type.
+	///     Whether the container owns this instance for disposal (its declared type implements <c>IDisposable</c> or
+	///     <c>IAsyncDisposable</c>), so it is tracked for teardown. The drain selects the right disposal at runtime.
 	/// </summary>
 	public bool NeedsDisposal => IsDisposable || IsAsyncDisposable;
 
 	/// <summary>
-	///     Whether this instance is itself an async-taint source (as opposed to being tainted only through a
-	///     dependency): its implementation is <c>IAsyncInitializable</c>, or it is produced by an asynchronous
-	///     factory. Either way it is reachable only by awaiting, so a synchronous relationship over it is an
-	///     AWT119 rather than a transitive AWT120.
+	///     Whether this instance is itself an async-taint source (not merely tainted through a dependency): it is
+	///     <c>IAsyncInitializable</c> or produced by an async factory. Reachable only by awaiting, so a synchronous
+	///     relationship over it is AWT119 rather than a transitive AWT120.
 	/// </summary>
 	public bool IsAsyncSource => IsAsyncInitializable || IsAsyncFactory;
 
@@ -106,7 +82,7 @@ internal sealed record InstanceModel(
 	/// <summary>
 	///     Whether this instance is produced by a requesting-type factory: a <c>Factory =</c> method with a
 	///     <c>[RequestingType]</c> parameter (<see cref="DependencyKind.RequestingType" />). Its resolver
-	///     embeds the consumer's <c>typeof(…)</c> per call, so - unlike an ordinary registration - it cannot
+	///     embeds the consumer's <c>typeof(…)</c> per call, so unlike an ordinary registration it cannot
 	///     be lowered to a shared cached resolver: it is built fresh on every invocation (the declared
 	///     lifetime is ignored for caching) and, like a parameterized service, pruned from collection
 	///     membership.

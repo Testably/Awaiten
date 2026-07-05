@@ -10,14 +10,9 @@ namespace Awaiten;
 [AttributeUsage(AttributeTargets.Parameter | AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
 public sealed class FromKeyAttribute : Attribute
 {
-	/// <summary>
-	///     Initializes a new instance of the <see cref="FromKeyAttribute" /> class.
-	/// </summary>
 	/// <param name="key">The resolution key to select.</param>
 	public FromKeyAttribute(string key) => Key = key;
 
-	/// <summary>
-	///     The resolution key to select.
-	/// </summary>
+	/// <summary>The resolution key to select.</summary>
 	public string Key { get; }
 }

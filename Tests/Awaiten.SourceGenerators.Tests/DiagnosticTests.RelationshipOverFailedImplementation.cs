@@ -2,11 +2,10 @@ namespace Awaiten.SourceGenerators.Tests;
 
 public partial class DiagnosticTests
 {
-	// A relationship (Func/Lazy/Owned) whose target service is registered but whose implementation fails to
-	// build (e.g. an interface registered directly -> AWT103) leaves the service in serviceToImpl but absent
-	// from implToIndex. The diagnostic passes that walk the graph must guard that lookup rather than indexing
-	// it blindly, or the generator crashes (CS8785 / KeyNotFoundException) and the real registration error is
-	// lost.
+	// A relationship (Func/Lazy/Owned) over a service that is registered but whose implementation fails to
+	// build (e.g. an interface registered directly, AWT103) leaves it in serviceToImpl but absent from
+	// implToIndex. Graph-walking diagnostic passes must guard that lookup, or the generator crashes
+	// (CS8785 / KeyNotFoundException) and the real registration error is lost.
 	public class RelationshipOverFailedImplementation
 	{
 		[Theory]

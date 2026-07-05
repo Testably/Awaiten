@@ -16,24 +16,24 @@ namespace Awaiten.SourceGenerators;
 ///     Reports <see cref="Diagnostics.RootAccumulatingFactory">AWT118</see> for a root-owned instance (a
 ///     singleton or pre-built instance) that, directly or through its transitive transient dependencies,
 ///     holds a plain <c>Func&lt;…&gt;</c> over a build-on-demand service (a transient or parameterized service)
-///     whose construction tracks a fresh disposable on the root - the produced service is itself disposable, or
+///     whose construction tracks a fresh disposable on the root: the produced service is itself disposable, or
 ///     it transitively rebuilds a disposable transient. Such a factory is bound to the root, so every instance
 ///     it builds (and the disposables built with it) is tracked on the root and accumulates for the container's
 ///     lifetime; a <c>Func&lt;…, Owned&lt;T&gt;&gt;</c> hands each instance back as a disposal handle and is not
 ///     reported. Also reports <see cref="Diagnostics.AsyncOnlyDisposal">AWT156</see> for a synchronous
 ///     <c>using</c> / <c>Dispose()</c> of a generated <c>Root</c> or <c>Scope</c> whose container owns a service
-///     that implements <c>IAsyncDisposable</c> but not <c>IDisposable</c> - a disposal only <c>DisposeAsync</c>
-///     (<c>await using</c>) can carry out - and that the disposed owner could actually track: a root-owned
+///     that implements <c>IAsyncDisposable</c> but not <c>IDisposable</c> (a disposal only <c>DisposeAsync</c> /
+///     <c>await using</c> can carry out) that the disposed owner could actually track: a root-owned
 ///     instance (a singleton or pre-built instance) always lives on the <c>Root</c>, so it never faults a
 ///     child <c>Scope</c>'s disposal.
 /// </summary>
 /// <remarks>
 ///     AWT118 is an analyzer (rather than a generator) diagnostic so that, under loose lifetime safety where
 ///     it is a warning, it can be suppressed in source with <c>#pragma warning disable AWT118</c> or
-///     <c>[SuppressMessage]</c> - a generator-reported diagnostic cannot. Under strict lifetime safety (the
+///     <c>[SuppressMessage]</c>; a generator-reported diagnostic cannot. Under strict lifetime safety (the
 ///     default) it is instead reported through <see cref="Diagnostics.RootAccumulatingFactoryStrict" />: an
 ///     error carrying <see cref="WellKnownDiagnosticTags.NotConfigurable" />, so it cannot be suppressed by
-///     <c>#pragma</c>, <c>&lt;NoWarn&gt;</c> or an editorconfig severity override - the only opt-out is
+///     <c>#pragma</c>, <c>&lt;NoWarn&gt;</c> or an editorconfig severity override; the only opt-out is
 ///     <c>LifetimeSafety.Loose</c>. That non-suppressibility is what keeps the leak structurally impossible
 ///     under strict lifetime safety. The graph it walks is built by the same
 ///     <c>AwaitenGenerator.BuildGraph</c> the generator uses.
@@ -61,7 +61,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 			}
 
 			// One graph build per container per compilation, shared by the AWT118 symbol walk and the AWT156
-			// disposal sites - one compilation can dispose the same container in many places. The Lazy
+			// disposal sites; one compilation can dispose the same container in many places. The Lazy
 			// (ExecutionAndPublication) collapses concurrent callers into a single BuildGraph per container.
 			ConcurrentDictionary<INamedTypeSymbol, Lazy<GraphModel>> graphByContainer =
 				new(SymbolEqualityComparer.Default);
@@ -73,7 +73,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 
 			// AWT156 fires at each synchronous disposal site of a generated Root/Scope. A generated Root/Scope
 			// is recognized by shape and name: a type named Root or Scope, implementing IAwaitenScope, nested in
-			// a [Container] class. The name check matters - a user-authored type nested in the container class
+			// a [Container] class. The name check matters: a user-authored type nested in the container class
 			// can hand-implement the public IAwaitenScope, but it cannot coexist with the generated Root/Scope
 			// under their names.
 			INamedTypeSymbol? scopeInterface = start.Compilation.GetTypeByMetadataName("Awaiten.IAwaitenScope");
@@ -118,7 +118,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 
 	// Builds the reportable diagnostic. The location is reconstructed against the compilation's actual syntax
 	// tree (matched by file path) rather than via LocationInfo.ToLocation(), which yields an external location
-	// detached from any tree - and a diagnostic without a source-tree location cannot be suppressed by an
+	// detached from any tree, and a diagnostic without a source-tree location cannot be suppressed by an
 	// in-source #pragma warning disable / [SuppressMessage].
 	private static Diagnostic ToDiagnostic(DiagnosticInfo info, Compilation compilation)
 	{
@@ -163,7 +163,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 			}
 		}
 
-		// The collection membership - plain, by (element service type, key), and keyed, by service type - so the
+		// The collection membership (plain, by (element service type, key), and keyed, by service type) so the
 		// transitive-disposable walk can follow a service's collection dependencies of either kind (a transient
 		// disposable member accumulates on the root just like a direct transient one).
 		CollectionMembership membership =
@@ -237,7 +237,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 
 			// The leak-free remedy differs by relationship. A synchronous Func is redirected to a
 			// Func<…, Owned<T>> disposal handle; an async Func<…, Task<T>> cannot use Owned<T> (a synchronous
-			// handle that cannot await initialization - AWT119), so it is redirected to the async owned form
+			// handle that cannot await initialization, AWT119), so it is redirected to the async owned form
 			// Func<…, Task<Owned<T>>>, which async-resolves each instance into a throwaway scope.
 			string remedy = parameter.Kind == DependencyKind.FuncTask
 				? $"resolve it as Func<…, Task<Owned<{service}>>> for per-use disposal"
@@ -260,7 +260,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 	// the produced service itself is disposable, or it transitively rebuilds a disposable transient. Each call to
 	// such a Func, bound to the root, builds and re-tracks those disposables on the root, so they accumulate for
 	// the container's lifetime. The async resolver tracks disposables identically to the synchronous one, so the
-	// async factory leaks the same way and is included here - and since Owned<T> is unavailable for an async
+	// async factory leaks the same way and is included here, and since Owned<T> is unavailable for an async
 	// service, the async form is the only deferred factory that can reach an async-tainted target at all.
 	private static bool IsRootAccumulatingFunc(GraphModel graph, Dictionary<ServiceKey, int> serviceToIndex, CollectionMembership membership, ParameterModel parameter)
 	{
@@ -323,7 +323,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 
 	// AWT156: an explicit synchronous Dispose() call on a receiver statically typed as a generated Root/Scope.
 	// A call through IAwaitenScope / IDisposable (or from another assembly, or by a host framework) does not
-	// reveal the container and is not reported - the generated drain's runtime throw remains the backstop there.
+	// reveal the container and is not reported; the generated drain's runtime throw remains the backstop there.
 	private static void AnalyzeSynchronousDisposeCall(
 		OperationAnalysisContext context,
 		INamedTypeSymbol containerAttribute,
@@ -340,8 +340,8 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 	// Reports AWT156 when the synchronously disposed type is a generated Root/Scope (a type named Root or
 	// Scope, implementing IAwaitenScope, nested in a [Container] class) of a container that statically owns an
 	// async-only disposable the disposed owner could track. IsAsyncDisposable is read off a registration's
-	// declared/produced type - a factory output hiding one behind a non-disposable declared type is left to
-	// the runtime backstop - and a pre-built Instance registration is never owned, so it carries neither flag
+	// declared/produced type; a factory output hiding one behind a non-disposable declared type is left to
+	// the runtime backstop, and a pre-built Instance registration is never owned, so it carries neither flag
 	// and is naturally exempt. A scoped/transient async-only service also warns on a Root using, since the
 	// root is itself a scope and may track one; a root-owned one never warns on a child Scope using, since a
 	// singleton always tracks on the Root (its resolver runs against the root even when first hit inside a
@@ -387,7 +387,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 	}
 
 	// The async-only disposable implementations (IAsyncDisposable without IDisposable) the disposed owner
-	// could track - a child Scope's drain never reaches a root-owned instance, so those are filtered out
+	// could track: a child Scope's drain never reaches a root-owned instance, so those are filtered out
 	// unless the Root itself is disposed. Deduped by display name: a decorator type can recur as several
 	// chain-link instances, which would repeat one name (Distinct keeps the first occurrence, preserving
 	// registration order). The cheap flag test runs before the display formatting, which allocates.

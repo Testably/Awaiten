@@ -165,10 +165,7 @@ public static class BuildExtensions
 		}
 	}
 
-	/// <summary>
-	///     Reads a file from the given <paramref name="branch" /> using the GitHub contents API.
-	///     Returns <see langword="null" /> if the file does not exist on that branch.
-	/// </summary>
+	/// <summary>Reads a file from <paramref name="branch" />. Returns <see langword="null" /> if it does not exist there.</summary>
 	public static async Task<GithubFile> ReadBranchFileAsync(string path, string branch, string githubToken)
 	{
 		using HttpClient client = CreateGithubClient(githubToken);
@@ -190,9 +187,6 @@ public static class BuildExtensions
 		return new GithubFile(content, sha);
 	}
 
-	/// <summary>
-	///     Writes a file to the given <paramref name="branch" /> using the GitHub contents API.
-	/// </summary>
 	public static async Task WriteBranchFileAsync(string path, string branch, string commitMessage, string content,
 		string existingSha, string githubToken)
 	{

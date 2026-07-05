@@ -6,12 +6,12 @@ namespace Awaiten.SourceGenerators;
 internal static partial class Sources
 {
 	/// <summary>
-	///     How a resolver tracks its instance for disposal. None: not disposable, nothing to track. Static: the
-	///     declared type is known IDisposable, so the instance is cast and added directly. Runtime: a factory's
-	///     declared return type can hide a concrete IDisposable behind a non-disposable service interface, so the
-	///     static IsDisposable flag under-reports; the output is added behind a runtime <c>is IDisposable</c> check
-	///     on the realized instance (retaining only genuinely-disposable outputs). Constructed and pre-built-Instance
-	///     production never need Runtime: info.Symbol is the concrete type, and a pre-built Instance is never owned.
+	///     How a resolver tracks its instance for disposal. None: not disposable. Static: the declared type is
+	///     known IDisposable, so the instance is cast and added directly. Runtime: a factory's declared return type
+	///     can hide a concrete IDisposable behind a non-disposable service interface, so the static IsDisposable
+	///     flag under-reports; the output is added behind a runtime <c>is IDisposable</c> check that retains only
+	///     genuinely-disposable outputs. Constructed and pre-built-Instance production never need Runtime:
+	///     info.Symbol is the concrete type, and a pre-built Instance is never owned.
 	/// </summary>
 	private enum DisposalTracking
 	{
@@ -97,7 +97,7 @@ internal static partial class Sources
 
 	/// <summary>
 	///     Emits the reverse-order synchronous drain of the (possibly null) <c>__toDispose</c> list captured
-	///     under the lock - disposing what the owner created, newest first. When <paramref name="asyncDisposal" />
+	///     under the lock, disposing what the owner created newest first. When <paramref name="asyncDisposal" />
 	///     is set, an instance that is <c>IAsyncDisposable</c> but not <c>IDisposable</c> cannot be torn down on
 	///     this synchronous path, so it throws guidance to use <c>DisposeAsync</c> (matching
 	///     Microsoft.Extensions.DependencyInjection rather than blocking on an async dispose).
@@ -243,7 +243,7 @@ internal static partial class Sources
 	///     abandoned on a failed wiring/initialization. Without async disposal it is a synchronous <c>Dispose</c>.
 	///     With async disposal in an async resolver it awaits <c>DisposeAsync</c> (preferring it), falling back to
 	///     <c>Dispose</c>; in a synchronous resolver it disposes a synchronous <c>IDisposable</c> and leaves an
-	///     async-only instance to its (rare) race - a synchronous path cannot await, matching the synchronous
+	///     async-only instance to its (rare) race, since a synchronous path cannot await, matching the synchronous
 	///     Dispose contract. The runtime checks go through <c>(object)instance</c> so a sealed concrete type that
 	///     implements only one of the disposal interfaces still compiles (a direct <c>is</c> against such a type
 	///     would be a CS8121 error).

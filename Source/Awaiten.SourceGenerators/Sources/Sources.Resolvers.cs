@@ -7,13 +7,10 @@ internal static partial class Sources
 {
 	/// <summary>
 	///     The async collections resolvable by type through <c>ResolveAsync</c>: each unkeyed, non-synthesis-
-	///     suppressed collection whose async shape is not itself registered (a registered
-	///     <c>IAsyncEnumerable&lt;T&gt;</c> owns its slot on both surfaces) and that is not synchronously
-	///     materializable (it holds an async-tainted member) - outside
-	///     pragmatic <c>SyncResolveAfterInit</c> mode, where every collection is synchronously materializable and so
-	///     served by the synchronous dispatch. Each is paired with the async resolver method that materializes it,
-	///     named by the collection's position in <see cref="Names.Collections" /> so the method emission and the
-	///     async dispatch arm derive the same name.
+	///     suppressed collection whose async shape is not itself registered and that is not synchronously
+	///     materializable (it holds an async-tainted member). Empty under <c>SyncResolveAfterInit</c>, where every
+	///     collection is synchronously materializable. Each is paired with its async resolver method, named by the
+	///     collection's position in <see cref="Names.Collections" /> so emission and the async dispatch arm agree.
 	/// </summary>
 	private static IEnumerable<(ServiceMembers Collection, string Method)> AsyncByTypeCollections(
 		Names names, Dictionary<ServiceKey, int> serviceToIndex, bool syncResolveAfterInit)
@@ -39,8 +36,8 @@ internal static partial class Sources
 
 	/// <summary>
 	///     Emits the async by-type resolver for one async collection: it materializes the
-	///     <c>IAsyncEnumerable&lt;T&gt;</c> exactly as an injected async collection is built - awaiting each
-	///     async-tainted member off the scope the resolver runs on, resolving each synchronous member directly - so
+	///     <c>IAsyncEnumerable&lt;T&gt;</c> exactly as an injected async collection is built, awaiting each
+	///     async-tainted member off the scope the resolver runs on and resolving each synchronous member directly, so
 	///     <c>ResolveAsync(typeof(IAsyncEnumerable&lt;T&gt;))</c> hands back the initialized stream.
 	/// </summary>
 	private static void EmitAsyncCollectionResolver(StringBuilder builder, int depth, ServiceMembers collection, string method, Names names, InstanceModel[] instances)
@@ -57,11 +54,9 @@ internal static partial class Sources
 
 	/// <summary>
 	///     Emits a non-singleton resolver as an <c>internal static</c> method on the base <c>Scope</c>, taking the
-	///     resolving scope as <c>__s</c>. A parameterized service (with <c>[Arg]</c> parameters) is built fresh per
-	///     call from its runtime arguments; a scoped service caches on <c>__s</c>; a transient constructs fresh on
-	///     <c>__s</c>. Singleton-owned services (singletons and pre-built Instances) are emitted on the <c>Root</c>
-	///     instead (see <see cref="EmitRootResolver" />), so this never emits a delegator - a dependency selects the
-	///     right owner by calling the target's static resolver directly.
+	///     resolving scope as <c>__s</c>. A parameterized service is built fresh per call, a scoped service caches on
+	///     <c>__s</c>, and a transient constructs fresh on <c>__s</c>. Singleton-owned services are emitted on the
+	///     <c>Root</c> instead (see <see cref="EmitRootResolver" />).
 	/// </summary>
 	private static void EmitScopeResolver(StringBuilder builder, int depth, int index, EmitContext context)
 	{
@@ -71,11 +66,9 @@ internal static partial class Sources
 		string type = instance.ConstructedType;
 		string resolver = names.Resolver(index);
 
-		// A requesting-type factory embeds the consumer's typeof(…) per call, so it cannot be lowered to a shared
-		// cached resolver: its resolver takes the requesting type as a parameter and calls the factory on each
-		// invocation (the factory itself may cache, as the canonical logger factory does). It is built fresh per
-		// call - the declared lifetime is ignored for caching, exactly so the per-consumer requesting type
-		// survives - and a disposable output is still tracked for teardown on the resolving scope.
+		// A requesting-type factory embeds the consumer's typeof(…) per call, so it cannot be a shared cached
+		// resolver: it takes the requesting type as a parameter and calls the factory per invocation (built fresh,
+		// declared lifetime ignored for caching). A disposable output is still tracked for teardown on the scope.
 		if (instance.IsRequestingTypeFactory)
 		{
 			string requestingConstruction = EmitConstruction(instance, context.Instances, names, context.ServiceToIndex);
@@ -111,8 +104,8 @@ internal static partial class Sources
 	}
 
 	/// <summary>
-	///     The deferred-wiring emitter for an instance - the callback a resolver shape invokes after
-	///     construction to assign the instance's <c>[Inject(Deferred = true)]</c> members - or
+	///     The deferred-wiring emitter for an instance: the callback a resolver shape invokes after
+	///     construction to assign the instance's <c>[Inject(Deferred = true)]</c> members, or
 	///     <see langword="null" /> when it has none, so a plain resolver's emitted code is unchanged. Shared by
 	///     every resolver shape (sync/async, fresh/caching) so the hookup cannot drift per emission site.
 	/// </summary>
@@ -146,12 +139,10 @@ internal static partial class Sources
 		Indent(builder, depth).AppendLine("{");
 		EmitDisposedGuard(builder, depth + 1, "__s.");
 
-		// The `created` variable form is needed whenever there is post-construction work: registering the instance
-		// for disposal, wiring its deferred members, queuing its OnRelease hook, or running its OnActivated hook. A
-		// transient is not cached, so its deferred members never participate in a terminating cycle (AWT145 rejects
-		// a transient deferred cycle); they are still wired here before the owner's own disposal/release
-		// registration, so a dependency first built during wiring registers earlier and is torn down later than
-		// this owner.
+		// The `created` variable is needed for any post-construction work: disposal tracking, wiring deferred
+		// members, queuing OnRelease, or running OnActivated. A transient is not cached, so its deferred members
+		// never form a terminating cycle (AWT145); they are wired here before the owner's own disposal/release
+		// registration, so a dependency first built during wiring is torn down after this owner.
 		bool tracks = resolver.Disposal != DisposalTracking.None || instance.HasReleaseHook;
 		if (tracks || emitDeferred is not null || instance.OnActivated is not null)
 		{
@@ -238,10 +229,7 @@ internal static partial class Sources
 	/// <summary>
 	///     The by-type async dispatch arms: one per unkeyed service key of each async-tainted, non-parameterized
 	///     service (routed to its memoizing async resolver), plus one <c>IAsyncEnumerable&lt;T&gt;</c> arm per async
-	///     collection (routed to its generated async collection resolver). Each carries the guidance a root-withheld
-	///     arm throws off the Root (null when not withheld). They are collected up front so a large set can be split
-	///     across chunk methods, staying under RyuJIT's optimization guards - the same cliff the synchronous dispatch
-	///     hit before it was chunked.
+	///     collection. Each carries the guidance a root-withheld arm throws off the Root (null when not withheld).
 	/// </summary>
 	private static List<(string Service, string AsyncResolver, bool RootOwned, bool RequestingType, string? RootWithheldMessage)> BuildAsyncArms(
 		InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool strict, bool syncResolveAfterInit)
@@ -251,7 +239,7 @@ internal static partial class Sources
 		{
 			// A parameterized service is built fresh from its runtime arguments, so it is reached only through
 			// its Func<TArg…, T> / Func<TArg…, Task<T>> factory; by-type ResolveAsync cannot supply those [Arg]s,
-			// so it gets no entry here (it does have an async resolver - the async factory relationship binds it).
+			// so it gets no entry here (it does have an async resolver; the async factory relationship binds it).
 			if (!instances[i].IsAsyncTainted || instances[i].IsParameterized)
 			{
 				continue;
@@ -261,7 +249,7 @@ internal static partial class Sources
 			// A disposable async transient is withheld from by-type resolution on the Root: each Root resolution
 			// would track a fresh disposable on the root for the container's lifetime (an unbounded leak), so the
 			// Root throws guidance toward a child scope while a child scope still resolves it (its disposal bounds
-			// the instance). Injection into a singleton stays allowed - that is bounded to one instance.
+			// the instance). Injection into a singleton stays allowed, since that is bounded to one instance.
 			bool rootWithheld = IsWithheld(instances[i], strict);
 			bool rootOwned = IsRootOwned(instances[i]);
 			// A requesting-type factory's async resolver takes the requesting type; a top-level ResolveAsync has no
@@ -356,13 +344,11 @@ internal static partial class Sources
 	}
 
 	/// <summary>
-	///     Emits the async dispatch table: an <c>__AsyncBucket</c> slot type and the <c>__asyncBuckets</c> /
-	///     <c>__asyncBucketSize</c> table, built once through field initializers (which coexist with the
-	///     synchronous static constructor). Each slot's delegate awaits the async resolver and converts the result
-	///     to <c>Task&lt;object&gt;</c>; a root-withheld arm bakes its guidance throw into the delegate (the Root
-	///     throws, a child scope resolves). No forwarder methods are needed - the delegates are inline lambdas. The
-	///     table fields are routed into <paramref name="fields" /> (the fields region); the <c>__AsyncBucket</c>
-	///     slot type and <c>__BuildAsyncBuckets</c> into <paramref name="helpers" />.
+	///     Emits the async dispatch table: an <c>__AsyncBucket</c> slot type and the <c>__asyncBuckets</c> table,
+	///     built once through field initializers. Each slot's delegate awaits the async resolver and converts the
+	///     result to <c>Task&lt;object&gt;</c>; a root-withheld arm bakes its guidance throw into the delegate. The
+	///     table fields are routed into <paramref name="fields" />, the slot type and <c>__BuildAsyncBuckets</c> into
+	///     <paramref name="helpers" />.
 	/// </summary>
 	private static void EmitAsyncBucketDispatch(StringBuilder fields, StringBuilder helpers, int depth, List<(string Service, string AsyncResolver, bool RootOwned, bool RequestingType, string? RootWithheldMessage)> arms)
 	{
@@ -455,8 +441,8 @@ internal static partial class Sources
 		Action<int>? emitDeferred = DeferredEmitter(builder, instance, "created", context, asynchronous: true);
 
 		// A requesting-type factory that is async-tainted (an async factory, or one that awaits an async
-		// dependency) builds fresh per call with the consumer's typeof(…) embedded, so - like a parameterized
-		// service - it never caches: a fresh async resolver takes the requesting type alongside the token. AWT162
+		// dependency) builds fresh per call with the consumer's typeof(…) embedded, so (like a parameterized
+		// service) it never caches: a fresh async resolver takes the requesting type alongside the token. AWT162
 		// forbids it from also being parameterized, so it has no runtime arguments to carry.
 		if (instance.IsRequestingTypeFactory)
 		{
@@ -489,8 +475,8 @@ internal static partial class Sources
 
 	/// <summary>
 	///     Emits the synchronous resolver for an async-tainted service in pragmatic mode
-	///     (<c>SyncResolveAfterInit</c>): it blocks on the memoizing async resolver - the single
-	///     construction-and-initialization path - rather than building a second, uninitialized instance. Once
+	///     (<c>SyncResolveAfterInit</c>): it blocks on the memoizing async resolver (the single
+	///     construction-and-initialization path) rather than building a second, uninitialized instance. Once
 	///     the service has been warmed (through <c>InitializeAsync</c> / <c>CreateScopeAsync</c> / an earlier
 	///     <c>ResolveAsync</c>) the async resolver returns a completed task, so this returns the cached
 	///     instance without blocking; resolving before warm-up blocks the caller until initialization
@@ -607,23 +593,13 @@ internal static partial class Sources
 	}
 
 	/// <summary>
-	///     Wires the deferred members, runs the <c>OnActivated</c> hook and awaits <c>InitializeAsync</c> for a
-	///     freshly built <c>created</c> instance, then registers it for disposal and queues its <c>OnRelease</c>
-	///     hook - shared by the transient (<see cref="EmitAsyncFreshResolver" />) and memoized
-	///     (<see cref="EmitAsyncCachingResolver" />) async resolvers so both handle failure identically. For a
-	///     disposable instance the wiring, activation and initialization run inside a <c>try</c> whose <c>catch</c>
-	///     disposes <c>created</c> and rethrows, so a failure in deferred wiring, activation or
-	///     <c>InitializeAsync</c> tears down the instance we already constructed rather than leaking it (a
-	///     memoized task is additionally faulted and evicted, so the instance is otherwise unreachable). The
-	///     teardown is itself guarded: a throw from the instance's own <c>Dispose</c>/<c>DisposeAsync</c> is
-	///     swallowed so it cannot mask the original failure that the rethrow propagates. Disposal registration and
-	///     the release-hook queue both stay after the wiring - preserving reverse-teardown order (a dependency first
-	///     built during wiring registers earlier and so is torn down after this owner) - and run only on success,
-	///     so a torn-down instance leaves behind neither a disposal nor a release (keeping the two balanced) and is
-	///     never double-disposed. <c>OnActivated</c> always runs post-construction, before initialization; the
-	///     release is queued only once initialization has succeeded, so a faulted init (evicted and retried) leaves
-	///     no release for the instance it drops. A non-disposable instance has nothing to leak, so it wires,
-	///     activates and initializes directly.
+	///     Wires the deferred members, runs <c>OnActivated</c> and awaits <c>InitializeAsync</c> for a freshly built
+	///     <c>created</c> instance, then registers it for disposal and queues <c>OnRelease</c>. Shared by the
+	///     transient and memoized async resolvers so both handle failure identically. For a disposable instance,
+	///     wiring, activation and initialization run inside a <c>try</c> whose <c>catch</c> disposes <c>created</c>
+	///     and rethrows, so a failure tears the instance down rather than leaking it. Disposal registration and the
+	///     release queue stay after the wiring (preserving reverse-teardown order) and run only on success, so a
+	///     torn-down instance leaves neither behind. A non-disposable instance wires directly.
 	/// </summary>
 	private static void EmitGuardedWiringAndInit(StringBuilder builder, int depth, InstanceModel instance, EmitContext context, Action<int>? emitDeferred)
 	{
@@ -691,7 +667,7 @@ internal static partial class Sources
 	/// <summary>
 	///     Awaits the instance's own <c>IAsyncInitializable.InitializeAsync</c> when its implementation is
 	///     async-initialized (an instance that is only async-tainted through a dependency has nothing of its
-	///     own to initialize - its async dependency was already awaited during construction).
+	///     own to initialize; its async dependency was already awaited during construction).
 	/// </summary>
 	private static void EmitAsyncInitialization(StringBuilder builder, int depth, InstanceModel instance, string variable)
 	{
@@ -705,8 +681,8 @@ internal static partial class Sources
 	/// <summary>
 	///     Emits the base <c>Scope</c>'s private <c>__WarmAsync</c>: it eagerly warms this scope's
 	///     async-initialized scoped services in dependency order. It is private (not on <c>IAwaitenScope</c>)
-	///     because a child scope is warmed only at creation, through <c>CreateScopeAsync</c> - its sole caller,
-	///     declared on the same <c>Scope</c> - so nothing outside the type ever reaches it.
+	///     because a child scope is warmed only at creation, through <c>CreateScopeAsync</c> (its sole caller,
+	///     declared on the same <c>Scope</c>), so nothing outside the type ever reaches it.
 	/// </summary>
 	private static void EmitScopeInitializeAsync(StringBuilder builder, int depth, InstanceModel[] instances, Names names)
 		=> EmitWarmUp(builder, depth, instances, names, "private", "__WarmAsync", Lifetime.Scoped);
@@ -820,7 +796,7 @@ internal static partial class Sources
 		List<int> targets = new();
 		for (int i = 0; i < instances.Length; i++)
 		{
-			// A requesting-type factory is built fresh per consumer (never cached), so there is nothing to warm -
+			// A requesting-type factory is built fresh per consumer (never cached), so there is nothing to warm,
 			// and its async resolver takes the requesting type, which the argument-free warm-up call cannot supply.
 			if (instances[i].IsAsyncTainted && instances[i].Lifetime == lifetime && !instances[i].IsParameterized && !instances[i].IsRequestingTypeFactory)
 			{
@@ -865,7 +841,7 @@ internal static partial class Sources
 		// acquire-read makes the deferred writes visible). The re-entrant same-thread resolve that breaks a mutual
 		// cycle still works: mid-wiring the flag is still false, so the re-entrant call falls through to the lock
 		// (__gate is a reentrant monitor), finds the field already set, skips the miss block, and returns the
-		// mid-wiring instance - which is exactly what terminates the cycle.
+		// mid-wiring instance, which is exactly what terminates the cycle.
 		string fastPathGuard = deferred
 			? $"__s.{field} is not null && __s.{resolver.WiredFlag}"
 			: $"__s.{field} is not null";
@@ -911,8 +887,8 @@ internal static partial class Sources
 		else
 		{
 			// The wiring episode: everything published while __wiring is non-zero is still being wired (possibly
-			// re-entrantly, across a cycle). The instance is published before its deferred members are wired - that
-			// is what lets the re-entrant resolve of a mutual cycle return it - and registered for disposal after
+			// re-entrantly, across a cycle). The instance is published before its deferred members are wired (that
+			// is what lets the re-entrant resolve of a mutual cycle return it) and registered for disposal after
 			// them, so a dependency first built during wiring registers earlier and is disposed later than this
 			// owner (reverse teardown order preserves dependency-outlives-dependent).
 			Indent(builder, depth + 3).AppendLine("__s.__wiring++;");
@@ -931,15 +907,15 @@ internal static partial class Sources
 			Indent(builder, depth + 3).AppendLine("catch");
 			Indent(builder, depth + 3).AppendLine("{");
 			// A failed wiring episode must not leave a half-wired instance published: a later resolve would skip
-			// the miss block (field non-null) and silently return it forever. Unpublish this field and - from the
-			// outermost frame - every other instance the failed episode published (their flags are still false),
+			// the miss block (field non-null) and silently return it forever. Unpublish this field and, from the
+			// outermost frame, every other instance the failed episode published (their flags are still false),
 			// so the next resolve rebuilds instead. Peers cached in the failed episode may keep a reference to an
 			// unpublished instance; they are unpublished with it, so nothing published survives half-consistent.
 			if (disposal != DisposalTracking.None)
 			{
 				// This field is published but not yet registered (registration is the try's last step), so dispose it
-				// here rather than leak it. Every frame of the episode disposes its own field as the throw unwinds;
-				// a peer already registered in an inner frame stays in __disposables and is disposed at teardown, so
+				// here rather than leak it. Every frame of the episode disposes its own field as the throw unwinds.
+				// A peer already registered in an inner frame stays in __disposables and is disposed at teardown, so
 				// rollback (which only unpublishes) never leaves it disposed twice. `!` suppresses CS8600 on the
 				// nullable field under the (object) cast that guards against a sealed-type CS8121; when construction
 				// itself threw the field is still null, but the teardown's `is` check makes that a no-op.
@@ -1014,7 +990,7 @@ internal static partial class Sources
 	private readonly struct CachingResolver(string owner, string type, string method, (string Field, string WiredFlag) cache, string construction, DisposalTracking disposal, string summary)
 	{
 		// The declaring/owner type of the static resolver's `__s` parameter: <c>Scope</c> for a scoped resolver,
-		// <c>Root</c> for a singleton one - it is always emitted on that type and caches on that owner.
+		// <c>Root</c> for a singleton one. It is always emitted on that type and caches on that owner.
 		public string Owner { get; } = owner;
 
 		public string Type { get; } = type;
@@ -1043,7 +1019,7 @@ internal static partial class Sources
 	private readonly struct FreshResolver(string owner, string type, string method, string signature, string construction, DisposalTracking disposal, string summary)
 	{
 		// The declaring/owner type of the static resolver's `__s` parameter: <c>Scope</c> for a scoped or
-		// transient resolver, <c>Root</c> for a (parameterized-on-root) one - it is always emitted on that type.
+		// transient resolver, <c>Root</c> for a (parameterized-on-root) one. It is always emitted on that type.
 		public string Owner { get; } = owner;
 
 		public string Type { get; } = type;

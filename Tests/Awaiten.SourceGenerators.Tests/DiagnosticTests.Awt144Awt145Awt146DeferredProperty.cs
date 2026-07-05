@@ -318,8 +318,8 @@ public partial class DiagnosticTests
 			                                       namespace MyCode;
 
 			                                       // Left defers Right, but Right holds Left through a plain [Inject] property (a Direct construction-time
-			                                       // edge). A transient is never cached, so without AWT147 this compiles clean and stack-overflows at runtime;
-			                                       // the mixed-edge fault applies regardless of lifetime, so AWT147 - not AWT145 - is the reason.
+			                                       // edge). A transient is never cached, so without AWT147 this compiles clean and stack-overflows at runtime.
+			                                       // The mixed-edge fault applies regardless of lifetime, so AWT147 (not AWT145) is the reason.
 			                                       public sealed class Left { [Inject(Deferred = true)] public Right Right { get; set; } }
 			                                       public sealed class Right { [Inject] public Left Left { get; set; } }
 

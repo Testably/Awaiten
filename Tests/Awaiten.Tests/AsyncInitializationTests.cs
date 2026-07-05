@@ -8,8 +8,7 @@ namespace Awaiten.Tests;
 ///     constructed and initialized through <c>ResolveAsync</c> / <c>InitializeAsync</c> /
 ///     <c>CreateScopeAsync</c>, exactly once, in dependency order, and thread-safely. In the strict
 ///     default an async-tainted service is reachable only asynchronously; <c>SyncResolveAfterInit</c>
-///     relaxes that. The containers and services are nested types, so the enclosing class is
-///     <c>partial</c>.
+///     relaxes that.
 /// </summary>
 public partial class AsyncInitializationTests
 {
@@ -228,7 +227,7 @@ public partial class AsyncInitializationTests
 		using PragmaticContainer.Root container = new();
 
 		// No InitializeAsync first: the synchronous resolver delegates to the (memoizing) async path, so it
-		// returns a fully initialized instance built exactly once - never a second, uninitialized one.
+		// returns a fully initialized instance built exactly once, never a second, uninitialized one.
 		Connection first = container.Resolve<Connection>();
 
 		await That(first.Initialized).IsTrue();
@@ -335,7 +334,7 @@ public partial class AsyncInitializationTests
 		// The factory is declared to return a non-async, non-disposable interface yet builds a concrete type
 		// that is both IAsyncInitializable and IDisposable. The async-taint follows the concrete return type
 		// (so the container drives InitializeAsync), and disposal is tracked by the generated runtime
-		// `is IDisposable` check on the realized instance - exercising the async creator path that the
+		// `is IDisposable` check on the realized instance, exercising the async creator path that the
 		// synchronous hidden-disposable tests do not reach.
 		AsyncHiddenDisposable hidden;
 		using (AsyncHiddenDisposableContainer.Root container = new())
@@ -373,7 +372,7 @@ public partial class AsyncInitializationTests
 		DisposableWorker worker;
 		using (IAwaitenScope scope = await container.CreateScopeAsync(Ct))
 		{
-			// From a child scope it resolves normally - the instance it builds is owned by the scope, so its
+			// From a child scope it resolves normally: the instance it builds is owned by the scope, so its
 			// lifetime is bounded rather than accumulating on the root.
 			worker = await scope.ResolveAsync<DisposableWorker>(Ct);
 			await That(worker.Initialized).IsTrue();
@@ -507,7 +506,7 @@ public partial class AsyncInitializationTests
 	[Scoped<FailingScoped>]
 	public static partial class FailingScopeContainer;
 
-	// Fails its first initialization, then succeeds - to prove a faulted task is not memoized.
+	// Fails its first initialization, then succeeds, to prove a faulted task is not memoized.
 	public sealed class FlakyConnection : IAsyncInitializable
 	{
 		public static int Attempts { get; private set; }
@@ -533,7 +532,7 @@ public partial class AsyncInitializationTests
 	[Singleton<FlakyConnection>]
 	public static partial class FlakyContainer;
 
-	// Blocks (honoring cancellation) on its first initialization, then succeeds - to prove a canceled task is
+	// Blocks (honoring cancellation) on its first initialization, then succeeds, to prove a canceled task is
 	// not memoized and a later caller with a live token can still initialize it.
 	public sealed class SlowConnection : IAsyncInitializable
 	{
@@ -582,11 +581,11 @@ public partial class AsyncInitializationTests
 
 	// An async-but-not-disposable service interface: the factory's declared return type, so async-taint is
 	// statically visible (it extends IAsyncInitializable) while the concrete IDisposable stays hidden behind
-	// it - exactly the split that drives the async creator yet needs the runtime disposal check.
+	// it. Exactly the split that drives the async creator yet needs the runtime disposal check.
 	public interface IAsyncHidden : IAsyncInitializable;
 
 	// A concrete type that is both async-initialized (through IAsyncHidden) and IDisposable. A factory
-	// declared to return IAsyncHidden still both drives its async initialization and disposes it -
+	// declared to return IAsyncHidden still both drives its async initialization and disposes it.
 	// DisposeCount (not a bool) proves disposal happens exactly once.
 	public sealed class AsyncHiddenDisposable : IAsyncHidden, IDisposable
 	{
@@ -806,7 +805,7 @@ public partial class AsyncInitializationTests
 	}
 
 	// The factory result is itself IAsyncInitializable: the container awaits the factory, then awaits
-	// InitializeAsync - so it is built and initialized exactly once each, with no double-initialization.
+	// InitializeAsync, so it is built and initialized exactly once each, with no double-initialization.
 	public sealed class InitializingAsyncFactoryService : IAsyncInitializable
 	{
 		public bool Initialized { get; private set; }
@@ -852,7 +851,7 @@ public partial class AsyncInitializationTests
 
 	// A non-disposable service interface hiding a concrete IDisposable, produced by an async Task<T> factory.
 	// Async-taint comes purely from the factory being asynchronous (the type is not IAsyncInitializable), and
-	// the disposable stays hidden behind the interface and the Task - so disposal can only be tracked by the
+	// the disposable stays hidden behind the interface and the Task, so disposal can only be tracked by the
 	// generated runtime is-IDisposable check on the awaited result. DisposeCount (not a bool) proves exactly once.
 	public interface IHiddenDisposableFactoryService;
 
@@ -1085,7 +1084,7 @@ public partial class AsyncInitializationTests
 	public async Task AsyncOwned_FuncOfTaskOfOwned_DisposeAsync_TearsDownAnAsyncDisposableService()
 	{
 		// The transient Valve only ever lives in the Owned<Valve> throwaway scope, drained through the handle's
-		// DisposeAsync below - the root never tracks one, so its synchronous using is safe here (AWT156 checks
+		// DisposeAsync below, so the root never tracks one and its synchronous using is safe here (AWT156 checks
 		// what the disposed owner could track, not what it actually tracked, and a root could track a transient).
 #pragma warning disable AWT156
 		using AsyncDisposableOwnedContainer.Root container = new();

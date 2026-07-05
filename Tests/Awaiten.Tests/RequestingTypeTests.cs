@@ -7,8 +7,7 @@ namespace Awaiten.Tests;
 ///     <c>[RequestingType] Type</c> parameter receives, at each construction site, the <c>typeof(…)</c> of
 ///     the consumer being satisfied (the declaring type of the constructor parameter or <c>[Inject]</c>
 ///     property). The factory's other parameters resolve from the graph as usual, and a top-level resolve
-///     (no consumer) passes <c>null</c>. The containers and services are nested types, so the enclosing
-///     class is <c>partial</c>.
+///     (no consumer) passes <c>null</c>.
 /// </summary>
 public partial class RequestingTypeTests
 {
@@ -134,7 +133,7 @@ public partial class RequestingTypeTests
 		Epsilon epsilon = await container.ResolveAsync<Epsilon>(TestContext.Current.CancellationToken);
 
 		// The factory is async-tainted (it awaits its AsyncPrefix dependency), so it is built through the async
-		// resolver - which still embeds the consumer's typeof(…) per site.
+		// resolver, which still embeds the consumer's typeof(…) per site.
 		await That(epsilon.Logger.Category).IsEqualTo(typeof(Epsilon).FullName);
 	}
 
@@ -193,7 +192,7 @@ public partial class RequestingTypeTests
 	public static partial class AsyncLoggerContainer
 	{
 		// Async-tainted through its AsyncPrefix dependency (which the factory awaits), so the logger is reached
-		// only through the async resolver - yet the requesting type is still supplied per consumer.
+		// only through the async resolver, yet the requesting type is still supplied per consumer.
 		private static Logger CreateLogger([RequestingType] Type? requestingType, Prefix prefix, AsyncPrefix asyncPrefix)
 			=> new Logger(requestingType?.FullName ?? "<root>", prefix);
 	}

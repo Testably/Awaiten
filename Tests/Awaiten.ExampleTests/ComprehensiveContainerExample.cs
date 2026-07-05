@@ -5,18 +5,14 @@ using System.Threading;
 namespace Awaiten.ExampleTests;
 
 /// <summary>
-///     A deliberately exhaustive composition root, themed as a <b>coffee shop</b> so each registration's
-///     role reads from its name: the shop has one <see cref="Menu" /> (singleton); each customer gets one
-///     <see cref="Order" /> (scoped); every <see cref="Receipt" /> is printed fresh (transient); the
-///     <see cref="EspressoMachine" /> must warm up before use (async initialization); a <see cref="Cup" /> is
-///     taken, used and tossed (a disposable reached through <c>Owned&lt;T&gt;</c>); milk comes in named
-///     varieties (keyed); a drink is dressed up by wrapping it (decorators); a full inspection combines the
-///     individual checks (composite); the card reader is owned by the payment provider, not the shop
-///     (external <c>[FromServices]</c>); and the roastery's catalogue is imported (a module). One
-///     <see cref="CoffeeShop" /> container registers every kind, so the source generator emits — and these
-///     tests exercise — the full breadth of its resolution, scoping and disposal code paths. Types in the
-///     parent <c>Awaiten</c> namespace (the attributes, <c>Owned&lt;T&gt;</c>, <c>IAsyncInitializable</c>, …)
-///     are in scope without an explicit <c>using</c>.
+///     A deliberately exhaustive composition root, themed as a coffee shop so each registration's role
+///     reads from its name: one <see cref="Menu" /> (singleton), one <see cref="Order" /> per customer
+///     (scoped), a fresh <see cref="Receipt" /> each time (transient), an <see cref="EspressoMachine" /> that
+///     warms up (async init), a <see cref="Cup" /> reached through <c>Owned&lt;T&gt;</c> (disposable), keyed
+///     milk, decorators, a composite inspection, an external <c>[FromServices]</c> card reader, and an
+///     imported roastery module. One <see cref="CoffeeShop" /> container registers every kind, so the tests
+///     exercise the full breadth of its resolution, scoping and disposal code paths. Types in the parent
+///     <c>Awaiten</c> namespace are in scope without an explicit <c>using</c>.
 /// </summary>
 /// <remarks>
 ///     The shop runs under the strict-safety default: an async-initialized service is reached only through
@@ -544,12 +540,11 @@ public partial class ComprehensiveContainerExample
 
 	// ---- Tests ----------------------------------------------------------------------------------------
 
-	// The coffee-shop tests below tear their Root down with a synchronous `using`: the example compiles for
-	// net48 too, whose generated Root has no DisposeAsync surface to `await using`. That is safe here - the
-	// shop's only IAsyncDisposable-only service, the scoped DishStation (net8.0+), is resolved solely in
+	// The tests below tear their Root down with a synchronous `using`: the example also compiles for net48,
+	// whose generated Root has no DisposeAsync surface. That is safe because the shop's only
+	// IAsyncDisposable-only service, the scoped DishStation (net8.0+), is resolved solely in
 	// ScopedAsyncDisposable_IsTornDownAsynchronouslyWithItsScope inside a child scope drained through
-	// DisposeAsync, so a root never tracks one and its synchronous drain has nothing async-only to reach
-	// (AWT156 warns on what the disposed owner could track, not on what it actually tracked).
+	// DisposeAsync, so a root never tracks one (AWT156 warns on what the disposed owner could track).
 #pragma warning disable AWT156
 	[Fact]
 	public async Task Singleton_Scoped_Transient_ResolveAndShareCorrectly()

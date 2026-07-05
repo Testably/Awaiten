@@ -65,9 +65,8 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			// An [Inject] awaited collection member is always satisfiable - an unregistered element type yields a
-			// completed empty collection - so it is never a reason to skip the match, exactly like a constructor
-			// parameter of the same shape.
+			// An awaited collection member is always satisfiable (an unregistered element type yields an empty
+			// collection), so it never makes a scanned match unconstructable.
 			await That(result.Diagnostics).IsEmpty()
 				.Because("an empty awaited collection member does not make a scanned match unconstructable");
 			string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
@@ -183,8 +182,8 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			// Dropping NeedsName unregisters the service NeedsNeedsName depends on, so the prune iterates to a
-			// fixpoint and drops NeedsNeedsName too - with its own warning - rather than leaving an AWT101.
+			// Dropping NeedsName orphans NeedsNeedsName, so the prune iterates to a fixpoint and drops it too
+			// (with its own warning) rather than leaving an AWT101.
 			await That(result.Diagnostics).Contains("*AWT141*NeedsName*").AsWildcard()
 				.And.Contains("*AWT141*NeedsNeedsName*").AsWildcard();
 			await That(result.Diagnostics.Any(d => d.Contains("AWT101"))).IsFalse();
