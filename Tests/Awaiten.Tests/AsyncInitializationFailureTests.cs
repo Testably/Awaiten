@@ -19,8 +19,6 @@ namespace Awaiten.Tests;
 /// </summary>
 public partial class AsyncInitializationFailureTests
 {
-	// --- Memoized (scoped/singleton) path ------------------------------------------------------------------
-
 	[Fact]
 	public async Task Singleton_OwnInitThrows_InstanceIsDisposedOnce()
 	{
@@ -63,11 +61,9 @@ public partial class AsyncInitializationFailureTests
 		await That(recorder.Disposed).IsEqualTo(1).Because("only the first, failed instance was disposed at this point");
 	}
 
-	// --- Transient (fresh) path ----------------------------------------------------------------------------
-
 	// A disposable transient is withheld from by-type resolution off the Root in strict mode (steered to
-	// Owned<T>), so these resolve from a child scope, where transient disposables are bounded by the scope.
-
+	// Owned<T>), so the transient tests resolve from a child scope, where transient disposables are bounded
+	// by the scope.
 	[Fact]
 	public async Task Transient_OwnInitThrows_InstanceIsDisposedOnce()
 	{
@@ -96,8 +92,6 @@ public partial class AsyncInitializationFailureTests
 		await That(recorder.Disposed).IsEqualTo(1).Because("the transient owner must not leak when deferred wiring throws");
 	}
 
-	// --- Hardening: a throwing Dispose on the failure path must not mask the original failure --------------
-
 	[Fact]
 	public async Task InitThrows_AndDisposeAlsoThrows_OriginalFailurePropagates()
 	{
@@ -110,12 +104,10 @@ public partial class AsyncInitializationFailureTests
 			.WithMessage("*init-boom*").AsWildcard();
 	}
 
-	// --- Success path guard: the fix must still register a successful instance for teardown ----------------
-
 	[Fact]
 	public async Task Singleton_SuccessfulInit_IsRegisteredAndDisposedAtTeardown()
 	{
-		SingletonFlakyContainer.Root container = new();
+		using SingletonFlakyContainer.Root container = new();
 		Recorder recorder = container.Resolve<Recorder>();
 
 		// Flaky throws on the first init and succeeds on the second, so resolve twice to get a live instance.

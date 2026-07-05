@@ -154,7 +154,27 @@ internal static partial class Sources
 		if (resolver.Disposal != DisposalTracking.None || emitDeferred is not null)
 		{
 			Indent(builder, depth + 1).Append(type).Append(" created = ").Append(construction).AppendLine(";");
-			emitDeferred?.Invoke(depth + 1);
+			if (emitDeferred is not null && resolver.Disposal != DisposalTracking.None)
+			{
+				// Guard the deferred wiring: if wiring a member throws, dispose the freshly built instance rather
+				// than leak it. It is registered for teardown only on success (below), so this never double-disposes.
+				Indent(builder, depth + 1).AppendLine("try");
+				Indent(builder, depth + 1).AppendLine("{");
+				emitDeferred(depth + 2);
+				Indent(builder, depth + 1).AppendLine("}");
+				Indent(builder, depth + 1).AppendLine("catch");
+				Indent(builder, depth + 1).AppendLine("{");
+				EmitGuardedTeardown(builder, depth + 2, asyncDisposal, asyncContext: false);
+				builder.AppendLine();
+				Indent(builder, depth + 2).AppendLine("throw;");
+				Indent(builder, depth + 1).AppendLine("}");
+				builder.AppendLine();
+			}
+			else
+			{
+				emitDeferred?.Invoke(depth + 1);
+			}
+
 			if (resolver.Disposal != DisposalTracking.None)
 			{
 				EmitFreshDisposalTracking(builder, depth + 1, resolver.Disposal == DisposalTracking.Runtime, asyncDisposal, asyncContext: false);
@@ -604,16 +624,8 @@ internal static partial class Sources
 		Indent(builder, depth).AppendLine("}");
 		Indent(builder, depth).AppendLine("catch");
 		Indent(builder, depth).AppendLine("{");
-		// Dispose the instance we constructed but failed to wire/initialize. Guard the teardown so a throw from
-		// its own disposal does not replace the original wiring/InitializeAsync failure that `throw;` propagates.
-		Indent(builder, depth + 1).AppendLine("try");
-		Indent(builder, depth + 1).AppendLine("{");
-		EmitRacedTeardown(builder, depth + 2, context.AsyncDisposal, asyncContext: true);
-		Indent(builder, depth + 1).AppendLine("}");
-		Indent(builder, depth + 1).AppendLine("catch");
-		Indent(builder, depth + 1).AppendLine("{");
-		Indent(builder, depth + 2).AppendLine("// Swallowed: the original failure below is the one that matters.");
-		Indent(builder, depth + 1).AppendLine("}");
+		// Dispose the instance we constructed but failed to wire/initialize, then rethrow the original failure.
+		EmitGuardedTeardown(builder, depth + 1, context.AsyncDisposal, asyncContext: true);
 		builder.AppendLine();
 		Indent(builder, depth + 1).AppendLine("throw;");
 		Indent(builder, depth).AppendLine("}");
@@ -868,6 +880,18 @@ internal static partial class Sources
 			// outermost frame - every other instance the failed episode published (their flags are still false),
 			// so the next resolve rebuilds instead. Peers cached in the failed episode may keep a reference to an
 			// unpublished instance; they are unpublished with it, so nothing published survives half-consistent.
+			if (disposal != DisposalTracking.None)
+			{
+				// This field is published but not yet registered (registration is the try's last step), so dispose it
+				// here rather than leak it. Every frame of the episode disposes its own field as the throw unwinds;
+				// a peer already registered in an inner frame stays in __disposables and is disposed at teardown, so
+				// rollback (which only unpublishes) never leaves it disposed twice. `!` suppresses CS8600 on the
+				// nullable field under the (object) cast that guards against a sealed-type CS8121; when construction
+				// itself threw the field is still null, but the teardown's `is` check makes that a no-op.
+				EmitGuardedTeardown(builder, depth + 4, asyncDisposal, asyncContext: false, "__s." + field + "!");
+				builder.AppendLine();
+			}
+
 			Indent(builder, depth + 4).Append("__s.").Append(field).AppendLine(" = null;");
 			Indent(builder, depth + 4).AppendLine("if (__s.__wiring == 1)");
 			Indent(builder, depth + 4).AppendLine("{");

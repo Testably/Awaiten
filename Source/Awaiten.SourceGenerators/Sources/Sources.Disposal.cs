@@ -146,32 +146,53 @@ internal static partial class Sources
 	}
 
 	/// <summary>
-	///     Tears down a single <c>created</c> instance built during a concurrent dispose. Without async disposal
-	///     it is a synchronous <c>Dispose</c>. With async disposal in an async resolver it awaits
-	///     <c>DisposeAsync</c> (preferring it), falling back to <c>Dispose</c>; in a synchronous resolver it
-	///     disposes a synchronous <c>IDisposable</c> and leaves an async-only instance to its (rare) race - a
-	///     synchronous path cannot await, matching the synchronous Dispose contract. The runtime checks go through
-	///     <c>(object)created</c> so a sealed concrete type that implements only one of the disposal interfaces
-	///     still compiles (a direct <c>is</c> against such a type would be a CS8121 error).
+	///     Tears down a single freshly built <paramref name="instance" /> (the <c>created</c> local of a fresh
+	///     resolver, or the <c>__s.&lt;field&gt;</c> of a caching resolver) built during a concurrent dispose or
+	///     abandoned on a failed wiring/initialization. Without async disposal it is a synchronous <c>Dispose</c>.
+	///     With async disposal in an async resolver it awaits <c>DisposeAsync</c> (preferring it), falling back to
+	///     <c>Dispose</c>; in a synchronous resolver it disposes a synchronous <c>IDisposable</c> and leaves an
+	///     async-only instance to its (rare) race - a synchronous path cannot await, matching the synchronous
+	///     Dispose contract. The runtime checks go through <c>(object)instance</c> so a sealed concrete type that
+	///     implements only one of the disposal interfaces still compiles (a direct <c>is</c> against such a type
+	///     would be a CS8121 error).
 	/// </summary>
-	private static void EmitRacedTeardown(StringBuilder builder, int depth, bool asyncDisposal, bool asyncContext)
+	private static void EmitRacedTeardown(StringBuilder builder, int depth, bool asyncDisposal, bool asyncContext, string instance = "created")
 	{
 		if (asyncDisposal && asyncContext)
 		{
-			Indent(builder, depth).AppendLine("if ((object)created is global::System.IAsyncDisposable __racedAsync)");
+			Indent(builder, depth).Append("if ((object)").Append(instance).AppendLine(" is global::System.IAsyncDisposable __racedAsync)");
 			Indent(builder, depth).AppendLine("{");
 			Indent(builder, depth + 1).AppendLine("await __racedAsync.DisposeAsync().ConfigureAwait(false);");
 			Indent(builder, depth).AppendLine("}");
-			Indent(builder, depth).AppendLine("else if ((object)created is global::System.IDisposable __racedSync)");
+			Indent(builder, depth).Append("else if ((object)").Append(instance).AppendLine(" is global::System.IDisposable __racedSync)");
 			Indent(builder, depth).AppendLine("{");
 			Indent(builder, depth + 1).AppendLine("__racedSync.Dispose();");
 			Indent(builder, depth).AppendLine("}");
 			return;
 		}
 
-		Indent(builder, depth).AppendLine("if ((object)created is global::System.IDisposable __racedSync)");
+		Indent(builder, depth).Append("if ((object)").Append(instance).AppendLine(" is global::System.IDisposable __racedSync)");
 		Indent(builder, depth).AppendLine("{");
 		Indent(builder, depth + 1).AppendLine("__racedSync.Dispose();");
+		Indent(builder, depth).AppendLine("}");
+	}
+
+	/// <summary>
+	///     Emits the failure-path teardown of a partially-built <paramref name="instance" />: a
+	///     <see cref="EmitRacedTeardown" /> wrapped in its own <c>try</c>/<c>catch</c> that swallows a throw from
+	///     the instance's own <c>Dispose</c>/<c>DisposeAsync</c>, so the disposal failure cannot mask the original
+	///     wiring/initialization failure the caller is about to see (the caller rethrows after this). Shared by the
+	///     async and synchronous guarded-wiring resolvers.
+	/// </summary>
+	private static void EmitGuardedTeardown(StringBuilder builder, int depth, bool asyncDisposal, bool asyncContext, string instance = "created")
+	{
+		Indent(builder, depth).AppendLine("try");
+		Indent(builder, depth).AppendLine("{");
+		EmitRacedTeardown(builder, depth + 1, asyncDisposal, asyncContext, instance);
+		Indent(builder, depth).AppendLine("}");
+		Indent(builder, depth).AppendLine("catch");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).AppendLine("// Swallowed: a throw from the instance's own disposal must not mask the original failure below.");
 		Indent(builder, depth).AppendLine("}");
 	}
 
