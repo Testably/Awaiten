@@ -102,9 +102,8 @@ partial class AwaitenGenerator
 			// compares the current registration against.
 			implInfos.TryGetValue(registration.ImplementationType, out ImplInfo? info);
 
-			// A WhenInjectedInto registration is stored under a synthetic context key so it is reached only from the
-			// named consumer's parameters (ClassifyParameters), never from the public unkeyed dispatch. Its real Key
-			// stays null, so it also never joins a keyed collection (AddKeyedMember) nor triggers an AWT117 report.
+			// A WhenInjectedInto registration is stored under a synthetic context key, reached only from its named
+			// consumer's dependencies. Its real Key stays null, so it never joins a keyed collection (AddKeyedMember).
 			string? effectiveKey = registration.WhenInjectedInto is { } consumer ? ContextKey(consumer) : registration.Key;
 			ServiceKey serviceKey = new(registration.ServiceType, effectiveKey);
 			bool alreadyChosen = winners.TryGetValue(serviceKey, out RawRegistration? winner);
@@ -158,6 +157,7 @@ partial class AwaitenGenerator
 			if (alreadyChosen)
 			{
 				ReportDuplicateKey(registration, winner!.ImplementationType, diagnostics);
+				ReportDuplicateContextualBinding(registration, winner, diagnostics);
 				ReportCrossModuleDuplicate(registration, winner, diagnostics);
 				continue;
 			}
@@ -197,25 +197,23 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     The synthetic resolution key a contextual (WhenInjectedInto) registration is stored under: unique per
-	///     consumer type and prefixed so it cannot collide with a user <c>Key</c>. Reached only from that consumer's
-	///     parameters in <see cref="ClassifyParameters" />, so the contextual implementation never surfaces on the
-	///     public unkeyed dispatch or in a keyed collection.
+	///     consumer type and prefixed so it is very unlikely to collide with a user <c>Key</c>. Reached only from
+	///     that consumer's dependencies, so the contextual implementation never surfaces on the public dispatch.
 	/// </summary>
 	private const string ContextKeyPrefix = "__ctx:";
 
 	private static string ContextKey(string consumerType) => ContextKeyPrefix + consumerType;
 
 	/// <summary>
-	///     A contextual (WhenInjectedInto) registration recorded for AWT167: the synthetic context key it is stored
-	///     under, the service and consumer types (for the message) and the registration location. Once every instance
-	///     is built, one whose context key no consumer parameter consumed never applied and is reported.
+	///     A contextual (WhenInjectedInto) registration recorded for AWT167: its context key, the service and
+	///     consumer types (for the message) and the registration location. One whose key no consumer dependency
+	///     consumed never applied and is reported.
 	/// </summary>
 	private sealed record ConditionalRegistration(ServiceKey Key, string Service, string Consumer, LocationInfo? Location);
 
 	/// <summary>
-	///     Every contextual (WhenInjectedInto) registration in declaration order, each paired with the synthetic
-	///     context key it is stored under, so <see cref="BuildGraph" /> can report AWT167 for any whose named
-	///     consumer never consumes it.
+	///     Every contextual (WhenInjectedInto) registration paired with its context key, so <see cref="BuildGraph" />
+	///     can report AWT167 for any whose named consumer never consumes it.
 	/// </summary>
 	private static List<ConditionalRegistration> CollectConditionalRegistrations(List<RawRegistration> raw)
 	{
@@ -477,6 +475,24 @@ partial class AwaitenGenerator
 			Diagnostics.DuplicateKey,
 			LocationInfo.From(registration.Location),
 			new EquatableArray<string>([Display(registration.ServiceType), registration.Key,])));
+	}
+
+	/// <summary>
+	///     AWT169: a second implementation targets the same service and consumer via <c>WhenInjectedInto</c>, so
+	///     which one the consumer resolves would be ambiguous. Both share the synthetic context key, so this is
+	///     reached from the <c>alreadyChosen</c> branch; the same implementation re-registered is left silent.
+	/// </summary>
+	private static void ReportDuplicateContextualBinding(RawRegistration registration, RawRegistration winner, List<DiagnosticInfo> diagnostics)
+	{
+		if (registration.WhenInjectedInto is not { } consumer || winner.ImplementationType == registration.ImplementationType)
+		{
+			return;
+		}
+
+		diagnostics.Add(new DiagnosticInfo(
+			Diagnostics.DuplicateContextualBinding,
+			LocationInfo.From(registration.Location),
+			new EquatableArray<string>([Display(registration.ServiceType), Display(consumer),])));
 	}
 
 	/// <summary>

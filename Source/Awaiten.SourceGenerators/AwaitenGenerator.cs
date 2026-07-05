@@ -244,9 +244,8 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		// consumer parameters, drained after the instance loop below.
 		VarianceState variance = new(varianceCandidates, compilation);
 
-		// Contextual (WhenInjectedInto) bindings: every one recorded up front, and the set of synthetic context keys
-		// a consumer parameter actually redirects to, filled by ClassifyParameters. A binding whose key stays absent
-		// never applied and is reported (AWT167) once every instance is built.
+		// Contextual (WhenInjectedInto) bindings recorded up front, plus the set of context keys a consumer
+		// dependency actually redirects to. A binding whose key stays absent is reported (AWT167) below.
 		List<ConditionalRegistration> conditionals = CollectConditionalRegistrations(raw);
 		HashSet<ServiceKey> consumedConditionals = new();
 
@@ -265,9 +264,8 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			}
 		}
 
-		// AWT167: a contextual (WhenInjectedInto) registration whose named consumer has no constructor dependency on
-		// the service is never reached, so its synthetic context key stays unconsumed. Reported here, once every
-		// consumer's parameters have had the chance to redirect to it in ClassifyParameters.
+		// AWT167: a contextual registration whose named consumer never redirected to its context key (no unkeyed
+		// direct dependency on the service) is never reached, so report it now that every instance is built.
 		foreach (ConditionalRegistration conditional in conditionals)
 		{
 			if (!consumedConditionals.Contains(conditional.Key))

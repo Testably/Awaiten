@@ -76,9 +76,9 @@ public sealed class SingletonAttribute<TImplementation> : Attribute
 	public string? Key { get; set; }
 
 	/// <summary>
-	///     Restricts this registration to constructor parameters of the given consumer type: the service
-	///     resolves to this implementation only when injected into <see cref="WhenInjectedInto" />, and to
-	///     the unconditional registration everywhere else (contextual binding).
+	///     Restricts this registration to the constructor parameters and [Inject] properties of the given consumer
+	///     type: the service resolves to this implementation only when injected into <see cref="WhenInjectedInto" />,
+	///     and to the unconditional registration everywhere else (contextual binding).
 	/// </summary>
 	public Type? WhenInjectedInto { get; set; }
 
@@ -149,9 +149,9 @@ public sealed class SingletonAttribute<TImplementation, TService> : Attribute
 	public string? Key { get; set; }
 
 	/// <summary>
-	///     Restricts this registration to constructor parameters of the given consumer type: the service
-	///     resolves to this implementation only when injected into <see cref="WhenInjectedInto" />, and to
-	///     the unconditional registration everywhere else (contextual binding).
+	///     Restricts this registration to the constructor parameters and [Inject] properties of the given consumer
+	///     type: the service resolves to this implementation only when injected into <see cref="WhenInjectedInto" />,
+	///     and to the unconditional registration everywhere else (contextual binding).
 	/// </summary>
 	public Type? WhenInjectedInto { get; set; }
 

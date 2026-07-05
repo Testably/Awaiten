@@ -104,19 +104,9 @@ partial class AwaitenGenerator
 
 			parameterModel = RedirectDecoratorInner(parameterModel, info, context.DecoratorInner);
 
-			// Contextual binding: when a WhenInjectedInto registration targets this consumer, redirect the parameter
-			// to its synthetic context key. Gated on an unkeyed Direct dependency, so an explicit [FromKey] and a
-			// decorator's inner redirect both take precedence, and the redirect keeps it off the [ImportServices]
-			// external fall-through below. Consuming the key marks the binding applied (else AWT167).
-			if (parameterModel is { Kind: DependencyKind.Direct, Key: null, })
-			{
-				ServiceKey contextKey = new(parameterModel.ServiceType, ContextKey(info.ImplementationType));
-				if (context.ServiceToImpl.ContainsKey(contextKey))
-				{
-					parameterModel = parameterModel with { Key = contextKey.Key, };
-					context.ConsumedConditionals.Add(contextKey);
-				}
-			}
+			// A [FromKey] and a decorator's inner redirect already carry a key, so both take precedence; the
+			// redirect also keeps the parameter off the [ImportServices] fall-through below.
+			parameterModel = RedirectContextualBinding(parameterModel, info, context.ServiceToImpl, context.ConsumedConditionals);
 
 			parameterModel = SuppressRegisteredCollectionSynthesis(parameterModel, parameter.Type, context.ServiceToImpl);
 
@@ -216,12 +206,13 @@ partial class AwaitenGenerator
 		INamedTypeSymbol containerSymbol,
 		Dictionary<ServiceKey, string> serviceToImpl,
 		HashSet<string> constraintRejected,
+		HashSet<ServiceKey> consumedConditionals,
 		List<MemberModel> members,
 		List<DiagnosticInfo> diagnostics)
 	{
 		foreach (IPropertySymbol property in InjectedProperties(info.Symbol))
 		{
-			if (ClassifyInjectedMember(property, info, containerSymbol, serviceToImpl, constraintRejected, diagnostics) is { } member)
+			if (ClassifyInjectedMember(property, info, containerSymbol, serviceToImpl, constraintRejected, consumedConditionals, diagnostics) is { } member)
 			{
 				members.Add(member);
 			}
@@ -265,6 +256,7 @@ partial class AwaitenGenerator
 		INamedTypeSymbol containerSymbol,
 		Dictionary<ServiceKey, string> serviceToImpl,
 		HashSet<string> constraintRejected,
+		HashSet<ServiceKey> consumedConditionals,
 		List<DiagnosticInfo> diagnostics)
 	{
 		LocationInfo? location = LocationInfo.From(property.Locations.FirstOrDefault());
@@ -291,6 +283,8 @@ partial class AwaitenGenerator
 
 		ParameterModel dependency = ClassifyDependency(
 			property.Type, property.GetAttributes(), asyncFactory: false, location);
+
+		dependency = RedirectContextualBinding(dependency, info, serviceToImpl, consumedConditionals);
 
 		// A collection member is always filled (an unregistered collection yields an empty one), so it is never
 		// omitted from the object initializer: Optional has no effect on it, and neither the Optional shape rules
@@ -630,6 +624,33 @@ partial class AwaitenGenerator
 			? null
 			: new ParameterModel(
 				service.ToDisplayString(FullyQualified), DependencyKind.Func, new EquatableArray<string>(argTypes), Key: key, Location: location);
+	}
+
+	/// <summary>
+	///     Redirects an unkeyed direct dependency to the synthetic context key of a <c>WhenInjectedInto</c>
+	///     registration that targets this consumer, so the consumer resolves the contextual implementation while
+	///     every other resolution keeps the unconditional one. Consuming the key marks the binding applied (else
+	///     AWT167). Shared by the constructor-parameter and <c>[Inject]</c>-property paths.
+	/// </summary>
+	private static ParameterModel RedirectContextualBinding(
+		ParameterModel model,
+		ImplInfo info,
+		Dictionary<ServiceKey, string> serviceToImpl,
+		HashSet<ServiceKey> consumedConditionals)
+	{
+		if (model is not { Kind: DependencyKind.Direct, Key: null, })
+		{
+			return model;
+		}
+
+		ServiceKey contextKey = new(model.ServiceType, ContextKey(info.ImplementationType));
+		if (!serviceToImpl.ContainsKey(contextKey))
+		{
+			return model;
+		}
+
+		consumedConditionals.Add(contextKey);
+		return model with { Key = contextKey.Key, };
 	}
 
 	private static ServiceKey KeyOf(ParameterModel parameter) => new(parameter.ServiceType, parameter.Key);

@@ -105,13 +105,14 @@ partial class AwaitenGenerator
 
 		private void ProcessService(string service, List<DecorateRegistration> chain)
 		{
-			ServiceKey publicKey = new(service, null);
-			_serviceToImpl.TryGetValue(publicKey, out string? winner);
-			List<string>? members = _serviceMembers.TryGetValue(publicKey, out List<string>? m) ? m : null;
-			List<string> baseImpls = CollectBaseImpls(members, winner);
+			// The public (unkeyed) resolution, then each contextual (WhenInjectedInto) resolution of the service, so
+			// a contextually-bound implementation is wrapped by the same chain as the default. Snapshotted and sorted
+			// before wrapping mutates _serviceToImpl (and for deterministic synthetic keys).
+			List<string?> targets = new() { null, };
+			targets.AddRange(ContextTargetKeys(service));
 
-			// AWT123: the decorated service has no registration to wrap.
-			if (baseImpls.Count == 0)
+			// AWT123: the decorated service has no registration (under any resolution key) to wrap.
+			if (targets.All(key => TargetBaseImpls(service, key).Count == 0))
 			{
 				Report(Diagnostics.DecoratedServiceNotRegistered, chain[0].Location,
 					service, chain[0].Decorator.ToDisplayString(FullyQualified));
@@ -131,11 +132,50 @@ partial class AwaitenGenerator
 				return;
 			}
 
-			ServiceChain sc = new(service, winner, members, ordered, innerParameterTypes);
-			for (int k = 0; k < baseImpls.Count; k++)
+			int baseIndex = 0;
+			foreach (string? resolutionKey in targets)
 			{
-				WrapBaseImpl(sc, baseImpls[k], k);
+				_serviceToImpl.TryGetValue(new ServiceKey(service, resolutionKey), out string? winner);
+				List<string>? members = resolutionKey is null ? MembersOf(service) : null;
+				ServiceChain sc = new(service, resolutionKey, winner, members, ordered, innerParameterTypes);
+				foreach (string baseImpl in TargetBaseImpls(service, resolutionKey))
+				{
+					WrapBaseImpl(sc, baseImpl, baseIndex++);
+				}
 			}
+		}
+
+		/// <summary>
+		///     The base implementations to wrap under a resolution key: the unkeyed key's collection members (so the
+		///     collection view is decorated too), or the single winner for a contextual key (which has no public
+		///     collection). A snapshot, since wrapping mutates the underlying membership.
+		/// </summary>
+		private List<string> TargetBaseImpls(string service, string? resolutionKey)
+		{
+			_serviceToImpl.TryGetValue(new ServiceKey(service, resolutionKey), out string? winner);
+			return CollectBaseImpls(resolutionKey is null ? MembersOf(service) : null, winner);
+		}
+
+		private List<string>? MembersOf(string service)
+			=> _serviceMembers.TryGetValue(new ServiceKey(service, null), out List<string>? members) ? members : null;
+
+		/// <summary>
+		///     The synthetic contextual (WhenInjectedInto) keys of a service, sorted for deterministic wrapping. Each
+		///     is a separate resolution slot the consumer redirects to, wrapped by the same decorator chain.
+		/// </summary>
+		private List<string> ContextTargetKeys(string service)
+		{
+			List<string> keys = new();
+			foreach (ServiceKey key in _serviceToImpl.Keys)
+			{
+				if (key.Service == service && key.Key is { } k && k.StartsWith(ContextKeyPrefix, StringComparison.Ordinal))
+				{
+					keys.Add(k);
+				}
+			}
+
+			keys.Sort(StringComparer.Ordinal);
+			return keys;
 		}
 
 		/// <summary>
@@ -182,10 +222,10 @@ partial class AwaitenGenerator
 			string service = chain.Service;
 			bool isWinnerChain = baseImpl == chain.Winner;
 
-			// Move the base implementation off the public service onto the chain's lowest synthetic key, so the
-			// first decorator reaches it by key and the public dispatch no longer hits it directly.
+			// Move the base implementation off the resolution key onto the chain's lowest synthetic key, so the
+			// first decorator reaches it by key and the resolution no longer hits it directly.
 			string baseKey = DecoratorKey(service, baseIndex, 0);
-			MoveBaseToSyntheticKey(service, baseImpl, baseKey);
+			MoveBaseToSyntheticKey(chain.ResolutionKey, service, baseImpl, baseKey);
 
 			ImplInfo? baseInfo = _byImpl.TryGetValue(baseImpl, out ImplInfo? bi) ? bi : null;
 			Lifetime lifetime = baseInfo?.Lifetime ?? Lifetime.Transient;
@@ -207,11 +247,11 @@ partial class AwaitenGenerator
 			RewriteCollectionMembership(chain.Members, baseImpl, outermostIdentity);
 		}
 
-		private void MoveBaseToSyntheticKey(string service, string baseImpl, string baseKey)
+		private void MoveBaseToSyntheticKey(string? resolutionKey, string service, string baseImpl, string baseKey)
 		{
 			if (_byImpl.TryGetValue(baseImpl, out ImplInfo? baseInfo))
 			{
-				baseInfo.Services.Remove(new ServiceKey(service, null));
+				baseInfo.Services.Remove(new ServiceKey(service, resolutionKey));
 				ServiceKey synthetic = new(service, baseKey);
 				if (!baseInfo.Services.Contains(synthetic))
 				{
@@ -224,8 +264,9 @@ partial class AwaitenGenerator
 
 		/// <summary>
 		///     Registers one chain link and returns its synthetic identity. The outermost link of the winner chain
-		///     (<c>isPublic</c>) takes the public service key; every other link is keyed so it is reached only as the
-		///     inner of the link above it (or as a rewritten collection member).
+		///     (<c>isPublic</c>) takes the target resolution key (null for public dispatch, a context key for a
+		///     contextual binding); every other link is keyed so it is reached only as the inner of the link above it
+		///     (or as a rewritten collection member).
 		/// </summary>
 		private string AddChainLink(ServiceChain chain, int baseIndex, int linkIndex, bool isPublic, Lifetime lifetime, LocationInfo? location, string innerKey)
 		{
@@ -239,7 +280,7 @@ partial class AwaitenGenerator
 			_implOrder.Add(info);
 
 			ServiceKey ownKey = isPublic
-				? new ServiceKey(service, null)
+				? new ServiceKey(service, chain.ResolutionKey)
 				: new ServiceKey(service, DecoratorKey(service, baseIndex, link));
 			info.Services.Add(ownKey);
 			_serviceToImpl[ownKey] = identity;
@@ -273,12 +314,14 @@ partial class AwaitenGenerator
 		}
 
 		/// <summary>
-		///     The per-service state threaded through <c>WrapBaseImpl</c> / <c>AddChainLink</c>: the decorated service,
-		///     its single-dispatch winner (if any), its collection membership (if any), the decorators innermost-first,
-		///     and each decorator's inner-parameter type (positionally matching <c>Ordered</c>).
+		///     The per-target state threaded through <c>WrapBaseImpl</c> / <c>AddChainLink</c>: the decorated service,
+		///     the resolution key being wrapped (null for the public dispatch, a synthetic context key for a
+		///     contextual binding), that key's winner and collection membership (if any), the decorators
+		///     innermost-first, and each decorator's inner-parameter type (positionally matching <c>Ordered</c>).
 		/// </summary>
 		private readonly record struct ServiceChain(
 			string Service,
+			string? ResolutionKey,
 			string? Winner,
 			List<string>? Members,
 			List<DecorateRegistration> Ordered,

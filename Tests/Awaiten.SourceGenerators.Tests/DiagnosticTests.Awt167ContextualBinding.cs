@@ -112,6 +112,32 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics.Any(d => d.Contains("AWT167"))).IsTrue()
 				.Because("a Func-deferred dependency is not an unkeyed direct parameter, so the contextual binding is never applied");
 		}
+
+		[Fact]
+		public async Task DoesNotReportWhenTheNamedConsumerDependsThroughAnInjectProperty()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IClock { }
+			                                       public sealed class DefaultClock : IClock { }
+			                                       public sealed class TestClock : IClock { }
+			                                       public sealed class NeedsTest { [Inject] public IClock Clock { get; set; } }
+
+			                                       [Container]
+			                                       [Singleton<DefaultClock, IClock>]
+			                                       [Singleton<TestClock, IClock>(WhenInjectedInto = typeof(NeedsTest))]
+			                                       [Singleton<NeedsTest>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("an [Inject] property is an unkeyed direct dependency, so it consumes the contextual binding");
+		}
 	}
 
 	public class Awt168ContextualBindingWithKey
@@ -166,6 +192,67 @@ public partial class DiagnosticTests
 
 			await That(result.Diagnostics).IsEmpty()
 				.Because("WhenInjectedInto without a Key is the ordinary contextual binding");
+		}
+	}
+
+	public class Awt169DuplicateContextualBinding
+	{
+		[Fact]
+		public async Task ReportsWhenTwoImplementationsTargetTheSameServiceAndConsumer()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IClock { }
+			                                       public sealed class DefaultClock : IClock { }
+			                                       public sealed class TestClock : IClock { }
+			                                       public sealed class OtherClock : IClock { }
+			                                       public sealed class NeedsTest { public NeedsTest(IClock clock) { } }
+
+			                                       [Container]
+			                                       [Singleton<DefaultClock, IClock>]
+			                                       [Singleton<TestClock, IClock>(WhenInjectedInto = typeof(NeedsTest))]
+			                                       [Singleton<OtherClock, IClock>(WhenInjectedInto = typeof(NeedsTest))]
+			                                       [Singleton<NeedsTest>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics.Any(d => d.Contains("AWT169"))).IsTrue()
+				.Because("both bindings claim the one contextual slot for the consumer, so the resolution is ambiguous");
+		}
+
+		[Fact]
+		public async Task DoesNotReportForTwoContextualBindingsIntoDifferentConsumers()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IClock { }
+			                                       public sealed class DefaultClock : IClock { }
+			                                       public sealed class TestClock : IClock { }
+			                                       public sealed class OtherClock : IClock { }
+			                                       public sealed class NeedsTest { public NeedsTest(IClock clock) { } }
+			                                       public sealed class NeedsOther { public NeedsOther(IClock clock) { } }
+
+			                                       [Container]
+			                                       [Singleton<DefaultClock, IClock>]
+			                                       [Singleton<TestClock, IClock>(WhenInjectedInto = typeof(NeedsTest))]
+			                                       [Singleton<OtherClock, IClock>(WhenInjectedInto = typeof(NeedsOther))]
+			                                       [Singleton<NeedsTest>]
+			                                       [Singleton<NeedsOther>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("each consumer has its own contextual slot, so there is no collision");
 		}
 	}
 }
