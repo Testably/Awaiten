@@ -20,6 +20,17 @@ internal static class AwaitenTaskConverter
 
 	private static readonly ConcurrentDictionary<Type, Func<Task<object>, object>> Converters = new();
 
+#if NET
+	[System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("AOT", "IL3050",
+		Justification =
+			"serviceType is a DI service type (a reference type); AsTask<T> over a reference type binds to " +
+			"NativeAOT's shared canonical instantiation, so MakeGenericMethod does not generate code at runtime. " +
+			"Async value-type service types are the one shape not supported under native AOT.")]
+	[System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2060",
+		Justification =
+			"AsTask is a private static method preserved on this type; only its reference-type argument varies, so " +
+			"the trimmer keeps the single AsTask<T> body it binds against.")]
+#endif
 	public static Func<Task<object>, object> For(Type serviceType)
 		=> Converters.GetOrAdd(serviceType, static type =>
 		{
