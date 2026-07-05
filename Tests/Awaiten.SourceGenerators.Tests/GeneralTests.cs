@@ -1981,14 +1981,19 @@ public class GeneralTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// A reverse-drained release queue is emitted, the activation hook runs post-construction, and the release
-		// hook is queued as an action that is drained (reverse creation order) before the disposables on teardown.
-		// The release captures the instance into a local (by value) rather than reading the cache field lazily, so
-		// a wiring-episode rollback that nulls the field cannot orphan it.
+		// A reverse-drained release queue is emitted, the activation hook runs on a local post-construction, and
+		// the release hook is queued as an action (capturing that same local by value) that is drained (reverse
+		// creation order) before the disposables on teardown.
 		await That(source).Contains("global::System.Collections.Generic.List<global::System.Action>? __releases;");
-		await That(source).Contains("Started(__s.");
-		await That(source).Contains("__released = __s.");
-		await That(source).Contains(".Add(() => Stopping(__released));");
+		await That(source).Contains("Started(created);");
+		await That(source).Contains(".Add(() => Stopping(created));");
 		await That(source).Contains("__toRelease[__index]();");
+
+		// The cache field is published (= created;) only after the activation hook has run, so the lock-free fast
+		// path never hands a concurrent caller a published-but-not-yet-activated instance.
+		int activationAt = source.IndexOf("Started(created);");
+		int publishAt = source.IndexOf("= created;");
+		await That(activationAt >= 0 && publishAt > activationAt).IsTrue()
+			.Because("the cache field must be published only after activation completes");
 	}
 }

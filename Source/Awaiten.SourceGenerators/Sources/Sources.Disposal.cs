@@ -77,37 +77,14 @@ internal static partial class Sources
 		}
 	}
 
-	// Runs OnActivated on the just-published cached instance, unpublishing the field and rethrowing when the hook
-	// throws: a caching resolver serves a non-null field from its lock-free fast path, so leaving a half-activated
-	// instance published would hand it out un-activated forever. Nulling the field makes a later resolve rebuild
-	// instead; the constructed instance stays registered for disposal (added by value before this), so it is still
-	// torn down rather than leaked. Used on the non-deferred cache-miss path, whose field assignment is not already
-	// inside a wiring episode's try; the deferred path runs the plain EmitActivation inside that try, which
-	// unpublishes and rolls the episode back on the same throw. Nothing when the instance names no activation hook.
-	private static void EmitCachedActivation(StringBuilder builder, int depth, InstanceModel instance, string field)
-	{
-		if (instance.OnActivated is null)
-		{
-			return;
-		}
-
-		Indent(builder, depth).AppendLine("try");
-		Indent(builder, depth).AppendLine("{");
-		Indent(builder, depth + 1).Append(instance.OnActivated).Append("(__s.").Append(field).AppendLine(");");
-		Indent(builder, depth).AppendLine("}");
-		Indent(builder, depth).AppendLine("catch");
-		Indent(builder, depth).AppendLine("{");
-		Indent(builder, depth + 1).Append("__s.").Append(field).AppendLine(" = null;");
-		Indent(builder, depth + 1).AppendLine("throw;");
-		Indent(builder, depth).AppendLine("}");
-	}
-
 	// Queues the OnRelease hook for a just-published cached (singleton/scoped) instance, capturing it into a local
 	// first: (var __released = __s.field; __releases.Add(() => OnRelease(__released));). The by-value capture
 	// mirrors the disposal registration (which adds __s.field by value) so a wiring-episode rollback - which nulls
 	// the field of every instance the failed episode published, including peers that had already queued a release -
-	// cannot orphan the closure onto a null-or-rebuilt field. Emitted after OnActivated has run, so only a
-	// successfully-activated instance is ever released. Nothing when the instance names no hook.
+	// cannot orphan the closure onto a null-or-rebuilt field. Used on the cache-miss path where the field is
+	// published before its release is queued (a deferred wiring episode, or a plain cache with no activation hook);
+	// a non-deferred instance with an activation hook stores the field only after activating, so it queues the
+	// release against that local via EmitReleaseRegistration instead. Nothing when the instance names no hook.
 	private static void EmitCachedReleaseRegistration(StringBuilder builder, int depth, InstanceModel instance, string field, string type)
 	{
 		if (instance.OnRelease is not null)

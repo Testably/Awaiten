@@ -186,6 +186,46 @@ public partial class LifecycleHookTests
 		await That(Probe.Log).Contains("released:Widget");
 	}
 
+	[Fact]
+	public async Task ConcurrentResolve_NeverObservesTheSingletonBeforeOnActivatedHasRun()
+	{
+		Probe.Reset();
+		using ConcurrentActivationContainer.Root container = new();
+
+		const int workers = 16;
+		using Barrier gate = new(workers);
+		bool[] sawActivated = new bool[workers];
+		CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+		Task[] tasks = new Task[workers];
+		for (int i = 0; i < workers; i++)
+		{
+			int index = i;
+			tasks[index] = Task.Run(
+				() =>
+				{
+					// Release all workers at once so they race the lock-free fast path while the winner is still
+					// inside the (deliberately slow) activation hook.
+					gate.SignalAndWait(cancellationToken);
+					Slow instance = container.Resolve<Slow>();
+					sawActivated[index] = instance.Activated;
+				},
+				cancellationToken);
+		}
+
+		await Task.WhenAll(tasks);
+
+		// Every concurrent caller received a fully-activated singleton: the lock-free fast path never handed out
+		// the published-but-not-yet-activated instance. Publishing the cache field before activation would let a
+		// racing reader observe Activated == false here.
+		await That(sawActivated.All(seen => seen)).IsTrue()
+			.Because("no caller may observe the singleton before its OnActivated hook has run");
+
+		// The singleton was constructed and activated exactly once, regardless of the concurrent contention.
+		await That(Probe.Constructions).IsEqualTo(1);
+		await That(Probe.Log.Count(entry => entry == "activated:Slow")).IsEqualTo(1);
+	}
+
 	public sealed class Alpha;
 
 	public sealed class Beta;
@@ -222,6 +262,14 @@ public partial class LifecycleHookTests
 	{
 		[Inject(Deferred = true)]
 		public Gadget? Gadget { get; set; }
+	}
+
+	public sealed class Slow
+	{
+		public Slow() => Probe.Constructions++;
+
+		// Volatile so a racing resolver thread cannot cache a stale read of the flag the activation hook sets.
+		public volatile bool Activated;
 	}
 
 	private static class Probe
@@ -343,5 +391,19 @@ public partial class LifecycleHookTests
 		private static void Activated(Widget instance) => Probe.Log.Add("activated:Widget");
 
 		private static void Released(Widget instance) => Probe.Log.Add("released:Widget");
+	}
+
+	[Container]
+	[Singleton<Slow>(OnActivated = nameof(Activate))]
+	public static partial class ConcurrentActivationContainer
+	{
+		private static void Activate(Slow slow)
+		{
+			// Widen the window between publishing the cache field and finishing activation: if the field were
+			// published first, a concurrent fast-path reader would observe this instance before Activated is set.
+			Thread.Sleep(30);
+			slow.Activated = true;
+			Probe.Log.Add("activated:Slow");
+		}
 	}
 }

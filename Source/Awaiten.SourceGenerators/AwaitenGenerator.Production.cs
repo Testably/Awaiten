@@ -28,27 +28,7 @@ partial class AwaitenGenerator
 		// implements IAsyncInitializable), not as a pre-built Instance.
 		if (info.Production == ProductionKind.Instance)
 		{
-			ValidateInstanceMember(containerSymbol, info, compilation, diagnostics);
-			// AWT165: a lifecycle hook on a pre-built Instance is a silent no-op (the caller, not the container,
-			// owns and tears down the instance), so reject it rather than construct with hooks that never run.
-			if (info.OnActivated is not null || info.OnRelease is not null)
-			{
-				diagnostics.Add(new DiagnosticInfo(
-					Diagnostics.LifecycleHookOnInstance,
-					info.Location,
-					new EquatableArray<string>([Display(info.OwningServiceOrImpl),])));
-			}
-
-			return new InstanceModel(
-				info.ImplementationType,
-				info.Symbol.Name,
-				info.Lifetime,
-				new EquatableArray<ServiceKey>(info.Services.ToArray()),
-				new EquatableArray<ParameterModel>([]),
-				false,
-				info.Symbol.IsReferenceType,
-				ProductionKind.Instance,
-				QualifiedProductionMember(info));
+			return BuildPrebuiltInstance(info, containerSymbol, compilation, diagnostics);
 		}
 
 		// Select the producer: a container method (Factory) or the implementation's constructor (the
@@ -177,6 +157,40 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
+	///     Builds the model for a pre-built <c>Instance</c> registration - handed back from a container member,
+	///     never constructed here. It validates the named member (AWT109/AWT153) and rejects a lifecycle hook
+	///     (AWT165), since the container does not own the instance and so never runs a hook around it.
+	/// </summary>
+	private static InstanceModel BuildPrebuiltInstance(
+		ImplInfo info,
+		INamedTypeSymbol containerSymbol,
+		Compilation compilation,
+		List<DiagnosticInfo> diagnostics)
+	{
+		ValidateInstanceMember(containerSymbol, info, compilation, diagnostics);
+		// AWT165: a lifecycle hook on a pre-built Instance is a silent no-op (the caller, not the container,
+		// owns and tears down the instance), so reject it rather than construct with hooks that never run.
+		if (info.OnActivated is not null || info.OnRelease is not null)
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.LifecycleHookOnInstance,
+				info.Location,
+				new EquatableArray<string>([Display(info.OwningServiceOrImpl),])));
+		}
+
+		return new InstanceModel(
+			info.ImplementationType,
+			info.Symbol.Name,
+			info.Lifetime,
+			new EquatableArray<ServiceKey>(info.Services.ToArray()),
+			new EquatableArray<ParameterModel>([]),
+			false,
+			info.Symbol.IsReferenceType,
+			ProductionKind.Instance,
+			QualifiedProductionMember(info));
+	}
+
+	/// <summary>
 	///     Selects the method that produces an implementation: a container method for a <c>Factory</c>
 	///     registration, or the implementation's own constructor otherwise. Returns <see langword="null" />
 	///     when the registration is unusable - an unresolved factory (AWT108), a non-instantiable abstract or
@@ -250,7 +264,7 @@ partial class AwaitenGenerator
 		{
 			// A module hook must also be accessible from the generated container (its own private members are
 			// reachable from the partial, a module's are not); an inaccessible module method is not a usable hook.
-			if (member is IMethodSymbol { MethodKind: MethodKind.Ordinary, ReturnsVoid: true, Parameters.Length: 1, } method
+			if (member is IMethodSymbol { MethodKind: MethodKind.Ordinary, IsStatic: true, ReturnsVoid: true, Parameters.Length: 1, } method
 			    && compilation.HasImplicitConversion(info.Symbol, method.Parameters[0].Type)
 			    && (info.Origin is null || compilation.IsSymbolAccessibleWithin(method, containerSymbol)))
 			{
