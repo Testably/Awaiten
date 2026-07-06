@@ -493,7 +493,7 @@ partial class AwaitenGenerator
 		diagnostics.Add(new DiagnosticInfo(
 			Diagnostics.DuplicateKey,
 			LocationInfo.From(registration.Location),
-			new EquatableArray<string>([Display(registration.ServiceType), registration.Key,])));
+			new EquatableArray<string>([Display(registration.ServiceType), KeyDisplay(registration.Key),])));
 	}
 
 	/// <summary>

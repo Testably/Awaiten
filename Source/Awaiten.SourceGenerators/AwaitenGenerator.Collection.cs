@@ -122,7 +122,7 @@ partial class AwaitenGenerator
 			bool weak = fallback != 0;
 			bool isDefault = fallback == 1;
 
-			string? key = NamedArgument(attribute, "Key");
+			string? key = NamedKeyArgument(attribute);
 
 			// A [Singleton<…>(WhenInjectedInto = typeof(Consumer))] contextual binding; absent (null) on the
 			// open-generic Type-ctor form, which exposes no such property. Resolved to the consumer's context key.
@@ -131,6 +131,7 @@ partial class AwaitenGenerator
 			Location? location = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? fallbackLocation;
 
 			ReportContextualBindingWithKey(key, whenInjectedInto, implementation, location, diagnostics);
+			ReportUnsupportedRegistrationKey(attribute, LocationInfo.From(location), Display(implementation.ToDisplayString(FullyQualified)), diagnostics);
 
 			result.Add(new RawRegistration(
 				service.ToDisplayString(FullyQualified),

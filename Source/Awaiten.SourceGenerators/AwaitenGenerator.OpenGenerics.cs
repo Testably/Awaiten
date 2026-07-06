@@ -54,7 +54,8 @@ partial class AwaitenGenerator
 			return;
 		}
 
-		open.Add(new OpenRegistration(pair.Service, pair.Mapped, lifetime, NamedArgument(attribute, "Key"), location, origin));
+		ReportUnsupportedRegistrationKey(attribute, location, Display(implementation.ToDisplayString(FullyQualified)), diagnostics);
+		open.Add(new OpenRegistration(pair.Service, pair.Mapped, lifetime, NamedKeyArgument(attribute), location, origin));
 	}
 
 	/// <summary>

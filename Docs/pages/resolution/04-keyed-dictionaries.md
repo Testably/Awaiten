@@ -30,9 +30,22 @@ IMilk oat = milks["Oat"];
 
 The dictionary contains every keyed registration of the service, keyed by its `Key`. Unkeyed registrations are left out. Each member keeps its own lifetime. With no keyed registrations, you get an empty dictionary.
 
-## The key must be a string
+## The key type: string or enum
 
-Awaiten synthesizes the dictionary only for a `string` key. A non-string key is a build error ([AWT159](../diagnostics#awt159)) unless you register the dictionary yourself. A synthesized dictionary already resolves every key, so applying `[FromKey]` to it makes no sense and is an error ([AWT160](../diagnostics#awt160)).
+Awaiten synthesizes the dictionary for a `string` key or an `enum` key. For an enum-keyed map, register every implementation under a constant of the same enum and depend on `IReadOnlyDictionary<TEnum, TService>`:
+
+```csharp
+public enum MilkKind { Oat, Whole, Soy }
+
+[Container]
+[Singleton<OatMilk, IMilk>(Key = MilkKind.Oat)]
+[Singleton<WholeMilk, IMilk>(Key = MilkKind.Whole)]
+public static partial class CoffeeShop;
+
+public sealed class MilkFridge(IReadOnlyDictionary<MilkKind, IMilk> milks);
+```
+
+The dictionary synthesizes only when every keyed registration of the service matches the requested key type. A key type that is neither `string` nor an enum, or one whose registrations mix key kinds, is a build error ([AWT159](../diagnostics#awt159)) unless you register the dictionary yourself. A synthesized dictionary already resolves every key, so applying `[FromKey]` to it makes no sense and is an error ([AWT160](../diagnostics#awt160)).
 
 ## The async form
 

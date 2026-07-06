@@ -360,7 +360,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			KeyedMember[] members = keyedMembers[service].Where(member => implToIndex.ContainsKey(member.Implementation)).ToArray();
 			if (members.Length > 0)
 			{
-				keyedCollections.Add(new KeyedServiceMembers(service, new EquatableArray<KeyedMember>(members)));
+				keyedCollections.Add(new KeyedServiceMembers(service, new EquatableArray<KeyedMember>(members), DictionaryKeyType(members)));
 			}
 		}
 

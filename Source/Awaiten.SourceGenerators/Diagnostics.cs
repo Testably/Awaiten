@@ -867,14 +867,16 @@ internal static class Diagnostics
 		isEnabledByDefault: true);
 
 	/// <summary>
-	///     A keyed collection (<c>IReadOnlyDictionary&lt;TKey, TService&gt;</c>) declares a key type other than
-	///     <c>string</c>. Keyed registrations carry <c>string</c> keys (the <c>[Key]</c> value), so v1 resolves
-	///     only <c>IReadOnlyDictionary&lt;string, TService&gt;</c>; typed/enum keys are not yet supported.
+	///     A synthesized keyed collection (<c>IReadOnlyDictionary&lt;TKey, TService&gt;</c>) cannot be synthesized under
+	///     its requested key type: the key type is neither <c>string</c> nor an enum, or it is one of those but the
+	///     service's keyed registrations do not all carry a key of that kind. Keyed registrations carry <c>string</c> or
+	///     enum constant keys; a dictionary synthesizes only when every keyed registration matches the requested key
+	///     type (mixed key kinds have no coherent dictionary).
 	/// </summary>
 	public static readonly DiagnosticDescriptor UnsupportedKeyedCollectionKey = new(
 		"AWT159",
 		"Unsupported keyed-collection key type",
-		"'{0}' requests a keyed collection with key type '{1}', but keyed registrations use string keys; use IReadOnlyDictionary<string, TService> (typed/enum keys are not yet supported)",
+		"'{0}' requests a keyed dictionary with key type '{1}', which {2}",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
@@ -889,7 +891,7 @@ internal static class Diagnostics
 	public static readonly DiagnosticDescriptor FromKeyOnKeyedCollection = new(
 		"AWT160",
 		"[FromKey] on a keyed collection",
-		"'{0}' applies [FromKey(\"{1}\")] to the keyed collection '{2}', which resolves every keyed registration of its service type; remove the [FromKey], or register a dictionary service under that key to take precedence over synthesis",
+		"'{0}' applies [FromKey({1})] to the keyed collection '{2}', which resolves every keyed registration of its service type; remove the [FromKey], or register a dictionary service under that key to take precedence over synthesis",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
@@ -1017,6 +1019,19 @@ internal static class Diagnostics
 		"AWT169",
 		"Duplicate contextual binding",
 		"'{0}' has more than one contextual binding for '{1}'; the contextual resolution into '{1}' would be ambiguous",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A <c>[Key]</c> or <c>[FromKey]</c> uses a constant whose type is not a supported key type. A resolution key
+	///     must be a <c>string</c>, an <c>enum</c> value, or a <c>typeof(...)</c>; a numeric, <c>char</c> or
+	///     <c>bool</c> constant is rejected rather than silently treated as no key.
+	/// </summary>
+	public static readonly DiagnosticDescriptor UnsupportedKeyType = new(
+		"AWT170",
+		"Unsupported key type",
+		"'{0}' uses an unsupported key type '{1}'; a resolution key must be a string, an enum value, or a typeof(...)",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);

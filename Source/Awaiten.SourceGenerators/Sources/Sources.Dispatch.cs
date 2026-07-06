@@ -520,9 +520,16 @@ internal static partial class Sources
 		List<DispatchEntry> entries,
 		HashSet<string> seen)
 	{
-		foreach (string service in names.KeyedCollections.Select(keyed => keyed.Service))
+		foreach (KeyedServiceMembers keyed in names.KeyedCollections)
 		{
-			string dictionaryType = $"global::System.Collections.Generic.IReadOnlyDictionary<string, {service}>";
+			// Mixed key kinds have no coherent by-type dictionary; only [FromKey] injection reaches those members.
+			if (keyed.KeyType is null)
+			{
+				continue;
+			}
+
+			string service = keyed.Service;
+			string dictionaryType = $"global::System.Collections.Generic.IReadOnlyDictionary<{keyed.KeyType}, {service}>";
 			string awaitedType = $"global::System.Threading.Tasks.Task<{dictionaryType}>";
 
 			// A registered synchronous dictionary suppresses the awaited view (all-or-nothing); a registered
@@ -540,7 +547,7 @@ internal static partial class Sources
 			bool rootWithheld = membership.Keyed.TryGetValue(service, out List<int>? members)
 			                    && members.Any(member => IsFuncWithheld(instances, member, serviceToIndex, membership, strict));
 
-			string value = AwaitedKeyedCollectionExpression(service, names, instances, asynchronous: false);
+			string value = AwaitedKeyedCollectionExpression(service, keyed.KeyType, names, instances, asynchronous: false);
 			entries.Add(rootWithheld
 				? new DispatchEntry(awaitedType, value, AwaitedKeyedCollectionWithheldMessage(awaitedType))
 				: new DispatchEntry(awaitedType, value));
@@ -569,9 +576,16 @@ internal static partial class Sources
 		List<DispatchEntry> entries,
 		HashSet<string> seen)
 	{
-		foreach (string service in names.KeyedCollections.Select(keyed => keyed.Service))
+		foreach (KeyedServiceMembers keyed in names.KeyedCollections)
 		{
-			string type = $"global::System.Collections.Generic.IReadOnlyDictionary<string, {service}>";
+			// Mixed key kinds have no coherent by-type dictionary; only [FromKey] injection reaches those members.
+			if (keyed.KeyType is null)
+			{
+				continue;
+			}
+
+			string service = keyed.Service;
+			string type = $"global::System.Collections.Generic.IReadOnlyDictionary<{keyed.KeyType}, {service}>";
 			if (serviceToIndex.ContainsKey(new ServiceKey(type, null)) || !names.IsSyncKeyedCollection(service) || !seen.Add(type))
 			{
 				continue;
@@ -580,7 +594,7 @@ internal static partial class Sources
 			bool rootWithheld = membership.Keyed.TryGetValue(service, out List<int>? members)
 			                    && members.Any(member => IsFuncWithheld(instances, member, serviceToIndex, membership, strict));
 
-			string literal = KeyedCollectionLiteral(service, names);
+			string literal = KeyedCollectionLiteral(service, keyed.KeyType, names);
 			entries.Add(rootWithheld
 				? new DispatchEntry(type, literal, KeyedCollectionWithheldMessage(type))
 				: new DispatchEntry(type, literal));

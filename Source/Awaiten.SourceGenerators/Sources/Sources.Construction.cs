@@ -1,6 +1,5 @@
 using System.Text;
 using Awaiten.SourceGenerators.Entities;
-using Microsoft.CodeAnalysis.CSharp;
 
 namespace Awaiten.SourceGenerators;
 
@@ -73,16 +72,16 @@ internal static partial class Sources
 	}
 
 	/// <summary>
-	///     A <c>new Dictionary&lt;string, TService&gt; { ["a"] = ResolveA(__s), … }</c> expression: every keyed
-	///     registration of the service, keyed by its <c>[Key]</c> in registration order, satisfying the requested
-	///     <c>IReadOnlyDictionary&lt;string, TService&gt;</c>. Each member calls its static resolver over the
-	///     current owner <c>__s</c>, exactly like <see cref="CollectionLiteral" />.
+	///     A <c>new Dictionary&lt;TKey, TService&gt; { [key] = ResolveA(__s), … }</c> expression: every keyed
+	///     registration of the service, keyed by its <c>[Key]</c> literal in registration order, satisfying the
+	///     requested <c>IReadOnlyDictionary&lt;TKey, TService&gt;</c> (<paramref name="keyType" /> is <c>string</c> or an
+	///     enum). Each member calls its static resolver over the current owner <c>__s</c>, like <see cref="CollectionLiteral" />.
 	/// </summary>
-	private static string KeyedCollectionLiteral(string service, Names names)
+	private static string KeyedCollectionLiteral(string service, string keyType, Names names)
 	{
 		string items = string.Join(", ", names.KeyedCollectionResolvers(service)
-			.Select(member => $"[{SymbolDisplay.FormatLiteral(member.Key, quote: true)}] = {ResolveCall(member.Resolver, member.RootOwned)}"));
-		return $"new global::System.Collections.Generic.Dictionary<string, {service}> {{ {items} }}";
+			.Select(member => $"[{AwaitenGenerator.KeyLiteral(member.Key)}] = {ResolveCall(member.Resolver, member.RootOwned)}"));
+		return $"new global::System.Collections.Generic.Dictionary<{keyType}, {service}> {{ {items} }}";
 	}
 
 	/// <summary>
@@ -158,12 +157,12 @@ internal static partial class Sources
 	///     expression: a completed <c>Task.FromResult</c> when every member is synchronous, otherwise an async
 	///     lambda awaiting each async-tainted member. Awaited members receive the token only on the async path.
 	/// </summary>
-	private static string AwaitedKeyedCollectionExpression(string service, Names names, InstanceModel[] instances, bool asynchronous)
+	private static string AwaitedKeyedCollectionExpression(string service, string keyType, Names names, InstanceModel[] instances, bool asynchronous)
 	{
 		(string Key, string Resolver, bool RootOwned)[] members = names.KeyedCollectionResolvers(service);
 		int[] indices = names.KeyedCollectionMemberIndices(service);
-		string shape = $"global::System.Collections.Generic.IReadOnlyDictionary<string, {service}>";
-		string dictionary = $"global::System.Collections.Generic.Dictionary<string, {service}>";
+		string shape = $"global::System.Collections.Generic.IReadOnlyDictionary<{keyType}, {service}>";
+		string dictionary = $"global::System.Collections.Generic.Dictionary<{keyType}, {service}>";
 
 		bool anyAsync = false;
 		for (int m = 0; m < indices.Length; m++)
@@ -174,7 +173,7 @@ internal static partial class Sources
 		if (!anyAsync)
 		{
 			string syncItems = string.Join(", ", members.Select(member =>
-				$"[{SymbolDisplay.FormatLiteral(member.Key, quote: true)}] = {ResolveCall(member.Resolver, member.RootOwned)}"));
+				$"[{AwaitenGenerator.KeyLiteral(member.Key)}] = {ResolveCall(member.Resolver, member.RootOwned)}"));
 			return $"global::System.Threading.Tasks.Task.FromResult<{shape}>(new {dictionary} {{ {syncItems} }})";
 		}
 
@@ -185,7 +184,7 @@ internal static partial class Sources
 			string value = instances[indices[m]].IsAsyncTainted
 				? $"await {AsyncResolveCall(names.AsyncResolver(indices[m]), members[m].RootOwned, token)}.ConfigureAwait(false)"
 				: ResolveCall(members[m].Resolver, members[m].RootOwned);
-			items[m] = $"[{SymbolDisplay.FormatLiteral(members[m].Key, quote: true)}] = {value}";
+			items[m] = $"[{AwaitenGenerator.KeyLiteral(members[m].Key)}] = {value}";
 		}
 
 		string literal = $"({shape})new {dictionary} {{ {string.Join(", ", items)} }}";
@@ -272,12 +271,12 @@ internal static partial class Sources
 
 		if (dependency.Kind == DependencyKind.KeyedCollection)
 		{
-			return KeyedCollectionLiteral(dependency.ServiceType, names);
+			return KeyedCollectionLiteral(dependency.ServiceType, dependency.KeyType!, names);
 		}
 
 		if (dependency.Kind == DependencyKind.AwaitedKeyedCollection)
 		{
-			return AwaitedKeyedCollectionExpression(dependency.ServiceType, names, instances, asynchronous);
+			return AwaitedKeyedCollectionExpression(dependency.ServiceType, dependency.KeyType!, names, instances, asynchronous);
 		}
 
 		if (asynchronous && dependency.Kind == DependencyKind.Direct
@@ -610,7 +609,7 @@ internal static partial class Sources
 	///     escaped string literal, or <c>"null"</c> for an unkeyed dependency.
 	/// </summary>
 	private static string ExternalKeyLiteral(string? key)
-		=> key is null ? "null" : SymbolDisplay.FormatLiteral(key, quote: true);
+		=> key is null ? "null" : AwaitenGenerator.KeyLiteral(key);
 
 	/// <summary>
 	///     Emits the <c>__Owned&lt;T&gt;</c> helper on the base <c>Scope</c>: it opens a throwaway child scope,
