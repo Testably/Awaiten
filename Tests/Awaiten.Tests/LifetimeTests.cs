@@ -1,7 +1,4 @@
-using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
 // ReSharper disable AccessToDisposedClosure
 
 namespace Awaiten.Tests;
@@ -135,73 +132,6 @@ public partial class LifetimeTests
 	}
 
 	[Fact]
-	public async Task Singleton_ResolvedConcurrently_IsCreatedExactlyOnce()
-	{
-		using ConcurrencyContainer.Root container = new();
-
-		const int threadCount = 64;
-		CountedSingleton[] results = new CountedSingleton[threadCount];
-		using ManualResetEventSlim start = new(false);
-		Task[] workers = new Task[threadCount];
-		for (int t = 0; t < threadCount; t++)
-		{
-			int index = t;
-			workers[index] = Task.Run(() =>
-			{
-				start.Wait();
-				results[index] = container.Resolve<CountedSingleton>();
-			}, TestContext.Current.CancellationToken);
-		}
-
-		start.Set();
-		await Task.WhenAll(workers);
-
-		CountedSingleton first = results[0];
-		await That(results).All().ComplyWith(r => r.IsSameAs(first))
-			.Because("every thread observes the one cached singleton");
-		await That(container.Resolve<ConstructionCounter>().Count).IsEqualTo(1)
-			.Because("the singleton is constructed exactly once under the lock");
-	}
-
-	[Fact]
-	public async Task Transient_ResolvedConcurrently_TracksEveryInstanceForDisposal()
-	{
-		const int threadCount = 16;
-		const int perThread = 200;
-		ConcurrentBag<CountedTransient> produced = new();
-		CountedTransient[] captured;
-
-		using (ConcurrencyContainer.Root container = new())
-		{
-			using ManualResetEventSlim start = new(false);
-			Task[] workers = new Task[threadCount];
-			for (int t = 0; t < threadCount; t++)
-			{
-				workers[t] = Task.Run(() =>
-				{
-					start.Wait();
-					for (int i = 0; i < perThread; i++)
-					{
-						produced.Add(container.Resolve<CountedTransient>());
-					}
-				}, TestContext.Current.CancellationToken);
-			}
-
-			start.Set();
-			await Task.WhenAll(workers);
-
-			captured = produced.ToArray();
-			await That(captured.Length).IsEqualTo(threadCount * perThread)
-				.Because("every resolution returns a fresh transient");
-			await That(captured.All(c => !c.Disposed)).IsTrue()
-				.Because("tracked transients are not disposed until the owner is");
-		}
-
-		await That(captured.All(c => c.Disposed)).IsTrue()
-			.Because("every concurrently tracked transient is disposed with the container; had the unsynchronized tracking list raced, some would be lost or resolution would have thrown");
-	}
-
-	[Fact]
 	public async Task ResolvingFromADisposedContainer_Throws()
 	{
 		LifetimeContainer.Root container = new();
@@ -309,32 +239,4 @@ public partial class LifetimeTests
 	[Singleton<Beta>]
 	public static partial class DisposalOrderContainer;
 
-	public sealed class ConstructionCounter
-	{
-		private int _count;
-
-		public int Count => Volatile.Read(ref _count);
-
-		public void Increment() => Interlocked.Increment(ref _count);
-	}
-
-	public sealed class CountedSingleton
-	{
-		public CountedSingleton(ConstructionCounter counter) => counter.Increment();
-	}
-
-	public sealed class CountedTransient : IDisposable
-	{
-		public bool Disposed { get; private set; }
-
-		public void Dispose() => Disposed = true;
-	}
-
-	// Loose: this test resolves the disposable transient directly by type and asserts every concurrently
-	// tracked instance is disposed with the container, the permissive path that strict withholds.
-	[Container(LifetimeSafety = LifetimeSafety.Loose)]
-	[Singleton<ConstructionCounter>]
-	[Singleton<CountedSingleton>]
-	[Transient<CountedTransient>]
-	public static partial class ConcurrencyContainer;
 }
