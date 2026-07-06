@@ -822,7 +822,7 @@ partial class AwaitenGenerator
 				dependency.Location ?? info.Location,
 				new EquatableArray<string>([
 					DisplayInstance(info.ImplementationType),
-					KeyDisplay(dependency.Key!),
+					KeyArgumentDisplay(dependency.Key!),
 					Display(type.ToDisplayString(FullyQualified)),
 				])));
 		}

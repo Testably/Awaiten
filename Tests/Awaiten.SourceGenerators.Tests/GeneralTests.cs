@@ -1366,6 +1366,37 @@ public class GeneralTests
 
 		// A [FromKey] cannot select within the synthesized dictionary, so it is rejected (AWT160).
 		await That(result.Diagnostics).Contains("*AWT160*").AsWildcard();
+		await That(result.Diagnostics).Contains("*[FromKey(\"fast\")]*").AsWildcard()
+			.Because("a string key is rendered as a quoted literal, reproducing the attribute syntax");
+	}
+
+	[Fact]
+	public async Task FromKeyEnumOnASynthesizedKeyedDictionary_ReportsAwt160WithTheUnquotedEnumKey()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+			using System.Collections.Generic;
+
+			namespace MyCode;
+
+			public enum ProcessType { Fast, Slow }
+			public interface IChannel { }
+			public sealed class Fast : IChannel { }
+			public sealed class Router { public Router([FromKey(ProcessType.Fast)] IReadOnlyDictionary<ProcessType, IChannel> channels) { } }
+
+			[Container]
+			[Singleton<Fast, IChannel>(Key = ProcessType.Fast)]
+			[Singleton<Router>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		// The [FromKey] cannot select within the synthesized dictionary (AWT160), and the enum key is rendered as the
+		// user-written member access without the string quotes a string key would carry.
+		await That(result.Diagnostics).Contains("*AWT160*").AsWildcard();
+		await That(result.Diagnostics).Contains("*[FromKey(MyCode.ProcessType.Fast)]*").AsWildcard()
+			.Because("an enum key is rendered as an unquoted member access, not a quoted string");
 	}
 
 	[Fact]

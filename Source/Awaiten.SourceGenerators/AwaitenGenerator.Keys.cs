@@ -55,7 +55,7 @@ partial class AwaitenGenerator
 	/// </summary>
 	private static string? NamedKeyArgument(AttributeData attribute)
 	{
-		foreach (System.Collections.Generic.KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
+		foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
 		{
 			if (argument.Key == "Key")
 			{
@@ -185,6 +185,17 @@ partial class AwaitenGenerator
 
 		return key;
 	}
+
+	/// <summary>
+	///     Renders an internal key as the argument the user would write inside <c>[FromKey(...)]</c>/<c>Key = ...</c>: a
+	///     quoted string literal for a string key, otherwise the bare <see cref="KeyDisplay" /> form (an enum member
+	///     access or <c>typeof(...)</c>). Used where a diagnostic reproduces the attribute syntax, so a string key keeps
+	///     its quotes while a typed key does not gain misleading ones.
+	/// </summary>
+	private static string KeyArgumentDisplay(string key)
+		=> IsStringKey(key)
+			? SymbolDisplay.FormatLiteral(key.Substring(StringKeyPrefix.Length), quote: true)
+			: KeyDisplay(key);
 
 	// Splits an enum|<fully-qualified-type>|<underlying-value>|<member-name> key. Neither the type, the value nor the
 	// member name contains a '|', so a bounded split is unambiguous.

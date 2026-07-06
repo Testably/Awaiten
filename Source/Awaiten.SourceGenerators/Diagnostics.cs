@@ -891,7 +891,7 @@ internal static class Diagnostics
 	public static readonly DiagnosticDescriptor FromKeyOnKeyedCollection = new(
 		"AWT160",
 		"[FromKey] on a keyed collection",
-		"'{0}' applies [FromKey(\"{1}\")] to the keyed collection '{2}', which resolves every keyed registration of its service type; remove the [FromKey], or register a dictionary service under that key to take precedence over synthesis",
+		"'{0}' applies [FromKey({1})] to the keyed collection '{2}', which resolves every keyed registration of its service type; remove the [FromKey], or register a dictionary service under that key to take precedence over synthesis",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
