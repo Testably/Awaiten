@@ -39,6 +39,18 @@ public static class AwaitenResolverExtensions
 			return (T)resolver.Resolve(typeof(T));
 		}
 
+		/// <summary>
+		///     Resolves the service of type <typeparamref name="T" /> registered under <paramref name="key" />,
+		///     throwing if it is not registered. There is no typed fast path for a keyed resolution, so this always
+		///     dispatches through the runtime <see cref="IAwaitenResolver.Resolve(Type, object)" />.
+		/// </summary>
+		public T Resolve<T>(object key)
+		{
+			ThrowIfNull(resolver);
+
+			return (T)resolver.Resolve(typeof(T), key);
+		}
+
 		/// <summary>Attempts to resolve a service of type <typeparamref name="T" />.</summary>
 		public bool TryResolve<T>([NotNullWhen(true)] out T? instance)
 		{
@@ -54,20 +66,8 @@ public static class AwaitenResolverExtensions
 			return false;
 		}
 
-		/// <summary>
-		///     Resolves the service of type <typeparamref name="T" /> registered under <paramref name="key" />,
-		///     throwing if it is not registered. There is no typed fast path for a keyed resolution, so this always
-		///     dispatches through the runtime <see cref="IAwaitenResolver.Resolve(Type, object)" />.
-		/// </summary>
-		public T Resolve<T>(string key)
-		{
-			ThrowIfNull(resolver);
-
-			return (T)resolver.Resolve(typeof(T), key);
-		}
-
 		/// <summary>Attempts to resolve the service of type <typeparamref name="T" /> registered under <paramref name="key" />.</summary>
-		public bool TryResolve<T>(string key, [NotNullWhen(true)] out T? instance)
+		public bool TryResolve<T>(object key, [NotNullWhen(true)] out T? instance)
 		{
 			ThrowIfNull(resolver);
 
@@ -107,7 +107,7 @@ public static class AwaitenResolverExtensions
 		///     asynchronously, awaiting its <see cref="IAsyncInitializable.InitializeAsync" /> (and that of its
 		///     non-deferred async dependencies) where required. Throws if it is not registered.
 		/// </summary>
-		public Task<T> ResolveAsync<T>(string key, CancellationToken cancellationToken = default)
+		public Task<T> ResolveAsync<T>(object key, CancellationToken cancellationToken = default)
 		{
 			ThrowIfNull(resolver);
 

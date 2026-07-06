@@ -20,7 +20,7 @@ namespace Awaiten.Extensions.DependencyInjection;
 ///     <see cref="IAwaitenScope" /> behind it. Prefer <c>await using</c> (<see cref="DisposeAsync" />) when
 ///     the container tracks asynchronously disposable instances.
 /// </remarks>
-public sealed class AwaitenServiceProvider : IServiceProvider, IKeyedServiceProvider, IServiceScopeFactory, IDisposable, IAsyncDisposable
+public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScopeFactory, IDisposable, IAsyncDisposable
 {
 	private readonly IAwaitenScope _container;
 	private readonly bool _ownsContainer;

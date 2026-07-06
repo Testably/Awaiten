@@ -148,38 +148,46 @@ internal static partial class Sources
 			{
 				// The synthetic decorator/contextual keys are internal wiring, never advertised. Unkeyed and
 				// user-keyed registrations are both advertised, the latter carrying its user-declared [Key].
-				if (service.Key is not null && !AwaitenGenerator.IsUserKey(service.Key))
+				if (service.Key is null || AwaitenGenerator.IsUserKey(service.Key))
 				{
-					continue;
+					EmitRegistrationEntry(builder, depth + 1, service, instance, requiresAsync, externallyOwned);
 				}
-
-				Indent(builder, depth + 1).Append("new global::Awaiten.AwaitenRegistration(typeof(").Append(service.Service)
-					.Append("), ").Append(AwaitenLifetimeOf(instance.Lifetime));
-				if (requiresAsync)
-				{
-					// The async ctor carries the closed generics the bridge projects with, so it never
-					// constructs Task<TService> or the Task<object>->Task<T> converter reflectively.
-					builder.Append(", typeof(global::System.Threading.Tasks.Task<").Append(service.Service).Append(">), ")
-						.Append("__t => global::Awaiten.AwaitenTaskProjection.AsTask<").Append(service.Service).Append(">(__t)");
-				}
-				else if (externallyOwned)
-				{
-					builder.Append(", externallyOwned: true");
-				}
-
-				// A user-keyed registration advertises its [Key] as the last (named) argument on whichever ctor.
-				if (service.Key is not null)
-				{
-					builder.Append(", key: ").Append(AwaitenGenerator.KeyLiteral(service.Key));
-				}
-
-				builder.AppendLine("),");
 			}
 		}
 
 		Indent(builder, depth).AppendLine("};");
 		Separate(members);
 		Indent(members, depth).AppendLine("global::System.Collections.Generic.IReadOnlyList<global::Awaiten.AwaitenRegistration> global::Awaiten.IAwaitenContainerMetadata.Registrations => __registrations;");
+	}
+
+	/// <summary>
+	///     Emits one <c>AwaitenRegistration</c> initializer: the service type and lifetime, then the async <c>Task&lt;T&gt;</c>
+	///     projection (for an async-tainted registration) or the <c>externallyOwned</c> flag, and finally the
+	///     user-declared <c>[Key]</c> for a keyed registration.
+	/// </summary>
+	private static void EmitRegistrationEntry(StringBuilder builder, int depth, ServiceKey service, InstanceModel instance, bool requiresAsync, bool externallyOwned)
+	{
+		Indent(builder, depth).Append("new global::Awaiten.AwaitenRegistration(typeof(").Append(service.Service)
+			.Append("), ").Append(AwaitenLifetimeOf(instance.Lifetime));
+		if (requiresAsync)
+		{
+			// The async ctor carries the closed generics the bridge projects with, so it never
+			// constructs Task<TService> or the Task<object>->Task<T> converter reflectively.
+			builder.Append(", typeof(global::System.Threading.Tasks.Task<").Append(service.Service).Append(">), ")
+				.Append("__t => global::Awaiten.AwaitenTaskProjection.AsTask<").Append(service.Service).Append(">(__t)");
+		}
+		else if (externallyOwned)
+		{
+			builder.Append(", externallyOwned: true");
+		}
+
+		// A user-keyed registration advertises its [Key] as the last (named) argument on whichever ctor.
+		if (service.Key is not null)
+		{
+			builder.Append(", key: ").Append(AwaitenGenerator.KeyLiteral(service.Key));
+		}
+
+		builder.AppendLine("),");
 	}
 
 	/// <summary>

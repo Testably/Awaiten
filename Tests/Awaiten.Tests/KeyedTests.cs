@@ -224,6 +224,36 @@ public partial class KeyedTests
 			.Because("keyed ResolveAsync awaits the async initialization");
 	}
 
+	// A container that declares no [Key], so its keyed dispatch has no entries: the disposed-scope guard must still
+	// run for a keyed request.
+	[Container]
+	[Singleton<DefaultClock, IClock>]
+	public static partial class UnkeyedContainer;
+
+	[Fact]
+	public async Task KeyedResolve_OnADisposedScope_ThrowsObjectDisposed_LikeTheUnkeyedResolve()
+	{
+		KeyedContainer.Root container = new();
+		container.Dispose();
+
+		// A keyed by-type resolution rejects a disposed scope exactly like the unkeyed Resolve(Type)/TryResolve(Type).
+		await That(() => container.Resolve<IChannel>("fast")).Throws<ObjectDisposedException>();
+		await That(() => container.TryResolve<IChannel>("fast", out IChannel? _)).Throws<ObjectDisposedException>();
+		await That(() => container.ResolveAsync<IChannel>("fast", TestContext.Current.CancellationToken)).Throws<ObjectDisposedException>();
+	}
+
+	[Fact]
+	public async Task KeyedResolve_OnADisposedScope_WithNoKeyedRegistrations_StillThrowsObjectDisposed()
+	{
+		UnkeyedContainer.Root container = new();
+		container.Dispose();
+
+		// Even a container that declares no [Key] guards a disposed scope for a keyed request, uniform with the
+		// unkeyed dispatch, rather than reporting a plain "no registration".
+		await That(() => container.Resolve<IClock>("missing")).Throws<ObjectDisposedException>();
+		await That(() => container.TryResolve<IClock>("missing", out IClock? _)).Throws<ObjectDisposedException>();
+	}
+
 	public interface IWork;
 
 	public sealed class ScopedFast : IWork;

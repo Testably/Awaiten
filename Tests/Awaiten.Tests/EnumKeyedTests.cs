@@ -44,6 +44,20 @@ public partial class EnumKeyedTests
 	}
 
 	[Fact]
+	public async Task ResolveWithEnumKey_ThroughTheGenericConvenience_SelectsTheEnumKeyedRegistration()
+	{
+		using GatewayContainer.Root container = new();
+
+		// The generic convenience takes an object key, so a non-string [Key] (here an enum) is reachable without
+		// dropping to the non-generic Resolve(Type, object) and casting.
+		await That(container.Resolve<IGateway>(PaymentProvider.Stripe)).Is<StripeGateway>()
+			.Because("Resolve<T>(PaymentProvider.Stripe) selects the enum-keyed registration");
+		await That(container.TryResolve<IGateway>(PaymentProvider.PayPal, out IGateway? gateway)).IsTrue();
+		await That(gateway).Is<PayPalGateway>()
+			.Because("TryResolve<T>(PaymentProvider.PayPal, out _) selects the enum-keyed registration");
+	}
+
+	[Fact]
 	public async Task EnumKeyedDictionary_SynthesizesKeyedByTheEnumConstant()
 	{
 		using GatewayContainer.Root container = new();

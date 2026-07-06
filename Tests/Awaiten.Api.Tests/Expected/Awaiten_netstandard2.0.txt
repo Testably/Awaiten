@@ -46,14 +46,14 @@ namespace Awaiten
         extension(Awaiten.IAwaitenResolver resolver)
         {
             public T Resolve<T>() { }
+            public T Resolve<T>(object key) { }
             public bool TryResolve<T>([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out T? instance) { }
-            public T Resolve<T>(string key) { }
-            public bool TryResolve<T>(string key, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out T? instance) { }
+            public bool TryResolve<T>(object key, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out T? instance) { }
         }
         extension(Awaiten.IAwaitenAsyncResolver resolver)
         {
             public System.Threading.Tasks.Task<T> ResolveAsync<T>(System.Threading.CancellationToken cancellationToken = default) { }
-            public System.Threading.Tasks.Task<T> ResolveAsync<T>(string key, System.Threading.CancellationToken cancellationToken = default) { }
+            public System.Threading.Tasks.Task<T> ResolveAsync<T>(object key, System.Threading.CancellationToken cancellationToken = default) { }
         }
     }
     public static class AwaitenTaskProjection

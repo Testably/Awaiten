@@ -1,4 +1,3 @@
-using System.Linq;
 using System.Text;
 using Awaiten.SourceGenerators.Entities;
 
@@ -37,13 +36,15 @@ internal static partial class Sources
 		Indent(builder, depth + 2).AppendLine("return Resolve(serviceType);");
 		Indent(builder, depth + 1).AppendLine("}");
 		builder.AppendLine();
+		// TryResolve carries the disposed-scope guard, so a keyed Resolve rejects a disposed scope exactly like the
+		// unkeyed Resolve(Type), whether or not any keyed registration exists.
+		Indent(builder, depth + 1).AppendLine("if (TryResolve(serviceType, key, out object? instance))");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).AppendLine("return instance!;");
+		Indent(builder, depth + 1).AppendLine("}");
+		builder.AppendLine();
 		if (hasEntries)
 		{
-			Indent(builder, depth + 1).AppendLine("if (TryResolve(serviceType, key, out object? instance))");
-			Indent(builder, depth + 1).AppendLine("{");
-			Indent(builder, depth + 2).AppendLine("return instance!;");
-			Indent(builder, depth + 1).AppendLine("}");
-			builder.AppendLine();
 			// A registered keyed service that could not be resolved synchronously (async-tainted, or a disposable
 			// build-on-demand service withheld on the Root) carries targeted guidance instead of "no registration".
 			Indent(builder, depth + 1).AppendLine("if (__keyed.TryGetValue(new __KeyedKey(serviceType, key), out __KeyedEntry __entry) && __entry.Guidance is not null)");
@@ -70,9 +71,11 @@ internal static partial class Sources
 		Indent(builder, depth + 2).AppendLine("return TryResolve(serviceType, out instance);");
 		Indent(builder, depth + 1).AppendLine("}");
 		builder.AppendLine();
+		// A disposed scope rejects every keyed by-type resolution, whether or not any keyed registration exists,
+		// mirroring the unkeyed TryResolve(Type)'s unconditional guard.
+		EmitDisposedGuard(builder, depth + 1);
 		if (hasEntries)
 		{
-			EmitDisposedGuard(builder, depth + 1);
 			Indent(builder, depth + 1).AppendLine("if (__keyed.TryGetValue(new __KeyedKey(serviceType, key), out __KeyedEntry __entry)");
 			Indent(builder, depth + 1).AppendLine("    && __entry.Sync is not null");
 			// A root-withheld disposable resolves from a child scope (its lifetime bounded there) but not from the
@@ -139,15 +142,12 @@ internal static partial class Sources
 	/// </summary>
 	private static List<KeyedDispatchEntry> BuildKeyedEntries(EmitContext context, bool strict, bool syncResolveAfterInit)
 	{
-		InstanceModel[] instances = context.Instances;
-		Names names = context.Names;
-		Dictionary<ServiceKey, int> serviceToIndex = context.ServiceToIndex;
 		List<KeyedDispatchEntry> entries = new();
 		HashSet<ServiceKey> seen = new();
 
-		for (int i = 0; i < instances.Length; i++)
+		foreach (InstanceModel owner in context.Instances)
 		{
-			foreach (ServiceKey serviceKey in instances[i].Services.AsArray())
+			foreach (ServiceKey serviceKey in owner.Services.AsArray())
 			{
 				// Only user-declared [Key]s are reachable; the synthetic decorator/contextual keys stay internal.
 				if (!AwaitenGenerator.IsUserKey(serviceKey.Key) || !seen.Add(serviceKey))
@@ -155,57 +155,94 @@ internal static partial class Sources
 					continue;
 				}
 
-				// The authoritative winner of a (service, key) slot, so imperative keyed resolution agrees with
-				// [FromKey] injection (which resolves through the same map).
-				int index = serviceToIndex[serviceKey];
-				InstanceModel instance = instances[index];
-
-				// A parameterized service or a requesting-type factory cannot be built from a bare (type, key) request
-				// (it needs its runtime arguments / the requesting type), so it is offered only through its relationship.
-				if (instance.IsParameterized || instance.IsRequestingTypeFactory)
+				if (TryBuildKeyedEntry(serviceKey, context, strict, syncResolveAfterInit) is { } entry)
 				{
-					continue;
+					entries.Add(entry);
 				}
-
-				string service = serviceKey.Service;
-				string keyLiteral = AwaitenGenerator.KeyLiteral(serviceKey.Key!);
-				bool rootOwned = IsRootOwned(instance);
-				string resolver = names.Resolver(index);
-				bool emitsSync = EmitsSync(instance, syncResolveAfterInit);
-				bool withheld = IsWithheld(instance, strict);
-
-				// The synchronous resolver call over the resolving scope __s: a singleton through the Root over the
-				// shared root, a scoped/transient over this scope. Null for an async-tainted service in the strict
-				// default (no synchronous path).
-				string? sync = emitsSync
-					? rootOwned ? $"Root.{resolver}(__s.__root)" : $"{resolver}(__s)"
-					: null;
-
-				string? async = null;
-				if (instance.IsAsyncTainted)
-				{
-					string asyncResolver = names.AsyncResolver(index);
-					string call = rootOwned ? $"Root.{asyncResolver}(__s.__root, __ct)" : $"{asyncResolver}(__s, __ct)";
-					// A disposable async transient is withheld from by-type resolution on the Root (an unbounded leak),
-					// mirroring the unkeyed async arm; a child scope still resolves it.
-					async = withheld
-						? $"__s is Root ? throw new global::System.InvalidOperationException({AsyncRootWithheldMessage(service)}) : __AsObject({call})"
-						: $"__AsObject({call})";
-				}
-
-				// The guidance a synchronous Resolve throws on a miss: async-taint takes precedence (no sync path on
-				// any scope), otherwise a disposable build-on-demand service withheld on the Root.
-				string? guidance = !emitsSync
-					? AsyncWithheldMessage(service)
-					: withheld
-						? BareWithheldMessage(service)
-						: null;
-
-				entries.Add(new KeyedDispatchEntry(service, keyLiteral, sync, async, emitsSync && withheld, guidance));
 			}
 		}
 
 		return entries;
+	}
+
+	/// <summary>
+	///     The keyed dispatch case for one user-declared <c>(service, [Key])</c>, or <see langword="null" /> when the
+	///     winning registration has no bare (key-only) resolution (a parameterized service or a requesting-type
+	///     factory, reachable only through its <c>Func&lt;…&gt;</c> relationship).
+	/// </summary>
+	private static KeyedDispatchEntry? TryBuildKeyedEntry(ServiceKey serviceKey, EmitContext context, bool strict, bool syncResolveAfterInit)
+	{
+		// The authoritative winner of a (service, key) slot, so imperative keyed resolution agrees with
+		// [FromKey] injection (which resolves through the same map).
+		int index = context.ServiceToIndex[serviceKey];
+		InstanceModel instance = context.Instances[index];
+
+		// A parameterized service or a requesting-type factory cannot be built from a bare (type, key) request
+		// (it needs its runtime arguments / the requesting type), so it is offered only through its relationship.
+		if (instance.IsParameterized || instance.IsRequestingTypeFactory)
+		{
+			return null;
+		}
+
+		string service = serviceKey.Service;
+		string resolver = context.Names.Resolver(index);
+		bool rootOwned = IsRootOwned(instance);
+		bool emitsSync = EmitsSync(instance, syncResolveAfterInit);
+		bool withheld = IsWithheld(instance, strict);
+
+		string? sync = KeyedSyncCall(emitsSync, rootOwned, resolver);
+		string? asyncArm = KeyedAsyncArm(instance, context.Names, index, rootOwned, withheld, service);
+		string? guidance = KeyedGuidance(emitsSync, withheld, service);
+
+		return new KeyedDispatchEntry(service, AwaitenGenerator.KeyLiteral(serviceKey.Key!), sync, asyncArm, emitsSync && withheld, guidance);
+	}
+
+	/// <summary>
+	///     The synchronous resolver call over the resolving scope <c>__s</c>: a singleton through the Root over the
+	///     shared root, a scoped/transient over this scope. Null for an async-tainted service in the strict default
+	///     (no synchronous path).
+	/// </summary>
+	private static string? KeyedSyncCall(bool emitsSync, bool rootOwned, string resolver)
+	{
+		if (!emitsSync)
+		{
+			return null;
+		}
+
+		return rootOwned ? $"Root.{resolver}(__s.__root)" : $"{resolver}(__s)";
+	}
+
+	/// <summary>
+	///     The async arm of an async-tainted keyed service (null otherwise): its memoizing async resolver adapted to
+	///     <c>Task&lt;object&gt;</c>. A disposable async transient is withheld from by-type resolution on the Root (an
+	///     unbounded leak), mirroring the unkeyed async arm; a child scope still resolves it.
+	/// </summary>
+	private static string? KeyedAsyncArm(InstanceModel instance, Names names, int index, bool rootOwned, bool withheld, string service)
+	{
+		if (!instance.IsAsyncTainted)
+		{
+			return null;
+		}
+
+		string asyncResolver = names.AsyncResolver(index);
+		string call = rootOwned ? $"Root.{asyncResolver}(__s.__root, __ct)" : $"{asyncResolver}(__s, __ct)";
+		return withheld
+			? $"__s is Root ? throw new global::System.InvalidOperationException({AsyncRootWithheldMessage(service)}) : __AsObject({call})"
+			: $"__AsObject({call})";
+	}
+
+	/// <summary>
+	///     The guidance a synchronous Resolve throws on a miss: async-taint takes precedence (no sync path on any
+	///     scope), otherwise a disposable build-on-demand service withheld on the Root, otherwise none.
+	/// </summary>
+	private static string? KeyedGuidance(bool emitsSync, bool withheld, string service)
+	{
+		if (!emitsSync)
+		{
+			return AsyncWithheldMessage(service);
+		}
+
+		return withheld ? BareWithheldMessage(service) : null;
 	}
 
 	/// <summary>
@@ -227,10 +264,10 @@ internal static partial class Sources
 		foreach (KeyedDispatchEntry entry in entries)
 		{
 			string sync = entry.Sync is null ? "null" : $"static __s => {entry.Sync}";
-			string async = entry.Async is null ? "null" : $"static (__s, __ct) => {entry.Async}";
+			string asyncArm = entry.Async is null ? "null" : $"static (__s, __ct) => {entry.Async}";
 			string guidance = entry.Guidance ?? "null";
 			Indent(fields, depth + 1).Append("{ new __KeyedKey(typeof(").Append(entry.Type).Append("), ").Append(entry.KeyLiteral)
-				.Append("), new __KeyedEntry(").Append(sync).Append(", ").Append(async).Append(", ")
+				.Append("), new __KeyedEntry(").Append(sync).Append(", ").Append(asyncArm).Append(", ")
 				.Append(entry.RootWithheld ? "true" : "false").Append(", ").Append(guidance).AppendLine(") },");
 		}
 
@@ -277,7 +314,7 @@ internal static partial class Sources
 	///     whether it is <see cref="RootWithheld" /> from synchronous by-type resolution on the Root, and the
 	///     <see cref="Guidance" /> a synchronous miss throws (null when it resolves synchronously).
 	/// </summary>
-	private readonly struct KeyedDispatchEntry(string type, string keyLiteral, string? sync, string? async, bool rootWithheld, string? guidance)
+	private readonly struct KeyedDispatchEntry(string type, string keyLiteral, string? sync, string? asyncArm, bool rootWithheld, string? guidance)
 	{
 		public string Type { get; } = type;
 
@@ -285,7 +322,7 @@ internal static partial class Sources
 
 		public string? Sync { get; } = sync;
 
-		public string? Async { get; } = async;
+		public string? Async { get; } = asyncArm;
 
 		public bool RootWithheld { get; } = rootWithheld;
 
