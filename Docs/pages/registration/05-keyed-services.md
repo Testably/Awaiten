@@ -22,7 +22,7 @@ A consumer picks a keyed registration with `[FromKey]` on the parameter.
 public sealed class LatteRecipe([FromKey("Oat")] IMilk milk);
 ```
 
-A keyed registration is reachable only through `[FromKey]`. A plain `Resolve<IMilk>()` will not return it. You can mix a keyed set with one unkeyed registration, and the unkeyed one is what a plain resolve gives you.
+A plain `Resolve<IMilk>()` does not return a keyed registration. You can mix a keyed set with one unkeyed registration, and the unkeyed one is what a plain resolve gives you. To pick a keyed registration outside a constructor, pass the key to `Resolve` — see [keyed resolution](../resolution/resolving-services#keyed-resolution).
 
 ## Typed keys
 
