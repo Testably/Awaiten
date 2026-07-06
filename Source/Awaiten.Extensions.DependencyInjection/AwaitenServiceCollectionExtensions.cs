@@ -96,12 +96,18 @@ public static class AwaitenServiceCollectionExtensions
 		{
 			Type serviceType = registration.ServiceType;
 			AwaitenLifetime lifetime = registration.Lifetime;
+			// A user-keyed registration is projected as a keyed MS.DI descriptor, so [FromKeyedServices] reaches it
+			// through the host's IKeyedServiceProvider; an unkeyed one is projected as an ordinary descriptor.
+			object? key = registration.Key;
 
 			if (registration.ExternallyOwned)
 			{
 				// A pre-built container member is user-owned. Registering the resolved instance as a constant
 				// relays it without MS.DI capturing it for disposal.
-				services.Add(new ServiceDescriptor(serviceType, root.Resolve(serviceType)));
+				object instance = root.Resolve(serviceType, key);
+				services.Add(key is null
+					? new ServiceDescriptor(serviceType, instance)
+					: new ServiceDescriptor(serviceType, key, instance));
 			}
 			else if (registration.RequiresAsync)
 			{
@@ -111,26 +117,47 @@ public static class AwaitenServiceCollectionExtensions
 				// Task<TService> type and the Task<object>->Task<T> converter are emitted by the generator.
 				Type taskType = registration.AsyncTaskType!;
 				Func<Task<object>, object> asTypedTask = registration.AsyncTaskConverter!;
-				services.Add(new ServiceDescriptor(
-					taskType,
-					sp =>
-					{
-						EnsureExternalWired(sp, root, hasExternal);
-						AwaitenAsyncDisposalSlot slot = sp.GetRequiredService<AwaitenAsyncDisposalSlot>();
-						return asTypedTask(FillSlot(ScopeFor<TRoot>(sp, lifetime, root).ResolveAsync(serviceType), slot));
-					},
-					ToServiceLifetime(lifetime)));
+				services.Add(key is null
+					? new ServiceDescriptor(
+						taskType,
+						sp =>
+						{
+							EnsureExternalWired(sp, root, hasExternal);
+							AwaitenAsyncDisposalSlot slot = sp.GetRequiredService<AwaitenAsyncDisposalSlot>();
+							return asTypedTask(FillSlot(ScopeFor<TRoot>(sp, lifetime, root).ResolveAsync(serviceType, key), slot));
+						},
+						ToServiceLifetime(lifetime))
+					: new ServiceDescriptor(
+						taskType,
+						key,
+						(sp, _) =>
+						{
+							EnsureExternalWired(sp, root, hasExternal);
+							AwaitenAsyncDisposalSlot slot = sp.GetRequiredService<AwaitenAsyncDisposalSlot>();
+							return asTypedTask(FillSlot(ScopeFor<TRoot>(sp, lifetime, root).ResolveAsync(serviceType, key), slot));
+						},
+						ToServiceLifetime(lifetime)));
 			}
 			else
 			{
-				services.Add(new ServiceDescriptor(
-					serviceType,
-					sp =>
-					{
-						EnsureExternalWired(sp, root, hasExternal);
-						return ScopeFor<TRoot>(sp, lifetime, root).Resolve(serviceType);
-					},
-					ToServiceLifetime(lifetime)));
+				services.Add(key is null
+					? new ServiceDescriptor(
+						serviceType,
+						sp =>
+						{
+							EnsureExternalWired(sp, root, hasExternal);
+							return ScopeFor<TRoot>(sp, lifetime, root).Resolve(serviceType, key);
+						},
+						ToServiceLifetime(lifetime))
+					: new ServiceDescriptor(
+						serviceType,
+						key,
+						(sp, _) =>
+						{
+							EnsureExternalWired(sp, root, hasExternal);
+							return ScopeFor<TRoot>(sp, lifetime, root).Resolve(serviceType, key);
+						},
+						ToServiceLifetime(lifetime)));
 			}
 		}
 

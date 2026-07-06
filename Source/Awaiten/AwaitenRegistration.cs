@@ -10,9 +10,10 @@ namespace Awaiten;
 ///     Microsoft.Extensions.DependencyInjection service collection so a host can resolve Awaiten-owned services.
 /// </summary>
 /// <remarks>
-///     Only unkeyed service types are advertised; keyed registrations are reachable only through <c>[FromKey]</c>
-///     inside the Awaiten graph. A service that requires asynchronous resolution (<see cref="RequiresAsync" />)
-///     has no synchronous path, so it is projected as a <c>Task&lt;T&gt;</c> rather than a bare <c>T</c>.
+///     A keyed registration carries its user-declared <see cref="Key" /> (the container's internal synthetic keys
+///     are never advertised); an unkeyed one has a <see langword="null" /> <see cref="Key" />. A service that
+///     requires asynchronous resolution (<see cref="RequiresAsync" />) has no synchronous path, so it is projected
+///     as a <c>Task&lt;T&gt;</c> rather than a bare <c>T</c>.
 /// </remarks>
 public readonly struct AwaitenRegistration : IEquatable<AwaitenRegistration>
 {
@@ -20,8 +21,9 @@ public readonly struct AwaitenRegistration : IEquatable<AwaitenRegistration>
 	/// <param name="serviceType">The service type that can be resolved.</param>
 	/// <param name="lifetime">The lifetime under which the container owns the service.</param>
 	/// <param name="externallyOwned">Whether the instance is a pre-built member the container exposes but does not own.</param>
+	/// <param name="key">The user-declared <c>[Key]</c> of a keyed registration, or <see langword="null" /> when unkeyed.</param>
 	/// <exception cref="ArgumentNullException"><paramref name="serviceType" /> is <see langword="null" />.</exception>
-	public AwaitenRegistration(Type serviceType, AwaitenLifetime lifetime, bool externallyOwned = false)
+	public AwaitenRegistration(Type serviceType, AwaitenLifetime lifetime, bool externallyOwned = false, object? key = null)
 	{
 		ServiceType = serviceType ?? throw new ArgumentNullException(nameof(serviceType));
 		Lifetime = lifetime;
@@ -29,6 +31,7 @@ public readonly struct AwaitenRegistration : IEquatable<AwaitenRegistration>
 		ExternallyOwned = externallyOwned;
 		AsyncTaskType = null;
 		AsyncTaskConverter = null;
+		Key = key;
 	}
 
 	/// <summary>
@@ -43,8 +46,9 @@ public readonly struct AwaitenRegistration : IEquatable<AwaitenRegistration>
 	///     A delegate bound to the closed <see cref="AwaitenTaskProjection.AsTask{T}" /> that adapts the container's
 	///     <c>Task&lt;object&gt;</c> resolution to the <c>Task&lt;TService&gt;</c> the host asks for.
 	/// </param>
-	/// <exception cref="ArgumentNullException">Any argument is <see langword="null" />.</exception>
-	public AwaitenRegistration(Type serviceType, AwaitenLifetime lifetime, Type asyncTaskType, Func<Task<object>, object> asyncTaskConverter)
+	/// <param name="key">The user-declared <c>[Key]</c> of a keyed registration, or <see langword="null" /> when unkeyed.</param>
+	/// <exception cref="ArgumentNullException">Any non-<paramref name="key" /> argument is <see langword="null" />.</exception>
+	public AwaitenRegistration(Type serviceType, AwaitenLifetime lifetime, Type asyncTaskType, Func<Task<object>, object> asyncTaskConverter, object? key = null)
 	{
 		ServiceType = serviceType ?? throw new ArgumentNullException(nameof(serviceType));
 		Lifetime = lifetime;
@@ -52,6 +56,7 @@ public readonly struct AwaitenRegistration : IEquatable<AwaitenRegistration>
 		ExternallyOwned = false;
 		AsyncTaskType = asyncTaskType ?? throw new ArgumentNullException(nameof(asyncTaskType));
 		AsyncTaskConverter = asyncTaskConverter ?? throw new ArgumentNullException(nameof(asyncTaskConverter));
+		Key = key;
 	}
 
 	/// <summary>The service type that the container can resolve.</summary>
@@ -59,6 +64,12 @@ public readonly struct AwaitenRegistration : IEquatable<AwaitenRegistration>
 
 	/// <summary>The lifetime under which the container owns the service.</summary>
 	public AwaitenLifetime Lifetime { get; }
+
+	/// <summary>
+	///     The user-declared <c>[Key]</c> of a keyed registration, or <see langword="null" /> when the registration
+	///     is unkeyed. The container's internal synthetic keys (decorator/contextual wiring) are never advertised.
+	/// </summary>
+	public object? Key { get; }
 
 	/// <summary>
 	///     Whether the service must be resolved asynchronously. It is <c>IAsyncInitializable</c>, is produced by an
@@ -89,7 +100,7 @@ public readonly struct AwaitenRegistration : IEquatable<AwaitenRegistration>
 	/// <inheritdoc />
 	public bool Equals(AwaitenRegistration other)
 		=> ServiceType == other.ServiceType && Lifetime == other.Lifetime && RequiresAsync == other.RequiresAsync
-		   && ExternallyOwned == other.ExternallyOwned;
+		   && ExternallyOwned == other.ExternallyOwned && Equals(Key, other.Key);
 
 	/// <inheritdoc />
 	public override bool Equals(object? obj) => obj is AwaitenRegistration other && Equals(other);
@@ -102,6 +113,6 @@ public readonly struct AwaitenRegistration : IEquatable<AwaitenRegistration>
 
 	/// <inheritdoc />
 	public override int GetHashCode()
-		=> unchecked((((ServiceType.GetHashCode() * 397) ^ (int)Lifetime) * 397 ^ (RequiresAsync ? 1 : 0)) * 397
-		             ^ (ExternallyOwned ? 1 : 0));
+		=> unchecked(((((((ServiceType.GetHashCode() * 397) ^ (int)Lifetime) * 397 ^ (RequiresAsync ? 1 : 0)) * 397
+		               ^ (ExternallyOwned ? 1 : 0)) * 397) ^ (Key?.GetHashCode() ?? 0)));
 }

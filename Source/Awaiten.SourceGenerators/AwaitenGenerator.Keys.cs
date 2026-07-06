@@ -119,7 +119,7 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>Whether an internal key is a user-written key rather than a synthetic (<c>__ctx:</c>/<c>__dec:</c>) one.</summary>
-	private static bool IsUserKey(string? key)
+	internal static bool IsUserKey(string? key)
 		=> key is not null
 		   && (key.StartsWith(StringKeyPrefix, StringComparison.Ordinal)
 		       || key.StartsWith(EnumKeyPrefix, StringComparison.Ordinal)

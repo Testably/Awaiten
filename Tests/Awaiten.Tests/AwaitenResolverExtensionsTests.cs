@@ -94,6 +94,76 @@ public sealed class AwaitenResolverExtensionsTests
 			.WithParamName("resolver");
 	}
 
+	[Fact]
+	public async Task ResolveWithKey_ForwardsTheKeyAndCastsTheResolvedInstance()
+	{
+		FakeResolver resolver = new()
+		{
+			ResolveResult = "value",
+		};
+
+		string resolved = resolver.Resolve<string>("special");
+
+		await That(resolved).IsEqualTo("value");
+		await That(resolver.RequestedResolveType).IsEqualTo(typeof(string));
+		await That(resolver.RequestedKey).IsEqualTo("special");
+	}
+
+	[Fact]
+	public async Task ResolveWithKey_WhenResolverIsNull_Throws()
+	{
+		IAwaitenResolver resolver = null!;
+
+		await That(() => resolver.Resolve<string>("special")).Throws<ArgumentNullException>()
+			.WithParamName("resolver");
+	}
+
+	[Fact]
+	public async Task TryResolveWithKey_WhenResolved_ReturnsTrueAndCastsInstance()
+	{
+		FakeResolver resolver = new()
+		{
+			TryResolveResult = true,
+			TryResolveInstance = "value",
+		};
+
+		bool resolved = resolver.TryResolve("special", out string? instance);
+
+		await That(resolved).IsTrue();
+		await That(instance).IsEqualTo("value");
+		await That(resolver.RequestedTryResolveType).IsEqualTo(typeof(string));
+		await That(resolver.RequestedKey).IsEqualTo("special");
+	}
+
+	[Fact]
+	public async Task TryResolveWithKey_WhenNotResolved_ReturnsFalseAndDefaultsInstance()
+	{
+		FakeResolver resolver = new()
+		{
+			TryResolveResult = false,
+		};
+
+		bool resolved = resolver.TryResolve("special", out string? instance);
+
+		await That(resolved).IsFalse();
+		await That(instance).IsNull();
+	}
+
+	[Fact]
+	public async Task ResolveAsyncWithKey_ForwardsTheKeyAndCastsTheResult()
+	{
+		FakeResolver resolver = new()
+		{
+			ResolveResult = "value",
+		};
+
+		string resolved = await resolver.ResolveAsync<string>("special", TestContext.Current.CancellationToken);
+
+		await That(resolved).IsEqualTo("value");
+		await That(resolver.RequestedResolveAsyncType).IsEqualTo(typeof(string));
+		await That(resolver.RequestedKey).IsEqualTo("special");
+	}
+
 	private sealed class FakeResolver : IAwaitenAsyncResolver
 	{
 		public object ResolveResult { get; set; } = null!;
@@ -101,10 +171,18 @@ public sealed class AwaitenResolverExtensionsTests
 		public object? TryResolveInstance { get; set; }
 		public Type? RequestedResolveType { get; private set; }
 		public Type? RequestedTryResolveType { get; private set; }
+		public object? RequestedKey { get; private set; }
 
 		public object Resolve(Type serviceType)
 		{
 			RequestedResolveType = serviceType;
+			return ResolveResult;
+		}
+
+		public object Resolve(Type serviceType, object? key)
+		{
+			RequestedResolveType = serviceType;
+			RequestedKey = key;
 			return ResolveResult;
 		}
 
@@ -115,11 +193,26 @@ public sealed class AwaitenResolverExtensionsTests
 			return TryResolveResult;
 		}
 
+		public bool TryResolve(Type serviceType, object? key, [NotNullWhen(true)] out object? instance)
+		{
+			RequestedTryResolveType = serviceType;
+			RequestedKey = key;
+			instance = TryResolveInstance;
+			return TryResolveResult;
+		}
+
 		public Type? RequestedResolveAsyncType { get; private set; }
 
 		public Task<object> ResolveAsync(Type serviceType, System.Threading.CancellationToken cancellationToken = default)
 		{
 			RequestedResolveAsyncType = serviceType;
+			return Task.FromResult(ResolveResult);
+		}
+
+		public Task<object> ResolveAsync(Type serviceType, object? key, System.Threading.CancellationToken cancellationToken = default)
+		{
+			RequestedResolveAsyncType = serviceType;
+			RequestedKey = key;
 			return Task.FromResult(ResolveResult);
 		}
 	}

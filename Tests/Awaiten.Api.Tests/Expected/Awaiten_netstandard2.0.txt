@@ -26,11 +26,12 @@ namespace Awaiten
     }
     public readonly struct AwaitenRegistration : System.IEquatable<Awaiten.AwaitenRegistration>
     {
-        public AwaitenRegistration(System.Type serviceType, Awaiten.AwaitenLifetime lifetime, bool externallyOwned = false) { }
-        public AwaitenRegistration(System.Type serviceType, Awaiten.AwaitenLifetime lifetime, System.Type asyncTaskType, System.Func<System.Threading.Tasks.Task<object>, object> asyncTaskConverter) { }
+        public AwaitenRegistration(System.Type serviceType, Awaiten.AwaitenLifetime lifetime, bool externallyOwned = false, object? key = null) { }
+        public AwaitenRegistration(System.Type serviceType, Awaiten.AwaitenLifetime lifetime, System.Type asyncTaskType, System.Func<System.Threading.Tasks.Task<object>, object> asyncTaskConverter, object? key = null) { }
         public System.Func<System.Threading.Tasks.Task<object>, object>? AsyncTaskConverter { get; }
         public System.Type? AsyncTaskType { get; }
         public bool ExternallyOwned { get; }
+        public object? Key { get; }
         public Awaiten.AwaitenLifetime Lifetime { get; }
         public bool RequiresAsync { get; }
         public System.Type ServiceType { get; }
@@ -46,10 +47,13 @@ namespace Awaiten
         {
             public T Resolve<T>() { }
             public bool TryResolve<T>([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out T? instance) { }
+            public T Resolve<T>(string key) { }
+            public bool TryResolve<T>(string key, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out T? instance) { }
         }
         extension(Awaiten.IAwaitenAsyncResolver resolver)
         {
             public System.Threading.Tasks.Task<T> ResolveAsync<T>(System.Threading.CancellationToken cancellationToken = default) { }
+            public System.Threading.Tasks.Task<T> ResolveAsync<T>(string key, System.Threading.CancellationToken cancellationToken = default) { }
         }
     }
     public static class AwaitenTaskProjection
@@ -118,6 +122,7 @@ namespace Awaiten
     public interface IAwaitenAsyncResolver : Awaiten.IAwaitenResolver
     {
         System.Threading.Tasks.Task<object> ResolveAsync(System.Type serviceType, System.Threading.CancellationToken cancellationToken = default);
+        System.Threading.Tasks.Task<object> ResolveAsync(System.Type serviceType, object? key, System.Threading.CancellationToken cancellationToken = default);
     }
     public interface IAwaitenContainerMetadata : Awaiten.IAwaitenAsyncResolver, Awaiten.IAwaitenResolver, Awaiten.IAwaitenRoot, Awaiten.IAwaitenScope, Awaiten.IExternalResolverHost, System.IDisposable
     {
@@ -127,7 +132,9 @@ namespace Awaiten
     public interface IAwaitenResolver
     {
         object Resolve(System.Type serviceType);
+        object Resolve(System.Type serviceType, object? key);
         bool TryResolve(System.Type serviceType, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? instance);
+        bool TryResolve(System.Type serviceType, object? key, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? instance);
     }
     public interface IAwaitenResolver<T>
     {

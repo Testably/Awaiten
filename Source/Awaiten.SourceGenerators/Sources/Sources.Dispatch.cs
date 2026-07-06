@@ -120,9 +120,10 @@ internal static partial class Sources
 	///     Emits the compile-time, reflection-free <c>IAwaitenContainerMetadata.Registrations</c> list on the Root:
 	///     public (unkeyed) registrations with their lifetimes, which the
 	///     <c>Awaiten.Extensions.DependencyInjection</c> companion projects into a service collection. Parameterized
-	///     services and keyed registrations are omitted (neither is resolvable by service type alone). An
-	///     async-tainted service is flagged <c>requiresAsync</c> so the bridge projects it as a <c>Task&lt;T&gt;</c>,
-	///     unless <paramref name="syncResolveAfterInit" /> makes it synchronously resolvable after warm-up.
+	///     services are omitted (not resolvable by service type alone); a user-keyed registration is advertised with
+	///     its <c>[Key]</c>, while the synthetic decorator/contextual keys stay internal. An async-tainted service is
+	///     flagged <c>requiresAsync</c> so the bridge projects it as a <c>Task&lt;T&gt;</c>, unless
+	///     <paramref name="syncResolveAfterInit" /> makes it synchronously resolvable after warm-up.
 	/// </summary>
 	private static void EmitRegistrations(StringBuilder fields, StringBuilder members, int depth, InstanceModel[] instances, bool syncResolveAfterInit)
 	{
@@ -145,7 +146,9 @@ internal static partial class Sources
 			bool externallyOwned = instance.Production == ProductionKind.Instance;
 			foreach (ServiceKey service in instance.Services.AsArray())
 			{
-				if (service.Key is not null)
+				// The synthetic decorator/contextual keys are internal wiring, never advertised. Unkeyed and
+				// user-keyed registrations are both advertised, the latter carrying its user-declared [Key].
+				if (service.Key is not null && !AwaitenGenerator.IsUserKey(service.Key))
 				{
 					continue;
 				}
@@ -162,6 +165,12 @@ internal static partial class Sources
 				else if (externallyOwned)
 				{
 					builder.Append(", externallyOwned: true");
+				}
+
+				// A user-keyed registration advertises its [Key] as the last (named) argument on whichever ctor.
+				if (service.Key is not null)
+				{
+					builder.Append(", key: ").Append(AwaitenGenerator.KeyLiteral(service.Key));
 				}
 
 				builder.AppendLine("),");
