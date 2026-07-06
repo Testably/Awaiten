@@ -397,4 +397,245 @@ public class ScanTests
 		await That(source).Contains("new __Bucket(typeof(global::Awaiten.Tests.Support.GammaPlugin)");
 		await That(source).Contains("new __Bucket(typeof(global::Awaiten.Tests.Support.DeltaPlugin)");
 	}
+
+	[Fact]
+	public async Task NamePatterns_RegisterOnlyMatchingNamesAndOrMultiplePatterns()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace MyCode;
+
+			public interface IPlugin { }
+			public sealed class OrderHandler : IPlugin { }
+			public sealed class EmailValidator : IPlugin { }
+			public sealed class PlainService : IPlugin { }
+
+			[Container]
+			[Scan(typeof(IPlugin), NamePatterns = new[] { "*Handler", "*Validator" })]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("new global::MyCode.OrderHandler()")
+			.And.Contains("new global::MyCode.EmailValidator()")
+			.Because("a candidate matching any include pattern is registered");
+		await That(source).DoesNotContain("PlainService")
+			.Because("a candidate matching no include pattern is filtered out");
+	}
+
+	[Fact]
+	public async Task NamePatterns_ExcludeDropsNegatedMatches()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace MyCode;
+
+			public interface IPlugin { }
+			public sealed class LegacyHandler : IPlugin { }
+			public sealed class ModernHandler : IPlugin { }
+
+			[Container]
+			[Scan(typeof(IPlugin), NamePatterns = new[] { "!Legacy*" })]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("new global::MyCode.ModernHandler()")
+			.Because("with no include patterns every non-excluded candidate passes");
+		await That(source).DoesNotContain("LegacyHandler")
+			.Because("a !-prefixed pattern excludes the matching candidate");
+	}
+
+	[Fact]
+	public async Task NamePatterns_AreCaseSensitive()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace MyCode;
+
+			public interface IPlugin { }
+			public sealed class OrderHandler : IPlugin { }
+
+			[Container]
+			[Scan(typeof(IPlugin), NamePatterns = new[] { "*handler" })]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		// The glob is ordinal, so lower-case "handler" does not match "OrderHandler"; nothing is left to register.
+		await That(result.Diagnostics).Contains("*AWT172*").AsWildcard();
+		await That(result.Sources["Awaiten.MyCode.MyContainer.g.cs"]).DoesNotContain("OrderHandler");
+	}
+
+	[Fact]
+	public async Task NamespacePatterns_MatchTheSubtreeButNotASibling()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace App.Services { public interface IPlugin { } public sealed class CoreService : IPlugin { } }
+			namespace App.Services.Billing { public sealed class InvoiceService : App.Services.IPlugin { } }
+			namespace App.ServicesLegacy { public sealed class OldService : App.Services.IPlugin { } }
+
+			namespace MyCode
+			{
+			    [Container]
+			    [Scan(typeof(App.Services.IPlugin), NamespacePatterns = new[] { "App.Services.**" })]
+			    public static partial class MyContainer { }
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("new global::App.Services.CoreService()")
+			.Because("'**' includes the anchor namespace itself");
+		await That(source).Contains("new global::App.Services.Billing.InvoiceService()")
+			.Because("'**' includes nested namespaces");
+		await That(source).DoesNotContain("OldService")
+			.Because("segment-aware matching does not leak into the sibling App.ServicesLegacy");
+	}
+
+	[Fact]
+	public async Task NamespacePatterns_SingleStarMatchesImmediateChildrenOnly()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace App.Data { public interface IPlugin { } }
+			namespace App.Data.Sql { public sealed class SqlStore : App.Data.IPlugin { } }
+			namespace App.Data.Sql.Internal { public sealed class InternalStore : App.Data.IPlugin { } }
+
+			namespace MyCode
+			{
+			    [Container]
+			    [Scan(typeof(App.Data.IPlugin), NamespacePatterns = new[] { "App.Data.*" })]
+			    public static partial class MyContainer { }
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("new global::App.Data.Sql.SqlStore()")
+			.Because("'*' matches exactly one segment");
+		await That(source).DoesNotContain("InternalStore")
+			.Because("'*' does not match a two-segment-deeper namespace");
+	}
+
+	[Fact]
+	public async Task NamespacePatterns_ExcludeByTrailingSegment()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace App.Core { public interface IPlugin { } public sealed class RealService : IPlugin { } }
+			namespace App.Core.Tests { public sealed class FakeService : App.Core.IPlugin { } }
+
+			namespace MyCode
+			{
+			    [Container]
+			    [Scan(typeof(App.Core.IPlugin), NamespacePatterns = new[] { "!**.Tests" })]
+			    public static partial class MyContainer { }
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("new global::App.Core.RealService()");
+		await That(source).DoesNotContain("FakeService")
+			.Because("'!**.Tests' excludes any namespace whose last segment is Tests");
+	}
+
+	[Fact]
+	public async Task Exclude_RemovesTheExactTypeOnly()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace MyCode;
+
+			public interface IPlugin { }
+			public sealed class KeepPlugin : IPlugin { }
+			public sealed class DropPlugin : IPlugin { }
+
+			[Container]
+			[Scan(typeof(IPlugin), Exclude = new[] { typeof(DropPlugin) })]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("new global::MyCode.KeepPlugin()");
+		await That(source).DoesNotContain("DropPlugin")
+			.Because("an Exclude entry removes that exact type");
+	}
+
+	[Fact]
+	public async Task Filters_ComposeAcrossAxesWithAnd()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace App.Handlers { public interface IPlugin { } public sealed class OrderHandler : IPlugin { } public sealed class OrderService : IPlugin { } }
+			namespace App.Other { public sealed class AuditHandler : App.Handlers.IPlugin { } }
+
+			namespace MyCode
+			{
+			    [Container]
+			    [Scan(typeof(App.Handlers.IPlugin), NamePatterns = new[] { "*Handler" }, NamespacePatterns = new[] { "App.Handlers" })]
+			    public static partial class MyContainer { }
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("new global::App.Handlers.OrderHandler()")
+			.Because("it matches both the name and the namespace filter");
+		await That(source).DoesNotContain("OrderService")
+			.Because("it fails the name filter");
+		await That(source).DoesNotContain("AuditHandler")
+			.Because("it fails the namespace filter");
+	}
+
+	[Fact]
+	public async Task Filters_ApplyToReferencedAssemblyCandidates()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+			using Awaiten.Tests.Support;
+
+			namespace MyCode;
+
+			[Container]
+			[Scan(typeof(ICrossAssemblyPlugin), InAssembliesOf = new[] { typeof(ICrossAssemblyPlugin) }, NamePatterns = new[] { "Gamma*" }, Lifetime = AwaitenLifetime.Singleton)]
+			public static partial class MyContainer
+			{
+			}
+			""", typeof(global::Awaiten.Tests.Support.ICrossAssemblyPlugin));
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("new __Bucket(typeof(global::Awaiten.Tests.Support.GammaPlugin)");
+		await That(source).DoesNotContain("DeltaPlugin")
+			.Because("the name filter narrows referenced-assembly candidates too");
+	}
 }

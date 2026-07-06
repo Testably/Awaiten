@@ -1051,4 +1051,43 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Warning,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A <c>[Scan]</c> matched concrete types assignable to its marker, but its <c>NamePatterns</c>,
+	///     <c>NamespacePatterns</c> or <c>Exclude</c> filters removed every one, so the scan registers nothing.
+	///     Distinct from AWT138 (the marker itself matched nothing): here the marker matched but the narrowing was
+	///     too tight.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ScanFiltersMatchedNothing = new(
+		"AWT172",
+		"Assembly scan filters removed every match",
+		"Concrete types assignable to '{0}' were found, but the scan's name, namespace and exclude filters removed them all, so nothing is registered",
+		"Awaiten",
+		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A <c>[Scan]</c> exclusion (an <c>Exclude</c> type, or a <c>!</c>-prefixed <c>NamePatterns</c>/
+	///     <c>NamespacePatterns</c> entry) removed no candidate, so it has no effect, most often a type or name left
+	///     stale after a rename.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ScanExclusionNeverMatched = new(
+		"AWT173",
+		"Scan exclusion never matched",
+		"The scan exclusion '{0}' matched no candidate, so it has no effect; it is likely stale after a rename",
+		"Awaiten",
+		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A <c>[Scan]</c> include pattern matches every candidate (a name pattern of <c>*</c>, or a namespace
+	///     pattern of <c>**</c>), so it does not narrow the scan and can be removed.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ScanPatternMatchesEverything = new(
+		"AWT174",
+		"Scan pattern matches every candidate",
+		"The scan pattern '{0}' matches every candidate, so it does not narrow the scan",
+		"Awaiten",
+		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true);
 }

@@ -73,3 +73,6 @@
  AWT169  | Awaiten   | Error    | Two implementations set WhenInjectedInto for the same service and consumer, so the contextual resolution would be ambiguous
  AWT170  | Awaiten   | Error    | A [Key] or [FromKey] uses a constant whose type is not a supported key type (string, enum, or typeof)
  AWT171  | Awaiten   | Warning  | A closing of an open generic [Decorate]/[Composite] violates the decorator's or composite's constraints and is skipped
+ AWT172  | Awaiten   | Warning  | A [Scan]'s name, namespace or exclude filters removed every marker-assignable match, so the scan registers nothing
+ AWT173  | Awaiten   | Warning  | A [Scan] exclusion (an Exclude type or a !-prefixed name/namespace pattern) matched no candidate and is likely stale
+ AWT174  | Awaiten   | Warning  | A [Scan] include pattern (* for a name, ** for a namespace) matches every candidate and does not narrow the scan

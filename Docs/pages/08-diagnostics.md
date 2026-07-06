@@ -948,6 +948,46 @@ A `[Scan(InAssembliesOf = …)]` resolved to no assembly at all.
 public static partial class CoffeeShop;
 ```
 
+### AWT172
+
+:::warning[Warning]
+A `[Scan]`'s name, namespace or exclude filters removed every marker-assignable match.
+:::
+
+```csharp
+public sealed class GrinderPlugin : IPlugin;   // assignable, but filtered out by the pattern below
+
+[Container]
+[Scan<IPlugin>(NamePatterns = ["*Handler"])]   // no IPlugin ends in "Handler", so nothing registers
+public static partial class CoffeeShop;
+```
+
+### AWT173
+
+:::warning[Warning]
+A `[Scan]` exclusion (an `Exclude` type or a `!`-prefixed pattern) matched no candidate.
+:::
+
+```csharp
+public sealed class GrinderPlugin : IPlugin;
+
+[Container]
+[Scan<IPlugin>(Exclude = [typeof(RenamedPlugin)])]   // RenamedPlugin is no longer a candidate: stale
+public static partial class CoffeeShop;
+```
+
+### AWT174
+
+:::warning[Warning]
+A `[Scan]` include pattern matches every candidate, so it does not narrow the scan.
+:::
+
+```csharp
+[Container]
+[Scan<IPlugin>(NamePatterns = ["*"])]   // "*" matches every name; drop it
+public static partial class CoffeeShop;
+```
+
 ## Modules
 
 ### AWT149

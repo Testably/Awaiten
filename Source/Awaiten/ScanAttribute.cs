@@ -55,6 +55,28 @@ public sealed class ScanAttribute : Attribute
 	///     registered in a deterministic order.
 	/// </summary>
 	public Type[]? InAssembliesOf { get; set; }
+
+	/// <summary>
+	///     Includes only candidates whose simple name matches one of these ordinal globs, where <c>*</c> matches any
+	///     run of characters (<c>"*Handler"</c>, <c>"Order*"</c>, <c>"*Service*"</c>, or exact <c>"Handler"</c>); a
+	///     <c>!</c> prefix excludes instead. A candidate passes when it matches some include (or none are given) and
+	///     no exclude. AND-combined with <see cref="NamespacePatterns" /> and <see cref="Exclude" />.
+	/// </summary>
+	public string[]? NamePatterns { get; set; }
+
+	/// <summary>
+	///     Like <see cref="NamePatterns" /> but matched against the containing namespace and segment-aware on
+	///     <c>.</c>: <c>*</c> matches one segment and <c>**</c> zero or more, so <c>"MyApp.Services.**"</c> is that
+	///     namespace and everything nested beneath it (not the sibling <c>MyApp.ServicesLegacy</c>) and
+	///     <c>"**.Tests"</c> is any namespace ending in a <c>Tests</c> segment. A <c>!</c> prefix excludes.
+	/// </summary>
+	public string[]? NamespacePatterns { get; set; }
+
+	/// <summary>
+	///     Removes these types from the scan by exact identity rather than assignability, so an entry survives a
+	///     rename and never removes a same-named type elsewhere. An entry that matches no candidate is reported as stale.
+	/// </summary>
+	public Type[]? Exclude { get; set; }
 }
 
 // S2326: the type parameter is the source generator's input. It reads the marker from the attribute's type
@@ -97,6 +119,28 @@ public sealed class ScanAttribute<TMarker> : Attribute
 	///     registered in a deterministic order.
 	/// </summary>
 	public Type[]? InAssembliesOf { get; set; }
+
+	/// <summary>
+	///     Includes only candidates whose simple name matches one of these ordinal globs, where <c>*</c> matches any
+	///     run of characters (<c>"*Handler"</c>, <c>"Order*"</c>, <c>"*Service*"</c>, or exact <c>"Handler"</c>); a
+	///     <c>!</c> prefix excludes instead. A candidate passes when it matches some include (or none are given) and
+	///     no exclude. AND-combined with <see cref="NamespacePatterns" /> and <see cref="Exclude" />.
+	/// </summary>
+	public string[]? NamePatterns { get; set; }
+
+	/// <summary>
+	///     Like <see cref="NamePatterns" /> but matched against the containing namespace and segment-aware on
+	///     <c>.</c>: <c>*</c> matches one segment and <c>**</c> zero or more, so <c>"MyApp.Services.**"</c> is that
+	///     namespace and everything nested beneath it (not the sibling <c>MyApp.ServicesLegacy</c>) and
+	///     <c>"**.Tests"</c> is any namespace ending in a <c>Tests</c> segment. A <c>!</c> prefix excludes.
+	/// </summary>
+	public string[]? NamespacePatterns { get; set; }
+
+	/// <summary>
+	///     Removes these types from the scan by exact identity rather than assignability, so an entry survives a
+	///     rename and never removes a same-named type elsewhere. An entry that matches no candidate is reported as stale.
+	/// </summary>
+	public Type[]? Exclude { get; set; }
 }
 
 #pragma warning restore S2326
