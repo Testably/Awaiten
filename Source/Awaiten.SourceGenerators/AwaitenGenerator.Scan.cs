@@ -87,7 +87,7 @@ partial class AwaitenGenerator
 			RegisterScanMatch(type, contracts, markerDisplay, match, result, diagnostics);
 		}
 
-		ReportScanFilterDiagnostics(filters, hits, assignable, registered, assemblies, markerDisplay, location, diagnostics);
+		ReportScanFilterDiagnostics(filters, hits, new ScanFilterCounts(assignable, registered), assemblies, markerDisplay, location, diagnostics);
 	}
 
 	/// <summary>
@@ -449,6 +449,9 @@ partial class AwaitenGenerator
 		public HashSet<INamedTypeSymbol> ExcludeTypes { get; } = new(SymbolEqualityComparer.Default);
 	}
 
+	/// <summary>Candidates a scan's marker matched (<paramref name="Assignable" />) and how many survived its filters to register (<paramref name="Registered" />).</summary>
+	private readonly record struct ScanFilterCounts(int Assignable, int Registered);
+
 	/// <summary>
 	///     The <c>NamePatterns</c>, <c>NamespacePatterns</c> and <c>Exclude</c> named on a <c>[Scan]</c>. Null, empty
 	///     and (for patterns) bare <c>!</c> entries are dropped.
@@ -530,31 +533,22 @@ partial class AwaitenGenerator
 			: string.Empty;
 
 		bool excluded = false;
-		foreach (string pattern in filters.NameExcludes)
+		foreach (string pattern in filters.NameExcludes.Where(pattern => NameGlob(name, pattern)))
 		{
-			if (NameGlob(name, pattern))
-			{
-				hits.NameExcludes.Add(pattern);
-				excluded = true;
-			}
+			hits.NameExcludes.Add(pattern);
+			excluded = true;
 		}
 
-		foreach (string pattern in filters.NamespaceExcludes)
+		foreach (string pattern in filters.NamespaceExcludes.Where(pattern => NamespaceGlob(ns, pattern)))
 		{
-			if (NamespaceGlob(ns, pattern))
-			{
-				hits.NamespaceExcludes.Add(pattern);
-				excluded = true;
-			}
+			hits.NamespaceExcludes.Add(pattern);
+			excluded = true;
 		}
 
-		foreach (INamedTypeSymbol excludedType in filters.ExcludeTypes)
+		foreach (INamedTypeSymbol excludedType in filters.ExcludeTypes.Where(excludedType => SymbolEqualityComparer.Default.Equals(type, excludedType)))
 		{
-			if (SymbolEqualityComparer.Default.Equals(type, excludedType))
-			{
-				hits.ExcludeTypes.Add(excludedType);
-				excluded = true;
-			}
+			hits.ExcludeTypes.Add(excludedType);
+			excluded = true;
 		}
 
 		if (excluded)
@@ -574,14 +568,13 @@ partial class AwaitenGenerator
 	private static void ReportScanFilterDiagnostics(
 		ScanFilters filters,
 		ScanFilterHits hits,
-		int assignable,
-		int registered,
+		ScanFilterCounts counts,
 		List<IAssemblySymbol>? assemblies,
 		string markerDisplay,
 		Location? location,
 		List<DiagnosticInfo> diagnostics)
 	{
-		if (assignable == 0)
+		if (counts.Assignable == 0)
 		{
 			// AWT138's "in this assembly" wording only fits an own-assembly scan; an InAssembliesOf scan already
 			// reported the more actionable AWT140 per named assembly.
@@ -596,7 +589,7 @@ partial class AwaitenGenerator
 			return;
 		}
 
-		if (registered == 0)
+		if (counts.Registered == 0)
 		{
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.ScanFiltersMatchedNothing,
@@ -704,25 +697,7 @@ partial class AwaitenGenerator
 		{
 			if (pattern[patternIndex] == "**")
 			{
-				while (patternIndex < pattern.Length && pattern[patternIndex] == "**")
-				{
-					patternIndex++;
-				}
-
-				if (patternIndex == pattern.Length)
-				{
-					return true;
-				}
-
-				for (int skip = textIndex; skip <= text.Length; skip++)
-				{
-					if (MatchSegments(text, skip, pattern, patternIndex))
-					{
-						return true;
-					}
-				}
-
-				return false;
+				return MatchAfterDoubleStar(text, textIndex, pattern, patternIndex);
 			}
 
 			if (textIndex >= text.Length || !NameGlob(text[textIndex], pattern[patternIndex]))
@@ -735,6 +710,33 @@ partial class AwaitenGenerator
 		}
 
 		return textIndex == text.Length;
+	}
+
+	/// <summary>
+	///     Matches the remaining pattern starting at a run of <c>**</c> segments: collapses the run, then (if the
+	///     pattern continues) tries every split of the remaining text so <c>**</c> absorbs zero or more segments.
+	/// </summary>
+	private static bool MatchAfterDoubleStar(string[] text, int textIndex, string[] pattern, int patternIndex)
+	{
+		while (patternIndex < pattern.Length && pattern[patternIndex] == "**")
+		{
+			patternIndex++;
+		}
+
+		if (patternIndex == pattern.Length)
+		{
+			return true;
+		}
+
+		for (int skip = textIndex; skip <= text.Length; skip++)
+		{
+			if (MatchSegments(text, skip, pattern, patternIndex))
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/// <summary>
