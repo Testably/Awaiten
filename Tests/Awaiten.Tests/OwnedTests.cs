@@ -118,6 +118,25 @@ public partial class OwnedTests
 			.Because("Gizmo is not disposable, but its transient Bolt is built into the throwaway scope and released when the handle is disposed - the transitive disposable does not accumulate on the root");
 	}
 
+	[Fact]
+	public async Task DefaultHandle_DisposeIsANoOp()
+	{
+		// A default(Owned<T>) has no backing scope; disposing it (or an already-disposed handle) must not throw.
+		Owned<Widget> handle = default;
+
+		await That(() => handle.Dispose()).DoesNotThrow();
+	}
+
+#if NET
+	[Fact]
+	public async Task DefaultHandle_DisposeAsyncIsANoOp()
+	{
+		Owned<Widget> handle = default;
+
+		await That(() => handle.DisposeAsync()).DoesNotThrow();
+	}
+#endif
+
 	public sealed class Engine : IDisposable
 	{
 		public bool Disposed { get; private set; }
