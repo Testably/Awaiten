@@ -291,7 +291,11 @@ internal static partial class Sources
 	///     synchronously and completes immediately (deferring to <c>Resolve</c> for the same registration /
 	///     withholding errors as the synchronous path).
 	/// </summary>
-	private static void EmitAsyncResolutionApi(ApiRegions regions, int depth, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool strict, bool syncResolveAfterInit)
+	/// <returns>
+	///     Whether the <c>__AsObject</c> Task-to-<c>Task&lt;object&gt;</c> helper was emitted (it is when any
+	///     async arm exists), so the keyed dispatch can share it instead of emitting a duplicate.
+	/// </returns>
+	private static bool EmitAsyncResolutionApi(ApiRegions regions, int depth, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool strict, bool syncResolveAfterInit)
 	{
 		const string task = "global::System.Threading.Tasks.Task";
 		(StringBuilder members, StringBuilder fields, StringBuilder helpers) = regions;
@@ -313,7 +317,7 @@ internal static partial class Sources
 			// throws the same registration / strict-withholding guidance as the synchronous path.
 			Indent(builder, depth + 1).Append("return ").Append(task).AppendLine(".FromResult(Resolve(serviceType));");
 			Indent(builder, depth).AppendLine("}");
-			return;
+			return false;
 		}
 
 		// Bucket probe, mirroring the synchronous dispatch: hash the type into its window and invoke the matched
@@ -341,6 +345,7 @@ internal static partial class Sources
 
 		EmitAsyncBucketDispatch(fields, helpers, depth, arms);
 		EmitAsObjectHelper(helpers, depth);
+		return true;
 	}
 
 	/// <summary>

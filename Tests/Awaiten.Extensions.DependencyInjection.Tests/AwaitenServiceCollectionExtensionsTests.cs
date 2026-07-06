@@ -49,7 +49,15 @@ public sealed class AwaitenServiceCollectionExtensionsTests
 
 		public object Resolve(Type serviceType) => throw new NotSupportedException();
 
+		public object Resolve(Type serviceType, object? key) => throw new NotSupportedException();
+
 		public bool TryResolve(Type serviceType, [NotNullWhen(true)] out object? instance)
+		{
+			instance = null;
+			return false;
+		}
+
+		public bool TryResolve(Type serviceType, object? key, [NotNullWhen(true)] out object? instance)
 		{
 			instance = null;
 			return false;
@@ -58,6 +66,9 @@ public sealed class AwaitenServiceCollectionExtensionsTests
 		public IAwaitenScope CreateScope() => throw new NotSupportedException();
 
 		public Task<object> ResolveAsync(Type serviceType, System.Threading.CancellationToken cancellationToken = default)
+			=> throw new NotSupportedException();
+
+		public Task<object> ResolveAsync(Type serviceType, object? key, System.Threading.CancellationToken cancellationToken = default)
 			=> throw new NotSupportedException();
 
 		public Task InitializeAsync(System.Threading.CancellationToken cancellationToken = default)

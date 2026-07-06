@@ -26,6 +26,12 @@ An async-only service has no synchronous path, so its bare type is not registere
 Task<EspressoMachine> machine = provider.GetRequiredService<Task<EspressoMachine>>();
 ```
 
+A keyed registration is projected under its key, so `[FromKeyedServices]` and `GetKeyedService` reach it. An async-only keyed service is projected as a keyed `Task<T>`, the same way its unkeyed counterpart is.
+
+```csharp
+public sealed class Router([FromKeyedServices("fast")] IChannel channel);
+```
+
 ## Use it as the host's provider factory
 
 For the generic host or `WebApplicationBuilder`, plug in `AwaitenServiceProviderFactory<TRoot>`. Host registrations and Awaiten services coexist, so a host component can inject an Awaiten service and the other way round.
@@ -37,7 +43,7 @@ builder.Host.UseServiceProviderFactory(
 
 ## Or let Awaiten own everything
 
-`AwaitenServiceProvider` adapts an Awaiten scope directly to `IServiceProvider` and `IServiceScopeFactory`. Awaiten is then the single owner of construction and disposal. `GetService` maps to `TryResolve`, so a missing service returns `null`.
+`AwaitenServiceProvider` adapts an Awaiten scope directly to `IServiceProvider`, `IKeyedServiceProvider`, and `IServiceScopeFactory`. Awaiten is then the single owner of construction and disposal. `GetService` maps to `TryResolve`, so a missing service returns `null`, and `GetKeyedService`/`GetRequiredKeyedService` reach a keyed registration by its key.
 
 ```csharp
 using var shop = new CoffeeShop.Root();
@@ -75,7 +81,7 @@ The bridge is reflection-free. The generator emits the closed `Task<T>` type and
 
 ## What the bridge does not project
 
-The bridge surfaces each individual registration and the external dependencies. It does not project Awaiten collections or keyed services into MS.DI-side resolution. Those stay internal to the container. If you need the container to be the single disposal owner for multi-service singletons and nested scoped dependencies, use the `AwaitenServiceProvider` replacement path.
+The bridge surfaces each individual registration and the external dependencies. It does not project Awaiten collections into MS.DI-side resolution; those stay internal to the container. If you need the container to be the single disposal owner for multi-service singletons and nested scoped dependencies, use the `AwaitenServiceProvider` replacement path.
 
 ## Where to go next
 

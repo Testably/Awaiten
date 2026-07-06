@@ -1,3 +1,5 @@
+using System.Threading;
+
 namespace Awaiten.Tests;
 
 /// <summary>
@@ -55,6 +57,62 @@ public partial class KeyedTests
 			.Because("a [FromKey(\"fast\")] Func<IChannel> defers to the implementation keyed 'fast'");
 		await That(router.Backup.Value).Is<SlowChannel>()
 			.Because("a [FromKey(\"slow\")] Lazy<IChannel> defers to the implementation keyed 'slow'");
+	}
+
+	[Fact]
+	public async Task ResolveWithKey_ReturnsTheImplementationRegisteredUnderThatKey()
+	{
+		using KeyedContainer.Root container = new();
+
+		await That(container.Resolve<IChannel>("fast")).Is<FastChannel>()
+			.Because("Resolve<T>(\"fast\") returns the registration keyed 'fast'");
+		await That(container.Resolve<IChannel>("slow")).Is<SlowChannel>()
+			.Because("Resolve<T>(\"slow\") returns the registration keyed 'slow'");
+	}
+
+	[Fact]
+	public async Task ResolveWithKey_ForAnUnknownKey_Throws()
+	{
+		using KeyedContainer.Root container = new();
+
+		await That(() => container.Resolve<IChannel>("unknown")).Throws<InvalidOperationException>()
+			.Because("no registration is keyed 'unknown'");
+	}
+
+	[Fact]
+	public async Task TryResolveWithKey_ReportsHitAndMiss()
+	{
+		using KeyedContainer.Root container = new();
+
+		await That(container.TryResolve<IChannel>("fast", out IChannel? hit)).IsTrue();
+		await That(hit).Is<FastChannel>();
+
+		await That(container.TryResolve<IChannel>("unknown", out IChannel? miss)).IsFalse();
+		await That(miss).IsNull();
+	}
+
+	[Fact]
+	public async Task ResolveWithKey_AndUnkeyed_SelectTheirRespectiveRegistrations()
+	{
+		using MixedContainer.Root container = new();
+
+		await That(container.Resolve<IClock>()).Is<DefaultClock>()
+			.Because("an unkeyed resolution returns the unkeyed registration");
+		await That(container.Resolve<IClock>("fast")).Is<FastChannelClock>()
+			.Because("the keyed resolution returns the registration keyed 'fast'");
+		await That(container.TryResolve<IClock>("fast", out IClock? keyed)).IsTrue();
+		await That(keyed).Is<FastChannelClock>();
+	}
+
+	[Fact]
+	public async Task ResolveAsyncWithKey_ReturnsTheKeyedRegistration()
+	{
+		using KeyedContainer.Root container = new();
+
+		IChannel channel = await container.ResolveAsync<IChannel>("fast", TestContext.Current.CancellationToken);
+
+		await That(channel).Is<FastChannel>()
+			.Because("ResolveAsync<T>(\"fast\") returns the registration keyed 'fast' even when it needs no async init");
 	}
 
 	[Fact]
@@ -128,6 +186,73 @@ public partial class KeyedTests
 	[Singleton<FastChannelClock, IClock>(Key = "fast")]
 	[Singleton<Consumer>]
 	public static partial class MixedContainer;
+
+	public interface IGauge;
+
+	public sealed class SyncGauge : IGauge;
+
+	public sealed class AsyncGauge : IGauge, IAsyncInitializable
+	{
+		public bool Initialized { get; private set; }
+
+		public Task InitializeAsync(CancellationToken cancellationToken)
+		{
+			Initialized = true;
+			return Task.CompletedTask;
+		}
+	}
+
+	[Container]
+	[Singleton<SyncGauge, IGauge>(Key = "sync")]
+	[Singleton<AsyncGauge, IGauge>(Key = "async")]
+	public static partial class AsyncKeyedContainer;
+
+	[Fact]
+	public async Task KeyedResolve_OfAnAsyncTaintedService_FollowsTheStrictAsyncRules()
+	{
+		using AsyncKeyedContainer.Root container = new();
+
+		// The strict default has no synchronous path for an async-initialized service, keyed or not.
+		await That(() => container.Resolve<IGauge>("async")).Throws<InvalidOperationException>()
+			.Because("a keyed async-tainted service is not synchronously resolvable in the strict default");
+		await That(container.TryResolve<IGauge>("async", out IGauge? _)).IsFalse()
+			.Because("TryResolve stays non-throwing for an async-only keyed service");
+
+		IGauge gauge = await container.ResolveAsync<IGauge>("async", TestContext.Current.CancellationToken);
+		await That(gauge).Is<AsyncGauge>();
+		await That(((AsyncGauge)gauge).Initialized).IsTrue()
+			.Because("keyed ResolveAsync awaits the async initialization");
+	}
+
+	// A container that declares no [Key], so its keyed dispatch has no entries: the disposed-scope guard must still
+	// run for a keyed request.
+	[Container]
+	[Singleton<DefaultClock, IClock>]
+	public static partial class UnkeyedContainer;
+
+	[Fact]
+	public async Task KeyedResolve_OnADisposedScope_ThrowsObjectDisposed_LikeTheUnkeyedResolve()
+	{
+		KeyedContainer.Root container = new();
+		container.Dispose();
+
+		// A keyed by-type resolution rejects a disposed scope exactly like the unkeyed Resolve(Type)/TryResolve(Type).
+		await That(() => container.Resolve<IChannel>("fast")).Throws<ObjectDisposedException>();
+		await That(() => container.TryResolve<IChannel>("fast", out IChannel? _)).Throws<ObjectDisposedException>();
+		await That(() => container.ResolveAsync<IChannel>("fast", TestContext.Current.CancellationToken)).Throws<ObjectDisposedException>();
+	}
+
+	[Fact]
+	public async Task KeyedResolve_OnADisposedScope_WithNoKeyedRegistrations_StillThrowsObjectDisposed()
+	{
+		UnkeyedContainer.Root container = new();
+		container.Dispose();
+
+		// Even a container that declares no [Key] guards a disposed scope for a keyed request, uniform with the
+		// unkeyed dispatch, rather than reporting a plain "no registration".
+		await That(() => container.Resolve<IClock>("missing")).Throws<ObjectDisposedException>();
+		await That(() => container.TryResolve<IClock>("missing", out IClock? _)).Throws<ObjectDisposedException>();
+	}
 
 	public interface IWork;
 

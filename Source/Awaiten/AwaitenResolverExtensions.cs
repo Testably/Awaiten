@@ -8,7 +8,7 @@ namespace Awaiten;
 /// <summary>
 ///     Generic conveniences over the <see cref="IAwaitenResolver" /> resolution surface, so callers
 ///     with a compile-time type can write <c>resolver.Resolve&lt;T&gt;()</c> instead of casting the
-///     result of <see cref="IAwaitenResolver.Resolve" />.
+///     result of <see cref="IAwaitenResolver.Resolve(Type)" />.
 /// </summary>
 public static class AwaitenResolverExtensions
 {
@@ -39,12 +39,39 @@ public static class AwaitenResolverExtensions
 			return (T)resolver.Resolve(typeof(T));
 		}
 
+		/// <summary>
+		///     Resolves the service of type <typeparamref name="T" /> registered under <paramref name="key" />,
+		///     throwing if it is not registered. There is no typed fast path for a keyed resolution, so this always
+		///     dispatches through the runtime <see cref="IAwaitenResolver.Resolve(Type, object)" />.
+		/// </summary>
+		public T Resolve<T>(object key)
+		{
+			ThrowIfNull(resolver);
+
+			return (T)resolver.Resolve(typeof(T), key);
+		}
+
 		/// <summary>Attempts to resolve a service of type <typeparamref name="T" />.</summary>
 		public bool TryResolve<T>([NotNullWhen(true)] out T? instance)
 		{
 			ThrowIfNull(resolver);
 
 			if (resolver.TryResolve(typeof(T), out object? resolved))
+			{
+				instance = (T)resolved!;
+				return true;
+			}
+
+			instance = default;
+			return false;
+		}
+
+		/// <summary>Attempts to resolve the service of type <typeparamref name="T" /> registered under <paramref name="key" />.</summary>
+		public bool TryResolve<T>(object key, [NotNullWhen(true)] out T? instance)
+		{
+			ThrowIfNull(resolver);
+
+			if (resolver.TryResolve(typeof(T), key, out object? resolved))
 			{
 				instance = (T)resolved!;
 				return true;
@@ -71,6 +98,20 @@ public static class AwaitenResolverExtensions
 			ThrowIfNull(resolver);
 
 			return Cast(resolver.ResolveAsync(typeof(T), cancellationToken));
+
+			static async Task<T> Cast(Task<object> resolution) => (T)await resolution.ConfigureAwait(false);
+		}
+
+		/// <summary>
+		///     Resolves the service of type <typeparamref name="T" /> registered under <paramref name="key" />
+		///     asynchronously, awaiting its <see cref="IAsyncInitializable.InitializeAsync" /> (and that of its
+		///     non-deferred async dependencies) where required. Throws if it is not registered.
+		/// </summary>
+		public Task<T> ResolveAsync<T>(object key, CancellationToken cancellationToken = default)
+		{
+			ThrowIfNull(resolver);
+
+			return Cast(resolver.ResolveAsync(typeof(T), key, cancellationToken));
 
 			static async Task<T> Cast(Task<object> resolution) => (T)await resolution.ConfigureAwait(false);
 		}

@@ -37,7 +37,7 @@ public class KeyedRegistrationTests
 	}
 
 	[Fact]
-	public async Task KeyedServices_AreNotExposedThroughThePublicDispatchOrTypedResolver()
+	public async Task KeyedServices_AreReachableThroughTheKeyedDispatchButNotTheUnkeyedOneOrTheTypedResolver()
 	{
 		GeneratorResult result = Generator.Run("""
 		                                       using Awaiten;
@@ -61,17 +61,58 @@ public class KeyedRegistrationTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// The keyed implementations are registered and constructible, so their absence from the dispatch table
-		// is exclusion, not IClock going away.
+		// The keyed implementations are registered and constructible, so their absence from the unkeyed dispatch
+		// table is exclusion, not IClock going away.
 		await That(source).Contains("ResolveFastClock")
 			.Because("the keyed implementation is registered and constructible");
 		await That(source).Contains("ResolveSlowClock")
 			.Because("the keyed implementation is registered and constructible");
 
-		await That(source).DoesNotContain("typeof(global::MyCode.IClock)")
-			.Because("a keyed service is reached only by [FromKey], never the public unkeyed dispatch table");
+		// Imperative keyed resolution reaches each registration through the (service type, key) keyed table.
+		await That(source).Contains("new __KeyedKey(typeof(global::MyCode.IClock), \"fast\")")
+			.Because("the keyed 'fast' registration is reachable through the keyed dispatch table");
+		await That(source).Contains("new __KeyedKey(typeof(global::MyCode.IClock), \"slow\")")
+			.Because("the keyed 'slow' registration is reachable through the keyed dispatch table");
+
+		await That(source).DoesNotContain("new __Bucket(typeof(global::MyCode.IClock)")
+			.Because("a keyed service is never placed in the unkeyed by-type dispatch table");
 		await That(source).DoesNotContain("global::Awaiten.IAwaitenResolver<global::MyCode.IClock>")
 			.Because("a keyed service gets no typed resolution fast path");
+	}
+
+	[Fact]
+	public async Task SyntheticDecoratorKeys_AreNeverExposedThroughTheKeyedDispatchOrMetadata()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface IClock { }
+		                                       public sealed class RealClock : IClock { }
+		                                       public sealed class FastClock : IClock { }
+		                                       public sealed class LoggingClock : IClock { public LoggingClock(IClock inner) { } }
+
+		                                       [Container]
+		                                       [Singleton<RealClock, IClock>]
+		                                       [Singleton<FastClock, IClock>(Key = "fast")]
+		                                       [Decorate<LoggingClock, IClock>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// The decorator allocates internal __dec: keys in the same key space as the user "fast" key; those synthetic
+		// keys are internal wiring and must never surface as a resolvable key or in the advertised registrations.
+		await That(source).Contains("new __KeyedKey(typeof(global::MyCode.IClock), \"fast\")")
+			.Because("the user-declared 'fast' key is reachable through the keyed dispatch");
+		await That(source).DoesNotContain("__dec:")
+			.Because("a synthetic decorator key is never emitted as a resolvable key or advertised registration");
+		await That(source).DoesNotContain("__ctx:")
+			.Because("a synthetic contextual key is never emitted as a resolvable key or advertised registration");
 	}
 
 	[Fact]

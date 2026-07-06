@@ -39,6 +39,23 @@ For an async-tainted service in the strict default, `TryResolve` reports `false`
 EspressoMachine machine = await shop.ResolveAsync<EspressoMachine>(cancellationToken);
 ```
 
+## Keyed resolution
+
+Each of the three methods has an overload that takes the `Key` a registration was declared with. This is the imperative counterpart to `[FromKey]` at an injection site, and it selects the same registration.
+
+```csharp
+IMilk oat = shop.Resolve<IMilk>("Oat");
+
+if (shop.TryResolve<IMilk>(MilkKind.Whole, out IMilk? whole))
+{
+    // use whole
+}
+
+IMilk soy = await shop.ResolveAsync<IMilk>("Soy", cancellationToken);
+```
+
+The key is an `object`, so a string, an `enum` constant, or a `typeof(...)` all work, matching the key the registration carries. A `null` key resolves the unkeyed registration, exactly like the keyless overload. An unknown key follows the same miss rules as above: `Resolve` throws, `TryResolve` reports `false`. See [Keyed services](../registration/keyed-services).
+
 ## Prefer constructor injection
 
 You rarely call these methods deep in your code. You call them once at the composition root to pull out the top-level service, and everything below is wired by its constructors. A `Barista` that needs a `Grinder` just declares it:

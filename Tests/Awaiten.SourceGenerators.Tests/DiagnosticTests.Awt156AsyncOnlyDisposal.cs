@@ -277,8 +277,11 @@ public partial class DiagnosticTests
 			                                       	public sealed class FakeScope : IAwaitenScope
 			                                       	{
 			                                       		public object Resolve(Type serviceType) => throw new NotSupportedException();
+			                                       		public object Resolve(Type serviceType, object? key) => throw new NotSupportedException();
 			                                       		public bool TryResolve(Type serviceType, out object? instance) { instance = null; return false; }
+			                                       		public bool TryResolve(Type serviceType, object? key, out object? instance) { instance = null; return false; }
 			                                       		public Task<object> ResolveAsync(Type serviceType, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+			                                       		public Task<object> ResolveAsync(Type serviceType, object? key, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 			                                       		public IAwaitenScope CreateScope() => this;
 			                                       		public Task<IAwaitenScope> CreateScopeAsync(CancellationToken cancellationToken = default) => Task.FromResult<IAwaitenScope>(this);
 			                                       		public void Dispose() { }

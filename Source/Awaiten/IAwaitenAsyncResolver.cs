@@ -21,4 +21,13 @@ public interface IAwaitenAsyncResolver : IAwaitenResolver
 	///     async-tainted service.
 	/// </summary>
 	Task<object> ResolveAsync(Type serviceType, CancellationToken cancellationToken = default);
+
+	/// <summary>
+	///     Resolves the service registered for <paramref name="serviceType" /> under <paramref name="key" />
+	///     asynchronously, awaiting any asynchronous initialization exactly like
+	///     <see cref="ResolveAsync(Type, CancellationToken)" />. A <see langword="null" /> <paramref name="key" />
+	///     resolves the unkeyed registration. Only user-declared <c>[Key]</c>s are reachable; the container's
+	///     internal synthetic keys are not.
+	/// </summary>
+	Task<object> ResolveAsync(Type serviceType, object? key, CancellationToken cancellationToken = default);
 }

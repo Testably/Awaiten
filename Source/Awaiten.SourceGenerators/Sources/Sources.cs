@@ -227,7 +227,10 @@ internal static partial class Sources
 		EmitGenericResolveMethod(members, body);
 		// The asynchronous surface: ResolveAsync(Type) on every owner, plus CreateScopeAsync. The Root's
 		// InitializeAsync and per-singleton async resolvers are emitted on the Root.
-		EmitAsyncResolutionApi(regions, body, instances, names, serviceToIndex, strict, syncResolveAfterInit);
+		bool asObjectEmitted = EmitAsyncResolutionApi(regions, body, instances, names, serviceToIndex, strict, syncResolveAfterInit);
+		// The keyed resolution surface (Resolve/TryResolve/ResolveAsync over object? key), sharing the __AsObject
+		// helper with the async dispatch above.
+		EmitKeyedResolutionApi(regions, body, context, strict, syncResolveAfterInit, asObjectEmitted);
 		Separate(members);
 		EmitCreateScopeAsync(members, body);
 		// Nesting shares the same root (same singletons), so a child created from a child is no different from one
@@ -614,11 +617,25 @@ internal static partial class Sources
 		Indent(builder, depth + 1).AppendLine("}");
 		builder.AppendLine();
 		Indent(builder, depth + 1).Append(
+				"public object Resolve(global::System.Type serviceType, object? key) => throw new global::System.InvalidOperationException(")
+			.Append(message).AppendLine(");");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("public bool TryResolve(global::System.Type serviceType, object? key, [global::System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? instance)");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).AppendLine("instance = null;");
+		Indent(builder, depth + 2).AppendLine("return false;");
+		Indent(builder, depth + 1).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, depth + 1).Append(
 				"public global::Awaiten.IAwaitenScope CreateScope() => throw new global::System.InvalidOperationException(")
 			.Append(message).AppendLine(");");
 		builder.AppendLine();
 		Indent(builder, depth + 1).Append(
 				"public global::System.Threading.Tasks.Task<object> ResolveAsync(global::System.Type serviceType, global::System.Threading.CancellationToken cancellationToken = default) => throw new global::System.InvalidOperationException(")
+			.Append(message).AppendLine(");");
+		builder.AppendLine();
+		Indent(builder, depth + 1).Append(
+				"public global::System.Threading.Tasks.Task<object> ResolveAsync(global::System.Type serviceType, object? key, global::System.Threading.CancellationToken cancellationToken = default) => throw new global::System.InvalidOperationException(")
 			.Append(message).AppendLine(");");
 		builder.AppendLine();
 		Indent(builder, depth + 1).Append(
