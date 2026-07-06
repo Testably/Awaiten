@@ -360,6 +360,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sun Jul 5 17:26:46 2026 \u002B0200",
         "message": "docs: add the Awaiten documentation site (#78)"
+      },
+      {
+        "sha": "d3e7fdfb8f5083d0236429051766b6f6c48438d9",
+        "author": "Valentin Breu\u00DF",
+        "date": "Mon Jul 6 09:24:55 2026 \u002B0200",
+        "message": "feat: support open-generic decorators and composites (#79) (#85)"
       }
     ],
     "labels": [
@@ -422,7 +428,8 @@ window.BENCHMARK_DATA = {
       "03d4efe0",
       "868f5343",
       "e6ffcfe1",
-      "383a2c13"
+      "383a2c13",
+      "d3e7fdfb"
     ],
     "datasets": [
       {
@@ -488,7 +495,8 @@ window.BENCHMARK_DATA = {
           7.785969897040299,
           7.832957134715149,
           7.466713133667197,
-          5.746839030512741
+          5.746839030512741,
+          7.773361697793007
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -500,6 +508,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -633,7 +642,8 @@ window.BENCHMARK_DATA = {
           7.852565371990204,
           7.218358724245003,
           9.25247755417457,
-          9.533955020400194
+          9.533955020400194,
+          7.278849442417805
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -645,6 +655,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -778,7 +789,8 @@ window.BENCHMARK_DATA = {
           109.38638340575355,
           110.8822036822637,
           132.75287877718608,
-          119.62400155067444
+          119.62400155067444,
+          110.72883120377858
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -790,6 +802,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -923,7 +936,8 @@ window.BENCHMARK_DATA = {
           2.6583116971529446,
           2.8127356039790006,
           3.1410673713045463,
-          2.8949571416846345
+          2.8949571416846345,
+          2.6547427578614307
         ],
         "borderColor": "#4A6FA5",
         "backgroundColor": "#4A6FA5",
@@ -935,6 +949,7 @@ window.BENCHMARK_DATA = {
         "label": "Jab memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -1068,7 +1083,8 @@ window.BENCHMARK_DATA = {
           5.429747611284256,
           5.458437209328015,
           5.421934486581729,
-          4.245468920895031
+          4.245468920895031,
+          5.428245176489536
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
@@ -1080,6 +1096,7 @@ window.BENCHMARK_DATA = {
         "label": "PureDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -1209,7 +1226,8 @@ window.BENCHMARK_DATA = {
           8.759392404307922,
           8.750662536575245,
           8.75156704049844,
-          7.226101314792266
+          7.226101314792266,
+          9.375617240483944
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -1221,6 +1239,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -1346,7 +1365,8 @@ window.BENCHMARK_DATA = {
           10.938695109807528,
           10.9688908968653,
           11.196189968631817,
-          9.975871042410533
+          9.975871042410533,
+          11.267712808572329
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -1358,6 +1378,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -1954,6 +1975,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sun Jul 5 17:26:46 2026 \u002B0200",
         "message": "docs: add the Awaiten documentation site (#78)"
+      },
+      {
+        "sha": "d3e7fdfb8f5083d0236429051766b6f6c48438d9",
+        "author": "Valentin Breu\u00DF",
+        "date": "Mon Jul 6 09:24:55 2026 \u002B0200",
+        "message": "feat: support open-generic decorators and composites (#79) (#85)"
       }
     ],
     "labels": [
@@ -2016,7 +2043,8 @@ window.BENCHMARK_DATA = {
       "03d4efe0",
       "868f5343",
       "e6ffcfe1",
-      "383a2c13"
+      "383a2c13",
+      "d3e7fdfb"
     ],
     "datasets": [
       {
@@ -2082,7 +2110,8 @@ window.BENCHMARK_DATA = {
           8.453277628336634,
           8.802173125743867,
           8.443811976909638,
-          7.061529102069991
+          7.061529102069991,
+          8.450194394836823
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -2094,6 +2123,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -2227,7 +2257,8 @@ window.BENCHMARK_DATA = {
           8.002424478530884,
           7.251382069928305,
           7.214935131867727,
-          7.499025813170841
+          7.499025813170841,
+          7.291162622662691
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -2239,6 +2270,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -2372,7 +2404,8 @@ window.BENCHMARK_DATA = {
           116.41641985575357,
           106.20435169109932,
           135.1661068757375,
-          116.75642226292537
+          116.75642226292537,
+          113.63131268819173
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -2384,6 +2417,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -2517,7 +2551,8 @@ window.BENCHMARK_DATA = {
           42.672896614441505,
           42.76489217281342,
           42.676786397894226,
-          75.7347101339927
+          75.7347101339927,
+          42.83345731596152
         ],
         "borderColor": "#4A6FA5",
         "backgroundColor": "#4A6FA5",
@@ -2529,6 +2564,7 @@ window.BENCHMARK_DATA = {
         "label": "Jab memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -2662,7 +2698,8 @@ window.BENCHMARK_DATA = {
           8.895141759266457,
           8.233225005368391,
           7.331582518724295,
-          7.755101163188616
+          7.755101163188616,
+          7.645800816161292
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
@@ -2674,6 +2711,7 @@ window.BENCHMARK_DATA = {
         "label": "PureDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -2803,7 +2841,8 @@ window.BENCHMARK_DATA = {
           8.713739147553078,
           8.75620229790608,
           8.894117169082165,
-          7.204000971714655
+          7.204000971714655,
+          9.342929027974606
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -2815,6 +2854,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -2940,7 +2980,8 @@ window.BENCHMARK_DATA = {
           14.606457058053751,
           14.678332539541382,
           14.85680208603541,
-          10.053502173225086
+          10.053502173225086,
+          14.928564053561006
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -2952,6 +2993,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -3381,6 +3423,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sun Jul 5 17:26:46 2026 \u002B0200",
         "message": "docs: add the Awaiten documentation site (#78)"
+      },
+      {
+        "sha": "d3e7fdfb8f5083d0236429051766b6f6c48438d9",
+        "author": "Valentin Breu\u00DF",
+        "date": "Mon Jul 6 09:24:55 2026 \u002B0200",
+        "message": "feat: support open-generic decorators and composites (#79) (#85)"
       }
     ],
     "labels": [
@@ -3443,7 +3491,8 @@ window.BENCHMARK_DATA = {
       "03d4efe0",
       "868f5343",
       "e6ffcfe1",
-      "383a2c13"
+      "383a2c13",
+      "d3e7fdfb"
     ],
     "datasets": [
       {
@@ -3509,7 +3558,8 @@ window.BENCHMARK_DATA = {
           16.660551462570826,
           20.131669885345868,
           17.302717916170756,
-          17.211588936050735
+          17.211588936050735,
+          15.956318013370037
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -3548,6 +3598,7 @@ window.BENCHMARK_DATA = {
           136,
           136,
           136,
+          144,
           144,
           144,
           144,
@@ -3654,7 +3705,8 @@ window.BENCHMARK_DATA = {
           1425.2516803741455,
           1725.050725809733,
           1445.8449139912923,
-          1577.0359242303032
+          1577.0359242303032,
+          1424.5159419377644
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -3666,6 +3718,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          5688,
           5688,
           5688,
           5688,
@@ -3799,7 +3852,8 @@ window.BENCHMARK_DATA = {
           28887.694309779577,
           31319.57208251953,
           33089.74725748698,
-          34538.967049734936
+          34538.967049734936,
+          29495.02695138114
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -3867,6 +3921,7 @@ window.BENCHMARK_DATA = {
           33098,
           33098,
           33093,
+          33098,
           33098,
           33098,
           33098,
@@ -3944,7 +3999,8 @@ window.BENCHMARK_DATA = {
           8.419556558132172,
           9.87380411028862,
           8.628875314124993,
-          8.621132053931554
+          8.621132053931554,
+          10.268704293029648
         ],
         "borderColor": "#4A6FA5",
         "backgroundColor": "#4A6FA5",
@@ -3978,6 +4034,7 @@ window.BENCHMARK_DATA = {
           96,
           96,
           32,
+          96,
           96,
           96,
           96,
@@ -4089,7 +4146,8 @@ window.BENCHMARK_DATA = {
           14.37343681546358,
           19.043660145998,
           15.862020911773046,
-          16.319811610380807
+          16.319811610380807,
+          15.868013805576734
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
@@ -4101,6 +4159,7 @@ window.BENCHMARK_DATA = {
         "label": "PureDI memory",
         "unit": "b",
         "data": [
+          128,
           128,
           128,
           128,
@@ -4230,7 +4289,8 @@ window.BENCHMARK_DATA = {
           716.4322184244792,
           772.0633866970355,
           722.9265445709228,
-          770.9337608973185
+          770.9337608973185,
+          813.6896644739004
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -4260,6 +4320,7 @@ window.BENCHMARK_DATA = {
           1472,
           1472,
           1472,
+          1528,
           1528,
           1528,
           1528,
@@ -4367,7 +4428,8 @@ window.BENCHMARK_DATA = {
           11554.129598999023,
           12794.879416910808,
           10955.957320149739,
-          12407.999295043945
+          12407.999295043945,
+          12280.955633036296
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -4433,6 +4495,7 @@ window.BENCHMARK_DATA = {
           24760,
           24760,
           24761,
+          24760,
           24760,
           24760
         ],
@@ -4975,6 +5038,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sun Jul 5 17:26:46 2026 \u002B0200",
         "message": "docs: add the Awaiten documentation site (#78)"
+      },
+      {
+        "sha": "d3e7fdfb8f5083d0236429051766b6f6c48438d9",
+        "author": "Valentin Breu\u00DF",
+        "date": "Mon Jul 6 09:24:55 2026 \u002B0200",
+        "message": "feat: support open-generic decorators and composites (#79) (#85)"
       }
     ],
     "labels": [
@@ -5037,7 +5106,8 @@ window.BENCHMARK_DATA = {
       "03d4efe0",
       "868f5343",
       "e6ffcfe1",
-      "383a2c13"
+      "383a2c13",
+      "d3e7fdfb"
     ],
     "datasets": [
       {
@@ -5103,7 +5173,8 @@ window.BENCHMARK_DATA = {
           89.02888281345368,
           105.12563145160675,
           80.21019593874614,
-          81.81487475122724
+          81.81487475122724,
+          87.66155128479004
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -5142,6 +5213,7 @@ window.BENCHMARK_DATA = {
           2120,
           2120,
           2120,
+          2128,
           2128,
           2128,
           2128,
@@ -5248,7 +5320,8 @@ window.BENCHMARK_DATA = {
           13923.865541898287,
           15495.69200032552,
           14232.8410639445,
-          14255.272572108677
+          14255.272572108677,
+          15256.058139038087
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -5260,6 +5333,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          61016,
           61016,
           61016,
           61016,
@@ -5393,7 +5467,8 @@ window.BENCHMARK_DATA = {
           717269.3630719866,
           739102.2712890625,
           831737.4221540178,
-          903877.744140625
+          903877.744140625,
+          742815.6041666666
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -5464,7 +5539,8 @@ window.BENCHMARK_DATA = {
           740936,
           721015,
           737616,
-          740934
+          740934,
+          740939
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -5538,7 +5614,8 @@ window.BENCHMARK_DATA = {
           70.22228430850166,
           90.79998471736909,
           67.73038010199865,
-          67.78790379365286
+          67.78790379365286,
+          83.52542846019452
         ],
         "borderColor": "#4A6FA5",
         "backgroundColor": "#4A6FA5",
@@ -5572,6 +5649,7 @@ window.BENCHMARK_DATA = {
           2080,
           2080,
           32,
+          2080,
           2080,
           2080,
           2080,
@@ -5683,7 +5761,8 @@ window.BENCHMARK_DATA = {
           80.10347937742868,
           97.84368034771511,
           75.22729705061231,
-          74.5129274447759
+          74.5129274447759,
+          85.538649892807
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
@@ -5695,6 +5774,7 @@ window.BENCHMARK_DATA = {
         "label": "PureDI memory",
         "unit": "b",
         "data": [
+          2112,
           2112,
           2112,
           2112,
@@ -5824,7 +5904,8 @@ window.BENCHMARK_DATA = {
           42428.43640572684,
           46278.787959507536,
           48850.590649414065,
-          46844.770399983725
+          46844.770399983725,
+          42772.3897257487
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -5891,7 +5972,8 @@ window.BENCHMARK_DATA = {
           80673,
           80108,
           81170,
-          80666
+          80666,
+          80680
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -5961,7 +6043,8 @@ window.BENCHMARK_DATA = {
           355518.4244791667,
           381199.9981770833,
           383729.2983774039,
-          365655.51533203124
+          365655.51533203124,
+          358717.1794759115
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -6028,7 +6111,8 @@ window.BENCHMARK_DATA = {
           573040,
           573105,
           573089,
-          573058
+          573058,
+          573135
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -6378,6 +6462,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sun Jul 5 17:26:46 2026 \u002B0200",
         "message": "docs: add the Awaiten documentation site (#78)"
+      },
+      {
+        "sha": "d3e7fdfb8f5083d0236429051766b6f6c48438d9",
+        "author": "Valentin Breu\u00DF",
+        "date": "Mon Jul 6 09:24:55 2026 \u002B0200",
+        "message": "feat: support open-generic decorators and composites (#79) (#85)"
       }
     ],
     "labels": [
@@ -6436,7 +6526,8 @@ window.BENCHMARK_DATA = {
       "03d4efe0",
       "868f5343",
       "e6ffcfe1",
-      "383a2c13"
+      "383a2c13",
+      "d3e7fdfb"
     ],
     "datasets": [
       {
@@ -6498,7 +6589,8 @@ window.BENCHMARK_DATA = {
           267.71601985295615,
           233.2080990717961,
           240.76315879821777,
-          269.5000473022461
+          269.5000473022461,
+          239.61031732559204
         ],
         "borderColor": "#3949AB",
         "backgroundColor": "#3949AB",
@@ -6533,6 +6625,7 @@ window.BENCHMARK_DATA = {
           560,
           560,
           560,
+          568,
           568,
           568,
           568,
@@ -6635,7 +6728,8 @@ window.BENCHMARK_DATA = {
           590.5807444708688,
           594.567608152117,
           577.7882331701426,
-          684.8881167003086
+          684.8881167003086,
+          604.448300743103
         ],
         "borderColor": "#512BD4",
         "backgroundColor": "#512BD4",
@@ -6647,6 +6741,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          1104,
           1104,
           1104,
           1104,
@@ -6772,7 +6867,8 @@ window.BENCHMARK_DATA = {
           8348.923473612467,
           8364.613814133863,
           8086.54146194458,
-          7048.814134216309
+          7048.814134216309,
+          8445.460372924805
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -6784,6 +6880,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          13696,
           13696,
           13696,
           13696,
@@ -6908,7 +7005,8 @@ window.BENCHMARK_DATA = {
           212.3483128229777,
           173.50445314816065,
           179.5827091852824,
-          216.04593222481864
+          216.04593222481864,
+          184.046187321345
         ],
         "borderColor": "#D9534F",
         "backgroundColor": "#D9534F",
@@ -6920,6 +7018,7 @@ window.BENCHMARK_DATA = {
         "label": "Jab memory",
         "unit": "b",
         "data": [
+          432,
           432,
           432,
           432,
@@ -7044,7 +7143,8 @@ window.BENCHMARK_DATA = {
           451.063892587026,
           413.9666938100542,
           400.50396900177003,
-          413.53985520771573
+          413.53985520771573,
+          416.33715527852377
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -7056,6 +7156,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          944,
           944,
           944,
           944,
@@ -7181,7 +7282,8 @@ window.BENCHMARK_DATA = {
           685.1078897476197,
           718.8756357828776,
           717.9716619491577,
-          746.0335287729899
+          746.0335287729899,
+          721.5799128214518
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -7193,6 +7295,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          1096,
           1096,
           1096,
           1096,
@@ -7318,7 +7421,8 @@ window.BENCHMARK_DATA = {
           202.98784098625183,
           177.74320537249247,
           178.28272436346327,
-          186.046821641922
+          186.046821641922,
+          184.7564335346222
         ],
         "borderColor": "#F0AD4E",
         "backgroundColor": "#F0AD4E",
@@ -7330,6 +7434,7 @@ window.BENCHMARK_DATA = {
         "label": "PureDI memory",
         "unit": "b",
         "data": [
+          632,
           632,
           632,
           632,
