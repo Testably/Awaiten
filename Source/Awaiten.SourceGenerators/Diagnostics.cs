@@ -378,6 +378,8 @@ internal static class Diagnostics
 	///     A closed generic required from the graph cannot be constructed from an open generic
 	///     registration because its type arguments violate the implementation's type-parameter
 	///     constraints (e.g. <c>Repository&lt;int&gt;</c> where the implementation declares <c>where T : class</c>).
+	///     An error because the dependency is then unsatisfiable. The decorator/composite analogue, where the base
+	///     service still resolves, is the warning <see cref="DecoratorClosingConstraintViolation">AWT171</see>.
 	/// </summary>
 	public static readonly DiagnosticDescriptor OpenGenericConstraintViolation = new(
 		"AWT126",
@@ -1017,5 +1019,21 @@ internal static class Diagnostics
 		"'{0}' has more than one contextual binding for '{1}'; the contextual resolution into '{1}' would be ambiguous",
 		"Awaiten",
 		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A closing of an open generic <c>[Decorate]</c>/<c>[Composite]</c> cannot be constructed because its type
+	///     arguments violate the decorator's or composite's type-parameter constraints (e.g. a
+	///     <c>Logging&lt;T&gt; where T : class</c> behavior applied to <c>IHandler&lt;&gt;</c> when
+	///     <c>IHandler&lt;int&gt;</c> is registered). Unlike <see cref="OpenGenericConstraintViolation">AWT126</see>,
+	///     a warning rather than an error: the base service still resolves, so that one closing is left
+	///     undecorated/unfronted and the remaining closings are decorated/composed as usual.
+	/// </summary>
+	public static readonly DiagnosticDescriptor DecoratorClosingConstraintViolation = new(
+		"AWT171",
+		"Decorator or composite skips a constraint-violating closing",
+		"'{0}' cannot be constructed from the open generic '{1}': the type argument(s) violate its type-parameter constraints, so that closing is left as-is",
+		"Awaiten",
+		DiagnosticSeverity.Warning,
 		isEnabledByDefault: true);
 }

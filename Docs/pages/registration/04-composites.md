@@ -30,6 +30,27 @@ await channel.SendAsync(receipt);                            // printer, email, 
 
 The composite never contains itself. Its own collection parameter receives only the other members. A consumer that asks for `IReceiptChannel[]` still gets the bare channels, so you can reach them directly if you need to.
 
+## Compose every closing of an open generic
+
+To front every closing of an open generic service with a matching composite, use the `typeof` form with unbound generics (the generic `[Composite<,>]` form only takes closed types):
+
+```csharp
+public sealed class CompositeHandler<T>(IEnumerable<IHandler<T>> inner) : IHandler<T>
+{
+    public Task HandleAsync(T request) => Task.WhenAll(inner.Select(h => h.HandleAsync(request)));
+}
+
+[Container]
+[Transient(typeof(EmailHandler<>), typeof(IHandler<>))]
+[Transient(typeof(SmsHandler<>), typeof(IHandler<>))]
+[Composite(typeof(CompositeHandler<>), typeof(IHandler<>))]
+public static partial class CoffeeShop;
+
+// Resolve<IHandler<Receipt>>() returns CompositeHandler<Receipt> fanning out to the Receipt handlers
+```
+
+Awaiten synthesizes a closed composite for every closing present in the graph. Each closing then follows the closed rules above: one façade per closing, excluded from its own fan-out. The composite's arity must match the service's, and it must expose the service with its type parameters in declaration order (`CompositeHandler<T> : IHandler<T>`).
+
 ## Lifetime
 
 A composite is transient by default. Set `Lifetime` to change it.
@@ -40,7 +61,7 @@ A composite is transient by default. Set `Lifetime` to change it.
 
 With no members registered, the composite still resolves and fans out to an empty collection.
 
-*Note: only one composite may front a given service ([AWT132](../diagnostics#awt132)), and the composite's collection parameter must be of the composed service itself ([AWT130](../diagnostics#awt130), [AWT133](../diagnostics#awt133)).*
+*Note: only one composite may front a given service ([AWT132](../diagnostics#awt132)), and the composite's collection parameter must be of the composed service itself ([AWT130](../diagnostics#awt130), [AWT133](../diagnostics#awt133)). The open generic `typeof` form additionally requires an unbound generic ([AWT127](../diagnostics#awt127)) of matching arity ([AWT125](../diagnostics#awt125)), and skips a closing whose type arguments violate the composite's constraints ([AWT126](../diagnostics#awt126)).*
 
 ## Where to go next
 

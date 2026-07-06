@@ -373,20 +373,23 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     Reads the <c>[Decorate&lt;TDecorator, TService&gt;]</c> registrations on a container and its modules, in
-	///     declaration order (container first). Each carries its declaration index so equal <c>Order</c> values fall
-	///     back to declaration order. Collected apart from lifetime registrations because a decorator wraps an
-	///     existing registration after coalescing.
+	///     Reads the <c>[Decorate]</c> registrations on a container and its modules, in declaration order (container
+	///     first): the closed <c>[Decorate&lt;TDecorator, TService&gt;]</c> form and the open generic
+	///     <c>[Decorate(typeof(D&lt;&gt;), typeof(IService&lt;&gt;))]</c> form. Both share one declaration counter so
+	///     that, once the open form is expanded per closing, open and closed decorators of the same closed service
+	///     interleave by equal <c>Order</c> then declaration order. Collected apart from lifetime registrations
+	///     because a decorator wraps an existing registration after coalescing.
 	/// </summary>
-	private static List<DecorateRegistration> CollectDecorators(INamedTypeSymbol containerSymbol, List<ImportedModule> modules)
+	private static (List<DecorateRegistration> Closed, List<OpenDecorateRegistration> Open) CollectDecorators(
+		INamedTypeSymbol containerSymbol, List<ImportedModule> modules, List<DiagnosticInfo> diagnostics)
 	{
-		List<DecorateRegistration> result = new();
+		List<DecorateRegistration> closed = new();
+		List<OpenDecorateRegistration> open = new();
+		int declarationOrder = 0;
 		foreach ((AttributeData attribute, Location? fallbackLocation) in AttributesOf(containerSymbol, modules))
 		{
-			if (attribute.AttributeClass is not { Name: "DecorateAttribute", IsGenericType: true, TypeArguments.Length: 2, } attributeClass
-			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace
-			    || attributeClass.TypeArguments[0] is not INamedTypeSymbol decorator
-			    || attributeClass.TypeArguments[1] is not INamedTypeSymbol service)
+			if (attribute.AttributeClass is not { Name: "DecorateAttribute", } attributeClass
+			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace)
 			{
 				continue;
 			}
@@ -400,33 +403,50 @@ partial class AwaitenGenerator
 				}
 			}
 
-			result.Add(new DecorateRegistration(
-				service.ToDisplayString(FullyQualified),
-				service,
-				decorator,
-				order,
-				result.Count,
-				attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? fallbackLocation));
+			Location? location = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? fallbackLocation;
+
+			if (attributeClass.IsGenericType)
+			{
+				if (attributeClass.TypeArguments.Length == 2
+				    && attributeClass.TypeArguments[0] is INamedTypeSymbol decorator
+				    && attributeClass.TypeArguments[1] is INamedTypeSymbol service)
+				{
+					closed.Add(new DecorateRegistration(
+						service.ToDisplayString(FullyQualified), service, decorator, order, declarationOrder, location));
+				}
+			}
+			else if (attribute.ConstructorArguments.Length == 2
+			         && attribute.ConstructorArguments[0].Value is INamedTypeSymbol openDecorator
+			         && attribute.ConstructorArguments[1].Value is INamedTypeSymbol openService
+			         && TryReadOpenGenericPair(openDecorator, openService, LocationInfo.From(location), diagnostics) is { } pair)
+			{
+				open.Add(new OpenDecorateRegistration(pair.Service, pair.Mapped, order, declarationOrder, location));
+			}
+
+			// One slot per [Decorate] attribute (well-formed or not), so open and closed decorators keep their
+			// relative source order regardless of how many closings the open form later expands to.
+			declarationOrder++;
 		}
 
-		return result;
+		return (closed, open);
 	}
 
 	/// <summary>
-	///     Reads the <c>[Composite&lt;TComposite, TService&gt;]</c> registrations on a container and its modules,
-	///     each carrying the composed service, the composite implementation and its lifetime (default
-	///     <see cref="Lifetime.Transient" />). Collected apart from lifetime registrations because a composite
-	///     fronts an existing service after coalescing.
+	///     Reads the <c>[Composite]</c> registrations on a container and its modules: the closed
+	///     <c>[Composite&lt;TComposite, TService&gt;]</c> form and the open generic
+	///     <c>[Composite(typeof(C&lt;&gt;), typeof(IService&lt;&gt;))]</c> form, each carrying the composed service,
+	///     the composite and its lifetime (default <see cref="Lifetime.Transient" />). Collected apart from lifetime
+	///     registrations because a composite fronts an existing service after coalescing.
 	/// </summary>
-	private static List<CompositeRegistration> CollectComposites(INamedTypeSymbol containerSymbol, List<ImportedModule> modules)
+	private static (List<CompositeRegistration> Closed, List<OpenCompositeRegistration> Open) CollectComposites(
+		INamedTypeSymbol containerSymbol, List<ImportedModule> modules, List<DiagnosticInfo> diagnostics)
 	{
-		List<CompositeRegistration> result = new();
+		List<CompositeRegistration> closed = new();
+		List<OpenCompositeRegistration> open = new();
 		foreach ((AttributeData attribute, Location? fallbackLocation) in AttributesOf(containerSymbol, modules))
 		{
-			if (attribute.AttributeClass is not { Name: "CompositeAttribute", IsGenericType: true, TypeArguments.Length: 2, } attributeClass
-			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace
-			    || attributeClass.TypeArguments[0] is not INamedTypeSymbol composite
-			    || attributeClass.TypeArguments[1] is not INamedTypeSymbol service)
+			if (attribute.AttributeClass is not { Name: "CompositeAttribute", } attributeClass
+			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace)
 			{
 				continue;
 			}
@@ -443,15 +463,28 @@ partial class AwaitenGenerator
 				}
 			}
 
-			result.Add(new CompositeRegistration(
-				service.ToDisplayString(FullyQualified),
-				service,
-				composite,
-				lifetime,
-				attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? fallbackLocation));
+			Location? location = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? fallbackLocation;
+
+			if (attributeClass.IsGenericType)
+			{
+				if (attributeClass.TypeArguments.Length == 2
+				    && attributeClass.TypeArguments[0] is INamedTypeSymbol composite
+				    && attributeClass.TypeArguments[1] is INamedTypeSymbol service)
+				{
+					closed.Add(new CompositeRegistration(
+						service.ToDisplayString(FullyQualified), service, composite, lifetime, location));
+				}
+			}
+			else if (attribute.ConstructorArguments.Length == 2
+			         && attribute.ConstructorArguments[0].Value is INamedTypeSymbol openComposite
+			         && attribute.ConstructorArguments[1].Value is INamedTypeSymbol openService
+			         && TryReadOpenGenericPair(openComposite, openService, LocationInfo.From(location), diagnostics) is { } pair)
+			{
+				open.Add(new OpenCompositeRegistration(pair.Service, pair.Mapped, lifetime, location));
+			}
 		}
 
-		return result;
+		return (closed, open);
 	}
 
 	/// <summary>

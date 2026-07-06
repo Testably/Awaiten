@@ -71,3 +71,4 @@
  AWT167  | Awaiten   | Warning  | A WhenInjectedInto contextual binding never applies because the named consumer has no unkeyed direct constructor parameter to redirect
  AWT168  | Awaiten   | Error    | A registration sets both WhenInjectedInto and Key, which claim the same resolution slot, so the Key is silently dropped
  AWT169  | Awaiten   | Error    | Two implementations set WhenInjectedInto for the same service and consumer, so the contextual resolution would be ambiguous
+ AWT171  | Awaiten   | Warning  | A closing of an open generic [Decorate]/[Composite] violates the decorator's or composite's constraints and is skipped

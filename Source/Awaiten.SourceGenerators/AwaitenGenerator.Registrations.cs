@@ -77,6 +77,32 @@ internal sealed record CompositeRegistration(
 	Lifetime Lifetime,
 	Location? Location);
 
+/// <summary>
+///     A single open generic <c>[Decorate(typeof(D&lt;&gt;), typeof(IService&lt;&gt;))]</c> registration: the unbound
+///     service and decorator definitions, the chain <see cref="Order" /> and the declaration index (shared with the
+///     closed <c>[Decorate&lt;,&gt;]</c> forms so open and closed decorators interleave). Expanded into a closed
+///     <see cref="DecorateRegistration" /> per existing closing of the service.
+/// </summary>
+/// <remarks>An intermediate type carrying a live Roslyn <see cref="Location" />; see <see cref="RawRegistration" />.</remarks>
+internal sealed record OpenDecorateRegistration(
+	INamedTypeSymbol Service,
+	INamedTypeSymbol Decorator,
+	int Order,
+	int DeclarationOrder,
+	Location? Location);
+
+/// <summary>
+///     A single open generic <c>[Composite(typeof(C&lt;&gt;), typeof(IService&lt;&gt;))]</c> registration: the unbound
+///     service and composite definitions and the lifetime. Expanded into a closed <see cref="CompositeRegistration" />
+///     per existing closing of the service.
+/// </summary>
+/// <remarks>An intermediate type carrying a live Roslyn <see cref="Location" />; see <see cref="RawRegistration" />.</remarks>
+internal sealed record OpenCompositeRegistration(
+	INamedTypeSymbol Service,
+	INamedTypeSymbol Composite,
+	Lifetime Lifetime,
+	Location? Location);
+
 partial class AwaitenGenerator
 {
 	/// <summary>

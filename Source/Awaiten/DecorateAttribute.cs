@@ -40,3 +40,44 @@ public sealed class DecorateAttribute<TDecorator, TService> : Attribute
 	/// </summary>
 	public int Order { get; set; }
 }
+
+/// <summary>
+///     Decorates every closing of an open generic service with the matching closing of an open generic decorator,
+///     so a pipeline behavior wraps all closings of <c>IHandler&lt;&gt;</c> in one attribute. Resolving
+///     <c>IHandler&lt;Order&gt;</c> yields <c>LoggingBehavior&lt;Order&gt;(inner)</c>. Uses <see cref="Type" />
+///     arguments because an unbound generic like <c>typeof(IHandler&lt;&gt;)</c> cannot be a type argument.
+/// </summary>
+/// <remarks>
+///     A closed decorator is synthesized for every closing already present in the graph (however it was registered -
+///     explicit, scanned or open generic) and interleaves with explicit <c>[Decorate&lt;D, IHandler&lt;Order&gt;&gt;]</c>
+///     registrations by the same <see cref="Order" />-then-declaration-order rules. The decorator's arity must equal
+///     the service's, and it must expose the service with its type parameters in declaration order
+///     (<c>LoggingBehavior&lt;T&gt; : IHandler&lt;T&gt;</c>); a closing whose type arguments violate the decorator's
+///     constraints is skipped with a diagnostic. Like the generic form, a decorator's own generic dependencies are
+///     supplied only when some other registration expands them into the graph.
+/// </remarks>
+/// <example><c>[Decorate(typeof(LoggingBehavior&lt;&gt;), typeof(IHandler&lt;&gt;))]</c></example>
+[AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
+public sealed class DecorateAttribute : Attribute
+{
+	/// <summary>Decorates every closing of <paramref name="service" /> with the matching closing of <paramref name="decorator" />.</summary>
+	/// <param name="decorator">The open generic decorator, e.g. <c>typeof(LoggingBehavior&lt;&gt;)</c>.</param>
+	/// <param name="service">The open generic service to decorate, e.g. <c>typeof(IHandler&lt;&gt;)</c>.</param>
+	public DecorateAttribute(Type decorator, Type service)
+	{
+		Decorator = decorator;
+		Service = service;
+	}
+
+	/// <summary>The open generic decorator type, e.g. <c>typeof(LoggingBehavior&lt;&gt;)</c>.</summary>
+	public Type Decorator { get; }
+
+	/// <summary>The open generic service type whose closings are decorated, e.g. <c>typeof(IHandler&lt;&gt;)</c>.</summary>
+	public Type Service { get; }
+
+	/// <summary>
+	///     The decorator's position in each closing's chain (ascending, outermost last), interleaved with that
+	///     closing's explicit decorators by <see cref="Order" /> first, then declaration order.
+	/// </summary>
+	public int Order { get; set; }
+}

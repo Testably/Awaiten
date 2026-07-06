@@ -40,6 +40,18 @@ Open registrations join collections. A request for `IEnumerable<IHandler<OrderPl
 [Transient(typeof(FastRepository<>), typeof(IRepository<>), Key = "fast")]
 ```
 
+## Decorate or compose the closings
+
+Decorators and composites take the same `typeof` form, so one behavior wraps every closing of an open generic service — the pipeline-behavior pattern:
+
+```csharp
+[Transient(typeof(Handler<>), typeof(IHandler<>))]
+[Decorate(typeof(LoggingBehavior<>), typeof(IHandler<>))]
+[Composite(typeof(CompositeHandler<>), typeof(IHandler<>))]
+```
+
+See [Decorators](./decorators#decorate-every-closing-of-an-open-generic) and [Composites](./composites#compose-every-closing-of-an-open-generic).
+
 *Note: the implementation and service must have the same arity ([AWT125](../diagnostics#awt125)), and a closed type argument must satisfy the implementation's constraints ([AWT126](../diagnostics#awt126)).*
 
 ## Where to go next
