@@ -17,7 +17,6 @@ public partial class ConcurrentResolveTests
 	[Fact]
 	public async Task Singleton_ResolvedAsyncConcurrently_IsInitializedOnceAndDisposedOnce()
 	{
-		AsyncCountedService.Reset();
 		AsyncCountedService[] resolved = new AsyncCountedService[ThreadCount];
 
 		using (AsyncContainer.Root container = new())
@@ -26,15 +25,15 @@ public partial class ConcurrentResolveTests
 
 			await That(resolved.Distinct().Count()).IsEqualTo(1)
 				.Because("every thread observes the one cached, initialized singleton");
-			await That(AsyncCountedService.ConstructionCount).IsEqualTo(1)
+			await That(container.Resolve<Counter>().Count).IsEqualTo(1)
 				.Because("the singleton is constructed exactly once even when many threads call ResolveAsync at once");
-			await That(AsyncCountedService.InitializeCount).IsEqualTo(1)
+			await That(resolved[0].InitializeCount).IsEqualTo(1)
 				.Because("InitializeAsync runs exactly once under the async memoization, never once per racing caller");
 			await That(resolved[0].Disposed).IsFalse()
 				.Because("the container still owns the singleton");
 		}
 
-		await That(AsyncCountedService.DisposeCount).IsEqualTo(1)
+		await That(resolved[0].DisposeCount).IsEqualTo(1)
 			.Because("the concurrently-async-resolved singleton is tracked for disposal exactly once, so container teardown disposes it exactly once");
 	}
 
@@ -431,23 +430,16 @@ public partial class ConcurrentResolveTests
 
 	public sealed class AsyncCountedService : IAsyncInitializable, IDisposable
 	{
-		private static int _constructionCount;
-		private static int _initializeCount;
-		private static int _disposeCount;
-		private int _disposed;
+		private int _initializeCount;
+		private int _disposeCount;
 
-		public AsyncCountedService()
-		{
-			Interlocked.Increment(ref _constructionCount);
-		}
+		public AsyncCountedService(Counter counter) => counter.Mark();
 
-		public static int ConstructionCount => Volatile.Read(ref _constructionCount);
+		public int InitializeCount => Volatile.Read(ref _initializeCount);
 
-		public static int InitializeCount => Volatile.Read(ref _initializeCount);
+		public int DisposeCount => Volatile.Read(ref _disposeCount);
 
-		public static int DisposeCount => Volatile.Read(ref _disposeCount);
-
-		public bool Disposed => Volatile.Read(ref _disposed) != 0;
+		public bool Disposed => DisposeCount != 0;
 
 		public async Task InitializeAsync(CancellationToken cancellationToken)
 		{
@@ -456,21 +448,11 @@ public partial class ConcurrentResolveTests
 			Interlocked.Increment(ref _initializeCount);
 		}
 
-		public void Dispose()
-		{
-			Volatile.Write(ref _disposed, 1);
-			Interlocked.Increment(ref _disposeCount);
-		}
-
-		public static void Reset()
-		{
-			Volatile.Write(ref _constructionCount, 0);
-			Volatile.Write(ref _initializeCount, 0);
-			Volatile.Write(ref _disposeCount, 0);
-		}
+		public void Dispose() => Interlocked.Increment(ref _disposeCount);
 	}
 
 	[Container]
+	[Singleton<Counter>]
 	[Singleton<AsyncCountedService>]
 	public static partial class AsyncContainer;
 
@@ -544,7 +526,11 @@ public partial class ConcurrentResolveTests
 
 		public bool Disposed => DisposeCount != 0;
 
-		public void Dispose() => Interlocked.Increment(ref _disposeCount);
+		public void Dispose()
+		{
+			Interlocked.Increment(ref _disposeCount);
+			GC.SuppressFinalize(this);
+		}
 	}
 
 	public sealed class HeteroA(HeteroCounter counter) : HeteroService(counter);
@@ -671,7 +657,11 @@ public partial class ConcurrentResolveTests
 
 		public bool Disposed => DisposeCount != 0;
 
-		public void Dispose() => Interlocked.Increment(ref _disposeCount);
+		public void Dispose()
+		{
+			Interlocked.Increment(ref _disposeCount);
+			GC.SuppressFinalize(this);
+		}
 	}
 
 	public sealed class FastKeyed(KeyedCounter counter) : KeyedServiceBase(counter);
