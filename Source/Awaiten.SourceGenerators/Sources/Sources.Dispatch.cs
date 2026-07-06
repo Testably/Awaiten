@@ -144,14 +144,12 @@ internal static partial class Sources
 
 			bool requiresAsync = instance.IsAsyncTainted && !syncResolveAfterInit;
 			bool externallyOwned = instance.Production == ProductionKind.Instance;
-			foreach (ServiceKey service in instance.Services.AsArray())
+			// The synthetic decorator/contextual keys are internal wiring, never advertised. Unkeyed and
+			// user-keyed registrations are both advertised, the latter carrying its user-declared [Key].
+			foreach (ServiceKey service in instance.Services.AsArray()
+				         .Where(service => service.Key is null || AwaitenGenerator.IsUserKey(service.Key)))
 			{
-				// The synthetic decorator/contextual keys are internal wiring, never advertised. Unkeyed and
-				// user-keyed registrations are both advertised, the latter carrying its user-declared [Key].
-				if (service.Key is null || AwaitenGenerator.IsUserKey(service.Key))
-				{
-					EmitRegistrationEntry(builder, depth + 1, service, instance, requiresAsync, externallyOwned);
-				}
+				EmitRegistrationEntry(builder, depth + 1, service, instance, requiresAsync, externallyOwned);
 			}
 		}
 
