@@ -208,8 +208,11 @@ namespace Awaiten
         public ScanAttribute(System.Type assignableTo) { }
         public Awaiten.ScanAs As { get; set; }
         public System.Type AssignableTo { get; }
+        public System.Type[]? Exclude { get; set; }
         public System.Type[]? InAssembliesOf { get; set; }
         public Awaiten.AwaitenLifetime Lifetime { get; set; }
+        public string[]? NamePatterns { get; set; }
+        public string[]? NamespacePatterns { get; set; }
         public bool SkipUnconstructable { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
@@ -217,8 +220,11 @@ namespace Awaiten
     {
         public ScanAttribute() { }
         public Awaiten.ScanAs As { get; set; }
+        public System.Type[]? Exclude { get; set; }
         public System.Type[]? InAssembliesOf { get; set; }
         public Awaiten.AwaitenLifetime Lifetime { get; set; }
+        public string[]? NamePatterns { get; set; }
+        public string[]? NamespacePatterns { get; set; }
         public bool SkipUnconstructable { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]

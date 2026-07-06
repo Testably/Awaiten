@@ -11,8 +11,10 @@ partial class AwaitenGenerator
 	///     assignable to the marker, exposed per <c>ScanAs</c>. An unbound generic marker matches a type
 	///     implementing a closed form of it, registered under that closed interface (Autofac's
 	///     <c>AsClosedTypesOf</c>). Covers the container's own assembly, or the assemblies named by
-	///     <c>InAssembliesOf</c>, sorted by name for reproducibility. Abstract/static classes, generic definitions,
-	///     inaccessible types and the marker itself are skipped. Reports AWT138/AWT139/AWT140/AWT143. The synthesized
+	///     <c>InAssembliesOf</c>, sorted by name for reproducibility, then narrowed by the optional
+	///     <c>NamePatterns</c>/<c>NamespacePatterns</c>/<c>Exclude</c> filters. Abstract/static classes, generic
+	///     definitions, inaccessible types and the marker itself are skipped. Reports
+	///     AWT138/AWT139/AWT140/AWT143/AWT172/AWT173/AWT174. The synthesized
 	///     registrations are <see cref="RawRegistration.IsScan" />, so an explicit registration wins single
 	///     resolution while every match still joins its collection.
 	/// </summary>
@@ -62,30 +64,30 @@ partial class AwaitenGenerator
 		}
 
 		ScanMatch match = new(ScanExposureOf(attribute), ScanLifetime(attribute), location, ScanSkipsUnconstructable(attribute));
+		ScanFilters filters = ScanFiltersOf(attribute);
 		bool openMarker = IsOpenGenericMarker(marker);
 		INamedTypeSymbol markerDefinition = marker.OriginalDefinition;
 		string markerDisplay = (openMarker ? markerDefinition : marker).ToDisplayString(FullyQualified);
 
-		int matched = 0;
+		ScanFilterHits hits = new();
+		int assignable = 0;
+		int registered = 0;
 		foreach (INamedTypeSymbol type in ScanCandidates(assemblies, compilation, marker, location, diagnostics))
 		{
-			matched++;
+			assignable++;
+			if (!PassesScanFilters(type, filters, hits))
+			{
+				continue;
+			}
+
+			registered++;
 			List<INamedTypeSymbol> contracts = openMarker
 				? ClosedMarkerInterfaces(type, markerDefinition)
 				: MarkerInterfaces(type, marker, compilation);
 			RegisterScanMatch(type, contracts, markerDisplay, match, result, diagnostics);
 		}
 
-		// AWT138 fires only for an own-assembly scan (its "in this assembly" wording is accurate there). An
-		// InAssembliesOf scan that matched nothing already reported the more actionable AWT140 per named
-		// assembly, so AWT138 would be redundant and misworded.
-		if (matched == 0 && assemblies is null)
-		{
-			diagnostics.Add(new DiagnosticInfo(
-				Diagnostics.ScanMatchedNothing,
-				LocationInfo.From(location),
-				new EquatableArray<string>([Display(markerDisplay),])));
-		}
+		ReportScanFilterDiagnostics(filters, hits, new ScanFilterCounts(assignable, registered), assemblies, markerDisplay, location, diagnostics);
 	}
 
 	/// <summary>
@@ -414,6 +416,327 @@ partial class AwaitenGenerator
 		}
 
 		return ScanExposure.Self;
+	}
+
+	/// <summary>
+	///     The name, namespace and exact-type filters named on a <c>[Scan]</c>, each pattern list split into
+	///     includes and <c>!</c>-prefixed excludes. Empty when the scan declares no filter.
+	/// </summary>
+	private sealed class ScanFilters
+	{
+		public List<string> NameIncludes { get; } = new();
+
+		public List<string> NameExcludes { get; } = new();
+
+		public List<string> NamespaceIncludes { get; } = new();
+
+		public List<string> NamespaceExcludes { get; } = new();
+
+		public List<INamedTypeSymbol> ExcludeTypes { get; } = new();
+
+		public bool IsEmpty => NameIncludes.Count == 0 && NameExcludes.Count == 0
+		                       && NamespaceIncludes.Count == 0 && NamespaceExcludes.Count == 0
+		                       && ExcludeTypes.Count == 0;
+	}
+
+	/// <summary>Which exclusions actually removed a candidate, so an exclusion that never applied is reported as stale.</summary>
+	private sealed class ScanFilterHits
+	{
+		public HashSet<string> NameExcludes { get; } = new(StringComparer.Ordinal);
+
+		public HashSet<string> NamespaceExcludes { get; } = new(StringComparer.Ordinal);
+
+		public HashSet<INamedTypeSymbol> ExcludeTypes { get; } = new(SymbolEqualityComparer.Default);
+	}
+
+	/// <summary>Candidates a scan's marker matched (<paramref name="Assignable" />) and how many survived its filters to register (<paramref name="Registered" />).</summary>
+	private readonly record struct ScanFilterCounts(int Assignable, int Registered);
+
+	/// <summary>
+	///     The <c>NamePatterns</c>, <c>NamespacePatterns</c> and <c>Exclude</c> named on a <c>[Scan]</c>. Null, empty
+	///     and (for patterns) bare <c>!</c> entries are dropped.
+	/// </summary>
+	private static ScanFilters ScanFiltersOf(AttributeData attribute)
+	{
+		ScanFilters filters = new();
+		foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
+		{
+			switch (argument.Key)
+			{
+				case "NamePatterns":
+					AddPatterns(argument.Value, filters.NameIncludes, filters.NameExcludes);
+					break;
+				case "NamespacePatterns":
+					AddPatterns(argument.Value, filters.NamespaceIncludes, filters.NamespaceExcludes);
+					break;
+				case "Exclude" when argument.Value.Kind == TypedConstantKind.Array && !argument.Value.IsNull:
+					foreach (TypedConstant element in argument.Value.Values)
+					{
+						if (element.Value is INamedTypeSymbol type
+						    && !filters.ExcludeTypes.Contains(type, SymbolEqualityComparer.Default))
+						{
+							filters.ExcludeTypes.Add(type);
+						}
+					}
+
+					break;
+			}
+		}
+
+		return filters;
+	}
+
+	private static void AddPatterns(TypedConstant value, List<string> includes, List<string> excludes)
+	{
+		if (value.Kind != TypedConstantKind.Array || value.IsNull)
+		{
+			return;
+		}
+
+		foreach (TypedConstant element in value.Values)
+		{
+			if (element.Value is not string pattern || pattern.Length == 0)
+			{
+				continue;
+			}
+
+			if (pattern[0] == '!')
+			{
+				if (pattern.Length > 1)
+				{
+					excludes.Add(pattern.Substring(1));
+				}
+			}
+			else
+			{
+				includes.Add(pattern);
+			}
+		}
+	}
+
+	/// <summary>
+	///     Whether a marker-assignable candidate survives the scan's filters: it matches no exclusion (name/namespace
+	///     pattern or <c>Exclude</c> type) and, on each axis that declares includes, matches at least one. Records
+	///     every exclusion that applied on <paramref name="hits" /> even when the candidate is dropped for another
+	///     reason, so a stale exclusion can be told apart from one that did its job.
+	/// </summary>
+	private static bool PassesScanFilters(INamedTypeSymbol type, ScanFilters filters, ScanFilterHits hits)
+	{
+		if (filters.IsEmpty)
+		{
+			return true;
+		}
+
+		string name = type.Name;
+		string ns = type.ContainingNamespace is { IsGlobalNamespace: false, } containing
+			? containing.ToDisplayString()
+			: string.Empty;
+
+		bool excluded = false;
+		foreach (string pattern in filters.NameExcludes.Where(pattern => NameGlob(name, pattern)))
+		{
+			hits.NameExcludes.Add(pattern);
+			excluded = true;
+		}
+
+		foreach (string pattern in filters.NamespaceExcludes.Where(pattern => NamespaceGlob(ns, pattern)))
+		{
+			hits.NamespaceExcludes.Add(pattern);
+			excluded = true;
+		}
+
+		foreach (INamedTypeSymbol excludedType in filters.ExcludeTypes.Where(excludedType => SymbolEqualityComparer.Default.Equals(type, excludedType)))
+		{
+			hits.ExcludeTypes.Add(excludedType);
+			excluded = true;
+		}
+
+		if (excluded)
+		{
+			return false;
+		}
+
+		return (filters.NameIncludes.Count == 0 || filters.NameIncludes.Any(pattern => NameGlob(name, pattern)))
+		       && (filters.NamespaceIncludes.Count == 0 || filters.NamespaceIncludes.Any(pattern => NamespaceGlob(ns, pattern)));
+	}
+
+	/// <summary>
+	///     Reports the filter-related scan diagnostics after the candidate loop: AWT138 (marker matched nothing in
+	///     the own assembly) or AWT172 (the filters removed every marker match), AWT173 per exclusion that never
+	///     applied, and AWT174 per include pattern that matches every candidate.
+	/// </summary>
+	private static void ReportScanFilterDiagnostics(
+		ScanFilters filters,
+		ScanFilterHits hits,
+		ScanFilterCounts counts,
+		List<IAssemblySymbol>? assemblies,
+		string markerDisplay,
+		Location? location,
+		List<DiagnosticInfo> diagnostics)
+	{
+		if (counts.Assignable == 0)
+		{
+			// AWT138's "in this assembly" wording only fits an own-assembly scan; an InAssembliesOf scan already
+			// reported the more actionable AWT140 per named assembly.
+			if (assemblies is null)
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.ScanMatchedNothing,
+					LocationInfo.From(location),
+					new EquatableArray<string>([Display(markerDisplay),])));
+			}
+
+			return;
+		}
+
+		if (counts.Registered == 0)
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.ScanFiltersMatchedNothing,
+				LocationInfo.From(location),
+				new EquatableArray<string>([Display(markerDisplay),])));
+		}
+
+		foreach (string pattern in filters.NameExcludes.Where(pattern => !hits.NameExcludes.Contains(pattern)))
+		{
+			ReportStaleExclusion("!" + pattern, location, diagnostics);
+		}
+
+		foreach (string pattern in filters.NamespaceExcludes.Where(pattern => !hits.NamespaceExcludes.Contains(pattern)))
+		{
+			ReportStaleExclusion("!" + pattern, location, diagnostics);
+		}
+
+		foreach (INamedTypeSymbol type in filters.ExcludeTypes.Where(type => !hits.ExcludeTypes.Contains(type)))
+		{
+			ReportStaleExclusion(Display(type.ToDisplayString(FullyQualified)), location, diagnostics);
+		}
+
+		foreach (string pattern in filters.NameIncludes.Where(pattern => pattern.All(character => character == '*')))
+		{
+			ReportRedundantPattern(pattern, location, diagnostics);
+		}
+
+		foreach (string pattern in filters.NamespaceIncludes.Where(pattern => pattern.Split('.').All(segment => segment == "**")))
+		{
+			ReportRedundantPattern(pattern, location, diagnostics);
+		}
+	}
+
+	private static void ReportStaleExclusion(string entry, Location? location, List<DiagnosticInfo> diagnostics)
+		=> diagnostics.Add(new DiagnosticInfo(
+			Diagnostics.ScanExclusionNeverMatched,
+			LocationInfo.From(location),
+			new EquatableArray<string>([entry,])));
+
+	private static void ReportRedundantPattern(string pattern, Location? location, List<DiagnosticInfo> diagnostics)
+		=> diagnostics.Add(new DiagnosticInfo(
+			Diagnostics.ScanPatternMatchesEverything,
+			LocationInfo.From(location),
+			new EquatableArray<string>([pattern,])));
+
+	/// <summary>
+	///     Ordinal glob match of a simple type name: <c>*</c> matches any run of characters and the pattern is
+	///     anchored to the whole name. The only wildcard; there is no <c>.</c> separator to respect.
+	/// </summary>
+	private static bool NameGlob(string text, string pattern)
+	{
+		string[] parts = pattern.Split('*');
+		if (parts.Length == 1)
+		{
+			return string.Equals(text, pattern, StringComparison.Ordinal);
+		}
+
+		if (!text.StartsWith(parts[0], StringComparison.Ordinal)
+		    || !text.EndsWith(parts[parts.Length - 1], StringComparison.Ordinal))
+		{
+			return false;
+		}
+
+		int index = parts[0].Length;
+		int end = text.Length - parts[parts.Length - 1].Length;
+		if (index > end)
+		{
+			return false;
+		}
+
+		for (int part = 1; part < parts.Length - 1; part++)
+		{
+			if (parts[part].Length == 0)
+			{
+				continue;
+			}
+
+			int found = text.IndexOf(parts[part], index, end - index, StringComparison.Ordinal);
+			if (found < 0)
+			{
+				return false;
+			}
+
+			index = found + parts[part].Length;
+		}
+
+		return true;
+	}
+
+	/// <summary>
+	///     Segment-aware ordinal glob match of a namespace: split on <c>.</c>, a <c>**</c> segment matches zero or
+	///     more whole segments and any other segment matches exactly one via <see cref="NameGlob" />. The empty
+	///     string is the global namespace (zero segments).
+	/// </summary>
+	private static bool NamespaceGlob(string ns, string pattern)
+		=> MatchSegments(
+			ns.Length == 0 ? Array.Empty<string>() : ns.Split('.'),
+			0,
+			pattern.Length == 0 ? Array.Empty<string>() : pattern.Split('.'),
+			0);
+
+	private static bool MatchSegments(string[] text, int textIndex, string[] pattern, int patternIndex)
+	{
+		while (patternIndex < pattern.Length)
+		{
+			if (pattern[patternIndex] == "**")
+			{
+				return MatchAfterDoubleStar(text, textIndex, pattern, patternIndex);
+			}
+
+			if (textIndex >= text.Length || !NameGlob(text[textIndex], pattern[patternIndex]))
+			{
+				return false;
+			}
+
+			textIndex++;
+			patternIndex++;
+		}
+
+		return textIndex == text.Length;
+	}
+
+	/// <summary>
+	///     Matches the remaining pattern starting at a run of <c>**</c> segments: collapses the run, then (if the
+	///     pattern continues) tries every split of the remaining text so <c>**</c> absorbs zero or more segments.
+	/// </summary>
+	private static bool MatchAfterDoubleStar(string[] text, int textIndex, string[] pattern, int patternIndex)
+	{
+		while (patternIndex < pattern.Length && pattern[patternIndex] == "**")
+		{
+			patternIndex++;
+		}
+
+		if (patternIndex == pattern.Length)
+		{
+			return true;
+		}
+
+		for (int skip = textIndex; skip <= text.Length; skip++)
+		{
+			if (MatchSegments(text, skip, pattern, patternIndex))
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/// <summary>
