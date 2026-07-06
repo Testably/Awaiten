@@ -5,9 +5,9 @@ namespace Awaiten.SourceGenerators.Tests;
 /// <summary>
 ///     The open generic <c>typeof</c> forms of <c>[Decorate]</c> and <c>[Composite]</c>: a closed decorator/composite
 ///     is synthesized per closing of the service present in the graph and flows through the same chain/composite
-///     builders as the closed forms. The forms reuse the open generic diagnostics: AWT127 (not unbound), AWT125
-///     (arity) and AWT126 (a closing's type arguments violate the decorator's/composite's constraints); an open
-///     decorator that matches no closing reports AWT123.
+///     builders as the closed forms. The forms reuse the open generic diagnostics AWT127 (not unbound) and AWT125
+///     (arity); a closing whose type arguments violate the decorator's/composite's constraints warns AWT171 (a
+///     warning, since the base service still resolves); an open decorator that matches no closing reports AWT123.
 /// </summary>
 public class OpenGenericDecoratorTests
 {
@@ -96,7 +96,7 @@ public class OpenGenericDecoratorTests
 	}
 
 	[Fact]
-	public async Task OpenDecorator_ClosingViolatesConstraints_ReportsAwt126()
+	public async Task OpenDecorator_ClosingViolatesConstraints_WarnsAwt171()
 	{
 		GeneratorResult result = Generator.Run("""
 		                                       using Awaiten;
@@ -118,8 +118,10 @@ public class OpenGenericDecoratorTests
 		                                       }
 		                                       """);
 
-		await That(result.Diagnostics.Any(d => d.Contains("AWT126"))).IsTrue()
+		await That(result.Diagnostics.Any(d => d.Contains("warning AWT171"))).IsTrue()
 			.Because("the closing IHandler<int> cannot construct Logging<int> under 'where T : class'");
+		await That(result.Diagnostics.Any(d => d.Contains("AWT126"))).IsFalse()
+			.Because("AWT126 is the registration error; an excluded decorator closing is the separate warning AWT171");
 	}
 
 	[Fact]

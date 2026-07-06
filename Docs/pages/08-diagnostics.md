@@ -665,7 +665,7 @@ public static partial class CoffeeShop;
 ### AWT126
 
 :::danger[Error]
-A required closed type violates the open generic implementation's type-parameter constraints. Also raised when a closing's type arguments violate an open `[Decorate]`/`[Composite]` decorator's or composite's constraints (that closing is skipped).
+A required closed type violates the open generic implementation's type-parameter constraints, so the dependency cannot be satisfied. (For the open `[Decorate]`/`[Composite]` case, where the base service still resolves, see the warning [AWT171](#awt171).)
 :::
 
 ```csharp
@@ -675,6 +675,24 @@ public sealed class Ledger(IRepository<int> repo);   // int is not a class
 [Container]
 [Transient(typeof(Repository<>), typeof(IRepository<>))]
 [Singleton<Ledger>]
+public static partial class CoffeeShop;
+```
+
+### AWT171
+
+:::warning[Warning]
+The decorator/composite counterpart to [AWT126](#awt126): a closing of an open generic `[Decorate]`/`[Composite]` cannot be constructed because its type arguments violate the decorator's or composite's type-parameter constraints. A warning, not an error, because the base service still resolves — that one closing is left as-is (undecorated/unfronted) and the remaining closings are decorated/composed as usual.
+:::
+
+```csharp
+public interface IHandler<T> { }
+public sealed class Handler<T> : IHandler<T> { }
+public sealed class Logging<T>(IHandler<T> inner) : IHandler<T> where T : class;   // reference types only
+
+[Container]
+[Transient(typeof(Handler<>), typeof(IHandler<>))]
+[Transient<Root>]
+[Decorate(typeof(Logging<>), typeof(IHandler<>))]   // IHandler<int> can't take Logging<int>: warned and skipped
 public static partial class CoffeeShop;
 ```
 

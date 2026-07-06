@@ -12,8 +12,8 @@ partial class AwaitenGenerator
 	///     (an unkeyed winner or collection member, however it was registered - explicit, scanned or open generic),
 	///     constructing the matching closing of the decorator. The synthesized registrations carry the open form's
 	///     <c>Order</c> and declaration order, so the existing <see cref="DecoratorChainBuilder" /> interleaves them
-	///     with explicit closed decorators of the same closing. Reports AWT126 for a closing whose type arguments
-	///     violate the decorator's constraints and AWT123 for an open decorator that matches no closing at all.
+	///     with explicit closed decorators of the same closing. Warns AWT171 and skips a closing whose type arguments
+	///     violate the decorator's constraints; reports AWT123 for an open decorator that matches no closing at all.
 	/// </summary>
 	private static void ExpandOpenDecorators(
 		List<DecorateRegistration> decorators,
@@ -43,7 +43,7 @@ partial class AwaitenGenerator
 			{
 				ITypeSymbol[] typeArguments = closed.TypeArguments.ToArray();
 
-				// AWT126: the closing's type arguments must satisfy the decorator's type-parameter constraints.
+				// AWT171: the closing's type arguments must satisfy the decorator's type-parameter constraints.
 				if (!ConstraintsSatisfied(decorator.Decorator, typeArguments))
 				{
 					ReportClosingConstraintViolation(decorator.Decorator, typeArguments, decorator.Location, diagnostics);
@@ -65,7 +65,7 @@ partial class AwaitenGenerator
 	///     Expands each open generic <c>[Composite(typeof(C&lt;&gt;), typeof(IService&lt;&gt;))]</c> into a closed
 	///     <see cref="CompositeRegistration" /> for every closing of its service present in the coalesced graph,
 	///     constructing the matching closing of the composite. Each synthesized composite then follows the closed
-	///     <c>[Composite]</c> rules in <see cref="BuildComposites" />. Reports AWT126 for a closing whose type
+	///     <c>[Composite]</c> rules in <see cref="BuildComposites" />. Warns AWT171 and skips a closing whose type
 	///     arguments violate the composite's constraints.
 	/// </summary>
 	private static void ExpandOpenComposites(
@@ -81,7 +81,7 @@ partial class AwaitenGenerator
 			{
 				ITypeSymbol[] typeArguments = closed.TypeArguments.ToArray();
 
-				// AWT126: the closing's type arguments must satisfy the composite's type-parameter constraints.
+				// AWT171: the closing's type arguments must satisfy the composite's type-parameter constraints.
 				if (!ConstraintsSatisfied(composite.Composite, typeArguments))
 				{
 					ReportClosingConstraintViolation(composite.Composite, typeArguments, composite.Location, diagnostics);
@@ -135,9 +135,11 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     Reports AWT126 for a closing (of an open decorator or composite) whose type arguments violate the open
-	///     definition's type-parameter constraints, naming the would-be closed type and the open definition, mirroring
-	///     the open generic registration's constraint report.
+	///     Reports AWT171 (a warning) for a closing (of an open decorator or composite) whose type arguments violate
+	///     the open definition's type-parameter constraints, naming the would-be closed type and the open definition.
+	///     Unlike the open generic registration's AWT126 error, the base service still resolves - only this closing is
+	///     left as-is - so a broadly-applied decorator/composite whose constraints exclude some closings degrades
+	///     gracefully instead of failing the whole compilation.
 	/// </summary>
 	private static void ReportClosingConstraintViolation(
 		INamedTypeSymbol openDefinition,
@@ -145,7 +147,7 @@ partial class AwaitenGenerator
 		Location? location,
 		List<DiagnosticInfo> diagnostics)
 		=> diagnostics.Add(new DiagnosticInfo(
-			Diagnostics.OpenGenericConstraintViolation,
+			Diagnostics.DecoratorClosingConstraintViolation,
 			LocationInfo.From(location),
 			new EquatableArray<string>([
 				Display(openDefinition.Construct(typeArguments).ToDisplayString(FullyQualified)),
