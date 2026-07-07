@@ -253,6 +253,103 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
+	///     AWT175: a type declared <c>[ImportService&lt;T&gt;]</c> (drawn from the external provider) must not also be
+	///     registered on the container - it is either host-owned or Awaiten-owned. Reported once the coalesced
+	///     service-&gt;impl map is known, at the container's location.
+	/// </summary>
+	private static void ReportContradictingExternalServices(
+		HashSet<string> externalServiceTypes,
+		Dictionary<ServiceKey, string> serviceToImpl,
+		INamedTypeSymbol containerSymbol,
+		List<DiagnosticInfo> diagnostics)
+	{
+		if (externalServiceTypes.Count == 0)
+		{
+			return;
+		}
+
+		LocationInfo? location = LocationInfo.From(containerSymbol.Locations.FirstOrDefault());
+		foreach (string externalType in externalServiceTypes
+			         .Where(type => IsRegisteredService(type, serviceToImpl))
+			         .OrderBy(type => type, StringComparer.Ordinal))
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.ContradictingExternalService,
+				location,
+				new EquatableArray<string>([Display(externalType),])));
+		}
+	}
+
+	/// <summary>
+	///     AWT176: a type declared <c>[ImportService&lt;T&gt;]</c> that no dependency in the graph consumes with a
+	///     shape that either routes it or gives its own diagnostic is a dead declaration. Reported once every instance
+	///     is built (so every dependency has had the chance to route), at the container's location. A type is treated
+	///     as consumed when it is either routed externally (an <c>External</c> direct dependency) or reached through a
+	///     relationship over it (<c>Func&lt;T&gt;</c>, <c>Lazy&lt;T&gt;</c>, <c>Owned&lt;T&gt;</c>, their Task forms) -
+	///     the latter is not routed but surfaces its own AWT101, so a second diagnostic for the one root cause is
+	///     avoided. A collection element reference (<c>IEnumerable&lt;T&gt;</c> and friends) does <em>not</em> count:
+	///     the resolver never yields collection elements, so such a declaration is genuinely inert and stays reported.
+	///     A type flagged AWT175 (registered, so resolved from the graph) is excluded, its contradiction the root cause.
+	/// </summary>
+	private static void ReportUnconsumedExternalServices(
+		HashSet<string> externalServiceTypes,
+		Dictionary<ServiceKey, string> serviceToImpl,
+		List<InstanceModel> instances,
+		INamedTypeSymbol containerSymbol,
+		List<DiagnosticInfo> diagnostics)
+	{
+		if (externalServiceTypes.Count == 0)
+		{
+			return;
+		}
+
+		HashSet<string> consumed = new(StringComparer.Ordinal);
+		foreach (InstanceModel instance in instances)
+		{
+			foreach (ParameterModel parameter in instance.ConstructorParameters.AsArray())
+			{
+				RecordExternalConsumption(parameter, consumed);
+			}
+
+			foreach (MemberModel member in instance.InjectedMembers.AsArray())
+			{
+				RecordExternalConsumption(member.Dependency, consumed);
+			}
+		}
+
+		LocationInfo? location = LocationInfo.From(containerSymbol.Locations.FirstOrDefault());
+		foreach (string externalType in externalServiceTypes
+			         .Where(type => !consumed.Contains(type) && !IsRegisteredService(type, serviceToImpl))
+			         .OrderBy(type => type, StringComparer.Ordinal))
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.UnconsumedExternalService,
+				location,
+				new EquatableArray<string>([Display(externalType),])));
+		}
+	}
+
+	/// <summary>
+	///     Records a dependency's service type as consuming its <c>[ImportService&lt;T&gt;]</c> declaration (for AWT176)
+	///     when the shape either routes the type externally (<c>External</c>) or resolves it from the graph through a
+	///     relationship that surfaces its own AWT101 (<c>Func</c>/<c>Lazy</c>/<c>Owned</c>/<c>Task</c> and their forms).
+	///     A collection element reference is deliberately not recorded: it is never routed, so the declaration stays inert.
+	/// </summary>
+	private static void RecordExternalConsumption(ParameterModel dependency, HashSet<string> consumed)
+	{
+		if (dependency.Kind is DependencyKind.External
+		    or DependencyKind.Func or DependencyKind.Lazy or DependencyKind.Owned
+		    or DependencyKind.Task or DependencyKind.FuncTask or DependencyKind.LazyTask)
+		{
+			consumed.Add(dependency.ServiceType);
+		}
+	}
+
+	/// <summary>Whether any registration (of any key) provides the service type, so a declared external type contradicts it.</summary>
+	private static bool IsRegisteredService(string serviceType, Dictionary<ServiceKey, string> serviceToImpl)
+		=> serviceToImpl.Keys.Any(key => string.Equals(key.Service, serviceType, StringComparison.Ordinal));
+
+	/// <summary>
 	///     The single encoding of coalescing precedence: explicit strong registrations first, then overridable
 	///     defaults (<c>Fallback.Warn</c>/<c>Fallback.Silent</c>), then open-generic-synthesized registrations, then scan matches.
 	///     Consumed by the coalescing loop and the open generic expansion seed, which must agree on who wins.

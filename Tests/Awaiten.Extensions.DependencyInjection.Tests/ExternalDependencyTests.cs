@@ -20,12 +20,13 @@ public sealed partial class ExternalDependencyTests
 		private readonly IClock _clock;
 
 		// Satisfied from the external (host-owned) provider, not the Awaiten graph.
-		public TimeReporter([FromServices] IClock clock) => _clock = clock;
+		public TimeReporter(IClock clock) => _clock = clock;
 
 		public string Report() => _clock.Now;
 	}
 
 	[Container]
+	[ImportService<IClock>]
 	[Singleton<TimeReporter>]
 	public static partial class ExternalContainer;
 
@@ -175,12 +176,13 @@ public sealed partial class ExternalDependencyTests
 	public sealed class ScopedReporter
 	{
 		// A scoped Awaiten service whose external dependency is a scoped host service.
-		public ScopedReporter([FromServices] IClock clock) => Clock = clock;
+		public ScopedReporter(IClock clock) => Clock = clock;
 
 		public IClock Clock { get; }
 	}
 
 	[Container]
+	[ImportService<IClock>]
 	[Scoped<ScopedReporter>]
 	public static partial class ScopedExternalContainer;
 
@@ -218,6 +220,7 @@ public sealed partial class ExternalDependencyTests
 	}
 
 	[Container]
+	[ImportService<IClock>]
 	[Scoped<ScopedReporter>]
 	[Scoped<ReporterUser>]
 	public static partial class OwnedExternalContainer;
@@ -242,12 +245,13 @@ public sealed partial class ExternalDependencyTests
 	public sealed class KeyedReporter
 	{
 		// The [FromKey] selects the keyed external service; the key is forwarded to the resolver.
-		public KeyedReporter([FromServices] [FromKey("utc")] IClock clock) => Clock = clock;
+		public KeyedReporter([FromKey("utc")] IClock clock) => Clock = clock;
 
 		public IClock Clock { get; }
 	}
 
 	[Container]
+	[ImportService<IClock>]
 	[Singleton<KeyedReporter>]
 	public static partial class KeyedExternalContainer;
 

@@ -4,7 +4,7 @@ A minimal console app that proves Awaiten's `Microsoft.Extensions.DependencyInje
 reflection-free and native-AOT compatible. It registers a generated `[Container]` into an
 `IServiceCollection` with `AddGeneratedContainer`, verifies its external dependencies with
 `VerifyAwaitenContainers`, and resolves a service (whose graph mixes an Awaiten-owned `IClock` with a
-host-owned `Banner` injected across the seam via `[FromServices]`) from an MS.DI scope.
+host-owned `Banner` injected across the seam via `[ImportService<T>]`) from an MS.DI scope.
 
 The project is part of `Awaiten.slnx`, so it is compiled cross-platform alongside the unit tests. Because
 publishing it natively needs a platform linker, the native-AOT publish (and the run that follows) happens in

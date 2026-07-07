@@ -35,8 +35,6 @@
  AWT131  | Awaiten   | Warning  | A [Composite] type is also registered as an ordinary member of the service it composes
  AWT132  | Awaiten   | Error    | More than one [Composite] names the same service
  AWT133  | Awaiten   | Error    | A [Composite]'s collection parameter is of a base type of the composed service, not the composed service itself
- AWT134  | Awaiten   | Error    | A constructor parameter is marked both [FromServices] and [Arg]
- AWT135  | Awaiten   | Error    | A decorator's inner parameter is marked [FromServices]
  AWT136  | Awaiten   | Error    | An [Inject] property has no set or init accessor the container can assign through
  AWT137  | Awaiten   | Error    | An injected property is marked [Arg]
  AWT138  | Awaiten   | Warning  | A [Scan] matched no concrete type assignable to its marker
@@ -76,3 +74,5 @@
  AWT172  | Awaiten   | Warning  | A [Scan]'s name, namespace or exclude filters removed every marker-assignable match, so the scan registers nothing
  AWT173  | Awaiten   | Warning  | A [Scan] exclusion (an Exclude type or a !-prefixed name/namespace pattern) matched no candidate and is likely stale
  AWT174  | Awaiten   | Warning  | A [Scan] include pattern (* for a name, ** for a namespace) matches every candidate and does not narrow the scan
+ AWT175  | Awaiten   | Error    | A type is declared [ImportService<T>] but is also registered on the container
+ AWT176  | Awaiten   | Warning  | A type declared [ImportService<T>] is never consumed by any dependency in the graph

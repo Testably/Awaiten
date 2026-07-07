@@ -55,9 +55,9 @@ internal enum DependencyKind
 	AsyncEnumerable,
 
 	/// <summary>
-	///     An external dependency: a <c>[FromServices]</c> parameter (or, under <c>[ImportServices]</c>, an
-	///     otherwise-unresolved direct dependency) satisfied from the container's <c>IExternalResolver</c>, not the
-	///     graph. Contributes no edge.
+	///     An external dependency: a dependency whose type the container declares <c>[ImportService&lt;T&gt;]</c>
+	///     (or, under <c>[ImportServices]</c>, any otherwise-unresolved unkeyed direct dependency) satisfied from the
+	///     container's <c>IExternalResolver</c>, not the graph. Contributes no edge.
 	/// </summary>
 	External,
 

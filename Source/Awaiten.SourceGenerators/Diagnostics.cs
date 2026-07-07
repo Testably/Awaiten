@@ -489,31 +489,6 @@ internal static class Diagnostics
 		isEnabledByDefault: true);
 
 	/// <summary>
-	///     A constructor parameter is marked both <c>[FromServices]</c> and <c>[Arg]</c>: it cannot be both
-	///     an externally-resolved dependency and a caller-supplied runtime argument.
-	/// </summary>
-	public static readonly DiagnosticDescriptor ConflictingExternalParameter = new(
-		"AWT134",
-		"Conflicting external parameter",
-		"The parameter '{0}' of '{1}' is marked both [FromServices] and [Arg]; it cannot be both an external dependency and a runtime argument",
-		"Awaiten",
-		DiagnosticSeverity.Error,
-		isEnabledByDefault: true);
-
-	/// <summary>
-	///     The parameter of a decorator that would receive the decorated inner instance is marked
-	///     <c>[FromServices]</c>: the inner is supplied by the decorator chain, not the external provider, so
-	///     the attribute would silently bypass the chain.
-	/// </summary>
-	public static readonly DiagnosticDescriptor ExternalDecoratorInner = new(
-		"AWT135",
-		"External decorator inner parameter",
-		"The parameter '{0}' of the decorator '{1}' is marked [FromServices]; the decorated inner instance is supplied by the decorator chain and cannot be resolved from the external provider",
-		"Awaiten",
-		DiagnosticSeverity.Error,
-		isEnabledByDefault: true);
-
-	/// <summary>
 	///     A property marked <c>[Inject]</c> has no <c>set</c> or <c>init</c> accessor the container can assign
 	///     through the object initializer (the container is not a derived context, so a protected/private-protected
 	///     setter, and a cross-assembly internal one, is out of reach), so there is nothing for Awaiten to fill.
@@ -1087,6 +1062,31 @@ internal static class Diagnostics
 		"AWT174",
 		"Scan pattern matches every candidate",
 		"The scan pattern '{0}' matches every candidate, so it does not narrow the scan",
+		"Awaiten",
+		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A type is declared <c>[ImportService&lt;T&gt;]</c> (drawn from the external provider) yet is also registered
+	///     on the container: it is either host-owned or Awaiten-owned, not both. Remove the registration to keep it
+	///     external, or drop the <c>[ImportService&lt;T&gt;]</c> to resolve it from the graph.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ContradictingExternalService = new(
+		"AWT175",
+		"External service is also registered",
+		"'{0}' is declared [ImportService<{0}>] but also registered on the container; a type is either host-owned or Awaiten-owned. Remove the registration or the [ImportService<>] declaration.",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A type declared <c>[ImportService&lt;T&gt;]</c> is never consumed by any dependency in the graph, so the
+	///     declaration is dead - most often a mistyped or stale <c>[ImportService&lt;T&gt;]</c> left after a refactor.
+	/// </summary>
+	public static readonly DiagnosticDescriptor UnconsumedExternalService = new(
+		"AWT176",
+		"External service is never consumed",
+		"'{0}' is declared [ImportService<{0}>] but no dependency in the container consumes it, so the declaration has no effect. Remove it or add the consuming dependency.",
 		"Awaiten",
 		DiagnosticSeverity.Warning,
 		isEnabledByDefault: true);

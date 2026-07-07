@@ -56,7 +56,7 @@ Pass `ownsContainer: false` if you want to keep ownership of the container yours
 
 ## Warm async services on startup
 
-`AddAwaitenInitialization<TContainer>` registers an `IHostedService` that calls `InitializeAsync` on startup. It wires the external resolver first, so `[FromServices]` dependencies resolve during warm-up. It is idempotent.
+`AddAwaitenInitialization<TContainer>` registers an `IHostedService` that calls `InitializeAsync` on startup. It wires the external resolver first, so `[ImportService<T>]` dependencies resolve during warm-up. It is idempotent.
 
 ```csharp
 services.AddGeneratedContainer<CoffeeShop.Root>();
@@ -67,7 +67,7 @@ Pair this with `[Container(SyncResolveAfterInit = true)]` so warmed singletons r
 
 ## Verify external dependencies at startup
 
-An Awaiten graph can depend on host services through `[FromServices]` and `[ImportServices]`. See [External services](./advanced/external-services). Verify they are actually registered before you serve traffic.
+An Awaiten graph can depend on host services through `[ImportService<T>]` and `[ImportServices]`. See [External services](./advanced/external-services). Verify they are actually registered before you serve traffic.
 
 ```csharp
 provider.VerifyAwaitenContainers();
@@ -86,4 +86,4 @@ The bridge surfaces each individual registration and the external dependencies. 
 ## Where to go next
 
 - [Async initialization](./async-initialization) for the initialization the hosted service drives.
-- [External services](./advanced/external-services) for `[FromServices]` and `[ImportServices]`.
+- [External services](./advanced/external-services) for `[ImportService<T>]` and `[ImportServices]`.

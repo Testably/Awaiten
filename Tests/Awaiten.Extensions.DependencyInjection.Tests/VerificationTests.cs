@@ -79,7 +79,7 @@ public sealed class VerificationTests
 			.WithMessage(
 				"Awaiten: the container's external dependencies are not registered in the provider: "
 				+ "*IClock. Register them before building the provider, or remove the "
-				+ "[FromServices]/[ImportServices] usage.")
+				+ "[ImportService<T>]/[ImportServices] usage.")
 			.AsWildcard();
 	}
 

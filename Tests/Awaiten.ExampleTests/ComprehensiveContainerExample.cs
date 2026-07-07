@@ -9,7 +9,7 @@ namespace Awaiten.ExampleTests;
 ///     reads from its name: one <see cref="Menu" /> (singleton), one <see cref="Order" /> per customer
 ///     (scoped), a fresh <see cref="Receipt" /> each time (transient), an <see cref="EspressoMachine" /> that
 ///     warms up (async init), a <see cref="Cup" /> reached through <c>Owned&lt;T&gt;</c> (disposable), keyed
-///     milk, decorators, a composite inspection, an external <c>[FromServices]</c> card reader, and an
+///     milk, decorators, a composite inspection, an external <c>[ImportService&lt;T&gt;]</c> card reader, and an
 ///     imported roastery module. One <see cref="CoffeeShop" /> container registers every kind, so the tests
 ///     exercise the full breadth of its resolution, scoping and disposal code paths. Types in the parent
 ///     <c>Awaiten</c> namespace are in scope without an explicit <c>using</c>.
@@ -303,7 +303,7 @@ public partial class ComprehensiveContainerExample
 		public FrontOfHouse Peer { get; set; } = null!;
 	}
 
-	// ---- External dependency ([FromServices]) ----------------------------------------------------------
+	// ---- External dependency ([ImportService<T>]) ------------------------------------------------------
 
 	// The card reader is owned by the payment provider (the host), not the shop.
 	public interface IPaymentGateway
@@ -313,7 +313,7 @@ public partial class ComprehensiveContainerExample
 
 	public sealed class Register
 	{
-		public Register([FromServices] IPaymentGateway gateway) => Gateway = gateway;
+		public Register(IPaymentGateway gateway) => Gateway = gateway;
 
 		public IPaymentGateway Gateway { get; }
 	}
@@ -458,6 +458,7 @@ public partial class ComprehensiveContainerExample
 
 	[Container]
 	[Import(typeof(RoasteryModule))]
+	[ImportService<IPaymentGateway>]
 	[Singleton<Menu, IMenu>]
 	[Scoped<Order, IOrder>]
 	[Transient<Receipt>]
@@ -773,7 +774,7 @@ public partial class ComprehensiveContainerExample
 		((IExternalResolverHost)shop).ExternalResolver = new GatewayResolver();
 
 		await That(shop.Resolve<Register>().Gateway.Provider).IsEqualTo("stripe")
-			.Because("a [FromServices] parameter is satisfied by the wired external resolver");
+			.Because("an [ImportService<T>] dependency is satisfied by the wired external resolver");
 	}
 
 	[Fact]

@@ -28,7 +28,7 @@ partial class AwaitenGenerator
 		private readonly List<ImplInfo> _implOrder;
 		private readonly Dictionary<ServiceKey, List<string>> _serviceMembers;
 		private readonly Dictionary<string, DecoratorInner> _decoratorInner;
-		private readonly bool _importServices;
+		private readonly ExternalSurface _external;
 		private readonly List<DiagnosticInfo> _diagnostics;
 
 		/// <summary>
@@ -42,7 +42,7 @@ partial class AwaitenGenerator
 			Compilation compilation,
 			CoalescedGraph graph,
 			Dictionary<string, DecoratorInner> decoratorInner,
-			bool importServices,
+			ExternalSurface external,
 			List<DiagnosticInfo> diagnostics)
 		{
 			_containerSymbol = containerSymbol;
@@ -51,7 +51,7 @@ partial class AwaitenGenerator
 			_implOrder = graph.ImplOrder;
 			_serviceMembers = graph.ServiceMembers;
 			_decoratorInner = decoratorInner;
-			_importServices = importServices;
+			_external = external;
 			_diagnostics = diagnostics;
 
 			_byImpl = new Dictionary<string, ImplInfo>(StringComparer.Ordinal);
@@ -180,8 +180,7 @@ partial class AwaitenGenerator
 
 		/// <summary>
 		///     Each decorator's inner-parameter type in chain order, or <see langword="null" /> (having reported
-		///     AWT124, or AWT135 when the would-be inner is marked <c>[FromServices]</c>) when any decorator has no
-		///     single constructor parameter that can receive the inner instance.
+		///     AWT124) when any decorator has no single constructor parameter that can receive the inner instance.
 		/// </summary>
 		private List<string>? ResolveInnerParameterTypes(string service, List<DecorateRegistration> ordered)
 		{
@@ -189,24 +188,11 @@ partial class AwaitenGenerator
 			bool valid = true;
 			foreach (DecorateRegistration decorator in ordered)
 			{
-				string? innerType = SingleInnerParameterType(decorator.Decorator, decorator.ServiceSymbol, out IParameterSymbol? externalInner);
+				string? innerType = SingleInnerParameterType(decorator.Decorator, decorator.ServiceSymbol);
 				if (innerType is null)
 				{
-					// The would-be inner is marked [FromServices]: point at the offending parameter (or the
-					// [Decorate] registration when its location is unavailable) rather than the generic
-					// missing-inner AWT124, whose "add a parameter" guidance would mislead here.
-					if (externalInner is not null)
-					{
-						Report(Diagnostics.ExternalDecoratorInner,
-							externalInner.Locations.FirstOrDefault() ?? decorator.Location,
-							externalInner.Name, decorator.Decorator.ToDisplayString(FullyQualified));
-					}
-					else
-					{
-						Report(Diagnostics.DecoratorMissingInnerParameter, decorator.Location,
-							decorator.Decorator.ToDisplayString(FullyQualified), service);
-					}
-
+					Report(Diagnostics.DecoratorMissingInnerParameter, decorator.Location,
+						decorator.Decorator.ToDisplayString(FullyQualified), service);
 					valid = false;
 					continue;
 				}
@@ -329,35 +315,28 @@ partial class AwaitenGenerator
 
 		/// <summary>
 		///     The fully-qualified type of a decorator's single constructor parameter that receives the inner
-		///     instance, or <see langword="null" /> when there is none or it is ambiguous (AWT124). A would-be inner
-		///     marked <c>[FromServices]</c> is yielded through <paramref name="externalInner" /> so the caller
-		///     reports AWT135 instead. Uses the same <see cref="SelectConstructor" /> the container builds through,
-		///     and returns the type string <see cref="ClassifyParameter" /> produces so the redirect can match it.
+		///     instance, or <see langword="null" /> when there is none or it is ambiguous (AWT124). Uses the same
+		///     <see cref="SelectConstructor" /> the container builds through, and returns the type string
+		///     <see cref="ClassifyParameter" /> produces so the redirect can match it.
 		/// </summary>
-		private string? SingleInnerParameterType(INamedTypeSymbol decorator, INamedTypeSymbol service, out IParameterSymbol? externalInner)
+		private string? SingleInnerParameterType(INamedTypeSymbol decorator, INamedTypeSymbol service)
 		{
-			externalInner = null;
-			IMethodSymbol? constructor = SelectConstructor(decorator, _containerSymbol, _serviceToImpl.Keys.Select(k => k.Service), importServices: _importServices);
+			IMethodSymbol? constructor = SelectConstructor(decorator, _containerSymbol, _serviceToImpl.Keys.Select(k => k.Service), _external);
 			if (constructor is null)
 			{
 				return null;
 			}
 
-			// The inner parameter must accept the decorated service (implicitly convertible from it). [FromKey] and
-			// [FromServices] parameters are excluded, since each selects a separate dependency. When several
-			// parameters are assignable, the inner is the most-derived one (every other is a base of it); a tie is
-			// ambiguous and reported as AWT124.
+			// The inner parameter must accept the decorated service (implicitly convertible from it). A [FromKey]
+			// parameter is excluded, since it selects a separate keyed dependency. When several parameters are
+			// assignable, the inner is the most-derived one (every other is a base of it); a tie is ambiguous and
+			// reported as AWT124.
 			List<IParameterSymbol> assignable = constructor.Parameters
-				.Where(p => FromKey(p.GetAttributes()) is null && !HasFromServices(p) && _compilation.HasImplicitConversion(service, p.Type))
+				.Where(p => FromKey(p.GetAttributes()) is null && _compilation.HasImplicitConversion(service, p.Type))
 				.ToList();
 
-			// AWT135: nothing is left to receive the inner instance, but a [FromServices] parameter of the
-			// service is present. The would-be inner was marked external, which would silently bypass the
-			// decorator chain. Yield it so the caller reports that specific conflict instead of a generic AWT124.
 			if (assignable.Count == 0)
 			{
-				externalInner = constructor.Parameters
-					.FirstOrDefault(p => HasFromServices(p) && _compilation.HasImplicitConversion(service, p.Type));
 				return null;
 			}
 
@@ -403,7 +382,7 @@ partial class AwaitenGenerator
 		Compilation compilation,
 		INamedTypeSymbol containerSymbol,
 		CoalescedGraph graph,
-		bool importServices,
+		ExternalSurface external,
 		List<DiagnosticInfo> diagnostics)
 	{
 		(Dictionary<ServiceKey, string> serviceToImpl, List<ImplInfo> implOrder, Dictionary<ServiceKey, List<string>> serviceMembers) = graph;
@@ -431,7 +410,7 @@ partial class AwaitenGenerator
 			}
 
 			// AWT130/AWT133: the composite must fan out over a collection of exactly the composed service.
-			if (!ValidateCompositeCollection(composite, compositeType, containerSymbol, compilation, serviceToImpl, importServices, diagnostics))
+			if (!ValidateCompositeCollection(composite, compositeType, containerSymbol, compilation, serviceToImpl, external, diagnostics))
 			{
 				continue;
 			}
@@ -481,10 +460,10 @@ partial class AwaitenGenerator
 		INamedTypeSymbol containerSymbol,
 		Compilation compilation,
 		Dictionary<ServiceKey, string> serviceToImpl,
-		bool importServices,
+		ExternalSurface external,
 		List<DiagnosticInfo> diagnostics)
 	{
-		switch (ClassifyCompositeCollection(composite.Composite, composite.ServiceSymbol, containerSymbol, compilation, serviceToImpl, importServices, out string? relatedElement))
+		switch (ClassifyCompositeCollection(composite.Composite, composite.ServiceSymbol, containerSymbol, compilation, serviceToImpl, external, out string? relatedElement))
 		{
 			case CompositeCollectionKind.Missing:
 				diagnostics.Add(new DiagnosticInfo(
@@ -629,11 +608,11 @@ partial class AwaitenGenerator
 		INamedTypeSymbol containerSymbol,
 		Compilation compilation,
 		Dictionary<ServiceKey, string> serviceToImpl,
-		bool importServices,
+		ExternalSurface external,
 		out string? relatedElement)
 	{
 		relatedElement = null;
-		IMethodSymbol? constructor = SelectConstructor(composite, containerSymbol, serviceToImpl.Keys.Select(k => k.Service), importServices: importServices);
+		IMethodSymbol? constructor = SelectConstructor(composite, containerSymbol, serviceToImpl.Keys.Select(k => k.Service), external);
 		if (constructor is null)
 		{
 			return CompositeCollectionKind.Missing;

@@ -11,7 +11,7 @@ partial class AwaitenGenerator
 		INamedTypeSymbol containerSymbol,
 		List<ImportedModule> modules,
 		Compilation compilation,
-		bool importServices,
+		ExternalSurface external,
 		List<DiagnosticInfo> diagnostics)
 	{
 		List<RawRegistration> result = new();
@@ -45,7 +45,7 @@ partial class AwaitenGenerator
 		// implementation (iterating to a fixpoint over its own generic dependencies).
 		if (open.Count > 0)
 		{
-			ExpandOpenGenerics(result, open, containerSymbol, importServices, diagnostics, constraintRejected);
+			ExpandOpenGenerics(result, open, containerSymbol, external, diagnostics, constraintRejected);
 		}
 
 		// ...then moved back to the end: coalescing is first-wins per service, so the explicit registrations and

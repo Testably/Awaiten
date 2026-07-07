@@ -89,20 +89,9 @@ partial class AwaitenGenerator
 				continue;
 			}
 
-			ParameterModel parameterModel = ClassifyParameter(parameter, asyncFactory);
+			ParameterModel parameterModel = ClassifyParameter(parameter, asyncFactory, context.External.ServiceTypes);
 
 			ReportUnsupportedFromKey(parameter.GetAttributes(), parameterModel.Location ?? info.Location, DisplayInstance(info.ImplementationType), context.Diagnostics);
-
-			// AWT134: a [FromServices] parameter (External) cannot also be an [Arg]: it cannot be both an
-			// externally-resolved dependency and a caller-supplied value. Point the diagnostic at the offending
-			// parameter, falling back to the registration when its location is unavailable.
-			if (parameterModel.Kind == DependencyKind.External && HasArgAttribute(parameter.GetAttributes()))
-			{
-				context.Diagnostics.Add(new DiagnosticInfo(
-					Diagnostics.ConflictingExternalParameter,
-					parameterModel.Location ?? info.Location,
-					new EquatableArray<string>([parameter.Name, DisplayInstance(info.ImplementationType),])));
-			}
 
 			parameterModel = RedirectDecoratorInner(parameterModel, info, context.DecoratorInner);
 
@@ -128,7 +117,7 @@ partial class AwaitenGenerator
 			// [ImportServices]: an otherwise-unresolved direct dependency (unkeyed) is satisfied from the
 			// external provider rather than reported as missing. Only direct dependencies fall through; an
 			// unregistered relationship type still surfaces as AWT101 below.
-			if (context.ImportServices
+			if (context.External.ImportServices
 			    && parameterModel is { Kind: DependencyKind.Direct, Key: null, }
 			    && !context.ServiceToImpl.ContainsKey(KeyOf(parameterModel)))
 			{
@@ -203,18 +192,11 @@ partial class AwaitenGenerator
 	///     produces a graph edge, filled through an object initializer after construction. See
 	///     <see cref="ClassifyInjectedMember" /> for the diagnostics reported.
 	/// </summary>
-	private static void DiscoverInjectedMembers(
-		ImplInfo info,
-		INamedTypeSymbol containerSymbol,
-		Dictionary<ServiceKey, string> serviceToImpl,
-		HashSet<string> constraintRejected,
-		HashSet<ServiceKey> consumedConditionals,
-		List<MemberModel> members,
-		List<DiagnosticInfo> diagnostics)
+	private static void DiscoverInjectedMembers(ImplInfo info, BuildContext context, List<MemberModel> members)
 	{
 		foreach (IPropertySymbol property in InjectedProperties(info.Symbol))
 		{
-			if (ClassifyInjectedMember(property, info, containerSymbol, serviceToImpl, constraintRejected, consumedConditionals, diagnostics) is { } member)
+			if (ClassifyInjectedMember(property, info, context) is { } member)
 			{
 				members.Add(member);
 			}
@@ -252,15 +234,15 @@ partial class AwaitenGenerator
 	///     registration still yields an edge (so it participates in analysis); an <c>Optional</c> one is dropped
 	///     without diagnostic.
 	/// </summary>
-	private static MemberModel? ClassifyInjectedMember(
-		IPropertySymbol property,
-		ImplInfo info,
-		INamedTypeSymbol containerSymbol,
-		Dictionary<ServiceKey, string> serviceToImpl,
-		HashSet<string> constraintRejected,
-		HashSet<ServiceKey> consumedConditionals,
-		List<DiagnosticInfo> diagnostics)
+	private static MemberModel? ClassifyInjectedMember(IPropertySymbol property, ImplInfo info, BuildContext context)
 	{
+		INamedTypeSymbol containerSymbol = context.ContainerSymbol;
+		Dictionary<ServiceKey, string> serviceToImpl = context.ServiceToImpl;
+		HashSet<string> constraintRejected = context.ConstraintRejected;
+		HashSet<ServiceKey> consumedConditionals = context.ConsumedConditionals;
+		HashSet<string> externalServiceTypes = context.External.ServiceTypes;
+		List<DiagnosticInfo> diagnostics = context.Diagnostics;
+
 		LocationInfo? location = LocationInfo.From(property.Locations.FirstOrDefault());
 
 		// AWT136: an [Inject] property must have a set/init accessor the container can assign through the object
@@ -284,7 +266,7 @@ partial class AwaitenGenerator
 		bool optional = IsInjectOptional(property.GetAttributes());
 
 		ParameterModel dependency = ClassifyDependency(
-			property.Type, property.GetAttributes(), asyncFactory: false, location);
+			property.Type, property.GetAttributes(), asyncFactory: false, location, externalServiceTypes);
 
 		ReportUnsupportedFromKey(property.GetAttributes(), location, DisplayInstance(info.ImplementationType), diagnostics);
 
@@ -326,9 +308,11 @@ partial class AwaitenGenerator
 
 		// AWT101: a direct/relationship member edge needs a registration to satisfy it (a collection member is
 		// satisfied elsewhere, like a constructor parameter, and yields an empty collection when unregistered).
-		// Mirror ClassifyParameters: a constraint-rejected open generic (AWT126) is not re-reported here, and an
-		// Owned<T> requested through Lazy surfaces the targeted AWT121 instead.
+		// Mirror ClassifyParameters: a constraint-rejected open generic (AWT126) is not re-reported here, an
+		// Owned<T> requested through Lazy surfaces the targeted AWT121 instead, and an [ImportService<T>] member
+		// (External) is satisfied from the external provider, so it is never missing.
 		if (!isCollection
+		    && dependency.Kind != DependencyKind.External
 		    && !serviceToImpl.ContainsKey(KeyOf(dependency))
 		    && !constraintRejected.Contains(dependency.ServiceType))
 		{
@@ -437,22 +421,10 @@ partial class AwaitenGenerator
 	///     direct dependency, so it surfaces as an unregistered service type rather than a misleading diagnostic
 	///     about the inner relationship.
 	/// </summary>
-	private static ParameterModel ClassifyParameter(IParameterSymbol parameter, bool asyncFactory)
+	private static ParameterModel ClassifyParameter(IParameterSymbol parameter, bool asyncFactory, HashSet<string> externalServiceTypes)
 	{
 		LocationInfo? location = LocationInfo.From(parameter.Locations.FirstOrDefault());
-
-		// An explicit [FromServices] parameter resolves from the external provider; its own type is the external
-		// service type, and a [FromKey] on it selects the keyed external service. It takes precedence so the
-		// parameter is never treated as an Awaiten graph edge ([FromServices] with [Arg] is AWT134 in
-		// ClassifyParameters). It is a constructor-parameter concern only, so it lives here rather than in the
-		// shared ClassifyDependency core (an injected property never resolves from the external provider).
-		if (HasFromServices(parameter))
-		{
-			return new ParameterModel(
-				parameter.Type.ToDisplayString(FullyQualified), DependencyKind.External, Key: FromKey(parameter.GetAttributes()), Location: location);
-		}
-
-		return ClassifyDependency(parameter.Type, parameter.GetAttributes(), asyncFactory, location);
+		return ClassifyDependency(parameter.Type, parameter.GetAttributes(), asyncFactory, location, externalServiceTypes);
 	}
 
 	/// <summary>
@@ -463,7 +435,7 @@ partial class AwaitenGenerator
 	///     dependency. Returns the underlying service type it resolves and an optional <c>[FromKey]</c> selection.
 	///     The property path reuses this verbatim, so a member resolves exactly like a constructor parameter.
 	/// </summary>
-	private static ParameterModel ClassifyDependency(ITypeSymbol type, ImmutableArray<AttributeData> attributes, bool asyncFactory, LocationInfo? location)
+	private static ParameterModel ClassifyDependency(ITypeSymbol type, ImmutableArray<AttributeData> attributes, bool asyncFactory, LocationInfo? location, HashSet<string> externalServiceTypes)
 	{
 		if (HasArgAttribute(attributes))
 		{
@@ -568,9 +540,20 @@ partial class AwaitenGenerator
 			return relationship;
 		}
 
+		// [ImportService<T>]: a direct dependency whose service type is declared external is satisfied from the
+		// container's IExternalResolver, forwarding any [FromKey] key. Stronger than the blanket [ImportServices]
+		// fall-through (which routes only unkeyed direct dependencies): it also routes a keyed one, whether a
+		// constructor parameter, a factory parameter or an [Inject] property (this is the shared classification core).
+		// A relationship (Func/Lazy/Task) or collection over T returned above, so only the direct dependency of type
+		// T is routed; every other unresolved dependency still gets the AWT101 check.
+		string serviceType = type.ToDisplayString(FullyQualified);
+		if (externalServiceTypes.Contains(serviceType))
+		{
+			return new ParameterModel(serviceType, DependencyKind.External, Key: key, Location: location);
+		}
+
 		// A direct dependency, optionally selecting a keyed registration with [FromKey].
-		return new ParameterModel(
-			type.ToDisplayString(FullyQualified), DependencyKind.Direct, Key: key, Location: location);
+		return new ParameterModel(serviceType, DependencyKind.Direct, Key: key, Location: location);
 	}
 
 	/// <summary>
@@ -1013,18 +996,43 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     Whether a parameter is marked <c>[FromServices]</c>, so it is resolved from the container's external
-	///     provider rather than the Awaiten graph.
-	/// </summary>
-	private static bool HasFromServices(IParameterSymbol parameter)
-		=> HasAwaitenAttribute(parameter.GetAttributes(), "FromServicesAttribute");
-
-	/// <summary>
 	///     Whether the container is marked <c>[ImportServices]</c>, so every otherwise-unresolved direct dependency is
 	///     satisfied from the external provider rather than reported as missing.
 	/// </summary>
 	private static bool ContainerImportsServices(INamedTypeSymbol containerSymbol)
 		=> HasAwaitenAttribute(containerSymbol.GetAttributes(), "ImportServicesAttribute");
+
+	/// <summary>
+	///     The fully-qualified service types declared external with <c>[ImportService&lt;T&gt;]</c> on the container
+	///     or any imported <c>[Module]</c> (symmetric with the blanket <c>[ImportServices]</c>, which a module can
+	///     contribute too). Each routes every unregistered direct dependency of that type (keyed or not, in a
+	///     constructor, factory or <c>[Inject]</c> property) to the container's <c>IExternalResolver</c>, forwarding
+	///     any <c>[FromKey]</c> key.
+	/// </summary>
+	private static HashSet<string> CollectExternalServiceTypes(INamedTypeSymbol containerSymbol, List<ImportedModule> modules)
+	{
+		HashSet<string> types = new(StringComparer.Ordinal);
+		AddExternalServiceTypes(containerSymbol, types);
+		foreach (ImportedModule module in modules)
+		{
+			AddExternalServiceTypes(module.Symbol, types);
+		}
+
+		return types;
+	}
+
+	/// <summary>Adds every <c>[ImportService&lt;T&gt;]</c> type argument declared on <paramref name="symbol" /> to <paramref name="types" />.</summary>
+	private static void AddExternalServiceTypes(INamedTypeSymbol symbol, HashSet<string> types)
+	{
+		foreach (AttributeData attribute in symbol.GetAttributes())
+		{
+			if (attribute.AttributeClass is { Name: "ImportServiceAttribute", IsGenericType: true, TypeArguments.Length: 1, } attributeClass
+			    && attributeClass.ContainingNamespace?.ToDisplayString() == AttributeNamespace)
+			{
+				types.Add(attributeClass.TypeArguments[0].ToDisplayString(FullyQualified));
+			}
+		}
+	}
 
 	private static bool IsRelationshipType(ITypeSymbol type)
 		=> type is INamedTypeSymbol { IsGenericType: true, TypeArguments.Length: 1, Name: "Func" or "Lazy", } named

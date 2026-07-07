@@ -25,7 +25,7 @@ partial class AwaitenGenerator
 
 		// The producer is a container method (Factory) or the implementation's constructor (default). Null
 		// means the registration is unusable and a diagnostic was already reported.
-		IMethodSymbol? producer = SelectProducer(info, containerSymbol, compilation, serviceToImpl, context.ImportServices, diagnostics);
+		IMethodSymbol? producer = SelectProducer(info, containerSymbol, compilation, serviceToImpl, context.External, diagnostics);
 		if (producer is null)
 		{
 			return null;
@@ -47,7 +47,7 @@ partial class AwaitenGenerator
 		List<MemberModel> members = new();
 		if (info.Production == ProductionKind.Constructor)
 		{
-			DiscoverInjectedMembers(info, containerSymbol, serviceToImpl, context.ConstraintRejected, context.ConsumedConditionals, members, diagnostics);
+			DiscoverInjectedMembers(info, context, members);
 		}
 
 		// Disposability follows the owned type: a factory's produced type (for an async factory the awaited T,
@@ -184,7 +184,7 @@ partial class AwaitenGenerator
 		INamedTypeSymbol containerSymbol,
 		Compilation compilation,
 		Dictionary<ServiceKey, string> serviceToImpl,
-		bool importServices,
+		ExternalSurface external,
 		List<DiagnosticInfo> diagnostics)
 	{
 		if (info.Production == ProductionKind.Factory)
@@ -202,7 +202,7 @@ partial class AwaitenGenerator
 			return null;
 		}
 
-		IMethodSymbol? constructor = SelectConstructor(info.Symbol, containerSymbol, serviceToImpl.Keys.Select(k => k.Service), importServices: importServices);
+		IMethodSymbol? constructor = SelectConstructor(info.Symbol, containerSymbol, serviceToImpl.Keys.Select(k => k.Service), external);
 		if (constructor is null)
 		{
 			diagnostics.Add(new DiagnosticInfo(
@@ -514,7 +514,8 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     Chooses the constructor the container builds <paramref name="implementation" /> through: its single
 	///     accessible constructor, or the greediest whose parameters are all satisfiable (falling back to the
-	///     greediest so unresolved parameters surface as AWT101). <paramref name="additionallySatisfiable" />,
+	///     greediest so unresolved parameters surface as AWT101). <paramref name="external" /> marks external
+	///     ([ImportService&lt;T&gt;]/[ImportServices]) parameters as satisfiable. <paramref name="additionallySatisfiable" />,
 	///     when supplied, marks parameters the caller can satisfy beyond the registered set. Open generic
 	///     expansion passes it so a parameter whose closed generic is expanded on demand does not disqualify a
 	///     constructor, letting the seed scan the same constructor the emitted container resolves.
@@ -523,8 +524,8 @@ partial class AwaitenGenerator
 		INamedTypeSymbol implementation,
 		INamedTypeSymbol containerSymbol,
 		IEnumerable<string> registeredServices,
-		Func<IParameterSymbol, bool>? additionallySatisfiable = null,
-		bool importServices = false)
+		ExternalSurface external,
+		Func<IParameterSymbol, bool>? additionallySatisfiable = null)
 	{
 		List<IMethodSymbol> constructors = implementation.InstanceConstructors
 			.Where(c => IsAccessibleConstructor(c, containerSymbol))
@@ -540,13 +541,13 @@ partial class AwaitenGenerator
 			{
 				// Selecting a constructor, never an async factory, so no CancellationToken forwarding applies.
 				// A collection (Enumerable, AsyncEnumerable or AwaitedEnumerable) is always satisfiable: an
-				// unregistered element type just yields an empty collection. A [FromServices] (External)
+				// unregistered element type just yields an empty collection. An external ([ImportService<T>])
 				// parameter is always satisfiable too, and with [ImportServices] any direct dependency can fall
 				// through to the external provider, so neither disqualifies a constructor.
-				ParameterModel parameter = ClassifyParameter(p, asyncFactory: false);
+				ParameterModel parameter = ClassifyParameter(p, asyncFactory: false, external.ServiceTypes);
 				return parameter.Kind is DependencyKind.Arg or DependencyKind.External
 				       || IsSynthesizedCollection(parameter.Kind)
-				       || (importServices && parameter.Kind == DependencyKind.Direct)
+				       || (external.ImportServices && parameter.Kind == DependencyKind.Direct)
 				       || registered.Contains(parameter.ServiceType)
 				       || (additionallySatisfiable?.Invoke(p) ?? false);
 			}))

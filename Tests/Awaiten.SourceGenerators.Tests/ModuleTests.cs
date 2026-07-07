@@ -517,6 +517,38 @@ public class ModuleTests
 	}
 
 	[Fact]
+	public async Task Module_ImportService_RoutesTheDeclaredTypeToTheExternalProvider()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface IExternal { }
+		                                       public sealed class Consumer
+		                                       {
+		                                           public Consumer(IExternal external) { }
+		                                       }
+
+		                                       [Module]
+		                                       [ImportService<IExternal>]
+		                                       [Singleton<Consumer>]
+		                                       public static class ExternalModule { }
+
+		                                       [Container]
+		                                       [Import(typeof(ExternalModule))]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty()
+			.Because("a module-declared [ImportService<T>] is honored on the container, symmetric with [ImportServices]");
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+		await That(source).Contains("(global::MyCode.IExternal)__s.__ResolveExternal(typeof(global::MyCode.IExternal), null)");
+	}
+
+	[Fact]
 	public async Task Module_WithOnlyADecorator_IsNotReportedAsEmpty()
 	{
 		GeneratorResult result = Generator.Run("""

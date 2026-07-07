@@ -195,7 +195,7 @@ internal static partial class Sources
 
 		EmitCacheFields(fields, body, instances, names, Lifetime.Scoped);
 
-		// The external resolver this scope routes its [FromServices] / [ImportServices] dependencies through. A
+		// The external resolver this scope routes its [ImportService<T>] / [ImportServices] dependencies through. A
 		// host wires each scope; a child without its own falls back to the root's in __ResolveExternal. The
 		// explicit IExternalResolverHost.ExternalResolver property lands in the members region.
 		Separate(fields);
@@ -271,7 +271,7 @@ internal static partial class Sources
 			EmitOwnedHelper(helpers, body, HasExternalDependencies(instances));
 		}
 
-		// The __ResolveExternal helper is emitted only when the container has [FromServices] / [ImportServices]
+		// The __ResolveExternal helper is emitted only when the container has [ImportService<T>] / [ImportServices]
 		// dependencies, so a container without them carries no unused helper.
 		if (HasExternalDependencies(instances))
 		{
