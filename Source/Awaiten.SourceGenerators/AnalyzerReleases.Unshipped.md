@@ -76,3 +76,8 @@
  AWT174  | Awaiten   | Warning  | A [Scan] include pattern (* for a name, ** for a namespace) matches every candidate and does not narrow the scan
  AWT175  | Awaiten   | Error    | A type is declared [ImportService<T>] but is also registered on the container
  AWT176  | Awaiten   | Warning  | A type declared [ImportService<T>] is never consumed by any dependency in the graph
+ AWT177  | Awaiten   | Error    | An [InjectProperty<TImplementation>] names a member that is not a settable property on TImplementation
+ AWT178  | Awaiten   | Error    | An [InjectProperty<TImplementation>] targets a TImplementation produced by a Factory or Instance registration
+ AWT179  | Awaiten   | Warning  | Two [InjectProperty<TImplementation>] entries name the same property of the same implementation
+ AWT180  | Awaiten   | Warning  | An [InjectProperty<TImplementation>] targets a TImplementation with no container-constructed registration, so the entry is never applied
+ AWT181  | Awaiten   | Warning  | A property is named by both [Inject] and an [InjectProperty<TImplementation>] entry, so the entry's flags are ignored

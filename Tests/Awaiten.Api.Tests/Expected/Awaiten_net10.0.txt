@@ -175,6 +175,16 @@ namespace Awaiten
         public bool Deferred { get; set; }
         public bool Optional { get; set; }
     }
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
+    public sealed class InjectPropertyAttribute<TImplementation> : System.Attribute
+        where TImplementation :  class
+    {
+        public InjectPropertyAttribute(string propertyName) { }
+        public bool Deferred { get; set; }
+        public object? Key { get; set; }
+        public bool Optional { get; set; }
+        public string PropertyName { get; }
+    }
     public enum LifetimeSafety
     {
         Strict = 0,

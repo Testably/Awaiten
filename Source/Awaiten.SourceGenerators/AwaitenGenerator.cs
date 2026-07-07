@@ -172,6 +172,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		ExternalSurface External,
 		VarianceState Variance,
 		HashSet<ServiceKey> ConsumedConditionals,
+		Dictionary<string, List<InjectPropertyEntry>> InjectProperties,
 		List<DiagnosticInfo> Diagnostics);
 
 	/// <summary>
@@ -288,7 +289,11 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		// host-owned or Awaiten-owned, not both. Reported now that the coalesced service->impl map is known.
 		ReportContradictingExternalServices(externalServiceTypes, serviceToImpl, containerSymbol, diagnostics);
 
-		BuildContext buildContext = new(containerSymbol, compilation, serviceToImpl, decoratorInner, wellKnown, constraintRejected, external, variance, consumedConditionals, diagnostics);
+		// Container-side property injection: [InjectProperty<TImpl>] entries keyed by implementation type, so
+		// BuildInstance fills them wherever that implementation is constructed (including [Scan]-registered types).
+		Dictionary<string, List<InjectPropertyEntry>> injectProperties = CollectInjectProperties(containerSymbol, diagnostics);
+
+		BuildContext buildContext = new(containerSymbol, compilation, serviceToImpl, decoratorInner, wellKnown, constraintRejected, external, variance, consumedConditionals, injectProperties, diagnostics);
 
 		// Validate each implementation, select its constructor and build the instance.
 		foreach (ImplInfo info in implOrder)
@@ -311,6 +316,10 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		// or stale declaration. Reported once every instance is built, so every dependency has had the chance to
 		// route. A type flagged AWT175 (registered, so resolved from the graph rather than externally) is excluded.
 		ReportUnconsumedExternalServices(externalServiceTypes, serviceToImpl, instances, containerSymbol, diagnostics);
+
+		// AWT180: an [InjectProperty<TImpl>] entry whose implementation type matches no registration is never
+		// applied, reported now that every registered implementation has been seen.
+		ReportUnmatchedInjectProperties(injectProperties, implOrder, diagnostics);
 
 		// Variance for collections (Part C): union every variance-compatible registration's members into each
 		// requested closed-generic collection. Before the parameterized prune and edge building so the unioned

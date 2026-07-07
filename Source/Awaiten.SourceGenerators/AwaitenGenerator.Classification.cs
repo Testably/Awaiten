@@ -187,20 +187,112 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     Discovers the <c>[Inject]</c> properties of a constructed implementation (opt-in; a plain
-	///     <c>required</c> property is not auto-injected). Each is classified like a Direct constructor parameter and
-	///     produces a graph edge, filled through an object initializer after construction. See
-	///     <see cref="ClassifyInjectedMember" /> for the diagnostics reported.
+	///     The container-wide inputs an injected-member classification reads, bundled so the classification methods
+	///     stay small: the container symbol, the coalesced service map, the constraint-rejected and consumed-context
+	///     sets, the <c>[ImportService&lt;T&gt;]</c> external service types (a member of one resolves externally
+	///     rather than being reported missing), and the diagnostics sink.
 	/// </summary>
-	private static void DiscoverInjectedMembers(ImplInfo info, BuildContext context, List<MemberModel> members)
+	private sealed record InjectionContext(
+		INamedTypeSymbol ContainerSymbol,
+		Dictionary<ServiceKey, string> ServiceToImpl,
+		HashSet<string> ConstraintRejected,
+		HashSet<ServiceKey> ConsumedConditionals,
+		HashSet<string> ExternalServiceTypes,
+		List<DiagnosticInfo> Diagnostics);
+
+	/// <summary>
+	///     The per-property injection flags: how the member is assigned (<see cref="Deferred" />), whether a missing
+	///     registration is tolerated (<see cref="Optional" />), a keyed selection (<see cref="KeyOverride" />, non-null
+	///     only for a container-side entry - an <c>[Inject]</c> property's <c>[FromKey]</c> is read from the property
+	///     itself), and the location diagnostics point at (<see cref="EntryLocation" />: the <c>[InjectProperty]</c>
+	///     attribute for a container-side entry, <see langword="null" /> to fall back to the property declaration for
+	///     an <c>[Inject]</c> one).
+	/// </summary>
+	private readonly record struct InjectionSpec(bool Deferred, bool Optional, string? KeyOverride, LocationInfo? EntryLocation);
+
+	/// <summary>
+	///     Discovers the members to fill after construction: the opt-in <c>[Inject]</c> properties of the constructed
+	///     implementation, plus the container-side <c>[InjectProperty&lt;TImpl&gt;]</c> entries matched to it. Each is
+	///     classified like a Direct constructor parameter and produces a graph edge, filled through an object
+	///     initializer after construction. See <see cref="ClassifyInjectedMember" /> for the diagnostics reported.
+	/// </summary>
+	private static void DiscoverInjectedMembers(
+		ImplInfo info,
+		InjectionContext context,
+		List<InjectPropertyEntry> injectProperties,
+		List<MemberModel> members)
 	{
+		// The property names already filled, so a container-side [InjectProperty<TImpl>] entry for a property that
+		// also carries [Inject] is deduped (injected once, AWT181).
+		HashSet<string> injected = new(StringComparer.Ordinal);
+
 		foreach (IPropertySymbol property in InjectedProperties(info.Symbol))
 		{
-			if (ClassifyInjectedMember(property, info, context) is { } member)
+			injected.Add(property.Name);
+			ImmutableArray<AttributeData> attributes = property.GetAttributes();
+			InjectionSpec spec = new(IsInjectDeferred(attributes), IsInjectOptional(attributes), KeyOverride: null, EntryLocation: null);
+			if (ClassifyInjectedMember(property, info, context, spec) is { } member)
 			{
 				members.Add(member);
 			}
 		}
+
+		// Container-side property injection: an [InjectProperty<TImpl>] entry names a property to fill exactly like
+		// an [Inject] one, but its flags come from the entry rather than the (absent) attribute, and it is matched by
+		// implementation type so it reaches [Scan]-registered types too. Its diagnostics point at the attribute
+		// (entry.Location), the line the author edits, rather than the POCO property. AWT177: the name is not a
+		// settable property on the implementation.
+		foreach (InjectPropertyEntry entry in injectProperties)
+		{
+			// AWT181: the property also carries [Inject], which fills it (winning), so this entry's flags are
+			// ignored. Deduped since AWT179 already removed duplicate entries, so a collision is with an [Inject] one.
+			if (!injected.Add(entry.PropertyName))
+			{
+				context.Diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.InjectPropertyAlsoInjectAttribute,
+					entry.Location ?? info.Location,
+					new EquatableArray<string>([entry.PropertyName, DisplayInstance(info.ImplementationType),])));
+				continue;
+			}
+
+			if (ResolveNamedInstanceMember(info.Symbol, entry.PropertyName) is not IPropertySymbol { IsIndexer: false, } property
+			    || property.SetMethod is null)
+			{
+				context.Diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.InjectPropertyNotFound,
+					entry.Location ?? info.Location,
+					new EquatableArray<string>([entry.PropertyName, DisplayInstance(info.ImplementationType),])));
+				continue;
+			}
+
+			InjectionSpec spec = new(entry.Deferred, entry.Optional, entry.Key, entry.Location);
+			if (ClassifyInjectedMember(property, info, context, spec) is { } member)
+			{
+				members.Add(member);
+			}
+		}
+	}
+
+	/// <summary>
+	///     The most-derived non-static member named <paramref name="name" /> on <paramref name="type" /> or a base
+	///     type (walking derived-first so a <c>new</c> or overriding member shadows a base one), or
+	///     <see langword="null" /> when there is none. Used to resolve an <c>[InjectProperty]</c> name to the member
+	///     it targets; a result that is not a settable property surfaces as AWT177.
+	/// </summary>
+	private static ISymbol? ResolveNamedInstanceMember(INamedTypeSymbol type, string name)
+	{
+		for (INamedTypeSymbol? current = type; current is not null; current = current.BaseType)
+		{
+			foreach (ISymbol member in current.GetMembers(name))
+			{
+				if (!member.IsStatic)
+				{
+					return member;
+				}
+			}
+		}
+
+		return null;
 	}
 
 	/// <summary>
@@ -227,50 +319,54 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     Classifies one <c>[Inject]</c> property into the member edge to fill after construction, or reports why
-	///     it cannot be injected and returns <c>null</c>. Diagnostics (each at the property's location): AWT136 (no
-	///     reachable set/init accessor), AWT137 (<c>[Arg]</c> on an injected property), AWT157/AWT158 (a malformed
+	///     Classifies one injected property - an <c>[Inject]</c> property or a container-side
+	///     <c>[InjectProperty&lt;TImpl&gt;]</c> entry, per <paramref name="spec" /> - into the member edge to fill
+	///     after construction, or reports why it cannot be injected and returns <c>null</c>. Diagnostics (each at
+	///     <see cref="InjectionSpec.EntryLocation" /> for a container-side entry, else the property's location): AWT136
+	///     (no reachable set/init accessor), AWT137 (<c>[Arg]</c> on an injected property), AWT157/AWT158 (a malformed
 	///     <c>Optional</c> property), and AWT101/AWT121 for a missing registration. A required member with a missing
 	///     registration still yields an edge (so it participates in analysis); an <c>Optional</c> one is dropped
 	///     without diagnostic.
 	/// </summary>
-	private static MemberModel? ClassifyInjectedMember(IPropertySymbol property, ImplInfo info, BuildContext context)
+	private static MemberModel? ClassifyInjectedMember(
+		IPropertySymbol property,
+		ImplInfo info,
+		InjectionContext context,
+		InjectionSpec spec)
 	{
-		INamedTypeSymbol containerSymbol = context.ContainerSymbol;
-		Dictionary<ServiceKey, string> serviceToImpl = context.ServiceToImpl;
-		HashSet<string> constraintRejected = context.ConstraintRejected;
-		HashSet<ServiceKey> consumedConditionals = context.ConsumedConditionals;
-		HashSet<string> externalServiceTypes = context.External.ServiceTypes;
-		List<DiagnosticInfo> diagnostics = context.Diagnostics;
+		HashSet<string> externalServiceTypes = context.ExternalServiceTypes;
 
-		LocationInfo? location = LocationInfo.From(property.Locations.FirstOrDefault());
+		// A container-side entry points its diagnostics at the [InjectProperty] attribute the author edits; an
+		// [Inject] property (EntryLocation null) points at the property declaration.
+		LocationInfo? location = spec.EntryLocation ?? LocationInfo.From(property.Locations.FirstOrDefault());
 
-		// AWT136: an [Inject] property must have a set/init accessor the container can assign through the object
+		// AWT136: an injected property must have a set/init accessor the container can assign through the object
 		// initializer. The container is not a derived type, so a protected/private-protected setter (and a
 		// cross-assembly internal one) is out of reach even though not private. Apply the same accessibility test
 		// the constructor path uses rather than a bare not-private check, so an unreachable setter surfaces as
 		// AWT136 instead of an inaccessible-setter error in generated code.
-		if (property.SetMethod is not { } setter || !IsAccessibleSetter(setter, containerSymbol))
+		if (property.SetMethod is not { } setter || !IsAccessibleSetter(setter, context.ContainerSymbol))
 		{
-			diagnostics.Add(new DiagnosticInfo(
+			context.Diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.InjectedPropertyNotSettable,
 				location,
 				new EquatableArray<string>([property.Name, DisplayInstance(info.ImplementationType),])));
 			return null;
 		}
 
-		// A deferred property ([Inject(Deferred = true)]) is assigned after construction and caching rather than
-		// inside the object initializer, so it contributes no graph edge and can break a mutual constructor cycle.
-		// An optional property ([Inject(Optional = true)]) is instead dropped when its dependency is unregistered.
-		bool deferred = IsInjectDeferred(property.GetAttributes());
-		bool optional = IsInjectOptional(property.GetAttributes());
-
 		ParameterModel dependency = ClassifyDependency(
 			property.Type, property.GetAttributes(), asyncFactory: false, location, externalServiceTypes);
 
-		ReportUnsupportedFromKey(property.GetAttributes(), location, DisplayInstance(info.ImplementationType), diagnostics);
+		// A container-side [InjectProperty<TImpl>] entry supplies its key directly (the property is a POCO member
+		// with no [FromKey]); an [Inject] property's key is already read from its [FromKey] above (KeyOverride null).
+		if (spec.KeyOverride is not null)
+		{
+			dependency = dependency with { Key = spec.KeyOverride, };
+		}
 
-		dependency = RedirectContextualBinding(dependency, info, serviceToImpl, consumedConditionals);
+		ReportUnsupportedFromKey(property.GetAttributes(), location, DisplayInstance(info.ImplementationType), context.Diagnostics);
+
+		dependency = RedirectContextualBinding(dependency, info, context.ServiceToImpl, context.ConsumedConditionals);
 
 		// A collection member is always filled (an unregistered collection yields an empty one), so it is never
 		// omitted from the object initializer: Optional has no effect on it, and neither the Optional shape rules
@@ -280,26 +376,26 @@ partial class AwaitenGenerator
 		bool isCollection = IsSynthesizedCollection(dependency.Kind);
 
 		// AWT144/AWT157/AWT158: the accessor and modifiers must be compatible with how the member is assigned.
-		if (RejectsInjectedPropertyShape(property, setter, info, deferred, optional, isCollection, diagnostics))
+		if (RejectsInjectedPropertyShape(property, setter, info, spec, isCollection, location, context.Diagnostics))
 		{
 			return null;
 		}
 
-		// An explicitly registered collection shape (or keyed dictionary) preempts synthesis for an [Inject]
+		// An explicitly registered collection shape (or keyed dictionary) preempts synthesis for an injected
 		// member exactly as for a constructor parameter: the member is rewritten to a direct dependency on the
 		// registered opaque value.
-		dependency = SuppressRegisteredCollectionSynthesis(dependency, property.Type, serviceToImpl);
+		dependency = SuppressRegisteredCollectionSynthesis(dependency, property.Type, context.ServiceToImpl);
 
 		// AWT159/AWT160: keyed-collection misuse is reported only for a dictionary that stays synthesized. An
 		// explicitly registered dictionary was rewritten to Direct above and resolves that registration.
-		ReportUnsupportedKeyedCollectionKey(dependency, property.Type, info, serviceToImpl, diagnostics);
-		ReportFromKeyOnKeyedCollection(dependency, property.Type, info, diagnostics);
+		ReportUnsupportedKeyedCollectionKey(dependency, property.Type, info, context.ServiceToImpl, context.Diagnostics);
+		ReportFromKeyOnKeyedCollection(dependency, property.Type, info, context.Diagnostics);
 
 		// AWT137: runtime arguments flow only through a Func<…> factory into [Arg] constructor parameters, never
 		// through property injection (the member resolves entirely from the graph).
 		if (dependency.Kind == DependencyKind.Arg)
 		{
-			diagnostics.Add(new DiagnosticInfo(
+			context.Diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.InjectedPropertyIsArg,
 				location,
 				new EquatableArray<string>([property.Name, DisplayInstance(info.ImplementationType),])));
@@ -313,8 +409,8 @@ partial class AwaitenGenerator
 		// (External) is satisfied from the external provider, so it is never missing.
 		if (!isCollection
 		    && dependency.Kind != DependencyKind.External
-		    && !serviceToImpl.ContainsKey(KeyOf(dependency))
-		    && !constraintRejected.Contains(dependency.ServiceType))
+		    && !context.ServiceToImpl.ContainsKey(KeyOf(dependency))
+		    && !context.ConstraintRejected.Contains(dependency.ServiceType))
 		{
 			bool ownedThroughLazy = dependency.Kind is DependencyKind.Lazy or DependencyKind.LazyTask
 			                        && dependency.ServiceType.StartsWith("global::Awaiten.Owned<", StringComparison.Ordinal);
@@ -324,12 +420,12 @@ partial class AwaitenGenerator
 			// and async-taint analysis: there is nothing to assign, so nothing to analyze. A structurally
 			// impossible request is not a missing registration, though: Owned<T> can never be produced through
 			// Lazy, so AWT121 is reported (and the edge kept) regardless of Optional, as for a required one.
-			if (optional && !ownedThroughLazy)
+			if (spec.Optional && !ownedThroughLazy)
 			{
 				return null;
 			}
 
-			diagnostics.Add(new DiagnosticInfo(
+			context.Diagnostics.Add(new DiagnosticInfo(
 				ownedThroughLazy ? Diagnostics.OwnedThroughLazy : Diagnostics.MissingDependency,
 				location,
 				new EquatableArray<string>([
@@ -339,13 +435,15 @@ partial class AwaitenGenerator
 				])));
 		}
 
-		return new MemberModel(property.Name, dependency, deferred);
+		return new MemberModel(property.Name, dependency, spec.Deferred);
 	}
 
 	/// <summary>
-	///     Reports the shape diagnostics for an <c>[Inject]</c> property whose accessor or modifiers are
-	///     incompatible with how it would be assigned, returning <see langword="true" /> when the property is
-	///     rejected. AWT144: a deferred property is assigned after construction and omitted from the object
+	///     Reports the shape diagnostics for an injected property (an <c>[Inject]</c> property or an
+	///     <c>[InjectProperty]</c> entry, whose flags arrive in <paramref name="spec" />) whose accessor or modifiers
+	///     are incompatible with how it would be assigned, returning <see langword="true" /> when the property is
+	///     rejected. Each diagnostic is reported at <paramref name="location" /> (the <c>[InjectProperty]</c> attribute
+	///     for a container-side entry, else the property declaration). AWT144: a deferred property is assigned after construction and omitted from the object
 	///     initializer, so it needs a real <c>set</c> accessor and must not be <c>required</c> (an init-only
 	///     accessor and a required member can only be satisfied inside the initializer, the construction-time path
 	///     a deferred property avoids; a required member omitted would otherwise surface as an opaque CS9035).
@@ -360,14 +458,12 @@ partial class AwaitenGenerator
 		IPropertySymbol property,
 		IMethodSymbol setter,
 		ImplInfo info,
-		bool deferred,
-		bool optional,
+		InjectionSpec spec,
 		bool isCollection,
+		LocationInfo? location,
 		List<DiagnosticInfo> diagnostics)
 	{
-		LocationInfo? location = LocationInfo.From(property.Locations.FirstOrDefault());
-
-		if (deferred && (setter.IsInitOnly || property.IsRequired))
+		if (spec.Deferred && (setter.IsInitOnly || property.IsRequired))
 		{
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.DeferredPropertyIsInitOnly,
@@ -380,7 +476,7 @@ partial class AwaitenGenerator
 			return true;
 		}
 
-		if (optional && !isCollection && property.IsRequired)
+		if (spec.Optional && !isCollection && property.IsRequired)
 		{
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.OptionalPropertyIsRequired,
@@ -389,7 +485,7 @@ partial class AwaitenGenerator
 			return true;
 		}
 
-		if (optional && !isCollection && setter.IsInitOnly)
+		if (spec.Optional && !isCollection && setter.IsInitOnly)
 		{
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.OptionalPropertyIsInitOnly,
