@@ -785,7 +785,7 @@ partial class AwaitenGenerator
 		List<RawRegistration> raw,
 		INamedTypeSymbol containerSymbol,
 		Compilation compilation,
-		bool importServices,
+		ExternalSurface external,
 		HashSet<string> constraintRejected,
 		List<DiagnosticInfo> diagnostics)
 	{
@@ -799,7 +799,7 @@ partial class AwaitenGenerator
 		bool dropped = true;
 		while (dropped)
 		{
-			dropped = PruneUnconstructableScanRound(raw, containerSymbol, compilation, importServices, constraintRejected, diagnostics);
+			dropped = PruneUnconstructableScanRound(raw, containerSymbol, compilation, external, constraintRejected, diagnostics);
 		}
 	}
 
@@ -814,7 +814,7 @@ partial class AwaitenGenerator
 		List<RawRegistration> raw,
 		INamedTypeSymbol containerSymbol,
 		Compilation compilation,
-		bool importServices,
+		ExternalSurface external,
 		HashSet<string> constraintRejected,
 		List<DiagnosticInfo> diagnostics)
 	{
@@ -851,7 +851,7 @@ partial class AwaitenGenerator
 		{
 			if (pinnedImpls.Contains(registration.ImplementationType)
 			    || !checkedImpls.Add(registration.ImplementationType)
-			    || FirstUnconstructableReason(registration.Implementation, containerSymbol, services, constraintRejected, importServices, variance) is not { } reason)
+			    || FirstUnconstructableReason(registration.Implementation, containerSymbol, services, constraintRejected, external, variance) is not { } reason)
 			{
 				continue;
 			}
@@ -879,11 +879,11 @@ partial class AwaitenGenerator
 		INamedTypeSymbol containerSymbol,
 		HashSet<ServiceKey> services,
 		HashSet<string> constraintRejected,
-		bool importServices,
+		ExternalSurface external,
 		VarianceState variance)
 	{
 		IMethodSymbol? constructor = SelectConstructor(
-			implementation, containerSymbol, services.Select(service => service.Service), importServices: importServices);
+			implementation, containerSymbol, services.Select(service => service.Service), external);
 		if (constructor is null)
 		{
 			return "it has no constructor accessible to the container";
@@ -891,11 +891,11 @@ partial class AwaitenGenerator
 
 		foreach (IParameterSymbol parameter in constructor.Parameters)
 		{
-			ParameterModel model = ClassifyParameter(parameter, asyncFactory: false);
+			ParameterModel model = ClassifyParameter(parameter, asyncFactory: false, external.ServiceTypes);
 			bool satisfiable =
 				model.Kind is DependencyKind.Arg or DependencyKind.External
 				|| IsSynthesizedCollection(model.Kind)
-				|| (importServices && model is { Kind: DependencyKind.Direct, Key: null, })
+				|| (external.ImportServices && model is { Kind: DependencyKind.Direct, Key: null, })
 				|| services.Contains(KeyOf(model))
 				|| constraintRejected.Contains(model.ServiceType)
 				|| IsVarianceSatisfiable(model, parameter.Type, variance);
@@ -907,7 +907,7 @@ partial class AwaitenGenerator
 
 		foreach (IPropertySymbol property in InjectedProperties(implementation))
 		{
-			if (UnsatisfiableInjectedMemberReason(property, containerSymbol, services, constraintRejected) is { } reason)
+			if (UnsatisfiableInjectedMemberReason(property, containerSymbol, services, constraintRejected, external.ServiceTypes) is { } reason)
 			{
 				return reason;
 			}
@@ -919,18 +919,19 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     The reason a scanned implementation's <c>[Inject]</c> member cannot be satisfied (an AWT141 fragment), or
 	///     <see langword="null" /> otherwise. An injected member resolves from the graph like a Direct parameter (no
-	///     external fall-through or variance redirect). A not-settable, <c>[Arg]</c>-marked, optional or collection
-	///     member is never a reason.
+	///     external fall-through or variance redirect, though an <c>[ImportService&lt;T&gt;]</c> member does resolve
+	///     externally). A not-settable, <c>[Arg]</c>-marked, external, optional or collection member is never a reason.
 	/// </summary>
 	private static string? UnsatisfiableInjectedMemberReason(
 		IPropertySymbol property,
 		INamedTypeSymbol containerSymbol,
 		HashSet<ServiceKey> services,
-		HashSet<string> constraintRejected)
+		HashSet<string> constraintRejected,
+		HashSet<string> externalServiceTypes)
 	{
-		ParameterModel member = ClassifyDependency(property.Type, property.GetAttributes(), asyncFactory: false, location: null);
+		ParameterModel member = ClassifyDependency(property.Type, property.GetAttributes(), asyncFactory: false, location: null, externalServiceTypes);
 		if (property.SetMethod is not { } setter || !IsAccessibleSetter(setter, containerSymbol)
-		    || member.Kind == DependencyKind.Arg || IsInjectOptional(property.GetAttributes()))
+		    || member.Kind is DependencyKind.Arg or DependencyKind.External || IsInjectOptional(property.GetAttributes()))
 		{
 			return null;
 		}

@@ -478,20 +478,6 @@ public sealed class Barista(Cup cup);   // must ask for Func<string, Cup>
 public static partial class CoffeeShop;
 ```
 
-### AWT134
-
-:::danger[Error]
-A constructor parameter is marked both `[FromServices]` and `[Arg]`.
-:::
-
-```csharp
-public sealed class Receipt([FromServices, Arg] IClock clock);
-
-[Container]
-[Transient<Receipt>]
-public static partial class CoffeeShop;
-```
-
 ### AWT137
 
 :::danger[Error]
@@ -567,21 +553,6 @@ A decorator has no single constructor parameter assignable to the decorated serv
 
 ```csharp
 public sealed class LoggingTerminal : IPaymentTerminal;   // no IPaymentTerminal inner parameter
-
-[Container]
-[Singleton<CardTerminal, IPaymentTerminal>]
-[Decorate<LoggingTerminal, IPaymentTerminal>]
-public static partial class CoffeeShop;
-```
-
-### AWT135
-
-:::danger[Error]
-A decorator's inner parameter is marked `[FromServices]`.
-:::
-
-```csharp
-public sealed class LoggingTerminal([FromServices] IPaymentTerminal inner) : IPaymentTerminal;
 
 [Container]
 [Singleton<CardTerminal, IPaymentTerminal>]
@@ -1188,5 +1159,33 @@ public sealed class LatteRecipe([FromKey(5)] IMilk milk);   // int is not a supp
 [Container]
 [Singleton<OatMilk, IMilk>(Key = "Oat")]
 [Singleton<LatteRecipe>]
+public static partial class CoffeeShop;
+```
+
+## External services
+
+### AWT175
+
+:::danger[Error]
+A type is declared `[ImportService<T>]` (drawn from the host provider) but is also registered on the container. A type is either host-owned or Awaiten-owned, not both.
+:::
+
+```csharp
+[Container]
+[ImportService<IPaymentGateway>]                 // declared external
+[Singleton<StripeGateway, IPaymentGateway>]      // …but also registered - contradiction
+public static partial class CoffeeShop;
+```
+
+### AWT176
+
+:::warning[Warning]
+A type declared `[ImportService<T>]` is never consumed by any dependency in the graph, so the declaration is dead - most often a stale or mistyped `[ImportService<T>]`.
+:::
+
+```csharp
+[Container]
+[ImportService<IPaymentGateway>]   // nothing in the graph depends on IPaymentGateway
+[Singleton<Menu>]
 public static partial class CoffeeShop;
 ```

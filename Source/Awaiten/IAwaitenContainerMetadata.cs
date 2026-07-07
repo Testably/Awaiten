@@ -15,7 +15,7 @@ public interface IAwaitenContainerMetadata : IAwaitenRoot, IExternalResolverHost
 	IReadOnlyList<AwaitenRegistration> Registrations { get; }
 
 	/// <summary>
-	///     The <c>[FromServices]</c> / <c>[ImportServices]</c> dependencies the container expects from an external
+	///     The <c>[ImportService&lt;T&gt;]</c> / <c>[ImportServices]</c> dependencies the container expects from an external
 	///     provider, each carrying its service type and optional <c>[FromKey]</c> resolution key. A host satisfies
 	///     these through <see cref="IExternalResolverHost.ExternalResolver" />. Empty when there are none.
 	/// </summary>

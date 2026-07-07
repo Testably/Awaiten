@@ -150,6 +150,15 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		INamedTypeSymbol? AsyncInitializable);
 
 	/// <summary>
+	///     The container's external-resolution surface, consulted during constructor selection and open-generic/scan
+	///     seeding: the blanket <c>[ImportServices]</c> fall-through (<see cref="ImportServices" />) plus the per-type
+	///     <c>[ImportService&lt;T&gt;]</c> declarations (<see cref="ServiceTypes" />). The two are computed together
+	///     and bundled so they travel as one through the coalescing-phase helpers that decide whether a constructor
+	///     parameter is satisfiable, keeping their parameter lists short.
+	/// </summary>
+	internal readonly record struct ExternalSurface(bool ImportServices, HashSet<string> ServiceTypes);
+
+	/// <summary>
 	///     The container-wide inputs threaded to each per-implementation <see cref="BuildInstance" />, passed
 	///     together to avoid a long parameter list.
 	/// </summary>
@@ -160,7 +169,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		Dictionary<string, DecoratorInner> DecoratorInner,
 		WellKnownTypes WellKnown,
 		HashSet<string> ConstraintRejected,
-		bool ImportServices,
+		ExternalSurface External,
 		VarianceState Variance,
 		HashSet<ServiceKey> ConsumedConditionals,
 		List<DiagnosticInfo> Diagnostics);
@@ -201,13 +210,21 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		bool importServices = ContainerImportsServices(containerSymbol)
 		                      || modules.Any(module => HasAwaitenAttribute(module.Symbol.GetAttributes(), "ImportServicesAttribute"));
 
+		// [ImportService<T>]: the typed counterpart of the blanket flag above, honored on the container and any
+		// imported module. Each declared type routes every unregistered dependency of that type - keyed or not,
+		// whether a constructor parameter, factory parameter or [Inject] property - to the external provider, while
+		// every other unresolved dependency keeps the AWT101 check. Bundled with the blanket flag as the container's
+		// external-resolution surface, threaded through the coalescing phase that decides constructor satisfiability.
+		HashSet<string> externalServiceTypes = CollectExternalServiceTypes(containerSymbol, modules);
+		ExternalSurface external = new(importServices, externalServiceTypes);
+
 		// Collect also expands [Scan]s into overridable registrations (IsScan), ordered after the explicit ones
 		// so an explicit registration wins single resolution while every match still joins its collection.
-		(List<RawRegistration> raw, HashSet<string> constraintRejected) = Collect(containerSymbol, modules, compilation, importServices, diagnostics);
+		(List<RawRegistration> raw, HashSet<string> constraintRejected) = Collect(containerSymbol, modules, compilation, external, diagnostics);
 
 		// [Scan(SkipUnconstructable = true)] trades the AWT101 error for a skip-with-warning (AWT141) on matches
 		// the container cannot construct. Scans without the opt-in, and explicit registrations, keep the error.
-		PruneUnconstructableScanMatches(raw, containerSymbol, compilation, importServices, constraintRejected, diagnostics);
+		PruneUnconstructableScanMatches(raw, containerSymbol, compilation, external, constraintRejected, diagnostics);
 
 		(List<DecorateRegistration> decorators, List<OpenDecorateRegistration> openDecorators) =
 			CollectDecorators(containerSymbol, modules, diagnostics);
@@ -237,7 +254,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		Dictionary<string, DecoratorInner> decoratorInner = new(StringComparer.Ordinal);
 		if (decorators.Count > 0)
 		{
-			new DecoratorChainBuilder(containerSymbol, compilation, graph, decoratorInner, importServices, diagnostics)
+			new DecoratorChainBuilder(containerSymbol, compilation, graph, decoratorInner, external, diagnostics)
 				.Build(decorators);
 		}
 
@@ -251,7 +268,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		// others. Runs after decorator chains so a composite fronts the decorated members.
 		if (composites.Count > 0)
 		{
-			BuildComposites(composites, compilation, containerSymbol, graph, importServices, diagnostics);
+			BuildComposites(composites, compilation, containerSymbol, graph, external, diagnostics);
 		}
 
 		List<InstanceModel> instances = new();
@@ -267,7 +284,11 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		List<ConditionalRegistration> conditionals = CollectConditionalRegistrations(raw);
 		HashSet<ServiceKey> consumedConditionals = new();
 
-		BuildContext buildContext = new(containerSymbol, compilation, serviceToImpl, decoratorInner, wellKnown, constraintRejected, importServices, variance, consumedConditionals, diagnostics);
+		// AWT175: a type declared [ImportService<T>] must not also be registered on the container - it is either
+		// host-owned or Awaiten-owned, not both. Reported now that the coalesced service->impl map is known.
+		ReportContradictingExternalServices(externalServiceTypes, serviceToImpl, containerSymbol, diagnostics);
+
+		BuildContext buildContext = new(containerSymbol, compilation, serviceToImpl, decoratorInner, wellKnown, constraintRejected, external, variance, consumedConditionals, diagnostics);
 
 		// Validate each implementation, select its constructor and build the instance.
 		foreach (ImplInfo info in implOrder)
@@ -285,6 +306,11 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		// AWT167: a contextual registration whose named consumer never redirected to its context key (no unkeyed
 		// direct dependency on the service) is never reached, so report it now that every instance is built.
 		ReportUnappliedContextualBindings(conditionals, consumedConditionals, diagnostics);
+
+		// AWT176: a declared [ImportService<T>] whose type no graph edge ever routed externally is dead - a mistyped
+		// or stale declaration. Reported once every instance is built, so every dependency has had the chance to
+		// route. A type flagged AWT175 (registered, so resolved from the graph rather than externally) is excluded.
+		ReportUnconsumedExternalServices(externalServiceTypes, serviceToImpl, instances, containerSymbol, diagnostics);
 
 		// Variance for collections (Part C): union every variance-compatible registration's members into each
 		// requested closed-generic collection. Before the parameterized prune and edge building so the unioned

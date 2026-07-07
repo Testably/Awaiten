@@ -32,7 +32,7 @@ public sealed class Report
 	private readonly IClock _clock;
 	private readonly Banner _banner;
 
-	public Report(IClock clock, [FromServices] Banner banner)
+	public Report(IClock clock, Banner banner)
 	{
 		_clock = clock;
 		_banner = banner;
@@ -59,6 +59,7 @@ public sealed class Warmup : IAsyncInitializable
 }
 
 [Container]
+[ImportService<Banner>]
 [Singleton<SystemClock, IClock>]
 [Transient<Report>]
 [Singleton<Warmup>]

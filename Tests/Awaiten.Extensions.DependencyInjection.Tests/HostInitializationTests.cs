@@ -67,7 +67,7 @@ public sealed partial class HostInitializationTests
 
 		// Drawn from the host provider (not the Awaiten graph): warm-up resolves the container root directly,
 		// so the hosted service must wire the external resolver before this singleton can be constructed.
-		public ExternalAsyncResource([FromServices] IClock clock) => Clock = clock;
+		public ExternalAsyncResource(IClock clock) => Clock = clock;
 
 		public IClock Clock { get; }
 
@@ -79,6 +79,7 @@ public sealed partial class HostInitializationTests
 	}
 
 	[Container(SyncResolveAfterInit = true)]
+	[ImportService<IClock>]
 	[Singleton<ExternalAsyncResource>]
 	public static partial class ExternalHostContainer;
 
@@ -96,7 +97,7 @@ public sealed partial class HostInitializationTests
 
 		await That(ExternalAsyncResource.InitializeCount).IsEqualTo(0);
 
-		// Without the hosted service wiring the external resolver, constructing the singleton's [FromServices]
+		// Without the hosted service wiring the external resolver, constructing the singleton's external
 		// dependency during warm-up would throw. The resolver is null until a bridged resolution wires it.
 		await host.StartAsync(TestContext.Current.CancellationToken);
 

@@ -7,7 +7,7 @@ namespace Awaiten.Extensions.DependencyInjection;
 
 /// <summary>
 ///     Startup-time verification that the external dependencies a generated container expects from the
-///     host (its <c>[FromServices]</c> / <c>[ImportServices]</c> dependencies) are actually registered
+///     host (its <c>[ImportService&lt;T&gt;]</c> / <c>[ImportServices]</c> dependencies) are actually registered
 ///     in the provider. This is the runtime analog of the compile-time missing-dependency check
 ///     (AWT101) across the Microsoft.Extensions.DependencyInjection boundary, surfacing a
 ///     misconfiguration at startup rather than on first resolution.
@@ -42,7 +42,7 @@ public static class AwaitenVerificationExtensions
 			throw new InvalidOperationException(
 				"Awaiten: the container's external dependencies are not registered in the provider: "
 				+ string.Join(", ", missing.Select(Describe))
-				+ ". Register them before building the provider, or remove the [FromServices]/[ImportServices] usage.");
+				+ ". Register them before building the provider, or remove the [ImportService<T>]/[ImportServices] usage.");
 		}
 	}
 

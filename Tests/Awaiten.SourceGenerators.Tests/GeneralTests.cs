@@ -864,7 +864,7 @@ public class GeneralTests
 	}
 
 	[Fact]
-	public async Task FromServicesParameter_IsResolvedExternallyWithoutAwt101()
+	public async Task ImportServiceParameter_IsResolvedExternallyWithoutAwt101()
 	{
 		GeneratorResult result = Generator.Run("""
 		                                       using Awaiten;
@@ -872,9 +872,10 @@ public class GeneralTests
 		                                       namespace MyCode;
 
 		                                       public interface ILogger { }
-		                                       public sealed class Service { public Service([FromServices] ILogger logger) { } }
+		                                       public sealed class Service { public Service(ILogger logger) { } }
 
 		                                       [Container]
+		                                       [ImportService<ILogger>]
 		                                       [Singleton<Service>]
 		                                       public static partial class MyContainer
 		                                       {
@@ -882,13 +883,109 @@ public class GeneralTests
 		                                       """);
 
 		await That(result.Diagnostics).IsEmpty()
-			.Because("a [FromServices] parameter is resolved from the external provider, not the Awaiten graph");
+			.Because("an [ImportService<T>] dependency is resolved from the external provider, not the Awaiten graph");
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 		await That(source).Contains("protected object __ResolveExternal(global::System.Type serviceType, object? serviceKey)");
 		await That(source).Contains("new global::MyCode.Service((global::MyCode.ILogger)__s.__ResolveExternal(typeof(global::MyCode.ILogger), null))");
 		// The external dependency is advertised in the container metadata.
 		await That(source).Contains("global::Awaiten.IAwaitenContainerMetadata.ExternalDependencies");
 		await That(source).Contains("typeof(global::MyCode.ILogger)");
+	}
+
+	[Fact]
+	public async Task ImportService_IsPerType_ADifferentUnregisteredDependencyStillReportsAwt101()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface ILogger { }
+		                                       public interface IMetrics { }
+		                                       // ILogger is declared external; IMetrics is not, so it must still be reported missing.
+		                                       public sealed class Service { public Service(ILogger logger, IMetrics metrics) { } }
+
+		                                       [Container]
+		                                       [ImportService<ILogger>]
+		                                       [Singleton<Service>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).Contains("*AWT101*").AsWildcard()
+			.And.Contains("*IMetrics*").AsWildcard()
+			.Because("[ImportService<T>] routes only the declared type; every other unresolved dependency keeps the AWT101 check");
+		await That(result.Diagnostics.Any(d => d.Contains("ILogger"))).IsFalse()
+			.Because("the declared external ILogger is routed to the provider, not reported missing");
+	}
+
+	[Fact]
+	public async Task ImportService_RoutesOnlyTheDirectDependency_ARelationshipOverTheExternalTypeStillReportsAwt101()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using System;
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface ILogger { }
+		                                       // Only a direct ILogger dependency is routed externally; a Func<ILogger> relationship is not.
+		                                       public sealed class Service { public Service(Func<ILogger> logger) { } }
+
+		                                       [Container]
+		                                       [ImportService<ILogger>]
+		                                       [Singleton<Service>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).Contains("*AWT101*").AsWildcard()
+			.And.Contains("*ILogger*").AsWildcard()
+			.Because("[ImportService<T>] routes only the direct dependency of T; a Func<T>/Lazy<T> relationship over it resolves from the graph and is AWT101 when unregistered");
+		await That(result.Diagnostics.Any(d => d.Contains("AWT176"))).IsFalse()
+			.Because("the external type is still referenced through the relationship, so it is not an unconsumed (dead) declaration");
+	}
+
+	[Fact]
+	public async Task ImportService_MultiConstructorDecorator_SelectsTheExternalAwareConstructorWithoutSpuriousAwt124()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface IService { }
+		                                       public interface ILogger { }
+		                                       public interface IExtra { }
+		                                       public sealed class Real : IService { }
+		                                       public sealed class Extra : IExtra { }
+		                                       public sealed class Deco : IService
+		                                       {
+		                                           // A shorter constructor with no inner, and a greedier one whose inner-bearing
+		                                           // signature is only satisfiable because ILogger is external. Inner detection must
+		                                           // use the same external-aware selection the container builds through, else it scans
+		                                           // the inner-less constructor and reports a spurious AWT124.
+		                                           public Deco(IExtra extra) { }
+		                                           public Deco(IService inner, ILogger logger) { }
+		                                       }
+
+		                                       [Container]
+		                                       [ImportService<ILogger>]
+		                                       [Transient<Real, IService>]
+		                                       [Transient<Extra, IExtra>]
+		                                       [Decorate<Deco, IService>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty()
+			.Because("inner detection uses the external-aware SelectConstructor, so the inner-bearing constructor is chosen and no spurious AWT124 is raised");
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+		await That(source).Contains("(global::MyCode.ILogger)__s.__ResolveExternal(typeof(global::MyCode.ILogger), null)")
+			.Because("the decorator's external side-dependency is routed to the provider");
 	}
 
 	[Fact]
@@ -960,7 +1057,7 @@ public class GeneralTests
 	}
 
 	[Fact]
-	public async Task FromServicesWithFromKey_ForwardsTheKeyToTheExternalResolver()
+	public async Task ImportServiceWithFromKey_ForwardsTheKeyToTheExternalResolver()
 	{
 		GeneratorResult result = Generator.Run("""
 		                                       using Awaiten;
@@ -968,9 +1065,10 @@ public class GeneralTests
 		                                       namespace MyCode;
 
 		                                       public interface ILogger { }
-		                                       public sealed class Service { public Service([FromServices] [FromKey("audit")] ILogger logger) { } }
+		                                       public sealed class Service { public Service([FromKey("audit")] ILogger logger) { } }
 
 		                                       [Container]
+		                                       [ImportService<ILogger>]
 		                                       [Singleton<Service>]
 		                                       public static partial class MyContainer
 		                                       {
@@ -978,7 +1076,7 @@ public class GeneralTests
 		                                       """);
 
 		await That(result.Diagnostics).IsEmpty()
-			.Because("a keyed [FromServices] parameter is resolved from the external provider under its key");
+			.Because("a keyed [ImportService<T>] dependency is resolved from the external provider under its key");
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 		await That(source).Contains("(global::MyCode.ILogger)__s.__ResolveExternal(typeof(global::MyCode.ILogger), \"audit\")");
 	}

@@ -189,7 +189,7 @@ internal static partial class Sources
 	}
 
 	/// <summary>
-	///     Emits the Root's advertised <c>ExternalDependencies</c> list (the distinct <c>[FromServices]</c> /
+	///     Emits the Root's advertised <c>ExternalDependencies</c> list (the distinct <c>[ImportService&lt;T&gt;]</c> /
 	///     <c>[ImportServices]</c> service types, empty when there are none) that <c>IAwaitenContainerMetadata</c>
 	///     requires. The <c>ExternalResolver</c> the container routes those dependencies through is emitted on the
 	///     base <c>Scope</c> (inherited by the Root), so a host can wire each scope independently.
@@ -1061,7 +1061,7 @@ internal static partial class Sources
 	}
 
 	/// <summary>
-	///     Emits the <c>__ResolveExternal</c> helper that routes a <c>[FromServices]</c> / <c>[ImportServices]</c>
+	///     Emits the <c>__ResolveExternal</c> helper that routes an <c>[ImportService&lt;T&gt;]</c> / <c>[ImportServices]</c>
 	///     dependency (optionally under a <c>[FromKey]</c> key) through the external resolver, throwing a clear
 	///     message when no resolver is wired or the service is unavailable. Emitted on the base <c>Scope</c> and
 	///     inherited by the <c>Root</c>. It prefers this scope's own <c>ExternalResolver</c> (a host wires each
@@ -1086,9 +1086,10 @@ internal static partial class Sources
 	}
 
 	/// <summary>
-	///     The distinct external (<c>[FromServices]</c> / <c>[ImportServices]</c>) service types across every
-	///     instance's constructor parameters, in first-seen order, advertised by the Root as
-	///     <c>ExternalDependencies</c> and used to decide whether the external-resolution surface is emitted.
+	///     The distinct external (<c>[ImportService&lt;T&gt;]</c> / <c>[ImportServices]</c>) service types across
+	///     every instance's constructor/factory parameters and <c>[Inject]</c> members, in first-seen order,
+	///     advertised by the Root as <c>ExternalDependencies</c> and used to decide whether the external-resolution
+	///     surface is emitted.
 	/// </summary>
 	private static (string Type, string? Key)[] ExternalDependencies(InstanceModel[] instances)
 	{
@@ -1101,6 +1102,14 @@ internal static partial class Sources
 				if (parameter.Kind == DependencyKind.External && seen.Add((parameter.ServiceType, parameter.Key)))
 				{
 					external.Add((parameter.ServiceType, parameter.Key));
+				}
+			}
+
+			foreach (ParameterModel dependency in instance.InjectedMembers.AsArray().Select(member => member.Dependency))
+			{
+				if (dependency.Kind == DependencyKind.External && seen.Add((dependency.ServiceType, dependency.Key)))
+				{
+					external.Add((dependency.ServiceType, dependency.Key));
 				}
 			}
 		}

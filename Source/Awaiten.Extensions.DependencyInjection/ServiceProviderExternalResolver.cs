@@ -6,7 +6,7 @@ namespace Awaiten.Extensions.DependencyInjection;
 /// <summary>
 ///     Adapts a Microsoft.Extensions.DependencyInjection <see cref="IServiceProvider" /> to Awaiten's
 ///     <see cref="IExternalResolver" /> seam, so a generated container can resolve its
-///     <c>[FromServices]</c> / <c>[ImportServices]</c> dependencies from the host's provider.
+///     <c>[ImportService&lt;T&gt;]</c> / <c>[ImportServices]</c> dependencies from the host's provider.
 /// </summary>
 public sealed class ServiceProviderExternalResolver : IExternalResolver
 {
