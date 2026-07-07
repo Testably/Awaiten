@@ -56,7 +56,7 @@ public class GeneralTests
 		                                       """);
 
 		await That(result.Diagnostics).IsEmpty();
-		await That(result.Sources).HasCount(1);
+		await That(result.Sources).HasCount(2).Because("the container source plus the injected marker polyfills");
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 		await That(source).Contains("static partial class MyContainer");
 		await That(source).Contains("public object Resolve(global::System.Type serviceType)");
@@ -276,7 +276,7 @@ public class GeneralTests
 		                                       """);
 
 		await That(result.Diagnostics).IsEmpty();
-		await That(result.Sources).HasCount(1);
+		await That(result.Sources).HasCount(2).Because("the container source plus the injected marker polyfills");
 		string source = result.Sources["Awaiten.MyCode.Outer+Inner.g.cs"];
 		await That(source).Contains("partial class Outer");
 		await That(source).Contains("static partial class Inner");
@@ -294,7 +294,7 @@ public class GeneralTests
 		                                       """);
 
 		await That(result.Diagnostics).IsEmpty();
-		await That(result.Sources).HasCount(2);
+		await That(result.Sources).HasCount(3).Because("the two container sources plus the injected marker polyfills");
 		await That(result.Sources).ContainsKey("Awaiten.A.MyContainer.g.cs");
 		await That(result.Sources).ContainsKey("Awaiten.B.MyContainer.g.cs");
 	}

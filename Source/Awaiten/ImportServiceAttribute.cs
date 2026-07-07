@@ -18,7 +18,7 @@ namespace Awaiten;
 ///         dependencies with no registration - an explicit <c>[ImportService&lt;T&gt;]</c> is stronger and narrower.
 ///         It routes <em>every</em> unregistered dependency of type <typeparamref name="TService" />, keyed or not,
 ///         whether a constructor parameter, a factory-method parameter, or an injected property, to the external
-///         provider, forwarding any <see cref="FromKeyAttribute">[FromKey]</see> key to the resolver. Every other
+///         provider, forwarding any <c>[FromKey]</c> key to the resolver. Every other
 ///         unresolved dependency still gets the ordinary missing-dependency check (AWT101), so a forgotten or
 ///         mistyped dependency of any other type is still reported rather than silently deferred to the host.
 ///     </para>
@@ -31,7 +31,7 @@ namespace Awaiten;
 ///     </para>
 ///     <para>
 ///         Honored on the <see cref="ContainerAttribute">container</see> and on any imported <c>[Module]</c>,
-///         symmetric with <see cref="ImportServicesAttribute" />. Combine with <see cref="FromKeyAttribute" /> at the
+///         symmetric with <see cref="ImportServicesAttribute" />. Combine with <c>[FromKey]</c> at the
 ///         dependency to resolve a keyed external service; the key is forwarded to the resolver. Declaring a type both
 ///         <c>[ImportService&lt;T&gt;]</c> and registering it on the container is contradictory (AWT175), since a type
 ///         is either host-owned or Awaiten-owned, not both; declaring a type external that no dependency in the graph

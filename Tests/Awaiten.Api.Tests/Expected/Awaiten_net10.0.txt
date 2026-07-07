@@ -2,11 +2,6 @@
 [assembly: System.Runtime.Versioning.TargetFramework(".NETCoreApp,Version=v10.0", FrameworkDisplayName=".NET 10.0")]
 namespace Awaiten
 {
-    [System.AttributeUsage(System.AttributeTargets.Property | System.AttributeTargets.Parameter, AllowMultiple=false, Inherited=false)]
-    public sealed class ArgAttribute : System.Attribute
-    {
-        public ArgAttribute() { }
-    }
     public readonly struct AwaitenExternalDependency : System.IEquatable<Awaiten.AwaitenExternalDependency>
     {
         public AwaitenExternalDependency(System.Type serviceType, object? key = null) { }
@@ -103,13 +98,6 @@ namespace Awaiten
         Warn = 1,
         Silent = 2,
     }
-    [System.AttributeUsage(System.AttributeTargets.Property | System.AttributeTargets.Parameter, AllowMultiple=false, Inherited=false)]
-    public sealed class FromKeyAttribute : System.Attribute
-    {
-        public FromKeyAttribute(object key) { }
-        public FromKeyAttribute(string key) { }
-        public object Key { get; }
-    }
     public interface IAsyncInitializable
     {
         System.Threading.Tasks.Task InitializeAsync(System.Threading.CancellationToken cancellationToken);
@@ -167,13 +155,6 @@ namespace Awaiten
     public sealed class ImportServicesAttribute : System.Attribute
     {
         public ImportServicesAttribute() { }
-    }
-    [System.AttributeUsage(System.AttributeTargets.Property, AllowMultiple=false, Inherited=false)]
-    public sealed class InjectAttribute : System.Attribute
-    {
-        public InjectAttribute() { }
-        public bool Deferred { get; set; }
-        public bool Optional { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
     public sealed class InjectPropertyAttribute<TImplementation> : System.Attribute

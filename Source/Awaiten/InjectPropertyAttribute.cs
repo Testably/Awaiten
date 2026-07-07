@@ -9,7 +9,7 @@ namespace Awaiten;
 /// <summary>
 ///     Declares, on the <see cref="ContainerAttribute">container</see>, a property of
 ///     <typeparamref name="TImplementation" /> to fill from the object graph after construction - the
-///     container-side counterpart of <see cref="InjectAttribute">[Inject]</see> that keeps the implementation a
+///     container-side counterpart of <c>[Inject]</c> that keeps the implementation a
 ///     plain POCO. The named property is filled exactly like an <c>[Inject]</c> one: its service type is
 ///     resolved like a constructor parameter (direct, <c>Func&lt;T&gt;</c> / <c>Lazy&lt;T&gt;</c>, a collection,
 ///     or a keyed registration) and assigned through an object initializer, so no reflection is used and the
@@ -45,7 +45,7 @@ public sealed class InjectPropertyAttribute<TImplementation>(string propertyName
     /// <summary>
     ///     Makes the dependency optional: when its service type is not registered the property is left at its
     ///     default instead of reporting <c>AWT101</c>. When the dependency is registered an optional property is
-    ///     filled exactly like a required one. Mirrors <see cref="InjectAttribute.Optional" /> and may combine
+    ///     filled exactly like a required one. Mirrors the <c>[Inject]</c> <c>Optional</c> flag and may combine
     ///     with <see cref="Deferred" />.
     /// </summary>
     public bool Optional { get; set; }
@@ -53,7 +53,7 @@ public sealed class InjectPropertyAttribute<TImplementation>(string propertyName
     /// <summary>
     ///     Defers the property's assignment until after the owning instance is constructed and cached, instead
     ///     of filling it in the object initializer, so it carries no cycle edge and can break a mutual
-    ///     constructor cycle. Mirrors <see cref="InjectAttribute.Deferred" /> and requires an accessible plain
+    ///     constructor cycle. Mirrors the <c>[Inject]</c> <c>Deferred</c> flag and requires an accessible plain
     ///     <c>set</c> accessor (an <c>init</c>-only or <c>required</c> property is <c>AWT144</c>).
     /// </summary>
     public bool Deferred { get; set; }

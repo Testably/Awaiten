@@ -28,6 +28,10 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 	/// <inheritdoc />
 	public void Initialize(IncrementalGeneratorInitializationContext context)
 	{
+		// The consumer-side markers ([Arg]/[FromKey]/[Inject]) are injected as internal source into every
+		// compilation, so an assembly that uses them carries no runtime reference to Awaiten (only the analyzer).
+		context.RegisterPostInitializationOutput(RegisterMarkerAttributes);
+
 		IncrementalValuesProvider<ContainerModel> models = context.SyntaxProvider
 			.ForAttributeWithMetadataName(
 				ContainerAttributeName,

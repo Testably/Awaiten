@@ -17,9 +17,12 @@
 		<PackageReference Remove="aweXpect" />
 	</ItemGroup>
 
-	<!-- The Awaiten attributes only (not the analyzer): this library declares a [Module] but the generator
-	     runs on the importing container in Awaiten.Tests, never here. -->
+	<!-- The container-side attributes come from the Awaiten runtime; the analyzer is referenced so the
+	     consumer-side markers ([Arg]/[FromKey]/[Inject]) - now source-injected internal types rather than
+	     runtime types - exist in this assembly. It declares a [Module] and a marker-bearing service, both read
+	     by the importing container in Awaiten.Tests; no container is defined here, so nothing else is emitted. -->
 	<ItemGroup>
+		<ProjectReference Include="..\..\Source\Awaiten.SourceGenerators\Awaiten.SourceGenerators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
 		<ProjectReference Include="..\..\Source\Awaiten\Awaiten.csproj" />
 	</ItemGroup>
 
