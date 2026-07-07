@@ -489,6 +489,119 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
+	///     One <c>[InjectProperty&lt;TImplementation&gt;(name)]</c> entry on the container: the property of the
+	///     implementation to fill, plus the same per-property flags an <c>[Inject]</c> attribute carries. The
+	///     container-side counterpart of an <c>[Inject]</c> property, matched to a registration by its
+	///     implementation type (see <see cref="CollectInjectProperties" />).
+	/// </summary>
+	private sealed record InjectPropertyEntry(string PropertyName, bool Optional, bool Deferred, string? Key, LocationInfo? Location);
+
+	/// <summary>
+	///     Reads the container's <c>[InjectProperty&lt;TImplementation&gt;(name)]</c> entries into a map from the
+	///     implementation's fully-qualified type to its properties to fill, so <see cref="BuildInstance" /> can look
+	///     them up by <c>info.ImplementationType</c> - reaching every construction site of that implementation,
+	///     including one brought in by a <c>[Scan]</c>. Reports <see cref="Diagnostics.DuplicateInjectProperty">AWT179</see>
+	///     for a second entry naming the same property of the same implementation, keeping only the first.
+	/// </summary>
+	private static Dictionary<string, List<InjectPropertyEntry>> CollectInjectProperties(
+		INamedTypeSymbol containerSymbol, List<DiagnosticInfo> diagnostics)
+	{
+		Dictionary<string, List<InjectPropertyEntry>> map = new(StringComparer.Ordinal);
+		foreach (AttributeData attribute in containerSymbol.GetAttributes())
+		{
+			if (attribute.AttributeClass is not { Name: "InjectPropertyAttribute", IsGenericType: true, } attributeClass
+			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace
+			    || attributeClass.TypeArguments.Length != 1
+			    || attributeClass.TypeArguments[0] is not INamedTypeSymbol implementation
+			    || attribute.ConstructorArguments.Length != 1
+			    || attribute.ConstructorArguments[0].Value is not string propertyName)
+			{
+				continue;
+			}
+
+			string implementationType = implementation.ToDisplayString(FullyQualified);
+			LocationInfo? location = LocationInfo.From(attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation());
+
+			if (!map.TryGetValue(implementationType, out List<InjectPropertyEntry>? entries))
+			{
+				entries = new List<InjectPropertyEntry>();
+				map[implementationType] = entries;
+			}
+
+			// AWT170: the Key must be a supported key constant (string, enum or typeof), guarded exactly as on a
+			// registration's Key and a [FromKey]; an unsupported one would otherwise be silently dropped to no key.
+			ReportUnsupportedRegistrationKey(attribute, location, DisplayInstance(implementationType), diagnostics);
+
+			// AWT179: a property is injected once, so a second entry for it is a copy-paste whose flags would be
+			// silently ignored; report it and keep the first.
+			if (entries.Any(entry => entry.PropertyName == propertyName))
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.DuplicateInjectProperty,
+					location,
+					new EquatableArray<string>([propertyName, DisplayInstance(implementationType),])));
+				continue;
+			}
+
+			entries.Add(new InjectPropertyEntry(
+				propertyName,
+				NamedFlag(attribute, "Optional"),
+				NamedFlag(attribute, "Deferred"),
+				NamedKeyArgument(attribute),
+				location));
+		}
+
+		return map;
+	}
+
+	/// <summary>
+	///     Reports <see cref="Diagnostics.InjectPropertyImplementationNotRegistered">AWT180</see> for every
+	///     <c>[InjectProperty&lt;TImplementation&gt;]</c> entry whose implementation type matches no registration in
+	///     <paramref name="implOrder" />, so the entry is never applied (an unregistered type, or an unexpanded
+	///     closed generic). Run once every instance is built, the container-side analogue of
+	///     <see cref="ReportUnappliedContextualBindings" />. A Factory/Instance-produced implementation is registered
+	///     (present in <paramref name="implOrder" />) and is AWT178 at its <c>BuildInstance</c>, so it is not
+	///     reported here. The registered set carries each impl's <em>real</em> type (<c>info.Symbol</c>) as well as
+	///     its <c>ImplementationType</c>: a decorator chain link's <c>ImplementationType</c> is a synthetic
+	///     <c>Type@__dec:…</c> identity, so keying only on that would misreport an entry targeting the decorator type
+	///     as unmatched. (Property injection is not applied to a decorator wrapper; see the <c>[InjectProperty]</c>
+	///     XML doc.)
+	/// </summary>
+	private static void ReportUnmatchedInjectProperties(
+		Dictionary<string, List<InjectPropertyEntry>> injectProperties,
+		List<ImplInfo> implOrder,
+		List<DiagnosticInfo> diagnostics)
+	{
+		if (injectProperties.Count == 0)
+		{
+			return;
+		}
+
+		HashSet<string> registered = new(StringComparer.Ordinal);
+		foreach (ImplInfo info in implOrder)
+		{
+			registered.Add(info.ImplementationType);
+			registered.Add(info.Symbol.ToDisplayString(FullyQualified));
+		}
+
+		foreach (KeyValuePair<string, List<InjectPropertyEntry>> implementation in injectProperties)
+		{
+			if (registered.Contains(implementation.Key))
+			{
+				continue;
+			}
+
+			foreach (InjectPropertyEntry entry in implementation.Value)
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.InjectPropertyImplementationNotRegistered,
+					entry.Location,
+					new EquatableArray<string>([entry.PropertyName, DisplayInstance(implementation.Key),])));
+			}
+		}
+	}
+
+	/// <summary>
 	///     Resolves how a registration produces its instance: a <c>Factory</c> method, a pre-built <c>Instance</c>
 	///     member, or a constructor when neither is set. Setting both drives AWT110. An explicit empty string is
 	///     kept (not treated as absent) so it surfaces as AWT108/AWT109.

@@ -15,6 +15,13 @@ partial class AwaitenGenerator
 		WellKnownTypes wellKnown = context.WellKnown;
 		List<DiagnosticInfo> diagnostics = context.Diagnostics;
 
+		// Property injection: after the constructor, fill the opt-in [Inject] and container-side [InjectProperty]
+		// members through an object initializer. Only a constructed instance is filled; a factory or pre-built
+		// instance is produced whole by its source (an [InjectProperty] on it is AWT178). Each member edge is
+		// classified like a Direct constructor parameter, so it participates fully in cycle, captive and async-taint
+		// analysis. Computed before the Instance early-return so its AWT178 is still reported for one.
+		List<MemberModel> members = BuildInjectedMembers(info, context);
+
 		// A pre-built Instance is handed back from a container member, never constructed here. The container does
 		// not own it: it is not disposed, may be an interface (no not-instantiable check), contributes no edges, and
 		// is never async-initialized (InitializeAsync never runs). The caller owns construction and lifetime.
@@ -39,16 +46,6 @@ partial class AwaitenGenerator
 		// A factory's parameters resolve from the graph like a constructor's. An async factory additionally
 		// forwards the resolve-time CancellationToken into a matching parameter instead of resolving it.
 		List<ParameterModel> parameters = ClassifyParameters(producer, info, asyncFactory, context);
-
-		// Property injection: after the constructor, fill opt-in [Inject] properties through an object
-		// initializer. Only a constructed instance is filled; a factory or pre-built instance is produced whole
-		// by its source. Each member edge is classified like a Direct constructor parameter, so it participates
-		// fully in cycle, captive and async-taint analysis.
-		List<MemberModel> members = new();
-		if (info.Production == ProductionKind.Constructor)
-		{
-			DiscoverInjectedMembers(info, context, members);
-		}
 
 		// Disposability follows the owned type: a factory's produced type (for an async factory the awaited T,
 		// not the Task), or the constructed implementation. Using info.Symbol for a factory would miss a
@@ -135,6 +132,45 @@ partial class AwaitenGenerator
 		static bool CouldHideDisposable(ITypeSymbol type)
 			=> type.TypeKind is TypeKind.Interface or TypeKind.TypeParameter
 			   || (type.TypeKind == TypeKind.Class && !type.IsSealed);
+	}
+
+	/// <summary>
+	///     The property-injection members of an instance: its opt-in <c>[Inject]</c> properties plus the container's
+	///     <c>[InjectProperty&lt;TImpl&gt;]</c> entries matched to it. Only a container-constructed instance is
+	///     filled; a Factory/Instance-produced implementation is produced whole by its source, so an
+	///     <c>[InjectProperty]</c> entry on it yields no member and is
+	///     <see cref="Diagnostics.InjectPropertyOnNonConstructed">AWT178</see> (mirroring the
+	///     <see cref="ProductionKind.Constructor" /> gate). Extracted from <see cref="BuildInstance" /> to keep its
+	///     branching flat.
+	/// </summary>
+	private static List<MemberModel> BuildInjectedMembers(ImplInfo info, BuildContext context)
+	{
+		List<InjectPropertyEntry> injectProperties =
+			context.InjectProperties.TryGetValue(info.ImplementationType, out List<InjectPropertyEntry>? entries)
+				? entries
+				: new List<InjectPropertyEntry>();
+
+		List<MemberModel> members = new();
+
+		if (info.Production != ProductionKind.Constructor)
+		{
+			foreach (InjectPropertyEntry entry in injectProperties)
+			{
+				context.Diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.InjectPropertyOnNonConstructed,
+					entry.Location ?? info.Location,
+					new EquatableArray<string>([entry.PropertyName, DisplayInstance(info.ImplementationType),])));
+			}
+
+			return members;
+		}
+
+		DiscoverInjectedMembers(
+			info,
+			new InjectionContext(context.ContainerSymbol, context.ServiceToImpl, context.ConstraintRejected, context.ConsumedConditionals, context.External.ServiceTypes, context.Diagnostics),
+			injectProperties,
+			members);
+		return members;
 	}
 
 	/// <summary>

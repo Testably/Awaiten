@@ -1080,6 +1080,20 @@ internal static class Diagnostics
 		isEnabledByDefault: true);
 
 	/// <summary>
+	///     An <c>[InjectProperty&lt;TImplementation&gt;(name)]</c> on the container names a member that is not a
+	///     settable property on <c>TImplementation</c> (or a base type): there is no such member, it is not a
+	///     property (a field or method), or the property is read-only (get-only). The container-side analogue of a
+	///     typo; a property whose setter merely cannot be reached from the container is <see cref="InjectedPropertyNotSettable">AWT136</see> instead.
+	/// </summary>
+	public static readonly DiagnosticDescriptor InjectPropertyNotFound = new(
+		"AWT177",
+		"Injected property not found",
+		"'{1}' has no settable property '{0}' for [InjectProperty] to fill; check the name (use nameof), and that it is a property with a set/init accessor rather than a field, method or read-only member",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
 	///     A type declared <c>[ImportService&lt;T&gt;]</c> is never consumed by any dependency in the graph, so the
 	///     declaration is dead - most often a mistyped or stale <c>[ImportService&lt;T&gt;]</c> left after a refactor.
 	/// </summary>
@@ -1087,6 +1101,67 @@ internal static class Diagnostics
 		"AWT176",
 		"External service is never consumed",
 		"'{0}' is declared [ImportService<{0}>] but no dependency in the container consumes it, so the declaration has no effect. Remove it or add the consuming dependency.",
+		"Awaiten",
+		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     An <c>[InjectProperty&lt;TImplementation&gt;]</c> targets a <c>TImplementation</c> produced by a
+	///     <c>Factory</c> or <c>Instance</c> registration. Property injection fills a container-constructed
+	///     instance through its object initializer; a factory or pre-built instance is produced whole by its
+	///     source, so there is nothing for the container to fill (mirroring how a <c>[Scan]</c>-constructed or
+	///     ordinary constructed type is the only one an <c>[Inject]</c> property applies to).
+	/// </summary>
+	public static readonly DiagnosticDescriptor InjectPropertyOnNonConstructed = new(
+		"AWT178",
+		"[InjectProperty] on a non-constructed implementation",
+		"'{1}' is produced by a Factory or Instance registration, so its property '{0}' cannot be filled by [InjectProperty]; property injection applies only to a container-constructed instance",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     Two <c>[InjectProperty&lt;TImplementation&gt;]</c> entries name the same property of the same
+	///     implementation. The property is filled once; the redundant entry is likely a copy-paste and is
+	///     reported so a contradicting <c>Optional</c>/<c>Deferred</c>/<c>Key</c> on it is not silently ignored. A
+	///     warning rather than an error: the graph is well-defined (the first entry wins), like the other no-op
+	///     detections (AWT172-AWT174).
+	/// </summary>
+	public static readonly DiagnosticDescriptor DuplicateInjectProperty = new(
+		"AWT179",
+		"Duplicate [InjectProperty] entry",
+		"'{1}' has more than one [InjectProperty] entry for the property '{0}'; a property is injected once, so the duplicate is ignored",
+		"Awaiten",
+		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     An <c>[InjectProperty&lt;TImplementation&gt;]</c> targets a <c>TImplementation</c> that has no
+	///     container-constructed registration, so the entry is never applied: the type is not registered, or it is
+	///     an unexpanded closed generic no consumer required. A warning rather than an error: the container is still
+	///     well-defined (the dead entry contributes nothing), the contextual analogue of AWT167. A closed,
+	///     container-constructed type is required; an open generic is not matched (its closings are only expanded on
+	///     demand), and a Factory/Instance-produced type is AWT178 instead.
+	/// </summary>
+	public static readonly DiagnosticDescriptor InjectPropertyImplementationNotRegistered = new(
+		"AWT180",
+		"[InjectProperty] implementation is not registered",
+		"'{1}' has no container-constructed registration, so its [InjectProperty] entry for '{0}' is never applied; register '{1}' as a constructed service (a closed, container-constructed type - an unregistered or open-generic type is not matched)",
+		"Awaiten",
+		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A property is named by both <c>[Inject]</c> and a container-side
+	///     <c>[InjectProperty&lt;TImplementation&gt;]</c> entry. The property is filled once, from the <c>[Inject]</c>
+	///     attribute, so the entry's <c>Optional</c>/<c>Deferred</c>/<c>Key</c> flags are ignored. A warning rather
+	///     than an error: the graph is well-defined (the <c>[Inject]</c> member wins), but the redundant entry - or
+	///     its contradicting flags - is likely unintended.
+	/// </summary>
+	public static readonly DiagnosticDescriptor InjectPropertyAlsoInjectAttribute = new(
+		"AWT181",
+		"[InjectProperty] duplicates an [Inject] property",
+		"the property '{0}' on '{1}' carries [Inject] and also has an [InjectProperty] entry; the [Inject] member wins, so the entry's Optional/Deferred/Key are ignored - remove one",
 		"Awaiten",
 		DiagnosticSeverity.Warning,
 		isEnabledByDefault: true);
