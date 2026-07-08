@@ -11,17 +11,17 @@ Point `[InjectProperty<TImplementation>]` at a settable property by name, on the
 ```csharp
 public sealed class Barista
 {
-    public IClock? Clock { get; set; }   // a plain property, no Awaiten attribute
+    public ITimeSystem? Time { get; set; }   // a plain property, no Awaiten attribute
 }
 
 [Container]
-[Singleton<SystemClock, IClock>]
+[Singleton<RealTimeSystem, ITimeSystem>]
 [Singleton<Barista>]
-[InjectProperty<Barista>(nameof(Barista.Clock))]
+[InjectProperty<Barista>(nameof(Barista.Time))]
 public static partial class CoffeeShop;
 ```
 
-Pass `nameof(Barista.Clock)` so a rename carries through. Repeat the attribute, once per property. It reads the *implementation* type, so it applies wherever that type is constructed, including a type pulled in by a [`[Scan]`](../registration/scanning) that a per-registration list of names could never reach.
+Pass `nameof(Barista.Time)` so a rename carries through. Repeat the attribute, once per property. It reads the *implementation* type, so it applies wherever that type is constructed, including a type pulled in by a [`[Scan]`](../registration/scanning) that a per-registration list of names could never reach.
 
 ## Any dependency shape works
 
@@ -64,7 +64,7 @@ Marking the property itself with `[Inject]` asks for the same injection from the
 ```csharp
 public sealed class Handler<T>
 {
-    [Inject] public IClock? Clock { get; set; }
+    [Inject] public ITimeSystem? Time { get; set; }
 }
 ```
 

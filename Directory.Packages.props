@@ -4,6 +4,7 @@
 	</PropertyGroup>
 	<ItemGroup>
 		<PackageVersion Include="aweXpect" Version="2.35.0"/>
+		<PackageVersion Include="aweXpect.Reflection" Version="2.0.0"/>
 	</ItemGroup>
 	<ItemGroup>
 		<PackageVersion Include="IsExternalInit" Version="1.0.3"/>

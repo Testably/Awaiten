@@ -48,36 +48,36 @@ If a dependency reaches outside the process, keeps state that outlives one call,
 
 ## The four anti-patterns
 
-Loose coupling has four classic failure modes. Awaiten structurally rules out one of them; the other three it cannot see, so knowing them is the defense.
+Loose coupling has four classic failure modes. The names and the taxonomy come from Steven van Deursen and Mark Seemann's [*Dependency Injection Principles, Practices, and Patterns*](https://www.manning.com/books/dependency-injection-principles-practices-patterns) (Manning, 2019), the standard reference on DI in .NET; Seemann also writes about them on [his blog](https://blog.ploeh.dk/).
 
 ### Control Freak
 
 A class takes control of building its own volatile dependency instead of receiving it, by newing it up or reaching a static accessor.
 
 ```csharp
-public sealed class Register
+public sealed class Barista
 {
-    public Receipt Charge(Order order)
+    public Receipt Serve(Order order)
     {
-        var gateway = new StripeGateway();          // built here, cannot be substituted
-        var when = DateTime.UtcNow;                  // and reached statically
+        var terminal = new PaymentTerminal();   // built here, cannot be substituted
+        var when = DateTime.UtcNow;             // and the clock is reached statically
         // ...
     }
 }
 ```
 
-Now `Register` cannot be tested without touching Stripe and the wall clock, and no caller can swap either one.
+Now `Barista` cannot be tested without charging a real card and reading the wall clock, and no caller can swap either one.
 
-**In Awaiten:** the tool does not stop a `new` inside a method, and it cannot. The fix is not a diagnostic; it is design. Depend on an abstraction (`IPaymentGateway`, `IClock`), take it through the constructor, and register it on the container.
+**In Awaiten:** the tool does not stop a `new` inside a method, and it cannot. The fix is not a diagnostic; it is design. Depend on an abstraction (`IPaymentGateway`, `ITimeSystem`), take it through the constructor, and register it on the container.
 
 ### Service Locator
 
 A class takes the container itself and asks it for dependencies at run time.
 
 ```csharp
-public sealed class Register(IAwaitenResolver resolver)
+public sealed class Barista(IAwaitenResolver resolver)
 {
-    public Receipt Charge(Order order)
+    public Receipt Serve(Order order)
     {
         var gateway = resolver.Resolve<IPaymentGateway>();   // real dependency, hidden
         // ...
@@ -85,7 +85,7 @@ public sealed class Register(IAwaitenResolver resolver)
 }
 ```
 
-This looks like DI, but it is the opposite. `Register`'s real dependencies no longer show in its constructor, so you cannot tell what it needs without reading its body, and Awaiten cannot check the graph it hides.
+This looks like DI, but it is the opposite — Seemann's [*Service Locator is an Anti-Pattern*](https://blog.ploeh.dk/2010/02/03/ServiceLocatorisanAnti-Pattern/) is the classic write-up. `Barista`'s real dependencies no longer show in its constructor, so you cannot tell what it needs without reading its body, and Awaiten cannot check the graph it hides.
 
 **Rule: never inject `IAwaitenResolver`, `IAwaitenScope`, or `IAwaitenRoot` into a service.** They are seams for the composition root, not for the classes it composes. Awaiten flags this one for you: holding a resolver in anything but the `[Container]` is the suppressible warning [AWT135](./diagnostics#awt135). Take the dependency you actually need through the constructor and let the container supply it.
 
@@ -94,14 +94,14 @@ This looks like DI, but it is the opposite. `Register`'s real dependencies no lo
 A class reaches a dependency through static, process-wide state rather than receiving it.
 
 ```csharp
-var when = DateTime.UtcNow;              // the ambient clock
-var user = Thread.CurrentPrincipal;      // the ambient identity
-Logger.Info("charged");                  // the ambient logger
+var when = DateTime.UtcNow;             // the ambient clock
+var barista = Thread.CurrentPrincipal;  // the ambient identity
+Log.Info("order served");               // the ambient logger
 ```
 
 It reads conveniently, but the dependency is invisible in the signature and shared across the whole process, so a test cannot pin the time, the identity, or capture the log without global setup.
 
-**In Awaiten:** not something the tool can see. Inject the abstraction instead. Give the barista an `IClock` and read `clock.UtcNow`, the same clock the rest of the coffee shop shares through the container, so a test can freeze it.
+**In Awaiten:** not something the tool can see. Inject the abstraction instead. Give the barista an `ITimeSystem` and read `timeSystem.DateTime.UtcNow`, the same clock the rest of the coffee shop shares through the container, so a test can freeze it.
 
 ### Constrained Construction
 
@@ -114,7 +114,7 @@ A design that forces a particular constructor shape or late-binds types by refle
 Plain constructor injection needs no attribute at all. A class that asks for its collaborators through its constructor is already a clean POCO, and that is the common path.
 
 ```csharp
-public sealed class Barista(IClock clock, IPaymentGateway gateway);   // no attributes, no Awaiten reference
+public sealed class Barista(ITimeSystem timeSystem, IPaymentGateway gateway);   // no attributes, no Awaiten reference
 ```
 
 The few features that would otherwise put an Awaiten attribute on a domain class each have a **container-side form** that keeps the class plain, because the instruction lives on the composition root where Awaiten belongs:
@@ -128,7 +128,26 @@ The few features that would otherwise put an Awaiten attribute on a domain class
 
 Prefer the container-side form every time. It leaves the domain class free of any reference to Awaiten, which is the whole point. The three consumer-side attributes (`[Arg]`, `[FromKey]`, `[Inject]`) are honest escape hatches for the rare shape the root cannot express, not defects, but each one couples the class that carries it to Awaiten.
 
-Awaiten guards part of this for you: applying a composition attribute (`[Singleton]`, `[Scan]`, and the like) in an assembly that declares no `[Container]` is the suppressible warning [AWT134](./diagnostics#awt134). That guard is best-effort, and it goes quiet in a single-project app that mixes the root with its domain, so enforce the full boundary the way the book does: with an **architecture test** that asserts your domain and application assemblies carry no reference to Awaiten. That turns a convention into a red build the day someone crosses the line.
+Awaiten guards part of this for you: applying a composition attribute (`[Singleton]`, `[Scan]`, and the like) in an assembly that declares no `[Container]` is the suppressible warning [AWT134](./diagnostics#awt134). That guard is best-effort, and it goes quiet in a single-project app that mixes the root with its domain. To enforce the full boundary, add an **architecture test** that asserts your domain and application assemblies carry no reference to Awaiten. That turns a convention into a red build the day someone crosses the line.
+
+[aweXpect.Reflection](https://docs.testably.org/Extensions/aweXpect.Reflection/) expresses that rule directly. Point it at the assembly that holds your domain code and assert it depends on nothing in the `Awaiten` namespace:
+
+```csharp
+using aweXpect;
+using aweXpect.Reflection;
+
+[Fact]
+public async Task Domain_has_no_reference_to_Awaiten()
+{
+    // every type in the assembly that holds your domain and application code
+    var domain = In.AssemblyContaining<Barista>().Types();
+
+    await Expect.That(domain)
+        .DoNotDependOn(Types.InNamespace("Awaiten"));
+}
+```
+
+Only the composition-root assembly — the one that declares your `[Container]` — should turn up a reference to Awaiten. The day a `[Singleton]` or an `[Inject]` sneaks into `Barista`'s assembly, this test goes red, whether or not AWT134 could see it.
 
 ## When power becomes a smell
 
