@@ -9,13 +9,13 @@ The rest of these docs teach the *mechanics*: how to register services, resolve 
 
 ## What DI is really for
 
-Dependency injection is a means to an end, and the end is loose coupling. You depend on abstractions you can substitute, so you can test a class in isolation, swap an implementation without touching its callers, and reason about one piece at a time. The container is not the point. It is just the machine that assembles the graph so you do not hand-wire it.
+[Dependency injection](https://martinfowler.com/articles/injection.html) is a means to an end, and the end is loose coupling. You depend on abstractions you can substitute, so you can test a class in isolation, swap an implementation without touching its callers, and reason about one piece at a time. The container is not the point. It is just the machine that assembles the graph so you do not hand-wire it. Because Awaiten does that assembly at compile time, you get [Pure DI](https://blog.ploeh.dk/2014/06/10/pure-di/): the compile-time safety of wiring the graph by hand, with none of the hand-wiring.
 
 A container that produces tightly coupled code is a container that has not helped you. Awaiten makes the wiring cheap and the lifetimes safe, but a clean build is not a clean design. You can follow every page here, get zero diagnostics, and still write code that is impossible to test in isolation. The habits below are what keep that from happening.
 
 ## The composition root
 
-Your `[Container]` is the **composition root**: the one place that knows how the whole graph fits together. The generated `Root` sits at your application's entry point, composes everything once, and owns it until shutdown.
+Your `[Container]` is the **[composition root](https://blog.ploeh.dk/2011/07/28/CompositionRoot/)**: the one place that knows how the whole graph fits together. The generated `Root` sits at your application's entry point, composes everything once, and owns it until shutdown.
 
 ```csharp
 [Container]
@@ -48,7 +48,7 @@ If a dependency reaches outside the process, keeps state that outlives one call,
 
 ## The four anti-patterns
 
-Loose coupling has four classic failure modes. The names and the taxonomy come from Steven van Deursen and Mark Seemann's [*Dependency Injection Principles, Practices, and Patterns*](https://www.manning.com/books/dependency-injection-principles-practices-patterns) (Manning, 2019), the standard reference on DI in .NET; Seemann also writes about them on [his blog](https://blog.ploeh.dk/).
+Loose coupling has four classic failure modes: four ways code stays bound to its collaborators even when it looks like it uses DI. Awaiten structurally rules out one of them; the other three are design mistakes no compiler can see, so recognizing them is the defense. These are not one team's opinion: the names follow van Deursen and Seemann's [*Dependency Injection Principles, Practices, and Patterns*](https://www.manning.com/books/dependency-injection-principles-practices-patterns) (Manning, 2019), and [Microsoft's own DI guidelines](https://learn.microsoft.com/en-us/dotnet/core/extensions/dependency-injection/guidelines#example-anti-patterns) warn against the same set.
 
 ### Control Freak
 
@@ -68,7 +68,7 @@ public sealed class Barista
 
 Now `Barista` cannot be tested without charging a real card and reading the wall clock, and no caller can swap either one.
 
-**In Awaiten:** the tool does not stop a `new` inside a method, and it cannot. The fix is not a diagnostic; it is design. Depend on an abstraction (`IPaymentGateway`, `ITimeSystem`), take it through the constructor, and register it on the container.
+**In Awaiten:** the tool does not stop a `new` inside a method, and it cannot. The fix is not a diagnostic; it is design. [Depend on an abstraction](https://learn.microsoft.com/en-us/dotnet/architecture/modern-web-apps-azure/architectural-principles#dependency-inversion) (`IPaymentGateway`, `ITimeSystem`), take it through the constructor, and register it on the container.
 
 ### Service Locator
 
@@ -85,7 +85,7 @@ public sealed class Barista(IAwaitenResolver resolver)
 }
 ```
 
-This looks like DI, but it is the opposite — Seemann's [*Service Locator is an Anti-Pattern*](https://blog.ploeh.dk/2010/02/03/ServiceLocatorisanAnti-Pattern/) is the classic write-up. `Barista`'s real dependencies no longer show in its constructor, so you cannot tell what it needs without reading its body, and Awaiten cannot check the graph it hides.
+This looks like DI, but it is the opposite. Seemann's [*Service Locator is an Anti-Pattern*](https://blog.ploeh.dk/2010/02/03/ServiceLocatorisanAnti-Pattern/) is the classic write-up. `Barista`'s real dependencies no longer show in its constructor, so you cannot tell what it needs without reading its body, and Awaiten cannot check the graph it hides.
 
 **Rule: never inject `IAwaitenResolver`, `IAwaitenScope`, or `IAwaitenRoot` into a service.** They are seams for the composition root, not for the classes it composes. Awaiten flags this one for you: holding a resolver in anything but the `[Container]` is the suppressible warning [AWT135](./diagnostics#awt135). Take the dependency you actually need through the constructor and let the container supply it.
 
@@ -111,7 +111,7 @@ A design that forces a particular constructor shape or late-binds types by refle
 
 ## Keeping DI out of your domain
 
-Plain constructor injection needs no attribute at all. A class that asks for its collaborators through its constructor is already a clean POCO, and that is the common path.
+Plain constructor injection needs no attribute at all. A class that [asks for its collaborators through its constructor](https://learn.microsoft.com/en-us/dotnet/architecture/modern-web-apps-azure/architectural-principles#explicit-dependencies) is already a clean POCO, and that is the common path.
 
 ```csharp
 public sealed class Barista(ITimeSystem timeSystem, IPaymentGateway gateway);   // no attributes, no Awaiten reference
@@ -147,7 +147,7 @@ public async Task Domain_has_no_reference_to_Awaiten()
 }
 ```
 
-Only the composition-root assembly — the one that declares your `[Container]` — should turn up a reference to Awaiten. The day a `[Singleton]` or an `[Inject]` sneaks into `Barista`'s assembly, this test goes red, whether or not AWT134 could see it.
+Only the composition-root assembly (the one that declares your `[Container]`) should turn up a reference to Awaiten. The day a `[Singleton]` or an `[Inject]` sneaks into `Barista`'s assembly, this test goes red, whether or not AWT134 could see it.
 
 ## When power becomes a smell
 
