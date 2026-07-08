@@ -34,6 +34,10 @@ The other factory parameters resolve from the graph as usual. `[RequestingType]`
 
 *Note: the parameter must be `System.Type` ([AWT162](../diagnostics#awt162)), and a factory cannot mix `[RequestingType]` with an `[Arg]` runtime argument ([AWT163](../diagnostics#awt163)).*
 
+:::caution[When not to reach for this]
+The requesting-type hook is advanced, and it makes one abstraction mean different things to different consumers, which is exactly the kind of implicit coupling DI is meant to remove. Reserve it for a genuinely cross-cutting service where the consumer's identity is the whole point, like a logger named after the class that uses it. For anything else, give each consumer the dependency it actually needs, see [Principles](../principles#when-power-becomes-a-smell).
+:::
+
 ## Where to go next
 
 - [Factories and instances](../registration/factories-and-instances) for factories in general.

@@ -72,6 +72,10 @@ public sealed class Handler<T>
 `[Inject]` puts an Awaiten reference on your class. Reach for it only for the one shape `[InjectProperty<T>]` cannot express: an **open-generic** implementation like `Handler<T>` above, whose closings are only expanded on demand and so cannot be named by a closed type argument. For every closed type, prefer the container-side form above. Where the residual applies, `[Inject]` is the accepted trade, not a defect.
 :::
 
+:::caution[When not to reach for this]
+Prefer constructor injection. A constructor parameter states a dependency plainly and cannot be forgotten; a property can be left unset. Reach for property injection only for a genuinely optional dependency with a sensible local default, or to break a cycle two constructors cannot. If you are using it to shorten a long constructor, that constructor is telling you the class does too much, see [Principles](../principles#when-power-becomes-a-smell).
+:::
+
 ## Where to go next
 
 - [Relationships](./relationships) for deferred construction without property injection.
