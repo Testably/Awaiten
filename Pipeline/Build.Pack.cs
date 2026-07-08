@@ -45,14 +45,6 @@ partial class Build
 					continue;
 				}
 
-				if (line.StartsWith("[![Mutation testing badge](https://img.shields.io/endpoint"))
-				{
-					sb.AppendLine(line
-						.Replace("%2Fmain)", $"%2Frelease%2Fv{version})")
-						.Replace("/main)", $"/release/v{version})"));
-					continue;
-				}
-
 				sb.AppendLine(line);
 			}
 
