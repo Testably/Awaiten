@@ -11,17 +11,17 @@ Point `[InjectProperty<TImplementation>]` at a settable property by name, on the
 ```csharp
 public sealed class Barista
 {
-    public IClock? Clock { get; set; }   // a plain property, no Awaiten attribute
+    public ITimeSystem? Time { get; set; }   // a plain property, no Awaiten attribute
 }
 
 [Container]
-[Singleton<SystemClock, IClock>]
+[Singleton<RealTimeSystem, ITimeSystem>]
 [Singleton<Barista>]
-[InjectProperty<Barista>(nameof(Barista.Clock))]
+[InjectProperty<Barista>(nameof(Barista.Time))]
 public static partial class CoffeeShop;
 ```
 
-Pass `nameof(Barista.Clock)` so a rename carries through. Repeat the attribute, once per property. It reads the *implementation* type, so it applies wherever that type is constructed, including a type pulled in by a [`[Scan]`](../registration/scanning) that a per-registration list of names could never reach.
+Pass `nameof(Barista.Time)` so a rename carries through. Repeat the attribute, once per property. It reads the *implementation* type, so it applies wherever that type is constructed, including a type pulled in by a [`[Scan]`](../registration/scanning) that a per-registration list of names could never reach.
 
 ## Any dependency shape works
 
@@ -64,12 +64,16 @@ Marking the property itself with `[Inject]` asks for the same injection from the
 ```csharp
 public sealed class Handler<T>
 {
-    [Inject] public IClock? Clock { get; set; }
+    [Inject] public ITimeSystem? Time { get; set; }
 }
 ```
 
 :::caution[Last resort]
 `[Inject]` puts an Awaiten reference on your class. Reach for it only for the one shape `[InjectProperty<T>]` cannot express: an **open-generic** implementation like `Handler<T>` above, whose closings are only expanded on demand and so cannot be named by a closed type argument. For every closed type, prefer the container-side form above. Where the residual applies, `[Inject]` is the accepted trade, not a defect.
+:::
+
+:::caution[When not to reach for this]
+Prefer constructor injection. A constructor parameter states a dependency plainly and cannot be forgotten; a property can be left unset. Reach for property injection only for a genuinely optional dependency with a sensible local default, or to break a cycle two constructors cannot. If you are using it to shorten a long constructor, that constructor is telling you the class does too much, see [Principles](../principles#when-power-becomes-a-smell).
 :::
 
 ## Where to go next

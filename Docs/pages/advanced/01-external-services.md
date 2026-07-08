@@ -18,14 +18,14 @@ public sealed class Register(Till till, IPaymentGateway gateway);   // IPaymentG
 For a keyed external service, select the key on a container [factory method](../registration/factories-and-instances) so the consumer stays a plain class; the `[FromKey]` is forwarded to the resolver.
 
 ```csharp
-public sealed class Report(IClock clock);   // a plain class, no attributes
+public sealed class Report(ITimeSystem timeSystem);   // a plain class, no attributes
 
 [Container]
-[ImportService<IClock>]
+[ImportService<ITimeSystem>]
 [Singleton<Report>(Factory = nameof(MakeReport))]
 public static partial class CoffeeShop
 {
-    private static Report MakeReport([FromKey("utc")] IClock clock) => new(clock);
+    private static Report MakeReport([FromKey("utc")] ITimeSystem timeSystem) => new(timeSystem);
 }
 ```
 

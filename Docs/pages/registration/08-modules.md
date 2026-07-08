@@ -32,12 +32,12 @@ A module can offer a default that the container is free to replace. Mark it `Fal
 
 ```csharp
 [Module]
-[Singleton<SystemClock, IClock>(Fallback = Fallback.Warn)]
+[Singleton<RealTimeSystem, ITimeSystem>(Fallback = Fallback.Warn)]
 public static class InfrastructureModule;
 
 [Container]
 [Import(typeof(InfrastructureModule))]
-[Singleton<TestClock, IClock>]           // wins over the module default
+[Singleton<MockTimeSystem, ITimeSystem>]   // wins over the module default
 public static partial class CoffeeShop;
 ```
 

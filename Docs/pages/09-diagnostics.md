@@ -152,16 +152,16 @@ Two overridable default registrations provide the same service ambiguously.
 
 ```csharp
 [Module]
-[Singleton<SystemClock, IClock>(Fallback = Fallback.Warn)]
-public static class ClockModuleA;
+[Singleton<RealTimeSystem, ITimeSystem>(Fallback = Fallback.Warn)]
+public static class TimeModuleA;
 
 [Module]
-[Singleton<UtcClock, IClock>(Fallback = Fallback.Warn)]
-public static class ClockModuleB;
+[Singleton<MockTimeSystem, ITimeSystem>(Fallback = Fallback.Warn)]
+public static class TimeModuleB;
 
 [Container]
-[Import(typeof(ClockModuleA))]
-[Import(typeof(ClockModuleB))]   // two defaults for IClock, neither wins
+[Import(typeof(TimeModuleA))]
+[Import(typeof(TimeModuleB))]   // two defaults for ITimeSystem, neither wins
 public static partial class CoffeeShop;
 ```
 
@@ -720,12 +720,12 @@ An `[Inject]` property has no set or init accessor the container can assign thro
 ```csharp
 public sealed class Barista
 {
-    [Inject] public IClock? Clock { get; }   // get-only, nothing to assign
+    [Inject] public ITimeSystem? Time { get; }   // get-only, nothing to assign
 }
 
 [Container]
 [Transient<Barista>]
-[Singleton<SystemClock, IClock>]
+[Singleton<RealTimeSystem, ITimeSystem>]
 public static partial class CoffeeShop;
 ```
 
@@ -807,7 +807,7 @@ An `[Inject(Optional = true)]` property is required and cannot be omitted from t
 ```csharp
 public sealed class Barista
 {
-    [Inject(Optional = true)] public required IClock Clock { get; set; }   // required cannot be omitted
+    [Inject(Optional = true)] public required ITimeSystem Time { get; set; }   // required cannot be omitted
 }
 
 [Container]
@@ -824,7 +824,7 @@ An `[Inject(Optional = true)]` property is init-only, so an unregistered depende
 ```csharp
 public sealed class Barista
 {
-    [Inject(Optional = true)] public IClock? Clock { get; init; }   // init-only stays default forever
+    [Inject(Optional = true)] public ITimeSystem? Time { get; init; }   // init-only stays default forever
 }
 
 [Container]
@@ -841,13 +841,13 @@ An `[InjectProperty<T>]` names a member that is not a settable property on the i
 ```csharp
 public sealed class Barista
 {
-    public IClock? Clock { get; set; }
+    public ITimeSystem? Time { get; set; }
 }
 
 [Container]
-[Singleton<SystemClock, IClock>]
+[Singleton<RealTimeSystem, ITimeSystem>]
 [Singleton<Barista>]
-[InjectProperty<Barista>("Clok")]   // no such property (typo); use nameof(Barista.Clock)
+[InjectProperty<Barista>("Tim")]   // no such property (typo); use nameof(Barista.Time)
 public static partial class CoffeeShop;
 ```
 
@@ -860,13 +860,13 @@ An `[InjectProperty<T>]` targets an implementation produced by a `Factory` or `I
 ```csharp
 public sealed class Barista
 {
-    public IClock? Clock { get; set; }
+    public ITimeSystem? Time { get; set; }
 }
 
 [Container]
-[Singleton<SystemClock, IClock>]
+[Singleton<RealTimeSystem, ITimeSystem>]
 [Singleton<Barista>(Factory = nameof(MakeBarista))]
-[InjectProperty<Barista>(nameof(Barista.Clock))]   // Barista is factory-produced, not container-constructed
+[InjectProperty<Barista>(nameof(Barista.Time))]   // Barista is factory-produced, not container-constructed
 public static partial class CoffeeShop
 {
     private static Barista MakeBarista() => new();
@@ -882,14 +882,14 @@ Two `[InjectProperty<T>]` entries name the same property of the same implementat
 ```csharp
 public sealed class Barista
 {
-    public IClock? Clock { get; set; }
+    public ITimeSystem? Time { get; set; }
 }
 
 [Container]
-[Singleton<SystemClock, IClock>]
+[Singleton<RealTimeSystem, ITimeSystem>]
 [Singleton<Barista>]
-[InjectProperty<Barista>(nameof(Barista.Clock))]
-[InjectProperty<Barista>(nameof(Barista.Clock))]   // filled once; the second entry is redundant
+[InjectProperty<Barista>(nameof(Barista.Time))]
+[InjectProperty<Barista>(nameof(Barista.Time))]   // filled once; the second entry is redundant
 public static partial class CoffeeShop;
 ```
 
@@ -902,12 +902,12 @@ An `[InjectProperty<T>]` names an implementation that has no container-construct
 ```csharp
 public sealed class Barista
 {
-    public IClock? Clock { get; set; }
+    public ITimeSystem? Time { get; set; }
 }
 
 [Container]
-[Singleton<SystemClock, IClock>]
-[InjectProperty<Barista>(nameof(Barista.Clock))]   // Barista itself is never registered
+[Singleton<RealTimeSystem, ITimeSystem>]
+[InjectProperty<Barista>(nameof(Barista.Time))]   // Barista itself is never registered
 public static partial class CoffeeShop;
 ```
 
@@ -920,13 +920,13 @@ A property carries both `[Inject]` and a container-side `[InjectProperty<T>]` en
 ```csharp
 public sealed class Barista
 {
-    [Inject] public IClock? Clock { get; set; }
+    [Inject] public ITimeSystem? Time { get; set; }
 }
 
 [Container]
-[Singleton<SystemClock, IClock>]
+[Singleton<RealTimeSystem, ITimeSystem>]
 [Singleton<Barista>]
-[InjectProperty<Barista>(nameof(Barista.Clock))]   // [Inject] already fills it: remove one
+[InjectProperty<Barista>(nameof(Barista.Time))]   // [Inject] already fills it: remove one
 public static partial class CoffeeShop;
 ```
 
@@ -1154,16 +1154,16 @@ Two imported modules strongly register the same service with different implement
 
 ```csharp
 [Module]
-[Singleton<SystemClock, IClock>]
+[Singleton<RealTimeSystem, ITimeSystem>]
 public static class ModuleA;
 
 [Module]
-[Singleton<UtcClock, IClock>]
+[Singleton<MockTimeSystem, ITimeSystem>]
 public static class ModuleB;
 
 [Container]
 [Import(typeof(ModuleA))]
-[Import(typeof(ModuleB))]   // both strongly register IClock
+[Import(typeof(ModuleB))]   // both strongly register ITimeSystem
 public static partial class CoffeeShop;
 ```
 

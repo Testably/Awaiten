@@ -103,6 +103,10 @@ public sealed class LatteRecipe([FromKey(MilkKind.Oat)] IMilk milk);
 `[FromKey]` on a constructor parameter couples the domain type to Awaiten. The composition-root forms above express the same selection without that coupling: `WhenInjectedInto` when a consumer always wants one variant, and a factory-`[FromKey]` when it takes two same-typed dependencies under different keys. Reach for the direct form only when you would rather annotate the constructor than add a factory; it is an accepted trade, not a defect.
 :::
 
+:::caution[When not to reach for this]
+Prefer distinct abstractions, or a [composite](./composites), over one service type selected by a key. A key is invisible to the type system, so nothing checks that a consumer asks for a key that exists. Reach for keys (and `WhenInjectedInto`) only when the implementations really are interchangeable variants of one abstraction, like the milk fridge above. Resolving the ambiguity with a key can hide a design that wants to be split into separate types, see [Principles](../principles#when-power-becomes-a-smell).
+:::
+
 ## Want the whole set?
 
 To get every keyed implementation as a map, ask for `IReadOnlyDictionary<string, IMilk>`. See [Keyed dictionaries](../resolution/keyed-dictionaries).
