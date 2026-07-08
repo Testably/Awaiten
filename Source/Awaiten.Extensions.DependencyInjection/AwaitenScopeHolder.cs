@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Awaiten.Extensions.DependencyInjection;
 
@@ -16,6 +17,7 @@ namespace Awaiten.Extensions.DependencyInjection;
 ///     the holder when the MS.DI scope is torn down.
 /// </remarks>
 #pragma warning disable S2326 // TRoot is a marker giving each root its own closed holder type, so MS.DI keeps a separate scoped registration per bridged container.
+[SuppressMessage("Awaiten", "AWT135:Service locator: a resolver interface is injected into a service", Justification = "This is the MS.DI bridge adapter: aligning one IAwaitenScope to each MS.DI scope is the adaptation itself, not a hidden run-time dependency.")]
 internal sealed class AwaitenScopeHolder<TRoot>
 #pragma warning restore S2326
 	where TRoot : class, IAwaitenContainerMetadata, new()

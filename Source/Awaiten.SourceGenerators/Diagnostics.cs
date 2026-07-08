@@ -489,6 +489,45 @@ internal static class Diagnostics
 		isEnabledByDefault: true);
 
 	/// <summary>
+	///     A container-side composition attribute (a lifetime registration, <c>[Scan]</c>, <c>[Decorate]</c>,
+	///     <c>[Composite]</c>, <c>[Import]</c>, <c>[ImportService]</c>/<c>[ImportServices]</c>, or
+	///     <c>[InjectProperty]</c>) is applied to a class in an assembly that declares no <c>[Container]</c>.
+	///     Composition belongs on the <c>[Container]</c> composition root (or an imported <c>[Module]</c>); a
+	///     domain or application assembly should stay free of Awaiten's composition attributes. The consumer-side
+	///     escape hatches <c>[Arg]</c>, <c>[FromKey]</c> and <c>[Inject]</c> are permitted on domain types and are
+	///     not reported. Reported by <see cref="AwaitenBoundaryAnalyzer" /> (not the generator) so it is
+	///     suppressible in source; best-effort, since it stays silent in an assembly that also declares the
+	///     <c>[Container]</c> (a single-project app), where the cross-assembly boundary is better enforced by an
+	///     architecture test.
+	/// </summary>
+	public static readonly DiagnosticDescriptor CompositionAttributeOutsideRoot = new(
+		"AWT134",
+		"Composition attribute outside a composition root",
+		"'{0}' carries the composition attribute [{1}], but this assembly declares no [Container]; registration and composition belong on the [Container] (or an imported [Module]), not on domain code",
+		"Awaiten",
+		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A resolver seam (<c>IAwaitenResolver</c>, <c>IAwaitenAsyncResolver</c>, <c>IAwaitenScope</c>,
+	///     <c>IAwaitenRoot</c>, or <c>IAwaitenContainerMetadata</c>) is injected into a type that is not a
+	///     <c>[Container]</c> composition root (nor a <c>[Module]</c>), as a constructor parameter, property, or
+	///     field. Resolving from the container at run time is the Service Locator anti-pattern: it hides a type's
+	///     real dependencies and defeats the compile-time graph check. Inject the dependency the type actually
+	///     needs instead; only the composition root should hold the resolver. The typed fast-path
+	///     <c>IAwaitenResolver&lt;T&gt;</c> is a single-service seam (closer to <c>Func&lt;T&gt;</c>) and is not
+	///     reported. Reported by <see cref="AwaitenBoundaryAnalyzer" /> (not the generator) so a deliberate seam,
+	///     such as the MS.DI bridge adapter, can be suppressed in source.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ServiceLocatorInjection = new(
+		"AWT135",
+		"Service locator: a resolver interface is injected into a service",
+		"'{0}' takes the resolver interface '{1}'; resolving from the container at run time hides real dependencies and defeats the compile-time graph check. Inject the dependency you need instead; only the [Container] composition root should hold '{1}'.",
+		"Awaiten",
+		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true);
+
+	/// <summary>
 	///     A property marked <c>[Inject]</c> has no <c>set</c> or <c>init</c> accessor the container can assign
 	///     through the object initializer (the container is not a derived context, so a protected/private-protected
 	///     setter, and a cross-assembly internal one, is out of reach), so there is nothing for Awaiten to fill.
