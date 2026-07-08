@@ -1287,3 +1287,32 @@ A type declared `[ImportService<T>]` is never consumed by any dependency in the 
 [Singleton<Menu>]
 public static partial class CoffeeShop;
 ```
+
+## Composition boundary
+
+These guard the line between your domain and the container. They are suppressible warnings, reported by the analyzer rather than the generator, so a deliberate exception can opt out in source.
+
+### AWT134
+
+:::warning[Warning]
+A container-side composition attribute (a lifetime registration, `[Scan]`, `[Decorate]`, `[Composite]`, `[Import]`, `[ImportService]`, or `[InjectProperty]`) is applied to a class in an assembly that declares no `[Container]`. Composition belongs on the `[Container]` (or an imported `[Module]`); domain code should stay free of it. This is a best-effort guard: it stays silent in an assembly that also declares the `[Container]`, where the cross-assembly boundary is better enforced by an architecture test.
+:::
+
+```csharp
+// A domain library that declares no [Container]:
+[Singleton<EspressoMachine>]        // registration belongs on the [Container], not here
+public sealed class EspressoMachine;
+```
+
+### AWT135
+
+:::warning[Warning]
+A resolver seam (`IAwaitenResolver`, `IAwaitenScope`, `IAwaitenRoot`, and the like) is injected into a type that is not the `[Container]` composition root. Resolving from the container at run time is the Service Locator anti-pattern: it hides the type's real dependencies and defeats the compile-time graph check. Inject the dependency you actually need instead. The typed fast-path `IAwaitenResolver<T>` is a single-service seam and is not reported.
+:::
+
+```csharp
+public sealed class Barista(IAwaitenResolver resolver)   // locates dependencies at run time
+{
+    public Cup Serve() => resolver.Resolve<Cup>();
+}
+```

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -20,6 +21,7 @@ namespace Awaiten.Extensions.DependencyInjection;
 ///     <see cref="IAwaitenScope" /> behind it. Prefer <c>await using</c> (<see cref="DisposeAsync" />) when
 ///     the container tracks asynchronously disposable instances.
 /// </remarks>
+[SuppressMessage("Awaiten", "AWT135:Service locator: a resolver interface is injected into a service", Justification = "This is the MS.DI bridge adapter: holding the IAwaitenScope is the adaptation itself, not a hidden run-time dependency.")]
 public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScopeFactory, IDisposable, IAsyncDisposable
 {
 	private readonly IAwaitenScope _container;

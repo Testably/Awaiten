@@ -35,6 +35,8 @@
  AWT131  | Awaiten   | Warning  | A [Composite] type is also registered as an ordinary member of the service it composes
  AWT132  | Awaiten   | Error    | More than one [Composite] names the same service
  AWT133  | Awaiten   | Error    | A [Composite]'s collection parameter is of a base type of the composed service, not the composed service itself
+ AWT134  | Awaiten   | Warning  | A composition attribute ([Singleton], [Scan], [Decorate], …) is applied in an assembly that declares no [Container]; composition belongs on the [Container] or an imported [Module]
+ AWT135  | Awaiten   | Warning  | A resolver interface (IAwaitenResolver/IAwaitenScope/IAwaitenRoot) is injected into a type that is not a [Container] composition root (Service Locator)
  AWT136  | Awaiten   | Error    | An [Inject] property has no set or init accessor the container can assign through
  AWT137  | Awaiten   | Error    | An injected property is marked [Arg]
  AWT138  | Awaiten   | Warning  | A [Scan] matched no concrete type assignable to its marker
