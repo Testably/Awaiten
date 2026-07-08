@@ -280,4 +280,50 @@ public partial class KeyedTests
 	[Scoped<ScopedFast, IWork>(Key = "fast")]
 	[Transient<TransientSlow, IWork>(Key = "slow")]
 	public static partial class CapturingContainer;
+
+	[Fact]
+	public async Task FactoryMethod_WithFromKeyParameters_DisambiguatesTwoSameTypedDependenciesForACleanDomainType()
+	{
+		using FactoryFromKeyContainer.Root container = new();
+
+		Blend blend = container.Resolve<Blend>();
+
+		await That(blend.Primary).Is<ArabicaBean>()
+			.Because("the factory's [FromKey(\"a\")] parameter selects the bean keyed 'a', though Blend's own constructor carries no attributes");
+		await That(blend.Secondary).Is<RobustaBean>()
+			.Because("the factory's [FromKey(\"b\")] parameter selects the bean keyed 'b', so the two same-typed dependencies are disambiguated at the composition root, not in the domain type");
+	}
+
+	public interface IBean;
+
+	public sealed class ArabicaBean : IBean;
+
+	public sealed class RobustaBean : IBean;
+
+	// A plain domain type: two same-typed dependencies and no Awaiten attributes anywhere on it. The "two
+	// same-typed parameters, different keys" case is expressed by the container factory's [FromKey] parameters,
+	// keeping Blend free of any Awaiten reference.
+	public sealed class Blend
+	{
+		public Blend(IBean primary, IBean secondary)
+		{
+			Primary = primary;
+			Secondary = secondary;
+		}
+
+		public IBean Primary { get; }
+
+		public IBean Secondary { get; }
+	}
+
+	// A factory method whose parameters carry [FromKey]: the keyed selection is forwarded to the factory, so the
+	// produced type need not declare [FromKey] itself (the keyed counterpart of the factory-[Arg] shape).
+	[Container]
+	[Singleton<ArabicaBean, IBean>(Key = "a")]
+	[Singleton<RobustaBean, IBean>(Key = "b")]
+	[Transient<Blend>(Factory = nameof(MakeBlend))]
+	public static partial class FactoryFromKeyContainer
+	{
+		private static Blend MakeBlend([FromKey("a")] IBean primary, [FromKey("b")] IBean secondary) => new(primary, secondary);
+	}
 }

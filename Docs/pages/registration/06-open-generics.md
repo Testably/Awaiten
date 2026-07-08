@@ -42,7 +42,7 @@ Open registrations join collections. A request for `IEnumerable<IHandler<OrderPl
 
 ## Decorate or compose the closings
 
-Decorators and composites take the same `typeof` form, so one behavior wraps every closing of an open generic service — the pipeline-behavior pattern:
+Decorators and composites take the same `typeof` form, so one behavior wraps every closing of an open generic service. This is the pipeline-behavior pattern:
 
 ```csharp
 [Transient(typeof(Handler<>), typeof(IHandler<>))]

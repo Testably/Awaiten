@@ -44,7 +44,7 @@ If a service has several implementations, each one is wrapped. A consumer that a
 
 ## Decorate every closing of an open generic
 
-A pipeline behavior wraps *every* closing of an open generic service — `IHandler<PlaceOrder>`, `IHandler<Refund>`, and the rest — with one attribute. The generic `[Decorate<,>]` form only takes closed types, so use the `typeof` form with unbound generics instead:
+A pipeline behavior wraps *every* closing of an open generic service (`IHandler<PlaceOrder>`, `IHandler<Refund>`, and the rest) with one attribute. The generic `[Decorate<,>]` form only takes closed types, so use the `typeof` form with unbound generics instead:
 
 ```csharp
 public sealed class LoggingBehavior<T>(IHandler<T> inner) : IHandler<T>
@@ -60,7 +60,7 @@ public static partial class CoffeeShop;
 // Resolve<IHandler<PlaceOrder>>() returns LoggingBehavior<PlaceOrder>(Handler<PlaceOrder>)
 ```
 
-Awaiten synthesizes a closed decorator for every closing already in the graph — however it was registered: an open generic, an explicit closed registration, or a scan. Each closing then behaves exactly like a hand-written closed decorator: it joins its collection, respects `Order`, and interleaves with any explicit `[Decorate<D, IHandler<PlaceOrder>>]` on that one closing by the same rules.
+Awaiten synthesizes a closed decorator for every closing already in the graph, however it was registered: an open generic, an explicit closed registration, or a scan. Each closing then behaves exactly like a hand-written closed decorator: it joins its collection, respects `Order`, and interleaves with any explicit `[Decorate<D, IHandler<PlaceOrder>>]` on that one closing by the same rules.
 
 The decorator's arity must match the service's, and it must expose the service with its type parameters in declaration order (`LoggingBehavior<T> : IHandler<T>`). A closing whose type arguments violate the decorator's constraints is skipped with a diagnostic. Like the closed form, a decorator's *own* generic dependencies are supplied only when some other registration already expands them into the graph.
 

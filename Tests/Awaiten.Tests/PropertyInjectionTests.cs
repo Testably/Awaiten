@@ -602,4 +602,41 @@ public partial class PropertyInjectionTests
 	[Transient<Bus>]
 	[Transient<OptionalConsumer>]
 	public static partial class OptionalRegisteredContainer;
+
+	[Fact]
+	public async Task InjectProperty_OnAnOpenGenericImplementation_IsFilledOnTheClosedExpansion()
+	{
+		using OpenGenericInjectContainer.Root container = new();
+
+		GenericHandler<Ticket> handler = container.Resolve<GenericHandler<Ticket>>();
+
+		await That(handler.Bus).Is<Bus>()
+			.Because("[Inject] on an open-generic property is filled on each closed expansion; this is the residual [InjectProperty<T>] cannot express, because an open generic cannot be written as an attribute type argument, so [Inject] on the type is the escape hatch");
+	}
+
+	public sealed class Ticket;
+
+	// An open-generic implementation carrying an [Inject] property. A container-side [InjectProperty<GenericHandler<>>]
+	// is not expressible (an unbound open generic is not a valid attribute type argument), so [Inject] on the property
+	// is the only way to inject it - the escape hatch the property-injection page's "Last resort" caution names.
+	public sealed class GenericHandler<T>
+	{
+		[Inject]
+		public Bus? Bus { get; set; }
+	}
+
+	// A concrete root that seeds open-generic expansion for the closing the test resolves, exactly as
+	// OpenGenericTests.App does: expansion is driven at compile time by the closed types the graph depends on.
+	public sealed class TicketApp
+	{
+		public TicketApp(GenericHandler<Ticket> handler) => Handler = handler;
+
+		public GenericHandler<Ticket> Handler { get; }
+	}
+
+	[Container]
+	[Transient<Bus>]
+	[Transient(typeof(GenericHandler<>))]
+	[Transient<TicketApp>]
+	public static partial class OpenGenericInjectContainer;
 }
