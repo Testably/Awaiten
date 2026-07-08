@@ -4,7 +4,7 @@ Not everything comes from Awaiten. When you run under ASP.NET Core or the generi
 
 ## Pull a single type with `[ImportService<T>]`
 
-Declare a service type external with `[ImportService<T>]` on the container. Every unregistered dependency of that type - keyed or not, whether a constructor parameter, a factory parameter, or an `[Inject]` property - is satisfied from the external provider instead of the graph. No Awaiten registration is needed for it, and every *other* unresolved dependency still gets the missing-dependency check (AWT101), so this is safer than the blanket fall-through below.
+Declare a service type external with `[ImportService<T>]` on the container. Every unregistered dependency of that type is satisfied from the external provider instead of the graph, whether it is keyed or not, and whether it arrives as a constructor parameter, a factory parameter, or an `[Inject]` property. No Awaiten registration is needed for it. Every *other* unresolved dependency still gets the missing-dependency check (AWT101), so this is safer than the blanket fall-through below.
 
 ```csharp
 [Container]
@@ -15,20 +15,27 @@ public static partial class CoffeeShop;
 public sealed class Register(Till till, IPaymentGateway gateway);   // IPaymentGateway comes from the host
 ```
 
-Combine it with `[FromKey]` for a keyed external service; the key is forwarded to the resolver.
+For a keyed external service, select the key on a container [factory method](../registration/factories-and-instances) so the consumer stays a plain class; the `[FromKey]` is forwarded to the resolver.
 
 ```csharp
+public sealed class Report(IClock clock);   // a plain class, no attributes
+
 [Container]
 [ImportService<IClock>]
-[Singleton<Report>]
-public static partial class CoffeeShop;
-
-public sealed class Report([FromKey("utc")] IClock clock);
+[Singleton<Report>(Factory = nameof(MakeReport))]
+public static partial class CoffeeShop
+{
+    private static Report MakeReport([FromKey("utc")] IClock clock) => new(clock);
+}
 ```
 
 `[ImportService<T>]` works on an imported `[Module]` too, exactly as it does on the container.
 
-Only the *direct* dependency of type `T` is routed. A relationship or collection over it - `Func<T>`, `Lazy<T>`, `Task<T>`, `IEnumerable<T>`, and the like - is not, because the resolver hands back an instance, not a deferred or fanned-out shape. Such a dependency still resolves from the Awaiten graph, so with no registration it surfaces as AWT101 (or an empty collection). Declaring a type external that nothing in the graph consumes is a dead declaration and is reported as AWT176.
+:::tip[Keeping DI out of your domain]
+Because external-ness is declared on the container, a service that consumes a host type just asks for it as an ordinary parameter, with no Awaiten reference in the domain class. `[ImportService<T>]` is the clean-domain form. The only per-parameter attribute involved is `[FromKey]`, and only when you need a keyed external service.
+:::
+
+Only the *direct* dependency of type `T` is routed. A relationship or collection over it (`Func<T>`, `Lazy<T>`, `Task<T>`, `IEnumerable<T>`, and the like) is not, because the resolver hands back an instance, not a deferred or fanned-out shape. Such a dependency still resolves from the Awaiten graph, so with no registration it surfaces as AWT101 (or an empty collection). Declaring a type external that nothing in the graph consumes is a dead declaration and is reported as AWT176.
 
 ## Fall through everything with `[ImportServices]`
 

@@ -652,7 +652,7 @@ public static partial class CoffeeShop;
 ### AWT171
 
 :::warning[Warning]
-The decorator/composite counterpart to [AWT126](#awt126): a closing of an open generic `[Decorate]`/`[Composite]` cannot be constructed because its type arguments violate the decorator's or composite's type-parameter constraints. A warning, not an error, because the base service still resolves — that one closing is left as-is (undecorated/unfronted) and the remaining closings are decorated/composed as usual.
+The decorator/composite counterpart to [AWT126](#awt126): a closing of an open generic `[Decorate]`/`[Composite]` cannot be constructed because its type arguments violate the decorator's or composite's type-parameter constraints. A warning, not an error, because the base service still resolves. That one closing is left as-is (undecorated/unfronted), and the remaining closings are decorated/composed as usual.
 :::
 
 ```csharp
@@ -829,6 +829,104 @@ public sealed class Barista
 
 [Container]
 [Transient<Barista>]
+public static partial class CoffeeShop;
+```
+
+### AWT177
+
+:::danger[Error]
+An `[InjectProperty<T>]` names a member that is not a settable property on the implementation: an unknown name, a field or method, or a read-only property.
+:::
+
+```csharp
+public sealed class Barista
+{
+    public IClock? Clock { get; set; }
+}
+
+[Container]
+[Singleton<SystemClock, IClock>]
+[Singleton<Barista>]
+[InjectProperty<Barista>("Clok")]   // no such property (typo); use nameof(Barista.Clock)
+public static partial class CoffeeShop;
+```
+
+### AWT178
+
+:::danger[Error]
+An `[InjectProperty<T>]` targets an implementation produced by a `Factory` or `Instance` registration. Such an instance is built whole by its source, so there is no object initializer for the container to fill.
+:::
+
+```csharp
+public sealed class Barista
+{
+    public IClock? Clock { get; set; }
+}
+
+[Container]
+[Singleton<SystemClock, IClock>]
+[Singleton<Barista>(Factory = nameof(MakeBarista))]
+[InjectProperty<Barista>(nameof(Barista.Clock))]   // Barista is factory-produced, not container-constructed
+public static partial class CoffeeShop
+{
+    private static Barista MakeBarista() => new();
+}
+```
+
+### AWT179
+
+:::warning[Warning]
+Two `[InjectProperty<T>]` entries name the same property of the same implementation. The property is filled once; the duplicate is ignored.
+:::
+
+```csharp
+public sealed class Barista
+{
+    public IClock? Clock { get; set; }
+}
+
+[Container]
+[Singleton<SystemClock, IClock>]
+[Singleton<Barista>]
+[InjectProperty<Barista>(nameof(Barista.Clock))]
+[InjectProperty<Barista>(nameof(Barista.Clock))]   // filled once; the second entry is redundant
+public static partial class CoffeeShop;
+```
+
+### AWT180
+
+:::warning[Warning]
+An `[InjectProperty<T>]` names an implementation that has no container-constructed registration, so the entry is never applied: the type is unregistered, or it is an open generic no consumer closed.
+:::
+
+```csharp
+public sealed class Barista
+{
+    public IClock? Clock { get; set; }
+}
+
+[Container]
+[Singleton<SystemClock, IClock>]
+[InjectProperty<Barista>(nameof(Barista.Clock))]   // Barista itself is never registered
+public static partial class CoffeeShop;
+```
+
+### AWT181
+
+:::warning[Warning]
+A property carries both `[Inject]` and a container-side `[InjectProperty<T>]` entry. The property is filled once, from `[Inject]`, so the entry's `Optional`/`Deferred`/`Key` are ignored.
+:::
+
+```csharp
+public sealed class Barista
+{
+    [Inject] public IClock? Clock { get; set; }
+}
+
+[Container]
+[Singleton<SystemClock, IClock>]
+[Singleton<Barista>]
+[InjectProperty<Barista>(nameof(Barista.Clock))]   // [Inject] already fills it: remove one
 public static partial class CoffeeShop;
 ```
 
@@ -1173,14 +1271,14 @@ A type is declared `[ImportService<T>]` (drawn from the host provider) but is al
 ```csharp
 [Container]
 [ImportService<IPaymentGateway>]                 // declared external
-[Singleton<StripeGateway, IPaymentGateway>]      // …but also registered - contradiction
+[Singleton<StripeGateway, IPaymentGateway>]      // …but is also registered, a contradiction
 public static partial class CoffeeShop;
 ```
 
 ### AWT176
 
 :::warning[Warning]
-A type declared `[ImportService<T>]` is never consumed by any dependency in the graph, so the declaration is dead - most often a stale or mistyped `[ImportService<T>]`.
+A type declared `[ImportService<T>]` is never consumed by any dependency in the graph, so the declaration is dead. This is most often a stale or mistyped `[ImportService<T>]`.
 :::
 
 ```csharp

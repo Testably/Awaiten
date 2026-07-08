@@ -16,7 +16,7 @@ namespace Awaiten;
 ///         <c>Task&lt;T&gt;</c>) are still reported as missing.
 ///     </para>
 ///     <para>
-///         This trades compile-time safety for flexibility: a forgotten or mistyped dependency is no longer
+///         This trades compile-time safety for flexibility: a forgotten or mistyped dependency is not
 ///         reported as missing (AWT101), but routed to the external provider and, if the host cannot supply it,
 ///         throws only on first resolve. It also makes every direct dependency satisfiable, so constructor
 ///         selection can prefer a greedier constructor. Declare individual service types with

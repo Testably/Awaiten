@@ -24,7 +24,8 @@ namespace Awaiten;
 ///     is <c>AWT136</c>, and a duplicate entry for one property is <c>AWT179</c>. Property injection applies
 ///     only to a container-constructed instance, so a <typeparamref name="TImplementation" /> produced by a
 ///     <c>Factory</c> or <c>Instance</c> registration is <c>AWT178</c> (the source produces it whole). A
-///     property that also carries <c>[Inject]</c> is filled once, with no diagnostic. A closed implementation
+///     property that also carries <c>[Inject]</c> is filled once, from the <c>[Inject]</c> attribute, so this
+///     entry's <c>Optional</c>/<c>Deferred</c>/<c>Key</c> are ignored, which is reported as <c>AWT181</c>. A closed implementation
 ///     type is required: matching an <em>open</em> generic <typeparamref name="TImplementation" /> against
 ///     open-generic scanned types is not supported. Targeting a <c>[Decorate]</c> decorator type is likewise not
 ///     supported: a decorator wrapper is built by the decorator chain, not filled by an entry, so an
