@@ -1,9 +1,10 @@
 ---
-title: Principles & the composition root
+title: Design principles & the composition root
+sidebar_label: Design principles
 sidebar_position: 2
 ---
 
-# Principles & the composition root
+# Design principles & the composition root
 
 The rest of these docs teach the *mechanics*: how to register services, resolve them, and keep their lifetimes honest. This page is about the *design* those mechanics serve. Awaiten enforces the mechanics for you (lifetimes, cycles, async ordering) and turns the ones it can see into build errors. It cannot enforce the design. That part is on you, and it is what this page is for.
 

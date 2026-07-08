@@ -52,7 +52,7 @@ var cup = shop.Resolve<Cup>();       // a fresh cup, wired and ready
 ## Where to go next
 
 - [Getting started](./getting-started) builds your first container end to end.
-- [Principles & the composition root](./principles) is the design behind the mechanics; read it before the feature pages.
+- [Design principles & the composition root](./principles) is the design behind the mechanics; read it before the feature pages.
 - [Lifetimes](./registration/lifetimes) explains singleton, scoped, and transient.
 - [Async initialization](./async-initialization) covers the headline feature.
 - [Diagnostics](./diagnostics) lists every compile-time check.
