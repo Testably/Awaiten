@@ -54,7 +54,7 @@ dotnet add package Awaiten
 Full documentation lives at [docs.testably.org/Awaiten](https://docs.testably.org/Awaiten).
 
 - [Getting started](https://docs.testably.org/Awaiten/getting-started)
-- [Design principles & the composition root](https://docs.testably.org/Awaiten/principles)
+- [Design principles & the composition root](https://docs.testably.org/Awaiten/design-principles)
 - Registration: [lifetimes](https://docs.testably.org/Awaiten/registration/lifetimes), [factories and instances](https://docs.testably.org/Awaiten/registration/factories-and-instances), [decorators](https://docs.testably.org/Awaiten/registration/decorators), [composites](https://docs.testably.org/Awaiten/registration/composites), [keyed services](https://docs.testably.org/Awaiten/registration/keyed-services), [open generics](https://docs.testably.org/Awaiten/registration/open-generics), [scanning](https://docs.testably.org/Awaiten/registration/scanning), [modules](https://docs.testably.org/Awaiten/registration/modules)
 - Resolution: [resolving services](https://docs.testably.org/Awaiten/resolution/resolving-services), [relationships](https://docs.testably.org/Awaiten/resolution/relationships), [collections](https://docs.testably.org/Awaiten/resolution/collections), [keyed dictionaries](https://docs.testably.org/Awaiten/resolution/keyed-dictionaries), [property injection](https://docs.testably.org/Awaiten/resolution/property-injection), [runtime arguments](https://docs.testably.org/Awaiten/resolution/runtime-arguments), [context-aware factories](https://docs.testably.org/Awaiten/resolution/context-aware-factories)
 - [Async initialization](https://docs.testably.org/Awaiten/async-initialization)
