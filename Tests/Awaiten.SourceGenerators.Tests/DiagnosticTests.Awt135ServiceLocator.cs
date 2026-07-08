@@ -4,8 +4,9 @@ namespace Awaiten.SourceGenerators.Tests;
 
 public partial class DiagnosticTests
 {
-	// AWT135 fires when a resolver seam (IAwaitenResolver and everything that extends it) is held by a type that
-	// is not a [Container] composition root - the Service Locator anti-pattern. Reported by
+	// AWT135 fires when a resolver seam (IAwaitenResolver and everything that extends it) is injected into a type
+	// that is not a [Container] composition root, as a constructor parameter or property - the Service Locator
+	// anti-pattern. Fields are not reported (the container never populates them). Reported by
 	// AwaitenBoundaryAnalyzer, so these tests drive that analyzer.
 	public class Awt135ServiceLocator
 	{
@@ -46,7 +47,43 @@ public partial class DiagnosticTests
 		}
 
 		[Fact]
-		public async Task ReportsForAResolverField()
+		public async Task ReportsForAResolverProperty()
+		{
+			string[] diagnostics = await Analyzer.Run<AwaitenBoundaryAnalyzer>("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public sealed class OrderProcessor
+			                                       {
+			                                       	public IAwaitenScope Scope { get; set; }
+			                                       }
+			                                       """);
+
+			await That(diagnostics.Any(d => d.Contains("AWT135"))).IsTrue()
+				.Because("a resolver-typed property is a run-time location seam the container can populate");
+		}
+
+		[Fact]
+		public async Task ReportsForAResolverParameterOnAStruct()
+		{
+			string[] diagnostics = await Analyzer.Run<AwaitenBoundaryAnalyzer>("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public readonly struct Handle
+			                                       {
+			                                       	public Handle(IAwaitenScope scope) { }
+			                                       }
+			                                       """);
+
+			await That(diagnostics.Any(d => d.Contains("AWT135"))).IsTrue()
+				.Because("a struct that injects the resolver is service location too; structs are analyzed, not just classes");
+		}
+
+		[Fact]
+		public async Task DoesNotReportForAResolverField()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenBoundaryAnalyzer>("""
 			                                       using Awaiten;
@@ -59,8 +96,8 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(diagnostics.Any(d => d.Contains("AWT135"))).IsTrue()
-				.Because("stashing the resolver in a field is the same run-time location, whichever member holds it");
+			await That(diagnostics.Any(d => d.Contains("AWT135"))).IsFalse()
+				.Because("Awaiten never populates a field, so a resolver-typed field is not an injection point; only constructor parameters and properties are reported");
 		}
 
 		[Fact]

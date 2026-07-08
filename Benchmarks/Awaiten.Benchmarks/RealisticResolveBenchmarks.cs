@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using Autofac;
 using Awaiten.Benchmarks.Helpers;
 using BenchmarkDotNet.Attributes;
@@ -21,7 +20,6 @@ namespace Awaiten.Benchmarks;
 ///     are generated; the rest are built at runtime in <see cref="Setup" /> so every framework's setup and
 ///     measured call sit in one place.
 /// </summary>
-[SuppressMessage("Awaiten", "AWT135:Service locator: a resolver interface is injected into a service", Justification = "A benchmark deliberately holds the container/scope to measure resolution latency; that is the operation under test, not a service-locator dependency.")]
 public class RealisticResolveBenchmarks : BenchmarksBase
 {
 	private IContainer _autofac = null!;

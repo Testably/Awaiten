@@ -511,8 +511,9 @@ internal static class Diagnostics
 	/// <summary>
 	///     A resolver seam (<c>IAwaitenResolver</c>, <c>IAwaitenAsyncResolver</c>, <c>IAwaitenScope</c>,
 	///     <c>IAwaitenRoot</c>, or <c>IAwaitenContainerMetadata</c>) is injected into a type that is not a
-	///     <c>[Container]</c> composition root (nor a <c>[Module]</c>), as a constructor parameter, property, or
-	///     field. Resolving from the container at run time is the Service Locator anti-pattern: it hides a type's
+	///     <c>[Container]</c> composition root (nor a <c>[Module]</c>), as a constructor parameter or property (the
+	///     container never populates a field, so a resolver-typed field is not reported). Resolving from the
+	///     container at run time is the Service Locator anti-pattern: it hides a type's
 	///     real dependencies and defeats the compile-time graph check. Inject the dependency the type actually
 	///     needs instead; only the composition root should hold the resolver. The typed fast-path
 	///     <c>IAwaitenResolver&lt;T&gt;</c> is a single-service seam (closer to <c>Func&lt;T&gt;</c>) and is not

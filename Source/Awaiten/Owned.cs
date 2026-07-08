@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Threading.Tasks;
 
 namespace Awaiten;
@@ -11,6 +12,7 @@ namespace Awaiten;
 ///     transient on demand: the container never accumulates it on the root.
 /// </summary>
 /// <typeparam name="T">The resolved service type.</typeparam>
+[SuppressMessage("Awaiten", "AWT135:Service locator: a resolver interface is injected into a service", Justification = "Owned<T> is a framework disposal handle: it holds the throwaway scope it owns so it can dispose it, handed in by generated container code. It never resolves arbitrary services, so this is not a service-locator dependency.")]
 public readonly struct Owned<T> :
 #if NET || NETSTANDARD2_1_OR_GREATER
 	IAsyncDisposable,

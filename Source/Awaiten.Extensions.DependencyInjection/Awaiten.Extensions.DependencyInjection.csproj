@@ -6,6 +6,7 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\Awaiten\Awaiten.csproj" />
+		<ProjectReference Include="..\Awaiten.SourceGenerators\Awaiten.SourceGenerators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
 	</ItemGroup>
 
 	<ItemGroup>

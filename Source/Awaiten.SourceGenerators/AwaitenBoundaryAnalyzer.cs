@@ -10,9 +10,9 @@ namespace Awaiten.SourceGenerators;
 ///     Guards the boundary between application code and the container. Reports
 ///     <see cref="Diagnostics.ServiceLocatorInjection">AWT135</see> when a resolver seam
 ///     (<c>IAwaitenResolver</c> and everything that extends it: <c>IAwaitenAsyncResolver</c>,
-///     <c>IAwaitenScope</c>, <c>IAwaitenRoot</c>, <c>IAwaitenContainerMetadata</c>) is held by a type that is not
-///     a <c>[Container]</c> composition root, as a constructor parameter, property, or field - the Service
-///     Locator anti-pattern. Also reports <see cref="Diagnostics.CompositionAttributeOutsideRoot">AWT134</see>
+///     <c>IAwaitenScope</c>, <c>IAwaitenRoot</c>, <c>IAwaitenContainerMetadata</c>) is injected into a type that is
+///     not a <c>[Container]</c> composition root, as a constructor parameter or property - the Service Locator
+///     anti-pattern. Also reports <see cref="Diagnostics.CompositionAttributeOutsideRoot">AWT134</see>
 ///     when a container-side composition attribute (a lifetime registration, <c>[Scan]</c>, <c>[Decorate]</c>,
 ///     <c>[Composite]</c>, <c>[Import]</c>, <c>[ImportService]</c>/<c>[ImportServices]</c>, or
 ///     <c>[InjectProperty]</c>) is applied to a class in an assembly that declares no <c>[Container]</c>.
@@ -92,7 +92,10 @@ public sealed class AwaitenBoundaryAnalyzer : DiagnosticAnalyzer
 		bool assemblyDeclaresContainer,
 		Action<Diagnostic> report)
 	{
-		if (type.TypeKind != TypeKind.Class || type.IsImplicitlyDeclared)
+		// Classes and structs are the service kinds a container builds; a struct that injects the resolver is the
+		// same anti-pattern as a class that does (a framework value type such as Owned<T> that legitimately holds a
+		// scope suppresses AWT135 in source). Interfaces, enums and delegates are not services and are skipped.
+		if (type.TypeKind is not (TypeKind.Class or TypeKind.Struct) || type.IsImplicitlyDeclared)
 		{
 			return;
 		}
@@ -114,9 +117,9 @@ public sealed class AwaitenBoundaryAnalyzer : DiagnosticAnalyzer
 		}
 	}
 
-	// AWT135: a resolver seam held as a constructor parameter, property, or field of a non-root type. A backing
-	// field of an auto-property is implicitly declared and skipped, so an injected resolver property is reported
-	// once (on the property).
+	// AWT135: a resolver seam injected into a non-root type as a constructor parameter or property. Fields are not
+	// reported: the container never populates a field, so a resolver-typed field is not an injection point (the
+	// constructor parameter it is assigned from is the seam, and that is reported).
 	private static void ReportServiceLocatorSeams(INamedTypeSymbol type, INamedTypeSymbol resolverInterface, Action<Diagnostic> report)
 	{
 		foreach (IMethodSymbol constructor in type.InstanceConstructors)
@@ -137,21 +140,14 @@ public sealed class AwaitenBoundaryAnalyzer : DiagnosticAnalyzer
 
 		foreach (ISymbol member in type.GetMembers())
 		{
-			if (member.IsImplicitlyDeclared)
+			if (member.IsImplicitlyDeclared || member is not IPropertySymbol property)
 			{
 				continue;
 			}
 
-			ITypeSymbol? memberType = member switch
+			if (IsResolverSeam(property.Type, resolverInterface))
 			{
-				IFieldSymbol field => field.Type,
-				IPropertySymbol property => property.Type,
-				_ => null,
-			};
-
-			if (memberType is not null && IsResolverSeam(memberType, resolverInterface))
-			{
-				ReportSeam(report, member, type, memberType);
+				ReportSeam(report, property, type, property.Type);
 			}
 		}
 	}
