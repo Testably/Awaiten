@@ -21,13 +21,21 @@ Awaiten wires the graph at build time, so there is nothing to reflect over at ru
 - **Job**: `MediumRun` with the in-process toolchain.
 - **Runner**: `ubuntu-latest` GitHub Actions agent, refreshed on every push to `main`.
 - Each row shows time and allocated memory, sorted fastest-first; bars are scaled within the row so length corresponds to magnitude. The Awaiten row is highlighted as the baseline (`1.00x`) and every other row shows its ratio relative to Awaiten. **Lower is better.**
-- Click a row to hide that container so the others spread out. Build and Resolve are measured at container sizes of 8, 64, and 256 registrations; switch between them with the inline tabs.
+- Click a row to hide that container so the others spread out. Build and Resolve are measured at container sizes of 8 and 256 registrations; switch between them with the inline tabs.
 
 :::
 
 <Tabs groupId="awaitenBenchmark">
 
-<TabItem value="Resolve" label="Resolve" default>
+<TabItem value="Realistic" label="Realistic" default>
+
+A per-request pattern, the shape a web app actually runs: open a scope, resolve a deep graph of mixed lifetimes rooted at a request handler, then dispose the scope.
+
+<AwaitenBenchmarkResult name="Realistic" />
+
+</TabItem>
+
+<TabItem value="Resolve" label="Resolve">
 
 Steady-state resolution of a service by type once the container is built.
 
@@ -40,14 +48,6 @@ Steady-state resolution of a service by type once the container is built.
 Container construction from cold, over a graph of singletons.
 
 <AwaitenBenchmarkResult name="Build" />
-
-</TabItem>
-
-<TabItem value="Realistic" label="Realistic">
-
-A per-request pattern, the shape a web app actually runs: open a scope, resolve a deep graph of mixed lifetimes rooted at a request handler, then dispose the scope.
-
-<AwaitenBenchmarkResult name="Realistic" />
 
 </TabItem>
 
