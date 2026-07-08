@@ -129,12 +129,9 @@ public sealed class AwaitenBoundaryAnalyzer : DiagnosticAnalyzer
 				continue;
 			}
 
-			foreach (IParameterSymbol parameter in constructor.Parameters)
+			foreach (IParameterSymbol parameter in constructor.Parameters.Where(parameter => IsResolverSeam(parameter.Type, resolverInterface)))
 			{
-				if (IsResolverSeam(parameter.Type, resolverInterface))
-				{
-					ReportSeam(report, parameter, type, parameter.Type);
-				}
+				ReportSeam(report, parameter, type, parameter.Type);
 			}
 		}
 
@@ -197,43 +194,12 @@ public sealed class AwaitenBoundaryAnalyzer : DiagnosticAnalyzer
 		=> symbol.GetAttributes().Any(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass, attributeType));
 
 	private static bool DeclaresContainer(INamespaceSymbol @namespace, INamedTypeSymbol containerAttribute)
-	{
-		foreach (INamedTypeSymbol type in @namespace.GetTypeMembers())
-		{
-			if (TypeOrNestedHasContainer(type, containerAttribute))
-			{
-				return true;
-			}
-		}
-
-		foreach (INamespaceSymbol child in @namespace.GetNamespaceMembers())
-		{
-			if (DeclaresContainer(child, containerAttribute))
-			{
-				return true;
-			}
-		}
-
-		return false;
-	}
+		=> @namespace.GetTypeMembers().Any(type => TypeOrNestedHasContainer(type, containerAttribute))
+		   || @namespace.GetNamespaceMembers().Any(child => DeclaresContainer(child, containerAttribute));
 
 	private static bool TypeOrNestedHasContainer(INamedTypeSymbol type, INamedTypeSymbol containerAttribute)
-	{
-		if (HasAttribute(type, containerAttribute))
-		{
-			return true;
-		}
-
-		foreach (INamedTypeSymbol nested in type.GetTypeMembers())
-		{
-			if (TypeOrNestedHasContainer(nested, containerAttribute))
-			{
-				return true;
-			}
-		}
-
-		return false;
-	}
+		=> HasAttribute(type, containerAttribute)
+		   || type.GetTypeMembers().Any(nested => TypeOrNestedHasContainer(nested, containerAttribute));
 
 	private static string TrimAttributeSuffix(string name)
 		=> name.EndsWith("Attribute", StringComparison.Ordinal)
