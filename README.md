@@ -4,7 +4,6 @@
 [![Build](https://github.com/Testably/Awaiten/actions/workflows/build.yml/badge.svg)](https://github.com/Testably/Awaiten/actions/workflows/build.yml)
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=Testably_Awaiten&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=Testably_Awaiten)
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=Testably_Awaiten&metric=coverage)](https://sonarcloud.io/summary/overall?id=Testably_Awaiten)
-[![Mutation testing badge](https://img.shields.io/endpoint?style=flat&url=https%3A%2F%2Fbadge-api.stryker-mutator.io%2Fgithub.com%2FTestably%2FAwaiten%2Fmain)](https://dashboard.stryker-mutator.io/reports/github.com/Testably/Awaiten/main)
 
 **The async-first dependency injection container for .NET.**
 
