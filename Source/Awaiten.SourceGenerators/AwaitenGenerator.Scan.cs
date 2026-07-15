@@ -156,9 +156,10 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     The reason a markerless <c>[Scan]</c> is invalid (an AWT183 fragment), or <see langword="null" /> when it
 	///     is well-formed: the <c>Marker</c> exposure has no marker to register under, and a scan that does not
-	///     positively bound its candidates would sweep every concrete type in scope. Only a narrowing include (a
-	///     name/namespace pattern that is not match-everything) or an <c>InAssembliesOf</c> counts as scoping; an
-	///     exclude-only filter still leaves the whole assembly in scope.
+	///     positively bound its candidates would sweep every concrete type in scope. A name or namespace axis scopes
+	///     the scan only when it declares includes and none of them matches everything: because the includes on an
+	///     axis are OR-combined, a single match-everything pattern (like <c>*</c>) leaves the whole axis unbounded
+	///     even alongside narrower patterns. An <c>InAssembliesOf</c> also scopes; an exclude-only filter does not.
 	/// </summary>
 	private static string? MarkerlessScanError(ScanExposure exposure, ScanFilters filters, List<IAssemblySymbol>? assemblies)
 	{
@@ -167,9 +168,11 @@ partial class AwaitenGenerator
 			return "includes the Marker exposure, which registers under a marker it does not name; use Self and/or MatchingInterface, or name a marker";
 		}
 
-		bool scoped = filters.NameIncludes.Any(pattern => !pattern.All(character => character == '*'))
-		              || filters.NamespaceIncludes.Any(pattern => !pattern.Split('.').All(segment => segment == "**"))
-		              || assemblies is not null;
+		bool nameScopes = filters.NameIncludes.Count > 0
+		                  && filters.NameIncludes.All(pattern => !pattern.All(character => character == '*'));
+		bool namespaceScopes = filters.NamespaceIncludes.Count > 0
+		                       && filters.NamespaceIncludes.All(pattern => !pattern.Split('.').All(segment => segment == "**"));
+		bool scoped = nameScopes || namespaceScopes || assemblies is not null;
 		return scoped
 			? null
 			: "declares no narrowing NamePatterns, NamespacePatterns or InAssembliesOf, so it would register every concrete type; add a filter to scope it";

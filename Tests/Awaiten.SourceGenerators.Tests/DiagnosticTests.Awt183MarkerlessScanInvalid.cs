@@ -72,6 +72,28 @@ public partial class DiagnosticTests
 		}
 
 		[Fact]
+		public async Task ReportsWhenAMatchEverythingPatternSitsAlongsideANarrowerOne()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IWidget { }
+			                                       public sealed class Widget : IWidget { }
+
+			                                       [Container]
+			                                       [Scan(As = ScanAs.MatchingInterface, NamePatterns = new[] { "*", "*Widget" })]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT183*").AsWildcard()
+				.Because("includes are OR-combined, so the '*' still matches every type despite the narrower '*Widget'");
+		}
+
+		[Fact]
 		public async Task DoesNotReportForAMarkerlessScanWithAFilterAndNoMarkerExposure()
 		{
 			GeneratorResult result = Generator.Run("""
