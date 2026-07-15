@@ -32,7 +32,7 @@ public partial class DiagnosticTests
 		}
 
 		[Fact]
-		public async Task DoesNotReportForSelfAndMarker()
+		public async Task DoesNotReportWhenTheSelfFlagIsAlsoSet()
 		{
 			GeneratorResult result = Generator.Run("""
 			                                       using Awaiten;
@@ -43,14 +43,14 @@ public partial class DiagnosticTests
 			                                       public sealed class RealHandler : HandlerBase { }
 
 			                                       [Container]
-			                                       [Scan(typeof(HandlerBase), As = ScanAs.SelfAndMarker)]
+			                                       [Scan(typeof(HandlerBase), As = ScanAs.Self | ScanAs.Marker)]
 			                                       public static partial class MyContainer
 			                                       {
 			                                       }
 			                                       """);
 
 			await That(result.Diagnostics.Any(d => d.Contains("AWT139"))).IsFalse()
-				.Because("SelfAndMarker still registers the match as its own concrete type");
+				.Because("the Self flag still registers the match as its own concrete type");
 		}
 
 		[Fact]

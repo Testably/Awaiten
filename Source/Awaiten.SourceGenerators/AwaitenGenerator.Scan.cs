@@ -13,8 +13,9 @@ partial class AwaitenGenerator
 	///     <c>AsClosedTypesOf</c>). Covers the container's own assembly, or the assemblies named by
 	///     <c>InAssembliesOf</c>, sorted by name for reproducibility, then narrowed by the optional
 	///     <c>NamePatterns</c>/<c>NamespacePatterns</c>/<c>Exclude</c> filters. Abstract/static classes, generic
-	///     definitions, inaccessible types and the marker itself are skipped. Reports
-	///     AWT138/AWT139/AWT140/AWT143/AWT172/AWT173/AWT174. The synthesized
+	///     definitions, inaccessible types and the marker itself are skipped. A markerless scan (the parameterless
+	///     <c>[Scan]</c>) matches every concrete type instead, narrowed by those same filters. Reports
+	///     AWT138/AWT139/AWT140/AWT143/AWT172/AWT173/AWT174/AWT182/AWT183/AWT184/AWT185. The synthesized
 	///     registrations are <see cref="RawRegistration.IsScan" />, so an explicit registration wins single
 	///     resolution while every match still joins its collection.
 	/// </summary>
@@ -27,11 +28,19 @@ partial class AwaitenGenerator
 
 		foreach (AttributeData attribute in containerSymbol.GetAttributes())
 		{
-			if (attribute.AttributeClass is { Name: "ScanAttribute", } attributeClass
-			    && attributeClass.ContainingNamespace?.ToDisplayString() == AttributeNamespace
-			    && ScanMarker(attribute, attributeClass) is { } marker)
+			if (attribute.AttributeClass is not { Name: "ScanAttribute", } attributeClass
+			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace)
+			{
+				continue;
+			}
+
+			if (ScanMarker(attribute, attributeClass) is { } marker)
 			{
 				ExpandScan(attribute, marker, compilation, result, diagnostics);
+			}
+			else if (IsMarkerlessScan(attribute, attributeClass))
+			{
+				ExpandScan(attribute, null, compilation, result, diagnostics);
 			}
 		}
 
@@ -39,14 +48,23 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
+	///     Whether a <c>[Scan]</c> is the markerless form: the non-generic attribute invoked through its
+	///     parameterless constructor (no <c>typeof</c> argument). The generic <c>[Scan&lt;TMarker&gt;]</c> always
+	///     carries a marker, and a non-generic <c>[Scan(...)]</c> with a malformed argument is not markerless.
+	/// </summary>
+	private static bool IsMarkerlessScan(AttributeData attribute, INamedTypeSymbol attributeClass)
+		=> !attributeClass.IsGenericType && attribute.ConstructorArguments.Length == 0;
+
+	/// <summary>
 	///     Expands one <c>[Scan]</c> over its candidate types, registering each match per <c>ScanAs</c>. An unbound
 	///     generic marker matches implementers of any closed form of it, registered under that closed interface,
-	///     while a closed marker matches types assignable to it. Every assignable match is counted even when an
-	///     explicit registration overrides it, so AWT138 fires only when nothing matched.
+	///     while a closed marker matches types assignable to it. A markerless scan (<paramref name="marker" /> is
+	///     <see langword="null" />) matches every concrete type, narrowed by its filters. Every assignable match is
+	///     counted even when an explicit registration overrides it, so AWT138 fires only when nothing matched.
 	/// </summary>
 	private static void ExpandScan(
 		AttributeData attribute,
-		INamedTypeSymbol marker,
+		INamedTypeSymbol? marker,
 		Compilation compilation,
 		List<RawRegistration> result,
 		List<DiagnosticInfo> diagnostics)
@@ -65,13 +83,38 @@ partial class AwaitenGenerator
 
 		ScanMatch match = new(ScanExposureOf(attribute), ScanLifetime(attribute), location, ScanSkipsUnconstructable(attribute));
 		ScanFilters filters = ScanFiltersOf(attribute);
-		bool openMarker = IsOpenGenericMarker(marker);
-		INamedTypeSymbol markerDefinition = marker.OriginalDefinition;
-		string markerDisplay = (openMarker ? markerDefinition : marker).ToDisplayString(FullyQualified);
+
+		// AWT185: As resolved to no recognized ScanAs flag (e.g. `Self & Marker`, or an out-of-range cast), so the
+		// scan would expose nothing.
+		if ((match.Exposure & ScanExposures.All) == 0)
+		{
+			diagnostics.Add(new DiagnosticInfo(Diagnostics.ScanExposesNothing, LocationInfo.From(location), new EquatableArray<string>([])));
+			return;
+		}
+
+		// AWT183: a markerless scan cannot register under a marker it does not name, and needs a scoping filter, or
+		// it would register every concrete type in scope. Rejected before any registration.
+		if (marker is null && MarkerlessScanError(match.Exposure, filters, assemblies) is { } reason)
+		{
+			diagnostics.Add(new DiagnosticInfo(Diagnostics.MarkerlessScanInvalid, LocationInfo.From(location), new EquatableArray<string>([reason,])));
+			return;
+		}
+
+		bool openMarker = marker is not null && IsOpenGenericMarker(marker);
+		INamedTypeSymbol? markerDefinition = marker?.OriginalDefinition;
+
+		// Null for a markerless scan; otherwise the marker's display string. The null both feeds the marker-only
+		// diagnostics and tells ReportScanFilterDiagnostics which "nothing happened" signal to use.
+		string? markerDisplay = null;
+		if (marker is not null)
+		{
+			markerDisplay = (openMarker ? markerDefinition! : marker).ToDisplayString(FullyQualified);
+		}
 
 		ScanFilterHits hits = new();
 		int assignable = 0;
 		int registered = 0;
+		int produced = 0;
 		foreach (INamedTypeSymbol type in ScanCandidates(assemblies, compilation, marker, location, diagnostics))
 		{
 			assignable++;
@@ -81,55 +124,177 @@ partial class AwaitenGenerator
 			}
 
 			registered++;
-			List<INamedTypeSymbol> contracts = openMarker
-				? ClosedMarkerInterfaces(type, markerDefinition)
-				: MarkerInterfaces(type, marker, compilation);
-			RegisterScanMatch(type, contracts, markerDisplay, match, result, diagnostics);
+			produced += RegisterScanMatch(type, ScanContracts(type, match, marker, openMarker, markerDefinition, compilation), markerDisplay, match, result, diagnostics);
 		}
 
-		ReportScanFilterDiagnostics(filters, hits, new ScanFilterCounts(assignable, registered), assemblies, markerDisplay, location, diagnostics);
+		ReportScanFilterDiagnostics(filters, hits, new ScanFilterCounts(assignable, registered, produced), assemblies, markerDisplay, location, diagnostics);
 	}
 
 	/// <summary>
-	///     Registers one scan match per <c>ScanAs</c>: as its own concrete type and under each contract interface.
-	///     An interfaces-only scan that found no contract to register under reports AWT139 (usual cause: a base-type
-	///     marker). <c>SelfAndMarker</c> is exempt, since its self registration still covers the type.
+	///     The interfaces one match registers under, unioned across the requested exposures: the marker interfaces
+	///     when <c>Marker</c> is set (never for a markerless scan, which names none) and the <c>I</c> + name
+	///     convention interface when <c>MatchingInterface</c> is set. An interface the generated code could not
+	///     reference (internal to another assembly) is dropped, like an inaccessible candidate type. Deduplicated
+	///     by fully-qualified name, since a combined <c>Marker | MatchingInterface</c> can select the same
+	///     interface twice.
 	/// </summary>
-	private static void RegisterScanMatch(
+	private static List<INamedTypeSymbol> ScanContracts(
+		INamedTypeSymbol type,
+		ScanMatch match,
+		INamedTypeSymbol? marker,
+		bool openMarker,
+		INamedTypeSymbol? markerDefinition,
+		Compilation compilation)
+	{
+		List<INamedTypeSymbol> contracts = new();
+		if (match.RegisterMarker && marker is not null)
+		{
+			contracts.AddRange(openMarker ? ClosedMarkerInterfaces(type, markerDefinition!) : MarkerInterfaces(type, marker, compilation));
+		}
+
+		if (match.RegisterMatchingInterface)
+		{
+			contracts.AddRange(MatchingInterfaces(type));
+		}
+
+		contracts.RemoveAll(contract => !compilation.IsSymbolAccessibleWithin(contract, compilation.Assembly));
+
+		HashSet<string> seen = new(StringComparer.Ordinal);
+		contracts.RemoveAll(contract => !seen.Add(contract.ToDisplayString(FullyQualified)));
+		return contracts;
+	}
+
+	/// <summary>
+	///     The reason a markerless <c>[Scan]</c> is invalid (an AWT183 fragment), or <see langword="null" /> when it
+	///     is well-formed: the <c>Marker</c> exposure has no marker to register under, and a scan that does not
+	///     positively bound its candidates would sweep every concrete type in scope. A name or namespace axis scopes
+	///     the scan only when it declares includes and every one of them names something: because the includes on an
+	///     axis are OR-combined, a single unbounded pattern (like <c>*</c>) leaves the whole axis unbounded even
+	///     alongside narrower patterns. An <c>InAssembliesOf</c> also scopes; an exclude-only filter does not.
+	/// </summary>
+	private static string? MarkerlessScanError(ScanExposures exposure, ScanFilters filters, List<IAssemblySymbol>? assemblies)
+	{
+		if ((exposure & ScanExposures.Marker) != 0)
+		{
+			return "includes the Marker exposure, which registers under a marker it does not name; use Self and/or MatchingInterface, or name a marker";
+		}
+
+		bool nameScopes = filters.NameIncludes.Count > 0
+		                  && filters.NameIncludes.All(pattern => !NamePatternMatchesEverything(pattern));
+		bool namespaceScopes = filters.NamespaceIncludes.Count > 0
+		                       && filters.NamespaceIncludes.All(NamespacePatternScopes);
+		bool scoped = nameScopes || namespaceScopes || assemblies is not null;
+		return scoped
+			? null
+			: "declares no narrowing NamePatterns, NamespacePatterns or InAssembliesOf, so it would register every concrete type; add a filter to scope it";
+	}
+
+	/// <summary>
+	///     Whether a name include is only <c>*</c> wildcards, matching every simple name: it cannot scope a
+	///     markerless scan (AWT183) and is redundant as a filter (AWT174).
+	/// </summary>
+	private static bool NamePatternMatchesEverything(string pattern)
+		=> pattern.All(character => character == '*');
+
+	/// <summary>
+	///     Whether a namespace include matches every namespace, i.e. every segment is <c>**</c> (which absorbs any
+	///     run of segments). Feeds AWT174; the AWT183 scoping check uses the stricter
+	///     <see cref="NamespacePatternScopes" />, since a pattern can fall short of matching everything and still
+	///     not scope.
+	/// </summary>
+	private static bool NamespacePatternMatchesEverything(string pattern)
+		=> pattern.Split('.').All(segment => segment == "**");
+
+	/// <summary>
+	///     Whether a namespace include positively bounds a markerless scan: at least one segment contains a
+	///     non-wildcard character. A wildcard-only pattern (<c>*</c>, <c>**.*</c>) constrains at most the segment
+	///     depth, which still sweeps effectively every concrete type, so it does not count as a scope for AWT183.
+	/// </summary>
+	private static bool NamespacePatternScopes(string pattern)
+		=> pattern.Split('.').Any(segment => segment.Any(character => character != '*'));
+
+	/// <summary>
+	///     Registers one scan match per the <c>ScanAs</c> flags: as its own concrete type and under each contract
+	///     interface, returning how many registrations it contributed. A marker match that contributed nothing
+	///     reports AWT139 (<c>Marker</c> requested but no assignable interface, usual cause: a base-type marker) or
+	///     AWT182 (<c>MatchingInterface</c> requested but no <c>I</c> + name interface). Setting the <c>Self</c> flag
+	///     exempts both, since the self registration still covers the type. A markerless match is never warned: not
+	///     conforming to the convention is the normal case when scanning broadly.
+	/// </summary>
+	private static int RegisterScanMatch(
 		INamedTypeSymbol type,
 		List<INamedTypeSymbol> contracts,
-		string markerDisplay,
+		string? markerDisplay,
 		ScanMatch match,
 		List<RawRegistration> result,
 		List<DiagnosticInfo> diagnostics)
 	{
 		string typeName = type.ToDisplayString(FullyQualified);
+		int produced = 0;
 
 		if (match.RegisterSelf)
 		{
 			result.Add(ScanRegistration(typeName, typeName, type, type, match));
-		}
-
-		if (!match.RegisterInterfaces)
-		{
-			return;
+			produced++;
 		}
 
 		foreach (INamedTypeSymbol contract in contracts)
 		{
 			result.Add(ScanRegistration(contract.ToDisplayString(FullyQualified), typeName, type, contract, match));
+			produced++;
 		}
 
-		if (contracts.Count == 0 && match.Exposure == ScanExposure.Marker)
+		// The match contributed nothing: an interface exposure was requested but found no interface to register
+		// under (and Self was not requested, which always registers). Warn only for a marker scan (a non-null
+		// markerDisplay); a markerless scan skips a non-conforming type silently and reports emptiness once, at
+		// the scan level (AWT184).
+		if (produced == 0 && markerDisplay is not null)
 		{
-			diagnostics.Add(new DiagnosticInfo(
-				Diagnostics.ScanNoImplementedInterfaces,
-				LocationInfo.From(match.Location),
-				new EquatableArray<string>([
-					Display(typeName),
-					Display(markerDisplay),
-				])));
+			if (match.RegisterMarker)
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.ScanNoImplementedInterfaces,
+					LocationInfo.From(match.Location),
+					new EquatableArray<string>([Display(typeName), Display(markerDisplay),])));
+			}
+			else if (match.RegisterMatchingInterface)
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.ScanNoMatchingInterface,
+					LocationInfo.From(match.Location),
+					new EquatableArray<string>([Display(typeName), Display("I" + type.Name),])));
+			}
 		}
+
+		return produced;
+	}
+
+	/// <summary>
+	///     The interfaces the <c>MatchingInterface</c> exposure registers a match under: the interfaces it
+	///     implements whose name is <c>I</c> + the match's own name (the <c>Foo</c>/<c>IFoo</c> convention),
+	///     preferring those declared in the match's own namespace. Namespaces are compared by name, so a convention
+	///     interface in a same-named namespace of another assembly (a contracts project sharing the root namespace)
+	///     still counts as the type's own. When no candidate is in the own namespace, every same-named match
+	///     registers, deterministically ordered. Generic interfaces are excluded, and assignability is preserved
+	///     (the interface is drawn from the type's implemented set, not synthesized from the name).
+	/// </summary>
+	private static List<INamedTypeSymbol> MatchingInterfaces(INamedTypeSymbol type)
+	{
+		string expected = "I" + type.Name;
+		List<INamedTypeSymbol> matches = type.AllInterfaces
+			.Where(contract => !contract.IsGenericType && contract.Name == expected)
+			.ToList();
+
+		string ownNamespace = type.ContainingNamespace.ToDisplayString();
+		List<INamedTypeSymbol> sameNamespace = matches
+			.Where(contract => contract.ContainingNamespace.ToDisplayString() == ownNamespace)
+			.ToList();
+		List<INamedTypeSymbol> selected = sameNamespace.Count > 0 ? sameNamespace : matches;
+
+		selected.Sort((left, right) => string.CompareOrdinal(
+			left.ToDisplayString(FullyQualified),
+			right.ToDisplayString(FullyQualified)));
+		return selected;
 	}
 
 	/// <summary>
@@ -152,11 +317,13 @@ partial class AwaitenGenerator
 	///     the attribute location for diagnostics, and whether an unconstructable match is skipped with a warning
 	///     (<c>SkipUnconstructable</c>) instead of erroring. Bundled so the per-match registration takes one handle.
 	/// </summary>
-	private sealed record ScanMatch(ScanExposure Exposure, Lifetime Lifetime, Location? Location, bool SkipUnconstructable)
+	private sealed record ScanMatch(ScanExposures Exposure, Lifetime Lifetime, Location? Location, bool SkipUnconstructable)
 	{
-		public bool RegisterSelf => Exposure is ScanExposure.Self or ScanExposure.SelfAndMarker;
+		public bool RegisterSelf => (Exposure & ScanExposures.Self) != 0;
 
-		public bool RegisterInterfaces => Exposure is ScanExposure.Marker or ScanExposure.SelfAndMarker;
+		public bool RegisterMarker => (Exposure & ScanExposures.Marker) != 0;
+
+		public bool RegisterMatchingInterface => (Exposure & ScanExposures.MatchingInterface) != 0;
 	}
 
 	/// <summary>
@@ -211,14 +378,15 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     The concrete-type candidates a <c>[Scan]</c> enumerates: the container's own assembly when
 	///     <paramref name="assemblies" /> is <see langword="null" /> (<c>InAssembliesOf</c> unset), else the
-	///     listed assemblies. Filtered to concrete classes assignable to the marker and sorted by
-	///     fully-qualified name so the registrations are reproducible. Reports AWT140 for any
-	///     <c>InAssembliesOf</c> assembly that holds no such type (a likely missing <c>ProjectReference</c>).
+	///     listed assemblies. Filtered to concrete classes assignable to the marker (or every concrete class when
+	///     <paramref name="marker" /> is <see langword="null" />, a markerless scan) and sorted by fully-qualified
+	///     name so the registrations are reproducible. Reports AWT140 for any <c>InAssembliesOf</c> assembly that
+	///     holds no such type (a likely missing <c>ProjectReference</c>).
 	/// </summary>
 	private static List<INamedTypeSymbol> ScanCandidates(
 		List<IAssemblySymbol>? assemblies,
 		Compilation compilation,
-		INamedTypeSymbol marker,
+		INamedTypeSymbol? marker,
 		Location? location,
 		List<DiagnosticInfo> diagnostics)
 	{
@@ -280,7 +448,7 @@ partial class AwaitenGenerator
 	/// </summary>
 	private static void AddAssemblyCandidates(
 		IAssemblySymbol assembly,
-		INamedTypeSymbol marker,
+		INamedTypeSymbol? marker,
 		Compilation compilation,
 		List<INamedTypeSymbol> candidates,
 		Location? location,
@@ -302,17 +470,23 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     Whether a type is a concrete class assignable to the marker (and not the marker itself), shared by
 	///     candidate gathering and the AWT140 emptiness check. An unbound generic marker requires the type to
-	///     implement a closed form of it. Generic type definitions and inaccessible types are skipped, since
-	///     neither can be referenced from generated code.
+	///     implement a closed form of it; a <see langword="null" /> marker (a markerless scan) accepts every
+	///     concrete class, leaving the narrowing to the filters. Generic type definitions and inaccessible types
+	///     are skipped, since neither can be referenced from generated code.
 	/// </summary>
-	private static bool IsScanCandidate(INamedTypeSymbol type, INamedTypeSymbol marker, Compilation compilation)
+	private static bool IsScanCandidate(INamedTypeSymbol type, INamedTypeSymbol? marker, Compilation compilation)
 	{
 		if (type is not { TypeKind: TypeKind.Class, IsAbstract: false, IsStatic: false, IsImplicitClass: false, }
-		    || SymbolEqualityComparer.Default.Equals(type, marker)
+		    || (marker is not null && SymbolEqualityComparer.Default.Equals(type, marker))
 		    || HasOpenTypeParameters(type)
 		    || !compilation.IsSymbolAccessibleWithin(type, compilation.Assembly))
 		{
 			return false;
+		}
+
+		if (marker is null)
+		{
+			return true;
 		}
 
 		return IsOpenGenericMarker(marker)
@@ -403,19 +577,19 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     The exposure named on a <c>[Scan]</c> (<c>As = ScanAs.X</c>); its underlying int lines up with the
-	///     generator's <c>ScanExposure</c> enum. Defaults to <c>Self</c> when unset, matching the attribute default.
+	///     generator's <c>ScanExposures</c> enum. Defaults to <c>Self</c> when unset, matching the attribute default.
 	/// </summary>
-	private static ScanExposure ScanExposureOf(AttributeData attribute)
+	private static ScanExposures ScanExposureOf(AttributeData attribute)
 	{
 		foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
 		{
 			if (argument.Key == "As" && argument.Value.Value is int value)
 			{
-				return (ScanExposure)value;
+				return (ScanExposures)value;
 			}
 		}
 
-		return ScanExposure.Self;
+		return ScanExposures.Self;
 	}
 
 	/// <summary>
@@ -449,8 +623,13 @@ partial class AwaitenGenerator
 		public HashSet<INamedTypeSymbol> ExcludeTypes { get; } = new(SymbolEqualityComparer.Default);
 	}
 
-	/// <summary>Candidates a scan's marker matched (<paramref name="Assignable" />) and how many survived its filters to register (<paramref name="Registered" />).</summary>
-	private readonly record struct ScanFilterCounts(int Assignable, int Registered);
+	/// <summary>
+	///     Candidates a scan's marker matched (<paramref name="Assignable" />), how many survived its filters
+	///     (<paramref name="Registered" />), and how many registrations those survivors actually contributed
+	///     (<paramref name="Produced" />, which a <c>MatchingInterface</c> match can leave short of
+	///     <paramref name="Registered" /> when a survivor has no <c>I</c> + name interface).
+	/// </summary>
+	private readonly record struct ScanFilterCounts(int Assignable, int Registered, int Produced);
 
 	/// <summary>
 	///     The <c>NamePatterns</c>, <c>NamespacePatterns</c> and <c>Exclude</c> named on a <c>[Scan]</c>. Null, empty
@@ -561,20 +740,41 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     Reports the filter-related scan diagnostics after the candidate loop: AWT138 (marker matched nothing in
-	///     the own assembly) or AWT172 (the filters removed every marker match), AWT173 per exclusion that never
-	///     applied, and AWT174 per include pattern that matches every candidate.
+	///     Reports the filter-related scan diagnostics after the candidate loop. For a marker scan (non-null
+	///     <paramref name="markerDisplay" />): AWT138 (marker matched nothing in the own assembly) or AWT172 (the
+	///     filters removed every marker match). For a markerless scan (null <paramref name="markerDisplay" />):
+	///     AWT184 when it contributed no registration at all. In both cases AWT173 per exclusion that never applied,
+	///     and AWT174 per include pattern that matches every candidate.
 	/// </summary>
 	private static void ReportScanFilterDiagnostics(
 		ScanFilters filters,
 		ScanFilterHits hits,
 		ScanFilterCounts counts,
 		List<IAssemblySymbol>? assemblies,
-		string markerDisplay,
+		string? markerDisplay,
 		Location? location,
 		List<DiagnosticInfo> diagnostics)
 	{
-		if (counts.Assignable == 0)
+		if (markerDisplay is null)
+		{
+			// A markerless scan does not warn per non-conforming type (that is the norm when scanning broadly), so
+			// its only "nothing happened" signal is that no registration was produced across every candidate.
+			if (counts.Produced == 0)
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.MarkerlessScanRegisteredNothing,
+					LocationInfo.From(location),
+					new EquatableArray<string>([])));
+
+				// No candidate existed at all: mirror the marker path's early return, since a stale-exclusion or
+				// redundant-pattern hint is noise when the scan saw nothing to filter.
+				if (counts.Assignable == 0)
+				{
+					return;
+				}
+			}
+		}
+		else if (counts.Assignable == 0)
 		{
 			// AWT138's "in this assembly" wording only fits an own-assembly scan; an InAssembliesOf scan already
 			// reported the more actionable AWT140 per named assembly.
@@ -588,8 +788,7 @@ partial class AwaitenGenerator
 
 			return;
 		}
-
-		if (counts.Registered == 0)
+		else if (counts.Registered == 0)
 		{
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.ScanFiltersMatchedNothing,
@@ -612,12 +811,12 @@ partial class AwaitenGenerator
 			ReportStaleExclusion(Display(type.ToDisplayString(FullyQualified)), location, diagnostics);
 		}
 
-		foreach (string pattern in filters.NameIncludes.Where(pattern => pattern.All(character => character == '*')))
+		foreach (string pattern in filters.NameIncludes.Where(NamePatternMatchesEverything))
 		{
 			ReportRedundantPattern(pattern, location, diagnostics);
 		}
 
-		foreach (string pattern in filters.NamespaceIncludes.Where(pattern => pattern.Split('.').All(segment => segment == "**")))
+		foreach (string pattern in filters.NamespaceIncludes.Where(NamespacePatternMatchesEverything))
 		{
 			ReportRedundantPattern(pattern, location, diagnostics);
 		}

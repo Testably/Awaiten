@@ -57,14 +57,14 @@ public sealed class AttributeTests
 	{
 		ScanAttribute scan = new(typeof(IService))
 		{
-			Lifetime = AwaitenLifetime.Scoped, As = ScanAs.SelfAndMarker, SkipUnconstructable = true,
+			Lifetime = AwaitenLifetime.Scoped, As = ScanAs.Self | ScanAs.Marker, SkipUnconstructable = true,
 			InAssembliesOf = [typeof(Impl)], NamePatterns = ["*Service"], NamespacePatterns = ["App.**"],
 			Exclude = [typeof(Impl)],
 		};
 
 		await That(scan.AssignableTo).IsEqualTo(typeof(IService));
 		await That(scan.Lifetime).IsEqualTo(AwaitenLifetime.Scoped);
-		await That(scan.As).IsEqualTo(ScanAs.SelfAndMarker);
+		await That(scan.As).IsEqualTo(ScanAs.Self | ScanAs.Marker);
 		await That(scan.SkipUnconstructable).IsTrue();
 		await That(scan.InAssembliesOf).IsEqualTo(new[] { typeof(Impl) });
 		await That(scan.NamePatterns).IsEqualTo(new[] { "*Service" });

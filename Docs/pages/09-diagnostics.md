@@ -1057,6 +1057,59 @@ A `[Scan]` include pattern matches every candidate, so it does not narrow the sc
 public static partial class CoffeeShop;
 ```
 
+### AWT182
+
+:::warning[Warning]
+A `[Scan(As = ScanAs.MatchingInterface)]` matched a type that implements no interface named `I` + its own name.
+:::
+
+```csharp
+public interface IEspresso;
+public sealed class Espresso : IEspresso;
+public sealed class Ristretto : IEspresso;   // no IRistretto, so it is not registered
+
+[Container]
+[Scan<IEspresso>(As = ScanAs.MatchingInterface)]
+public static partial class CoffeeShop;
+```
+
+### AWT183
+
+:::danger[Error]
+A markerless `[Scan]` includes the `Marker` exposure, or declares no scoping filter.
+:::
+
+```csharp
+[Container]
+[Scan(As = ScanAs.MatchingInterface)]   // markerless, but no NamePatterns/NamespacePatterns/InAssembliesOf
+public static partial class CoffeeShop;
+```
+
+### AWT184
+
+:::warning[Warning]
+A markerless `[Scan]` matched candidate types but registered none of them.
+:::
+
+```csharp
+[Container]
+// Nothing under CoffeeShop.Legacy follows the I + name convention, so nothing registers.
+[Scan(As = ScanAs.MatchingInterface, NamespacePatterns = ["CoffeeShop.Legacy.**"])]
+public static partial class CoffeeShop;
+```
+
+### AWT185
+
+:::danger[Error]
+A `[Scan]`'s `As` resolved to no `ScanAs` flag, so it would register nothing (usually `&` written for `|`).
+:::
+
+```csharp
+[Container]
+[Scan<IDrink>(As = ScanAs.Self & ScanAs.Marker)]   // & is empty; use | to combine flags
+public static partial class CoffeeShop;
+```
+
 ## Modules
 
 ### AWT149

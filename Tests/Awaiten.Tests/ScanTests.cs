@@ -58,7 +58,7 @@ public partial class ScanTests
 	}
 
 	[Fact]
-	public async Task ScanAsSelfAndMarker_RegistersBoth()
+	public async Task ScanAsSelfBitOrMarkerBit_RegistersBoth()
 	{
 		using SelfAndInterfaceScanContainer.Root container = new();
 
@@ -99,7 +99,7 @@ public partial class ScanTests
 	public sealed class SalesReport : IReport;
 
 	[Container]
-	[Scan(typeof(IReport), As = ScanAs.SelfAndMarker, Lifetime = AwaitenLifetime.Singleton)]
+	[Scan(typeof(IReport), As = ScanAs.Self | ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton)]
 	public static partial class SelfAndInterfaceScanContainer;
 
 	[Fact]
@@ -114,7 +114,7 @@ public partial class ScanTests
 	}
 
 	[Container]
-	[Scan<IReport>(As = ScanAs.SelfAndMarker, Lifetime = AwaitenLifetime.Singleton)]
+	[Scan<IReport>(As = ScanAs.Self | ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton)]
 	public static partial class GenericScanContainer;
 
 	[Fact]
@@ -290,4 +290,67 @@ public partial class ScanTests
 	[Container]
 	[Scan(typeof(ICrossAssemblyView<>), InAssembliesOf = new[] { typeof(ICrossAssemblyView<>) }, As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton)]
 	public static partial class CrossAssemblyClosedTypesOfScanContainer;
+
+	[Fact]
+	public async Task ScanAsMatchingInterface_RegistersUnderTheConventionInterface()
+	{
+		using MatchingInterfaceScanContainer.Root container = new();
+
+		// AlarmGadget : IGadget, IAlarmGadget registers only under its I + name interface, not the marker or itself.
+		await That(container.Resolve<IAlarmGadget>()).Is<AlarmGadget>();
+		await That(container.Resolve<ITimerGadget>()).Is<TimerGadget>();
+		await That(container.TryResolve(typeof(AlarmGadget), out _)).IsFalse();
+		await That(container.TryResolve(typeof(IGadget), out _)).IsFalse();
+	}
+
+	[Fact]
+	public async Task ScanAsMarkerOrMatchingInterface_RegistersUnderBoth()
+	{
+		using MarkerAndMatchingScanContainer.Root container = new();
+
+		// Marker | MatchingInterface unions the two exposures: each gadget joins the IGadget collection and stays
+		// resolvable by its own interface.
+		await That(container.Resolve<IAlarmGadget>()).Is<AlarmGadget>();
+		await That(container.Resolve<IEnumerable<IGadget>>().Count()).IsEqualTo(2);
+	}
+
+	[Fact]
+	public async Task MarkerlessScan_RegistersEachMatchUnderItsConventionInterface()
+	{
+		using MarkerlessScanContainer.Root container = new();
+
+		// No marker: the scan matches by name pattern and registers each match under its I + name interface.
+		await That(container.Resolve<IMklAlpha>()).Is<MklAlpha>();
+		await That(container.Resolve<IMklBeta>()).Is<MklBeta>();
+	}
+
+	public interface IGadget;
+
+	public interface IAlarmGadget;
+
+	public sealed class AlarmGadget : IGadget, IAlarmGadget;
+
+	public interface ITimerGadget;
+
+	public sealed class TimerGadget : IGadget, ITimerGadget;
+
+	[Container]
+	[Scan<IGadget>(As = ScanAs.MatchingInterface, Lifetime = AwaitenLifetime.Singleton)]
+	public static partial class MatchingInterfaceScanContainer;
+
+	[Container]
+	[Scan<IGadget>(As = ScanAs.Marker | ScanAs.MatchingInterface, Lifetime = AwaitenLifetime.Singleton)]
+	public static partial class MarkerAndMatchingScanContainer;
+
+	public interface IMklAlpha;
+
+	public sealed class MklAlpha : IMklAlpha;
+
+	public interface IMklBeta;
+
+	public sealed class MklBeta : IMklBeta;
+
+	[Container]
+	[Scan(As = ScanAs.MatchingInterface, NamePatterns = new[] { "Mkl*" }, Lifetime = AwaitenLifetime.Singleton)]
+	public static partial class MarkerlessScanContainer;
 }

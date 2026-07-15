@@ -206,18 +206,20 @@ namespace Awaiten
     {
         public RequestingTypeAttribute() { }
     }
+    [System.Flags]
     public enum ScanAs
     {
-        Self = 0,
-        Marker = 1,
-        SelfAndMarker = 2,
+        Self = 1,
+        Marker = 2,
+        MatchingInterface = 4,
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
     public sealed class ScanAttribute : System.Attribute
     {
+        public ScanAttribute() { }
         public ScanAttribute(System.Type assignableTo) { }
         public Awaiten.ScanAs As { get; set; }
-        public System.Type AssignableTo { get; }
+        public System.Type? AssignableTo { get; }
         public System.Type[]? Exclude { get; set; }
         public System.Type[]? InAssembliesOf { get; set; }
         public Awaiten.AwaitenLifetime Lifetime { get; set; }

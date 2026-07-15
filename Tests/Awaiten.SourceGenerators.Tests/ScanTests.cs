@@ -109,7 +109,7 @@ public class ScanTests
 	}
 
 	[Fact]
-	public async Task ScanAsSelfAndMarker_RegistersBoth()
+	public async Task ScanAsSelfBitOrMarkerBit_RegistersBoth()
 	{
 		GeneratorResult result = Generator.Run("""
 		                                       using Awaiten;
@@ -122,7 +122,7 @@ public class ScanTests
 		                                       public sealed class Consumer { public Consumer(SalesReport self, IEnumerable<IReport> all) { } }
 
 		                                       [Container]
-		                                       [Scan(typeof(IReport), As = ScanAs.SelfAndMarker, Lifetime = AwaitenLifetime.Singleton)]
+		                                       [Scan(typeof(IReport), As = ScanAs.Self | ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton)]
 		                                       [Singleton<Consumer>]
 		                                       public static partial class MyContainer
 		                                       {
@@ -133,9 +133,9 @@ public class ScanTests
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
 		await That(source).Contains("new __Bucket(typeof(global::MyCode.SalesReport)")
-			.Because("SelfAndMarker keeps the concrete self registration");
+			.Because("Self | Marker keeps the concrete self registration");
 		await That(source).Contains("new global::MyCode.IReport[] { Root.ResolveSalesReport(__s.__root) }")
-			.Because("SelfAndMarker also registers the match under the marker collection");
+			.Because("Self | Marker also registers the match under the marker collection");
 	}
 
 	[Fact]
@@ -637,5 +637,204 @@ public class ScanTests
 		await That(source).Contains("new __Bucket(typeof(global::Awaiten.Tests.Support.GammaPlugin)");
 		await That(source).DoesNotContain("DeltaPlugin")
 			.Because("the name filter narrows referenced-assembly candidates too");
+	}
+
+	[Fact]
+	public async Task ScanAsMatchingInterface_PrependsIEvenWhenTheNameAlreadyStartsWithI()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface IIdentity { }
+		                                       public sealed class Identity : IIdentity { }
+
+		                                       [Container]
+		                                       [Scan(As = ScanAs.MatchingInterface, NamePatterns = new[] { "Identity" })]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("typeof(global::MyCode.IIdentity)")
+			.Because("Identity's convention interface is I + Identity = IIdentity");
+	}
+
+	[Fact]
+	public async Task ScanAsMatchingInterface_DoesNotMatchAGenericInterfaceOfTheConventionName()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public interface IThing { }
+		                                       public interface IWidget<T> { }
+		                                       public sealed class Widget : IThing, IWidget<int> { }   // only generic IWidget<T>
+
+		                                       [Container]
+		                                       [Scan(typeof(IThing), As = ScanAs.MatchingInterface)]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).Contains("*AWT182*").AsWildcard()
+			.And.Contains("*Widget*").AsWildcard()
+			.Because("a generic IWidget<T> is not the non-generic IWidget the convention requires");
+	}
+
+	[Fact]
+	public async Task ScanAsMatchingInterface_RegistersUnderASameNamedInterfaceInAnotherNamespace()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace Contracts { public interface IWorker { } }
+
+		                                       namespace MyCode
+		                                       {
+		                                           public sealed class Worker : Contracts.IWorker { }
+
+		                                           [Container]
+		                                           [Scan(As = ScanAs.MatchingInterface, NamePatterns = new[] { "Worker" })]
+		                                           public static partial class MyContainer
+		                                           {
+		                                           }
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("typeof(global::Contracts.IWorker)")
+			.Because("with no same-namespace IWorker, the convention falls back to the implemented IWorker");
+	}
+
+	[Fact]
+	public async Task ScanAsMarkerOrMatchingInterface_DeduplicatesWhenTheMarkerIsTheConventionInterface()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+
+		                                       namespace MyCode;
+
+		                                       public interface IFoo { }
+		                                       public sealed class Foo : IFoo { }
+		                                       public sealed class Consumer { public Consumer(IEnumerable<IFoo> all) { } }
+
+		                                       [Container]
+		                                       [Scan(typeof(IFoo), As = ScanAs.Marker | ScanAs.MatchingInterface, Lifetime = AwaitenLifetime.Singleton)]
+		                                       [Singleton<Consumer>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// Marker (IFoo) and MatchingInterface (also IFoo) select the same interface; the union is deduplicated so
+		// Foo joins the IFoo collection once. A duplicate would materialize a two-element array instead.
+		await That(source).Contains("new global::MyCode.IFoo[] { Root.ResolveFoo(__s.__root) }")
+			.Because("the same interface selected by both exposures is registered only once");
+	}
+
+	[Fact]
+	public async Task ScanAsMatchingInterface_SkipsAConventionInterfaceTheGeneratedCodeCannotReference()
+	{
+		GeneratorResult result = Generator.RunWithReferencedAssembly("""
+			namespace Lib;
+
+			internal interface IWidget { }
+			public sealed class Widget : IWidget { }
+			""", """
+			using Awaiten;
+
+			namespace MyCode;
+
+			[Container]
+			[Scan(As = ScanAs.Self | ScanAs.MatchingInterface, InAssembliesOf = new[] { typeof(Lib.Widget) })]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		// The internal IWidget cannot be referenced from the container's assembly; registering under it would
+		// emit typeof(global::Lib.IWidget) and fail the consumer's build with CS0122.
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("new __Bucket(typeof(global::Lib.Widget)")
+			.Because("the accessible match still self-registers");
+		await That(source).DoesNotContain("IWidget")
+			.Because("an interface inaccessible to the generated code is dropped from the contracts");
+	}
+
+	[Fact]
+	public async Task ScanAsMatchingInterface_PrefersTheOwnNamespaceInterfaceAcrossAssemblies()
+	{
+		GeneratorResult result = Generator.RunWithReferencedAssembly("""
+			namespace MyCode { public interface IWorker { } }
+			namespace Other { public interface IWorker { } }
+			""", """
+			using Awaiten;
+
+			namespace MyCode
+			{
+			    public sealed class Worker : IWorker, Other.IWorker { }
+
+			    [Container]
+			    [Scan(As = ScanAs.MatchingInterface, NamePatterns = new[] { "Worker" })]
+			    public static partial class MyContainer
+			    {
+			    }
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// MyCode.IWorker lives in a referenced assembly, but its namespace NAME matches Worker's, so the
+		// own-namespace preference still applies across the assembly boundary.
+		await That(source).Contains("typeof(global::MyCode.IWorker)")
+			.Because("the convention interface in the match's own namespace wins the tiebreak");
+		await That(source).DoesNotContain("Other.IWorker")
+			.Because("the same-named interface in a foreign namespace loses to the own-namespace one");
+	}
+
+	[Fact]
+	public async Task ScanAsMatchingInterface_RegistersUnderEverySameNamedInterfaceWhenNoneIsInItsNamespace()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace A { public interface IWorker { } }
+		                                       namespace B { public interface IWorker { } }
+
+		                                       namespace MyCode
+		                                       {
+		                                           public sealed class Worker : A.IWorker, B.IWorker { }
+
+		                                           [Container]
+		                                           [Scan(As = ScanAs.MatchingInterface, NamePatterns = new[] { "Worker" })]
+		                                           public static partial class MyContainer
+		                                           {
+		                                           }
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		// With no own-namespace candidate to prefer, the convention is ambiguous; every same-named implemented
+		// interface registers, deterministically ordered.
+		await That(source).Contains("typeof(global::A.IWorker)")
+			.And.Contains("typeof(global::B.IWorker)");
 	}
 }

@@ -10,6 +10,12 @@ namespace Awaiten;
 ///     type implementing a closed form of it (<c>View1 : IView&lt;VM1&gt;</c>), registered under that closed
 ///     interface. This is the equivalent of Autofac's <c>AsClosedTypesOf</c>. Abstract and static classes, and the
 ///     marker type itself, are skipped.
+///     <para>
+///         The parameterless constructor is a markerless scan: it names no marker and instead matches by the
+///         <see cref="NamePatterns" />/<see cref="NamespacePatterns" />/<see cref="InAssembliesOf" /> filters. Its
+///         <see cref="As" /> may not include <see cref="ScanAs.Marker" /> (there is no marker to register under),
+///         and requires at least one such filter so it does not sweep every concrete type (AWT183).
+///     </para>
 /// </summary>
 /// <remarks>
 ///     Scanned registrations are overridable: an explicit registration of the same implementation type takes
@@ -25,11 +31,17 @@ namespace Awaiten;
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
 public sealed class ScanAttribute : Attribute
 {
+	/// <summary>A markerless scan that matches by the name, namespace and assembly filters instead of a marker.</summary>
+	public ScanAttribute() => AssignableTo = null;
+
 	/// <param name="assignableTo">The marker interface or base type to scan for.</param>
 	public ScanAttribute(Type assignableTo) => AssignableTo = assignableTo;
 
-	/// <summary>The marker interface or base type that discovered implementations must be assignable to.</summary>
-	public Type AssignableTo { get; }
+	/// <summary>
+	///     The marker interface or base type that discovered implementations must be assignable to, or
+	///     <see langword="null" /> for a markerless scan (the parameterless constructor).
+	/// </summary>
+	public Type? AssignableTo { get; }
 
 	/// <summary>The lifetime applied to each discovered implementation. Defaults to <see cref="AwaitenLifetime.Transient" />.</summary>
 	public AwaitenLifetime Lifetime { get; set; } = AwaitenLifetime.Transient;
