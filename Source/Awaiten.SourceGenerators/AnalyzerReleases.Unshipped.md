@@ -83,3 +83,7 @@
  AWT179  | Awaiten   | Warning  | Two [InjectProperty<TImplementation>] entries name the same property of the same implementation
  AWT180  | Awaiten   | Warning  | An [InjectProperty<TImplementation>] targets a TImplementation with no container-constructed registration, so the entry is never applied
  AWT181  | Awaiten   | Warning  | A property is named by both [Inject] and an [InjectProperty<TImplementation>] entry, so the entry's flags are ignored
+ AWT182  | Awaiten   | Warning  | A [Scan(As = ScanAs.MatchingInterface)] matched a type that implements no interface named I + its own name
+ AWT183  | Awaiten   | Error    | A markerless [Scan] includes the Marker exposure or declares no scoping filter
+ AWT184  | Awaiten   | Warning  | A markerless [Scan] matched candidates but registered none of them
+ AWT185  | Awaiten   | Error    | A [Scan]'s As resolved to no ScanAs flag, so it would register nothing

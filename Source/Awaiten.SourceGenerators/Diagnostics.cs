@@ -569,12 +569,12 @@ internal static class Diagnostics
 	/// <summary>
 	///     A <c>[Scan(As = ScanAs.Marker)]</c> matched a concrete type that implements no interface assignable to
 	///     the scanned marker, so the match contributes no registration, typically a base-class marker. Use a
-	///     marker interface, or <c>ScanAs.SelfAndMarker</c> to keep the self registration.
+	///     marker interface, or add the <c>ScanAs.Self</c> flag to keep the self registration.
 	/// </summary>
 	public static readonly DiagnosticDescriptor ScanNoImplementedInterfaces = new(
 		"AWT139",
 		"Assembly scan matched a type with no interface assignable to the marker",
-		"'{0}' matched the scan but implements no interface assignable to '{1}', so it is not registered; scan a marker interface or use ScanAs.SelfAndMarker",
+		"'{0}' matched the scan but implements no interface assignable to '{1}', so it is not registered; scan a marker interface or add the ScanAs.Self flag",
 		"Awaiten",
 		DiagnosticSeverity.Warning,
 		isEnabledByDefault: true);
@@ -1204,5 +1204,61 @@ internal static class Diagnostics
 		"the property '{0}' on '{1}' carries [Inject] and also has an [InjectProperty] entry; the [Inject] member wins, so the entry's Optional/Deferred/Key are ignored - remove one",
 		"Awaiten",
 		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A <c>[Scan(As = ScanAs.MatchingInterface)]</c> matched a concrete type that implements no interface named
+	///     <c>I</c> + its own name (the <c>Foo</c>/<c>IFoo</c> convention), so the match contributes no registration.
+	///     Implement the convention interface, or add the <c>Self</c> flag (<c>ScanAs.Self | ScanAs.MatchingInterface</c>)
+	///     to keep the self registration. A markerless scan does not report this: scanning broadly, a non-conforming
+	///     type is expected and simply skipped.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ScanNoMatchingInterface = new(
+		"AWT182",
+		"Assembly scan matched a type with no matching interface",
+		"'{0}' matched the scan but implements no interface named '{1}', so it is not registered; implement '{1}' or add the ScanAs.Self flag",
+		"Awaiten",
+		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A markerless <c>[Scan]</c> (the parameterless attribute) is misconfigured: its <c>As</c> includes the
+	///     <c>Marker</c> exposure although it names no marker, or it declares no
+	///     <c>NamePatterns</c>/<c>NamespacePatterns</c>/<c>InAssembliesOf</c> filter and so would register every
+	///     concrete type in scope. Reported as an error, since the scan cannot be expanded as written.
+	/// </summary>
+	public static readonly DiagnosticDescriptor MarkerlessScanInvalid = new(
+		"AWT183",
+		"Markerless scan is invalid",
+		"The markerless [Scan] {0}",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A markerless <c>[Scan]</c> matched candidate types but registered none of them: either its filters
+	///     matched nothing, or (with <c>ScanAs.MatchingInterface</c>) no candidate implements its <c>I</c> + name
+	///     interface. Widen the filters or check the naming convention.
+	/// </summary>
+	public static readonly DiagnosticDescriptor MarkerlessScanRegisteredNothing = new(
+		"AWT184",
+		"Markerless scan registered nothing",
+		"The markerless [Scan] matched no type to register; check its NamePatterns, NamespacePatterns and InAssembliesOf, and (for ScanAs.MatchingInterface) that matches follow the I + name convention",
+		"Awaiten",
+		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A <c>[Scan]</c>'s <c>As</c> resolved to no <c>ScanAs</c> flag, so the scan would expose its matches
+	///     nowhere and register nothing. Usually a <c>&amp;</c> written where <c>|</c> was meant (for example
+	///     <c>ScanAs.Self &amp; ScanAs.Marker</c>). Combine the flags with <c>|</c>, or drop <c>As</c> to keep the
+	///     <c>Self</c> default.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ScanExposesNothing = new(
+		"AWT185",
+		"Scan exposes matches nowhere",
+		"The scan's As resolved to no ScanAs flag, so it would register nothing; combine flags with | (not &), or omit As for the Self default",
+		"Awaiten",
+		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
 }

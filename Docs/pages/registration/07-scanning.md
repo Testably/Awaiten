@@ -24,11 +24,28 @@ By default each match registers as itself. Use `As` to register under the marker
 [Scan<IDrink>(As = ScanAs.Marker)]
 ```
 
-| `ScanAs` value | Registers each match as |
+`ScanAs` is a `[Flags]` enum: the three exposures are independent and combine with `|`.
+
+| `ScanAs` flag | Registers each match under |
 |---|---|
 | `Self` (default) | The concrete type |
 | `Marker` | The marker interface |
-| `SelfAndMarker` | Both |
+| `MatchingInterface` | The interface named `I` + its own name (`Foo` → `IFoo`) |
+
+```csharp
+// Resolvable as itself, as a member of IEnumerable<IDrink>, and by its own IEspresso interface.
+[Scan<IDrink>(As = ScanAs.Self | ScanAs.Marker | ScanAs.MatchingInterface)]
+```
+
+## Match the `Foo`/`IFoo` convention
+
+`MatchingInterface` registers each match under the interface it implements whose name is `I` + the match's own name, the common .NET convention where `Foo` implements `IFoo`. Unlike a wide "as implemented interfaces" registration, it never binds a match to an incidental interface like `IDisposable`, so the composition graph stays legible.
+
+```csharp
+[Scan<IViewModel>(As = ScanAs.MatchingInterface)]
+```
+
+Here `MainViewModel : IViewModel, IMainViewModel` registers only under `IMainViewModel`. The match must genuinely implement the convention interface (it is selected from the type's implemented interfaces by name, not synthesized), and generic interfaces are not matched. A match that implements no such interface contributes no `MatchingInterface` registration; when the scan names a marker and the match would otherwise register nothing at all, that is a warning ([AWT182](../diagnostics#awt182)). (Combined with `Self` or `Marker`, the other exposure still registers the match, so no warning is raised.)
 
 ## Choose the lifetime
 
@@ -62,6 +79,16 @@ Marker assignability is often wider than you want. Three optional filters narrow
 - **`Exclude`** drops types by exact identity, so an entry survives a rename and never removes a same-named type elsewhere.
 
 In either pattern list a bare entry includes and a `!`-prefixed entry excludes; a candidate passes an axis when it matches some include (or the list gives none) and no exclude. Matching is ordinal (case-sensitive). A filter set that removes every match warns with [AWT172](../diagnostics#awt172), a never-applied exclusion with [AWT173](../diagnostics#awt173), and a match-everything include (`*` or `**`) with [AWT174](../diagnostics#awt174).
+
+## Scan without a marker
+
+Some conventions have no shared marker at all: every `Foo` has its own `IFoo` and nothing else in common. The parameterless `[Scan]` matches every concrete type instead of a marker, narrowed by the same filters.
+
+```csharp
+[Scan(As = ScanAs.MatchingInterface, NamespacePatterns = ["MyApp.Services.**"])]
+```
+
+A markerless scan's `As` may not include `Marker` — there is no marker to register under — and it must carry at least one `NamePatterns`, `NamespacePatterns` or `InAssembliesOf` filter so it does not sweep every concrete type in scope. Breaking either rule is an error ([AWT183](../diagnostics#awt183)). Because it scans broadly, a type that does not follow the convention is simply skipped rather than warned; if the scan ends up registering nothing at all, that is a warning ([AWT184](../diagnostics#awt184)).
 
 ## Open generic markers
 
