@@ -88,7 +88,7 @@ Some conventions have no shared marker at all: every `Foo` has its own `IFoo` an
 [Scan(As = ScanAs.MatchingInterface, NamespacePatterns = ["MyApp.Services.**"])]
 ```
 
-A markerless scan's `As` may not include `Marker` — there is no marker to register under — and it must carry at least one `NamePatterns`, `NamespacePatterns` or `InAssembliesOf` filter so it does not sweep every concrete type in scope. Breaking either rule is an error ([AWT183](../diagnostics#awt183)). Because it scans broadly, a type that does not follow the convention is simply skipped rather than warned; if the scan ends up registering nothing at all, that is a warning ([AWT184](../diagnostics#awt184)).
+A markerless scan's `As` may not include `Marker` — there is no marker to register under — and it must carry at least one `NamePatterns`, `NamespacePatterns` or `InAssembliesOf` filter so it does not sweep every concrete type in scope. A wildcard-only pattern (`*`, `**.*`) does not count: it names nothing, so it does not narrow the sweep. Breaking either rule is an error ([AWT183](../diagnostics#awt183)). Because it scans broadly, a type that does not follow the convention is simply skipped rather than warned; if the scan ends up registering nothing at all, that is a warning ([AWT184](../diagnostics#awt184)).
 
 ## Open generic markers
 

@@ -86,7 +86,7 @@ partial class AwaitenGenerator
 
 		// AWT185: As resolved to no recognized ScanAs flag (e.g. `Self & Marker`, or an out-of-range cast), so the
 		// scan would expose nothing.
-		if ((match.Exposure & (ScanExposures.Self | ScanExposures.Marker | ScanExposures.MatchingInterface)) == 0)
+		if ((match.Exposure & ScanExposures.All) == 0)
 		{
 			diagnostics.Add(new DiagnosticInfo(Diagnostics.ScanExposesNothing, LocationInfo.From(location), new EquatableArray<string>([])));
 			return;
@@ -124,7 +124,7 @@ partial class AwaitenGenerator
 			}
 
 			registered++;
-			produced += RegisterScanMatch(type, ScanContracts(type, match, marker, openMarker, markerDefinition, compilation), markerDisplay, match, marker is not null, result, diagnostics);
+			produced += RegisterScanMatch(type, ScanContracts(type, match, marker, openMarker, markerDefinition, compilation), markerDisplay, match, result, diagnostics);
 		}
 
 		ReportScanFilterDiagnostics(filters, hits, new ScanFilterCounts(assignable, registered, produced), assemblies, markerDisplay, location, diagnostics);
@@ -133,8 +133,10 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     The interfaces one match registers under, unioned across the requested exposures: the marker interfaces
 	///     when <c>Marker</c> is set (never for a markerless scan, which names none) and the <c>I</c> + name
-	///     convention interface when <c>MatchingInterface</c> is set. Deduplicated by fully-qualified name, since a
-	///     combined <c>Marker | MatchingInterface</c> can select the same interface twice.
+	///     convention interface when <c>MatchingInterface</c> is set. An interface the generated code could not
+	///     reference (internal to another assembly) is dropped, like an inaccessible candidate type. Deduplicated
+	///     by fully-qualified name, since a combined <c>Marker | MatchingInterface</c> can select the same
+	///     interface twice.
 	/// </summary>
 	private static List<INamedTypeSymbol> ScanContracts(
 		INamedTypeSymbol type,
@@ -155,6 +157,8 @@ partial class AwaitenGenerator
 			contracts.AddRange(MatchingInterfaces(type));
 		}
 
+		contracts.RemoveAll(contract => !compilation.IsSymbolAccessibleWithin(contract, compilation.Assembly));
+
 		HashSet<string> seen = new(StringComparer.Ordinal);
 		contracts.RemoveAll(contract => !seen.Add(contract.ToDisplayString(FullyQualified)));
 		return contracts;
@@ -164,9 +168,9 @@ partial class AwaitenGenerator
 	///     The reason a markerless <c>[Scan]</c> is invalid (an AWT183 fragment), or <see langword="null" /> when it
 	///     is well-formed: the <c>Marker</c> exposure has no marker to register under, and a scan that does not
 	///     positively bound its candidates would sweep every concrete type in scope. A name or namespace axis scopes
-	///     the scan only when it declares includes and none of them matches everything: because the includes on an
-	///     axis are OR-combined, a single match-everything pattern (like <c>*</c>) leaves the whole axis unbounded
-	///     even alongside narrower patterns. An <c>InAssembliesOf</c> also scopes; an exclude-only filter does not.
+	///     the scan only when it declares includes and every one of them names something: because the includes on an
+	///     axis are OR-combined, a single unbounded pattern (like <c>*</c>) leaves the whole axis unbounded even
+	///     alongside narrower patterns. An <c>InAssembliesOf</c> also scopes; an exclude-only filter does not.
 	/// </summary>
 	private static string? MarkerlessScanError(ScanExposures exposure, ScanFilters filters, List<IAssemblySymbol>? assemblies)
 	{
@@ -176,14 +180,38 @@ partial class AwaitenGenerator
 		}
 
 		bool nameScopes = filters.NameIncludes.Count > 0
-		                  && filters.NameIncludes.All(pattern => !pattern.All(character => character == '*'));
+		                  && filters.NameIncludes.All(pattern => !NamePatternMatchesEverything(pattern));
 		bool namespaceScopes = filters.NamespaceIncludes.Count > 0
-		                       && filters.NamespaceIncludes.All(pattern => !pattern.Split('.').All(segment => segment == "**"));
+		                       && filters.NamespaceIncludes.All(NamespacePatternScopes);
 		bool scoped = nameScopes || namespaceScopes || assemblies is not null;
 		return scoped
 			? null
 			: "declares no narrowing NamePatterns, NamespacePatterns or InAssembliesOf, so it would register every concrete type; add a filter to scope it";
 	}
+
+	/// <summary>
+	///     Whether a name include is only <c>*</c> wildcards, matching every simple name: it cannot scope a
+	///     markerless scan (AWT183) and is redundant as a filter (AWT174).
+	/// </summary>
+	private static bool NamePatternMatchesEverything(string pattern)
+		=> pattern.All(character => character == '*');
+
+	/// <summary>
+	///     Whether a namespace include matches every namespace, i.e. every segment is <c>**</c> (which absorbs any
+	///     run of segments). Feeds AWT174; the AWT183 scoping check uses the stricter
+	///     <see cref="NamespacePatternScopes" />, since a pattern can fall short of matching everything and still
+	///     not scope.
+	/// </summary>
+	private static bool NamespacePatternMatchesEverything(string pattern)
+		=> pattern.Split('.').All(segment => segment == "**");
+
+	/// <summary>
+	///     Whether a namespace include positively bounds a markerless scan: at least one segment contains a
+	///     non-wildcard character. A wildcard-only pattern (<c>*</c>, <c>**.*</c>) constrains at most the segment
+	///     depth, which still sweeps effectively every concrete type, so it does not count as a scope for AWT183.
+	/// </summary>
+	private static bool NamespacePatternScopes(string pattern)
+		=> pattern.Split('.').Any(segment => segment.Any(character => character != '*'));
 
 	/// <summary>
 	///     Registers one scan match per the <c>ScanAs</c> flags: as its own concrete type and under each contract
@@ -198,7 +226,6 @@ partial class AwaitenGenerator
 		List<INamedTypeSymbol> contracts,
 		string? markerDisplay,
 		ScanMatch match,
-		bool markerAnchored,
 		List<RawRegistration> result,
 		List<DiagnosticInfo> diagnostics)
 	{
@@ -218,16 +245,17 @@ partial class AwaitenGenerator
 		}
 
 		// The match contributed nothing: an interface exposure was requested but found no interface to register
-		// under (and Self was not requested, which always registers). Warn only for a marker scan; a markerless
-		// scan skips a non-conforming type silently and reports emptiness once, at the scan level (AWT184).
-		if (produced == 0 && markerAnchored)
+		// under (and Self was not requested, which always registers). Warn only for a marker scan (a non-null
+		// markerDisplay); a markerless scan skips a non-conforming type silently and reports emptiness once, at
+		// the scan level (AWT184).
+		if (produced == 0 && markerDisplay is not null)
 		{
 			if (match.RegisterMarker)
 			{
 				diagnostics.Add(new DiagnosticInfo(
 					Diagnostics.ScanNoImplementedInterfaces,
 					LocationInfo.From(match.Location),
-					new EquatableArray<string>([Display(typeName), Display(markerDisplay!),])));
+					new EquatableArray<string>([Display(typeName), Display(markerDisplay),])));
 			}
 			else if (match.RegisterMatchingInterface)
 			{
@@ -242,9 +270,12 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     The interfaces the <c>MatchingInterface</c> exposure registers a match under: the interface it implements
-	///     whose name is <c>I</c> + the match's own name (the <c>Foo</c>/<c>IFoo</c> convention), preferring one
-	///     declared in the match's own namespace. Generic interfaces are excluded, and assignability is preserved
+	///     The interfaces the <c>MatchingInterface</c> exposure registers a match under: the interfaces it
+	///     implements whose name is <c>I</c> + the match's own name (the <c>Foo</c>/<c>IFoo</c> convention),
+	///     preferring those declared in the match's own namespace. Namespaces are compared by name, so a convention
+	///     interface in a same-named namespace of another assembly (a contracts project sharing the root namespace)
+	///     still counts as the type's own. When no candidate is in the own namespace, every same-named match
+	///     registers, deterministically ordered. Generic interfaces are excluded, and assignability is preserved
 	///     (the interface is drawn from the type's implemented set, not synthesized from the name).
 	/// </summary>
 	private static List<INamedTypeSymbol> MatchingInterfaces(INamedTypeSymbol type)
@@ -254,8 +285,9 @@ partial class AwaitenGenerator
 			.Where(contract => !contract.IsGenericType && contract.Name == expected)
 			.ToList();
 
+		string ownNamespace = type.ContainingNamespace.ToDisplayString();
 		List<INamedTypeSymbol> sameNamespace = matches
-			.Where(contract => SymbolEqualityComparer.Default.Equals(contract.ContainingNamespace, type.ContainingNamespace))
+			.Where(contract => contract.ContainingNamespace.ToDisplayString() == ownNamespace)
 			.ToList();
 		List<INamedTypeSymbol> selected = sameNamespace.Count > 0 ? sameNamespace : matches;
 
@@ -733,6 +765,13 @@ partial class AwaitenGenerator
 					Diagnostics.MarkerlessScanRegisteredNothing,
 					LocationInfo.From(location),
 					new EquatableArray<string>([])));
+
+				// No candidate existed at all: mirror the marker path's early return, since a stale-exclusion or
+				// redundant-pattern hint is noise when the scan saw nothing to filter.
+				if (counts.Assignable == 0)
+				{
+					return;
+				}
 			}
 		}
 		else if (counts.Assignable == 0)
@@ -772,12 +811,12 @@ partial class AwaitenGenerator
 			ReportStaleExclusion(Display(type.ToDisplayString(FullyQualified)), location, diagnostics);
 		}
 
-		foreach (string pattern in filters.NameIncludes.Where(pattern => pattern.All(character => character == '*')))
+		foreach (string pattern in filters.NameIncludes.Where(NamePatternMatchesEverything))
 		{
 			ReportRedundantPattern(pattern, location, diagnostics);
 		}
 
-		foreach (string pattern in filters.NamespaceIncludes.Where(pattern => pattern.Split('.').All(segment => segment == "**")))
+		foreach (string pattern in filters.NamespaceIncludes.Where(NamespacePatternMatchesEverything))
 		{
 			ReportRedundantPattern(pattern, location, diagnostics);
 		}

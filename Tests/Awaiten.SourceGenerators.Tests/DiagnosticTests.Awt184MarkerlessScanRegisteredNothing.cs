@@ -51,5 +51,28 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics.Any(d => d.Contains("AWT184"))).IsFalse()
 				.Because("FirstWidget registers under IFirstWidget, so the scan is not empty");
 		}
+
+		[Fact]
+		public async Task DoesNotReportStaleExclusionsWhenTheScanSawNoCandidate()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IWidget { }
+
+			                                       [Container]
+			                                       [Scan(As = ScanAs.MatchingInterface, NamePatterns = new[] { "*Widget" }, Exclude = new[] { typeof(IWidget) })]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT184*").AsWildcard()
+				.Because("the assembly holds no concrete class, so the scan registers nothing");
+			await That(result.Diagnostics.Any(d => d.Contains("AWT173"))).IsFalse()
+				.Because("a stale-exclusion hint is noise when the scan saw no candidate to filter");
+		}
 	}
 }

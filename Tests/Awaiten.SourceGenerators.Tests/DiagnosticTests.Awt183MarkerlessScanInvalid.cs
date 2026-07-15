@@ -94,6 +94,72 @@ public partial class DiagnosticTests
 		}
 
 		[Fact]
+		public async Task ReportsWhenTheSoleNamespacePatternIsWildcardOnly()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IWidget { }
+			                                       public sealed class Widget : IWidget { }
+
+			                                       [Container]
+			                                       [Scan(As = ScanAs.MatchingInterface, NamespacePatterns = new[] { "*" })]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT183*").AsWildcard()
+				.Because("'*' names nothing, so it sweeps every type in a root namespace instead of scoping the scan");
+		}
+
+		[Fact]
+		public async Task ReportsWhenTheNamespacePatternConstrainsOnlyTheDepth()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IWidget { }
+			                                       public sealed class Widget : IWidget { }
+
+			                                       [Container]
+			                                       [Scan(As = ScanAs.MatchingInterface, NamespacePatterns = new[] { "**.*" })]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT183*").AsWildcard()
+				.Because("'**.*' matches every non-global namespace at any depth, so it does not scope the scan");
+		}
+
+		[Fact]
+		public async Task DoesNotReportWhenANamespacePatternNamesASegment()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IWidget { }
+			                                       public sealed class Widget : IWidget { }
+
+			                                       [Container]
+			                                       [Scan(As = ScanAs.MatchingInterface, NamespacePatterns = new[] { "MyCode.**" })]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics.Any(d => d.Contains("AWT183"))).IsFalse()
+				.Because("a namespace pattern that names a segment positively bounds the scan");
+		}
+
+		[Fact]
 		public async Task DoesNotReportForAMarkerlessScanWithAFilterAndNoMarkerExposure()
 		{
 			GeneratorResult result = Generator.Run("""
