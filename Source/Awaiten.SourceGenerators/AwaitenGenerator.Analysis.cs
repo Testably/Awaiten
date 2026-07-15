@@ -492,6 +492,60 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
+	///     AWT186: an <c>Owned&lt;T&gt;</c>-family relationship (a bare <c>Owned&lt;T&gt;</c>, or a
+	///     <c>Func</c>/<c>Task</c> form that produces one) targets a service produced by a requesting-type factory.
+	///     Such a factory is called per consumer and has no owner scope to build the owned target into, so the
+	///     combination is unsupported; the emit path has no owned form for it and would otherwise produce an
+	///     <c>Owned&lt;T&gt;</c>-typed slot filled with a bare <c>T</c> (a raw CS1503). Reported for both constructor
+	///     parameters and injected <c>[Inject]</c> members, independent of lifetime safety (it is a structural
+	///     incompatibility, not an async concern). Mirrors AWT163's rejection of <c>[Arg]</c>-plus-<c>[RequestingType]</c>.
+	/// </summary>
+	private static void DetectOwnedOverRequestingTypeFactory(
+		List<InstanceModel> instances,
+		Dictionary<ServiceKey, string> serviceToImpl,
+		Dictionary<string, int> implToIndex,
+		List<LocationInfo?> instanceLocations,
+		List<DiagnosticInfo> diagnostics)
+	{
+		for (int i = 0; i < instances.Count; i++)
+		{
+			foreach (ParameterModel parameter in instances[i].ConstructorParameters.AsArray())
+			{
+				CheckDependency(i, parameter);
+			}
+
+			foreach (MemberModel member in instances[i].InjectedMembers.AsArray())
+			{
+				CheckDependency(i, member.Dependency);
+			}
+		}
+
+		void CheckDependency(int consumer, ParameterModel parameter)
+		{
+			// Every owned form: the bare Owned<T> (DependencyKind.Owned) and the Func/Task forms that wrap the
+			// produced value in an Owned<T> (ProducesOwned). Guard the implToIndex lookup: serviceToImpl can name an
+			// implementation whose BuildInstance failed, and an unguarded indexer would crash the generator instead
+			// of surfacing the real registration error.
+			if ((parameter.Kind != DependencyKind.Owned && !parameter.ProducesOwned)
+			    || !serviceToImpl.TryGetValue(KeyOf(parameter), out string? targetImpl)
+			    || !implToIndex.TryGetValue(targetImpl, out int target)
+			    || !instances[target].IsRequestingTypeFactory)
+			{
+				return;
+			}
+
+			// Point the diagnostic at the offending parameter; fall back to the consumer's registration.
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.OwnedOverRequestingTypeFactory,
+				parameter.Location ?? instanceLocations[consumer],
+				new EquatableArray<string>([
+					DisplayInstance(instances[consumer].ImplementationType),
+					DisplayInstance(instances[target].ImplementationType),
+				])));
+		}
+	}
+
+	/// <summary>
 	///     AWT122: a collection dependency is materialized synchronously, so an async-tainted member would be
 	///     resolved without awaiting its initialization. Reported under both strict and loose safety; only
 	///     SyncResolveAfterInit suppresses it.

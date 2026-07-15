@@ -87,3 +87,4 @@
  AWT183  | Awaiten   | Error    | A markerless [Scan] includes the Marker exposure or declares no scoping filter
  AWT184  | Awaiten   | Warning  | A markerless [Scan] matched candidates but registered none of them
  AWT185  | Awaiten   | Error    | A [Scan]'s As resolved to no ScanAs flag, so it would register nothing
+ AWT186  | Awaiten   | Error    | An Owned<T> relationship (or its Func/Task forms) targets a service produced by a requesting-type factory, which has no owner scope

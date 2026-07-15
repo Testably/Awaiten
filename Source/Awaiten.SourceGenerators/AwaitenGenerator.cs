@@ -89,6 +89,12 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		DetectCaptiveDependencies(graph.Instances, graph.Dependencies, graph.InstanceLocations, diagnostics);
 		DetectNonTerminatingDeferredCycles(graph.Instances, graph.ConstructionDependencies, graph.CombinedDependencies, containerLocation, diagnostics);
 
+		// AWT186: an Owned<T> relationship over a requesting-type factory has no owner scope to build into, so the
+		// combination is unsupported. Reported regardless of lifetime safety - it is a structural incompatibility,
+		// not an async concern - so it is outside the SyncResolveAfterInit gate below.
+		DetectOwnedOverRequestingTypeFactory(
+			graph.Instances, graph.ServiceToImpl, graph.ImplToIndex, graph.InstanceLocations, diagnostics);
+
 		// AWT119/AWT120 (strict only): a synchronous Func<T>/Lazy<T>/Owned<T> relationship resolves its target
 		// without awaiting initialization, so it may not target an async-tainted service. SyncResolveAfterInit
 		// allows it and so is not reported.

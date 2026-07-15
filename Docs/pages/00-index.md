@@ -11,7 +11,7 @@ The async-first dependency injection container for .NET.
 
 Awaiten is a Roslyn source generator. It wires your object graph at build time, so there is no runtime reflection and the generated code is plain, readable C#. Your container is native-AOT clean and trim-safe out of the box.
 
-The configuration is verified by the compiler. Missing, cyclic, ambiguous, and lifetime-mismatched registrations are build errors, not surprises at startup. Awaiten ships around 70 diagnostics for this.
+The configuration is verified by the compiler. Missing, cyclic, ambiguous, and lifetime-mismatched registrations are build errors, not surprises at startup. Awaiten ships around 90 diagnostics for this.
 
 Its headline feature is **async initialization**. Some services need asynchronous setup after construction, like an espresso machine heating its boiler or a payment terminal connecting to the bank. Awaiten tracks those through the graph, and reaching one synchronously before it is ready is a compile error.
 

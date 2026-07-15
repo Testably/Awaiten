@@ -380,6 +380,24 @@ public static partial class CoffeeShop
 }
 ```
 
+### AWT186
+
+:::danger[Error]
+An `Owned<T>` relationship (or its `Func`/`Task` forms) targets a service produced by a requesting-type factory. Such a factory is called per consumer and decides its own disposal, so it has no owner scope to build the owned target into. Consume the service directly, or through `Func<T>` / `Lazy<T>`.
+:::
+
+```csharp
+public sealed class Barista(Owned<ILogger> logger);   // Owned<T> over a requesting-type factory
+
+[Container]
+[Transient<ILogger>(Factory = nameof(CreateLogger))]
+[Transient<Barista>]
+public static partial class CoffeeShop
+{
+    private static Logger CreateLogger([RequestingType] Type? consumer) => new(consumer?.Name ?? "<root>");
+}
+```
+
 ## Lifecycle hooks
 
 ### AWT164
