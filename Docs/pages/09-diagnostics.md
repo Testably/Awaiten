@@ -1140,14 +1140,18 @@ namespace CoffeeShop.New { public interface IMenu; }
 
 namespace CoffeeShop
 {
+    public interface IShopService;
+
     // No CoffeeShop.IMenu exists to win the own-namespace tiebreak, so Menu registers under both.
-    public sealed class Menu : Old.IMenu, New.IMenu;
+    public sealed class Menu : IShopService, Old.IMenu, New.IMenu;
 
     [Container]
-    [Scan(As = ScanAs.MatchingInterface, NamePatterns = ["Menu"])]
+    [Scan<IShopService>(As = ScanAs.MatchingInterface)]
     public static partial class Shop;
 }
 ```
+
+Reported only when several interfaces actually register (an inaccessible candidate is dropped, which [AWT188](#awt188) covers when the match registers nothing) and only for a marker scan: a markerless `[Scan]` registers the ambiguous match silently, like the other per-match scan warnings.
 
 ### AWT188
 

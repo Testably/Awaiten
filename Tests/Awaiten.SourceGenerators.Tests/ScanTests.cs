@@ -846,12 +846,12 @@ public class ScanTests
 		                                       }
 		                                       """);
 
-		await That(result.Diagnostics).Contains("*AWT187*").AsWildcard()
-			.Because("the unresolved tie is surfaced while both interfaces still register");
+		await That(result.Diagnostics).IsEmpty()
+			.Because("a markerless match is never warned, so the unresolved tie registers silently (a marker scan reports AWT187)");
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
 		// With no own-namespace candidate to prefer, the convention is ambiguous; every same-named implemented
-		// interface registers, deterministically ordered, and AWT187 reports the ambiguity.
+		// interface registers, deterministically ordered.
 		await That(source).Contains("typeof(global::A.IWorker)")
 			.And.Contains("typeof(global::B.IWorker)");
 	}

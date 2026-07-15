@@ -124,7 +124,7 @@ partial class AwaitenGenerator
 			}
 
 			registered++;
-			produced += RegisterScanMatch(type, ScanContracts(type, match, marker, openMarker, markerDefinition, compilation, diagnostics), markerDisplay, match, result, diagnostics);
+			produced += RegisterScanMatch(type, ScanContracts(type, match, marker, openMarker, markerDefinition, compilation), markerDisplay, match, result, diagnostics);
 		}
 
 		ReportScanFilterDiagnostics(filters, hits, new ScanFilterCounts(assignable, registered, produced), assemblies, markerDisplay, location, diagnostics);
@@ -133,12 +133,12 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     The interfaces one match registers under, unioned across the requested exposures: the marker interfaces
 	///     when <c>Marker</c> is set (never for a markerless scan, which names none) and the <c>I</c> + name
-	///     convention interface when <c>MatchingInterface</c> is set. Reports AWT187 when the convention selects
-	///     several same-named interfaces, since each of them registers. An interface the generated code could not
+	///     convention interface when <c>MatchingInterface</c> is set. An interface the generated code could not
 	///     reference (internal to another assembly) is dropped, like an inaccessible candidate type, and returned
 	///     alongside so an exposure emptied by the drop reports AWT188 instead of a "not implemented" warning.
-	///     Deduplicated by fully-qualified name, since a combined <c>Marker | MatchingInterface</c> can select the
-	///     same interface twice.
+	///     <see cref="ScanContractSet.AmbiguousMatching" /> flags several accessible same-named convention
+	///     interfaces, which all register (the caller reports AWT187). Deduplicated by fully-qualified name,
+	///     since a combined <c>Marker | MatchingInterface</c> can select the same interface twice.
 	/// </summary>
 	private static ScanContractSet ScanContracts(
 		INamedTypeSymbol type,
@@ -146,8 +146,7 @@ partial class AwaitenGenerator
 		INamedTypeSymbol? marker,
 		bool openMarker,
 		INamedTypeSymbol? markerDefinition,
-		Compilation compilation,
-		List<DiagnosticInfo> diagnostics)
+		Compilation compilation)
 	{
 		List<INamedTypeSymbol> contracts = new();
 		if (match.RegisterMarker && marker is not null)
@@ -155,20 +154,10 @@ partial class AwaitenGenerator
 			contracts.AddRange(openMarker ? ClosedMarkerInterfaces(type, markerDefinition!) : MarkerInterfaces(type, marker, compilation));
 		}
 
+		List<INamedTypeSymbol> matching = new();
 		if (match.RegisterMatchingInterface)
 		{
-			List<INamedTypeSymbol> matching = MatchingInterfaces(type);
-
-			// AWT187: several same-named convention interfaces and no own-namespace winner to decide the tie, so
-			// the match registers under each of them — usually one is an incidental same-named interface.
-			if (matching.Count > 1)
-			{
-				diagnostics.Add(new DiagnosticInfo(
-					Diagnostics.ScanAmbiguousMatchingInterfaces,
-					LocationInfo.From(match.Location),
-					new EquatableArray<string>([Display(type.ToDisplayString(FullyQualified)), Display("I" + type.Name),])));
-			}
-
+			matching = MatchingInterfaces(type);
 			contracts.AddRange(matching);
 		}
 
@@ -186,15 +175,20 @@ partial class AwaitenGenerator
 
 		HashSet<string> seen = new(StringComparer.Ordinal);
 		contracts.RemoveAll(contract => !seen.Add(contract.ToDisplayString(FullyQualified)));
-		return new ScanContractSet(contracts, inaccessible);
+
+		// The convention tie is ambiguous only when several same-named interfaces actually register: one dropped
+		// as inaccessible above cannot make the registration ambiguous (it is reported separately, as AWT188).
+		bool ambiguousMatching = matching.Count(contract => compilation.IsSymbolAccessibleWithin(contract, compilation.Assembly)) > 1;
+		return new ScanContractSet(contracts, inaccessible, ambiguousMatching);
 	}
 
 	/// <summary>
-	///     The outcome of contract selection for one scan match: the interfaces it registers under, and the
+	///     The outcome of contract selection for one scan match: the interfaces it registers under, the
 	///     interfaces an exposure selected but had to drop because the generated code cannot reference them
-	///     (they feed AWT188 when the match ends up contributing nothing).
+	///     (they feed AWT188 when the match ends up contributing nothing), and whether several same-named
+	///     convention interfaces register because no own-namespace winner decided the tie (AWT187).
 	/// </summary>
-	private sealed record ScanContractSet(List<INamedTypeSymbol> Contracts, List<INamedTypeSymbol> Inaccessible);
+	private sealed record ScanContractSet(List<INamedTypeSymbol> Contracts, List<INamedTypeSymbol> Inaccessible, bool AmbiguousMatching);
 
 	/// <summary>
 	///     The reason a markerless <c>[Scan]</c> is invalid (an AWT183 fragment), or <see langword="null" /> when it
@@ -251,8 +245,9 @@ partial class AwaitenGenerator
 	///     reports AWT188 per interface that was found but dropped as inaccessible, else AWT139 (<c>Marker</c>
 	///     requested but no assignable interface, usual cause: a base-type marker) or AWT182
 	///     (<c>MatchingInterface</c> requested but no <c>I</c> + name interface). Setting the <c>Self</c> flag
-	///     exempts all three, since the self registration still covers the type. A markerless match is never
-	///     warned: not conforming to the convention is the normal case when scanning broadly.
+	///     exempts all three, since the self registration still covers the type. A match that registered under
+	///     several same-named convention interfaces (an unresolved tie) reports AWT187. A markerless match is
+	///     never warned: not conforming to the convention is the normal case when scanning broadly.
 	/// </summary>
 	private static int RegisterScanMatch(
 		INamedTypeSymbol type,
@@ -275,6 +270,17 @@ partial class AwaitenGenerator
 		{
 			result.Add(ScanRegistration(contract.ToDisplayString(FullyQualified), typeName, type, contract, match));
 			produced++;
+		}
+
+		// AWT187: no own-namespace winner decided the convention tie, so several same-named interfaces all
+		// registered above — usually one of them is an incidental same-named interface. Like the other per-match
+		// warnings, a markerless scan is exempt.
+		if (contracts.AmbiguousMatching && markerDisplay is not null)
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.ScanAmbiguousMatchingInterfaces,
+				LocationInfo.From(match.Location),
+				new EquatableArray<string>([Display(typeName), Display("I" + type.Name),])));
 		}
 
 		// The match contributed nothing: an interface exposure was requested but found no interface to register
@@ -1106,6 +1112,12 @@ partial class AwaitenGenerator
 				LocationInfo.From(registration.Location),
 				new EquatableArray<string>([DisplayInstance(registration.ImplementationType), reason,])));
 			raw.RemoveAll(r => r.IsScan && r.ImplementationType == registration.ImplementationType);
+
+			// The dropped match no longer registers under anything, so its queued ambiguity warning (AWT187)
+			// would contradict the AWT141 just reported. The other per-match warnings cannot co-occur with a
+			// drop: they only fire when the match produced no registration to prune.
+			diagnostics.RemoveAll(diagnostic => diagnostic.Descriptor == Diagnostics.ScanAmbiguousMatchingInterfaces
+			                                    && diagnostic.MessageArgs.AsArray()[0] == Display(registration.ImplementationType));
 			dropped = true;
 		}
 

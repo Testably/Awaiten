@@ -1285,11 +1285,13 @@ internal static class Diagnostics
 		isEnabledByDefault: true);
 
 	/// <summary>
-	///     A <c>[Scan(As = ScanAs.MatchingInterface)]</c> matched a type that implements several interfaces named
-	///     <c>I</c> + its own name (in different namespaces) and no own-namespace winner decides the tie, so the
-	///     match registers under each of them. Usually one of them is an incidental same-named interface: keep a
-	///     single convention interface, prefer one by declaring it in the type's namespace, or exclude the type
-	///     from the scan.
+	///     A <c>[Scan(As = ScanAs.MatchingInterface)]</c> matched a type that implements several accessible
+	///     interfaces named <c>I</c> + its own name (in different namespaces) and no own-namespace winner decides
+	///     the tie, so the match registers under each of them. Usually one of them is an incidental same-named
+	///     interface: keep a single convention interface, prefer one by declaring it in the type's namespace, or
+	///     exclude the type from the scan. Reported only when several interfaces actually register (an
+	///     inaccessible candidate is dropped and reported as AWT188 instead) and only for a marker scan, like
+	///     the other per-match scan warnings; a match later skipped as unconstructable (AWT141) is not reported.
 	/// </summary>
 	public static readonly DiagnosticDescriptor ScanAmbiguousMatchingInterfaces = new(
 		"AWT187",
