@@ -1128,6 +1128,48 @@ A `[Scan]`'s `As` resolved to no `ScanAs` flag, so it would register nothing (us
 public static partial class CoffeeShop;
 ```
 
+### AWT187
+
+:::warning[Warning]
+A `[Scan(As = ScanAs.MatchingInterface)]` matched a type implementing several same-named convention interfaces, so it registers under each of them.
+:::
+
+```csharp
+namespace CoffeeShop.Old { public interface IMenu; }
+namespace CoffeeShop.New { public interface IMenu; }
+
+namespace CoffeeShop
+{
+    public interface IShopService;
+
+    // No CoffeeShop.IMenu exists to win the own-namespace tiebreak, so Menu registers under both.
+    public sealed class Menu : IShopService, Old.IMenu, New.IMenu;
+
+    [Container]
+    [Scan<IShopService>(As = ScanAs.MatchingInterface)]
+    public static partial class Shop;
+}
+```
+
+Reported only when several interfaces actually register (an inaccessible candidate is dropped, which [AWT188](#awt188) covers when the match registers nothing) and only for a marker scan: a markerless `[Scan]` registers the ambiguous match silently, like the other per-match scan warnings.
+
+### AWT188
+
+:::warning[Warning]
+A scan match's only exposure interface is inaccessible to the generated container, so the match is not registered.
+:::
+
+```csharp
+// In a referenced assembly: the convention interface is internal.
+internal interface IRoaster;
+public sealed class Roaster : IRoaster, IEquipment;
+
+// Registering Roaster under IRoaster would not compile in the container's assembly.
+[Container]
+[Scan<IEquipment>(As = ScanAs.MatchingInterface, InAssembliesOf = [typeof(IEquipment)])]
+public static partial class CoffeeShop;
+```
+
 ## Modules
 
 ### AWT149

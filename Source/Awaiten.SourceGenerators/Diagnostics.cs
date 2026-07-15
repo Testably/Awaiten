@@ -1283,4 +1283,36 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A <c>[Scan(As = ScanAs.MatchingInterface)]</c> matched a type that implements several accessible
+	///     interfaces named <c>I</c> + its own name (in different namespaces) and no own-namespace winner decides
+	///     the tie, so the match registers under each of them. Usually one of them is an incidental same-named
+	///     interface: keep a single convention interface, prefer one by declaring it in the type's namespace, or
+	///     exclude the type from the scan. Reported only when several interfaces actually register (an
+	///     inaccessible candidate is dropped and reported as AWT188 instead) and only for a marker scan, like
+	///     the other per-match scan warnings; a match later skipped as unconstructable (AWT141) is not reported.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ScanAmbiguousMatchingInterfaces = new(
+		"AWT187",
+		"Scan matched several same-named interfaces",
+		"'{0}' implements multiple interfaces named '{1}', so it is registered under each of them; keep a single convention interface or exclude the type from the scan",
+		"Awaiten",
+		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A scan exposure selected only interfaces the generated container cannot reference: the match implements
+	///     its convention (or marker) interface, but that interface is internal to another assembly, so registering
+	///     under it would not compile and the match contributes no registration. Distinct from AWT139/AWT182, which
+	///     say the interface is not implemented at all. Widen the interface's accessibility (or grant
+	///     <c>InternalsVisibleTo</c>), or add the <c>ScanAs.Self</c> flag to keep the self registration.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ScanInterfaceInaccessible = new(
+		"AWT188",
+		"Scan matched a type whose interface is inaccessible",
+		"'{0}' matched the scan, but its interface '{1}' is not accessible to the generated container, so it is not registered; widen the interface's accessibility or add the ScanAs.Self flag",
+		"Awaiten",
+		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true);
 }
