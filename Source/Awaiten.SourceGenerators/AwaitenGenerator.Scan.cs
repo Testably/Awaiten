@@ -86,7 +86,7 @@ partial class AwaitenGenerator
 
 		// AWT185: As resolved to no recognized ScanAs flag (e.g. `Self & Marker`, or an out-of-range cast), so the
 		// scan would expose nothing.
-		if ((match.Exposure & (ScanExposure.Self | ScanExposure.Marker | ScanExposure.MatchingInterface)) == 0)
+		if ((match.Exposure & (ScanExposures.Self | ScanExposures.Marker | ScanExposures.MatchingInterface)) == 0)
 		{
 			diagnostics.Add(new DiagnosticInfo(Diagnostics.ScanExposesNothing, LocationInfo.From(location), new EquatableArray<string>([])));
 			return;
@@ -102,7 +102,14 @@ partial class AwaitenGenerator
 
 		bool openMarker = marker is not null && IsOpenGenericMarker(marker);
 		INamedTypeSymbol? markerDefinition = marker?.OriginalDefinition;
-		string markerDisplay = marker is null ? "(markerless)" : (openMarker ? markerDefinition! : marker).ToDisplayString(FullyQualified);
+
+		// Null for a markerless scan; otherwise the marker's display string. The null both feeds the marker-only
+		// diagnostics and tells ReportScanFilterDiagnostics which "nothing happened" signal to use.
+		string? markerDisplay = null;
+		if (marker is not null)
+		{
+			markerDisplay = (openMarker ? markerDefinition! : marker).ToDisplayString(FullyQualified);
+		}
 
 		ScanFilterHits hits = new();
 		int assignable = 0;
@@ -120,7 +127,7 @@ partial class AwaitenGenerator
 			produced += RegisterScanMatch(type, ScanContracts(type, match, marker, openMarker, markerDefinition, compilation), markerDisplay, match, marker is not null, result, diagnostics);
 		}
 
-		ReportScanFilterDiagnostics(filters, hits, new ScanFilterCounts(assignable, registered, produced), assemblies, markerDisplay, location, marker is null, diagnostics);
+		ReportScanFilterDiagnostics(filters, hits, new ScanFilterCounts(assignable, registered, produced), assemblies, markerDisplay, location, diagnostics);
 	}
 
 	/// <summary>
@@ -161,9 +168,9 @@ partial class AwaitenGenerator
 	///     axis are OR-combined, a single match-everything pattern (like <c>*</c>) leaves the whole axis unbounded
 	///     even alongside narrower patterns. An <c>InAssembliesOf</c> also scopes; an exclude-only filter does not.
 	/// </summary>
-	private static string? MarkerlessScanError(ScanExposure exposure, ScanFilters filters, List<IAssemblySymbol>? assemblies)
+	private static string? MarkerlessScanError(ScanExposures exposure, ScanFilters filters, List<IAssemblySymbol>? assemblies)
 	{
-		if ((exposure & ScanExposure.Marker) != 0)
+		if ((exposure & ScanExposures.Marker) != 0)
 		{
 			return "includes the Marker exposure, which registers under a marker it does not name; use Self and/or MatchingInterface, or name a marker";
 		}
@@ -189,7 +196,7 @@ partial class AwaitenGenerator
 	private static int RegisterScanMatch(
 		INamedTypeSymbol type,
 		List<INamedTypeSymbol> contracts,
-		string markerDisplay,
+		string? markerDisplay,
 		ScanMatch match,
 		bool markerAnchored,
 		List<RawRegistration> result,
@@ -220,7 +227,7 @@ partial class AwaitenGenerator
 				diagnostics.Add(new DiagnosticInfo(
 					Diagnostics.ScanNoImplementedInterfaces,
 					LocationInfo.From(match.Location),
-					new EquatableArray<string>([Display(typeName), Display(markerDisplay),])));
+					new EquatableArray<string>([Display(typeName), Display(markerDisplay!),])));
 			}
 			else if (match.RegisterMatchingInterface)
 			{
@@ -278,13 +285,13 @@ partial class AwaitenGenerator
 	///     the attribute location for diagnostics, and whether an unconstructable match is skipped with a warning
 	///     (<c>SkipUnconstructable</c>) instead of erroring. Bundled so the per-match registration takes one handle.
 	/// </summary>
-	private sealed record ScanMatch(ScanExposure Exposure, Lifetime Lifetime, Location? Location, bool SkipUnconstructable)
+	private sealed record ScanMatch(ScanExposures Exposure, Lifetime Lifetime, Location? Location, bool SkipUnconstructable)
 	{
-		public bool RegisterSelf => (Exposure & ScanExposure.Self) != 0;
+		public bool RegisterSelf => (Exposure & ScanExposures.Self) != 0;
 
-		public bool RegisterMarker => (Exposure & ScanExposure.Marker) != 0;
+		public bool RegisterMarker => (Exposure & ScanExposures.Marker) != 0;
 
-		public bool RegisterMatchingInterface => (Exposure & ScanExposure.MatchingInterface) != 0;
+		public bool RegisterMatchingInterface => (Exposure & ScanExposures.MatchingInterface) != 0;
 	}
 
 	/// <summary>
@@ -538,19 +545,19 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     The exposure named on a <c>[Scan]</c> (<c>As = ScanAs.X</c>); its underlying int lines up with the
-	///     generator's <c>ScanExposure</c> enum. Defaults to <c>Self</c> when unset, matching the attribute default.
+	///     generator's <c>ScanExposures</c> enum. Defaults to <c>Self</c> when unset, matching the attribute default.
 	/// </summary>
-	private static ScanExposure ScanExposureOf(AttributeData attribute)
+	private static ScanExposures ScanExposureOf(AttributeData attribute)
 	{
 		foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
 		{
 			if (argument.Key == "As" && argument.Value.Value is int value)
 			{
-				return (ScanExposure)value;
+				return (ScanExposures)value;
 			}
 		}
 
-		return ScanExposure.Self;
+		return ScanExposures.Self;
 	}
 
 	/// <summary>
@@ -701,22 +708,22 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     Reports the filter-related scan diagnostics after the candidate loop. For a marker scan: AWT138 (marker
-	///     matched nothing in the own assembly) or AWT172 (the filters removed every marker match). For a markerless
-	///     scan: AWT184 when it contributed no registration at all. In both cases AWT173 per exclusion that never
-	///     applied, and AWT174 per include pattern that matches every candidate.
+	///     Reports the filter-related scan diagnostics after the candidate loop. For a marker scan (non-null
+	///     <paramref name="markerDisplay" />): AWT138 (marker matched nothing in the own assembly) or AWT172 (the
+	///     filters removed every marker match). For a markerless scan (null <paramref name="markerDisplay" />):
+	///     AWT184 when it contributed no registration at all. In both cases AWT173 per exclusion that never applied,
+	///     and AWT174 per include pattern that matches every candidate.
 	/// </summary>
 	private static void ReportScanFilterDiagnostics(
 		ScanFilters filters,
 		ScanFilterHits hits,
 		ScanFilterCounts counts,
 		List<IAssemblySymbol>? assemblies,
-		string markerDisplay,
+		string? markerDisplay,
 		Location? location,
-		bool markerless,
 		List<DiagnosticInfo> diagnostics)
 	{
-		if (markerless)
+		if (markerDisplay is null)
 		{
 			// A markerless scan does not warn per non-conforming type (that is the norm when scanning broadly), so
 			// its only "nothing happened" signal is that no registration was produced across every candidate.

@@ -8,7 +8,7 @@ namespace Awaiten.SourceGenerators.Entities;
 ///     independent flags and combine.
 /// </summary>
 [Flags]
-internal enum ScanExposure
+internal enum ScanExposures
 {
 	Self = 1,
 	Marker = 2,

@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Awaiten;
 
@@ -11,10 +12,12 @@ namespace Awaiten;
 /// </summary>
 /// <remarks>
 ///     The generator reads these as their underlying int off the attribute's <c>TypedConstant</c> and casts
-///     to its internal <c>ScanExposure</c> enum, so the bit values are load-bearing: keep them aligned with that
+///     to its internal <c>ScanExposures</c> enum, so the bit values are load-bearing: keep them aligned with that
 ///     mirror. A value with no bit set exposes nothing and is reported (AWT185).
 /// </remarks>
 [Flags]
+[SuppressMessage("csharpsquid", "S2342:Enumeration types should comply with a naming convention",
+	Justification = "ScanAs reads as a fluent fragment at the use site (As = ScanAs.Marker); a plural noun would harm the DSL.")]
 public enum ScanAs
 {
 	/// <summary>Register each match as its own concrete type (the default).</summary>
