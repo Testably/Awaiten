@@ -104,7 +104,7 @@ public sealed class LatteRecipe([FromKey(MilkKind.Oat)] IMilk milk);
 :::
 
 :::caution[When not to reach for this]
-Prefer distinct abstractions, or a [composite](./composites), over one service type selected by a key. A key is invisible to the type system, so nothing checks that a consumer asks for a key that exists. Reach for keys (and `WhenInjectedInto`) only when the implementations really are interchangeable variants of one abstraction, like the milk fridge above. Resolving the ambiguity with a key can hide a design that wants to be split into separate types, see [Principles](../principles#when-power-becomes-a-smell).
+Prefer distinct abstractions, or a [composite](./composites), over one service type selected by a key. A key is invisible to the type system, so nothing checks that a consumer asks for a key that exists. Reach for keys (and `WhenInjectedInto`) only when the implementations really are interchangeable variants of one abstraction, like the milk fridge above. Resolving the ambiguity with a key can hide a design that wants to be split into separate types, see [Design principles](../design-principles#when-power-becomes-a-smell).
 :::
 
 ## Want the whole set?

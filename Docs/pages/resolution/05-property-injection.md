@@ -73,7 +73,7 @@ public sealed class Handler<T>
 :::
 
 :::caution[When not to reach for this]
-Prefer constructor injection. A constructor parameter states a dependency plainly and cannot be forgotten; a property can be left unset. Reach for property injection only for a genuinely optional dependency with a sensible local default, or to break a cycle two constructors cannot. If you are using it to shorten a long constructor, that constructor is telling you the class does too much, see [Principles](../principles#when-power-becomes-a-smell).
+Prefer constructor injection. A constructor parameter states a dependency plainly and cannot be forgotten; a property can be left unset. Reach for property injection only for a genuinely optional dependency with a sensible local default, or to break a cycle two constructors cannot. If you are using it to shorten a long constructor, that constructor is telling you the class does too much, see [Design principles](../design-principles#when-power-becomes-a-smell).
 :::
 
 ## Where to go next

@@ -78,7 +78,7 @@ An explicit registration of a scanned type wins over the scan, so you can specia
 *Note: a scan that matches nothing is a warning ([AWT138](../diagnostics#awt138)), not an error, so an empty menu does not break the build.*
 
 :::caution[When not to reach for this]
-Prefer explicit registrations. A scan trades away the property that makes the composition root useful: the whole graph visible in one place. Reach for a scan only for a large, uniform family that grows on its own, like message handlers, validators, or plug-ins, where listing each one adds churn without adding clarity. For a handful of services, spell them out, see [Principles](../principles#when-power-becomes-a-smell).
+Prefer explicit registrations. A scan trades away the property that makes the composition root useful: the whole graph visible in one place. Reach for a scan only for a large, uniform family that grows on its own, like message handlers, validators, or plug-ins, where listing each one adds churn without adding clarity. For a handful of services, spell them out, see [Design principles](../design-principles#when-power-becomes-a-smell).
 :::
 
 ## Where to go next
