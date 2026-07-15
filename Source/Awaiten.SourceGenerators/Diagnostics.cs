@@ -1261,4 +1261,26 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     An <c>Owned&lt;T&gt;</c>-family relationship (a bare <c>Owned&lt;T&gt;</c>, <c>Func&lt;…, Owned&lt;T&gt;&gt;</c>,
+	///     <c>Task&lt;Owned&lt;T&gt;&gt;</c> or <c>Func&lt;…, Task&lt;Owned&lt;T&gt;&gt;&gt;</c>) targets a service
+	///     produced by a requesting-type factory (a <c>Factory =</c> method with a <c>[RequestingType]</c> parameter).
+	///     Every other <c>Owned&lt;T&gt;</c> form resolves its target into a dedicated throwaway child scope and hands
+	///     back a disposal handle, but a requesting-type factory is called per consumer and decides its own disposal,
+	///     so it has no owner scope to build into. The combination is unsupported: without this diagnostic the
+	///     generator would emit an <c>Owned&lt;T&gt;</c>-typed slot filled with a bare <c>T</c>, a raw <c>CS1503</c>
+	///     pointing into generated source. The <c>Lazy&lt;Owned&lt;T&gt;&gt;</c> / <c>Lazy&lt;Task&lt;Owned&lt;T&gt;&gt;&gt;</c>
+	///     forms never reach this point: <c>Lazy</c> does not unwrap <c>Owned&lt;T&gt;</c>, so they are the more
+	///     specific <see cref="OwnedThroughLazy">AWT121</see> for every service. Mirrors AWT163, which rejects the
+	///     analogous <c>[Arg]</c>-plus-<c>[RequestingType]</c> combination. Reported on both constructor parameters
+	///     and <c>[Inject]</c> members.
+	/// </summary>
+	public static readonly DiagnosticDescriptor OwnedOverRequestingTypeFactory = new(
+		"AWT186",
+		"Owned<T> over a requesting-type factory",
+		"'{0}' consumes '{1}' through an Owned<T> relationship, but '{1}' is produced by a requesting-type factory, which has no owner scope; Owned<T> (and its Func/Task forms) is not supported here - consume '{1}' directly, or through Func<T> or Lazy<T>",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

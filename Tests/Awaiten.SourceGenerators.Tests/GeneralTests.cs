@@ -2072,6 +2072,225 @@ public class GeneralTests
 	}
 
 	[Fact]
+	public async Task RequestingType_WithABareOwned_ReportsAwt186()
+	{
+		GeneratorResult result = Generator.Run("""
+			using System;
+			using Awaiten;
+
+			namespace MyCode;
+
+			public interface ILogger { }
+			public sealed class Logger : ILogger, IDisposable { public Logger(string c) { } public void Dispose() { } }
+			public sealed class Alpha { public Alpha(Owned<ILogger> logger) { } }
+
+			[Container]
+			[Transient<ILogger>(Factory = nameof(CreateLogger))]
+			[Transient<Alpha>]
+			public static partial class MyContainer
+			{
+				private static ILogger CreateLogger([RequestingType] Type? t) => new Logger(t?.FullName ?? "<root>");
+			}
+			""");
+
+		string message = result.Diagnostics.Single(d => d.Contains("AWT186"));
+		await That(message).Contains("MyCode.Alpha")
+			.Because("the message names the consumer of the offending Owned<T> relationship");
+		await That(message).Contains("MyCode.ILogger")
+			.Because("the message names the factory-produced target, pointing at both ends of the relationship");
+	}
+
+	[Fact]
+	public async Task RequestingType_WithAFuncOwned_ReportsAwt186()
+	{
+		GeneratorResult result = Generator.Run("""
+			using System;
+			using Awaiten;
+
+			namespace MyCode;
+
+			public interface ILogger { }
+			public sealed class Logger : ILogger, IDisposable { public Logger(string c) { } public void Dispose() { } }
+			public sealed class Alpha { public Alpha(Func<Owned<ILogger>> logger) { } }
+
+			[Container]
+			[Transient<ILogger>(Factory = nameof(CreateLogger))]
+			[Transient<Alpha>]
+			public static partial class MyContainer
+			{
+				private static ILogger CreateLogger([RequestingType] Type? t) => new Logger(t?.FullName ?? "<root>");
+			}
+			""");
+
+		await That(result.Diagnostics.Any(d => d.Contains("AWT186"))).IsTrue()
+			.Because("a Func<Owned<T>> produces the owned handle per call, but the requesting-type factory has no owner scope to build it into");
+	}
+
+	[Fact]
+	public async Task RequestingType_WithATaskOwned_ReportsAwt186()
+	{
+		GeneratorResult result = Generator.Run("""
+			using System;
+			using System.Threading.Tasks;
+			using Awaiten;
+
+			namespace MyCode;
+
+			public interface ILogger { }
+			public sealed class Logger : ILogger, IDisposable { public Logger(string c) { } public void Dispose() { } }
+			public sealed class Alpha { public Alpha(Task<Owned<ILogger>> logger) { } }
+
+			[Container]
+			[Transient<ILogger>(Factory = nameof(CreateLogger))]
+			[Transient<Alpha>]
+			public static partial class MyContainer
+			{
+				private static ILogger CreateLogger([RequestingType] Type? t) => new Logger(t?.FullName ?? "<root>");
+			}
+			""");
+
+		await That(result.Diagnostics.Any(d => d.Contains("AWT186"))).IsTrue()
+			.Because("a Task<Owned<T>> still produces the owned handle, which the requesting-type factory has no owner scope to build into");
+	}
+
+	[Fact]
+	public async Task RequestingType_WithAFuncTaskOwned_ReportsAwt186()
+	{
+		GeneratorResult result = Generator.Run("""
+			using System;
+			using System.Threading.Tasks;
+			using Awaiten;
+
+			namespace MyCode;
+
+			public interface ILogger { }
+			public sealed class Logger : ILogger, IDisposable { public Logger(string c) { } public void Dispose() { } }
+			public sealed class Alpha { public Alpha(Func<Task<Owned<ILogger>>> logger) { } }
+
+			[Container]
+			[Transient<ILogger>(Factory = nameof(CreateLogger))]
+			[Transient<Alpha>]
+			public static partial class MyContainer
+			{
+				private static ILogger CreateLogger([RequestingType] Type? t) => new Logger(t?.FullName ?? "<root>");
+			}
+			""");
+
+		await That(result.Diagnostics.Any(d => d.Contains("AWT186"))).IsTrue()
+			.Because("a Func<Task<Owned<T>>> still produces the owned handle, which the requesting-type factory has no owner scope to build into");
+	}
+
+	[Fact]
+	public async Task RequestingType_WithALazyTaskOwned_ReportsAwt121NotAwt186()
+	{
+		GeneratorResult result = Generator.Run("""
+			using System;
+			using System.Threading.Tasks;
+			using Awaiten;
+
+			namespace MyCode;
+
+			public interface ILogger { }
+			public sealed class Logger : ILogger, IDisposable { public Logger(string c) { } public void Dispose() { } }
+			public sealed class Alpha { public Alpha(Lazy<Task<Owned<ILogger>>> logger) { } }
+
+			[Container]
+			[Transient<ILogger>(Factory = nameof(CreateLogger))]
+			[Transient<Alpha>]
+			public static partial class MyContainer
+			{
+				private static ILogger CreateLogger([RequestingType] Type? t) => new Logger(t?.FullName ?? "<root>");
+			}
+			""");
+
+		await That(result.Diagnostics.Any(d => d.Contains("AWT121"))).IsTrue()
+			.Because("Lazy does not unwrap Owned<T>, so the more specific AWT121 (Owned-through-Lazy) pre-empts this shape");
+		await That(result.Diagnostics.Any(d => d.Contains("AWT186"))).IsFalse()
+			.Because("the Lazy<Task<Owned<T>>> form never reaches the owned emit AWT186 guards");
+	}
+
+	[Fact]
+	public async Task RequestingType_WithABareLazyOwned_ReportsAwt121NotAwt186()
+	{
+		GeneratorResult result = Generator.Run("""
+			using System;
+			using Awaiten;
+
+			namespace MyCode;
+
+			public interface ILogger { }
+			public sealed class Logger : ILogger, IDisposable { public Logger(string c) { } public void Dispose() { } }
+			public sealed class Alpha { public Alpha(Lazy<Owned<ILogger>> logger) { } }
+
+			[Container]
+			[Transient<ILogger>(Factory = nameof(CreateLogger))]
+			[Transient<Alpha>]
+			public static partial class MyContainer
+			{
+				private static ILogger CreateLogger([RequestingType] Type? t) => new Logger(t?.FullName ?? "<root>");
+			}
+			""");
+
+		await That(result.Diagnostics.Any(d => d.Contains("AWT121"))).IsTrue()
+			.Because("Lazy never unwraps the Owned<T> handle, so the unregistered Owned<T> stays the service and surfaces AWT121");
+		await That(result.Diagnostics.Any(d => d.Contains("AWT186"))).IsFalse()
+			.Because("the bare Lazy<Owned<T>> form never reaches AWT186's owned emit, exactly like Lazy<Task<Owned<T>>>");
+	}
+
+	[Fact]
+	public async Task RequestingType_WithAnInjectedOwnedMember_ReportsAwt186()
+	{
+		GeneratorResult result = Generator.Run("""
+			using System;
+			using Awaiten;
+
+			namespace MyCode;
+
+			public interface ILogger { }
+			public sealed class Logger : ILogger, IDisposable { public Logger(string c) { } public void Dispose() { } }
+			public sealed class Alpha { [Inject] public Owned<ILogger> Logger { get; set; } }
+
+			[Container]
+			[Transient<ILogger>(Factory = nameof(CreateLogger))]
+			[Transient<Alpha>]
+			public static partial class MyContainer
+			{
+				private static ILogger CreateLogger([RequestingType] Type? t) => new Logger(t?.FullName ?? "<root>");
+			}
+			""");
+
+		await That(result.Diagnostics.Any(d => d.Contains("AWT186"))).IsTrue()
+			.Because("the detection pass walks injected [Inject] members like constructor parameters");
+	}
+
+	[Fact]
+	public async Task RequestingType_WithFuncAndLazyRelationships_DoesNotReportAwt186()
+	{
+		GeneratorResult result = Generator.Run("""
+			#nullable enable
+			using System;
+			using Awaiten;
+
+			namespace MyCode;
+
+			public interface ILogger { }
+			public sealed class Logger : ILogger { public Logger(string c) { } }
+			public sealed class Alpha { public Alpha(ILogger direct, Func<ILogger> factory, Lazy<ILogger> lazy) { } }
+
+			[Container]
+			[Transient<ILogger>(Factory = nameof(CreateLogger))]
+			[Transient<Alpha>]
+			public static partial class MyContainer
+			{
+				private static ILogger CreateLogger([RequestingType] Type? t) => new Logger(t?.FullName ?? "<root>");
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty()
+			.Because("the direct, Func<T> and Lazy<T> forms are the supported way to consume a requesting-type factory, so AWT186 (and every other diagnostic) stays silent");
+	}
+
+	[Fact]
 	public async Task AsyncFactoryRequestingType_EmitsAnAwaitingResolverThatTakesTheRequestingType()
 	{
 		GeneratorResult result = Generator.Run("""
