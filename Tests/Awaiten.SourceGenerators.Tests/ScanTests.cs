@@ -1,3 +1,5 @@
+using Awaiten;
+
 namespace Awaiten.SourceGenerators.Tests;
 
 /// <summary>
@@ -809,6 +811,21 @@ public class ScanTests
 	}
 
 	[Fact]
+	public async Task ScanAs_IsMirroredBitForBitByTheGeneratorsScanExposures()
+	{
+		// The generator reads ScanAs as its underlying int off the attribute's TypedConstant and casts it to its
+		// internal ScanExposures mirror, so the bit values must stay aligned; nothing else links the two enums.
+		Type exposures = typeof(AwaitenGenerator).Assembly.GetType("Awaiten.SourceGenerators.Entities.ScanExposures")!;
+
+		foreach (ScanAs flag in Enum.GetValues<ScanAs>())
+		{
+			object mirrored = Enum.Parse(exposures, flag.ToString());
+			await That(Convert.ToInt32(mirrored)).IsEqualTo((int)flag)
+				.Because($"the generator casts the ScanAs int to ScanExposures, so {flag} must keep its bit value");
+		}
+	}
+
+	[Fact]
 	public async Task ScanAsMatchingInterface_RegistersUnderEverySameNamedInterfaceWhenNoneIsInItsNamespace()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -829,11 +846,12 @@ public class ScanTests
 		                                       }
 		                                       """);
 
-		await That(result.Diagnostics).IsEmpty();
+		await That(result.Diagnostics).Contains("*AWT187*").AsWildcard()
+			.Because("the unresolved tie is surfaced while both interfaces still register");
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
 		// With no own-namespace candidate to prefer, the convention is ambiguous; every same-named implemented
-		// interface registers, deterministically ordered.
+		// interface registers, deterministically ordered, and AWT187 reports the ambiguity.
 		await That(source).Contains("typeof(global::A.IWorker)")
 			.And.Contains("typeof(global::B.IWorker)");
 	}

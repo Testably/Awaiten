@@ -88,3 +88,5 @@
  AWT184  | Awaiten   | Warning  | A markerless [Scan] matched candidates but registered none of them
  AWT185  | Awaiten   | Error    | A [Scan]'s As resolved to no ScanAs flag, so it would register nothing
  AWT186  | Awaiten   | Error    | An Owned<T> relationship (or its Func/Task forms) targets a service produced by a requesting-type factory, which has no owner scope
+ AWT187  | Awaiten   | Warning  | A [Scan(As = ScanAs.MatchingInterface)] matched a type implementing several same-named convention interfaces, so it registers under each
+ AWT188  | Awaiten   | Warning  | A scan match's only exposure interface is inaccessible to the generated container, so the match is not registered
