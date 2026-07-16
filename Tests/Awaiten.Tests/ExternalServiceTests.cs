@@ -45,12 +45,26 @@ public partial class ExternalServiceTests
 		public IClock Clock { get; }
 	}
 
+	public sealed class HookReporter
+	{
+		// No Awaiten registration for IClock: the activation hook's IClock parameter routes externally too.
+		public IClock? Clock { get; set; }
+	}
+
 	[Container]
 	[ImportService<IClock>]
 	[Transient<Reporter>]
 	[Transient<InjectedReporter>]
 	[Transient<KeyedReporter>]
 	public static partial class ExternalContainer;
+
+	[Container]
+	[ImportService<IClock>]
+	[Singleton<HookReporter>(OnActivated = nameof(ApplyClock))]
+	public static partial class HookExternalContainer
+	{
+		private static void ApplyClock(HookReporter reporter, IClock clock) => reporter.Clock = clock;
+	}
 
 	private sealed class ClockResolver : IExternalResolver
 	{
@@ -120,5 +134,27 @@ public partial class ExternalServiceTests
 			.Because("an unkeyed [ImportService<IClock>] consumer advertises the external dependency")
 			.And.Contains(new AwaitenExternalDependency(typeof(IClock), "utc"))
 			.Because("the keyed consumer advertises the forwarded key");
+	}
+
+	[Fact]
+	public async Task ImportService_LifecycleHookParameter_ResolvesThroughTheExternalResolver()
+	{
+		using HookExternalContainer.Root container = new();
+		((IExternalResolverHost)container).ExternalResolver = new ClockResolver();
+
+		HookReporter reporter = container.Resolve<HookReporter>();
+
+		await That(reporter.Clock).Is<FixedClock>()
+			.Because("a lifecycle hook parameter of an [ImportService<T>] type is drawn from the external resolver");
+	}
+
+	[Fact]
+	public async Task ImportService_ConsumedOnlyByAHookParameter_AdvertisesTheExternalDependency()
+	{
+		using HookExternalContainer.Root container = new();
+
+		await That(((IAwaitenContainerMetadata)container).ExternalDependencies)
+			.Contains(new AwaitenExternalDependency(typeof(IClock)))
+			.Because("an [ImportService<T>] reached only through a lifecycle hook parameter is still advertised and driven onto the external surface");
 	}
 }

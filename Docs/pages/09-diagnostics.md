@@ -448,6 +448,57 @@ public static partial class CoffeeShop
 }
 ```
 
+### AWT189
+
+:::danger[Error]
+A lifecycle hook parameter (after the instance) is marked `[Arg]`, but a hook resolves its parameters from the graph.
+:::
+
+```csharp
+[Container]
+[Singleton<EspressoMachine>(OnActivated = nameof(Calibrate))]
+public static partial class CoffeeShop
+{
+    private static void Calibrate(EspressoMachine machine, [Arg] int count) { }   // no Func<…> call site supplies an [Arg]
+}
+```
+
+### AWT190
+
+:::danger[Error]
+A lifecycle hook (`OnActivated` / `OnRelease`) names an overloaded method, so the container cannot choose which one to call.
+:::
+
+The container reaches a hook by simple name, so two accepting overloads leave the choice (and the graph dependencies the extra parameters resolve) order-dependent. Give the hook a unique name, exactly as a factory method must be unambiguous.
+
+```csharp
+[Container]
+[Singleton<EspressoMachine>(OnActivated = nameof(Calibrate))]
+public static partial class CoffeeShop
+{
+    private static void Calibrate(EspressoMachine machine) { }
+    private static void Calibrate(EspressoMachine machine, Settings settings) { }   // which one runs?
+}
+```
+
+### AWT191
+
+:::danger[Error]
+An `OnRelease` hook parameter is a `Func`/`Lazy` relationship, which would defer resolution past the owner's teardown.
+:::
+
+A release dependency is captured at construction, but a `Func<T>` or `Lazy<T>` captures only a resolver delegate. The hook runs while its owner is being disposed, so invoking the delegate there always throws. Take the dependency directly instead: it is resolved at construction and, released in reverse creation order, still alive when the hook uses it. An `OnActivated` hook may take `Func`/`Lazy` parameters freely, since it runs while the owner is alive.
+
+```csharp
+[Container]
+[Singleton<BufferPool>]
+[Transient<Buffer>(OnRelease = nameof(ReturnToPool))]
+public static partial class CoffeeShop
+{
+    private static void ReturnToPool(Buffer buffer, Func<BufferPool> pool) { }   // pool() would throw during teardown; take BufferPool directly
+}
+```
+
 ## Runtime arguments
 
 ### AWT113

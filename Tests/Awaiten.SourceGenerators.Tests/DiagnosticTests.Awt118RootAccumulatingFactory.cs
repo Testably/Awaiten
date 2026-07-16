@@ -298,5 +298,32 @@ public partial class DiagnosticTests
 			await That(diagnostics).Contains("*AWT118*").AsWildcard()
 				.Because("building the non-disposable Consumer on demand materializes its awaited keyed dictionary of disposable transients (the task starts materializing them at construction), which accumulate on the root - the transitive-disposable walk follows awaited-keyed-dictionary edges too");
 		}
+
+		[Fact]
+		public async Task ReportsWhenASingletonActivationHookHoldsAFuncOverADisposableTransient()
+		{
+			string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>("""
+			                                       using Awaiten;
+			                                       using System;
+
+			                                       namespace MyCode;
+
+			                                       public sealed class Tool : IDisposable { public void Dispose() { } }
+			                                       public sealed class Depot { }
+
+			                                       [Container]
+			                                       [Transient<Tool>]
+			                                       [Singleton<Depot>(OnActivated = nameof(Started))]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       	private static void Started(Depot depot, Func<Tool> tools) { }
+			                                       }
+			                                       """);
+
+			// A release hook's Func is rejected outright (AWT191), so the activation hook is the surviving
+			// hook-parameter shape this walk covers.
+			await That(diagnostics.Any(d => d.Contains("AWT118"))).IsTrue()
+				.Because("a root-owned singleton's activation hook can invoke its Func over a disposable transient, each call tracking a fresh disposable on the root like a constructor-held Func");
+		}
 	}
 }

@@ -315,6 +315,13 @@ partial class AwaitenGenerator
 			{
 				RecordExternalConsumption(member.Dependency, consumed);
 			}
+
+			// A lifecycle hook parameter consumes an external dependency too, so an import used only by a hook is
+			// not unconsumed (AWT176 would otherwise wrongly advise removing it).
+			foreach (ParameterModel parameter in instance.HookParameters())
+			{
+				RecordExternalConsumption(parameter, consumed);
+			}
 		}
 
 		LocationInfo? location = LocationInfo.From(containerSymbol.Locations.FirstOrDefault());

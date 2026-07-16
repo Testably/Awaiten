@@ -111,7 +111,10 @@ partial class AwaitenGenerator
 		CollectionMembership membership,
 		Stack<int> stack)
 	{
-		foreach (ParameterModel parameter in instance.ConstructorParameters.AsArray())
+		// A lifecycle hook's graph-resolved parameters are built as part of constructing the instance too (an
+		// activation dependency inline, a release dependency captured), so a transient disposable reached through
+		// one is a fresh disposable of this build like a constructor parameter's.
+		foreach (ParameterModel parameter in instance.ConstructorParameters.AsArray().Concat(instance.HookParameters()))
 		{
 			if (parameter.Kind is DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.AwaitedEnumerable)
 			{
@@ -282,6 +285,15 @@ partial class AwaitenGenerator
 				AddParameterEdges(member.Dependency, serviceToImpl, implToIndex, serviceMembers, keyedMembers, includeEagerBare, nodeEdges);
 			}
 
+			// A lifecycle hook's parameters (after the instance) are graph dependencies too: the activation hook
+			// resolves them during the owner's construction (an inline argument) and the release hook captures them
+			// then. Both are resolved eagerly like a Direct constructor parameter, so AddParameterEdges classifies
+			// them identically - contributing to cycle (AWT102), captive (AWT105) and async-taint analysis.
+			foreach (ParameterModel parameter in instances[i].HookParameters())
+			{
+				AddParameterEdges(parameter, serviceToImpl, implToIndex, serviceMembers, keyedMembers, includeEagerBare, nodeEdges);
+			}
+
 			edges[i] = nodeEdges;
 		}
 
@@ -437,14 +449,11 @@ partial class AwaitenGenerator
 	{
 		for (int i = 0; i < instances.Count; i++)
 		{
-			foreach (ParameterModel parameter in instances[i].ConstructorParameters.AsArray())
+			// A constructor parameter, an injected [Inject] member and a lifecycle hook parameter all resolve a
+			// synchronous relationship's target without awaiting initialization, so all are checked alike.
+			foreach (ParameterModel parameter in instances[i].WalkedDependencies())
 			{
 				CheckDependency(i, parameter);
-			}
-
-			foreach (MemberModel member in instances[i].InjectedMembers.AsArray())
-			{
-				CheckDependency(i, member.Dependency);
 			}
 		}
 
@@ -509,14 +518,11 @@ partial class AwaitenGenerator
 	{
 		for (int i = 0; i < instances.Count; i++)
 		{
-			foreach (ParameterModel parameter in instances[i].ConstructorParameters.AsArray())
+			// A constructor parameter, an injected [Inject] member and a lifecycle hook parameter share the same
+			// structural incompatibility (the emit path has no owned form for any of them), so all are checked alike.
+			foreach (ParameterModel parameter in instances[i].WalkedDependencies())
 			{
 				CheckDependency(i, parameter);
-			}
-
-			foreach (MemberModel member in instances[i].InjectedMembers.AsArray())
-			{
-				CheckDependency(i, member.Dependency);
 			}
 		}
 
@@ -577,16 +583,12 @@ partial class AwaitenGenerator
 
 		for (int i = 0; i < instances.Count; i++)
 		{
-			foreach (ParameterModel parameter in instances[i].ConstructorParameters.AsArray())
+			// A constructor parameter, an injected [Inject] member (deferred or not) and a lifecycle hook
+			// parameter all materialize a collection through the same synchronous expression, so all are
+			// checked alike.
+			foreach (ParameterModel parameter in instances[i].WalkedDependencies())
 			{
 				CheckCollection(i, parameter);
-			}
-
-			// An injected [Inject] collection member (deferred or not) is materialized through the same
-			// synchronous expression as a constructor parameter, so it is checked the same way.
-			foreach (ParameterModel dependency in instances[i].InjectedMembers.AsArray().Select(member => member.Dependency))
-			{
-				CheckCollection(i, dependency);
 			}
 		}
 
@@ -710,8 +712,9 @@ partial class AwaitenGenerator
 
 			// A parameterized async service is built fresh per call AND must await initialization, so its path is
 			// Func<TArg…, Task<T>>. Misuse is caught at the consumption site (AWT119 or AWT115), not the
-			// registration, so there is no registration-time diagnostic for [Arg]-plus-async.
-			foreach (ParameterModel parameter in instance.ConstructorParameters.AsArray())
+			// registration, so there is no registration-time diagnostic for [Arg]-plus-async. A hook parameter is a
+			// graph dependency too, so a plain hook parameter over a parameterized target is AWT115 like a constructor's.
+			foreach (ParameterModel parameter in instance.ConstructorParameters.AsArray().Concat(instance.HookParameters()))
 			{
 				// A collection resolves to a set of members, not a single registration whose [Arg] parameters could
 				// be supplied, so runtime-argument matching does not apply (excluded explicitly). Guard the
@@ -841,13 +844,14 @@ partial class AwaitenGenerator
 			}
 		}
 
-		// The service key the parent's constructor used to reach this dependency (the alias the developer wrote,
-		// including any [FromKey]). Falls back to the first service key, or the implementation type when the
-		// dependency exposes no service of its own, so the diagnostic still names it.
+		// The service key the parent used to reach this dependency (the alias the developer wrote, including any
+		// [FromKey]) - across its constructor parameters and lifecycle hook parameters. Falls back to the first
+		// service key, or the implementation type when the dependency exposes no service of its own, so the
+		// diagnostic still names it.
 		static ServiceKey ReferencedService(InstanceModel parent, InstanceModel dependency)
 		{
 			ServiceKey[] dependencyServices = dependency.Services.AsArray();
-			foreach (ParameterModel parameter in parent.ConstructorParameters.AsArray())
+			foreach (ParameterModel parameter in parent.ConstructorParameters.AsArray().Concat(parent.HookParameters()))
 			{
 				ServiceKey key = KeyOf(parameter);
 				if (dependencyServices.Contains(key))

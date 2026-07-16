@@ -20,6 +20,28 @@ You can type the parameter as `object` instead when one hook serves several impl
 
 `OnActivated` runs once, right after construction. For an async service it runs before `InitializeAsync`. `OnRelease` runs when the owner or scope is disposed, before the instance's own `Dispose`, and in reverse creation order.
 
+## Hook parameters
+
+Both hooks may declare parameters after the instance. The first parameter is always the instance; every parameter after it is resolved from the container graph, exactly like a constructor or factory parameter. Calibrate the machine from injected settings; return a pooled buffer to the pool it came from.
+
+```csharp
+[Container]
+[Singleton<Settings>]
+[Singleton<BufferPool>]
+[Singleton<EspressoMachine>(OnActivated = nameof(Calibrate))]
+[Transient<Buffer>(Factory = nameof(Rent), OnRelease = nameof(ReturnToPool))]
+public static partial class CoffeeShop
+{
+    private static void Calibrate(EspressoMachine machine, Settings settings) => machine.Calibrate(settings);
+    private static Buffer Rent(BufferPool pool) => pool.Rent();
+    private static void ReturnToPool(Buffer buffer, BufferPool pool) => pool.Return(buffer);
+}
+```
+
+An activation dependency is resolved inline as the hook is called. A release dependency is resolved at construction and captured by value into the queued closure, so the hook holds the instance it was queued for even if a later resolve fails and rolls back. Reverse creation-order teardown keeps a captured dependency (a singleton pool, say) alive until after the release that uses it has run.
+
+Hook parameters participate in the graph like any other dependency: an unregistered one is [AWT101](../diagnostics#awt101), and they are covered by cycle, captive-dependency and async-taint analysis. A hook parameter cannot be a runtime `[Arg]` (there is no `Func<…>` call site to supply one), which is [AWT189](../diagnostics#awt189). A release hook parameter also cannot be a `Func<T>` or `Lazy<T>`: those capture a resolver delegate rather than a value, and by the time the hook runs the owner is already tearing down, so invoking the delegate would throw. That is [AWT191](../diagnostics#awt191); an activation hook may take them freely.
+
 ## Ordering and failure
 
 Activation happens before initialization and before the instance is ever handed out, so a concurrent resolve never sees a service that has not been activated. If `OnActivated` throws, the instance is not published. A later resolve builds a fresh one and tries again. Release is only queued once activation succeeds.

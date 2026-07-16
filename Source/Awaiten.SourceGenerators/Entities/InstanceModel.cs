@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using Awaiten.SourceGenerators.Internals;
 
@@ -16,9 +17,12 @@ namespace Awaiten.SourceGenerators.Entities;
 ///     <c>IDisposable</c> but could produce one at runtime, so the resolver tracks it behind a runtime type test.
 ///     <see cref="Eager" /> marks a singleton built at container build time rather than lazily on first resolve.
 ///     <see cref="OnActivated" /> / <see cref="OnRelease" /> are the resolved names of the container's
-///     <c>static void M(TImplementation)</c> lifecycle hooks. The activation hook runs once the instance is
+///     <c>static void M(TImplementation, …)</c> lifecycle hooks. The activation hook runs once the instance is
 ///     constructed; the release hook is queued at construction and run when the owning Root/Scope is disposed,
-///     before the instance's own disposal.
+///     before the instance's own disposal. Each hook's first parameter is the instance; any parameters after it
+///     are graph dependencies, carried as <see cref="ActivationParameters" /> / <see cref="ReleaseParameters" />
+///     and resolved exactly like a constructor parameter (an activation dependency inline at the call, a release
+///     dependency captured by value into the queued closure).
 /// </summary>
 internal sealed record InstanceModel(
 	string ImplementationType,
@@ -39,7 +43,9 @@ internal sealed record InstanceModel(
 	EquatableArray<MemberModel> InjectedMembers = default,
 	bool Eager = false,
 	string? OnActivated = null,
-	string? OnRelease = null)
+	string? OnRelease = null,
+	EquatableArray<ParameterModel> ActivationParameters = default,
+	EquatableArray<ParameterModel> ReleaseParameters = default)
 {
 	/// <summary>
 	///     The concrete type to construct and to use for cache fields and resolver return types. Normally the same
@@ -91,4 +97,41 @@ internal sealed record InstanceModel(
 
 	/// <summary>Whether this instance runs a lifecycle hook when the owning Root/Scope is disposed.</summary>
 	public bool HasReleaseHook => OnRelease is not null;
+
+	/// <summary>
+	///     The lifecycle hooks' graph-resolved parameters (those after the leading instance parameter of the
+	///     <c>OnActivated</c> and <c>OnRelease</c> hooks), classified exactly like constructor parameters and
+	///     resolved eagerly at construction (the activation dependency inline at the call, the release dependency
+	///     captured by value). Every dependency-walking pass that visits <see cref="ConstructorParameters" /> must
+	///     also visit these, or a hook dependency escapes cycle/captive/async/argument analysis and the emitted
+	///     infrastructure it needs. The common case (no hook parameters, or only one hook contributing any) returns a
+	///     backing array without allocating; a new array is built only when both hooks contribute parameters.
+	/// </summary>
+	public ParameterModel[] HookParameters()
+	{
+		ParameterModel[] activation = ActivationParameters.AsArray();
+		ParameterModel[] release = ReleaseParameters.AsArray();
+		if (release.Length == 0)
+		{
+			return activation;
+		}
+
+		if (activation.Length == 0)
+		{
+			return release;
+		}
+
+		return activation.Concat(release).ToArray();
+	}
+
+	/// <summary>
+	///     Every graph dependency this instance resolves: its constructor/factory parameters, its injected
+	///     <c>[Inject]</c> member dependencies and its lifecycle hook parameters, in that order. For the
+	///     dependency-walking passes that treat all three groups alike; a pass that distinguishes them (deferred
+	///     members in the cycle graph, say) enumerates the groups itself.
+	/// </summary>
+	public IEnumerable<ParameterModel> WalkedDependencies()
+		=> ConstructorParameters.AsArray()
+			.Concat(InjectedMembers.AsArray().Select(member => member.Dependency))
+			.Concat(HookParameters());
 }

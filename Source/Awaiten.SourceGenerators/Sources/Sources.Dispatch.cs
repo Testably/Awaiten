@@ -1097,19 +1097,14 @@ internal static partial class Sources
 		HashSet<(string, string?)> seen = new();
 		foreach (InstanceModel instance in instances)
 		{
-			foreach (ParameterModel parameter in instance.ConstructorParameters.AsArray())
+			// A constructor parameter, an injected [Inject] member and a lifecycle hook parameter are all emitted
+			// through the same __ResolveExternal surface, so each advertises its type and drives that surface's
+			// emission alike.
+			foreach (ParameterModel parameter in instance.WalkedDependencies())
 			{
 				if (parameter.Kind == DependencyKind.External && seen.Add((parameter.ServiceType, parameter.Key)))
 				{
 					external.Add((parameter.ServiceType, parameter.Key));
-				}
-			}
-
-			foreach (ParameterModel dependency in instance.InjectedMembers.AsArray().Select(member => member.Dependency))
-			{
-				if (dependency.Kind == DependencyKind.External && seen.Add((dependency.ServiceType, dependency.Key)))
-				{
-					external.Add((dependency.ServiceType, dependency.Key));
 				}
 			}
 		}

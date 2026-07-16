@@ -2264,6 +2264,33 @@ public class GeneralTests
 	}
 
 	[Fact]
+	public async Task RequestingType_WithAnOwnedLifecycleHookParameter_ReportsAwt186()
+	{
+		GeneratorResult result = Generator.Run("""
+			using System;
+			using Awaiten;
+
+			namespace MyCode;
+
+			public interface ILogger { }
+			public sealed class Logger : ILogger, IDisposable { public Logger(string c) { } public void Dispose() { } }
+			public sealed class Alpha { }
+
+			[Container]
+			[Transient<ILogger>(Factory = nameof(CreateLogger))]
+			[Transient<Alpha>(OnActivated = nameof(Started))]
+			public static partial class MyContainer
+			{
+				private static ILogger CreateLogger([RequestingType] Type? t) => new Logger(t?.FullName ?? "<root>");
+				private static void Started(Alpha alpha, Owned<ILogger> logger) { }
+			}
+			""");
+
+		await That(result.Diagnostics.Any(d => d.Contains("AWT186"))).IsTrue()
+			.Because("the detection pass walks lifecycle hook parameters like constructor parameters");
+	}
+
+	[Fact]
 	public async Task RequestingType_WithFuncAndLazyRelationships_DoesNotReportAwt186()
 	{
 		GeneratorResult result = Generator.Run("""

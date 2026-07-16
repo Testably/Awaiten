@@ -1315,4 +1315,49 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Warning,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A lifecycle hook parameter (after the leading instance parameter of an <c>OnActivated</c> /
+	///     <c>OnRelease</c> hook) is marked <c>[Arg]</c>. A hook's parameters after the instance are resolved from
+	///     the object graph, but a runtime argument flows only through a <c>Func&lt;…&gt;</c> factory into an
+	///     <c>[Arg]</c> constructor parameter, and a hook is invoked by the container with no such call site to
+	///     supply one. Drop the <c>[Arg]</c>, or resolve the value from the graph instead.
+	/// </summary>
+	public static readonly DiagnosticDescriptor HookParameterIsArg = new(
+		"AWT189",
+		"Lifecycle hook parameter cannot be a runtime argument",
+		"the parameter '{0}' of the lifecycle hook for '{1}' is marked [Arg], but a hook's parameters are resolved from the graph; runtime arguments are supplied only through a Func<…> factory to constructor parameters, never to a lifecycle hook",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     An <c>OnActivated</c> / <c>OnRelease</c> registration names a method that is overloaded: more than one
+	///     accessible <c>static void</c> method of that name accepts the implementation type as its first parameter,
+	///     so the container's choice of hook (and of the graph dependencies its remaining parameters resolve) would
+	///     be order-dependent. Mirrors <see cref="AmbiguousFactory">AWT112</see> for factory methods.
+	/// </summary>
+	public static readonly DiagnosticDescriptor AmbiguousLifecycleHook = new(
+		"AWT190",
+		"Ambiguous lifecycle hook",
+		"'{0}' has an ambiguous lifecycle hook: {2} has more than one accessible method '{1}' accepting the instance; the container cannot choose one. Give the hook method a unique name.",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     An <c>OnRelease</c> hook parameter is a <c>Func</c>/<c>Lazy</c> relationship (including their
+	///     <c>Task</c> and <c>Owned</c> forms). A release dependency is captured at construction, but a
+	///     <c>Func&lt;T&gt;</c> or <c>Lazy&lt;T&gt;</c> captures only a resolver delegate, and the hook runs during
+	///     its owner's teardown, when the resolvers refuse (<c>ObjectDisposedException</c>) - the deferred value
+	///     could never produce its target. An activation hook may take them freely (it runs while the owner is
+	///     alive), so this applies to release hooks only.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ReleaseHookDeferredParameter = new(
+		"AWT191",
+		"Release hook parameter cannot defer resolution",
+		"the parameter '{0}' of the OnRelease lifecycle hook for '{1}' defers resolution behind a Func/Lazy, but a release hook runs during its owner's teardown, when the container no longer resolves; take the dependency directly, so it is captured at construction",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }
