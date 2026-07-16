@@ -1112,6 +1112,16 @@ internal static partial class Sources
 					external.Add((dependency.ServiceType, dependency.Key));
 				}
 			}
+
+			// A lifecycle hook parameter can be an external dependency too, and it is emitted through the same
+			// __ResolveExternal surface, so it must advertise the type and drive that surface's emission.
+			foreach (ParameterModel parameter in instance.HookParameters())
+			{
+				if (parameter.Kind == DependencyKind.External && seen.Add((parameter.ServiceType, parameter.Key)))
+				{
+					external.Add((parameter.ServiceType, parameter.Key));
+				}
+			}
 		}
 
 		return external.ToArray();

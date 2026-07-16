@@ -254,5 +254,36 @@ public partial class DiagnosticTests
 				.Because("pragmatic mode allows synchronous resolution of async-initialized services after warm-up");
 			await That(result.Diagnostics).DoesNotContain("*AWT120*").AsWildcard();
 		}
+
+		[Fact]
+		public async Task ReportsForASynchronousRelationshipLifecycleHookParameter()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+			                                       using System;
+			                                       using System.Threading;
+			                                       using System.Threading.Tasks;
+
+			                                       namespace MyCode;
+
+			                                       public sealed class Connection : IAsyncInitializable
+			                                       {
+			                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+			                                       }
+
+			                                       public sealed class Service { }
+
+			                                       [Container]
+			                                       [Singleton<Connection>]
+			                                       [Singleton<Service>(OnActivated = nameof(Started))]
+			                                       public static partial class MyContainer
+			                                       {
+			                                           private static void Started(Service service, Func<Connection> connection) { }
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT119*").AsWildcard()
+				.Because("a synchronous Func<T> hook parameter resolves an async-initialized target without awaiting it, like a constructor parameter");
+		}
 	}
 }

@@ -225,8 +225,11 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 		DiagnosticDescriptor descriptor = strict ? Diagnostics.RootAccumulatingFactoryStrict : Diagnostics.RootAccumulatingFactory;
 		DiagnosticSeverity? severity = strict ? DiagnosticSeverity.Error : null;
 
+		// A lifecycle hook's Func<T> parameter is rooted too - a release hook captures it by value into the owner's
+		// teardown closure - so an accumulating fresh-disposable Func reached through one is reported like a
+		// constructor parameter's.
 		InstanceModel holder = graph.Instances[node];
-		foreach (ParameterModel parameter in holder.ConstructorParameters.AsArray())
+		foreach (ParameterModel parameter in holder.ConstructorParameters.AsArray().Concat(holder.HookParameters()))
 		{
 			if (!IsRootAccumulatingFunc(graph, serviceToIndex, membership, parameter) || !reported.Add($"{node}|{parameter.ServiceType}|{parameter.Key}"))
 			{

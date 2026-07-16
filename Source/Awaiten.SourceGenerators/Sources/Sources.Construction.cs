@@ -19,11 +19,12 @@ internal static partial class Sources
 
 	/// <summary>
 	///     Whether the <c>__AsyncArray&lt;T&gt;</c> helper is used: some instance injects an
-	///     <c>IAsyncEnumerable&lt;T&gt;</c>, or some unkeyed, non-suppressed collection is offered by type as
-	///     <c>IAsyncEnumerable&lt;T&gt;</c> (skipping a registered async shape).
+	///     <c>IAsyncEnumerable&lt;T&gt;</c> through a constructor or lifecycle hook parameter, or some unkeyed,
+	///     non-suppressed collection is offered by type as <c>IAsyncEnumerable&lt;T&gt;</c> (skipping a registered
+	///     async shape).
 	/// </summary>
 	private static bool NeedsAsyncArrayHelper(InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex)
-		=> instances.Any(instance => instance.ConstructorParameters.AsArray().Any(p => p.Kind == DependencyKind.AsyncEnumerable))
+		=> instances.Any(instance => instance.ConstructorParameters.AsArray().Concat(instance.HookParameters()).Any(p => p.Kind == DependencyKind.AsyncEnumerable))
 		   || names.Collections.Any(collection => collection.Key is null
 		                                          && !SynthesisSuppressed(serviceToIndex, collection.Service)
 		                                          && !AsyncShapeRegistered(serviceToIndex, collection.Service));

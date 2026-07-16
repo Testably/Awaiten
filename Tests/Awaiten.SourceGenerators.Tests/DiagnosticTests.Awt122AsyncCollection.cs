@@ -180,5 +180,36 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).DoesNotContain("*AWT122*").AsWildcard()
 				.Because("the awaited keyed dictionary awaits its async-initialized members behind the produced task, exactly as the awaited collection does");
 		}
+
+		[Fact]
+		public async Task ReportsWhenALifecycleHookCollectionParameterHasAnAsyncMember()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+			                                       using System.Collections.Generic;
+			                                       using System.Threading;
+			                                       using System.Threading.Tasks;
+
+			                                       namespace MyCode;
+
+			                                       public interface IPlugin { }
+			                                       public sealed class AsyncPlugin : IPlugin, IAsyncInitializable
+			                                       {
+			                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+			                                       }
+			                                       public sealed class Host { }
+
+			                                       [Container]
+			                                       [Singleton<AsyncPlugin, IPlugin>]
+			                                       [Singleton<Host>(OnActivated = nameof(Started))]
+			                                       public static partial class MyContainer
+			                                       {
+			                                           private static void Started(Host host, IEnumerable<IPlugin> plugins) { }
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT122*").AsWildcard()
+				.Because("a hook's synchronously materialized collection parameter cannot await an async-initialized member, like a constructor parameter");
+		}
 	}
 }

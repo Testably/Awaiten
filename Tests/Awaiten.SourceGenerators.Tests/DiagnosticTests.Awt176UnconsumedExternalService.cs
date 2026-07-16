@@ -109,5 +109,29 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics.Any(d => d.Contains("AWT176"))).IsFalse()
 				.Because("a consumed [ImportService<T>] declaration is live");
 		}
+
+		[Fact]
+		public async Task DoesNotReportWhenTheExternalTypeIsConsumedByALifecycleHookParameter()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface ILogger { }
+			                                       public sealed class Service { }
+
+			                                       [Container]
+			                                       [ImportService<ILogger>]
+			                                       [Singleton<Service>(OnActivated = nameof(Started))]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       	private static void Started(Service service, ILogger logger) { }
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics.Any(d => d.Contains("AWT176"))).IsFalse()
+				.Because("an [ImportService<T>] consumed only by a lifecycle hook parameter is still live");
+		}
 	}
 }

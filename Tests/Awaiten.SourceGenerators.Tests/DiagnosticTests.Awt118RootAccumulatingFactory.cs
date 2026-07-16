@@ -298,5 +298,30 @@ public partial class DiagnosticTests
 			await That(diagnostics).Contains("*AWT118*").AsWildcard()
 				.Because("building the non-disposable Consumer on demand materializes its awaited keyed dictionary of disposable transients (the task starts materializing them at construction), which accumulate on the root - the transitive-disposable walk follows awaited-keyed-dictionary edges too");
 		}
+
+		[Fact]
+		public async Task ReportsWhenASingletonReleaseHookHoldsAFuncOverADisposableTransient()
+		{
+			string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>("""
+			                                       using Awaiten;
+			                                       using System;
+
+			                                       namespace MyCode;
+
+			                                       public sealed class Tool : IDisposable { public void Dispose() { } }
+			                                       public sealed class Depot { }
+
+			                                       [Container]
+			                                       [Transient<Tool>]
+			                                       [Singleton<Depot>(OnRelease = nameof(Drain))]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       	private static void Drain(Depot depot, Func<Tool> tools) { }
+			                                       }
+			                                       """);
+
+			await That(diagnostics.Any(d => d.Contains("AWT118"))).IsTrue()
+				.Because("a singleton release hook captures its Func over a disposable transient into the root's teardown closure, so its instances accumulate on the root like a constructor-held Func");
+		}
 	}
 }

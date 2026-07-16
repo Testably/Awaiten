@@ -96,4 +96,15 @@ internal sealed record InstanceModel(
 
 	/// <summary>Whether this instance runs a lifecycle hook when the owning Root/Scope is disposed.</summary>
 	public bool HasReleaseHook => OnRelease is not null;
+
+	/// <summary>
+	///     The lifecycle hooks' graph-resolved parameters (those after the leading instance parameter of the
+	///     <c>OnActivated</c> and <c>OnRelease</c> hooks), classified exactly like constructor parameters and
+	///     resolved eagerly at construction (the activation dependency inline at the call, the release dependency
+	///     captured by value). Every dependency-walking pass that visits <see cref="ConstructorParameters" /> must
+	///     also visit these, or a hook dependency escapes cycle/captive/async/argument analysis and the emitted
+	///     infrastructure it needs.
+	/// </summary>
+	public ParameterModel[] HookParameters()
+		=> ActivationParameters.AsArray().Concat(ReleaseParameters.AsArray()).ToArray();
 }

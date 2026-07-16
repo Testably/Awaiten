@@ -116,5 +116,32 @@ public partial class DiagnosticTests
 			await That(awt115).Contains($"({dependencyLine},")
 				.Because("the diagnostic points at the plain Robot dependency, not the [Singleton<Plant>] registration");
 		}
+
+		[Fact]
+		public async Task ReportsForALifecycleHookParameterOverAParameterizedTarget()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public sealed class Robot
+			                                       {
+			                                       	public Robot([Arg] string name) { }
+			                                       }
+			                                       public sealed class Plant { }
+
+			                                       [Container]
+			                                       [Transient<Robot>]
+			                                       [Singleton<Plant>(OnActivated = nameof(Started))]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       	private static void Started(Plant plant, Robot robot) { }
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT115*").AsWildcard()
+				.Because("a plain hook parameter cannot supply a parameterized target's runtime arguments, exactly like a constructor parameter");
+		}
 	}
 }
