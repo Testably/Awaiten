@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using Awaiten.SourceGenerators.Internals;
 
@@ -122,4 +123,15 @@ internal sealed record InstanceModel(
 
 		return activation.Concat(release).ToArray();
 	}
+
+	/// <summary>
+	///     Every graph dependency this instance resolves: its constructor/factory parameters, its injected
+	///     <c>[Inject]</c> member dependencies and its lifecycle hook parameters, in that order. For the
+	///     dependency-walking passes that treat all three groups alike; a pass that distinguishes them (deferred
+	///     members in the cycle graph, say) enumerates the groups itself.
+	/// </summary>
+	public IEnumerable<ParameterModel> WalkedDependencies()
+		=> ConstructorParameters.AsArray()
+			.Concat(InjectedMembers.AsArray().Select(member => member.Dependency))
+			.Concat(HookParameters());
 }

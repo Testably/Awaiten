@@ -449,19 +449,9 @@ partial class AwaitenGenerator
 	{
 		for (int i = 0; i < instances.Count; i++)
 		{
-			foreach (ParameterModel parameter in instances[i].ConstructorParameters.AsArray())
-			{
-				CheckDependency(i, parameter);
-			}
-
-			foreach (MemberModel member in instances[i].InjectedMembers.AsArray())
-			{
-				CheckDependency(i, member.Dependency);
-			}
-
-			// A hook's synchronous relationship parameter resolves its target without awaiting initialization,
-			// exactly like a constructor parameter's, so it is checked the same way.
-			foreach (ParameterModel parameter in instances[i].HookParameters())
+			// A constructor parameter, an injected [Inject] member and a lifecycle hook parameter all resolve a
+			// synchronous relationship's target without awaiting initialization, so all are checked alike.
+			foreach (ParameterModel parameter in instances[i].WalkedDependencies())
 			{
 				CheckDependency(i, parameter);
 			}
@@ -528,19 +518,9 @@ partial class AwaitenGenerator
 	{
 		for (int i = 0; i < instances.Count; i++)
 		{
-			foreach (ParameterModel parameter in instances[i].ConstructorParameters.AsArray())
-			{
-				CheckDependency(i, parameter);
-			}
-
-			foreach (MemberModel member in instances[i].InjectedMembers.AsArray())
-			{
-				CheckDependency(i, member.Dependency);
-			}
-
-			// A hook's Owned<T>-family parameter has the same structural incompatibility with a requesting-type
-			// factory as a constructor parameter's (the emit path has no owned form for it), so it is checked too.
-			foreach (ParameterModel parameter in instances[i].HookParameters())
+			// A constructor parameter, an injected [Inject] member and a lifecycle hook parameter share the same
+			// structural incompatibility (the emit path has no owned form for any of them), so all are checked alike.
+			foreach (ParameterModel parameter in instances[i].WalkedDependencies())
 			{
 				CheckDependency(i, parameter);
 			}
@@ -603,20 +583,10 @@ partial class AwaitenGenerator
 
 		for (int i = 0; i < instances.Count; i++)
 		{
-			foreach (ParameterModel parameter in instances[i].ConstructorParameters.AsArray())
-			{
-				CheckCollection(i, parameter);
-			}
-
-			// An injected [Inject] collection member (deferred or not) is materialized through the same
-			// synchronous expression as a constructor parameter, so it is checked the same way.
-			foreach (ParameterModel dependency in instances[i].InjectedMembers.AsArray().Select(member => member.Dependency))
-			{
-				CheckCollection(i, dependency);
-			}
-
-			// A hook's collection parameter is materialized through the same synchronous expression too.
-			foreach (ParameterModel parameter in instances[i].HookParameters())
+			// A constructor parameter, an injected [Inject] member (deferred or not) and a lifecycle hook
+			// parameter all materialize a collection through the same synchronous expression, so all are
+			// checked alike.
+			foreach (ParameterModel parameter in instances[i].WalkedDependencies())
 			{
 				CheckCollection(i, parameter);
 			}
