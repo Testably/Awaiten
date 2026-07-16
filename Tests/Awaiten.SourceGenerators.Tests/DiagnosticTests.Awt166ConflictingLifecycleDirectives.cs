@@ -83,6 +83,30 @@ public partial class DiagnosticTests
 		}
 
 		[Fact]
+		public async Task ReportsWhenALaterRegistrationOptsIntoSuppressDisposalTheWinnerDoesNot()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IRead { }
+			                                       public interface IWrite { }
+			                                       public sealed class Store : IRead, IWrite { }
+
+			                                       [Container]
+			                                       [Singleton<Store, IRead>]
+			                                       [Singleton<Store, IWrite>(SuppressDisposal = true)]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT166*").AsWildcard()
+				.Because("the first registration wins and disposes the instance, so the later SuppressDisposal = true would be silently dropped");
+		}
+
+		[Fact]
 		public async Task ReportsWhenALaterRegistrationSetsAHookTheWinnerOmits()
 		{
 			GeneratorResult result = Generator.Run("""

@@ -40,6 +40,7 @@ internal sealed record RawRegistration(
 	bool Eager = false,
 	string? OnActivated = null,
 	string? OnRelease = null,
+	bool SuppressDisposal = false,
 	string? WhenInjectedInto = null);
 
 /// <summary>
@@ -166,6 +167,14 @@ partial class AwaitenGenerator
 
 		/// <inheritdoc cref="OnActivated" />
 		public string? OnRelease { get; init; }
+
+		/// <summary>
+		///     Whether the winning registration opted out of the container's built-in disposal
+		///     (<c>SuppressDisposal = true</c>): the container constructs the instance but never calls its
+		///     <c>Dispose</c>/<c>DisposeAsync</c>, leaving teardown to an <see cref="OnRelease" /> hook or an
+		///     owner outside the container. Set from the first registration like the implementation's other options.
+		/// </summary>
+		public bool SuppressDisposal { get; init; }
 
 		public List<ServiceKey> Services { get; }
 

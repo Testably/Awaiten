@@ -48,6 +48,49 @@ public partial class LifecycleHookTests
 	}
 
 	[Fact]
+	public async Task SuppressDisposal_SkipsTheContainersDisposal_ButOnReleaseStillRuns()
+	{
+		Probe.Log.Clear();
+		using (SuppressedDisposalContainer.Root container = new())
+		{
+			container.Resolve<Tracked>();
+		}
+
+		await That(Probe.Log).Contains("released:Tracked")
+			.Because("SuppressDisposal opts out of the container's disposal, not out of the release hook");
+		await That(Probe.Log).DoesNotContain("disposed:Tracked")
+			.Because("SuppressDisposal tells the container not to dispose an instance it built");
+	}
+
+	[Fact]
+	public async Task Pooling_RentReturnsToPoolAndReusesTheInstance_WithoutDisposingIt()
+	{
+		Probe.Reset();
+		PoolingContainer.ClearPool();
+		using PoolingContainer.Root container = new();
+
+		RentedBuffer first;
+		using (Owned<RentedBuffer> rented = container.Resolve<Owned<RentedBuffer>>())
+		{
+			first = rented.Value;
+		}
+
+		await That(Probe.Log).DoesNotContain("disposed:RentedBuffer")
+			.Because("a returned-to-pool buffer is released, never disposed by the container");
+
+		using (Owned<RentedBuffer> rented = container.Resolve<Owned<RentedBuffer>>())
+		{
+			await That(ReferenceEquals(rented.Value, first)).IsTrue()
+				.Because("the second rent draws the same buffer back out of the pool");
+		}
+
+		await That(Probe.Constructions).IsEqualTo(1)
+			.Because("the buffer was rented, returned, and reused rather than reconstructed");
+		await That(Probe.Log).DoesNotContain("disposed:RentedBuffer")
+			.Because("the container never disposes a SuppressDisposal instance, even across reuse");
+	}
+
+	[Fact]
 	public async Task TransientHooks_RunOncePerConstructedInstance()
 	{
 		Probe.Log.Clear();
@@ -341,6 +384,13 @@ public partial class LifecycleHookTests
 		public void Dispose() => Probe.Log.Add("disposed:Tracked");
 	}
 
+	public sealed class RentedBuffer : IDisposable
+	{
+		public RentedBuffer() => Probe.Constructions++;
+
+		public void Dispose() => Probe.Log.Add("disposed:RentedBuffer");
+	}
+
 	public sealed class Flaky : IDisposable
 	{
 		public Flaky() => Probe.Constructions++;
@@ -409,6 +459,29 @@ public partial class LifecycleHookTests
 	public static partial class DisposableHookContainer
 	{
 		private static void Release(Tracked tracked) => Probe.Log.Add("released:Tracked");
+	}
+
+	[Container]
+	[Singleton<Tracked>(OnRelease = nameof(Release), SuppressDisposal = true)]
+	public static partial class SuppressedDisposalContainer
+	{
+		private static void Release(Tracked tracked) => Probe.Log.Add("released:Tracked");
+	}
+
+	[Container]
+	[Transient<RentedBuffer>(Factory = nameof(Rent), OnRelease = nameof(ReturnToPool), SuppressDisposal = true)]
+	public static partial class PoolingContainer
+	{
+		// A pool the container rents from and returns to: the container constructs the buffer (via Rent) but never
+		// disposes it (SuppressDisposal), leaving its teardown to ReturnToPool. The pool here is a static member the
+		// static hook reaches directly; a hook can also take it as a graph dependency (see the hook-parameter tests).
+		private static readonly Stack<RentedBuffer> _pool = new();
+
+		public static void ClearPool() => _pool.Clear();
+
+		private static RentedBuffer Rent() => _pool.Count > 0 ? _pool.Pop() : new RentedBuffer();
+
+		private static void ReturnToPool(RentedBuffer buffer) => _pool.Push(buffer);
 	}
 
 	[Container]

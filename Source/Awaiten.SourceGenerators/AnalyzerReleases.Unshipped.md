@@ -93,3 +93,4 @@
  AWT189  | Awaiten   | Error    | A lifecycle hook parameter (after the instance) is marked [Arg], but a hook resolves its parameters from the graph
  AWT190  | Awaiten   | Error    | A lifecycle hook (OnActivated / OnRelease) names an overloaded method, so the container cannot choose which one to call
  AWT191  | Awaiten   | Error    | An OnRelease hook parameter is a Func/Lazy relationship, which would defer resolution past the owner's teardown
+ AWT192  | Awaiten   | Error    | SuppressDisposal is set on a pre-built Instance, which the container does not own or dispose, so it has no effect

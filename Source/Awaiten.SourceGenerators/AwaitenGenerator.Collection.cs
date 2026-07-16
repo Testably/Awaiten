@@ -152,6 +152,9 @@ partial class AwaitenGenerator
 				Eager: NamedFlag(attribute, "Eager"),
 				OnActivated: NamedArgument(attribute, "OnActivated"),
 				OnRelease: NamedArgument(attribute, "OnRelease"),
+				// SuppressDisposal is exposed on the generic [Singleton<…>]/[Transient<…>]/[Scoped<…>] forms; the
+				// open-generic Type-ctor form has no such property, so NamedFlag reads false there.
+				SuppressDisposal: NamedFlag(attribute, "SuppressDisposal"),
 				WhenInjectedInto: whenInjectedInto));
 		}
 	}

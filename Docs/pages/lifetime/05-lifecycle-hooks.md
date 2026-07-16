@@ -18,7 +18,7 @@ public static partial class CoffeeShop
 
 You can type the parameter as `object` instead when one hook serves several implementations.
 
-`OnActivated` runs once, right after construction. For an async service it runs before `InitializeAsync`. `OnRelease` runs when the owner or scope is disposed, before the instance's own `Dispose`, and in reverse creation order.
+`OnActivated` runs once, right after construction. For an async service it runs before `InitializeAsync`. `OnRelease` runs when the owner or scope is disposed, before the instance's own `Dispose`, and in reverse creation order. By default it runs *in addition to* that disposal; pair it with [`SuppressDisposal`](./disposal#suppressing-disposal) to replace disposal entirely, as when a hook returns an object to a pool.
 
 ## Hook parameters
 

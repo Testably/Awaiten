@@ -22,7 +22,9 @@ namespace Awaiten.SourceGenerators.Entities;
 ///     before the instance's own disposal. Each hook's first parameter is the instance; any parameters after it
 ///     are graph dependencies, carried as <see cref="ActivationParameters" /> / <see cref="ReleaseParameters" />
 ///     and resolved exactly like a constructor parameter (an activation dependency inline at the call, a release
-///     dependency captured by value into the queued closure).
+///     dependency captured by value into the queued closure). <see cref="SuppressDisposal" /> opts the instance
+///     out of the container's built-in disposal entirely (teardown is left to an <see cref="OnRelease" /> hook or
+///     an owner outside the container), so a suppressed instance is never tracked for teardown.
 /// </summary>
 internal sealed record InstanceModel(
 	string ImplementationType,
@@ -45,7 +47,8 @@ internal sealed record InstanceModel(
 	string? OnActivated = null,
 	string? OnRelease = null,
 	EquatableArray<ParameterModel> ActivationParameters = default,
-	EquatableArray<ParameterModel> ReleaseParameters = default)
+	EquatableArray<ParameterModel> ReleaseParameters = default,
+	bool SuppressDisposal = false)
 {
 	/// <summary>
 	///     The concrete type to construct and to use for cache fields and resolver return types. Normally the same
@@ -58,8 +61,10 @@ internal sealed record InstanceModel(
 	/// <summary>
 	///     Whether the container owns this instance for disposal (its declared type implements <c>IDisposable</c> or
 	///     <c>IAsyncDisposable</c>), so it is tracked for teardown. The drain selects the right disposal at runtime.
+	///     <see cref="SuppressDisposal" /> opts out: a suppressed instance is not tracked and reads here as
+	///     non-disposable, so lifetime-safety analysis treats it like any other non-owned service.
 	/// </summary>
-	public bool NeedsDisposal => IsDisposable || IsAsyncDisposable;
+	public bool NeedsDisposal => !SuppressDisposal && (IsDisposable || IsAsyncDisposable);
 
 	/// <summary>
 	///     Whether this instance is itself an async-taint source (not merely tainted through a dependency): it is

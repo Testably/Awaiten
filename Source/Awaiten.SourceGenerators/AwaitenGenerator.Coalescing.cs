@@ -186,6 +186,7 @@ partial class AwaitenGenerator
 					Eager = reg.Eager,
 					OnActivated = reg.OnActivated,
 					OnRelease = reg.OnRelease,
+					SuppressDisposal = reg.SuppressDisposal,
 				};
 				implInfos.Add(reg.ImplementationType, info);
 				implOrder.Add(info);
@@ -412,8 +413,9 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     Reports the coalescing conflicts a re-registration of an already-seen implementation raises: a different
-	///     lifetime (AWT107), a different production strategy (AWT111), or a contradicting OnActivated/OnRelease/Eager
-	///     directive (AWT166). Lifetime and production conflicts are reported once per implementation, each directive
+	///     lifetime (AWT107), a different production strategy (AWT111), or a contradicting
+	///     OnActivated/OnRelease/Eager/SuppressDisposal directive (AWT166). Lifetime and production conflicts are
+	///     reported once per implementation, each directive
 	///     conflict once per (implementation, directive), since coalescing keeps the first registration.
 	/// </summary>
 	private static void ReportCoalescingConflicts(
@@ -474,13 +476,13 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     Every per-instance directive (OnActivated, OnRelease, or Eager) this registration sets to a value the
-	///     coalesced instance will not use, each yielded independently so it can be reported on its own. Coalescing
-	///     keeps the first (winning) registration's directives, so a conflict is a later registration explicitly
-	///     naming a directive value that differs from the winner's: a differing hook, or opting into Eager the winner
-	///     did not. A registration that leaves a directive unset (a null hook, or Eager left at its default false)
-	///     states no opinion and merges with the winner rather than conflicting, so the winner's own directives,
-	///     which this registration inherits, are never a conflict against themselves.
+	///     Every per-instance directive (OnActivated, OnRelease, Eager, or SuppressDisposal) this registration sets to
+	///     a value the coalesced instance will not use, each yielded independently so it can be reported on its own.
+	///     Coalescing keeps the first (winning) registration's directives, so a conflict is a later registration
+	///     explicitly naming a directive value that differs from the winner's: a differing hook, or opting into Eager
+	///     or SuppressDisposal the winner did not. A registration that leaves a directive unset (a null hook, or a
+	///     bool flag left at its default false) states no opinion and merges with the winner rather than conflicting,
+	///     so the winner's own directives, which this registration inherits, are never a conflict against themselves.
 	/// </summary>
 	private static IEnumerable<(string Directive, string Winner, string Loser)> ConflictingDirectives(ImplInfo info, RawRegistration registration)
 	{
@@ -497,6 +499,11 @@ partial class AwaitenGenerator
 		if (registration.Eager && !info.Eager)
 		{
 			yield return ("Eager", "false", "true");
+		}
+
+		if (registration.SuppressDisposal && !info.SuppressDisposal)
+		{
+			yield return ("SuppressDisposal", "false", "true");
 		}
 	}
 
