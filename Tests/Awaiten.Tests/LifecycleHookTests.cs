@@ -226,6 +226,56 @@ public partial class LifecycleHookTests
 		await That(Probe.Log.Count(entry => entry == "activated:Slow")).IsEqualTo(1);
 	}
 
+	[Fact]
+	public async Task OnActivated_ReceivesAGraphDependency()
+	{
+		Probe.Reset();
+		using ActivationDependencyContainer.Root container = new();
+
+		Settings settings = container.Resolve<Settings>();
+		EspressoMachine machine = container.Resolve<EspressoMachine>();
+
+		// The activation hook took a second, graph-resolved parameter (the singleton Settings) alongside the
+		// instance, and applied it - proving hook parameters after the instance resolve from the object graph.
+		await That(machine.AppliedSettings).IsSameAs(settings)
+			.Because("the activation hook's extra parameter resolves from the container graph");
+	}
+
+	[Fact]
+	public async Task OnRelease_ReceivesAGraphDependency_ReturningToAPool()
+	{
+		Probe.Reset();
+		Pool pool;
+		PooledBuffer buffer;
+		using (PoolContainer.Root container = new())
+		{
+			buffer = container.Resolve<PooledBuffer>();
+			pool = container.Resolve<Pool>();
+
+			// Nothing has been released while the container is alive.
+			await That(pool.Returned).DoesNotContain(buffer);
+		}
+
+		// On disposal the release hook ran with its graph-resolved Pool parameter and returned the buffer to it.
+		await That(pool.Returned).Contains(buffer)
+			.Because("the release hook's extra parameter resolves from the container graph");
+	}
+
+	[Fact]
+	public async Task ReleaseHookDependency_OutlivesTheRelease_InReverseCreationOrder()
+	{
+		Probe.Reset();
+		using (PoolContainer.Root container = new())
+		{
+			// PooledBuffer takes the Pool in its constructor, so the Pool is created first and, drained in reverse
+			// creation order, is released last - it is still alive when the buffer's release hook uses it.
+			container.Resolve<PooledBuffer>();
+		}
+
+		await That(Probe.Log.IndexOf("released:PooledBuffer") < Probe.Log.IndexOf("released:Pool")).IsTrue()
+			.Because("a release hook's captured dependency must still be alive when the release runs");
+	}
+
 	public sealed class Alpha;
 
 	public sealed class Beta;
@@ -405,5 +455,53 @@ public partial class LifecycleHookTests
 			slow.Activated = true;
 			Probe.Log.Add("activated:Slow");
 		}
+	}
+
+	public sealed class Settings;
+
+	public sealed class EspressoMachine
+	{
+		public Settings? AppliedSettings { get; private set; }
+
+		public void Calibrate(Settings settings) => AppliedSettings = settings;
+	}
+
+	public sealed class Pool
+	{
+		public readonly List<object> Returned = new();
+
+		public void Return(object item) => Returned.Add(item);
+	}
+
+	public sealed class PooledBuffer
+	{
+		// Takes the Pool in its constructor so the Pool is created first; reverse-order release then keeps the Pool
+		// alive until after the buffer's release hook has used it.
+		public PooledBuffer(Pool pool) => _ = pool;
+	}
+
+	[Container]
+	[Singleton<Settings>]
+	[Singleton<EspressoMachine>(OnActivated = nameof(Calibrate))]
+	public static partial class ActivationDependencyContainer
+	{
+		// The hook takes the instance plus a graph-resolved Settings dependency after it.
+		private static void Calibrate(EspressoMachine machine, Settings settings) => machine.Calibrate(settings);
+	}
+
+	[Container]
+	[Singleton<Pool>(OnRelease = nameof(ReleasePool))]
+	[Transient<PooledBuffer>(OnRelease = nameof(ReturnToPool))]
+	public static partial class PoolContainer
+	{
+		// The release hook takes the instance plus a graph-resolved Pool dependency, captured by value at
+		// construction and used to return the buffer when the container is disposed.
+		private static void ReturnToPool(PooledBuffer buffer, Pool pool)
+		{
+			pool.Return(buffer);
+			Probe.Log.Add("released:PooledBuffer");
+		}
+
+		private static void ReleasePool(Pool pool) => Probe.Log.Add("released:Pool");
 	}
 }

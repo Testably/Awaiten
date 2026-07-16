@@ -1,5 +1,6 @@
 using System.Text;
 using Awaiten.SourceGenerators.Entities;
+using Awaiten.SourceGenerators.Internals;
 
 namespace Awaiten.SourceGenerators;
 
@@ -52,18 +53,44 @@ internal static partial class Sources
 	}
 
 	/// <summary>
-	///     Emits the <c>OnActivated</c> hook call for a freshly built instance (<c>OnActivated(variable);</c>). The
-	///     hook is a static container method reached by simple name from the nested <c>Root</c>/<c>Scope</c>,
-	///     exactly like a factory method. Emitted only on the success path (a raced fresh resolve throws before
-	///     reaching it), so an instance that was torn down during a concurrent dispose is never activated. Nothing
-	///     when the instance names no activation hook.
+	///     Emits the <c>OnActivated</c> hook call for a freshly built instance (<c>OnActivated(variable, dep…);</c>).
+	///     The hook is a static container method reached by simple name from the nested <c>Root</c>/<c>Scope</c>,
+	///     exactly like a factory method. Any parameters after the instance are graph dependencies resolved inline
+	///     here, the same way a constructor argument is (awaited on the async path when async-tainted). Emitted only
+	///     on the success path (a raced fresh resolve throws before reaching it), so an instance that was torn down
+	///     during a concurrent dispose is never activated. Nothing when the instance names no activation hook.
 	/// </summary>
-	private static void EmitActivation(StringBuilder builder, int depth, InstanceModel instance, string variable)
+	private static void EmitActivation(StringBuilder builder, int depth, InstanceModel instance, string variable, EmitContext context, bool asynchronous)
 	{
 		if (instance.OnActivated is not null)
 		{
-			Indent(builder, depth).Append(instance.OnActivated).Append('(').Append(variable).AppendLine(");");
+			Indent(builder, depth).Append(instance.OnActivated).Append('(').Append(variable)
+				.Append(HookArguments(instance.ActivationParameters, instance, context, asynchronous)).AppendLine(");");
 		}
+	}
+
+	/// <summary>
+	///     The comma-prefixed argument list for a lifecycle hook's graph-resolved parameters (those after the
+	///     instance), each resolved through <see cref="DependencyValue" /> exactly like a constructor argument.
+	///     Empty when the hook takes only the instance. The instance presents its own <c>typeof(…)</c> as the
+	///     requesting type to any requesting-type factory a parameter consumes, mirroring construction.
+	/// </summary>
+	private static string HookArguments(EquatableArray<ParameterModel> parameters, InstanceModel instance, EmitContext context, bool asynchronous)
+	{
+		ParameterModel[] hookParameters = parameters.AsArray();
+		if (hookParameters.Length == 0)
+		{
+			return string.Empty;
+		}
+
+		string requestingType = RequestingTypeOf(instance);
+		StringBuilder arguments = new();
+		foreach (ParameterModel parameter in hookParameters)
+		{
+			arguments.Append(", ").Append(DependencyValue(parameter, context.Instances, context.Names, context.ServiceToIndex, asynchronous, requestingType));
+		}
+
+		return arguments.ToString();
 	}
 
 	/// <summary>
@@ -77,13 +104,54 @@ internal static partial class Sources
 	///     (singleton/scoped) path uses <see cref="EmitCachedReleaseRegistration" /> instead, which captures the
 	///     published field into a local for the same by-value guarantee under wiring rollback.
 	/// </summary>
-	private static void EmitReleaseRegistration(StringBuilder builder, int depth, InstanceModel instance, string variable)
+	private static void EmitReleaseRegistration(StringBuilder builder, int depth, InstanceModel instance, string variable, EmitContext context, bool asynchronous)
 	{
-		if (instance.OnRelease is not null)
+		if (instance.OnRelease is null)
 		{
-			Indent(builder, depth).Append("(__s.__releases ??= new global::System.Collections.Generic.List<global::System.Action>()).Add(() => ")
-				.Append(instance.OnRelease).Append('(').Append(variable).AppendLine("));");
+			return;
 		}
+
+		string arguments = EmitReleaseCaptures(builder, depth, instance, context, asynchronous);
+		EmitReleaseAdd(builder, depth, instance, variable, arguments);
+	}
+
+	/// <summary>
+	///     Resolves the release hook's graph-resolved parameters (those after the instance) into locals captured by
+	///     value (<c>var __release0 = …;</c>), so the queued closure holds the values resolved at construction time
+	///     rather than re-resolving them at teardown (when the owner may already be disposed). Mirrors the by-value
+	///     capture of the instance itself. Returns the comma-prefixed argument list referencing the locals; empty
+	///     (emitting nothing) when the hook takes only the instance.
+	/// </summary>
+	private static string EmitReleaseCaptures(StringBuilder builder, int depth, InstanceModel instance, EmitContext context, bool asynchronous)
+	{
+		ParameterModel[] parameters = instance.ReleaseParameters.AsArray();
+		if (parameters.Length == 0)
+		{
+			return string.Empty;
+		}
+
+		string requestingType = RequestingTypeOf(instance);
+		StringBuilder arguments = new();
+		for (int p = 0; p < parameters.Length; p++)
+		{
+			string local = "__release" + p;
+			string value = DependencyValue(parameters[p], context.Instances, context.Names, context.ServiceToIndex, asynchronous, requestingType);
+			Indent(builder, depth).Append("var ").Append(local).Append(" = ").Append(value).AppendLine(";");
+			arguments.Append(", ").Append(local);
+		}
+
+		return arguments.ToString();
+	}
+
+	/// <summary>
+	///     Emits the <c>__releases</c> enqueue of the release closure
+	///     (<c>Add(() =&gt; OnRelease(variable, dep…))</c>) over the by-value <paramref name="variable" /> and the
+	///     captured dependency <paramref name="arguments" /> (a comma-prefixed list, empty for an instance-only hook).
+	/// </summary>
+	private static void EmitReleaseAdd(StringBuilder builder, int depth, InstanceModel instance, string variable, string arguments)
+	{
+		Indent(builder, depth).Append("(__s.__releases ??= new global::System.Collections.Generic.List<global::System.Action>()).Add(() => ")
+			.Append(instance.OnRelease).Append('(').Append(variable).Append(arguments).AppendLine("));");
 	}
 
 	/// <summary>
@@ -97,14 +165,16 @@ internal static partial class Sources
 	///     field only after activating, so it queues the release against that local via
 	///     <see cref="EmitReleaseRegistration" /> instead. Nothing when the instance names no hook.
 	/// </summary>
-	private static void EmitCachedReleaseRegistration(StringBuilder builder, int depth, InstanceModel instance, string field, string type)
+	private static void EmitCachedReleaseRegistration(StringBuilder builder, int depth, InstanceModel instance, string field, string type, EmitContext context, bool asynchronous)
 	{
-		if (instance.OnRelease is not null)
+		if (instance.OnRelease is null)
 		{
-			Indent(builder, depth).Append(type).Append(" __released = __s.").Append(field).AppendLine(";");
-			Indent(builder, depth).Append("(__s.__releases ??= new global::System.Collections.Generic.List<global::System.Action>()).Add(() => ")
-				.Append(instance.OnRelease).AppendLine("(__released));");
+			return;
 		}
+
+		Indent(builder, depth).Append(type).Append(" __released = __s.").Append(field).AppendLine(";");
+		string arguments = EmitReleaseCaptures(builder, depth, instance, context, asynchronous);
+		EmitReleaseAdd(builder, depth, instance, "__released", arguments);
 	}
 
 	/// <summary>
@@ -238,18 +308,21 @@ internal static partial class Sources
 	///     activation, so that concurrent dispose tears it down; a non-disposable one simply is not released).
 	///     Nothing when the instance names no hook.
 	/// </summary>
-	private static void EmitFreshReleaseRegistration(StringBuilder builder, int depth, InstanceModel instance)
+	private static void EmitFreshReleaseRegistration(StringBuilder builder, int depth, InstanceModel instance, EmitContext context, bool asynchronous)
 	{
 		if (instance.OnRelease is null)
 		{
 			return;
 		}
 
+		// Resolve the captured release dependencies before the lock: on the async path an async-tainted dependency
+		// is awaited, which cannot occur inside a lock. The instance itself is the by-value `created` local.
+		string arguments = EmitReleaseCaptures(builder, depth, instance, context, asynchronous);
 		Indent(builder, depth).AppendLine("lock (__s.__gate)");
 		Indent(builder, depth).AppendLine("{");
 		Indent(builder, depth + 1).AppendLine("if (!__s.__disposed)");
 		Indent(builder, depth + 1).AppendLine("{");
-		EmitReleaseRegistration(builder, depth + 2, instance, "created");
+		EmitReleaseAdd(builder, depth + 2, instance, "created", arguments);
 		Indent(builder, depth + 1).AppendLine("}");
 		Indent(builder, depth).AppendLine("}");
 	}

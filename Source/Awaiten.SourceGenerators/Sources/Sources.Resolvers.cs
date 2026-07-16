@@ -74,7 +74,7 @@ internal static partial class Sources
 			string requestingConstruction = EmitConstruction(instance, context.Instances, names, context.ServiceToIndex);
 			string requestingSignature = $"global::System.Type? {RequestingTypeParameterName}";
 			string requestingSummary = $"Resolves {XmlTypeRef(type)} through its requesting-type factory, passing the requesting consumer's typeof(…) (a new instance per call).";
-			EmitFreshResolver(builder, depth, new FreshResolver("Scope", type, resolver, requestingSignature, requestingConstruction, DisposalOf(instance), requestingSummary), instance, asyncDisposal);
+			EmitFreshResolver(builder, depth, new FreshResolver("Scope", type, resolver, requestingSignature, requestingConstruction, DisposalOf(instance), requestingSummary), instance, asyncDisposal, context);
 			return;
 		}
 
@@ -84,7 +84,7 @@ internal static partial class Sources
 			string signature = string.Join(", ", argTypes.Select((t, i) => $"{t} a{i}"));
 			string parameterizedConstruction = EmitConstruction(instance, context.Instances, names, context.ServiceToIndex);
 			string parameterizedSummary = $"Resolves {XmlTypeRef(type)} from its <c>[Arg]</c> arguments (a new instance per call).";
-			EmitFreshResolver(builder, depth, new FreshResolver("Scope", type, resolver, signature, parameterizedConstruction, DisposalOf(instance), parameterizedSummary), instance, asyncDisposal, DeferredEmitter(builder, instance, "created", context, asynchronous: false));
+			EmitFreshResolver(builder, depth, new FreshResolver("Scope", type, resolver, signature, parameterizedConstruction, DisposalOf(instance), parameterizedSummary), instance, asyncDisposal, context, DeferredEmitter(builder, instance, "created", context, asynchronous: false));
 			return;
 		}
 
@@ -93,14 +93,14 @@ internal static partial class Sources
 		if (instance.Lifetime == Lifetime.Transient)
 		{
 			string transientSummary = $"Resolves the transient {XmlTypeRef(type)} (a new instance per call).";
-			EmitFreshResolver(builder, depth, new FreshResolver("Scope", type, resolver, string.Empty, construction, DisposalOf(instance), transientSummary), instance, asyncDisposal, DeferredEmitter(builder, instance, "created", context, asynchronous: false));
+			EmitFreshResolver(builder, depth, new FreshResolver("Scope", type, resolver, string.Empty, construction, DisposalOf(instance), transientSummary), instance, asyncDisposal, context, DeferredEmitter(builder, instance, "created", context, asynchronous: false));
 			return;
 		}
 
 		string scopedSummary = $"Resolves the scoped {XmlTypeRef(type)} (one instance per scope).";
 		string scopedWiredFlag = HasDeferredMembers(instance) ? names.WiredField(index) : string.Empty;
 		// The deferred members are wired onto the cached field on the owner (__s.<field>), inside the static resolver.
-		EmitCachingResolver(builder, depth, new CachingResolver("Scope", type, resolver, (names.Field(index), scopedWiredFlag), construction, DisposalOf(instance), scopedSummary), instance, asyncDisposal, DeferredEmitter(builder, instance, "__s." + names.Field(index), context, asynchronous: false));
+		EmitCachingResolver(builder, depth, new CachingResolver("Scope", type, resolver, (names.Field(index), scopedWiredFlag), construction, DisposalOf(instance), scopedSummary), instance, asyncDisposal, context, DeferredEmitter(builder, instance, "__s." + names.Field(index), context, asynchronous: false));
 	}
 
 	/// <summary>
@@ -120,7 +120,7 @@ internal static partial class Sources
 	///     registered for teardown on the owner under the lock, re-checking <c>__disposed</c> so one built
 	///     during a concurrent dispose is disposed here rather than leaked.
 	/// </summary>
-	private static void EmitFreshResolver(StringBuilder builder, int depth, in FreshResolver resolver, InstanceModel instance, bool asyncDisposal, Action<int>? emitDeferred = null)
+	private static void EmitFreshResolver(StringBuilder builder, int depth, in FreshResolver resolver, InstanceModel instance, bool asyncDisposal, EmitContext context, Action<int>? emitDeferred = null)
 	{
 		string type = resolver.Type;
 		string construction = resolver.Construction;
@@ -177,12 +177,12 @@ internal static partial class Sources
 				builder.AppendLine();
 			}
 
-			EmitActivation(builder, depth + 1, instance, "created");
+			EmitActivation(builder, depth + 1, instance, "created", context, asynchronous: false);
 			// Queue OnRelease only after OnActivated has run, so a failed activation queues no release; the
 			// raced-safe block skips the queue when the owner was disposed since construction.
 			if (instance.HasReleaseHook)
 			{
-				EmitFreshReleaseRegistration(builder, depth + 1, instance);
+				EmitFreshReleaseRegistration(builder, depth + 1, instance, context, asynchronous: false);
 			}
 
 			Indent(builder, depth + 1).AppendLine("return created;");
@@ -223,7 +223,7 @@ internal static partial class Sources
 		string singletonSummary = $"Resolves the singleton {XmlTypeRef(type)} (one instance per container).";
 		string singletonWiredFlag = HasDeferredMembers(instance) ? names.WiredField(index) : string.Empty;
 		// The deferred members are wired onto the cached field on the owner (__s.<field>), inside the static resolver.
-		EmitCachingResolver(builder, depth, new CachingResolver("Root", type, resolver, (names.Field(index), singletonWiredFlag), construction, DisposalOf(instance), singletonSummary), instance, context.AsyncDisposal, DeferredEmitter(builder, instance, "__s." + names.Field(index), context, asynchronous: false));
+		EmitCachingResolver(builder, depth, new CachingResolver("Root", type, resolver, (names.Field(index), singletonWiredFlag), construction, DisposalOf(instance), singletonSummary), instance, context.AsyncDisposal, context, DeferredEmitter(builder, instance, "__s." + names.Field(index), context, asynchronous: false));
 	}
 
 	/// <summary>
@@ -611,9 +611,9 @@ internal static partial class Sources
 		if (DisposalOf(instance) == DisposalTracking.None)
 		{
 			emitDeferred?.Invoke(depth);
-			EmitActivation(builder, depth, instance, "created");
+			EmitActivation(builder, depth, instance, "created", context, asynchronous: true);
 			EmitAsyncInitialization(builder, depth, instance, "created");
-			EmitFreshReleaseRegistration(builder, depth, instance);
+			EmitFreshReleaseRegistration(builder, depth, instance, context, asynchronous: true);
 			return;
 		}
 
@@ -622,7 +622,7 @@ internal static partial class Sources
 		emitDeferred?.Invoke(depth + 1);
 		// OnActivated runs post-construction, before initialization; inside the guarded try, so a throwing
 		// activation tears the constructed instance down (like a throwing wiring/init) rather than leaking it.
-		EmitActivation(builder, depth + 1, instance, "created");
+		EmitActivation(builder, depth + 1, instance, "created", context, asynchronous: true);
 		EmitAsyncInitialization(builder, depth + 1, instance, "created");
 		Indent(builder, depth).AppendLine("}");
 		Indent(builder, depth).AppendLine("catch");
@@ -636,7 +636,7 @@ internal static partial class Sources
 		// Register disposal and queue the release only on success, so a failure that tore the instance down above
 		// leaves neither behind.
 		EmitAsyncDisposableRegistration(builder, depth, instance, context.AsyncDisposal);
-		EmitFreshReleaseRegistration(builder, depth, instance);
+		EmitFreshReleaseRegistration(builder, depth, instance, context, asynchronous: true);
 	}
 
 	/// <summary>
@@ -822,7 +822,7 @@ internal static partial class Sources
 	///     transitively through a peer), and a failed episode unpublishes what it built so a later resolve retries
 	///     instead of silently returning a half-wired instance forever.
 	/// </summary>
-	private static void EmitCachingResolver(StringBuilder builder, int depth, in CachingResolver resolver, InstanceModel instance, bool asyncDisposal, Action<int>? emitDeferred = null)
+	private static void EmitCachingResolver(StringBuilder builder, int depth, in CachingResolver resolver, InstanceModel instance, bool asyncDisposal, EmitContext context, Action<int>? emitDeferred = null)
 	{
 		string type = resolver.Type;
 		string field = resolver.Field;
@@ -875,8 +875,8 @@ internal static partial class Sources
 				// successfully-activated instance is released), capturing the local by value.
 				Indent(builder, depth + 3).Append(type).Append(" created = ").Append(construction).AppendLine(";");
 				EmitCachedDisposalRegistration(builder, depth + 3, "created", disposal, asyncDisposal);
-				EmitActivation(builder, depth + 3, instance, "created");
-				EmitReleaseRegistration(builder, depth + 3, instance, "created");
+				EmitActivation(builder, depth + 3, instance, "created", context, asynchronous: false);
+				EmitReleaseRegistration(builder, depth + 3, instance, "created", context, asynchronous: false);
 				Indent(builder, depth + 3).Append("__s.").Append(field).AppendLine(" = created;");
 			}
 			else
@@ -886,7 +886,7 @@ internal static partial class Sources
 				// cache-miss (the owner is known not disposed here, so no separate raced check is needed).
 				Indent(builder, depth + 3).Append("__s.").Append(field).Append(" = ").Append(construction).AppendLine(";");
 				EmitCachedDisposalRegistration(builder, depth + 3, "__s." + field, disposal, asyncDisposal);
-				EmitCachedReleaseRegistration(builder, depth + 3, instance, field, type);
+				EmitCachedReleaseRegistration(builder, depth + 3, instance, field, type, context, asynchronous: false);
 			}
 		}
 		else
@@ -906,8 +906,8 @@ internal static partial class Sources
 			// episode back (unpublishing the field) rather than leaving a published, half-activated instance, and
 			// the release is queued only after activation succeeds. The release captures the instance by value, so
 			// a rollback triggered by a later peer in the same episode cannot orphan it onto the nulled field.
-			EmitActivation(builder, depth + 4, instance, "__s." + field);
-			EmitCachedReleaseRegistration(builder, depth + 4, instance, field, type);
+			EmitActivation(builder, depth + 4, instance, "__s." + field, context, asynchronous: false);
+			EmitCachedReleaseRegistration(builder, depth + 4, instance, field, type, context, asynchronous: false);
 			Indent(builder, depth + 3).AppendLine("}");
 			Indent(builder, depth + 3).AppendLine("catch");
 			Indent(builder, depth + 3).AppendLine("{");

@@ -1315,4 +1315,19 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Warning,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A lifecycle hook parameter (after the leading instance parameter of an <c>OnActivated</c> /
+	///     <c>OnRelease</c> hook) is marked <c>[Arg]</c>. A hook's parameters after the instance are resolved from
+	///     the object graph, but a runtime argument flows only through a <c>Func&lt;…&gt;</c> factory into an
+	///     <c>[Arg]</c> constructor parameter, and a hook is invoked by the container with no such call site to
+	///     supply one. Drop the <c>[Arg]</c>, or resolve the value from the graph instead.
+	/// </summary>
+	public static readonly DiagnosticDescriptor HookParameterIsArg = new(
+		"AWT189",
+		"Lifecycle hook parameter cannot be a runtime argument",
+		"the parameter '{0}' of the lifecycle hook for '{1}' is marked [Arg], but a hook's parameters are resolved from the graph; runtime arguments are supplied only through a Func<…> factory to constructor parameters, never to a lifecycle hook",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

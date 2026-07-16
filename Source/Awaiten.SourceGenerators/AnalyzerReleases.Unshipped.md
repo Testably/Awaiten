@@ -90,3 +90,4 @@
  AWT186  | Awaiten   | Error    | An Owned<T> relationship (or its Func/Task forms) targets a service produced by a requesting-type factory, which has no owner scope
  AWT187  | Awaiten   | Warning  | A [Scan(As = ScanAs.MatchingInterface)] matched a type implementing several same-named convention interfaces, so it registers under each
  AWT188  | Awaiten   | Warning  | A scan match's only exposure interface is inaccessible to the generated container, so the match is not registered
+ AWT189  | Awaiten   | Error    | A lifecycle hook parameter (after the instance) is marked [Arg], but a hook resolves its parameters from the graph

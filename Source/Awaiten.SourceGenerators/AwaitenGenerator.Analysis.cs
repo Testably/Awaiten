@@ -282,6 +282,20 @@ partial class AwaitenGenerator
 				AddParameterEdges(member.Dependency, serviceToImpl, implToIndex, serviceMembers, keyedMembers, includeEagerBare, nodeEdges);
 			}
 
+			// A lifecycle hook's parameters (after the instance) are graph dependencies too: the activation hook
+			// resolves them during the owner's construction (an inline argument) and the release hook captures them
+			// then. Both are resolved eagerly like a Direct constructor parameter, so AddParameterEdges classifies
+			// them identically - contributing to cycle (AWT102), captive (AWT105) and async-taint analysis.
+			foreach (ParameterModel parameter in instances[i].ActivationParameters.AsArray())
+			{
+				AddParameterEdges(parameter, serviceToImpl, implToIndex, serviceMembers, keyedMembers, includeEagerBare, nodeEdges);
+			}
+
+			foreach (ParameterModel parameter in instances[i].ReleaseParameters.AsArray())
+			{
+				AddParameterEdges(parameter, serviceToImpl, implToIndex, serviceMembers, keyedMembers, includeEagerBare, nodeEdges);
+			}
+
 			edges[i] = nodeEdges;
 		}
 

@@ -448,6 +448,21 @@ public static partial class CoffeeShop
 }
 ```
 
+### AWT189
+
+:::danger[Error]
+A lifecycle hook parameter (after the instance) is marked `[Arg]`, but a hook resolves its parameters from the graph.
+:::
+
+```csharp
+[Container]
+[Singleton<EspressoMachine>(OnActivated = nameof(Calibrate))]
+public static partial class CoffeeShop
+{
+    private static void Calibrate(EspressoMachine machine, [Arg] int count) { }   // no Func<…> call site supplies an [Arg]
+}
+```
+
 ## Runtime arguments
 
 ### AWT113

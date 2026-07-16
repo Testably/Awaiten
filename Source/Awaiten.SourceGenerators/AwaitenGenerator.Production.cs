@@ -90,11 +90,12 @@ partial class AwaitenGenerator
 		string realType = info.Symbol.ToDisplayString(FullyQualified);
 		string? emitType = info.ImplementationType == realType ? null : realType;
 
-		// Lifecycle hooks (AWT164 when a named member is not a usable static void M(TImplementation)). Applied to
+		// Lifecycle hooks (AWT164 when a named member is not a usable static void M(TImplementation, …)). Applied to
 		// constructed and factory-produced instances - the ones the container owns; a pre-built Instance returns
-		// above (the caller owns it, so activation/release do not apply).
-		string? onActivated = ResolveHook(containerSymbol, info, info.OnActivated, compilation, diagnostics);
-		string? onRelease = ResolveHook(containerSymbol, info, info.OnRelease, compilation, diagnostics);
+		// above (the caller owns it, so activation/release do not apply). A hook's parameters after the instance are
+		// graph dependencies (AWT101 when unregistered, AWT189 for a runtime [Arg]), resolved like a constructor's.
+		(string? onActivated, EquatableArray<ParameterModel> activationParameters) = ResolveHook(info, info.OnActivated, context);
+		(string? onRelease, EquatableArray<ParameterModel> releaseParameters) = ResolveHook(info, info.OnRelease, context);
 
 		return new InstanceModel(
 			info.ImplementationType,
@@ -117,7 +118,9 @@ partial class AwaitenGenerator
 			// coalesces onto the implementation, so this guard keeps a coalesced non-singleton from carrying it.
 			Eager: info.Eager && info.Lifetime == Lifetime.Singleton,
 			OnActivated: onActivated,
-			OnRelease: onRelease);
+			OnRelease: onRelease,
+			ActivationParameters: activationParameters,
+			ReleaseParameters: releaseParameters);
 
 		static bool ImplementsInterface(ITypeSymbol type, INamedTypeSymbol @interface)
 		{
@@ -251,48 +254,98 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     Resolves an <c>OnActivated</c> / <c>OnRelease</c> lifecycle hook to a <c>static void M(TImplementation)</c>
+	///     Resolves an <c>OnActivated</c> / <c>OnRelease</c> lifecycle hook to a <c>static void M(TImplementation, …)</c>
 	///     method on its owner - the container, or the module that declared the registration for an imported one
-	///     (never falling back to the container) - returning the name the generated Root/Scope calls it by, or
-	///     <see langword="null" /> when the registration named none. The owner is a static class, so the hook is a
-	///     static method reached by simple name, exactly like a factory method - no receiver and no instance/static
-	///     distinction; a module hook is qualified with the module type (the generated container is another class,
-	///     so the simple name would not bind). The container's own members are reachable at any accessibility from
-	///     the generated partial, so a <c>private</c> hook qualifies, but a module's are not: a module method that
-	///     matches yet is inaccessible from the container is skipped (it cannot be called from the generated code),
-	///     falling through to AWT164. Reports
-	///     <see cref="Diagnostics.InvalidLifecycleHook">AWT164</see> and returns <see langword="null" /> when no
-	///     accessible ordinary void method of that name accepts the implementation type.
+	///     (never falling back to the container) - returning the name the generated Root/Scope calls it by and its
+	///     graph-resolved parameters (every parameter after the instance), or <c>(null, empty)</c> when the
+	///     registration named none. The first parameter is the instance and accepts the implementation type; each
+	///     parameter after it is resolved from the object graph exactly like a constructor parameter (see
+	///     <see cref="ClassifyHookParameters" />). The owner is a static class, so the hook is a static method
+	///     reached by simple name, exactly like a factory method - no receiver and no instance/static distinction;
+	///     a module hook is qualified with the module type (the generated container is another class, so the simple
+	///     name would not bind). The container's own members are reachable at any accessibility from the generated
+	///     partial, so a <c>private</c> hook qualifies, but a module's are not: a module method that matches yet is
+	///     inaccessible from the container is skipped (it cannot be called from the generated code), falling through
+	///     to AWT164. Reports <see cref="Diagnostics.InvalidLifecycleHook">AWT164</see> and returns
+	///     <c>(null, empty)</c> when no accessible ordinary void method of that name accepts the implementation type
+	///     as its first parameter.
 	/// </summary>
-	private static string? ResolveHook(
-		INamedTypeSymbol containerSymbol,
+	private static (string? Hook, EquatableArray<ParameterModel> Parameters) ResolveHook(
 		ImplInfo info,
 		string? hookName,
-		Compilation compilation,
-		List<DiagnosticInfo> diagnostics)
+		BuildContext context)
 	{
 		if (hookName is null)
 		{
-			return null;
+			return (null, default);
 		}
+
+		INamedTypeSymbol containerSymbol = context.ContainerSymbol;
+		Compilation compilation = context.Compilation;
 
 		foreach (ISymbol member in AccessibleMembers(info.Origin ?? containerSymbol, hookName))
 		{
 			// A module hook must also be accessible from the generated container (its own private members are
 			// reachable from the partial, a module's are not); an inaccessible module method is not a usable hook.
-			if (member is IMethodSymbol { MethodKind: MethodKind.Ordinary, IsStatic: true, ReturnsVoid: true, Parameters.Length: 1, } method
+			if (member is IMethodSymbol { MethodKind: MethodKind.Ordinary, IsStatic: true, ReturnsVoid: true, Parameters.Length: >= 1, } method
 			    && compilation.HasImplicitConversion(info.Symbol, method.Parameters[0].Type)
 			    && (info.Origin is null || compilation.IsSymbolAccessibleWithin(method, containerSymbol)))
 			{
-				return QualifiedHook(info, hookName);
+				return (QualifiedHook(info, hookName), ClassifyHookParameters(method, info, context));
 			}
 		}
 
-		diagnostics.Add(new DiagnosticInfo(
+		context.Diagnostics.Add(new DiagnosticInfo(
 			Diagnostics.InvalidLifecycleHook,
 			info.Location,
 			new EquatableArray<string>([Display(info.OwningServiceOrImpl), hookName, DescribeOwner(info),])));
-		return null;
+		return (null, default);
+	}
+
+	/// <summary>
+	///     Classifies a lifecycle hook's parameters after the leading instance parameter into the graph
+	///     dependencies the container resolves and supplies to the hook, mirroring the constructor/factory pipeline
+	///     in <see cref="ClassifyParameters" /> (contextual binding, registered-collection suppression, variance and
+	///     the <c>[ImportServices]</c> fall-through), and reporting <see cref="Diagnostics.MissingDependency">AWT101</see>
+	///     for an unregistered one. A parameter marked <c>[Arg]</c> is rejected with
+	///     <see cref="Diagnostics.HookParameterIsArg">AWT189</see> and dropped: runtime arguments flow only through a
+	///     <c>Func&lt;…&gt;</c> factory into <c>[Arg]</c> constructor parameters, and a hook has no such call site.
+	/// </summary>
+	private static EquatableArray<ParameterModel> ClassifyHookParameters(IMethodSymbol hook, ImplInfo info, BuildContext context)
+	{
+		List<ParameterModel> parameters = new();
+		foreach (IParameterSymbol parameter in hook.Parameters.Skip(1))
+		{
+			ParameterModel parameterModel = ClassifyParameter(parameter, asyncFactory: false, context.External.ServiceTypes);
+
+			// AWT189: a hook parameter cannot be a runtime [Arg]. Dropped so it contributes no (unresolvable) graph
+			// edge and no emitted argument; the error already fails the build.
+			if (parameterModel.Kind == DependencyKind.Arg)
+			{
+				context.Diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.HookParameterIsArg,
+					parameterModel.Location ?? info.Location,
+					new EquatableArray<string>([parameter.Name, DisplayInstance(info.ImplementationType),])));
+				continue;
+			}
+
+			parameterModel = RedirectContextualBinding(parameterModel, info, context.ServiceToImpl, context.ConsumedConditionals);
+			parameterModel = SuppressRegisteredCollectionSynthesis(parameterModel, parameter.Type, context.ServiceToImpl);
+			parameterModel = RedirectVariance(parameterModel, parameter, context.ServiceToImpl, context.Variance);
+			RecordRequestedCollectionElement(parameterModel, parameter, context.Variance);
+
+			if (context.External.ImportServices
+			    && parameterModel is { Kind: DependencyKind.Direct, Key: null, }
+			    && !context.ServiceToImpl.ContainsKey(KeyOf(parameterModel)))
+			{
+				parameterModel = parameterModel with { Kind = DependencyKind.External, };
+			}
+
+			parameters.Add(parameterModel);
+			ReportWhenUnregistered(parameterModel, info, context);
+		}
+
+		return new EquatableArray<ParameterModel>(parameters.ToArray());
 	}
 
 	/// <summary>

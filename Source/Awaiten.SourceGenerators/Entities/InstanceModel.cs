@@ -16,9 +16,12 @@ namespace Awaiten.SourceGenerators.Entities;
 ///     <c>IDisposable</c> but could produce one at runtime, so the resolver tracks it behind a runtime type test.
 ///     <see cref="Eager" /> marks a singleton built at container build time rather than lazily on first resolve.
 ///     <see cref="OnActivated" /> / <see cref="OnRelease" /> are the resolved names of the container's
-///     <c>static void M(TImplementation)</c> lifecycle hooks. The activation hook runs once the instance is
+///     <c>static void M(TImplementation, …)</c> lifecycle hooks. The activation hook runs once the instance is
 ///     constructed; the release hook is queued at construction and run when the owning Root/Scope is disposed,
-///     before the instance's own disposal.
+///     before the instance's own disposal. Each hook's first parameter is the instance; any parameters after it
+///     are graph dependencies, carried as <see cref="ActivationParameters" /> / <see cref="ReleaseParameters" />
+///     and resolved exactly like a constructor parameter (an activation dependency inline at the call, a release
+///     dependency captured by value into the queued closure).
 /// </summary>
 internal sealed record InstanceModel(
 	string ImplementationType,
@@ -39,7 +42,9 @@ internal sealed record InstanceModel(
 	EquatableArray<MemberModel> InjectedMembers = default,
 	bool Eager = false,
 	string? OnActivated = null,
-	string? OnRelease = null)
+	string? OnRelease = null,
+	EquatableArray<ParameterModel> ActivationParameters = default,
+	EquatableArray<ParameterModel> ReleaseParameters = default)
 {
 	/// <summary>
 	///     The concrete type to construct and to use for cache fields and resolver return types. Normally the same
