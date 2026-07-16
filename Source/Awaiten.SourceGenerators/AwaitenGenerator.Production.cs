@@ -268,7 +268,8 @@ partial class AwaitenGenerator
 	///     inaccessible from the container is skipped (it cannot be called from the generated code), falling through
 	///     to AWT164. Reports <see cref="Diagnostics.InvalidLifecycleHook">AWT164</see> and returns
 	///     <c>(null, empty)</c> when no accessible ordinary void method of that name accepts the implementation type
-	///     as its first parameter.
+	///     as its first parameter, and <see cref="Diagnostics.AmbiguousLifecycleHook">AWT190</see> (also returning
+	///     <c>(null, empty)</c>) when more than one does, so the choice would be order-dependent.
 	/// </summary>
 	private static (string? Hook, EquatableArray<ParameterModel> Parameters) ResolveHook(
 		ImplInfo info,
@@ -283,6 +284,7 @@ partial class AwaitenGenerator
 		INamedTypeSymbol containerSymbol = context.ContainerSymbol;
 		Compilation compilation = context.Compilation;
 
+		List<IMethodSymbol> matches = new();
 		foreach (ISymbol member in AccessibleMembers(info.Origin ?? containerSymbol, hookName))
 		{
 			// A module hook must also be accessible from the generated container (its own private members are
@@ -291,12 +293,20 @@ partial class AwaitenGenerator
 			    && compilation.HasImplicitConversion(info.Symbol, method.Parameters[0].Type)
 			    && (info.Origin is null || compilation.IsSymbolAccessibleWithin(method, containerSymbol)))
 			{
-				return (QualifiedHook(info, hookName), ClassifyHookParameters(method, info, context));
+				matches.Add(method);
 			}
 		}
 
+		if (matches.Count == 1)
+		{
+			return (QualifiedHook(info, hookName), ClassifyHookParameters(matches[0], info, context));
+		}
+
+		// No usable match is AWT164 (unusable hook); more than one is AWT190 (an overload the container cannot pick
+		// between). Either way no hook is emitted - the error fails the build, and picking one arbitrarily would only
+		// add a confusing secondary diagnostic from the parameters of the guessed overload.
 		context.Diagnostics.Add(new DiagnosticInfo(
-			Diagnostics.InvalidLifecycleHook,
+			matches.Count == 0 ? Diagnostics.InvalidLifecycleHook : Diagnostics.AmbiguousLifecycleHook,
 			info.Location,
 			new EquatableArray<string>([Display(info.OwningServiceOrImpl), hookName, DescribeOwner(info),])));
 		return (null, default);

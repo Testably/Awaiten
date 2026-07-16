@@ -1330,4 +1330,18 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     An <c>OnActivated</c> / <c>OnRelease</c> registration names a method that is overloaded: more than one
+	///     accessible <c>static void</c> method of that name accepts the implementation type as its first parameter,
+	///     so the container's choice of hook (and of the graph dependencies its remaining parameters resolve) would
+	///     be order-dependent. Mirrors <see cref="AmbiguousFactory">AWT112</see> for factory methods.
+	/// </summary>
+	public static readonly DiagnosticDescriptor AmbiguousLifecycleHook = new(
+		"AWT190",
+		"Ambiguous lifecycle hook",
+		"'{0}' has an ambiguous lifecycle hook: {2} has more than one accessible method '{1}' accepting the instance; the container cannot choose one. Give the hook method a unique name.",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

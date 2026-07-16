@@ -267,8 +267,10 @@ public partial class LifecycleHookTests
 		Probe.Reset();
 		using (PoolContainer.Root container = new())
 		{
-			// PooledBuffer takes the Pool in its constructor, so the Pool is created first and, drained in reverse
-			// creation order, is released last - it is still alive when the buffer's release hook uses it.
+			// PooledBuffer has no constructor dependency on Pool: resolving it queues the buffer's release, and the
+			// release capture first-constructs the singleton Pool (queuing Pool's own release) before the buffer's
+			// release is enqueued. Reverse creation-order teardown then runs the buffer's release before Pool's, so
+			// the captured Pool is still alive when the buffer's release uses it.
 			container.Resolve<PooledBuffer>();
 		}
 
@@ -475,9 +477,11 @@ public partial class LifecycleHookTests
 
 	public sealed class PooledBuffer
 	{
-		// Takes the Pool in its constructor so the Pool is created first; reverse-order release then keeps the Pool
-		// alive until after the buffer's release hook has used it.
-		public PooledBuffer(Pool pool) => _ = pool;
+		// Deliberately no constructor dependency on Pool: the Pool is reached only through the release hook's
+		// parameter. That makes the reverse-creation-order teardown depend solely on the release capture resolving
+		// (and so first-constructing, and queuing the release of) the Pool before the buffer's own release is
+		// queued - the exact mechanism ReleaseHookDependency_OutlivesTheRelease_InReverseCreationOrder exercises. A
+		// constructor dependency would force the Pool-first order regardless, hiding a broken capture ordering.
 	}
 
 	[Container]

@@ -463,6 +463,24 @@ public static partial class CoffeeShop
 }
 ```
 
+### AWT190
+
+:::danger[Error]
+A lifecycle hook (`OnActivated` / `OnRelease`) names an overloaded method, so the container cannot choose which one to call.
+:::
+
+The container reaches a hook by simple name, so two accepting overloads leave the choice (and the graph dependencies the extra parameters resolve) order-dependent. Give the hook a unique name, exactly as a factory method must be unambiguous.
+
+```csharp
+[Container]
+[Singleton<EspressoMachine>(OnActivated = nameof(Calibrate))]
+public static partial class CoffeeShop
+{
+    private static void Calibrate(EspressoMachine machine) { }
+    private static void Calibrate(EspressoMachine machine, Settings settings) { }   // which one runs?
+}
+```
+
 ## Runtime arguments
 
 ### AWT113
