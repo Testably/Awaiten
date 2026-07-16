@@ -90,6 +90,21 @@ public partial class LifecycleHookTests
 			.Because("the container never disposes a SuppressDisposal instance, even across reuse");
 	}
 
+#if NET || NETSTANDARD2_1_OR_GREATER
+	[Fact]
+	public async Task SuppressDisposal_SkipsDisposeAsync_OnAnAsyncDisposableService()
+	{
+		Probe.Log.Clear();
+		await using (SuppressedAsyncDisposalContainer.Root container = new())
+		{
+			container.Resolve<AsyncTracked>();
+		}
+
+		await That(Probe.Log).DoesNotContain("disposedAsync:AsyncTracked")
+			.Because("SuppressDisposal opts out of DisposeAsync too, not only the synchronous Dispose");
+	}
+#endif
+
 	[Fact]
 	public async Task TransientHooks_RunOncePerConstructedInstance()
 	{
@@ -391,6 +406,17 @@ public partial class LifecycleHookTests
 		public void Dispose() => Probe.Log.Add("disposed:RentedBuffer");
 	}
 
+#if NET || NETSTANDARD2_1_OR_GREATER
+	public sealed class AsyncTracked : System.IAsyncDisposable
+	{
+		public ValueTask DisposeAsync()
+		{
+			Probe.Log.Add("disposedAsync:AsyncTracked");
+			return default;
+		}
+	}
+#endif
+
 	public sealed class Flaky : IDisposable
 	{
 		public Flaky() => Probe.Constructions++;
@@ -467,6 +493,12 @@ public partial class LifecycleHookTests
 	{
 		private static void Release(Tracked tracked) => Probe.Log.Add("released:Tracked");
 	}
+
+#if NET || NETSTANDARD2_1_OR_GREATER
+	[Container]
+	[Singleton<AsyncTracked>(SuppressDisposal = true)]
+	public static partial class SuppressedAsyncDisposalContainer;
+#endif
 
 	[Container]
 	[Transient<RentedBuffer>(Factory = nameof(Rent), OnRelease = nameof(ReturnToPool), SuppressDisposal = true)]

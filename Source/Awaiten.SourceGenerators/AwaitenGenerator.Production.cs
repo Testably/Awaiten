@@ -200,7 +200,7 @@ partial class AwaitenGenerator
 				new EquatableArray<string>([Display(info.OwningServiceOrImpl),])));
 		}
 
-		// AWT189: the container never disposes a pre-built Instance (the caller owns it), so opting out of that
+		// AWT192: the container never disposes a pre-built Instance (the caller owns it), so opting out of that
 		// disposal is a silent no-op, rejected for the same reason as a lifecycle hook above.
 		if (info.SuppressDisposal)
 		{
