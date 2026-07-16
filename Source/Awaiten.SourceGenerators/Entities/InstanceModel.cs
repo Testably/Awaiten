@@ -103,8 +103,23 @@ internal sealed record InstanceModel(
 	///     resolved eagerly at construction (the activation dependency inline at the call, the release dependency
 	///     captured by value). Every dependency-walking pass that visits <see cref="ConstructorParameters" /> must
 	///     also visit these, or a hook dependency escapes cycle/captive/async/argument analysis and the emitted
-	///     infrastructure it needs.
+	///     infrastructure it needs. The common case (no hook parameters, or only one hook contributing any) returns a
+	///     backing array without allocating; a new array is built only when both hooks contribute parameters.
 	/// </summary>
 	public ParameterModel[] HookParameters()
-		=> ActivationParameters.AsArray().Concat(ReleaseParameters.AsArray()).ToArray();
+	{
+		ParameterModel[] activation = ActivationParameters.AsArray();
+		ParameterModel[] release = ReleaseParameters.AsArray();
+		if (release.Length == 0)
+		{
+			return activation;
+		}
+
+		if (activation.Length == 0)
+		{
+			return release;
+		}
+
+		return activation.Concat(release).ToArray();
+	}
 }

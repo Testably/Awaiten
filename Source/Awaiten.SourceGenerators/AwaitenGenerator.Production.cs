@@ -317,9 +317,15 @@ partial class AwaitenGenerator
 	///     dependencies the container resolves and supplies to the hook, mirroring the constructor/factory pipeline
 	///     in <see cref="ClassifyParameters" /> (contextual binding, registered-collection suppression, variance and
 	///     the <c>[ImportServices]</c> fall-through), and reporting <see cref="Diagnostics.MissingDependency">AWT101</see>
-	///     for an unregistered one. A parameter marked <c>[Arg]</c> is rejected with
-	///     <see cref="Diagnostics.HookParameterIsArg">AWT189</see> and dropped: runtime arguments flow only through a
-	///     <c>Func&lt;…&gt;</c> factory into <c>[Arg]</c> constructor parameters, and a hook has no such call site.
+	///     for an unregistered one. The same key-misuse diagnostics as a constructor parameter apply: an unsupported
+	///     <c>[FromKey]</c> constant type (<see cref="Diagnostics.UnsupportedKeyType">AWT170</see>), and on a synthesized
+	///     keyed collection an unsupported key type (<see cref="Diagnostics.UnsupportedKeyedCollectionKey">AWT159</see>)
+	///     or a stray <c>[FromKey]</c> (<see cref="Diagnostics.FromKeyOnKeyedCollection">AWT160</see>). A parameter
+	///     marked <c>[Arg]</c> is rejected with <see cref="Diagnostics.HookParameterIsArg">AWT189</see> and dropped:
+	///     runtime arguments flow only through a <c>Func&lt;…&gt;</c> factory into <c>[Arg]</c> constructor parameters,
+	///     and a hook has no such call site. <c>[RequestingType]</c> is a factory-only feature (a hook is invoked by the
+	///     container for an instance, not requested by a consumer), so like a constructor parameter it is not honored
+	///     here and a <c>System.Type</c> so marked surfaces as an unregistered dependency (AWT101).
 	/// </summary>
 	private static EquatableArray<ParameterModel> ClassifyHookParameters(IMethodSymbol hook, ImplInfo info, BuildContext context)
 	{
@@ -339,8 +345,18 @@ partial class AwaitenGenerator
 				continue;
 			}
 
+			// AWT170: a [FromKey] whose constant is of an unsupported key type, reported exactly as for a constructor
+			// parameter (a dropped [Arg] above never reaches here, so it is not doubly reported).
+			ReportUnsupportedFromKey(parameter.GetAttributes(), parameterModel.Location ?? info.Location, DisplayInstance(info.ImplementationType), context.Diagnostics);
+
 			parameterModel = RedirectContextualBinding(parameterModel, info, context.ServiceToImpl, context.ConsumedConditionals);
 			parameterModel = SuppressRegisteredCollectionSynthesis(parameterModel, parameter.Type, context.ServiceToImpl);
+
+			// AWT159/AWT160: keyed-collection misuse (an unsupported key type, or a [FromKey] on a synthesized keyed
+			// collection), reported only for a dictionary that stayed synthesized past the suppression above.
+			ReportUnsupportedKeyedCollectionKey(parameterModel, parameter.Type, info, context.ServiceToImpl, context.Diagnostics);
+			ReportFromKeyOnKeyedCollection(parameterModel, parameter.Type, info, context.Diagnostics);
+
 			parameterModel = RedirectVariance(parameterModel, parameter, context.ServiceToImpl, context.Variance);
 			RecordRequestedCollectionElement(parameterModel, parameter, context.Variance);
 
