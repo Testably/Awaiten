@@ -16,6 +16,8 @@ BrewSession session = shop.Resolve<BrewSession>();   // withheld
 
 At runtime this `Resolve` throws with guidance, and `TryResolve` returns `false`. The message steers you toward a bounded option.
 
+A transient with an [`OnRelease` hook](./lifecycle-hooks) is withheld the same way, even when [`SuppressDisposal`](./disposal#suppressing-disposal) opts it out of disposal itself: each construction queues the release on the owner, so on the root the instances pile up just like undisposed ones would.
+
 ## What is still allowed
 
 Strict mode does not get in your way for the safe shapes:

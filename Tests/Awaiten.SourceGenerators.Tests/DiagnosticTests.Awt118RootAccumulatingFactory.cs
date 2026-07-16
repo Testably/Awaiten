@@ -104,6 +104,55 @@ public partial class DiagnosticTests
 		}
 
 		[Fact]
+		public async Task ReportsWhenTheFuncTargetIsAReleaseHookedPooledTransient()
+		{
+			string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>("""
+			                                       using Awaiten;
+			                                       using System;
+
+			                                       namespace MyCode;
+
+			                                       public sealed class Tool : IDisposable { public void Dispose() { } }
+			                                       public sealed class Depot { public Depot(Func<Tool> tools) { } }
+
+			                                       [Container]
+			                                       [Transient<Tool>(OnRelease = nameof(Return), SuppressDisposal = true)]
+			                                       [Singleton<Depot>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       	private static void Return(Tool tool) { }
+			                                       }
+			                                       """);
+
+			await That(diagnostics.Any(d => d.Contains("AWT118"))).IsTrue()
+				.Because("each Func call queues a release closure that retains the instance on the root, so a SuppressDisposal pooled transient accumulates there like a tracked disposable");
+		}
+
+		[Fact]
+		public async Task DoesNotReportWhenTheFuncTargetSuppressesDisposalWithoutAReleaseHook()
+		{
+			string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>("""
+			                                       using Awaiten;
+			                                       using System;
+
+			                                       namespace MyCode;
+
+			                                       public sealed class Tool : IDisposable { public void Dispose() { } }
+			                                       public sealed class Depot { public Depot(Func<Tool> tools) { } }
+
+			                                       [Container]
+			                                       [Transient<Tool>(SuppressDisposal = true)]
+			                                       [Singleton<Depot>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(diagnostics.Any(d => d.Contains("AWT118"))).IsFalse()
+				.Because("a SuppressDisposal transient without a release hook tracks nothing on the root, so the Func accumulates nothing");
+		}
+
+		[Fact]
 		public async Task DoesNotReportForANonDisposableTransientFactory()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>("""

@@ -52,6 +52,8 @@ public static partial class CoffeeShop
 
 `SuppressDisposal` applies to a service the container constructs, by constructor or `Factory`. Setting it on a pre-built `Instance`, which the container never owns or disposes anyway, is a build error ([AWT192](../diagnostics#awt192)).
 
+An `OnRelease` hook counts like disposal for [strict lifetime safety](./lifetime-safety): each construction queues the release on the owner, so a release-hooked transient like `Cup` above is withheld from by-type resolution on the container root just as a disposable one is — on the root, every rented cup would be held until the container itself is disposed, and none would return to the pool before then. Rent through [`Owned<T>`](./owned) or from a child scope and the return-to-pool runs when the handle or scope is disposed. A `SuppressDisposal` service *without* a release hook tracks nothing at all, so it stays resolvable everywhere.
+
 ## Async disposal
 
 Dispose with `await using` and Awaiten awaits `DisposeAsync` on every async-disposable instance it owns.

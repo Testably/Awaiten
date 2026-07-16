@@ -516,7 +516,10 @@ public partial class LifecycleHookTests
 		private static void ReturnToPool(RentedBuffer buffer) => _pool.Push(buffer);
 	}
 
-	[Container]
+	// Loose: a release-hooked transient is withheld from root by-type resolution under strict lifetime safety
+	// (its queued release closure accumulates on the root); these tests exercise root-owned release semantics,
+	// so they opt out. StrictModeTests covers the withholding itself.
+	[Container(LifetimeSafety = LifetimeSafety.Loose)]
 	[Transient<Alpha>(OnActivated = nameof(Activated), OnRelease = nameof(Released))]
 	public static partial class TransientHookContainer
 	{
@@ -652,7 +655,9 @@ public partial class LifecycleHookTests
 		private static void Calibrate(EspressoMachine machine, Settings settings) => machine.Calibrate(settings);
 	}
 
-	[Container]
+	// Loose so PooledBuffer stays root-resolvable (see TransientHookContainer): these tests need the buffer's and
+	// the Pool's releases queued on the same owner to observe reverse creation order within one queue.
+	[Container(LifetimeSafety = LifetimeSafety.Loose)]
 	[Singleton<Pool>(OnRelease = nameof(ReleasePool))]
 	[Transient<PooledBuffer>(OnRelease = nameof(ReturnToPool))]
 	public static partial class PoolContainer
@@ -702,7 +707,9 @@ public partial class LifecycleHookTests
 		}
 	}
 
-	[Container]
+	// Loose so AsyncBuffer stays root-resolvable (see TransientHookContainer): the test observes the capture's
+	// state when the root tears down.
+	[Container(LifetimeSafety = LifetimeSafety.Loose)]
 	[Singleton<AsyncGauge>]
 	[Transient<AsyncBuffer>(OnRelease = nameof(ReturnAsyncBuffer))]
 	public static partial class AsyncReleaseDependencyContainer

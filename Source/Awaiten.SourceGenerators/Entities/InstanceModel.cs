@@ -62,7 +62,9 @@ internal sealed record InstanceModel(
 	///     Whether the container owns this instance for disposal (its declared type implements <c>IDisposable</c> or
 	///     <c>IAsyncDisposable</c>), so it is tracked for teardown. The drain selects the right disposal at runtime.
 	///     <see cref="SuppressDisposal" /> opts out: a suppressed instance is not tracked and reads here as
-	///     non-disposable, so lifetime-safety analysis treats it like any other non-owned service.
+	///     non-disposable. Lifetime-safety analysis (strict withholding / AWT118) does not read this alone: an
+	///     <see cref="OnRelease" /> hook's queued closure retains the instance on the owner until teardown, so a
+	///     suppressed instance with a release hook still counts as accumulating there.
 	/// </summary>
 	public bool NeedsDisposal => !SuppressDisposal && (IsDisposable || IsAsyncDisposable);
 

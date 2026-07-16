@@ -6,15 +6,19 @@ namespace Awaiten.SourceGenerators;
 internal static partial class Sources
 {
 	/// <summary>
-	///     A disposable build-on-demand service (a disposable transient or parameterized service) is withheld from
-	///     by-type resolution on the container Root under strict lifetime safety: off the Root its bare type and
-	///     plain Func factory throw a guidance exception, and it gets no typed resolver, so the leak-prone ways to
-	///     reach it from the Root are constructor injection and <c>Owned&lt;T&gt;</c> / <c>Func&lt;…, Owned&lt;T&gt;&gt;</c>.
-	///     It stays resolvable from a child scope, where its lifetime is bounded by the scope (the Root mask, not
-	///     the table, gates it).
+	///     A build-on-demand service (a transient or parameterized service) whose construction tracks a teardown on
+	///     its owner is withheld from by-type resolution on the container Root under strict lifetime safety: off the
+	///     Root its bare type and plain Func factory throw a guidance exception, and it gets no typed resolver, so
+	///     the leak-prone ways to reach it from the Root are constructor injection and <c>Owned&lt;T&gt;</c> /
+	///     <c>Func&lt;…, Owned&lt;T&gt;&gt;</c>. It stays resolvable from a child scope, where its lifetime is
+	///     bounded by the scope (the Root mask, not the table, gates it). An <c>OnRelease</c> hook counts like
+	///     disposal: its queued closure retains the instance on the owner until teardown, so a
+	///     <c>SuppressDisposal</c> pooled service accumulates on the Root the same way a tracked disposable would.
 	/// </summary>
 	private static bool IsWithheld(InstanceModel instance, bool strict)
-		=> strict && instance.NeedsDisposal && (instance.Lifetime == Lifetime.Transient || instance.IsParameterized);
+		=> strict
+		   && (instance.NeedsDisposal || instance.HasReleaseHook)
+		   && (instance.Lifetime == Lifetime.Transient || instance.IsParameterized);
 
 	/// <summary>
 	///     Whether a plain <c>Func&lt;…&gt;</c> over this service is withheld from by-type resolution on the Root
