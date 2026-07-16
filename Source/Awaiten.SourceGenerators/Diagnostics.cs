@@ -1344,4 +1344,20 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     An <c>OnRelease</c> hook parameter is a <c>Func</c>/<c>Lazy</c> relationship (including their
+	///     <c>Task</c> and <c>Owned</c> forms). A release dependency is captured at construction, but a
+	///     <c>Func&lt;T&gt;</c> or <c>Lazy&lt;T&gt;</c> captures only a resolver delegate, and the hook runs during
+	///     its owner's teardown, when the resolvers refuse (<c>ObjectDisposedException</c>) - the deferred value
+	///     could never produce its target. An activation hook may take them freely (it runs while the owner is
+	///     alive), so this applies to release hooks only.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ReleaseHookDeferredParameter = new(
+		"AWT191",
+		"Release hook parameter cannot defer resolution",
+		"the parameter '{0}' of the OnRelease lifecycle hook for '{1}' defers resolution behind a Func/Lazy, but a release hook runs during its owner's teardown, when the container no longer resolves; take the dependency directly, so it is captured at construction",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

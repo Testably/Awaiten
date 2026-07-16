@@ -481,6 +481,24 @@ public static partial class CoffeeShop
 }
 ```
 
+### AWT191
+
+:::danger[Error]
+An `OnRelease` hook parameter is a `Func`/`Lazy` relationship, which would defer resolution past the owner's teardown.
+:::
+
+A release dependency is captured at construction, but a `Func<T>` or `Lazy<T>` captures only a resolver delegate. The hook runs while its owner is being disposed, so invoking the delegate there always throws. Take the dependency directly instead: it is resolved at construction and, released in reverse creation order, still alive when the hook uses it. An `OnActivated` hook may take `Func`/`Lazy` parameters freely, since it runs while the owner is alive.
+
+```csharp
+[Container]
+[Singleton<BufferPool>]
+[Transient<Buffer>(OnRelease = nameof(ReturnToPool))]
+public static partial class CoffeeShop
+{
+    private static void ReturnToPool(Buffer buffer, Func<BufferPool> pool) { }   // pool() would throw during teardown; take BufferPool directly
+}
+```
+
 ## Runtime arguments
 
 ### AWT113

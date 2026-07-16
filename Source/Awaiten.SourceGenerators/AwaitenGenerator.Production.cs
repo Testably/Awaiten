@@ -93,9 +93,10 @@ partial class AwaitenGenerator
 		// Lifecycle hooks (AWT164 when a named member is not a usable static void M(TImplementation, …)). Applied to
 		// constructed and factory-produced instances - the ones the container owns; a pre-built Instance returns
 		// above (the caller owns it, so activation/release do not apply). A hook's parameters after the instance are
-		// graph dependencies (AWT101 when unregistered, AWT189 for a runtime [Arg]), resolved like a constructor's.
-		(string? onActivated, EquatableArray<ParameterModel> activationParameters) = ResolveHook(info, info.OnActivated, context);
-		(string? onRelease, EquatableArray<ParameterModel> releaseParameters) = ResolveHook(info, info.OnRelease, context);
+		// graph dependencies (AWT101 when unregistered, AWT189 for a runtime [Arg], AWT191 for a Func/Lazy on the
+		// release hook), resolved like a constructor's.
+		(string? onActivated, EquatableArray<ParameterModel> activationParameters) = ResolveHook(info, info.OnActivated, release: false, context);
+		(string? onRelease, EquatableArray<ParameterModel> releaseParameters) = ResolveHook(info, info.OnRelease, release: true, context);
 
 		return new InstanceModel(
 			info.ImplementationType,
@@ -274,6 +275,7 @@ partial class AwaitenGenerator
 	private static (string? Hook, EquatableArray<ParameterModel> Parameters) ResolveHook(
 		ImplInfo info,
 		string? hookName,
+		bool release,
 		BuildContext context)
 	{
 		if (hookName is null)
@@ -299,7 +301,7 @@ partial class AwaitenGenerator
 
 		if (matches.Count == 1)
 		{
-			return (QualifiedHook(info, hookName), ClassifyHookParameters(matches[0], info, context));
+			return (QualifiedHook(info, hookName), ClassifyHookParameters(matches[0], info, release, context));
 		}
 
 		// No usable match is AWT164 (unusable hook); more than one is AWT190 (an overload the container cannot pick
@@ -323,11 +325,16 @@ partial class AwaitenGenerator
 	///     or a stray <c>[FromKey]</c> (<see cref="Diagnostics.FromKeyOnKeyedCollection">AWT160</see>). A parameter
 	///     marked <c>[Arg]</c> is rejected with <see cref="Diagnostics.HookParameterIsArg">AWT189</see> and dropped:
 	///     runtime arguments flow only through a <c>Func&lt;…&gt;</c> factory into <c>[Arg]</c> constructor parameters,
-	///     and a hook has no such call site. <c>[RequestingType]</c> is a factory-only feature (a hook is invoked by the
+	///     and a hook has no such call site. On a <paramref name="release" /> hook a <c>Func</c>/<c>Lazy</c> parameter
+	///     is rejected with <see cref="Diagnostics.ReleaseHookDeferredParameter">AWT191</see>: the capture holds only
+	///     a resolver delegate, and the hook runs during the owner's teardown, when the resolvers refuse - the
+	///     deferred value could never produce its target. It is kept (it resolves like any graph dependency), so the
+	///     emitted capture and every downstream pass stay coherent; the error already fails the build.
+	///     <c>[RequestingType]</c> is a factory-only feature (a hook is invoked by the
 	///     container for an instance, not requested by a consumer), so like a constructor parameter it is not honored
 	///     here and a <c>System.Type</c> so marked surfaces as an unregistered dependency (AWT101).
 	/// </summary>
-	private static EquatableArray<ParameterModel> ClassifyHookParameters(IMethodSymbol hook, ImplInfo info, BuildContext context)
+	private static EquatableArray<ParameterModel> ClassifyHookParameters(IMethodSymbol hook, ImplInfo info, bool release, BuildContext context)
 	{
 		List<ParameterModel> parameters = new();
 		foreach (IParameterSymbol parameter in hook.Parameters.Skip(1))
@@ -343,6 +350,16 @@ partial class AwaitenGenerator
 					parameterModel.Location ?? info.Location,
 					new EquatableArray<string>([parameter.Name, DisplayInstance(info.ImplementationType),])));
 				continue;
+			}
+
+			// AWT191: a release hook's Func/Lazy parameter (any of the four deferred-delegate kinds, covering their
+			// Task and Owned forms) captures a resolver delegate that is dead by the time the hook runs.
+			if (release && parameterModel.Kind is DependencyKind.Func or DependencyKind.Lazy or DependencyKind.FuncTask or DependencyKind.LazyTask)
+			{
+				context.Diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.ReleaseHookDeferredParameter,
+					parameterModel.Location ?? info.Location,
+					new EquatableArray<string>([parameter.Name, DisplayInstance(info.ImplementationType),])));
 			}
 
 			// AWT170: a [FromKey] whose constant is of an unsupported key type, reported exactly as for a constructor

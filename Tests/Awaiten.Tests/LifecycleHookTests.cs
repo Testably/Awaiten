@@ -278,6 +278,60 @@ public partial class LifecycleHookTests
 			.Because("a release hook's captured dependency must still be alive when the release runs");
 	}
 
+	[Fact]
+	public async Task AsyncActivationHookDependency_IsInitializedWhenTheHookRuns()
+	{
+		Probe.Reset();
+		using AsyncActivationDependencyContainer.Root container = new();
+
+		// The hook's Gauge parameter is async-initialized, so it taints AsyncMachine and forces the async path,
+		// which awaits the dependency's initialization inline in the hook call.
+		AsyncMachine machine = await container.ResolveAsync<AsyncMachine>(TestContext.Current.CancellationToken);
+		AsyncGauge gauge = await container.ResolveAsync<AsyncGauge>(TestContext.Current.CancellationToken);
+
+		await That(machine.Gauge).IsSameAs(gauge)
+			.Because("the activation hook's extra parameter resolves from the graph on the async path too");
+		await That(Probe.Log).Contains("activated-with-initialized-gauge")
+			.Because("the async path awaits the hook dependency's initialization before invoking the hook");
+	}
+
+	[Fact]
+	public async Task AsyncReleaseHookDependency_IsCapturedInitialized()
+	{
+		Probe.Reset();
+		using (AsyncReleaseDependencyContainer.Root container = new())
+		{
+			// The release capture on the async-initialized AsyncGauge taints AsyncBuffer, so it resolves
+			// asynchronously; the capture is awaited at construction, before the release closure is queued.
+			await container.ResolveAsync<AsyncBuffer>(TestContext.Current.CancellationToken);
+			await That(Probe.Log).DoesNotContain("released-with-initialized-gauge");
+		}
+
+		await That(Probe.Log).Contains("released-with-initialized-gauge")
+			.Because("the release hook received the dependency that was captured, already initialized, at construction");
+	}
+
+	[Fact]
+	public async Task ScopedReleaseHook_ReceivesAGraphDependency_WhenTheScopeIsDisposed()
+	{
+		Probe.Reset();
+		using ScopedReleaseDependencyContainer.Root container = new();
+		Pool pool = container.Resolve<Pool>();
+		ScopedBuffer buffer;
+		using (var scope = container.CreateScope())
+		{
+			buffer = scope.Resolve<ScopedBuffer>();
+
+			// Nothing has been released while the scope is alive.
+			await That(pool.Returned).DoesNotContain(buffer);
+		}
+
+		// The scoped instance's release ran with the scope's disposal (the cached release-registration path),
+		// handing the hook its graph-resolved singleton Pool.
+		await That(pool.Returned).Contains(buffer)
+			.Because("a scoped instance's release capture resolves from the graph and runs when its scope is disposed");
+	}
+
 	public sealed class Alpha;
 
 	public sealed class Beta;
@@ -507,5 +561,60 @@ public partial class LifecycleHookTests
 		}
 
 		private static void ReleasePool(Pool pool) => Probe.Log.Add("released:Pool");
+	}
+
+	public sealed class AsyncGauge : IAsyncInitializable
+	{
+		public bool Initialized { get; private set; }
+
+		public Task InitializeAsync(CancellationToken cancellationToken)
+		{
+			Initialized = true;
+			return Task.CompletedTask;
+		}
+	}
+
+	public sealed class AsyncMachine
+	{
+		public AsyncGauge? Gauge { get; set; }
+	}
+
+	public sealed class AsyncBuffer;
+
+	public sealed class ScopedBuffer;
+
+	[Container]
+	[Singleton<AsyncGauge>]
+	[Singleton<AsyncMachine>(OnActivated = nameof(Attach))]
+	public static partial class AsyncActivationDependencyContainer
+	{
+		// The async-initialized Gauge parameter taints AsyncMachine, so the hook argument is resolved (and its
+		// initialization awaited) on the async construction path.
+		private static void Attach(AsyncMachine machine, AsyncGauge gauge)
+		{
+			machine.Gauge = gauge;
+			Probe.Log.Add(gauge.Initialized ? "activated-with-initialized-gauge" : "activated-with-uninitialized-gauge");
+		}
+	}
+
+	[Container]
+	[Singleton<AsyncGauge>]
+	[Transient<AsyncBuffer>(OnRelease = nameof(ReturnAsyncBuffer))]
+	public static partial class AsyncReleaseDependencyContainer
+	{
+		// The async-initialized Gauge is captured (awaited) at construction; the hook observes the state it was
+		// captured in when the container tears down.
+		private static void ReturnAsyncBuffer(AsyncBuffer buffer, AsyncGauge gauge)
+			=> Probe.Log.Add(gauge.Initialized ? "released-with-initialized-gauge" : "released-with-uninitialized-gauge");
+	}
+
+	[Container]
+	[Singleton<Pool>]
+	[Scoped<ScopedBuffer>(OnRelease = nameof(ReturnScopedBuffer))]
+	public static partial class ScopedReleaseDependencyContainer
+	{
+		// A scoped instance queues its release on the scope through the cached release-registration path; the hook's
+		// Pool parameter resolves the root-owned singleton through the scope.
+		private static void ReturnScopedBuffer(ScopedBuffer buffer, Pool pool) => pool.Return(buffer);
 	}
 }

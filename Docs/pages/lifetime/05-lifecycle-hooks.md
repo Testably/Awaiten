@@ -40,7 +40,7 @@ public static partial class CoffeeShop
 
 An activation dependency is resolved inline as the hook is called. A release dependency is resolved at construction and captured by value into the queued closure, so the hook holds the instance it was queued for even if a later resolve fails and rolls back. Reverse creation-order teardown keeps a captured dependency (a singleton pool, say) alive until after the release that uses it has run.
 
-Hook parameters participate in the graph like any other dependency: an unregistered one is [AWT101](../diagnostics#awt101), and they are covered by cycle, captive-dependency and async-taint analysis. A hook parameter cannot be a runtime `[Arg]` (there is no `Func<…>` call site to supply one), which is [AWT189](../diagnostics#awt189).
+Hook parameters participate in the graph like any other dependency: an unregistered one is [AWT101](../diagnostics#awt101), and they are covered by cycle, captive-dependency and async-taint analysis. A hook parameter cannot be a runtime `[Arg]` (there is no `Func<…>` call site to supply one), which is [AWT189](../diagnostics#awt189). A release hook parameter also cannot be a `Func<T>` or `Lazy<T>`: those capture a resolver delegate rather than a value, and by the time the hook runs the owner is already tearing down, so invoking the delegate would throw. That is [AWT191](../diagnostics#awt191); an activation hook may take them freely.
 
 ## Ordering and failure
 

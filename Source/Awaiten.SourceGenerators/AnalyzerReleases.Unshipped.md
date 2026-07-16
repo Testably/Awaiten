@@ -92,3 +92,4 @@
  AWT188  | Awaiten   | Warning  | A scan match's only exposure interface is inaccessible to the generated container, so the match is not registered
  AWT189  | Awaiten   | Error    | A lifecycle hook parameter (after the instance) is marked [Arg], but a hook resolves its parameters from the graph
  AWT190  | Awaiten   | Error    | A lifecycle hook (OnActivated / OnRelease) names an overloaded method, so the container cannot choose which one to call
+ AWT191  | Awaiten   | Error    | An OnRelease hook parameter is a Func/Lazy relationship, which would defer resolution past the owner's teardown
