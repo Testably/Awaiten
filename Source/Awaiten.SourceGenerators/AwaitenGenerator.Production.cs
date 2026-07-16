@@ -121,7 +121,8 @@ partial class AwaitenGenerator
 			OnActivated: onActivated,
 			OnRelease: onRelease,
 			ActivationParameters: activationParameters,
-			ReleaseParameters: releaseParameters);
+			ReleaseParameters: releaseParameters,
+			SuppressDisposal: info.SuppressDisposal);
 
 		static bool ImplementsInterface(ITypeSymbol type, INamedTypeSymbol @interface)
 		{
@@ -195,6 +196,16 @@ partial class AwaitenGenerator
 		{
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.LifecycleHookOnInstance,
+				info.Location,
+				new EquatableArray<string>([Display(info.OwningServiceOrImpl),])));
+		}
+
+		// AWT192: the container never disposes a pre-built Instance (the caller owns it), so opting out of that
+		// disposal is a silent no-op, rejected for the same reason as a lifecycle hook above.
+		if (info.SuppressDisposal)
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.SuppressDisposalOnInstance,
 				info.Location,
 				new EquatableArray<string>([Display(info.OwningServiceOrImpl),])));
 		}

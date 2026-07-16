@@ -63,11 +63,13 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     Whether building the service at <paramref name="start" /> on its owner tracks a fresh disposable
-	///     there: the service itself is disposable, or its construction transitively rebuilds one. The walk
-	///     follows only transient edges (a scoped/singleton dependency is cached, so bounded) and collection
-	///     (Enumerable / keyed) edges, which materialize members eagerly. Used to decide whether a plain
-	///     <c>Func&lt;…&gt;</c> over the service accumulates on the container root (AWT118 / strict withholding).
+	///     Whether building the service at <paramref name="start" /> on its owner tracks a fresh teardown
+	///     there: the service itself is disposable or queues an <c>OnRelease</c> closure (which retains the
+	///     instance on the owner until teardown exactly like disposal tracking, so a <c>SuppressDisposal</c>
+	///     pooled service accumulates the same way), or its construction transitively rebuilds such a service.
+	///     The walk follows only transient edges (a scoped/singleton dependency is cached, so bounded) and
+	///     collection (Enumerable / keyed) edges, which materialize members eagerly. Used to decide whether a
+	///     plain <c>Func&lt;…&gt;</c> over the service accumulates on the container root (AWT118 / strict withholding).
 	/// </summary>
 	internal static bool BuildsFreshDisposable(
 		IReadOnlyList<InstanceModel> instances,
@@ -88,7 +90,7 @@ partial class AwaitenGenerator
 			}
 
 			InstanceModel instance = instances[node];
-			if (instance.NeedsDisposal)
+			if (instance.NeedsDisposal || instance.HasReleaseHook)
 			{
 				return true;
 			}

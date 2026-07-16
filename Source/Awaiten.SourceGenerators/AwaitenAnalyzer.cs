@@ -346,7 +346,8 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 	// async-only disposable the disposed owner could track. IsAsyncDisposable is read off a registration's
 	// declared/produced type; a factory output hiding one behind a non-disposable declared type is left to
 	// the runtime backstop, and a pre-built Instance registration is never owned, so it carries neither flag
-	// and is naturally exempt. A scoped/transient async-only service also warns on a Root using, since the
+	// and is naturally exempt. A SuppressDisposal instance is likewise exempt: the container never disposes it,
+	// so no synchronous drain can throw on it. A scoped/transient async-only service also warns on a Root using, since the
 	// root is itself a scope and may track one; a root-owned one never warns on a child Scope using, since a
 	// singleton always tracks on the Root (its resolver runs against the root even when first hit inside a
 	// child scope), so a Scope's drain cannot reach it.
@@ -398,6 +399,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 	private static ImmutableArray<string> AsyncOnlyDisposables(GraphModel graph, bool includeRootOwned)
 		=> graph.Instances
 			.Where(instance => instance.IsAsyncDisposable && !instance.IsDisposable
+			                   && !instance.SuppressDisposal
 			                   && (includeRootOwned || !IsRootOwned(instance)))
 			.Select(instance => AwaitenGenerator.DisplayInstance(instance.ImplementationType))
 			.Distinct(StringComparer.Ordinal)

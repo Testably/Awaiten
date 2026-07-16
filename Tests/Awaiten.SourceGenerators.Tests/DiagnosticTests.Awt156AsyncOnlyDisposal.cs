@@ -105,6 +105,37 @@ public partial class DiagnosticTests
 		}
 
 		[Fact]
+		public async Task DoesNotReportWhenTheAsyncOnlyDisposableSuppressesDisposal()
+		{
+			string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>("""
+			                                       using Awaiten;
+			                                       using System;
+			                                       using System.Threading.Tasks;
+
+			                                       namespace MyCode;
+
+			                                       public sealed class Connection : IAsyncDisposable { public ValueTask DisposeAsync() => default; }
+
+			                                       [Container]
+			                                       [Singleton<Connection>(SuppressDisposal = true)]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+
+			                                       public static class Consumer
+			                                       {
+			                                       	public static void Use()
+			                                       	{
+			                                       		using MyContainer.Root root = new();
+			                                       	}
+			                                       }
+			                                       """);
+
+			await That(diagnostics.Any(d => d.Contains("AWT156"))).IsFalse()
+				.Because("a SuppressDisposal instance is never tracked for teardown, so a synchronous drain can never reach it and throw");
+		}
+
+		[Fact]
 		public async Task DoesNotReportForASynchronousUsingOfAScopeWhenTheAsyncOnlyDisposableIsASingleton()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>(AsyncOnlyContainer + """

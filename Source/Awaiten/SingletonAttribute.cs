@@ -111,6 +111,15 @@ public sealed class SingletonAttribute<TImplementation> : Attribute
 	///     instead of, that disposal).
 	/// </summary>
 	public string? OnRelease { get; set; }
+
+	/// <summary>
+	///     Suppresses the container's built-in disposal of this instance. The container still constructs it
+	///     (by constructor or <see cref="Factory" />), but does not call its <c>Dispose</c>/<c>DisposeAsync</c>
+	///     on teardown; releasing it becomes your responsibility - typically through an <see cref="OnRelease" />
+	///     hook (for example, returning it to a pool), or because its lifetime is owned outside the container.
+	///     Defaults to <see langword="false" />, where the container disposes what it builds.
+	/// </summary>
+	public bool SuppressDisposal { get; set; }
 }
 
 /// <summary>
@@ -180,6 +189,15 @@ public sealed class SingletonAttribute<TImplementation, TService> : Attribute
 	///     instead of, that disposal).
 	/// </summary>
 	public string? OnRelease { get; set; }
+
+	/// <summary>
+	///     Suppresses the container's built-in disposal of this instance. The container still constructs it
+	///     (by constructor or <see cref="Factory" />), but does not call its <c>Dispose</c>/<c>DisposeAsync</c>
+	///     on teardown; releasing it becomes your responsibility - typically through an <see cref="OnRelease" />
+	///     hook (for example, returning it to a pool), or because its lifetime is owned outside the container.
+	///     Defaults to <see langword="false" />, where the container disposes what it builds.
+	/// </summary>
+	public bool SuppressDisposal { get; set; }
 }
 
 #pragma warning restore S2326

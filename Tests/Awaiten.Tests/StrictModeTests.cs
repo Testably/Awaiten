@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace Awaiten.Tests;
 
 /// <summary>
@@ -164,6 +166,58 @@ public partial class StrictModeTests
 	}
 
 	[Fact]
+	public async Task Strict_ResolvingAReleaseHookedPooledTransientByType_ThrowsGuidance()
+	{
+		using PooledContainer.Root container = new();
+
+		await That(() => container.Resolve<Pouch>()).Throws<InvalidOperationException>()
+			.Because("a release-hooked transient is withheld like a disposable one: each resolve queues a release closure that retains the instance on the root, so a SuppressDisposal pooled transient accumulates there the same way");
+	}
+
+	[Fact]
+	public async Task Strict_ThePlainFuncOverAReleaseHookedPooledTransient_IsWithheldOnTheRoot()
+	{
+		using PooledContainer.Root container = new();
+
+		await That(() => container.Resolve<Func<Pouch>>()).Throws<InvalidOperationException>()
+			.Because("each call to a root-bound Func over a release-hooked transient queues another release closure on the root, accumulating for the container's lifetime");
+	}
+
+	[Fact]
+	public async Task Strict_AReleaseHookedPooledTransient_ResolvesThroughOwned_AndIsReleasedNotDisposed()
+	{
+		PooledContainer.Returned.Clear();
+		using PooledContainer.Root container = new();
+
+		Pouch value;
+		using (Owned<Pouch> owned = container.Resolve<Owned<Pouch>>())
+		{
+			value = owned.Value;
+		}
+
+		await That(PooledContainer.Returned).Contains(value)
+			.Because("Owned<T> is the sanctioned way to reach a withheld pooled transient; disposing the handle runs its release hook");
+		await That(value.Disposed).IsFalse()
+			.Because("SuppressDisposal keeps the container from disposing the pooled instance it released");
+	}
+
+	[Fact]
+	public async Task Strict_ASuppressedDisposableTransientWithoutAReleaseHook_ResolvesOnTheRoot()
+	{
+		Loner loner;
+		using (LonerContainer.Root container = new())
+		{
+			loner = container.Resolve<Loner>();
+
+			await That(loner).IsNotNull()
+				.Because("a SuppressDisposal transient without a release hook tracks nothing on the root, so strict safety has no accumulation to withhold it for");
+		}
+
+		await That(loner.Disposed).IsFalse()
+			.Because("the container never disposes a SuppressDisposal instance; its teardown belongs to the caller");
+	}
+
+	[Fact]
 	public async Task Loose_ResolvingADisposableTransientByType_Works()
 	{
 		using LooseContainer.Root container = new();
@@ -224,11 +278,42 @@ public partial class StrictModeTests
 		public Widget Widget { get; }
 	}
 
+	// A pooled service: the container rents it (constructs it), returns it through the release hook, and never
+	// disposes it (SuppressDisposal). The hook makes it root-accumulating, so strict safety withholds it there.
+	public sealed class Pouch : IDisposable
+	{
+		public bool Disposed { get; private set; }
+
+		public void Dispose() => Disposed = true;
+	}
+
+	// A suppressed disposable without a release hook: the container tracks nothing for it, so strict safety
+	// leaves it resolvable everywhere.
+	public sealed class Loner : IDisposable
+	{
+		public bool Disposed { get; private set; }
+
+		public void Dispose() => Disposed = true;
+	}
+
 	[Container]
 	[Transient<Widget>]
 	[Transient<Consumer>]
 	[Transient<Gizmo>]
 	public static partial class StrictContainer;
+
+	[Container]
+	[Transient<Pouch>(OnRelease = nameof(Return), SuppressDisposal = true)]
+	public static partial class PooledContainer
+	{
+		public static readonly List<Pouch> Returned = new();
+
+		private static void Return(Pouch pouch) => Returned.Add(pouch);
+	}
+
+	[Container]
+	[Transient<Loner>(SuppressDisposal = true)]
+	public static partial class LonerContainer;
 
 	[Container(LifetimeSafety = LifetimeSafety.Loose)]
 	[Transient<Widget>]

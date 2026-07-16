@@ -24,15 +24,19 @@ internal static partial class Sources
 	/// <summary>
 	///     Runtime and Static are mutually exclusive: RuntimeDisposalCheck is set by the model only when the static
 	///     IsDisposable flag is false (the declared type does not reveal the disposable), so a factory output is
-	///     either statically disposable or runtime-checked, never both.
+	///     either statically disposable or runtime-checked, never both. A <c>SuppressDisposal</c> instance is never
+	///     tracked (the container does not own its teardown), so it short-circuits to None ahead of either check,
+	///     including the runtime check a hidden-disposable factory output would otherwise get.
 	/// </summary>
 	private static DisposalTracking DisposalOf(InstanceModel instance)
-		=> (instance.RuntimeDisposalCheck, instance.NeedsDisposal) switch
-		{
-			(true, _) => DisposalTracking.Runtime,
-			(_, true) => DisposalTracking.Static,
-			_ => DisposalTracking.None,
-		};
+		=> instance.SuppressDisposal
+			? DisposalTracking.None
+			: (instance.RuntimeDisposalCheck, instance.NeedsDisposal) switch
+			{
+				(true, _) => DisposalTracking.Runtime,
+				(_, true) => DisposalTracking.Static,
+				_ => DisposalTracking.None,
+			};
 
 	/// <summary>
 	///     Whether any instance registers an <c>OnRelease</c> hook, so the base <c>Scope</c> needs the

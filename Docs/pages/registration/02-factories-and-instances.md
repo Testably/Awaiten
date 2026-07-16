@@ -42,6 +42,8 @@ A factory can return an interface that hides a disposable concrete type. Awaiten
 
 An `Instance` member is the opposite. You own it, so Awaiten leaves its disposal to you.
 
+To keep a factory-built service but opt out of that disposal, set `SuppressDisposal = true`. Awaiten builds it and never disposes it, leaving teardown to you or to an `OnRelease` hook, which is how you [pool a rented object](../lifetime/disposal#suppressing-disposal).
+
 ## Where to go next
 
 - [Context-aware factories](../resolution/context-aware-factories) to build a service based on who asked for it.

@@ -1360,4 +1360,18 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     <c>SuppressDisposal</c> is set on a pre-built <c>Instance</c> registration. The container does not own a
+	///     pre-built instance - it is constructed, and disposed, by the caller - so it never disposes it; suppressing
+	///     that disposal is a silent no-op. Mirrors <see cref="LifecycleHookOnInstance">AWT165</see>, which rejects a
+	///     lifecycle hook on an <c>Instance</c> for the same reason.
+	/// </summary>
+	public static readonly DiagnosticDescriptor SuppressDisposalOnInstance = new(
+		"AWT192",
+		"SuppressDisposal on a pre-built instance",
+		"'{0}' sets SuppressDisposal on a pre-built Instance, which the container does not own or dispose, so it has no effect; remove SuppressDisposal, or register the type for construction instead of as an Instance",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

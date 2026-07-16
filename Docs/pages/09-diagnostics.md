@@ -598,6 +598,23 @@ public sealed class Counter(Lazy<Owned<BrewSession>> sessions);   // Owned canno
 public static partial class CoffeeShop;
 ```
 
+### AWT192
+
+:::danger[Error]
+`SuppressDisposal` is set on a pre-built `Instance`, which the container does not own or dispose, so it has no effect. Remove it, or register the type for construction (by constructor or `Factory`) instead of as an `Instance`.
+:::
+
+```csharp
+public sealed class Boiler : IDisposable { public void Dispose() { } }
+
+[Container]
+[Singleton<Boiler>(Instance = nameof(Shared), SuppressDisposal = true)]   // an Instance is never disposed anyway
+public static partial class CoffeeShop
+{
+    private static Boiler Shared { get; } = new();
+}
+```
+
 ## Decorators and composites
 
 ### AWT123
