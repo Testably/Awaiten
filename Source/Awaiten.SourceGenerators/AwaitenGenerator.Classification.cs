@@ -502,7 +502,7 @@ partial class AwaitenGenerator
 	// The setter must be reachable from the container's object initializer. Asks Roslyn the same way constructor
 	// selection does (see SelectConstructor), so the two agree: public always, internal/protected-internal within
 	// the container's own assembly or across an [InternalsVisibleTo] boundary, and protected/private-protected/
-	// private never - the container neither derives from the implementation nor sits inside it.
+	// private never, since the container neither derives from the implementation nor sits inside it.
 	private static bool IsAccessibleSetter(IMethodSymbol setter, INamedTypeSymbol containerSymbol, Compilation compilation)
 		=> compilation.IsSymbolAccessibleWithin(setter, containerSymbol);
 

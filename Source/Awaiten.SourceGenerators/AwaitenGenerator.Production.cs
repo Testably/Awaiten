@@ -672,9 +672,9 @@ partial class AwaitenGenerator
 		Func<IParameterSymbol, bool>? additionallySatisfiable = null)
 	{
 		// The generated partial emits the 'new' from inside the container, so what the container can reach is
-		// exactly Roslyn's own accessibility question - which honors [InternalsVisibleTo], where a bare
-		// same-assembly comparison would reject a referenced assembly's internal constructor the generated code
-		// could in fact call. The module member checks ask it the same way (see ResolveFactory).
+		// exactly Roslyn's own accessibility question, which honors [InternalsVisibleTo]. A bare same-assembly
+		// comparison would reject a referenced assembly's internal constructor the generated code could in fact
+		// call. The module member checks ask it the same way (see ResolveFactory).
 		List<IMethodSymbol> constructors = implementation.InstanceConstructors
 			.Where(c => compilation.IsSymbolAccessibleWithin(c, containerSymbol))
 			.ToList();
@@ -709,7 +709,7 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     The members named <paramref name="name" /> the generated container partial can reach: the
 	///     container's own members (any accessibility, since a partial can use its own private members) plus
-	///     inherited members the container can access - Roslyn's own check, so a base type's protected member
+	///     inherited members the container can access, which is Roslyn's own check: a base type's protected member
 	///     qualifies (the container derives from it) and an internal one does when the declaring assembly is the
 	///     container's or grants it [InternalsVisibleTo].
 	/// </summary>
