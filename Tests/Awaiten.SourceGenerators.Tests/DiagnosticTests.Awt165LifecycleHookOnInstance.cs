@@ -26,7 +26,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT165"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT165*").AsWildcard()
 				.Because("the container does not own a pre-built instance, so the hook would never run");
 		}
 
@@ -48,7 +48,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT165"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT165*").AsWildcard()
 				.Because("a pre-built instance without lifecycle hooks is valid");
 		}
 	}

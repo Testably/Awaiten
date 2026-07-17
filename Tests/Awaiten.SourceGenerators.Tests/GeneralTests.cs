@@ -916,7 +916,7 @@ public class GeneralTests
 		await That(result.Diagnostics).Contains("*AWT101*").AsWildcard()
 			.And.Contains("*IMetrics*").AsWildcard()
 			.Because("[ImportService<T>] routes only the declared type; every other unresolved dependency keeps the AWT101 check");
-		await That(result.Diagnostics.Any(d => d.Contains("ILogger"))).IsFalse()
+		await That(result.Diagnostics).DoesNotContain("*ILogger*").AsWildcard()
 			.Because("the declared external ILogger is routed to the provider, not reported missing");
 	}
 
@@ -944,7 +944,7 @@ public class GeneralTests
 		await That(result.Diagnostics).Contains("*AWT101*").AsWildcard()
 			.And.Contains("*ILogger*").AsWildcard()
 			.Because("[ImportService<T>] routes only the direct dependency of T; a Func<T>/Lazy<T> relationship over it resolves from the graph and is AWT101 when unregistered");
-		await That(result.Diagnostics.Any(d => d.Contains("AWT176"))).IsFalse()
+		await That(result.Diagnostics).DoesNotContain("*AWT176*").AsWildcard()
 			.Because("the external type is still referenced through the relationship, so it is not an unconsumed (dead) declaration");
 	}
 
@@ -2043,7 +2043,7 @@ public class GeneralTests
 			}
 			""");
 
-		await That(result.Diagnostics.Any(d => d.Contains("AWT162"))).IsTrue();
+		await That(result.Diagnostics).Contains("*AWT162*").AsWildcard();
 	}
 
 	[Fact]
@@ -2068,7 +2068,7 @@ public class GeneralTests
 			}
 			""");
 
-		await That(result.Diagnostics.Any(d => d.Contains("AWT163"))).IsTrue();
+		await That(result.Diagnostics).Contains("*AWT163*").AsWildcard();
 	}
 
 	[Fact]
@@ -2122,7 +2122,7 @@ public class GeneralTests
 			}
 			""");
 
-		await That(result.Diagnostics.Any(d => d.Contains("AWT186"))).IsTrue()
+		await That(result.Diagnostics).Contains("*AWT186*").AsWildcard()
 			.Because("a Func<Owned<T>> produces the owned handle per call, but the requesting-type factory has no owner scope to build it into");
 	}
 
@@ -2149,7 +2149,7 @@ public class GeneralTests
 			}
 			""");
 
-		await That(result.Diagnostics.Any(d => d.Contains("AWT186"))).IsTrue()
+		await That(result.Diagnostics).Contains("*AWT186*").AsWildcard()
 			.Because("a Task<Owned<T>> still produces the owned handle, which the requesting-type factory has no owner scope to build into");
 	}
 
@@ -2176,7 +2176,7 @@ public class GeneralTests
 			}
 			""");
 
-		await That(result.Diagnostics.Any(d => d.Contains("AWT186"))).IsTrue()
+		await That(result.Diagnostics).Contains("*AWT186*").AsWildcard()
 			.Because("a Func<Task<Owned<T>>> still produces the owned handle, which the requesting-type factory has no owner scope to build into");
 	}
 
@@ -2203,9 +2203,9 @@ public class GeneralTests
 			}
 			""");
 
-		await That(result.Diagnostics.Any(d => d.Contains("AWT121"))).IsTrue()
+		await That(result.Diagnostics).Contains("*AWT121*").AsWildcard()
 			.Because("Lazy does not unwrap Owned<T>, so the more specific AWT121 (Owned-through-Lazy) pre-empts this shape");
-		await That(result.Diagnostics.Any(d => d.Contains("AWT186"))).IsFalse()
+		await That(result.Diagnostics).DoesNotContain("*AWT186*").AsWildcard()
 			.Because("the Lazy<Task<Owned<T>>> form never reaches the owned emit AWT186 guards");
 	}
 
@@ -2231,9 +2231,9 @@ public class GeneralTests
 			}
 			""");
 
-		await That(result.Diagnostics.Any(d => d.Contains("AWT121"))).IsTrue()
+		await That(result.Diagnostics).Contains("*AWT121*").AsWildcard()
 			.Because("Lazy never unwraps the Owned<T> handle, so the unregistered Owned<T> stays the service and surfaces AWT121");
-		await That(result.Diagnostics.Any(d => d.Contains("AWT186"))).IsFalse()
+		await That(result.Diagnostics).DoesNotContain("*AWT186*").AsWildcard()
 			.Because("the bare Lazy<Owned<T>> form never reaches AWT186's owned emit, exactly like Lazy<Task<Owned<T>>>");
 	}
 
@@ -2259,7 +2259,7 @@ public class GeneralTests
 			}
 			""");
 
-		await That(result.Diagnostics.Any(d => d.Contains("AWT186"))).IsTrue()
+		await That(result.Diagnostics).Contains("*AWT186*").AsWildcard()
 			.Because("the detection pass walks injected [Inject] members like constructor parameters");
 	}
 
@@ -2286,7 +2286,7 @@ public class GeneralTests
 			}
 			""");
 
-		await That(result.Diagnostics.Any(d => d.Contains("AWT186"))).IsTrue()
+		await That(result.Diagnostics).Contains("*AWT186*").AsWildcard()
 			.Because("the detection pass walks lifecycle hook parameters like constructor parameters");
 	}
 

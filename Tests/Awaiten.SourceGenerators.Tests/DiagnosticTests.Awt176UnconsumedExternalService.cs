@@ -83,7 +83,7 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).Contains("*AWT101*").AsWildcard()
 				.And.Contains("*IExternal*").AsWildcard()
 				.Because("a relationship over the external type is not routed, so the missing registration is AWT101");
-			await That(result.Diagnostics.Any(d => d.Contains("AWT176"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT176*").AsWildcard()
 				.Because("the external type is referenced (via the relationship), so it is not a dead declaration - the AWT101 is the one signal");
 		}
 
@@ -106,7 +106,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT176"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT176*").AsWildcard()
 				.Because("a consumed [ImportService<T>] declaration is live");
 		}
 
@@ -130,7 +130,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT176"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT176*").AsWildcard()
 				.Because("an [ImportService<T>] consumed only by a lifecycle hook parameter is still live");
 		}
 	}

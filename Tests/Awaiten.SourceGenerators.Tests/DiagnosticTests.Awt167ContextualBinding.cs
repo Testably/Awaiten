@@ -28,7 +28,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT167"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT167*").AsWildcard()
 				.Because("the named consumer has no constructor dependency on the service, so the binding is dead");
 		}
 
@@ -82,7 +82,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT167"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT167*").AsWildcard()
 				.Because("the [FromKey] parameter takes precedence, so the contextual binding is never applied");
 		}
 
@@ -109,7 +109,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT167"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT167*").AsWildcard()
 				.Because("a Func-deferred dependency is not an unkeyed direct parameter, so the contextual binding is never applied");
 		}
 
@@ -164,7 +164,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT168"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT168*").AsWildcard()
 				.Because("WhenInjectedInto and Key claim the same resolution slot, so the Key is silently dropped");
 		}
 
@@ -221,7 +221,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT169"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT169*").AsWildcard()
 				.Because("both bindings claim the one contextual slot for the consumer, so the resolution is ambiguous");
 		}
 

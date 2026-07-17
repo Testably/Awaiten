@@ -24,7 +24,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT192"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT192*").AsWildcard()
 				.Because("the container never disposes a pre-built instance, so suppressing that disposal is a no-op");
 		}
 
@@ -46,7 +46,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT192"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT192*").AsWildcard()
 				.Because("a pre-built instance without SuppressDisposal is valid");
 		}
 
@@ -70,7 +70,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT192"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT192*").AsWildcard()
 				.Because("SuppressDisposal is meaningful on a container-constructed instance, which the container would otherwise dispose");
 		}
 	}

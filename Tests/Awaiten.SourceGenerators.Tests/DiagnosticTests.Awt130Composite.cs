@@ -27,7 +27,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT130"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT130*").AsWildcard()
 				.Because("a composite with no collection parameter of the composed service has nothing to fan out to");
 		}
 
@@ -53,7 +53,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT130"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT130*").AsWildcard()
 				.Because("the collection parameter must be of the composed service for the composite to fan out over it");
 		}
 

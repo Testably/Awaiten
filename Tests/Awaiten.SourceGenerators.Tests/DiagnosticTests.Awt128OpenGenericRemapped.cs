@@ -27,7 +27,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT128"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT128*").AsWildcard()
 				.Because("the implementation does not expose the service with its type parameters in declaration order");
 		}
 
@@ -52,7 +52,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT128"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT128*").AsWildcard()
 				.Because("Repository<T> : IRepository<T> maps its single type parameter onto the service in order");
 		}
 	}

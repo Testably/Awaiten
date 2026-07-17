@@ -110,7 +110,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT155"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT155*").AsWildcard()
 				.Because("an explicit registration beating another module's expanded template is deterministic regardless of [Import] order, so the collision is not ambiguous");
 		}
 
@@ -138,7 +138,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT155"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT155*").AsWildcard()
 				.Because("the container overriding a module is the intended override mechanism");
 		}
 
@@ -169,7 +169,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT155"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT155*").AsWildcard()
 				.Because("the same implementation coalesces into one instance; there is no ambiguity");
 		}
 
@@ -201,7 +201,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT155"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT155*").AsWildcard()
 				.Because("an overridable default yields by design; being overridden is its purpose");
 		}
 
@@ -235,7 +235,7 @@ public partial class DiagnosticTests
 
 			await That(result.Diagnostics).Contains("*AWT117*").AsWildcard()
 				.Because("a keyed duplicate is already its own error");
-			await That(result.Diagnostics.Any(d => d.Contains("AWT155"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT155*").AsWildcard()
 				.Because("AWT155 is limited to unkeyed collisions to avoid double-reporting");
 		}
 	}

@@ -29,7 +29,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT136"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT136*").AsWildcard()
 				.Because("an [Inject] property must have a set or init accessor the container can assign through");
 		}
 
@@ -56,9 +56,9 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT136"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT136*").AsWildcard()
 				.Because("a protected setter cannot be assigned from the container's object initializer, so it must surface as AWT136 rather than an inaccessible-setter error in generated code");
-			await That(result.Diagnostics.Any(d => d.Contains("CS0272"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*CS0272*").AsWildcard()
 				.Because("AWT136 must be reported instead of leaking a compile error into the generated container");
 		}
 
@@ -83,7 +83,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT137"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT137*").AsWildcard()
 				.Because("runtime arguments are supplied only to constructor parameters, never to an injected property");
 		}
 
@@ -108,7 +108,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT101"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT101*").AsWildcard()
 				.Because("an injected property needs a registration to satisfy it, exactly like a constructor parameter");
 		}
 

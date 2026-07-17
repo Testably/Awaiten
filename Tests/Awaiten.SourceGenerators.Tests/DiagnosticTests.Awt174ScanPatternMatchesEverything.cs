@@ -68,7 +68,7 @@ public partial class DiagnosticTests
 				}
 				""");
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT174"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT174*").AsWildcard()
 				.Because("'*Handler' does not match every candidate");
 		}
 	}

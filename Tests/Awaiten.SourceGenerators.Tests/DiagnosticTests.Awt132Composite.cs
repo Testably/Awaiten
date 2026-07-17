@@ -29,7 +29,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT132"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT132*").AsWildcard()
 				.Because("a service can have at most one composite façade");
 		}
 

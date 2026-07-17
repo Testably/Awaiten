@@ -24,7 +24,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT164"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT164*").AsWildcard()
 				.Because("the named method does not accept the registered implementation type");
 		}
 
@@ -45,7 +45,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT164"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT164*").AsWildcard()
 				.Because("no container method carries the named release hook");
 		}
 
@@ -67,7 +67,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT164"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT164*").AsWildcard()
 				.Because("a lifecycle hook must be a void method");
 		}
 
@@ -91,7 +91,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT164"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT164*").AsWildcard()
 				.Because("the hook's first parameter is the instance, so it must accept the implementation type");
 		}
 
@@ -115,7 +115,9 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT164") || d.Contains("AWT101"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT164*").AsWildcard()
+				.Because("the instance parameter is first and the extra Settings parameter is registered on the graph");
+			await That(result.Diagnostics).DoesNotContain("*AWT101*").AsWildcard()
 				.Because("the instance parameter is first and the extra Settings parameter is registered on the graph");
 		}
 
@@ -138,7 +140,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT101"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT101*").AsWildcard()
 				.Because("a lifecycle hook parameter after the instance is a graph dependency that must be registered");
 		}
 
@@ -161,7 +163,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT164"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT164*").AsWildcard()
 				.Because("a void method accepting the implementation (or a base type) is a usable hook");
 		}
 	}

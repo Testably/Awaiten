@@ -30,7 +30,7 @@ public partial class DiagnosticTests
 
 			await That(result.Diagnostics).Contains("*AWT141*NeedsName*").AsWildcard()
 				.Because("the opted-in scan degrades an unconstructable match to a skip-with-warning");
-			await That(result.Diagnostics.Any(d => d.Contains("AWT101"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT101*").AsWildcard()
 				.Because("the skipped match is not also reported as a missing dependency");
 
 			string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
@@ -98,7 +98,7 @@ public partial class DiagnosticTests
 
 			await That(result.Diagnostics).Contains("*AWT101*").AsWildcard()
 				.Because("without the opt-in, an unconstructable scan match stays a hard error");
-			await That(result.Diagnostics.Any(d => d.Contains("AWT141"))).IsFalse();
+			await That(result.Diagnostics).DoesNotContain("*AWT141*").AsWildcard();
 		}
 
 		[Fact]
@@ -125,7 +125,7 @@ public partial class DiagnosticTests
 
 			await That(result.Diagnostics).Contains("*AWT101*").AsWildcard()
 				.Because("asking for the type by name makes its missing dependency a real fault again");
-			await That(result.Diagnostics.Any(d => d.Contains("AWT141"))).IsFalse();
+			await That(result.Diagnostics).DoesNotContain("*AWT141*").AsWildcard();
 		}
 
 		[Fact]
@@ -153,7 +153,7 @@ public partial class DiagnosticTests
 
 			await That(result.Diagnostics).Contains("*AWT101*").AsWildcard()
 				.Because("the scan without the opt-in pins the shared match to error semantics");
-			await That(result.Diagnostics.Any(d => d.Contains("AWT141"))).IsFalse();
+			await That(result.Diagnostics).DoesNotContain("*AWT141*").AsWildcard();
 		}
 
 		[Fact]
@@ -186,7 +186,7 @@ public partial class DiagnosticTests
 			// (with its own warning) rather than leaving an AWT101.
 			await That(result.Diagnostics).Contains("*AWT141*NeedsName*").AsWildcard()
 				.And.Contains("*AWT141*NeedsNeedsName*").AsWildcard();
-			await That(result.Diagnostics.Any(d => d.Contains("AWT101"))).IsFalse();
+			await That(result.Diagnostics).DoesNotContain("*AWT101*").AsWildcard();
 
 			string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 			await That(source).Contains("new global::MyCode.OkPlugin()");

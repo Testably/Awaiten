@@ -26,7 +26,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT114"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT114*").AsWildcard()
 				.Because("a parameterized service is built fresh per call, so a singleton lifetime cannot be honored");
 		}
 
@@ -50,7 +50,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT114"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT114*").AsWildcard()
 				.Because("a scoped lifetime cannot be honored for a per-call parameterized service either");
 		}
 
@@ -74,7 +74,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT114"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT114*").AsWildcard()
 				.Because("transient is the only lifetime a parameterized service can honor");
 		}
 	}

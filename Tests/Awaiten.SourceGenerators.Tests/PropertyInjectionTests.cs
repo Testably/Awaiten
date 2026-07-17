@@ -92,7 +92,7 @@ public class PropertyInjectionTests
 		                                       }
 		                                       """);
 
-		await That(result.Diagnostics.Any(d => d.Contains("AWT102"))).IsTrue();
+		await That(result.Diagnostics).Contains("*AWT102*").AsWildcard();
 	}
 
 	[Fact]
@@ -180,7 +180,7 @@ public class PropertyInjectionTests
 		                                       }
 		                                       """);
 
-		await That(result.Diagnostics.Any(d => d.Contains("AWT102"))).IsTrue();
+		await That(result.Diagnostics).Contains("*AWT102*").AsWildcard();
 	}
 
 	[Fact]

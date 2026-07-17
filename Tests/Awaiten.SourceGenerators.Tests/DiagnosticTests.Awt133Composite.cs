@@ -30,9 +30,9 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT133"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT133*").AsWildcard()
 				.Because("a collection of a base type would fan out over a different collection than the composed service");
-			await That(result.Diagnostics.Any(d => d.Contains("AWT130"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT130*").AsWildcard()
 				.Because("the composite has a collection parameter, it is of the wrong element type, not missing");
 		}
 
@@ -60,7 +60,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT133"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT133*").AsWildcard()
 				.Because("an exact collection of the composed service satisfies the composite regardless of other collection parameters");
 		}
 	}

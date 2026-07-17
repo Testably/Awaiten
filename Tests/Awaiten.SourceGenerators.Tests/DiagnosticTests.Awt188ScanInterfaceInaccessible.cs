@@ -29,7 +29,7 @@ public partial class DiagnosticTests
 
 			await That(result.Diagnostics).Contains("*AWT188*IRoaster*").AsWildcard()
 				.Because("Roaster implements IRoaster, but the internal interface cannot be referenced by the container");
-			await That(result.Diagnostics.Any(d => d.Contains("AWT182"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT182*").AsWildcard()
 				.Because("claiming the interface is not implemented would mislead; AWT188 names the real cause");
 		}
 

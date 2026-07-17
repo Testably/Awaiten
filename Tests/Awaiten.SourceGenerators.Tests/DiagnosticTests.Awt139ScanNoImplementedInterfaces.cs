@@ -49,7 +49,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT139"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT139*").AsWildcard()
 				.Because("the Self flag still registers the match as its own concrete type");
 		}
 
@@ -71,7 +71,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT139"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT139*").AsWildcard()
 				.Because("the match implements the marker interface, so it is registered under it");
 		}
 	}

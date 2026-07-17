@@ -27,7 +27,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT126"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT126*").AsWildcard()
 				.Because("Repository<int> violates the implementation's where T : class constraint");
 		}
 
@@ -52,7 +52,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT126"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT126*").AsWildcard()
 				.Because("Order is a reference type, so it satisfies where T : class");
 		}
 
@@ -80,7 +80,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT126"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT126*").AsWildcard()
 				.Because("a constructed constraint mentioning the type parameter (IComparable<T>) is satisfied after substitution");
 		}
 
@@ -110,9 +110,9 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT126"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT126*").AsWildcard()
 				.Because("the implementation's self-referential constraint where T : IComparable<T> is violated by NotComparable after substitution");
-			await That(result.Diagnostics.Any(d => d.Contains("AWT101"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT101*").AsWildcard()
 				.Because("the constraint violation is the single root cause; the consumer's now-unregistered IRepository<NotComparable> must not also raise AWT101");
 		}
 	}

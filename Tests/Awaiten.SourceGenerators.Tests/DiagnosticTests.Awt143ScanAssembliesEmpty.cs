@@ -27,7 +27,7 @@ public partial class DiagnosticTests
 
 			await That(result.Diagnostics).Contains("*error AWT143*").AsWildcard()
 				.Because("an empty InAssembliesOf is a malformed scan, not a mere empty result, and must fail the build");
-			await That(result.Diagnostics.Any(d => d.Contains("AWT138"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT138*").AsWildcard()
 				.Because("the empty assembly list is the one root cause; the scan matching nothing follows from it");
 
 			string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
@@ -76,7 +76,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT143"))).IsFalse();
+			await That(result.Diagnostics).DoesNotContain("*AWT143*").AsWildcard();
 		}
 	}
 }

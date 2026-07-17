@@ -68,7 +68,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT148"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT148*").AsWildcard()
 				.Because("a strong registration overrides both defaults, so which default would have won is moot");
 		}
 
@@ -100,7 +100,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT148"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT148*").AsWildcard()
 				.Because("Fallback.Silent opts out of the ambiguity warning: the first contributor simply wins");
 		}
 
@@ -132,7 +132,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT148"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT148*").AsWildcard()
 				.Because("the earlier Fallback.Silent wins silently; AWT148 requires the current winner to be a Fallback.Warn");
 			string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 			await That(source).Contains("global::MyCode.ClockA")
@@ -207,7 +207,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT148"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT148*").AsWildcard()
 				.Because("defaults under different keys claim different service slots and do not collide");
 		}
 	}

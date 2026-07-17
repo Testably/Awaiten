@@ -48,7 +48,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT184"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT184*").AsWildcard()
 				.Because("FirstWidget registers under IFirstWidget, so the scan is not empty");
 		}
 
@@ -71,7 +71,7 @@ public partial class DiagnosticTests
 
 			await That(result.Diagnostics).Contains("*AWT184*").AsWildcard()
 				.Because("the assembly holds no concrete class, so the scan registers nothing");
-			await That(result.Diagnostics.Any(d => d.Contains("AWT173"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT173*").AsWildcard()
 				.Because("a stale-exclusion hint is noise when the scan saw no candidate to filter");
 		}
 	}

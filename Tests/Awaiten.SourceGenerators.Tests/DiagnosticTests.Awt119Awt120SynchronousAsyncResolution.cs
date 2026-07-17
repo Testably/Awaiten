@@ -189,7 +189,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT120") && d.Contains("Repository") && d.Contains("Connection"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT120*Repository*Connection*").AsWildcard()
 				.Because("the diagnostic names the dependency path from the synchronously-resolved service to the async-initialized one");
 		}
 

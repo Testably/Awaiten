@@ -47,7 +47,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT138"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT138*").AsWildcard()
 				.Because("the scan matched a concrete type, so it contributes a registration");
 		}
 
@@ -70,7 +70,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT138"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT138*").AsWildcard()
 				.Because("an overridden match still means the scan found something");
 		}
 	}

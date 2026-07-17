@@ -24,7 +24,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT189"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT189*").AsWildcard()
 				.Because("a runtime [Arg] cannot be supplied to a lifecycle hook - its parameters resolve from the graph");
 		}
 
@@ -48,7 +48,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT189"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT189*").AsWildcard()
 				.Because("a hook parameter resolved from the graph is not a runtime argument");
 		}
 	}

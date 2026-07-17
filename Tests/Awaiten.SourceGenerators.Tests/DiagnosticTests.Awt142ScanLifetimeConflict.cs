@@ -50,7 +50,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT142"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT142*").AsWildcard()
 				.Because("agreeing scans coalesce without contradiction");
 		}
 

@@ -28,7 +28,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT131"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT131*").AsWildcard()
 				.Because("the composite is also registered as a bare member of its own service, which has no effect");
 		}
 
@@ -54,7 +54,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT102"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT102*").AsWildcard()
 				.Because("dropping the redundant membership keeps the composite out of its own collection, so there is no self-edge cycle");
 		}
 
@@ -82,7 +82,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT131"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT131*").AsWildcard()
 				.Because("the composite is a member of a different service, not the one it composes");
 		}
 	}

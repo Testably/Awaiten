@@ -26,7 +26,7 @@ public partial class DiagnosticTests
 
 			await That(result.Diagnostics).Contains("*AWT172*").AsWildcard()
 				.Because("the marker matched OrderPlugin but the name filter removed it");
-			await That(result.Diagnostics.Any(d => d.Contains("AWT138"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT138*").AsWildcard()
 				.Because("AWT138 is for a marker that matched nothing, distinct from a filter that removed everything");
 		}
 
@@ -49,7 +49,7 @@ public partial class DiagnosticTests
 				}
 				""");
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT172"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT172*").AsWildcard()
 				.Because("OrderHandler still matches, so the filter did not remove everything");
 		}
 	}
