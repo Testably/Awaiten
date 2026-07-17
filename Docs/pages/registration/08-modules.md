@@ -56,7 +56,7 @@ public static class ProductionModule
 
 ## Self-compiled scans
 
-A library often keeps its implementations `internal` and exposes only interfaces. A consuming container cannot construct an inaccessible type, so it could never register one — unless the library hand-wrote a factory per type. A `[Scan]` on a `[Module]` closes that gap: the module compiles its own scan **in its own build**, emitting a factory per match that constructs the implementation (which its own assembly can see) and returns the accessible interface. To the consumer this is an ordinary module factory registration, so nothing new crosses the assembly boundary.
+A library often keeps its implementations `internal` and exposes only interfaces. A consuming container cannot construct an inaccessible type, so it could never register one — unless the library hand-wrote a factory per type. A `[Scan]` on a `[Module]` closes that gap: the module compiles its own scan **in its own build**, emitting a factory per match that constructs the implementation (which its own assembly can see) and returns the accessible interface. A consuming container reads each match like a container [`[Scan]`](./scanning) match, so a self-compiled scan behaves as close to a container scan as the assembly boundary allows.
 
 ```csharp
 public interface IClock;
@@ -68,9 +68,9 @@ internal sealed class Roaster(IClock clock) : IPlugin, IRoaster;   // stays inte
 public static partial class PluginModule;   // partial, so the generator can add the factory
 ```
 
-A consuming container `[Import]`s the module and resolves `IRoaster` without ever naming `Roaster`. The generated registration is an overridable default (`Fallback.Silent`), so the container can replace it with its own registration. Because diagnostics are reported in the *library's* build, the library author — not the consumer — sees any problem.
+A consuming container `[Import]`s the module and resolves `IRoaster` without ever naming `Roaster`. Each match is registered like a container scan match: an explicit registration of the same service in the container (or another module) **overrides** it, and when several matches expose the **same** interface they **collect** — a `[Scan<IPlugin>(As = ScanAs.Marker)]` over two internal plug-ins resolves as `IEnumerable<IPlugin>`, exactly as it would on a container. Because diagnostics are reported in the *library's* build, the library author — not the consumer — sees any problem.
 
-The module must be `partial` ([AWT194](../diagnostics#awt194)). A few v1 limitations apply, each reported at the library's source: a match exposes through exactly one accessible interface ([AWT196](../diagnostics#awt196)/[AWT197](../diagnostics#awt197)), and its constructor parameters must be types a consumer can name ([AWT195](../diagnostics#awt195)). Self-compilation is a cross-assembly feature: within a single assembly the container can already `[Scan]` its own `internal` types directly.
+The module must be `partial` ([AWT194](../diagnostics#awt194)). A few v1 limitations apply, each reported at the library's source: a single match exposes through exactly one accessible interface ([AWT196](../diagnostics#awt196)/[AWT197](../diagnostics#awt197)) — several matches under one interface still collect, but one match cannot share a single instance across several interfaces the way a container scan can — and a match's constructor parameters must be types a consumer can name ([AWT195](../diagnostics#awt195)). Self-compilation is a cross-assembly feature: within a single assembly the container can already `[Scan]` its own `internal` types directly.
 
 ## One level deep
 

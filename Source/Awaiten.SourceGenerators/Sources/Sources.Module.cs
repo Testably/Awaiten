@@ -5,7 +5,7 @@ namespace Awaiten.SourceGenerators;
 
 /// <summary>
 ///     Emits the generated partial of a <c>[Module]</c> that self-compiles its <c>[Scan]</c>: the module class is
-///     re-opened as <c>partial</c>, carrying one lifetime registration attribute per match and one
+///     re-opened as <c>partial</c>, carrying one <c>[GeneratedScanRegistration]</c> per match and one
 ///     <c>public static</c> factory method that constructs the match and returns its accessible exposure interface.
 ///     The factory body <c>new</c>s the (possibly <c>internal</c>) implementation - legal because this code compiles
 ///     in the module's own assembly - while the consumer only ever names the interface and calls the factory.
@@ -35,8 +35,8 @@ internal static partial class Sources
 			depth++;
 		}
 
-		// One registration attribute per generated factory, applied to the re-opened partial module. The consuming
-		// container reads these exactly like hand-written [Singleton<…>(Factory = …)] registrations.
+		// One [GeneratedScanRegistration] per generated factory, applied to the re-opened partial module. The
+		// consuming container reads these like a container [Scan]'s matches (collection-eligible and overridable).
 		foreach (ModuleFactory factory in model.Factories.AsArray())
 		{
 			Indent(builder, depth).Append('[').Append(RegistrationAttribute(factory)).AppendLine("]");
@@ -74,21 +74,14 @@ internal static partial class Sources
 	}
 
 	/// <summary>
-	///     The single-argument lifetime registration attribute for one factory: the service is the accessible
-	///     exposure interface, produced by the generated factory, and <c>Fallback.Silent</c> makes it an overridable
-	///     default so a consuming container can replace it with its own registration without a conflict.
+	///     The registration attribute for one factory: the service is the accessible exposure interface the
+	///     generated factory produces, and the lifetime is the one the scan declared. A consuming container reads
+	///     <c>[GeneratedScanRegistration]</c> like a container <c>[Scan]</c>'s match - collection-eligible so
+	///     several matches under one interface resolve as an <c>IEnumerable</c>, and overridable by an explicit
+	///     registration - so a self-compiled scan behaves as close to a container scan as the assembly boundary allows.
 	/// </summary>
 	private static string RegistrationAttribute(ModuleFactory factory)
-	{
-		string attribute = factory.Lifetime switch
-		{
-			Lifetime.Singleton => "SingletonAttribute",
-			Lifetime.Scoped => "ScopedAttribute",
-			_ => "TransientAttribute",
-		};
-
-		return $"global::Awaiten.{attribute}<{factory.ServiceType}>(Factory = \"{factory.FactoryName}\", Fallback = global::Awaiten.Fallback.Silent)";
-	}
+		=> $"global::Awaiten.GeneratedScanRegistrationAttribute<{factory.ServiceType}>(\"{factory.FactoryName}\", Lifetime = global::Awaiten.AwaitenLifetime.{factory.Lifetime})";
 
 	private static void EmitModuleFactory(StringBuilder builder, int depth, ModuleFactory factory)
 	{

@@ -9,9 +9,10 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     Expands every <c>[Scan]</c> declared on a <c>[Module]</c> into the factories the module self-compiles:
 	///     one <c>public static</c> method per match that constructs the (possibly <c>internal</c>) implementation
-	///     and returns its accessible exposure interface. The emitter pairs each with a single-argument lifetime
-	///     registration attribute (<c>[Singleton&lt;IExposure&gt;(Factory = …)]</c>), so to a consuming container
-	///     the scan is indistinguishable from a hand-written module factory - no new cross-assembly ABI. Runs in the
+	///     and returns its accessible exposure interface. The emitter pairs each with a
+	///     <c>[GeneratedScanRegistration&lt;IExposure&gt;(factory, Lifetime = …)]</c>, which a consuming container
+	///     reads like a container <c>[Scan]</c> match - collection-eligible (several matches under one interface
+	///     resolve as an <c>IEnumerable</c>) and overridable by an explicit registration. Runs in the
 	///     <em>module's own</em> build, so diagnostics land at the library's source locations, and the scan sees the
 	///     library's <c>internal</c> types (the whole point: keep implementations internal, expose interfaces).
 	///     Reuses the container scan's candidate discovery, filters and their diagnostics

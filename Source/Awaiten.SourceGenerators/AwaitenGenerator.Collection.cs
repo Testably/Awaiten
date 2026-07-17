@@ -49,11 +49,13 @@ partial class AwaitenGenerator
 		}
 
 		// ...then moved back to the end: coalescing is first-wins per service, so the explicit registrations and
-		// the closed registrations expanded from them must precede the overridable scan ones.
-		if (scans.Count > 0)
+		// the closed registrations expanded from them must precede the overridable scan ones — the container's own
+		// [Scan] matches and a module's self-compiled [GeneratedScanRegistration] matches alike, both IsScan.
+		List<RawRegistration> scanMatches = result.FindAll(registration => registration.IsScan);
+		if (scanMatches.Count > 0)
 		{
 			result.RemoveAll(registration => registration.IsScan);
-			result.AddRange(scans);
+			result.AddRange(scanMatches);
 		}
 
 		return (result, constraintRejected);
@@ -80,6 +82,15 @@ partial class AwaitenGenerator
 			if (attribute.AttributeClass is not { } attributeClass
 			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace)
 			{
+				continue;
+			}
+
+			// A [GeneratedScanRegistration<TService>(factory, Lifetime = …)] is what a [Module] self-compiled from
+			// its own [Scan] (one per match). Read it back like a container [Scan] match rather than a hand-written
+			// factory registration, so several matches under one interface collect instead of colliding.
+			if (attributeClass is { Name: "GeneratedScanRegistrationAttribute", IsGenericType: true, })
+			{
+				CollectGeneratedScanRegistration(attribute, attributeClass, result, origin, fallbackLocation);
 				continue;
 			}
 
@@ -157,6 +168,56 @@ partial class AwaitenGenerator
 				SuppressDisposal: NamedFlag(attribute, "SuppressDisposal"),
 				WhenInjectedInto: whenInjectedInto));
 		}
+	}
+
+	/// <summary>
+	///     Reads one <c>[GeneratedScanRegistration&lt;TService&gt;(factory, Lifetime = …)]</c> - what a
+	///     <c>[Module]</c> self-compiled from its own <c>[Scan]</c>, one per match - into an <c>IsScan</c> factory
+	///     registration, so the consuming container treats it exactly like a container <c>[Scan]</c> match:
+	///     collection-eligible (several matches under one interface resolve as an <c>IEnumerable</c>) and overridable
+	///     by an explicit registration (scans rank last). Each match gets a synthetic implementation identity keyed
+	///     by its unique factory name, distinct from the service's own type so the emitter still constructs through
+	///     the accessible service; without it two matches of one interface would collapse into one implementation
+	///     and collide as conflicting factories.
+	/// </summary>
+	private static void CollectGeneratedScanRegistration(
+		AttributeData attribute,
+		INamedTypeSymbol attributeClass,
+		List<RawRegistration> result,
+		INamedTypeSymbol? origin,
+		Location? fallbackLocation)
+	{
+		if (attributeClass.TypeArguments.Length != 1
+		    || attributeClass.TypeArguments[0] is not INamedTypeSymbol service
+		    || attribute.ConstructorArguments.Length != 1
+		    || attribute.ConstructorArguments[0].Value is not string factory)
+		{
+			return;
+		}
+
+		Lifetime lifetime = Lifetime.Transient;
+		foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
+		{
+			if (argument.Key == "Lifetime" && argument.Value.Value is int value)
+			{
+				lifetime = (Lifetime)value;
+			}
+		}
+
+		string serviceType = service.ToDisplayString(FullyQualified);
+		Location? location = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? fallbackLocation;
+
+		result.Add(new RawRegistration(
+			serviceType,
+			$"{serviceType}@scan:{factory}",
+			lifetime,
+			service,
+			location,
+			ProductionKind.Factory,
+			factory,
+			ServiceSymbol: service,
+			IsScan: true,
+			Origin: origin));
 	}
 
 	/// <summary>
@@ -293,7 +354,7 @@ partial class AwaitenGenerator
 	///     <c>[Singleton]</c>/<c>[Transient]</c>/<c>[Scoped]</c> lifetime registration (generic or open
 	///     <c>typeof</c> form), a <c>[Decorate]</c>, a <c>[Composite]</c>, or <c>[ImportServices]</c>. Used to
 	///     detect a module that declares nothing to import (AWT151). A module-declared <c>[Scan]</c> does not
-	///     count here on its own: its matches are self-compiled into generated lifetime registration attributes
+	///     count here on its own: its matches are self-compiled into <c>[GeneratedScanRegistration]</c> attributes
 	///     (which do count), so a scan-only module whose scan matched something carries those generated attributes.
 	/// </summary>
 	private static bool DeclaresAnyRegistration(ImmutableArray<AttributeData> attributes)
@@ -303,7 +364,8 @@ partial class AwaitenGenerator
 			if (attribute.AttributeClass is { } attributeClass
 			    && attributeClass.ContainingNamespace?.ToDisplayString() == AttributeNamespace
 			    && attributeClass.Name is "SingletonAttribute" or "TransientAttribute" or "ScopedAttribute"
-				    or "DecorateAttribute" or "CompositeAttribute" or "ImportServicesAttribute")
+				    or "DecorateAttribute" or "CompositeAttribute" or "ImportServicesAttribute"
+				    or "GeneratedScanRegistrationAttribute")
 			{
 				return true;
 			}

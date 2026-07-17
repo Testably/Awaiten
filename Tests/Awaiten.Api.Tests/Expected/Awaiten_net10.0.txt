@@ -110,6 +110,14 @@ namespace Awaiten
         public FromKeyAttribute(string key) { }
         public object Key { get; }
     }
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
+    public sealed class GeneratedScanRegistrationAttribute<TService> : System.Attribute
+        where TService :  class
+    {
+        public GeneratedScanRegistrationAttribute(string factory) { }
+        public string Factory { get; }
+        public Awaiten.AwaitenLifetime Lifetime { get; set; }
+    }
     public interface IAsyncInitializable
     {
         System.Threading.Tasks.Task InitializeAsync(System.Threading.CancellationToken cancellationToken);
