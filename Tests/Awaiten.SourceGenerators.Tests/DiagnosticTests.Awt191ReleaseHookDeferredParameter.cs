@@ -34,7 +34,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT191"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT191*").AsWildcard()
 				.Because("a Func<T> release capture holds a resolver delegate that is dead by the time the hook runs at teardown");
 		}
 
@@ -59,7 +59,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT191"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT191*").AsWildcard()
 				.Because("an unmaterialized Lazy<T> release capture defers resolution past the owner's teardown, like a Func<T>");
 		}
 
@@ -85,7 +85,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT191"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT191*").AsWildcard()
 				.Because("the async factory form defers resolution exactly like the synchronous Func<T>");
 		}
 
@@ -110,7 +110,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT191"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT191*").AsWildcard()
 				.Because("an activation hook runs while the owner is alive, so its Func<T> parameter is invokable");
 		}
 
@@ -134,7 +134,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT191"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT191*").AsWildcard()
 				.Because("a direct release dependency is resolved at construction and captured by value, which is the supported shape");
 		}
 	}

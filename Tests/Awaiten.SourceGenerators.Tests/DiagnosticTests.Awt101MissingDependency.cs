@@ -74,9 +74,9 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT101"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT101*").AsWildcard()
 				.Because("a [FromKey] with no registration under that key is a missing dependency");
-			await That(result.Diagnostics.Any(d => d.Contains("AWT101") && d.Contains("key: missing"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT101*key: missing*").AsWildcard()
 				.Because("the missing dependency names the requested key");
 		}
 

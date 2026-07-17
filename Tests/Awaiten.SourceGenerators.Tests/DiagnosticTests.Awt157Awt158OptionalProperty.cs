@@ -28,7 +28,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT101"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT101*").AsWildcard()
 				.Because("an optional property with no registration is left unset, not reported as a missing dependency");
 			await That(result.Diagnostics).IsEmpty()
 				.Because("an optional set-accessor property with no registration is well-defined and reports nothing");
@@ -83,7 +83,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT157"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT157*").AsWildcard()
 				.Because("an optional property is omitted from the object initializer when unregistered, which a required member does not allow - the targeted AWT157 is reported rather than leaving only the opaque CS9035 the omitted required member would otherwise produce");
 		}
 
@@ -110,9 +110,9 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT158"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT158*").AsWildcard()
 				.Because("an optional init-only property left unset when unregistered can never be filled afterwards, so it is warned about");
-			await That(result.Diagnostics.Any(d => d.Contains("AWT101"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT101*").AsWildcard()
 				.Because("the property is still optional, so a missing registration is not the AWT101 error");
 		}
 
@@ -138,7 +138,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT158"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT158*").AsWildcard()
 				.Because("AWT158 flags the init-only optional declaration itself: if the registration is ever removed the property would silently and permanently be default");
 		}
 
@@ -193,7 +193,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT158"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT158*").AsWildcard()
 				.Because("Optional has no effect on a collection, which is always filled, so the init-only-stays-default warning does not apply");
 			await That(result.Diagnostics).IsEmpty()
 				.Because("an optional init-only collection is well-defined and reports nothing");
@@ -223,7 +223,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT157"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT157*").AsWildcard()
 				.Because("a collection is always filled and never omitted, so a required optional collection is not the AWT157 fault");
 			await That(result.Diagnostics).IsEmpty()
 				.Because("an optional required collection is well-defined and reports nothing");

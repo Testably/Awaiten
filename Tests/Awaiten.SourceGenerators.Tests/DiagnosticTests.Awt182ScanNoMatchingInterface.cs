@@ -49,7 +49,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT182"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT182*").AsWildcard()
 				.Because("the Self flag still registers the match as its own concrete type");
 		}
 
@@ -72,7 +72,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT182"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT182*").AsWildcard()
 				.Because("a markerless scan skips a non-conforming type silently instead of warning per type");
 		}
 	}

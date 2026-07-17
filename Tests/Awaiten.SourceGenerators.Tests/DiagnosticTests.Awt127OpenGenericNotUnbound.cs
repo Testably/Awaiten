@@ -24,7 +24,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT127"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT127*").AsWildcard()
 				.Because("a closed generic in the typeof-ctor form would silently drop its type arguments; the generic attribute form registers closed types");
 		}
 
@@ -45,7 +45,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT127"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT127*").AsWildcard()
 				.Because("a non-generic type matches no closed service through the open generic path; the generic attribute form registers it");
 		}
 
@@ -70,7 +70,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT127"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT127*").AsWildcard()
 				.Because("typeof(Repository<>) is the intended unbound open generic form");
 		}
 	}

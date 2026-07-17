@@ -51,7 +51,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT175"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT175*").AsWildcard()
 				.Because("an [ImportService<T>] type with no registration is the ordinary, contradiction-free case");
 		}
 	}

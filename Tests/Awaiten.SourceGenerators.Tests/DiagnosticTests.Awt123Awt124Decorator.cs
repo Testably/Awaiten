@@ -25,7 +25,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT123"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT123*").AsWildcard()
 				.Because("a [Decorate] over a service with no registration has nothing to wrap");
 		}
 
@@ -50,7 +50,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT124"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT124*").AsWildcard()
 				.Because("a decorator with more than one parameter assignable to the service is ambiguous");
 		}
 
@@ -75,7 +75,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT124"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT124*").AsWildcard()
 				.Because("a decorator with no parameter assignable to the service cannot receive the inner instance");
 		}
 
@@ -125,7 +125,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT124"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT124*").AsWildcard()
 				.Because("the inner is the most-derived assignable parameter, so an unrelated `object` sibling is not ambiguous");
 		}
 
@@ -178,7 +178,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT124"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT124*").AsWildcard()
 				.Because("a [FromKey] parameter is not the chain inner, so the decorator has no parameter to receive it");
 		}
 
@@ -205,9 +205,9 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT102") && d.Contains("MyCode.Deco"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT102*MyCode.Deco*").AsWildcard()
 				.Because("the cycle diagnostic must name the real decorator type");
-			await That(result.Diagnostics.Any(d => d.Contains("@__dec:"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*@__dec:*").AsWildcard()
 				.Because("the internal synthetic '@__dec:' identity must not leak into user-facing diagnostics");
 		}
 
@@ -235,9 +235,9 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT105") && d.Contains("MyCode.Deco"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT105*MyCode.Deco*").AsWildcard()
 				.Because("the captive-dependency diagnostic must name the real decorator type");
-			await That(result.Diagnostics.Any(d => d.Contains("@__dec:"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*@__dec:*").AsWildcard()
 				.Because("the internal synthetic '@__dec:' identity must not leak into the captive-dependency diagnostic");
 		}
 	}

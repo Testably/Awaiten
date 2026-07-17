@@ -29,7 +29,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT113"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT113*").AsWildcard()
 				.Because("the Func requests an int but the [Arg] parameter expects a string");
 		}
 
@@ -56,7 +56,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT113"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT113*").AsWildcard()
 				.Because("a parameterized service cannot be produced from a Func that supplies no runtime arguments");
 			await That(result.Diagnostics.Single(d => d.Contains("AWT113"))).Contains("(none)")
 				.Because("an empty runtime-argument list reads as 'none' rather than an empty '()'");

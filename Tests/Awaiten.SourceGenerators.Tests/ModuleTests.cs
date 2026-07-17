@@ -743,7 +743,7 @@ public class ModuleTests
 		// The nested import is rejected (AWT150), but the module's own registrations still import, so they do
 		// not cascade as AWT101 missing dependencies.
 		await That(result.Diagnostics).Contains("*AWT150*InfrastructureModule*").AsWildcard();
-		await That(result.Diagnostics.Any(d => d.Contains("AWT101"))).IsFalse()
+		await That(result.Diagnostics).DoesNotContain("*AWT101*").AsWildcard()
 			.Because("the module's own registrations are imported despite its rejected nested [Import]");
 	}
 }

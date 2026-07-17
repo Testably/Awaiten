@@ -70,7 +70,7 @@ public partial class DiagnosticTests
 				}
 				""");
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT173"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT173*").AsWildcard()
 				.Because("DropPlugin was excluded, so the exclusion did its job");
 		}
 	}

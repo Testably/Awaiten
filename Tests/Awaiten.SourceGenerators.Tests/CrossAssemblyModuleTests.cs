@@ -100,7 +100,7 @@ public class CrossAssemblyModuleTests
 			""");
 
 		// The metadata module's Default loses to AppModule's (AWT148). With no syntax of its own the diagnostic must fall back to the container's [Import] line. ToString() prefixes the location only when one exists.
-		await That(result.Diagnostics.Any(d => d.Contains("AWT148"))).IsTrue()
+		await That(result.Diagnostics).Contains("*AWT148*").AsWildcard()
 			.Because("two Defaults collide across assemblies with nothing stronger to resolve them");
 		await That(result.Diagnostics).Contains("(*,*): *AWT148*").AsWildcard()
 			.Because("the metadata registration's diagnostic falls back to the container's [Import] location");

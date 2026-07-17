@@ -31,7 +31,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT177"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT177*").AsWildcard()
 				.Because("an [InjectProperty] name must resolve to a settable property on the implementation");
 		}
 
@@ -59,7 +59,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT177"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT177*").AsWildcard()
 				.Because("a read-only (get-only) member is not a settable property, so [InjectProperty] cannot fill it");
 		}
 
@@ -87,9 +87,9 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT178"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT178*").AsWildcard()
 				.Because("property injection only fills a container-constructed instance; a Factory produces it whole");
-			await That(result.Diagnostics.Any(d => d.Contains("AWT180"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT180*").AsWildcard()
 				.Because("a Factory-produced implementation is registered, so it is AWT178 rather than the unmatched AWT180");
 		}
 
@@ -117,7 +117,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT178"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT178*").AsWildcard()
 				.Because("a pre-built Instance is produced whole by its source, so [InjectProperty] cannot fill it");
 		}
 
@@ -146,7 +146,7 @@ public partial class DiagnosticTests
 			                                       """);
 
 			// AWT179 is a warning, not an error: the graph is well-defined (the first entry wins).
-			await That(result.Diagnostics.Any(d => d.Contains("warning AWT179"))).IsTrue()
+			await That(result.Diagnostics).Contains("*warning AWT179*").AsWildcard()
 				.Because("a property is injected once, so a duplicate [InjectProperty] entry is a suppressible warning");
 		}
 
@@ -171,7 +171,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT180"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT180*").AsWildcard()
 				.Because("an [InjectProperty] whose implementation has no container-constructed registration is never applied");
 		}
 
@@ -202,7 +202,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT180"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT180*").AsWildcard()
 				.Because("a decorator chain link is constructed (under a synthetic identity), so a decorator-type target must not be misreported as unmatched");
 		}
 
@@ -230,7 +230,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT170"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT170*").AsWildcard()
 				.Because("an [InjectProperty] Key must be a supported key constant, guarded like a registration's Key and [FromKey]");
 		}
 
@@ -258,7 +258,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT181"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT181*").AsWildcard()
 				.Because("a property named by both [Inject] and [InjectProperty] warns that the [Inject] member wins");
 		}
 
@@ -286,7 +286,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT*").AsWildcard()
 				.Because("a property named only by [InjectProperty] (no [Inject]) is filled cleanly, with no diagnostic");
 		}
 

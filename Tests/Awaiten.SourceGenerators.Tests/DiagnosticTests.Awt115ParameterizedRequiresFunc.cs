@@ -28,7 +28,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT115"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT115*").AsWildcard()
 				.Because("a parameterized service cannot be supplied its runtime arguments through a plain dependency");
 		}
 
@@ -55,7 +55,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT115"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT115*").AsWildcard()
 				.Because("Lazy<T> cannot carry runtime arguments either, so it cannot build a parameterized service");
 		}
 
@@ -82,7 +82,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT115"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT115*").AsWildcard()
 				.Because("a Func<TArg…, T> supplies the runtime arguments, so it is the correct way to obtain it");
 		}
 

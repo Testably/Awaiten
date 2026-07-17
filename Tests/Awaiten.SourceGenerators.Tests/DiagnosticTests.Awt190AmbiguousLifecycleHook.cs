@@ -27,7 +27,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT190"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT190*").AsWildcard()
 				.Because("two accessible methods named Started accept the instance, so the container cannot choose one");
 		}
 
@@ -50,7 +50,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT190"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT190*").AsWildcard()
 				.Because("both the exact and the object overload accept the instance, so the release hook choice is order-dependent");
 		}
 
@@ -73,7 +73,9 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT190") || d.Contains("AWT164"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT190*").AsWildcard()
+				.Because("the int overload does not accept the instance, so there is exactly one usable hook and no ambiguity");
+			await That(result.Diagnostics).DoesNotContain("*AWT164*").AsWildcard()
 				.Because("the int overload does not accept the instance, so there is exactly one usable hook and no ambiguity");
 		}
 
@@ -97,7 +99,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT190"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT190*").AsWildcard()
 				.Because("a single shared object hook is one match per registration, so neither registration is ambiguous");
 		}
 	}

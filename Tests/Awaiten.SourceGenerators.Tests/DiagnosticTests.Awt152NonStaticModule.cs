@@ -57,7 +57,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT101"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT101*").AsWildcard()
 				.Because("the module is still imported, so its registrations do not additionally cascade as missing dependencies");
 		}
 
@@ -82,7 +82,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT152"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT152*").AsWildcard()
 				.Because("a static module satisfies the requirement");
 		}
 
@@ -106,7 +106,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT152"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT152*").AsWildcard()
 				.Because("a non-module import is rejected by AWT149 before the static requirement applies");
 		}
 	}

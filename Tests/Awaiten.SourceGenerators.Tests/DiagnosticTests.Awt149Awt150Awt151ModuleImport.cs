@@ -81,7 +81,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT149"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT149*").AsWildcard()
 				.Because("a [Module] is a valid import target");
 		}
 	}
@@ -142,7 +142,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT150"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT150*").AsWildcard()
 				.Because("a module with no [Import] of its own has nothing to follow");
 		}
 	}
@@ -193,7 +193,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT151"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT151*").AsWildcard()
 				.Because("a module with registrations contributes something");
 		}
 	}

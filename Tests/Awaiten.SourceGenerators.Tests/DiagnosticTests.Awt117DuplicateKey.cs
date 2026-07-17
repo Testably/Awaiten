@@ -26,7 +26,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT117"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT117*").AsWildcard()
 				.Because("two different implementations claim the same service type and key");
 		}
 
@@ -50,7 +50,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT117"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT117*").AsWildcard()
 				.Because("several implementations may share one service type under different keys");
 		}
 
@@ -74,7 +74,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT117"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT117*").AsWildcard()
 				.Because("registering one implementation under several service types with one key is a coalesce, not a conflict");
 		}
 	}

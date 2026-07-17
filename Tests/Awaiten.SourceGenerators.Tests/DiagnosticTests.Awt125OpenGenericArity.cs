@@ -25,7 +25,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT125"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT125*").AsWildcard()
 				.Because("the open implementation's arity must match the service's, so a closed service can be re-mapped onto the implementation");
 		}
 
@@ -50,7 +50,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT125"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT125*").AsWildcard()
 				.Because("the implementation and service both declare one type parameter");
 		}
 	}

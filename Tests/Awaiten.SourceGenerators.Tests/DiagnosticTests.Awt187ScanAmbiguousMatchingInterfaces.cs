@@ -54,7 +54,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT187"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT187*").AsWildcard()
 				.Because("the own-namespace IWorker decides the tie, so a single interface registers");
 		}
 
@@ -82,7 +82,7 @@ public partial class DiagnosticTests
 				}
 				""");
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT187"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT187*").AsWildcard()
 				.Because("the internal A.IWorker is dropped, so only B.IWorker registers and no ambiguity remains");
 			string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 			await That(source).Contains("typeof(global::B.IWorker)");
@@ -115,7 +115,7 @@ public partial class DiagnosticTests
 
 			await That(result.Diagnostics).Contains("*AWT188*").AsWildcard()
 				.Because("the match registers nothing, which AWT188 reports per inaccessible interface");
-			await That(result.Diagnostics.Any(d => d.Contains("AWT187"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT187*").AsWildcard()
 				.Because("claiming the match is registered under each interface would contradict AWT188");
 		}
 
@@ -140,7 +140,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT187"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT187*").AsWildcard()
 				.Because("a markerless match is never warned, like AWT139/AWT182/AWT188");
 			string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 			await That(source).Contains("typeof(global::A.IWorker)")
@@ -176,7 +176,7 @@ public partial class DiagnosticTests
 
 			await That(result.Diagnostics).Contains("*AWT141*").AsWildcard()
 				.Because("the match cannot be constructed and the scan opted into skipping it");
-			await That(result.Diagnostics.Any(d => d.Contains("AWT187"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT187*").AsWildcard()
 				.Because("a skipped match is registered under nothing, so the ambiguity warning would contradict AWT141");
 		}
 	}

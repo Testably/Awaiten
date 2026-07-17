@@ -45,7 +45,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """, typeof(global::Awaiten.Tests.Support.ICrossAssemblyPlugin));
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT140"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT140*").AsWildcard()
 				.Because("the referenced assembly has concrete plugins assignable to the marker");
 		}
 	}

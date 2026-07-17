@@ -155,7 +155,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT183"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT183*").AsWildcard()
 				.Because("a namespace pattern that names a segment positively bounds the scan");
 		}
 
@@ -177,7 +177,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT183"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT183*").AsWildcard()
 				.Because("a scoped markerless MatchingInterface scan is well-formed");
 		}
 
@@ -197,7 +197,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """, typeof(global::Awaiten.Tests.Support.ICrossAssemblyPlugin));
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT183"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT183*").AsWildcard()
 				.Because("InAssembliesOf alone is a valid scope for a markerless scan");
 		}
 	}

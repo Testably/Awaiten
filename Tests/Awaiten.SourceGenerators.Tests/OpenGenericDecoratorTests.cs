@@ -66,7 +66,7 @@ public class OpenGenericDecoratorTests
 		                                       }
 		                                       """);
 
-		await That(result.Diagnostics.Any(d => d.Contains("AWT127"))).IsTrue()
+		await That(result.Diagnostics).Contains("*AWT127*").AsWildcard()
 			.Because("the typeof form must receive an unbound generic decorator such as typeof(Logging<>)");
 	}
 
@@ -91,7 +91,7 @@ public class OpenGenericDecoratorTests
 		                                       }
 		                                       """);
 
-		await That(result.Diagnostics.Any(d => d.Contains("AWT125"))).IsTrue()
+		await That(result.Diagnostics).Contains("*AWT125*").AsWildcard()
 			.Because("the open decorator's arity must match the service's");
 	}
 
@@ -118,9 +118,9 @@ public class OpenGenericDecoratorTests
 		                                       }
 		                                       """);
 
-		await That(result.Diagnostics.Any(d => d.Contains("warning AWT171"))).IsTrue()
+		await That(result.Diagnostics).Contains("*warning AWT171*").AsWildcard()
 			.Because("the closing IHandler<int> cannot construct Logging<int> under 'where T : class'");
-		await That(result.Diagnostics.Any(d => d.Contains("AWT126"))).IsFalse()
+		await That(result.Diagnostics).DoesNotContain("*AWT126*").AsWildcard()
 			.Because("AWT126 is the registration error; an excluded decorator closing is the separate warning AWT171");
 	}
 
@@ -145,7 +145,7 @@ public class OpenGenericDecoratorTests
 		                                       """);
 
 		// Nothing requires a closed IHandler<…>, so no closing is expanded and there is nothing to decorate.
-		await That(result.Diagnostics.Any(d => d.Contains("AWT123"))).IsTrue()
+		await That(result.Diagnostics).Contains("*AWT123*").AsWildcard()
 			.Because("the open decorator matches no closing of the service");
 	}
 
@@ -205,7 +205,7 @@ public class OpenGenericDecoratorTests
 		                                       }
 		                                       """);
 
-		await That(result.Diagnostics.Any(d => d.Contains("AWT127"))).IsTrue()
+		await That(result.Diagnostics).Contains("*AWT127*").AsWildcard()
 			.Because("the typeof form must receive an unbound generic composite such as typeof(CompositeHandler<>)");
 	}
 }

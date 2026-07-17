@@ -30,7 +30,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT129"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT129*").AsWildcard()
 				.Because("the open registration recurses into an ever-larger closed generic, so expansion is bounded and reported");
 		}
 
@@ -59,7 +59,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT129"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT129*").AsWildcard()
 				.Because("a finite closed-generic chain converges, so no depth limit is reached");
 		}
 	}

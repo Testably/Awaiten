@@ -68,7 +68,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT185"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT185*").AsWildcard()
 				.Because("an unset As keeps the Self default, which exposes the match");
 		}
 	}

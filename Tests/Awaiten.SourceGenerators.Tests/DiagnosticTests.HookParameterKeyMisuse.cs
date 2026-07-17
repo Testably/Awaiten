@@ -35,7 +35,7 @@ public partial class DiagnosticTests
 
 			// int is not a supported key type for a [FromKey], and a hook parameter is classified like a constructor
 			// parameter, so it is rejected rather than silently treated as unkeyed.
-			await That(result.Diagnostics.Any(d => d.Contains("AWT170"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT170*").AsWildcard()
 				.Because("a hook parameter's [FromKey] is validated exactly like a constructor parameter's");
 		}
 
@@ -63,7 +63,7 @@ public partial class DiagnosticTests
 
 			// int is neither string nor an enum, so a keyed dictionary cannot synthesize under it (AWT159), for a hook
 			// parameter as for a constructor one.
-			await That(result.Diagnostics.Any(d => d.Contains("AWT159"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT159*").AsWildcard()
 				.Because("a keyed-collection hook parameter is validated like a constructor parameter's");
 		}
 
@@ -91,7 +91,7 @@ public partial class DiagnosticTests
 
 			// A [FromKey] cannot select within the synthesized dictionary, so it is rejected (AWT160) on a hook
 			// parameter exactly as on a constructor one.
-			await That(result.Diagnostics.Any(d => d.Contains("AWT160"))).IsTrue()
+			await That(result.Diagnostics).Contains("*AWT160*").AsWildcard()
 				.Because("a [FromKey] on a synthesized keyed-collection hook parameter is rejected like a constructor parameter's");
 		}
 	}

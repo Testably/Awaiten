@@ -63,9 +63,9 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT101"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT101*").AsWildcard()
 				.Because("the module's lifetime registrations are still imported");
-			await That(result.Diagnostics.Any(d => d.Contains("AWT151"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT151*").AsWildcard()
 				.Because("the module declares a lifetime registration, so it is not empty");
 		}
 
@@ -120,7 +120,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics.Any(d => d.Contains("AWT154"))).IsFalse()
+			await That(result.Diagnostics).DoesNotContain("*AWT154*").AsWildcard()
 				.Because("[Scan] on the container is the supported placement");
 		}
 	}
