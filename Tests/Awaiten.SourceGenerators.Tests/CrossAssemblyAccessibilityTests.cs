@@ -155,4 +155,64 @@ public class CrossAssemblyAccessibilityTests
 		await That(result.Diagnostics).Contains("*AWT136*Grinder*").AsWildcard()
 			.Because("without the grant the setter is out of the container's reach, so it must surface as AWT136 rather than an inaccessible-setter error in generated code");
 	}
+
+	[Fact]
+	public async Task MultipleConstructors_ResolvableInternalOneSelectedAcrossInternalsVisibleTo()
+	{
+		GeneratorResult result = Generator.RunWithReferencedAssembly("""
+			[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("TestAssembly")]
+
+			namespace Lib;
+
+			public sealed class Grinder { }
+			public sealed class Roaster
+			{
+			    public Roaster(Grinder grinder) { }
+			    internal Roaster() { }
+			}
+			""", """
+			using Awaiten;
+
+			namespace MyCode;
+
+			[Container]
+			[Transient<Lib.Roaster>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty()
+			.Because("[InternalsVisibleTo] admits the internal constructor as a candidate, and it is the resolvable overload");
+		await That(result.Sources["Awaiten.MyCode.MyContainer.g.cs"]).Contains("new global::Lib.Roaster()")
+			.Because("constructor selection prefers the resolvable parameterless overload over the greedy public one");
+	}
+
+	[Fact]
+	public async Task MultipleConstructors_WithoutInternalsVisibleTo_FallsToPublicConstructorAndReportsAwt101()
+	{
+		GeneratorResult result = Generator.RunWithReferencedAssembly("""
+			namespace Lib;
+
+			public sealed class Grinder { }
+			public sealed class Roaster
+			{
+			    public Roaster(Grinder grinder) { }
+			    internal Roaster() { }
+			}
+			""", """
+			using Awaiten;
+
+			namespace MyCode;
+
+			[Container]
+			[Transient<Lib.Roaster>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		await That(result.Diagnostics).Contains("*AWT101*Grinder*").AsWildcard()
+			.Because("without the grant only the public constructor is reachable, and its dependency is unregistered");
+	}
 }
