@@ -102,7 +102,7 @@ An unbound generic marker matches closed forms, the way Autofac's closed-types-o
 
 ## Lifecycle hooks
 
-A scan can name `OnActivated` and `OnRelease` hooks, applied to every match — so a whole family shares one activation or teardown routine without a registration line per type.
+A scan can name `OnActivated` and `OnRelease` hooks, applied to every match, so a whole family shares one activation or teardown routine without a registration line per type.
 
 ```csharp
 [Container]
@@ -113,11 +113,11 @@ public static partial class CoffeeShop
 }
 ```
 
-The hook's first parameter is the match, so it must accept every one: type it as the scanned marker (or `object`). Parameters after it are resolved from the graph exactly as for an [explicit registration's hook](../lifetime/lifecycle-hooks#hook-parameters), and the same rules and diagnostics apply — an unusable hook name is [AWT164](../diagnostics#awt164), an unregistered parameter is [AWT101](../diagnostics#awt101). A hook that conflicts with an explicit registration of the same type is caught as [AWT166](../diagnostics#awt166).
+The hook's first parameter is the match, so it must accept every one: type it as the scanned marker (or `object`). Parameters after it are resolved from the graph exactly as for an [explicit registration's hook](../lifetime/lifecycle-hooks#hook-parameters), and the same rules and diagnostics apply: an unusable hook name is [AWT164](../diagnostics#awt164), an unregistered parameter is [AWT101](../diagnostics#awt101). A hook that conflicts with an explicit registration of the same type is caught as [AWT166](../diagnostics#awt166).
 
 ### Generic hooks on an open marker
 
-An [open generic marker](#open-generic-markers) knows each match's closed type argument at compile time, so a hook can be *generic* and receive it directly — no reflection, no `object`. The classic case is a WPF-style view/view-model family: bind each view to its matching view model as it is activated.
+An [open generic marker](#open-generic-markers) knows each match's closed type argument at compile time, so a hook can be *generic* and receive it directly, with no reflection and no `object`. The classic case is a WPF-style view/view-model family: bind each view to its matching view model as it is activated.
 
 ```csharp
 [Container]
@@ -130,9 +130,9 @@ public static partial class App
 }
 ```
 
-For `MainWindow : IView<IMainViewModel>` the generator dispatches `WireView<IMainViewModel>(mainWindow, viewModel)`, resolving the matching `IMainViewModel` from the graph. The type argument is visible to graph analysis, so an unregistered view model fails the build ([AWT101](../diagnostics#awt101)) rather than at runtime. A non-generic method works too (its parameters typed as the marker); the type argument only applies when the method is generic.
+For `MainWindow : IView<IMainViewModel>` the generator dispatches `WireView<IMainViewModel>(mainWindow, viewModel)`, resolving the matching `IMainViewModel` from the graph. The type argument is visible to graph analysis, so an unregistered view model fails the build ([AWT101](../diagnostics#awt101)) rather than at runtime. A non-generic method works too (its parameters typed as the marker or `object`); the type argument only applies when the method is generic.
 
-Because the type argument comes from the match's *single* closed marker form, a match that closes the marker more than once (`Dual : IView<A>, IView<B>`) is ambiguous and reported as [AWT198](../diagnostics#awt198) — register such a type explicitly with the hook it needs.
+Because a *generic* hook takes its type argument from the match's *single* closed marker form, a match that closes the marker more than once (`Dual : IView<A>, IView<B>`) leaves that argument ambiguous and is reported as [AWT198](../diagnostics#awt198): register such a type explicitly with the hook it needs, or split the family so each match closes the marker once. A non-generic hook takes no type argument, so a match with several closings is fine for it.
 
 ## Overriding a scanned type
 

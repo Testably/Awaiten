@@ -58,6 +58,56 @@ public partial class DiagnosticTests
 		}
 
 		[Fact]
+		public async Task DoesNotReportForANonGenericHookOnAMatchClosingTheMarkerMoreThanOnce()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IView<TViewModel> { }
+			                                       public sealed class DualView : IView<int>, IView<string> { }
+
+			                                       [Container]
+			                                       [Scan(typeof(IView<>), As = ScanAs.Marker, OnActivated = nameof(Log))]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       	private static void Log(object instance) { }
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).DoesNotContain("*AWT198*").AsWildcard()
+				.Because("a non-generic hook needs no type argument, so a match closing the marker several times is not ambiguous");
+			await That(result.Diagnostics).DoesNotContain("*AWT164*").AsWildcard()
+				.Because("the non-generic hook accepts every match as object and is a usable hook");
+		}
+
+		[Fact]
+		public async Task ReportsWhenTwoOpenMarkersBindOneGenericHookToDifferentClosings()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IView<TViewModel> { }
+			                                       public interface IEditor<TModel> { }
+			                                       public sealed class Dual : IView<int>, IEditor<string> { }
+
+			                                       [Container]
+			                                       [Scan(typeof(IView<>), As = ScanAs.Marker, OnActivated = nameof(Wire))]
+			                                       [Scan(typeof(IEditor<>), As = ScanAs.Marker, OnActivated = nameof(Wire))]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       	private static void Wire<TArg>(object instance) { }
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT198*").AsWildcard()
+				.Because("two open-generic scans bind the same generic hook to different closings of Dual, so its type argument is ambiguous rather than silently the first-seen one");
+		}
+
+		[Fact]
 		public async Task DoesNotReportWhenNoHookIsNamed()
 		{
 			GeneratorResult result = Generator.Run("""

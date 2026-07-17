@@ -187,11 +187,24 @@ partial class AwaitenGenerator
 					Eager = reg.Eager,
 					OnActivated = reg.OnActivated,
 					OnRelease = reg.OnRelease,
-					HookClosedMarker = reg.HookClosedMarker,
 					SuppressDisposal = reg.SuppressDisposal,
 				};
 				implInfos.Add(reg.ImplementationType, info);
 				implOrder.Add(info);
+			}
+
+			// Union every registration's closed marker forms (deduped), so a generic hook bound by two open-generic
+			// scans that close the marker differently is seen as ambiguous in ResolveHook, not silently fixed to the
+			// first-seen closing. All registrations of one scan carry the same forms, so this is a no-op for them.
+			if (reg.HookClosedMarkers is { } markers)
+			{
+				foreach (INamedTypeSymbol marker in markers)
+				{
+					if (!info.HookClosedMarkers.Any(seen => SymbolEqualityComparer.Default.Equals(seen, marker)))
+					{
+						info.HookClosedMarkers.Add(marker);
+					}
+				}
 			}
 
 			return info;

@@ -286,7 +286,11 @@ partial class AwaitenGenerator
 	///     to AWT164. Reports <see cref="Diagnostics.InvalidLifecycleHook">AWT164</see> and returns
 	///     <c>(null, empty)</c> when no accessible ordinary void method of that name accepts the implementation type
 	///     as its first parameter, and <see cref="Diagnostics.AmbiguousLifecycleHook">AWT190</see> (also returning
-	///     <c>(null, empty)</c>) when more than one does, so the choice would be order-dependent.
+	///     <c>(null, empty)</c>) when more than one does, so the choice would be order-dependent. A generic hook
+	///     (named on an open-generic <c>[Scan]</c> marker) binds its type argument from the match's single closed
+	///     marker form; when the match closes the marker at more than one form the argument is ambiguous, reported as
+	///     <see cref="Diagnostics.GenericHookAmbiguousMarker">AWT198</see> (a non-generic hook, needing no argument, is
+	///     unaffected).
 	/// </summary>
 	private static (string? Hook, EquatableArray<ParameterModel> Parameters) ResolveHook(
 		ImplInfo info,
@@ -303,6 +307,7 @@ partial class AwaitenGenerator
 		Compilation compilation = context.Compilation;
 
 		List<IMethodSymbol> matches = new();
+		bool ambiguousMarker = false;
 		foreach (ISymbol member in AccessibleMembers(info.Origin ?? containerSymbol, hookName, compilation))
 		{
 			// A module hook must also be accessible from the generated container (its own private members are
@@ -314,9 +319,17 @@ partial class AwaitenGenerator
 			}
 
 			// A generic hook (named on an open-generic [Scan] marker) binds its type parameters from the match's
-			// closed marker form, so WireView<TViewModel> is dispatched as WireView<IMainViewModel>; a non-generic
-			// method is used as-is. The first parameter of the constructed method must accept the instance.
-			if (ConstructHook(method, info.HookClosedMarker) is { } constructed
+			// single closed marker form, so WireView<TViewModel> is dispatched as WireView<IMainViewModel>. A match
+			// that closes the marker at more than one form leaves that type argument ambiguous (AWT198); a non-generic
+			// method needs no type argument, so it is unaffected and resolves as-is below.
+			if (method.Arity > 0 && info.HookClosedMarkers.Count > 1)
+			{
+				ambiguousMarker = true;
+				continue;
+			}
+
+			// The first parameter of the (possibly constructed) method must accept the instance.
+			if (ConstructHook(method, info.HookClosedMarkers) is { } constructed
 			    && compilation.HasImplicitConversion(info.Symbol, constructed.Parameters[0].Type))
 			{
 				matches.Add(constructed);
@@ -326,6 +339,18 @@ partial class AwaitenGenerator
 		if (matches.Count == 1)
 		{
 			return (QualifiedHook(info, hookName, matches[0]), ClassifyHookParameters(matches[0], info, release, context));
+		}
+
+		// A generic hook whose only obstacle was an ambiguous closed marker (and nothing else usable matched) is
+		// AWT198, distinct from an unusable name (AWT164) or an overload the container cannot pick between (AWT190):
+		// the marker closes at several forms, so the hook's type argument cannot be chosen. No hook is emitted.
+		if (matches.Count == 0 && ambiguousMarker)
+		{
+			context.Diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.GenericHookAmbiguousMarker,
+				info.Location,
+				new EquatableArray<string>([Display(info.ImplementationType), Display(info.HookClosedMarkers[0].OriginalDefinition.ToDisplayString(FullyQualified)),])));
+			return (null, default);
 		}
 
 		// No usable match is AWT164 (unusable hook); more than one is AWT190 (an overload the container cannot pick
@@ -436,23 +461,24 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     Binds a lifecycle hook method's type parameters for dispatch: a non-generic method (arity 0) is used
-	///     as-is, and a generic method is constructed from the match's closed marker form's type arguments
-	///     (<paramref name="closedMarker" />) when the arities match. Returns <see langword="null" /> when a generic
-	///     method has no marker to bind or the arities differ, so it is not a usable hook and falls through to AWT164.
+	///     as-is, ignoring any marker, and a generic method is constructed from the single closed marker form's type
+	///     arguments (<paramref name="closedMarkers" />) when the arities match. Returns <see langword="null" /> when a
+	///     generic method has no single marker to bind (none, or more than one, the ambiguity AWT198 reports) or the
+	///     arities differ, so it is not a usable hook and falls through to AWT164.
 	/// </summary>
-	private static IMethodSymbol? ConstructHook(IMethodSymbol method, INamedTypeSymbol? closedMarker)
+	private static IMethodSymbol? ConstructHook(IMethodSymbol method, IReadOnlyList<INamedTypeSymbol> closedMarkers)
 	{
 		if (method.Arity == 0)
 		{
 			return method;
 		}
 
-		if (closedMarker is null || method.Arity != closedMarker.TypeArguments.Length)
+		if (closedMarkers.Count != 1 || method.Arity != closedMarkers[0].TypeArguments.Length)
 		{
 			return null;
 		}
 
-		return method.Construct(closedMarker.TypeArguments.ToArray());
+		return method.Construct(closedMarkers[0].TypeArguments.ToArray());
 	}
 
 	/// <summary>

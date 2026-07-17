@@ -181,6 +181,32 @@ public partial class ScanTests
 	}
 
 	[Fact]
+	public async Task Scan_OpenGenericMarker_RunsANonGenericHookForAMatchClosingTheMarkerMoreThanOnce()
+	{
+		HookProbe.Log.Clear();
+		using DualPanelContainer.Root container = new();
+
+		DualPanel panel = container.Resolve<DualPanel>();
+
+		await That(panel).IsNotNull();
+		// DualPanel closes IPanel<> at both int and string, but a non-generic hook needs no type argument, so it
+		// is not ambiguous (no AWT198) and runs once for the single instance.
+		await That(HookProbe.Log).Contains("tracked:DualPanel")
+			.Because("a non-generic scan hook accepts every match as object, whatever closings the match implements");
+	}
+
+	public interface IPanel<TModel>;
+
+	public sealed class DualPanel : IPanel<int>, IPanel<string>;
+
+	[Container]
+	[Scan(typeof(IPanel<>), As = ScanAs.Self | ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton, OnActivated = nameof(Track))]
+	public static partial class DualPanelContainer
+	{
+		private static void Track(object instance) => HookProbe.Log.Add("tracked:" + instance.GetType().Name);
+	}
+
+	[Fact]
 	public async Task GenericScan_RegistersMatchesLikeTheTypeofForm()
 	{
 		using GenericScanContainer.Root container = new();

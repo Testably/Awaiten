@@ -1275,7 +1275,7 @@ public static partial class CoffeeShop
 }
 ```
 
-A [generic scan hook](./registration/scanning#lifecycle-hooks) binds its type argument from the match's *single* closed marker form, so `DualView` — which closes `IView<>` at both `Orders` and `Payments` — leaves it ambiguous. Register the type explicitly with the intended hook, or split the family so each match closes the marker once. A match closing the marker several times is fine *without* a hook (each closed form registers as its own collection member).
+A [generic scan hook](./registration/scanning#lifecycle-hooks) binds its type argument from the match's *single* closed marker form, so `DualView`, which closes `IView<>` at both `Orders` and `Payments`, leaves it ambiguous. Register the type explicitly with the intended hook, or split the family so each match closes the marker once. Only a *generic* hook is affected: a non-generic hook (its parameter typed as the marker or `object`) takes no type argument, so a match with several closings is fine for it, as is a match closing the marker several times *without* any hook (each closed form registers as its own collection member).
 
 ## Modules
 

@@ -16,9 +16,11 @@ partial class AwaitenGenerator
 	///     definitions and the marker itself are skipped; a match the generated container cannot name is reported as
 	///     AWT193 and then dropped. A markerless scan (the parameterless <c>[Scan]</c>) matches every concrete type
 	///     instead, narrowed by those same filters. Reports
-	///     AWT138/AWT139/AWT140/AWT143/AWT172/AWT173/AWT174/AWT182/AWT183/AWT184/AWT185/AWT187/AWT188/AWT193/AWT198. The synthesized
+	///     AWT138/AWT139/AWT140/AWT143/AWT172/AWT173/AWT174/AWT182/AWT183/AWT184/AWT185/AWT187/AWT188/AWT193. The synthesized
 	///     registrations are <see cref="RawRegistration.IsScan" />, so an explicit registration wins single
-	///     resolution while every match still joins its collection.
+	///     resolution while every match still joins its collection. A scan's lifecycle hook is resolved later in
+	///     <c>ResolveHook</c> like any other (AWT164/AWT190), where a generic hook bound by an open-generic marker may
+	///     also report AWT198 if a match closes the marker at more than one form.
 	/// </summary>
 	private static List<RawRegistration> CollectScans(
 		INamedTypeSymbol containerSymbol,
@@ -146,8 +148,8 @@ partial class AwaitenGenerator
 				continue;
 			}
 
-			(ScanMatch candidateMatch, INamedTypeSymbol? hookClosedMarker) = ResolveScanHook(candidate.Type, match, openMarker, markerDefinition, location, diagnostics);
-			produced += RegisterScanMatch(candidate.Type, ScanContracts(candidate.Type, match, marker, openMarker, markerDefinition, compilation), markerDisplay, candidateMatch, hookClosedMarker, result, diagnostics);
+			IReadOnlyList<INamedTypeSymbol>? hookClosedMarkers = ScanHookMarkers(candidate.Type, match, openMarker, markerDefinition);
+			produced += RegisterScanMatch(candidate.Type, ScanContracts(candidate.Type, match, marker, openMarker, markerDefinition, compilation), markerDisplay, match, hookClosedMarkers, result, diagnostics);
 		}
 
 		ReportScanFilterDiagnostics(filters, hits, new ScanFilterCounts(assignable, registered, produced), assemblies, markerDisplay, location, diagnostics);
@@ -277,7 +279,7 @@ partial class AwaitenGenerator
 		ScanContractSet contracts,
 		string? markerDisplay,
 		ScanMatch match,
-		INamedTypeSymbol? hookClosedMarker,
+		IReadOnlyList<INamedTypeSymbol>? hookClosedMarkers,
 		List<RawRegistration> result,
 		List<DiagnosticInfo> diagnostics)
 	{
@@ -286,13 +288,13 @@ partial class AwaitenGenerator
 
 		if (match.RegisterSelf)
 		{
-			result.Add(ScanRegistration(typeName, typeName, type, type, match, hookClosedMarker));
+			result.Add(ScanRegistration(typeName, typeName, type, type, match, hookClosedMarkers));
 			produced++;
 		}
 
 		foreach (INamedTypeSymbol contract in contracts.Contracts)
 		{
-			result.Add(ScanRegistration(contract.ToDisplayString(FullyQualified), typeName, type, contract, match, hookClosedMarker));
+			result.Add(ScanRegistration(contract.ToDisplayString(FullyQualified), typeName, type, contract, match, hookClosedMarkers));
 			produced++;
 		}
 
@@ -618,43 +620,32 @@ partial class AwaitenGenerator
 	///     service's collection, carrying the scan's <c>SkipUnconstructable</c> opt-in for the
 	///     unconstructable-match prune.
 	/// </summary>
-	private static RawRegistration ScanRegistration(string service, string implementation, INamedTypeSymbol type, INamedTypeSymbol serviceSymbol, ScanMatch match, INamedTypeSymbol? hookClosedMarker)
+	private static RawRegistration ScanRegistration(string service, string implementation, INamedTypeSymbol type, INamedTypeSymbol serviceSymbol, ScanMatch match, IReadOnlyList<INamedTypeSymbol>? hookClosedMarkers)
 		=> new(service, implementation, match.Lifetime, type, match.Location, ProductionKind.Constructor, null, false, null, serviceSymbol, true, match.SkipUnconstructable,
-			OnActivated: match.OnActivated, OnRelease: match.OnRelease, HookClosedMarker: hookClosedMarker);
+			OnActivated: match.OnActivated, OnRelease: match.OnRelease, HookClosedMarkers: hookClosedMarkers);
 
 	/// <summary>
-	///     Resolves one match's lifecycle hooks for a <c>[Scan]</c>. For an open-generic marker that names a hook, the
-	///     closed marker form the match implements binds the hook's type argument, so
-	///     <c>MainWindow : IView&lt;IMainViewModel&gt;</c> dispatches <c>WireView&lt;IMainViewModel&gt;</c>. A match
-	///     that closes the marker more than once has an ambiguous type argument, reported as AWT198 with the hooks
-	///     dropped for that match (so no secondary AWT164 fires from resolving a generic method non-generically). A
-	///     closed or markerless scan, or a scan with no hook, passes the scan's hooks through unchanged and binds no
-	///     type argument (the hook is resolved non-generically in <c>ResolveHook</c>).
+	///     The closed marker forms a match's lifecycle hook may bind its type argument from. For an open-generic marker
+	///     that names a hook, these are the forms the match closes the marker at, so
+	///     <c>MainWindow : IView&lt;IMainViewModel&gt;</c> yields <c>IView&lt;IMainViewModel&gt;</c> and the hook is
+	///     dispatched as <c>WireView&lt;IMainViewModel&gt;</c>. A match that closes the marker more than once yields
+	///     several forms; whether that is an error is decided in <c>ResolveHook</c>, where the hook's arity is known: a
+	///     generic hook has an ambiguous type argument (AWT198), a non-generic one is unaffected. A closed or markerless
+	///     scan, or a scan with no hook, binds no marker (<see langword="null" />), so a generic hook there is unusable
+	///     and a non-generic one resolves as-is.
 	/// </summary>
-	private static (ScanMatch Match, INamedTypeSymbol? HookClosedMarker) ResolveScanHook(
+	private static IReadOnlyList<INamedTypeSymbol>? ScanHookMarkers(
 		INamedTypeSymbol type,
 		ScanMatch match,
 		bool openMarker,
-		INamedTypeSymbol? markerDefinition,
-		Location? location,
-		List<DiagnosticInfo> diagnostics)
+		INamedTypeSymbol? markerDefinition)
 	{
 		if (!openMarker || (match.OnActivated is null && match.OnRelease is null))
 		{
-			return (match, null);
+			return null;
 		}
 
-		List<INamedTypeSymbol> closed = ClosedMarkerForms(type, markerDefinition!);
-		if (closed.Count == 1)
-		{
-			return (match, closed[0]);
-		}
-
-		diagnostics.Add(new DiagnosticInfo(
-			Diagnostics.GenericHookAmbiguousMarker,
-			LocationInfo.From(location),
-			new EquatableArray<string>([Display(type.ToDisplayString(FullyQualified)), Display(markerDefinition!.ToDisplayString(FullyQualified)),])));
-		return (match with { OnActivated = null, OnRelease = null, }, null);
+		return ClosedMarkerForms(type, markerDefinition!);
 	}
 
 	/// <summary>
