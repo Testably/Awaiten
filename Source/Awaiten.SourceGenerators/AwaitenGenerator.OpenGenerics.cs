@@ -190,6 +190,7 @@ partial class AwaitenGenerator
 		List<RawRegistration> raw,
 		List<OpenRegistration> open,
 		INamedTypeSymbol containerSymbol,
+		Compilation compilation,
 		ExternalSurface external,
 		List<DiagnosticInfo> diagnostics,
 		HashSet<string> constraintRejected)
@@ -247,7 +248,7 @@ partial class AwaitenGenerator
 				continue;
 			}
 
-			foreach (ITypeSymbol required in RequiredServiceTypes(impl, containerSymbol, raw, openServices, external))
+			foreach (ITypeSymbol required in RequiredServiceTypes(impl, containerSymbol, compilation, raw, openServices, external))
 			{
 				if (required is INamedTypeSymbol { IsGenericType: true, IsUnboundGenericType: false, } closed
 				    && expandedServices.Add(closed.ToDisplayString(FullyQualified)))
@@ -379,6 +380,7 @@ partial class AwaitenGenerator
 	private static IEnumerable<ITypeSymbol> RequiredServiceTypes(
 		INamedTypeSymbol implementation,
 		INamedTypeSymbol containerSymbol,
+		Compilation compilation,
 		List<RawRegistration> raw,
 		HashSet<INamedTypeSymbol> openServices,
 		ExternalSurface external)
@@ -386,6 +388,7 @@ partial class AwaitenGenerator
 		IMethodSymbol? constructor = AwaitenGenerator.SelectConstructor(
 			implementation,
 			containerSymbol,
+			compilation,
 			raw.Select(r => r.ServiceType),
 			external,
 			p => IsOpenGenericSatisfiable(p.Type, openServices));

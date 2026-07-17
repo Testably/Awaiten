@@ -1102,7 +1102,7 @@ partial class AwaitenGenerator
 		{
 			if (pinnedImpls.Contains(registration.ImplementationType)
 			    || !checkedImpls.Add(registration.ImplementationType)
-			    || FirstUnconstructableReason(registration.Implementation, containerSymbol, services, constraintRejected, external, variance) is not { } reason)
+			    || FirstUnconstructableReason(registration.Implementation, containerSymbol, compilation, services, constraintRejected, external, variance) is not { } reason)
 			{
 				continue;
 			}
@@ -1134,13 +1134,14 @@ partial class AwaitenGenerator
 	private static string? FirstUnconstructableReason(
 		INamedTypeSymbol implementation,
 		INamedTypeSymbol containerSymbol,
+		Compilation compilation,
 		HashSet<ServiceKey> services,
 		HashSet<string> constraintRejected,
 		ExternalSurface external,
 		VarianceState variance)
 	{
 		IMethodSymbol? constructor = SelectConstructor(
-			implementation, containerSymbol, services.Select(service => service.Service), external);
+			implementation, containerSymbol, compilation, services.Select(service => service.Service), external);
 		if (constructor is null)
 		{
 			return "it has no constructor accessible to the container";
@@ -1164,7 +1165,7 @@ partial class AwaitenGenerator
 
 		foreach (IPropertySymbol property in InjectedProperties(implementation))
 		{
-			if (UnsatisfiableInjectedMemberReason(property, containerSymbol, services, constraintRejected, external.ServiceTypes) is { } reason)
+			if (UnsatisfiableInjectedMemberReason(property, containerSymbol, compilation, services, constraintRejected, external.ServiceTypes) is { } reason)
 			{
 				return reason;
 			}
@@ -1182,12 +1183,13 @@ partial class AwaitenGenerator
 	private static string? UnsatisfiableInjectedMemberReason(
 		IPropertySymbol property,
 		INamedTypeSymbol containerSymbol,
+		Compilation compilation,
 		HashSet<ServiceKey> services,
 		HashSet<string> constraintRejected,
 		HashSet<string> externalServiceTypes)
 	{
 		ParameterModel member = ClassifyDependency(property.Type, property.GetAttributes(), asyncFactory: false, location: null, externalServiceTypes);
-		if (property.SetMethod is not { } setter || !IsAccessibleSetter(setter, containerSymbol)
+		if (property.SetMethod is not { } setter || !IsAccessibleSetter(setter, containerSymbol, compilation)
 		    || member.Kind is DependencyKind.Arg or DependencyKind.External || IsInjectOptional(property.GetAttributes()))
 		{
 			return null;

@@ -172,7 +172,7 @@ partial class AwaitenGenerator
 
 		DiscoverInjectedMembers(
 			info,
-			new InjectionContext(context.ContainerSymbol, context.ServiceToImpl, context.ConstraintRejected, context.ConsumedConditionals, context.External.ServiceTypes, context.Diagnostics),
+			new InjectionContext(context.ContainerSymbol, context.Compilation, context.ServiceToImpl, context.ConstraintRejected, context.ConsumedConditionals, context.External.ServiceTypes, context.Diagnostics),
 			injectProperties,
 			members);
 		return members;
@@ -253,7 +253,7 @@ partial class AwaitenGenerator
 			return null;
 		}
 
-		IMethodSymbol? constructor = SelectConstructor(info.Symbol, containerSymbol, serviceToImpl.Keys.Select(k => k.Service), external);
+		IMethodSymbol? constructor = SelectConstructor(info.Symbol, containerSymbol, compilation, serviceToImpl.Keys.Select(k => k.Service), external);
 		if (constructor is null)
 		{
 			diagnostics.Add(new DiagnosticInfo(
@@ -298,7 +298,7 @@ partial class AwaitenGenerator
 		Compilation compilation = context.Compilation;
 
 		List<IMethodSymbol> matches = new();
-		foreach (ISymbol member in AccessibleMembers(info.Origin ?? containerSymbol, hookName))
+		foreach (ISymbol member in AccessibleMembers(info.Origin ?? containerSymbol, hookName, compilation))
 		{
 			// A module hook must also be accessible from the generated container (its own private members are
 			// reachable from the partial, a module's are not); an inaccessible module method is not a usable hook.
@@ -591,7 +591,7 @@ partial class AwaitenGenerator
 		List<DiagnosticInfo> diagnostics)
 	{
 		bool inaccessibleMatch = false;
-		foreach (ISymbol member in AccessibleMembers(info.Origin ?? containerSymbol, info.ProductionMember!))
+		foreach (ISymbol member in AccessibleMembers(info.Origin ?? containerSymbol, info.ProductionMember!, compilation))
 		{
 			ITypeSymbol? memberType = member switch
 			{
@@ -666,12 +666,17 @@ partial class AwaitenGenerator
 	internal static IMethodSymbol? SelectConstructor(
 		INamedTypeSymbol implementation,
 		INamedTypeSymbol containerSymbol,
+		Compilation compilation,
 		IEnumerable<string> registeredServices,
 		ExternalSurface external,
 		Func<IParameterSymbol, bool>? additionallySatisfiable = null)
 	{
+		// The generated partial emits the 'new' from inside the container, so what the container can reach is
+		// exactly Roslyn's own accessibility question, which honors [InternalsVisibleTo]. A bare same-assembly
+		// comparison would reject a referenced assembly's internal constructor the generated code could in fact
+		// call. The module member checks ask it the same way (see ResolveFactory).
 		List<IMethodSymbol> constructors = implementation.InstanceConstructors
-			.Where(c => IsAccessibleConstructor(c, containerSymbol))
+			.Where(c => compilation.IsSymbolAccessibleWithin(c, containerSymbol))
 			.ToList();
 		if (constructors.Count <= 1)
 		{
@@ -699,27 +704,16 @@ partial class AwaitenGenerator
 
 		// Fall back to the greediest constructor so its unresolved parameters surface as AWT101.
 		return resolvable ?? constructors.OrderByDescending(c => c.Parameters.Length).First();
-
-		static bool IsAccessibleConstructor(IMethodSymbol constructor, INamedTypeSymbol containerSymbol)
-		{
-			return constructor.DeclaredAccessibility switch
-			{
-				Accessibility.Public => true,
-				Accessibility.Internal or Accessibility.ProtectedOrInternal =>
-					SymbolEqualityComparer.Default.Equals(
-						constructor.ContainingAssembly, containerSymbol.ContainingAssembly),
-				_ => false,
-			};
-		}
 	}
 
 	/// <summary>
 	///     The members named <paramref name="name" /> the generated container partial can reach: the
 	///     container's own members (any accessibility, since a partial can use its own private members) plus
-	///     inherited members a derived type can access (everything but private, with internal / private-protected
-	///     restricted to the same assembly).
+	///     inherited members the container can access, which is Roslyn's own check: a base type's protected member
+	///     qualifies (the container derives from it) and an internal one does when the declaring assembly is the
+	///     container's or grants it [InternalsVisibleTo].
 	/// </summary>
-	private static IEnumerable<ISymbol> AccessibleMembers(INamedTypeSymbol container, string name)
+	private static IEnumerable<ISymbol> AccessibleMembers(INamedTypeSymbol container, string name, Compilation compilation)
 	{
 		foreach (ISymbol member in container.GetMembers(name))
 		{
@@ -728,20 +722,11 @@ partial class AwaitenGenerator
 
 		for (INamedTypeSymbol? baseType = container.BaseType; baseType is not null; baseType = baseType.BaseType)
 		{
-			foreach (ISymbol member in baseType.GetMembers(name).Where(m => IsAccessibleFromDerived(m, container)))
+			foreach (ISymbol member in baseType.GetMembers(name).Where(m => compilation.IsSymbolAccessibleWithin(m, container)))
 			{
 				yield return member;
 			}
 		}
-
-		static bool IsAccessibleFromDerived(ISymbol member, INamedTypeSymbol container)
-			=> member.DeclaredAccessibility switch
-			{
-				Accessibility.Public or Accessibility.Protected or Accessibility.ProtectedOrInternal => true,
-				Accessibility.Internal or Accessibility.ProtectedAndInternal =>
-					SymbolEqualityComparer.Default.Equals(member.ContainingAssembly, container.ContainingAssembly),
-				_ => false,
-			};
 	}
 
 	/// <summary>
@@ -756,7 +741,7 @@ partial class AwaitenGenerator
 		INamedTypeSymbol container, string name, ITypeSymbol serviceType, Compilation compilation)
 	{
 		List<IMethodSymbol> candidates = new();
-		foreach (ISymbol member in AccessibleMembers(container, name))
+		foreach (ISymbol member in AccessibleMembers(container, name, compilation))
 		{
 			if (member is IMethodSymbol { MethodKind: MethodKind.Ordinary, } method
 			    && compilation.HasImplicitConversion(ProducedType(method.ReturnType, compilation), serviceType))
