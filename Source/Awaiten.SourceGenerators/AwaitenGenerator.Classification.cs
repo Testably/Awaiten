@@ -188,12 +188,14 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     The container-wide inputs an injected-member classification reads, bundled so the classification methods
-	///     stay small: the container symbol, the coalesced service map, the constraint-rejected and consumed-context
-	///     sets, the <c>[ImportService&lt;T&gt;]</c> external service types (a member of one resolves externally
-	///     rather than being reported missing), and the diagnostics sink.
+	///     stay small: the container symbol, the compilation (which answers whether a setter is reachable from the
+	///     container), the coalesced service map, the constraint-rejected and consumed-context sets, the
+	///     <c>[ImportService&lt;T&gt;]</c> external service types (a member of one resolves externally rather than
+	///     being reported missing), and the diagnostics sink.
 	/// </summary>
 	private sealed record InjectionContext(
 		INamedTypeSymbol ContainerSymbol,
+		Compilation Compilation,
 		Dictionary<ServiceKey, string> ServiceToImpl,
 		HashSet<string> ConstraintRejected,
 		HashSet<ServiceKey> ConsumedConditionals,
@@ -341,11 +343,12 @@ partial class AwaitenGenerator
 		LocationInfo? location = spec.EntryLocation ?? LocationInfo.From(property.Locations.FirstOrDefault());
 
 		// AWT136: an injected property must have a set/init accessor the container can assign through the object
-		// initializer. The container is not a derived type, so a protected/private-protected setter (and a
-		// cross-assembly internal one) is out of reach even though not private. Apply the same accessibility test
-		// the constructor path uses rather than a bare not-private check, so an unreachable setter surfaces as
-		// AWT136 instead of an inaccessible-setter error in generated code.
-		if (property.SetMethod is not { } setter || !IsAccessibleSetter(setter, context.ContainerSymbol))
+		// initializer. The container is not a derived type, so a protected/private-protected setter (and an
+		// internal one in an assembly that grants the container no [InternalsVisibleTo]) is out of reach even
+		// though not private. Apply the same accessibility test the constructor path uses rather than a bare
+		// not-private check, so an unreachable setter surfaces as AWT136 instead of an inaccessible-setter error
+		// in generated code.
+		if (property.SetMethod is not { } setter || !IsAccessibleSetter(setter, context.ContainerSymbol, context.Compilation))
 		{
 			context.Diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.InjectedPropertyNotSettable,
@@ -496,17 +499,12 @@ partial class AwaitenGenerator
 		return false;
 	}
 
-	// The setter must be reachable from the container's object initializer, which is not a derived context.
-	// Mirrors IsAccessibleConstructor: public always, internal/protected-internal only within the container's own
-	// assembly, and protected/private-protected/private never (the container cannot reach them).
-	private static bool IsAccessibleSetter(IMethodSymbol setter, INamedTypeSymbol containerSymbol)
-		=> setter.DeclaredAccessibility switch
-		{
-			Accessibility.Public => true,
-			Accessibility.Internal or Accessibility.ProtectedOrInternal =>
-				SymbolEqualityComparer.Default.Equals(setter.ContainingAssembly, containerSymbol.ContainingAssembly),
-			_ => false,
-		};
+	// The setter must be reachable from the container's object initializer. Asks Roslyn the same way constructor
+	// selection does (see SelectConstructor), so the two agree: public always, internal/protected-internal within
+	// the container's own assembly or across an [InternalsVisibleTo] boundary, and protected/private-protected/
+	// private never - the container neither derives from the implementation nor sits inside it.
+	private static bool IsAccessibleSetter(IMethodSymbol setter, INamedTypeSymbol containerSymbol, Compilation compilation)
+		=> compilation.IsSymbolAccessibleWithin(setter, containerSymbol);
 
 	/// <summary>
 	///     Classifies a constructor parameter as a runtime argument (<c>[Arg]</c>), a deferred relationship type

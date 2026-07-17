@@ -321,7 +321,7 @@ partial class AwaitenGenerator
 		/// </summary>
 		private string? SingleInnerParameterType(INamedTypeSymbol decorator, INamedTypeSymbol service)
 		{
-			IMethodSymbol? constructor = SelectConstructor(decorator, _containerSymbol, _serviceToImpl.Keys.Select(k => k.Service), _external);
+			IMethodSymbol? constructor = SelectConstructor(decorator, _containerSymbol, _compilation, _serviceToImpl.Keys.Select(k => k.Service), _external);
 			if (constructor is null)
 			{
 				return null;
@@ -612,7 +612,7 @@ partial class AwaitenGenerator
 		out string? relatedElement)
 	{
 		relatedElement = null;
-		IMethodSymbol? constructor = SelectConstructor(composite, containerSymbol, serviceToImpl.Keys.Select(k => k.Service), external);
+		IMethodSymbol? constructor = SelectConstructor(composite, containerSymbol, compilation, serviceToImpl.Keys.Select(k => k.Service), external);
 		if (constructor is null)
 		{
 			return CompositeCollectionKind.Missing;

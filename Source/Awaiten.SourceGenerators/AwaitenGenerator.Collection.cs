@@ -45,7 +45,7 @@ partial class AwaitenGenerator
 		// implementation (iterating to a fixpoint over its own generic dependencies).
 		if (open.Count > 0)
 		{
-			ExpandOpenGenerics(result, open, containerSymbol, external, diagnostics, constraintRejected);
+			ExpandOpenGenerics(result, open, containerSymbol, compilation, external, diagnostics, constraintRejected);
 		}
 
 		// ...then moved back to the end: coalescing is first-wins per service, so the explicit registrations and
