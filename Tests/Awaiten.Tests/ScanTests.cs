@@ -103,6 +103,84 @@ public partial class ScanTests
 	public static partial class SelfAndInterfaceScanContainer;
 
 	[Fact]
+	public async Task Scan_LifecycleHooks_RunForEveryMatch_WithGraphResolvedParameters()
+	{
+		HookProbe.Log.Clear();
+		using (HookScanContainer.Root container = new())
+		{
+			container.Resolve<AlphaHooked>();
+			container.Resolve<BetaHooked>();
+
+			// The scan's OnActivated ran once each match was constructed, receiving its graph-resolved HookSettings
+			// (a scan hook goes through the same parameter pipeline as an explicit registration's hook).
+			await That(HookProbe.Log).Contains("activated:AlphaHooked:True");
+			await That(HookProbe.Log).Contains("activated:BetaHooked:True");
+			await That(HookProbe.Log).DoesNotContain("released:AlphaHooked")
+				.Because("nothing is released while the container is alive");
+		}
+
+		// The scan's OnRelease ran for every match on disposal.
+		await That(HookProbe.Log).Contains("released:AlphaHooked");
+		await That(HookProbe.Log).Contains("released:BetaHooked");
+	}
+
+	public interface IHooked;
+
+	public sealed class AlphaHooked : IHooked;
+
+	public sealed class BetaHooked : IHooked;
+
+	public sealed class HookSettings;
+
+	private static class HookProbe
+	{
+		public static readonly List<string> Log = new();
+	}
+
+	[Container]
+	[Singleton<HookSettings>]
+	[Scan(typeof(IHooked), Lifetime = AwaitenLifetime.Singleton, OnActivated = nameof(Activated), OnRelease = nameof(Released))]
+	public static partial class HookScanContainer
+	{
+		private static void Activated(IHooked instance, HookSettings settings)
+			=> HookProbe.Log.Add($"activated:{instance.GetType().Name}:{settings is not null}");
+
+		private static void Released(IHooked instance) => HookProbe.Log.Add("released:" + instance.GetType().Name);
+	}
+
+	[Fact]
+	public async Task Scan_OpenGenericMarker_DispatchesAGenericHookWithTheClosedTypeArgument()
+	{
+		HookProbe.Log.Clear();
+		using HookViewContainer.Root container = new();
+
+		IHookView<IHookViewModel> view = container.Resolve<IHookView<IHookViewModel>>();
+
+		await That(view).IsNotNull();
+		// The scan's open marker closes as IHookView<IHookViewModel> for HookWindow, so the generic hook is dispatched
+		// as WireView<IHookViewModel> - binding the matching view model, resolved from the graph, with no reflection.
+		await That(HookProbe.Log).Contains("wired:HookWindow:HookViewModel")
+			.Because("a generic scan hook binds its type argument from the match's closed marker form");
+	}
+
+	public interface IHookView<TViewModel>;
+
+	public interface IHookViewModel;
+
+	public sealed class HookViewModel : IHookViewModel;
+
+	public sealed class HookWindow : IHookView<IHookViewModel>;
+
+	[Container]
+	[Singleton<HookViewModel, IHookViewModel>]
+	[Scan(typeof(IHookView<>), As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton, OnActivated = nameof(WireView))]
+	public static partial class HookViewContainer
+	{
+		private static void WireView<TViewModel>(IHookView<TViewModel> view, TViewModel viewModel)
+			=> HookProbe.Log.Add($"wired:{view.GetType().Name}:{viewModel!.GetType().Name}");
+	}
+
+	[Fact]
 	public async Task GenericScan_RegistersMatchesLikeTheTypeofForm()
 	{
 		using GenericScanContainer.Root container = new();

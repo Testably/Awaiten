@@ -1501,4 +1501,19 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A generic lifecycle hook (an <c>OnActivated</c>/<c>OnRelease</c> named on a
+	///     <c>[Scan(typeof(IView&lt;&gt;))]</c> open-generic marker) binds its type argument from the match's closed
+	///     marker form, so it needs exactly one: this match implements the marker at several closings (say
+	///     <c>IView&lt;A&gt;</c> and <c>IView&lt;B&gt;</c>), so the type argument would be ambiguous. Register the type
+	///     explicitly with the intended hook, or split the family so each match closes the marker once.
+	/// </summary>
+	public static readonly DiagnosticDescriptor GenericHookAmbiguousMarker = new(
+		"AWT198",
+		"Ambiguous generic hook marker",
+		"'{0}' implements the scanned marker '{1}' at more than one closed form, so a generic lifecycle hook's type argument is ambiguous; register the type explicitly with the hook, or ensure it closes the marker only once",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

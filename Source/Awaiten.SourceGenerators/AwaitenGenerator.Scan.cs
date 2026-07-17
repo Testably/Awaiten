@@ -16,7 +16,7 @@ partial class AwaitenGenerator
 	///     definitions and the marker itself are skipped; a match the generated container cannot name is reported as
 	///     AWT193 and then dropped. A markerless scan (the parameterless <c>[Scan]</c>) matches every concrete type
 	///     instead, narrowed by those same filters. Reports
-	///     AWT138/AWT139/AWT140/AWT143/AWT172/AWT173/AWT174/AWT182/AWT183/AWT184/AWT185/AWT187/AWT188/AWT193. The synthesized
+	///     AWT138/AWT139/AWT140/AWT143/AWT172/AWT173/AWT174/AWT182/AWT183/AWT184/AWT185/AWT187/AWT188/AWT193/AWT198. The synthesized
 	///     registrations are <see cref="RawRegistration.IsScan" />, so an explicit registration wins single
 	///     resolution while every match still joins its collection.
 	/// </summary>
@@ -82,7 +82,13 @@ partial class AwaitenGenerator
 			return;
 		}
 
-		ScanMatch match = new(ScanExposureOf(attribute), ScanLifetime(attribute), location, ScanSkipsUnconstructable(attribute));
+		ScanMatch match = new(
+			ScanExposureOf(attribute),
+			ScanLifetime(attribute),
+			location,
+			ScanSkipsUnconstructable(attribute),
+			ScanHook(attribute, "OnActivated"),
+			ScanHook(attribute, "OnRelease"));
 		ScanFilters filters = ScanFiltersOf(attribute);
 
 		// AWT185: As resolved to no recognized ScanAs flag (e.g. `Self & Marker`, or an out-of-range cast), so the
@@ -140,7 +146,8 @@ partial class AwaitenGenerator
 				continue;
 			}
 
-			produced += RegisterScanMatch(candidate.Type, ScanContracts(candidate.Type, match, marker, openMarker, markerDefinition, compilation), markerDisplay, match, result, diagnostics);
+			(ScanMatch candidateMatch, INamedTypeSymbol? hookClosedMarker) = ResolveScanHook(candidate.Type, match, openMarker, markerDefinition, location, diagnostics);
+			produced += RegisterScanMatch(candidate.Type, ScanContracts(candidate.Type, match, marker, openMarker, markerDefinition, compilation), markerDisplay, candidateMatch, hookClosedMarker, result, diagnostics);
 		}
 
 		ReportScanFilterDiagnostics(filters, hits, new ScanFilterCounts(assignable, registered, produced), assemblies, markerDisplay, location, diagnostics);
@@ -270,6 +277,7 @@ partial class AwaitenGenerator
 		ScanContractSet contracts,
 		string? markerDisplay,
 		ScanMatch match,
+		INamedTypeSymbol? hookClosedMarker,
 		List<RawRegistration> result,
 		List<DiagnosticInfo> diagnostics)
 	{
@@ -278,13 +286,13 @@ partial class AwaitenGenerator
 
 		if (match.RegisterSelf)
 		{
-			result.Add(ScanRegistration(typeName, typeName, type, type, match));
+			result.Add(ScanRegistration(typeName, typeName, type, type, match, hookClosedMarker));
 			produced++;
 		}
 
 		foreach (INamedTypeSymbol contract in contracts.Contracts)
 		{
-			result.Add(ScanRegistration(contract.ToDisplayString(FullyQualified), typeName, type, contract, match));
+			result.Add(ScanRegistration(contract.ToDisplayString(FullyQualified), typeName, type, contract, match, hookClosedMarker));
 			produced++;
 		}
 
@@ -385,7 +393,13 @@ partial class AwaitenGenerator
 	///     the attribute location for diagnostics, and whether an unconstructable match is skipped with a warning
 	///     (<c>SkipUnconstructable</c>) instead of erroring. Bundled so the per-match registration takes one handle.
 	/// </summary>
-	private sealed record ScanMatch(ScanExposures Exposure, Lifetime Lifetime, Location? Location, bool SkipUnconstructable)
+	private sealed record ScanMatch(
+		ScanExposures Exposure,
+		Lifetime Lifetime,
+		Location? Location,
+		bool SkipUnconstructable,
+		string? OnActivated,
+		string? OnRelease)
 	{
 		public bool RegisterSelf => (Exposure & ScanExposures.Self) != 0;
 
@@ -604,8 +618,44 @@ partial class AwaitenGenerator
 	///     service's collection, carrying the scan's <c>SkipUnconstructable</c> opt-in for the
 	///     unconstructable-match prune.
 	/// </summary>
-	private static RawRegistration ScanRegistration(string service, string implementation, INamedTypeSymbol type, INamedTypeSymbol serviceSymbol, ScanMatch match)
-		=> new(service, implementation, match.Lifetime, type, match.Location, ProductionKind.Constructor, null, false, null, serviceSymbol, true, match.SkipUnconstructable);
+	private static RawRegistration ScanRegistration(string service, string implementation, INamedTypeSymbol type, INamedTypeSymbol serviceSymbol, ScanMatch match, INamedTypeSymbol? hookClosedMarker)
+		=> new(service, implementation, match.Lifetime, type, match.Location, ProductionKind.Constructor, null, false, null, serviceSymbol, true, match.SkipUnconstructable,
+			OnActivated: match.OnActivated, OnRelease: match.OnRelease, HookClosedMarker: hookClosedMarker);
+
+	/// <summary>
+	///     Resolves one match's lifecycle hooks for a <c>[Scan]</c>. For an open-generic marker that names a hook, the
+	///     closed marker form the match implements binds the hook's type argument, so
+	///     <c>MainWindow : IView&lt;IMainViewModel&gt;</c> dispatches <c>WireView&lt;IMainViewModel&gt;</c>. A match
+	///     that closes the marker more than once has an ambiguous type argument, reported as AWT198 with the hooks
+	///     dropped for that match (so no secondary AWT164 fires from resolving a generic method non-generically). A
+	///     closed or markerless scan, or a scan with no hook, passes the scan's hooks through unchanged and binds no
+	///     type argument (the hook is resolved non-generically in <c>ResolveHook</c>).
+	/// </summary>
+	private static (ScanMatch Match, INamedTypeSymbol? HookClosedMarker) ResolveScanHook(
+		INamedTypeSymbol type,
+		ScanMatch match,
+		bool openMarker,
+		INamedTypeSymbol? markerDefinition,
+		Location? location,
+		List<DiagnosticInfo> diagnostics)
+	{
+		if (!openMarker || (match.OnActivated is null && match.OnRelease is null))
+		{
+			return (match, null);
+		}
+
+		List<INamedTypeSymbol> closed = ClosedMarkerForms(type, markerDefinition!);
+		if (closed.Count == 1)
+		{
+			return (match, closed[0]);
+		}
+
+		diagnostics.Add(new DiagnosticInfo(
+			Diagnostics.GenericHookAmbiguousMarker,
+			LocationInfo.From(location),
+			new EquatableArray<string>([Display(type.ToDisplayString(FullyQualified)), Display(markerDefinition!.ToDisplayString(FullyQualified)),])));
+		return (match with { OnActivated = null, OnRelease = null, }, null);
+	}
 
 	/// <summary>
 	///     The scanned marker: the type argument of the generic <c>[Scan&lt;TMarker&gt;]</c>, or the
@@ -660,6 +710,24 @@ partial class AwaitenGenerator
 		}
 
 		return false;
+	}
+
+	/// <summary>
+	///     The <c>OnActivated</c> / <c>OnRelease</c> lifecycle hook name (<paramref name="name" />) declared on a
+	///     <c>[Scan]</c>, applied to every match, or <see langword="null" /> when unset. Resolved against the
+	///     container in <c>BuildInstance</c> like any other hook (AWT164/AWT189/AWT190/AWT191).
+	/// </summary>
+	private static string? ScanHook(AttributeData attribute, string name)
+	{
+		foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
+		{
+			if (argument.Key == name && argument.Value.Value is string value)
+			{
+				return value;
+			}
+		}
+
+		return null;
 	}
 
 	/// <summary>

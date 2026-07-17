@@ -100,7 +100,11 @@ partial class AwaitenGenerator
 			return;
 		}
 
-		ScanMatch match = new(ScanExposureOf(attribute), ScanLifetime(attribute), location, ScanSkipsUnconstructable(attribute));
+		// A self-compiled module scan does not carry OnActivated/OnRelease hooks: the hook pipeline resolves and
+		// emits against the container (Origin == null), so module-declared scan hooks need Origin-qualified wiring
+		// that does not exist yet. Pass null here until that lands.
+		ScanMatch match = new(ScanExposureOf(attribute), ScanLifetime(attribute), location, ScanSkipsUnconstructable(attribute),
+			OnActivated: null, OnRelease: null);
 		ScanFilters filters = ScanFiltersOf(attribute);
 
 		if ((match.Exposure & ScanExposures.All) == 0)

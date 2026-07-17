@@ -307,17 +307,25 @@ partial class AwaitenGenerator
 		{
 			// A module hook must also be accessible from the generated container (its own private members are
 			// reachable from the partial, a module's are not); an inaccessible module method is not a usable hook.
-			if (member is IMethodSymbol { MethodKind: MethodKind.Ordinary, IsStatic: true, ReturnsVoid: true, Parameters.Length: >= 1, } method
-			    && compilation.HasImplicitConversion(info.Symbol, method.Parameters[0].Type)
-			    && (info.Origin is null || compilation.IsSymbolAccessibleWithin(method, containerSymbol)))
+			if (member is not IMethodSymbol { MethodKind: MethodKind.Ordinary, IsStatic: true, ReturnsVoid: true, Parameters.Length: >= 1, } method
+			    || (info.Origin is not null && !compilation.IsSymbolAccessibleWithin(method, containerSymbol)))
 			{
-				matches.Add(method);
+				continue;
+			}
+
+			// A generic hook (named on an open-generic [Scan] marker) binds its type parameters from the match's
+			// closed marker form, so WireView<TViewModel> is dispatched as WireView<IMainViewModel>; a non-generic
+			// method is used as-is. The first parameter of the constructed method must accept the instance.
+			if (ConstructHook(method, info.HookClosedMarker) is { } constructed
+			    && compilation.HasImplicitConversion(info.Symbol, constructed.Parameters[0].Type))
+			{
+				matches.Add(constructed);
 			}
 		}
 
 		if (matches.Count == 1)
 		{
-			return (QualifiedHook(info, hookName), ClassifyHookParameters(matches[0], info, release, context));
+			return (QualifiedHook(info, hookName, matches[0]), ClassifyHookParameters(matches[0], info, release, context));
 		}
 
 		// No usable match is AWT164 (unusable hook); more than one is AWT190 (an overload the container cannot pick
@@ -410,10 +418,42 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     A module's lifecycle hook is emitted qualified with the module type (the generated container is another
 	///     class, so the simple name would not bind); the container's own hooks stay unqualified, in scope inside
-	///     the generated partial. Mirrors <c>QualifiedProductionMember</c> for Factory/Instance members.
+	///     the generated partial. Mirrors <c>QualifiedProductionMember</c> for Factory/Instance members. A generic
+	///     hook carries its bound type arguments (<c>WireView&lt;global::App.IMainViewModel&gt;</c>) so the emitter,
+	///     which writes the name verbatim, needs no generic awareness.
 	/// </summary>
-	private static string QualifiedHook(ImplInfo info, string hookName)
-		=> info.Origin is { } origin ? $"{origin.ToDisplayString(FullyQualified)}.{hookName}" : hookName;
+	private static string QualifiedHook(ImplInfo info, string hookName, IMethodSymbol hook)
+	{
+		string name = info.Origin is { } origin ? $"{origin.ToDisplayString(FullyQualified)}.{hookName}" : hookName;
+		if (hook.TypeArguments.Length == 0)
+		{
+			return name;
+		}
+
+		string arguments = string.Join(", ", hook.TypeArguments.Select(argument => argument.ToDisplayString(FullyQualified)));
+		return $"{name}<{arguments}>";
+	}
+
+	/// <summary>
+	///     Binds a lifecycle hook method's type parameters for dispatch: a non-generic method (arity 0) is used
+	///     as-is, and a generic method is constructed from the match's closed marker form's type arguments
+	///     (<paramref name="closedMarker" />) when the arities match. Returns <see langword="null" /> when a generic
+	///     method has no marker to bind or the arities differ, so it is not a usable hook and falls through to AWT164.
+	/// </summary>
+	private static IMethodSymbol? ConstructHook(IMethodSymbol method, INamedTypeSymbol? closedMarker)
+	{
+		if (method.Arity == 0)
+		{
+			return method;
+		}
+
+		if (closedMarker is null || method.Arity != closedMarker.TypeArguments.Length)
+		{
+			return null;
+		}
+
+		return method.Construct(closedMarker.TypeArguments.ToArray());
+	}
 
 	/// <summary>
 	///     Reports <see cref="Diagnostics.FactoryHidesAsyncInitialization">AWT106</see> when a synchronous

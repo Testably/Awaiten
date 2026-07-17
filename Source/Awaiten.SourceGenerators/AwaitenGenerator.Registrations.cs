@@ -45,7 +45,8 @@ internal sealed record RawRegistration(
 	string? OnRelease = null,
 	bool SuppressDisposal = false,
 	string? WhenInjectedInto = null,
-	bool GreedyConstructor = false);
+	bool GreedyConstructor = false,
+	INamedTypeSymbol? HookClosedMarker = null);
 
 /// <summary>
 ///     An imported module: its symbol and the location of the container's <c>[Import]</c> attribute that
@@ -179,6 +180,15 @@ partial class AwaitenGenerator
 
 		/// <inheritdoc cref="OnActivated" />
 		public string? OnRelease { get; init; }
+
+		/// <summary>
+		///     The closed marker form a generic scan hook binds its type argument from - set only when the winning
+		///     registration came from a <c>[Scan(typeof(IView&lt;&gt;))]</c> open-generic marker that names a hook, so
+		///     <c>MainWindow : IView&lt;IMainViewModel&gt;</c> carries <c>IView&lt;IMainViewModel&gt;</c> here and its
+		///     hook is dispatched as <c>WireView&lt;IMainViewModel&gt;</c>. <see langword="null" /> for a non-generic
+		///     hook (the type argument does not apply), resolved in <c>ResolveHook</c>.
+		/// </summary>
+		public INamedTypeSymbol? HookClosedMarker { get; init; }
 
 		/// <summary>
 		///     Whether the winning registration opted out of the container's built-in disposal

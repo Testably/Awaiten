@@ -187,6 +187,7 @@ partial class AwaitenGenerator
 					Eager = reg.Eager,
 					OnActivated = reg.OnActivated,
 					OnRelease = reg.OnRelease,
+					HookClosedMarker = reg.HookClosedMarker,
 					SuppressDisposal = reg.SuppressDisposal,
 				};
 				implInfos.Add(reg.ImplementationType, info);

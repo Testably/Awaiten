@@ -1257,6 +1257,26 @@ public static partial class CoffeeShop;
 
 Where [AWT188](#awt188) is about an interface the match cannot be exposed under, this one is about the match itself, so no `ScanAs` flag rescues it: every registration has to name the implementation. Make the type public, grant the container's assembly `InternalsVisibleTo`, or exclude it with a `NamePatterns`/`NamespacePatterns` entry (the `Exclude` type list cannot name an inaccessible type). Reported only for a type the marker matched and the scan's filters kept, so an unrelated internal type in a scanned assembly stays silent, as does one you already excluded.
 
+### AWT198
+
+:::danger[Error]
+A generic lifecycle hook on an open-generic `[Scan]` marker matched a type that closes the marker more than once, so the hook's type argument is ambiguous.
+:::
+
+```csharp
+public interface IView<TViewModel>;
+public sealed class DualView : IView<Orders>, IView<Payments>;   // closes IView<> twice
+
+[Container]
+[Scan(typeof(IView<>), As = ScanAs.Marker, OnActivated = nameof(Wire))]
+public static partial class CoffeeShop
+{
+    private static void Wire<TViewModel>(IView<TViewModel> view) { }   // TViewModel would be Orders or Payments?
+}
+```
+
+A [generic scan hook](./registration/scanning#lifecycle-hooks) binds its type argument from the match's *single* closed marker form, so `DualView` — which closes `IView<>` at both `Orders` and `Payments` — leaves it ambiguous. Register the type explicitly with the intended hook, or split the family so each match closes the marker once. A match closing the marker several times is fine *without* a hook (each closed form registers as its own collection member).
+
 ## Modules
 
 ### AWT149

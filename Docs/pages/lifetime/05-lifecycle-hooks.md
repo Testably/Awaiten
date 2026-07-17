@@ -58,7 +58,12 @@ Combine `Eager` with async and `SyncResolveAfterInit`, and the singleton is cons
 
 *Note: hooks are for services the container owns. Setting one on a pre-built `Instance` registration is an error ([AWT165](../diagnostics#awt165)). Conflicting coalesced directives across registrations of one implementation are caught too ([AWT166](../diagnostics#awt166)).*
 
+## Hooks on a scan
+
+A `[Scan]` can name the same `OnActivated`/`OnRelease` hooks, applied to every match, so a whole scanned family shares one routine. See [Scanning → Lifecycle hooks](../registration/scanning#lifecycle-hooks).
+
 ## Where to go next
 
 - [Async initialization](../async-initialization) for `InitializeAsync`.
 - [Disposal](./disposal) for teardown order.
+- [Scanning](../registration/scanning#lifecycle-hooks) to apply a hook to a whole matched family.

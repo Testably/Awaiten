@@ -166,5 +166,52 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).DoesNotContain("*AWT164*").AsWildcard()
 				.Because("a void method accepting the implementation (or a base type) is a usable hook");
 		}
+
+		[Fact]
+		public async Task ReportsForAScanHookThatNamesNoMethod()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IPlugin { }
+			                                       public sealed class AlphaPlugin : IPlugin { }
+
+			                                       [Container]
+			                                       [Scan(typeof(IPlugin), OnActivated = "DoesNotExist")]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT164*").AsWildcard()
+				.Because("a scan's OnActivated is resolved against the container like any other hook");
+		}
+
+		[Fact]
+		public async Task DoesNotReportForAScanHookAcceptingTheMarker()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IPlugin { }
+			                                       public sealed class AlphaPlugin : IPlugin { }
+			                                       public sealed class BetaPlugin : IPlugin { }
+
+			                                       [Container]
+			                                       [Scan(typeof(IPlugin), OnActivated = nameof(Started), OnRelease = nameof(Stopping))]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       	private static void Started(IPlugin plugin) { }
+			                                       	private static void Stopping(IPlugin plugin) { }
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).DoesNotContain("*AWT164*").AsWildcard()
+				.Because("a hook typed as the scanned marker accepts every match");
+		}
 	}
 }
