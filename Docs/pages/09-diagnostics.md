@@ -1238,6 +1238,25 @@ public sealed class Roaster : IRoaster, IEquipment;
 public static partial class CoffeeShop;
 ```
 
+### AWT193
+
+:::warning[Warning]
+A `[Scan]` matched a type that is inaccessible to the generated container, so it is not registered.
+:::
+
+```csharp
+// In a referenced assembly: the implementation itself is internal.
+public interface IEquipment;
+internal sealed class Roaster : IEquipment;
+
+// Roaster is assignable to the marker, but the container cannot name it to construct it.
+[Container]
+[Scan<IEquipment>(InAssembliesOf = [typeof(IEquipment)])]
+public static partial class CoffeeShop;
+```
+
+Where [AWT188](#awt188) is about an interface the match cannot be exposed under, this one is about the match itself, so no `ScanAs` flag rescues it: every registration has to name the implementation. Make the type public, grant the container's assembly `InternalsVisibleTo`, or exclude it with a `NamePatterns`/`NamespacePatterns` entry (the `Exclude` type list cannot name an inaccessible type). Reported only for a type the marker matched and the scan's filters kept, so an unrelated internal type in a scanned assembly stays silent, as does one you already excluded.
+
 ## Modules
 
 ### AWT149

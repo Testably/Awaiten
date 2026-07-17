@@ -13,9 +13,10 @@ partial class AwaitenGenerator
 	///     <c>AsClosedTypesOf</c>). Covers the container's own assembly, or the assemblies named by
 	///     <c>InAssembliesOf</c>, sorted by name for reproducibility, then narrowed by the optional
 	///     <c>NamePatterns</c>/<c>NamespacePatterns</c>/<c>Exclude</c> filters. Abstract/static classes, generic
-	///     definitions, inaccessible types and the marker itself are skipped. A markerless scan (the parameterless
-	///     <c>[Scan]</c>) matches every concrete type instead, narrowed by those same filters. Reports
-	///     AWT138/AWT139/AWT140/AWT143/AWT172/AWT173/AWT174/AWT182/AWT183/AWT184/AWT185/AWT187/AWT188. The synthesized
+	///     definitions and the marker itself are skipped; a match the generated container cannot name is reported as
+	///     AWT193 and then dropped. A markerless scan (the parameterless <c>[Scan]</c>) matches every concrete type
+	///     instead, narrowed by those same filters. Reports
+	///     AWT138/AWT139/AWT140/AWT143/AWT172/AWT173/AWT174/AWT182/AWT183/AWT184/AWT185/AWT187/AWT188/AWT193. The synthesized
 	///     registrations are <see cref="RawRegistration.IsScan" />, so an explicit registration wins single
 	///     resolution while every match still joins its collection.
 	/// </summary>
@@ -115,16 +116,31 @@ partial class AwaitenGenerator
 		int assignable = 0;
 		int registered = 0;
 		int produced = 0;
-		foreach (INamedTypeSymbol type in ScanCandidates(assemblies, compilation, marker, location, diagnostics))
+		foreach (ScanCandidate candidate in ScanCandidates(assemblies, compilation, marker, location, diagnostics))
 		{
 			assignable++;
-			if (!PassesScanFilters(type, filters, hits))
+			if (!PassesScanFilters(candidate.Type, filters, hits))
 			{
 				continue;
 			}
 
 			registered++;
-			produced += RegisterScanMatch(type, ScanContracts(type, match, marker, openMarker, markerDefinition, compilation), markerDisplay, match, result, diagnostics);
+
+			// AWT193: the match survived the filters, so the author does mean to register it, but the generated
+			// container cannot name the type and no registration could reference it. Reported here rather than
+			// during gathering, where it would fire once per internal type in every scanned assembly, and unlike
+			// the other per-match warnings also for a markerless scan: AWT183 forces one to narrow its candidates,
+			// so a match reaching this point was asked for either way.
+			if (candidate.Inaccessible)
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.ScanTypeInaccessible,
+					LocationInfo.From(location),
+					new EquatableArray<string>([Display(candidate.Type.ToDisplayString(FullyQualified)),])));
+				continue;
+			}
+
+			produced += RegisterScanMatch(candidate.Type, ScanContracts(candidate.Type, match, marker, openMarker, markerDefinition, compilation), markerDisplay, match, result, diagnostics);
 		}
 
 		ReportScanFilterDiagnostics(filters, hits, new ScanFilterCounts(assignable, registered, produced), assemblies, markerDisplay, location, diagnostics);
@@ -435,19 +451,18 @@ partial class AwaitenGenerator
 	///     name so the registrations are reproducible. Reports AWT140 for any <c>InAssembliesOf</c> assembly that
 	///     holds no such type (a likely missing <c>ProjectReference</c>).
 	/// </summary>
-	private static List<INamedTypeSymbol> ScanCandidates(
+	private static List<ScanCandidate> ScanCandidates(
 		List<IAssemblySymbol>? assemblies,
 		Compilation compilation,
 		INamedTypeSymbol? marker,
 		Location? location,
 		List<DiagnosticInfo> diagnostics)
 	{
-		List<INamedTypeSymbol> candidates = new();
+		List<ScanCandidate> candidates = new();
 
 		if (assemblies is null)
 		{
-			candidates.AddRange(EnumerateTypes(compilation.Assembly.GlobalNamespace)
-				.Where(type => IsScanCandidate(type, marker, compilation)));
+			candidates.AddRange(ScanCandidatesIn(compilation.Assembly.GlobalNamespace, marker, compilation));
 		}
 		else
 		{
@@ -460,10 +475,27 @@ partial class AwaitenGenerator
 		// Cross-assembly enumeration order is not guaranteed stable; sort by fully-qualified name so the
 		// generated output (and any snapshot) is reproducible.
 		candidates.Sort((left, right) => string.CompareOrdinal(
-			left.ToDisplayString(FullyQualified),
-			right.ToDisplayString(FullyQualified)));
+			left.Type.ToDisplayString(FullyQualified),
+			right.Type.ToDisplayString(FullyQualified)));
 		return candidates;
 	}
+
+	/// <summary>
+	///     The scan candidates one namespace tree contributes: every type the marker matched, each flagged with
+	///     whether the generated container can name it. The accessibility verdict is carried rather than acted on,
+	///     mirroring <see cref="ScanContractSet.Inaccessible" /> on the contract side, so that it is the caller (which
+	///     has applied the scan's filters) that decides between reporting AWT193 and staying silent.
+	/// </summary>
+	private static IEnumerable<ScanCandidate> ScanCandidatesIn(INamespaceSymbol ns, INamedTypeSymbol? marker, Compilation compilation)
+		=> EnumerateTypes(ns)
+			.Where(type => IsScanCandidate(type, marker, compilation))
+			.Select(type => new ScanCandidate(type, !compilation.IsSymbolAccessibleWithin(type, compilation.Assembly)));
+
+	/// <summary>
+	///     One type a <c>[Scan]</c> matched, and whether it is inaccessible to the generated container (internal to
+	///     another assembly, or a private/protected nested type), in which case nothing can be registered for it.
+	/// </summary>
+	private readonly record struct ScanCandidate(INamedTypeSymbol Type, bool Inaccessible);
 
 	/// <summary>
 	///     The assemblies named by <c>InAssembliesOf</c> (each entry's containing assembly, deduped). Null when the
@@ -496,19 +528,19 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     Appends one referenced assembly's scan candidates, reporting AWT140 when it holds none (almost always a
-	///     missing <c>ProjectReference</c> or the wrong marker type).
+	///     missing <c>ProjectReference</c> or the wrong marker type). An inaccessible match still counts as a
+	///     candidate: it is the more specific AWT193, not a "found nothing at all" hint, that the assembly earns.
 	/// </summary>
 	private static void AddAssemblyCandidates(
 		IAssemblySymbol assembly,
 		INamedTypeSymbol? marker,
 		Compilation compilation,
-		List<INamedTypeSymbol> candidates,
+		List<ScanCandidate> candidates,
 		Location? location,
 		List<DiagnosticInfo> diagnostics)
 	{
 		int contributed = candidates.Count;
-		candidates.AddRange(EnumerateTypes(assembly.GlobalNamespace)
-			.Where(type => IsScanCandidate(type, marker, compilation)));
+		candidates.AddRange(ScanCandidatesIn(assembly.GlobalNamespace, marker, compilation));
 
 		if (candidates.Count == contributed)
 		{
@@ -523,15 +555,18 @@ partial class AwaitenGenerator
 	///     Whether a type is a concrete class assignable to the marker (and not the marker itself), shared by
 	///     candidate gathering and the AWT140 emptiness check. An unbound generic marker requires the type to
 	///     implement a closed form of it; a <see langword="null" /> marker (a markerless scan) accepts every
-	///     concrete class, leaving the narrowing to the filters. Generic type definitions and inaccessible types
-	///     are skipped, since neither can be referenced from generated code.
+	///     concrete class, leaving the narrowing to the filters. Generic type definitions are skipped, since there
+	///     is no closed type to construct, and so is a type with no name the generated code could write at all
+	///     (<c>&lt;Module&gt;</c>, a compiler-generated closure): no author wrote it, so it must not reach AWT193.
+	///     Accessibility itself deliberately plays no part here: it is decided last, on what the marker (and then the
+	///     filters) already selected, so that AWT193 names only the types the author asked for rather than every
+	///     internal type in a scanned assembly.
 	/// </summary>
 	private static bool IsScanCandidate(INamedTypeSymbol type, INamedTypeSymbol? marker, Compilation compilation)
 	{
-		if (type is not { TypeKind: TypeKind.Class, IsAbstract: false, IsStatic: false, IsImplicitClass: false, }
+		if (type is not { TypeKind: TypeKind.Class, IsAbstract: false, IsStatic: false, IsImplicitClass: false, CanBeReferencedByName: true, }
 		    || (marker is not null && SymbolEqualityComparer.Default.Equals(type, marker))
-		    || HasOpenTypeParameters(type)
-		    || !compilation.IsSymbolAccessibleWithin(type, compilation.Assembly))
+		    || HasOpenTypeParameters(type))
 		{
 			return false;
 		}
@@ -678,8 +713,9 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     Candidates a scan's marker matched (<paramref name="Assignable" />), how many survived its filters
 	///     (<paramref name="Registered" />), and how many registrations those survivors actually contributed
-	///     (<paramref name="Produced" />, which a <c>MatchingInterface</c> match can leave short of
-	///     <paramref name="Registered" /> when a survivor has no <c>I</c> + name interface).
+	///     (<paramref name="Produced" />, which falls short of <paramref name="Registered" /> for a survivor the
+	///     container cannot name (AWT193) and for a <c>MatchingInterface</c> survivor with no <c>I</c> + name
+	///     interface).
 	/// </summary>
 	private readonly record struct ScanFilterCounts(int Assignable, int Registered, int Produced);
 

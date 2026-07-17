@@ -156,7 +156,10 @@ public class ScanTests
 		                                       }
 		                                       """, typeof(global::Awaiten.Tests.Support.ICrossAssemblyPlugin));
 
-		await That(result.Diagnostics).IsEmpty();
+		// The support assembly's internal InternalPlugin is assignable to the marker but not nameable from here,
+		// which AWT193 reports; nothing else about this scan is remarkable.
+		await That(result.Diagnostics).Contains("*AWT193*InternalPlugin*").AsWildcard();
+		await That(result.Diagnostics).HasCount(1);
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
 		await That(source).Contains("new __Bucket(typeof(global::Awaiten.Tests.Support.GammaPlugin)");
@@ -336,8 +339,8 @@ public class ScanTests
 		                                       }
 		                                       """);
 
-		await That(result.Diagnostics).IsEmpty()
-			.Because("a private nested match cannot be referenced from the generated code and must be skipped");
+		await That(result.Diagnostics).Contains("*AWT193*HiddenPlugin*").AsWildcard()
+			.Because("a private nested match cannot be referenced from the generated code, so it is skipped, but not silently");
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 		await That(source).Contains("new global::MyCode.VisiblePlugin()");
 		await That(source).DoesNotContain("HiddenPlugin");
@@ -392,7 +395,9 @@ public class ScanTests
 		                                       }
 		                                       """, typeof(global::Awaiten.Tests.Support.ICrossAssemblyPlugin));
 
-		await That(result.Diagnostics).IsEmpty();
+		// As above, the support assembly's internal InternalPlugin earns an AWT193 and nothing else does.
+		await That(result.Diagnostics).Contains("*AWT193*InternalPlugin*").AsWildcard();
+		await That(result.Diagnostics).HasCount(1);
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
 		// The generic form threads through InAssembliesOf exactly like the typeof form.
