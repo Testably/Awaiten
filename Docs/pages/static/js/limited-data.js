@@ -296,10 +296,10 @@ window.BENCHMARK_DATA = {
         "message": "refactor: assert diagnostics by wildcard so failures show the actual output (#114)"
       },
       {
-        "sha": "3bceeb2cb2001be8fd78714c38310f798d269631",
+        "sha": "8c555d8447288f9b5faabc9611472768aa903e7d",
         "author": "Valentin Breu\u00DF",
-        "date": "Fri Jul 17 15:07:45 2026 \u002B0200",
-        "message": "fix: honor \u0060InternalsVisibleTo\u0060 when checking constructor accessibility (#116)"
+        "date": "Fri Jul 17 15:12:35 2026 \u002B0200",
+        "message": "feat: report scan matches whose type is inaccessible (AWT193) (#115)"
       }
     ],
     "labels": [
@@ -352,7 +352,7 @@ window.BENCHMARK_DATA = {
       "f70bc2aa",
       "a9ecf934",
       "bc305b84",
-      "3bceeb2c"
+      "8c555d84"
     ],
     "datasets": [
       {
@@ -408,7 +408,7 @@ window.BENCHMARK_DATA = {
           5.961769225341933,
           6.984214661213068,
           7.022139627486467,
-          6.995472673575083
+          5.738266556461652
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -533,7 +533,7 @@ window.BENCHMARK_DATA = {
           6.440634553985936,
           7.346294555526513,
           7.313442610777342,
-          8.292259524975504
+          4.58929576476415
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -658,7 +658,7 @@ window.BENCHMARK_DATA = {
           85.92867632309596,
           138.5900273958842,
           110.56196761926016,
-          127.78214597702026
+          76.66552138328552
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -783,7 +783,7 @@ window.BENCHMARK_DATA = {
           2.4162207573652266,
           2.8372225521930625,
           3.0965878441929817,
-          2.4763717831900487
+          2.6338078213425784
         ],
         "borderColor": "#4A6FA5",
         "backgroundColor": "#4A6FA5",
@@ -908,7 +908,7 @@ window.BENCHMARK_DATA = {
           4.526937901477019,
           5.431260649974529,
           5.475362063600467,
-          4.810754118057398
+          4.097681039944291
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
@@ -1033,7 +1033,7 @@ window.BENCHMARK_DATA = {
           7.053957235600267,
           8.548441330591837,
           8.722654994044985,
-          9.346953363219898
+          6.691076751550039
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -1158,7 +1158,7 @@ window.BENCHMARK_DATA = {
           8.233624143259865,
           11.202297827372185,
           10.45985455190142,
-          11.522897845932416
+          8.415487844745318
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -1529,10 +1529,10 @@ window.BENCHMARK_DATA = {
         "message": "refactor: assert diagnostics by wildcard so failures show the actual output (#114)"
       },
       {
-        "sha": "3bceeb2cb2001be8fd78714c38310f798d269631",
+        "sha": "8c555d8447288f9b5faabc9611472768aa903e7d",
         "author": "Valentin Breu\u00DF",
-        "date": "Fri Jul 17 15:07:45 2026 \u002B0200",
-        "message": "fix: honor \u0060InternalsVisibleTo\u0060 when checking constructor accessibility (#116)"
+        "date": "Fri Jul 17 15:12:35 2026 \u002B0200",
+        "message": "feat: report scan matches whose type is inaccessible (AWT193) (#115)"
       }
     ],
     "labels": [
@@ -1585,7 +1585,7 @@ window.BENCHMARK_DATA = {
       "f70bc2aa",
       "a9ecf934",
       "bc305b84",
-      "3bceeb2c"
+      "8c555d84"
     ],
     "datasets": [
       {
@@ -1641,7 +1641,7 @@ window.BENCHMARK_DATA = {
           6.48095897535483,
           7.8173422538317165,
           8.092280637759428,
-          8.093969988326231
+          6.042621232072512
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -1766,7 +1766,7 @@ window.BENCHMARK_DATA = {
           6.488202248300825,
           7.320013329386711,
           7.416278254527312,
-          8.303056655021814
+          4.618451584130526
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -1891,7 +1891,7 @@ window.BENCHMARK_DATA = {
           87.73739255468051,
           129.65256204605103,
           119.78119620255062,
-          125.55154453791104
+          77.02675932248434
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -2016,7 +2016,7 @@ window.BENCHMARK_DATA = {
           36.28135290344556,
           42.67541418167261,
           42.53351327776909,
-          46.61377426981926
+          36.657977911142204
         ],
         "borderColor": "#4A6FA5",
         "backgroundColor": "#4A6FA5",
@@ -2141,7 +2141,7 @@ window.BENCHMARK_DATA = {
           6.652826086259806,
           8.656110814213752,
           7.602905945231517,
-          9.044201740374168
+          5.096734900275866
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
@@ -2266,7 +2266,7 @@ window.BENCHMARK_DATA = {
           7.369724972889974,
           8.481751332680384,
           8.760827839374542,
-          9.485334587784914
+          6.716597412641232
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -2391,7 +2391,7 @@ window.BENCHMARK_DATA = {
           7.954047814011574,
           14.908109857638676,
           14.131819877486963,
-          15.136211179196835
+          8.410923793911934
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -2762,10 +2762,10 @@ window.BENCHMARK_DATA = {
         "message": "refactor: assert diagnostics by wildcard so failures show the actual output (#114)"
       },
       {
-        "sha": "3bceeb2cb2001be8fd78714c38310f798d269631",
+        "sha": "8c555d8447288f9b5faabc9611472768aa903e7d",
         "author": "Valentin Breu\u00DF",
-        "date": "Fri Jul 17 15:07:45 2026 \u002B0200",
-        "message": "fix: honor \u0060InternalsVisibleTo\u0060 when checking constructor accessibility (#116)"
+        "date": "Fri Jul 17 15:12:35 2026 \u002B0200",
+        "message": "feat: report scan matches whose type is inaccessible (AWT193) (#115)"
       }
     ],
     "labels": [
@@ -2818,7 +2818,7 @@ window.BENCHMARK_DATA = {
       "f70bc2aa",
       "a9ecf934",
       "bc305b84",
-      "3bceeb2c"
+      "8c555d84"
     ],
     "datasets": [
       {
@@ -2874,7 +2874,7 @@ window.BENCHMARK_DATA = {
           12.968013841907183,
           18.0663733959198,
           16.369842256491,
-          13.841819391647975
+          16.24852908083371
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -2999,7 +2999,7 @@ window.BENCHMARK_DATA = {
           1089.9421412604195,
           1482.9623057501656,
           1454.3024060385567,
-          1304.303992680141
+          1398.4455340067545
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -3124,7 +3124,7 @@ window.BENCHMARK_DATA = {
           25636.91582438151,
           31322.79619954427,
           29704.739414760046,
-          27673.5991007487
+          29812.27721296038
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -3185,7 +3185,7 @@ window.BENCHMARK_DATA = {
           33094,
           33098,
           33098,
-          33095
+          33098
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -3249,7 +3249,7 @@ window.BENCHMARK_DATA = {
           6.506108531852563,
           10.177415948112806,
           10.520605434974035,
-          7.148175128300985
+          10.296914561589558
         ],
         "borderColor": "#4A6FA5",
         "backgroundColor": "#4A6FA5",
@@ -3374,7 +3374,7 @@ window.BENCHMARK_DATA = {
           11.851903936266899,
           16.426111710071563,
           14.54058352964265,
-          11.68889260093371
+          14.36512672106425
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
@@ -3499,7 +3499,7 @@ window.BENCHMARK_DATA = {
           559.6176377614339,
           760.6573519706726,
           667.1629113515218,
-          583.8926416543814
+          690.2635888417561
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -3624,7 +3624,7 @@ window.BENCHMARK_DATA = {
           8536.391380310059,
           12471.261266072592,
           11962.586076863607,
-          8750.647263663155
+          11132.744892665318
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -3995,10 +3995,10 @@ window.BENCHMARK_DATA = {
         "message": "refactor: assert diagnostics by wildcard so failures show the actual output (#114)"
       },
       {
-        "sha": "3bceeb2cb2001be8fd78714c38310f798d269631",
+        "sha": "8c555d8447288f9b5faabc9611472768aa903e7d",
         "author": "Valentin Breu\u00DF",
-        "date": "Fri Jul 17 15:07:45 2026 \u002B0200",
-        "message": "fix: honor \u0060InternalsVisibleTo\u0060 when checking constructor accessibility (#116)"
+        "date": "Fri Jul 17 15:12:35 2026 \u002B0200",
+        "message": "feat: report scan matches whose type is inaccessible (AWT193) (#115)"
       }
     ],
     "labels": [
@@ -4051,7 +4051,7 @@ window.BENCHMARK_DATA = {
       "f70bc2aa",
       "a9ecf934",
       "bc305b84",
-      "3bceeb2c"
+      "8c555d84"
     ],
     "datasets": [
       {
@@ -4107,7 +4107,7 @@ window.BENCHMARK_DATA = {
           62.378236540726256,
           94.88772531918117,
           86.97378265062967,
-          62.66116680417742
+          89.39690135916074
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -4232,7 +4232,7 @@ window.BENCHMARK_DATA = {
           10403.102520751952,
           14924.315182277134,
           14282.488821411132,
-          10790.713237508138
+          13937.890499877929
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -4357,7 +4357,7 @@ window.BENCHMARK_DATA = {
           616505.3353794643,
           740004.9735677083,
           734500.8079427084,
-          638060.6186523438
+          715423.0658482143
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -4418,7 +4418,7 @@ window.BENCHMARK_DATA = {
           738124,
           720900,
           721016,
-          737234
+          738949
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -4482,7 +4482,7 @@ window.BENCHMARK_DATA = {
           51.788944576467784,
           87.47358994483947,
           73.43530819245747,
-          51.28278720804623
+          73.92556560956515
         ],
         "borderColor": "#4A6FA5",
         "backgroundColor": "#4A6FA5",
@@ -4607,7 +4607,7 @@ window.BENCHMARK_DATA = {
           58.62954160800347,
           82.94359835556575,
           80.96661069563457,
-          57.56316477911813
+          82.95299705437252
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
@@ -4732,7 +4732,7 @@ window.BENCHMARK_DATA = {
           34534.463810511996,
           43133.2076285226,
           42868.01573399135,
-          35230.8423828125
+          43094.936397298174
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -4793,7 +4793,7 @@ window.BENCHMARK_DATA = {
           80937,
           80768,
           80100,
-          80941
+          80630
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -4857,7 +4857,7 @@ window.BENCHMARK_DATA = {
           261895.91399274554,
           372399.6763346354,
           360533.6534179688,
-          260107.47762044272
+          337508.93624441966
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -4918,7 +4918,7 @@ window.BENCHMARK_DATA = {
           573073,
           573056,
           573072,
-          573028
+          573112
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -5228,10 +5228,10 @@ window.BENCHMARK_DATA = {
         "message": "refactor: assert diagnostics by wildcard so failures show the actual output (#114)"
       },
       {
-        "sha": "3bceeb2cb2001be8fd78714c38310f798d269631",
+        "sha": "8c555d8447288f9b5faabc9611472768aa903e7d",
         "author": "Valentin Breu\u00DF",
-        "date": "Fri Jul 17 15:07:45 2026 \u002B0200",
-        "message": "fix: honor \u0060InternalsVisibleTo\u0060 when checking constructor accessibility (#116)"
+        "date": "Fri Jul 17 15:12:35 2026 \u002B0200",
+        "message": "feat: report scan matches whose type is inaccessible (AWT193) (#115)"
       }
     ],
     "labels": [
@@ -5284,7 +5284,7 @@ window.BENCHMARK_DATA = {
       "f70bc2aa",
       "a9ecf934",
       "bc305b84",
-      "3bceeb2c"
+      "8c555d84"
     ],
     "datasets": [
       {
@@ -5340,7 +5340,7 @@ window.BENCHMARK_DATA = {
           260.14689277013144,
           248.502894560496,
           245.56955518041337,
-          234.11926034518652
+          288.17139748164584
         ],
         "borderColor": "#3949AB",
         "backgroundColor": "#3949AB",
@@ -5465,7 +5465,7 @@ window.BENCHMARK_DATA = {
           582.7285786469778,
           619.6243688038418,
           609.7927558081491,
-          594.3735290254865
+          669.7277599970499
         ],
         "borderColor": "#512BD4",
         "backgroundColor": "#512BD4",
@@ -5590,7 +5590,7 @@ window.BENCHMARK_DATA = {
           6325.012018330892,
           7038.960703168596,
           6655.166512080601,
-          6417.583926064627
+          5075.594739641462
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -5715,7 +5715,7 @@ window.BENCHMARK_DATA = {
           200.1616269906362,
           186.4587875366211,
           185.20170844395955,
-          177.1228406906128
+          225.54347211974007
         ],
         "borderColor": "#D9534F",
         "backgroundColor": "#D9534F",
@@ -5840,7 +5840,7 @@ window.BENCHMARK_DATA = {
           422.090611521403,
           395.66576588948567,
           406.8750729560852,
-          408.69903507232664
+          407.1119853428432
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -5965,7 +5965,7 @@ window.BENCHMARK_DATA = {
           680.6094351496015,
           759.1564706655649,
           705.668704850333,
-          730.5803973124578
+          734.0447669029236
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -6090,7 +6090,7 @@ window.BENCHMARK_DATA = {
           184.9798091820308,
           202.07687255541484,
           184.26727698644,
-          176.6552872657776
+          211.48144982655842
         ],
         "borderColor": "#F0AD4E",
         "backgroundColor": "#F0AD4E",
