@@ -1377,14 +1377,14 @@ internal static class Diagnostics
 
 	/// <summary>
 	///     A <c>[Scan]</c> matched a type the generated container cannot name: it is internal to another assembly
-	///     (with no <c>InternalsVisibleTo</c>), or a private/protected nested type. No exposure can save it - unlike
-	///     <see cref="ScanInterfaceInaccessible">AWT188</see>, where only the interface is out of reach and
-	///     <c>ScanAs.Self</c> still registers the type - because every registration has to name the implementation to
-	///     construct it. Without this warning the match would vanish silently on a green build, which is exactly what
-	///     a library author hits after narrowing an implementation to <c>internal</c>. Reported only for a type the
-	///     marker matched and the scan's filters kept, so an unrelated internal type, or one the author already
-	///     excluded, stays quiet. Widen the type's accessibility, or exclude it from the scan to say the skip is
-	///     intended.
+	///     (with no <c>InternalsVisibleTo</c>), or a private/protected nested type. No exposure can save it, because
+	///     every registration has to name the implementation in order to construct it. That is what separates this
+	///     from <see cref="ScanInterfaceInaccessible">AWT188</see>, where only the interface is out of reach and
+	///     <c>ScanAs.Self</c> still registers the type. Without this warning the match would vanish silently on a
+	///     green build, which is exactly what a library author hits after narrowing an implementation to
+	///     <c>internal</c>. Reported only for a type the marker matched and the scan's filters kept, so an unrelated
+	///     internal type, or one the author already excluded, stays quiet. Widen the type's accessibility, or exclude
+	///     it from the scan to say the skip is intended.
 	/// </summary>
 	public static readonly DiagnosticDescriptor ScanTypeInaccessible = new(
 		"AWT193",

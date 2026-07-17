@@ -2,8 +2,10 @@
 
 	<PropertyGroup>
 		<!-- AWT193: the ScanTests fixture deliberately keeps an internal ICrossAssemblyPlugin in the referenced
-		     support assembly, so the cross-assembly scans can pin that it is not registered. Those scans have no way
-		     to filter it out (an Exclude would have to name the inaccessible type), so the warning is expected here. -->
+		     support assembly, so the cross-assembly scans here can pin that it is not registered. A "!InternalPlugin"
+		     NamePatterns entry would silence the warning, but it would also make the filter the reason the type is
+		     skipped, which is exactly what these scans exist to prove is not the case: it is the accessibility that
+		     skips it. So the warning is expected here, and suppressed rather than filtered away. -->
 		<NoWarn>$(NoWarn);AWT193</NoWarn>
 	</PropertyGroup>
 

@@ -201,6 +201,38 @@ public partial class DiagnosticTests
 				.Because("a markerless scan is narrowed by AWT183 to a namespace the author named, so a type it cannot register there is worth saying out loud");
 			await That(result.Diagnostics).DoesNotContain("*AWT193*Poller*").AsWildcard()
 				.Because("Lib.Internals is outside the scan's namespace filter");
+			await That(result.Diagnostics).Contains("*AWT184*").AsWildcard()
+				.Because("the scan did register nothing, and AWT193 saying why does not make that untrue; the pair is deliberate");
+		}
+
+		[Fact]
+		public async Task DoesNotReportWhenInternalsVisibleToGrantsAccess()
+		{
+			GeneratorResult result = Generator.RunWithReferencedAssembly("""
+				[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("TestAssembly")]
+
+				namespace Lib;
+
+				public interface IEquipment { }
+				internal sealed class Roaster : IEquipment { }
+				""", """
+				using Awaiten;
+
+				namespace MyCode;
+
+				[Container]
+				[Scan(typeof(Lib.IEquipment), InAssembliesOf = new[] { typeof(Lib.IEquipment) })]
+				public static partial class MyContainer
+				{
+				}
+				""");
+
+			// The diagnostic offers InternalsVisibleTo as a remedy, so pin that taking it actually works. An empty
+			// diagnostic set covers the generated source too, so this also proves the container can name Roaster.
+			await That(result.Diagnostics).IsEmpty()
+				.Because("the grant makes the internal type nameable from the container's assembly, so there is nothing to warn about");
+			await That(result.Sources["Awaiten.MyCode.MyContainer.g.cs"]).Contains("new global::Lib.Roaster()")
+				.Because("an internal type the container can see is registered like a public one");
 		}
 	}
 }
