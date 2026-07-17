@@ -233,10 +233,11 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     Validates one <c>[Import(typeof(Module))]</c> target, reporting AWT149-154, and returns whether it is
+	///     Validates one <c>[Import(typeof(Module))]</c> target, reporting AWT149-152, and returns whether it is
 	///     importable. A non-<c>[Module]</c> target (AWT149) is skipped (<see langword="false" />); the other faults
 	///     are reported but still imported (<see langword="true" />): non-static (AWT152), a nested <c>[Import]</c>
-	///     (AWT150), a module-declared <c>[Scan]</c> (AWT154), or no registrations (AWT151).
+	///     (AWT150), or no registrations (AWT151). A module-declared <c>[Scan]</c> is accepted (self-compiled in the
+	///     module's own build, AWT154 retired) rather than rejected.
 	/// </summary>
 	private static bool ValidateImportedModule(
 		INamedTypeSymbol module,
@@ -273,16 +274,9 @@ partial class AwaitenGenerator
 				Diagnostics.NestedModuleImport, location, new EquatableArray<string>([moduleName,])));
 		}
 
-		// AWT154: [Scan] sweeps an assembly relative to the container and is not collected from modules, so a
-		// module-declared scan would be silently ignored; reject it instead. Reported at the module's own [Scan]
-		// when in source, else at the container's [Import].
-		if (TryGetAwaitenAttribute(moduleAttributes, "ScanAttribute", out AttributeData? scan))
-		{
-			diagnostics.Add(new DiagnosticInfo(
-				Diagnostics.ScanOnModule,
-				LocationInfo.From(scan?.ApplicationSyntaxReference?.GetSyntax().GetLocation()) ?? location,
-				new EquatableArray<string>([moduleName,])));
-		}
+		// A [Scan] on a module is self-compiled in the module's own build (the module emits a generated factory
+		// and lifetime registration per match, which this collection reads like any other module registration),
+		// so the consumer neither re-runs it nor rejects it. See ExpandModuleScan; AWT154 was retired.
 
 		// AWT151: a module that declares no lifetime registrations imports nothing useful.
 		if (!DeclaresAnyRegistration(moduleAttributes))
@@ -298,8 +292,9 @@ partial class AwaitenGenerator
 	///     Whether an attribute list carries anything a module contributes to an importing container: a
 	///     <c>[Singleton]</c>/<c>[Transient]</c>/<c>[Scoped]</c> lifetime registration (generic or open
 	///     <c>typeof</c> form), a <c>[Decorate]</c>, a <c>[Composite]</c>, or <c>[ImportServices]</c>. Used to
-	///     detect a module that declares nothing to import (AWT151); a module-declared <c>[Scan]</c> does not
-	///     count, being uncollected and its own error (AWT154).
+	///     detect a module that declares nothing to import (AWT151). A module-declared <c>[Scan]</c> does not
+	///     count here on its own: its matches are self-compiled into generated lifetime registration attributes
+	///     (which do count), so a scan-only module whose scan matched something carries those generated attributes.
 	/// </summary>
 	private static bool DeclaresAnyRegistration(ImmutableArray<AttributeData> attributes)
 	{

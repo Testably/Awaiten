@@ -787,19 +787,9 @@ internal static class Diagnostics
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
 
-	/// <summary>
-	///     An imported <c>[Module]</c> carries a <c>[Scan]</c>. Assembly scanning is a container concern (it
-	///     sweeps assemblies relative to the container) and is not collected from modules, so a module-declared
-	///     scan would contribute nothing. This is an error rather than a warning so the scan is not silently
-	///     dropped. Move it onto the container.
-	/// </summary>
-	public static readonly DiagnosticDescriptor ScanOnModule = new(
-		"AWT154",
-		"Scan on module not supported",
-		"The imported module '{0}' declares a [Scan], which is not collected from modules and contributes nothing; move the [Scan] onto the container",
-		"Awaiten",
-		DiagnosticSeverity.Error,
-		isEnabledByDefault: true);
+	// AWT154 (ScanOnModule) was retired: a [Scan] on a [Module] is now supported and self-compiled in the
+	// module's own build (the module emits a generated factory + registration per match), so a module-declared
+	// scan no longer errors on import. See ExpandModuleScan and the AWT194-AWT197 diagnostics.
 
 	/// <summary>
 	///     Two different imported modules register the same service key with different implementations at
@@ -1393,5 +1383,64 @@ internal static class Diagnostics
 		"'{0}' matched the scan, but the type itself is not accessible to the generated container, so it is not registered; widen the type's accessibility (or grant the container's assembly InternalsVisibleTo), or exclude it from the scan with a NamePatterns/NamespacePatterns entry",
 		"Awaiten",
 		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A <c>[Module]</c> carries a <c>[Scan]</c> but is not declared <c>partial</c>, so the generator cannot
+	///     add the factory methods and registration attributes that self-compile the scan into it. Add the
+	///     <c>partial</c> modifier. Reported in the module's own build, at the module's declaration.
+	/// </summary>
+	public static readonly DiagnosticDescriptor NonPartialModuleScan = new(
+		"AWT194",
+		"Module with a scan is not partial",
+		"the module '{0}' declares a [Scan] but is not partial, so its scan cannot be self-compiled; add the partial modifier to the module class",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A self-compiled module <c>[Scan]</c> matched a type whose constructor takes a parameter of a type that
+	///     is not accessible outside the module's assembly. The generated factory is a <c>public</c> method that
+	///     resolves that parameter from the consuming container's graph, so the parameter type has to be nameable
+	///     by the consumer. Widen the parameter type's accessibility, or exclude the match from the scan. In v1 a
+	///     self-compiled scan cannot construct a match through an inaccessible parameter.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ModuleScanParameterInaccessible = new(
+		"AWT195",
+		"Module scan match has an inaccessible constructor parameter",
+		"'{0}' matched the module scan, but its constructor parameter of type '{1}' is not accessible outside the module's assembly, so the generated factory cannot expose it; widen the parameter type's accessibility or exclude the type from the scan",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A self-compiled module <c>[Scan]</c> matched a type but no exposure selected an interface accessible
+	///     outside the module's assembly, so a consumer could never name what the match registers under. A
+	///     <c>ScanAs.Self</c> exposure of an <c>internal</c> implementation hits this (the implementation type is
+	///     itself inaccessible), as does a match whose only convention/marker interface is <c>internal</c>. Expose
+	///     an accessible interface (<c>ScanAs.MatchingInterface</c> or <c>ScanAs.Marker</c> over a public
+	///     interface), or exclude the type from the scan.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ModuleScanNoAccessibleExposure = new(
+		"AWT196",
+		"Module scan match has no accessible exposure",
+		"'{0}' matched the module scan, but no exposure selected an interface accessible outside the module's assembly, so a consumer could not resolve it; expose it through a public interface (ScanAs.MatchingInterface or ScanAs.Marker) or exclude it from the scan",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A self-compiled module <c>[Scan]</c> matched a type that would be exposed under more than one accessible
+	///     interface. A self-compiled match is reached only through a generated factory that returns a single
+	///     accessible interface, so a shared instance across several interfaces cannot be expressed (unlike a
+	///     container scan, whose matches coalesce on the concrete type). In v1 narrow the exposure to a single
+	///     interface (typically <c>ScanAs.MatchingInterface</c>), or exclude the type from the scan.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ModuleScanMultipleExposures = new(
+		"AWT197",
+		"Module scan match has multiple exposures",
+		"'{0}' matched the module scan, but it would be exposed under multiple interfaces ({1}); a self-compiled scan supports a single exposure per match, so narrow the As to one interface or exclude the type from the scan",
+		"Awaiten",
+		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
 }

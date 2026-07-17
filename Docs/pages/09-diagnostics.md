@@ -1332,19 +1332,7 @@ public static class EquipmentModule
 
 ### AWT154
 
-:::danger[Error]
-An imported module declares a `[Scan]`, which is not collected from modules.
-:::
-
-```csharp
-[Module]
-[Scan<IDrink>]   // scans are not gathered from modules
-public static class MenuModule;
-
-[Container]
-[Import(typeof(MenuModule))]
-public static partial class CoffeeShop;
-```
+*Retired.* A `[Scan]` on a `[Module]` is now supported: the module compiles its own scan in its own build (see [self-compiled module scans](./registration/modules#self-compiled-scans)), so it is no longer rejected on import. The self-compilation constraints are reported as [AWT194](#awt194)–[AWT197](#awt197).
 
 ### AWT155
 
@@ -1366,6 +1354,69 @@ public static class ModuleB;
 [Import(typeof(ModuleB))]   // both strongly register ITimeSystem
 public static partial class CoffeeShop;
 ```
+
+### AWT194
+
+:::danger[Error]
+A `[Module]` that declares a `[Scan]` is not `partial`, so its scan cannot be self-compiled.
+:::
+
+```csharp
+[Module]
+[Scan<IPlugin>(As = ScanAs.MatchingInterface)]
+public static class PluginModule;   // must be partial to receive the generated factories
+```
+
+A [self-compiled module scan](./registration/modules#self-compiled-scans) emits a factory method and a registration attribute into the module's partial. Add the `partial` modifier. Reported in the module's own build.
+
+### AWT195
+
+:::danger[Error]
+A self-compiled module `[Scan]` match has a constructor parameter of a type inaccessible outside the module's assembly.
+:::
+
+```csharp
+internal sealed class Secret;
+internal sealed class Roaster(Secret secret) : IRoaster;   // Secret is internal
+
+[Module]
+[Scan<IRoaster>(As = ScanAs.MatchingInterface)]
+public static partial class PluginModule;
+```
+
+The generated factory is a `public` method whose parameters are resolved from the *consuming* container's graph, so each parameter type has to be nameable by the consumer. Widen the parameter type's accessibility, or exclude the match. (A v1 limitation: a self-compiled scan cannot construct a match through an inaccessible parameter.)
+
+### AWT196
+
+:::danger[Error]
+A self-compiled module `[Scan]` match has no exposure interface accessible outside the module's assembly.
+:::
+
+```csharp
+internal sealed class Roaster : IPlugin;
+
+[Module]
+[Scan<IPlugin>(As = ScanAs.Self)]   // Self exposes the internal type, which a consumer cannot name
+public static partial class PluginModule;
+```
+
+A consumer resolves a self-compiled match only through an accessible interface. `ScanAs.Self` over an `internal` implementation exposes nothing nameable; expose it through a public interface (`ScanAs.MatchingInterface` or `ScanAs.Marker`), or exclude the match.
+
+### AWT197
+
+:::danger[Error]
+A self-compiled module `[Scan]` match would be exposed under more than one interface.
+:::
+
+```csharp
+internal sealed class Roaster : IPlugin, IRoaster;
+
+[Module]
+[Scan<IPlugin>(As = ScanAs.Marker | ScanAs.MatchingInterface)]   // IPlugin and IRoaster both apply
+public static partial class PluginModule;
+```
+
+A self-compiled match is reached through a generated factory that returns a single accessible interface, so a shared instance across several interfaces cannot be expressed (unlike a container `[Scan]`, whose matches coalesce on the concrete type). Narrow the exposure to a single interface (typically `ScanAs.MatchingInterface`), or exclude the match. This is a v1 limitation.
 
 ## Keyed collections
 

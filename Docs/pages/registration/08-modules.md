@@ -54,9 +54,27 @@ public static class ProductionModule
 }
 ```
 
+## Self-compiled scans
+
+A library often keeps its implementations `internal` and exposes only interfaces. A consuming container cannot construct an inaccessible type, so it could never register one — unless the library hand-wrote a factory per type. A `[Scan]` on a `[Module]` closes that gap: the module compiles its own scan **in its own build**, emitting a factory per match that constructs the implementation (which its own assembly can see) and returns the accessible interface. To the consumer this is an ordinary module factory registration, so nothing new crosses the assembly boundary.
+
+```csharp
+public interface IClock;
+public interface IRoaster;
+internal sealed class Roaster(IClock clock) : IPlugin, IRoaster;   // stays internal
+
+[Module]
+[Scan<IPlugin>(As = ScanAs.MatchingInterface, Lifetime = AwaitenLifetime.Singleton)]
+public static partial class PluginModule;   // partial, so the generator can add the factory
+```
+
+A consuming container `[Import]`s the module and resolves `IRoaster` without ever naming `Roaster`. The generated registration is an overridable default (`Fallback.Silent`), so the container can replace it with its own registration. Because diagnostics are reported in the *library's* build, the library author — not the consumer — sees any problem.
+
+The module must be `partial` ([AWT194](../diagnostics#awt194)). A few v1 limitations apply, each reported at the library's source: a match exposes through exactly one accessible interface ([AWT196](../diagnostics#awt196)/[AWT197](../diagnostics#awt197)), and its constructor parameters must be types a consumer can name ([AWT195](../diagnostics#awt195)). Self-compilation is a cross-assembly feature: within a single assembly the container can already `[Scan]` its own `internal` types directly.
+
 ## One level deep
 
-Imports are not transitive. A module's own `[Import]` is not followed, and a `[Scan]` inside a module is not collected. Keep the container as the single place that composes modules.
+Imports are not transitive. A module's own `[Import]` is not followed. Keep the container as the single place that composes modules. (A module's own `[Scan]`, by contrast, is self-compiled in the module's build — see above — not collected by the importing container.)
 
 *Note: importing a type that is not a `[Module]` is an error ([AWT149](../diagnostics#awt149)), and a module must be static ([AWT152](../diagnostics#awt152)).*
 

@@ -2,6 +2,7 @@ using System.Text;
 using Awaiten.SourceGenerators.Entities;
 using Awaiten.SourceGenerators.Internals;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 
@@ -23,6 +24,7 @@ namespace Awaiten.SourceGenerators;
 public sealed partial class AwaitenGenerator : IIncrementalGenerator
 {
 	private const string ContainerAttributeName = "Awaiten.ContainerAttribute";
+	private const string ModuleAttributeName = "Awaiten.ModuleAttribute";
 	private const string AttributeNamespace = "Awaiten";
 
 	/// <inheritdoc />
@@ -45,6 +47,98 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 
 			spc.AddSource(model.HintName, SourceText.From(Sources.Emit(model), Encoding.UTF8));
 		});
+
+		// A second root: a [Module] that declares a [Scan] self-compiles it, emitting a factory + registration per
+		// match into its own partial (BuildModuleModel returns null for a plain module, which emits nothing).
+		IncrementalValuesProvider<ModuleScanModel> moduleModels = context.SyntaxProvider
+			.ForAttributeWithMetadataName(
+				ModuleAttributeName,
+				static (node, _) => node is ClassDeclarationSyntax,
+				static (ctx, ct) => BuildModuleModel(ctx, ct))
+			.Where(static model => model is not null)
+			.Select(static (model, _) => model!);
+
+		context.RegisterSourceOutput(moduleModels, static (spc, model) =>
+		{
+			foreach (DiagnosticInfo diagnostic in model.Diagnostics.AsArray())
+			{
+				spc.ReportDiagnostic(diagnostic.ToDiagnostic());
+			}
+
+			// No factories means nothing to add (an errored or empty scan reports its diagnostics above); emitting
+			// an empty partial would be noise.
+			if (model.Factories.Count > 0)
+			{
+				spc.AddSource(model.HintName, SourceText.From(Sources.EmitModule(model), Encoding.UTF8));
+			}
+		});
+	}
+
+	/// <summary>
+	///     Builds the <see cref="ModuleScanModel" /> for a <c>[Module]</c> that declares a <c>[Scan]</c> (returning
+	///     <see langword="null" /> for a module without one, which self-compiles nothing). The module must be
+	///     <c>partial</c> to receive the generated factories and registration attributes (AWT194); when it is, its
+	///     scans are expanded into factories in its own build (see <see cref="CollectModuleScanFactories" />).
+	/// </summary>
+	private static ModuleScanModel? BuildModuleModel(GeneratorAttributeSyntaxContext context, CancellationToken cancellationToken)
+	{
+		if (context.TargetSymbol is not INamedTypeSymbol moduleSymbol)
+		{
+			return null;
+		}
+
+		// Only a module that declares a [Scan] self-compiles; a plain [Module] carries no generated code (and pays
+		// no analysis cost beyond this check).
+		if (!HasAwaitenAttribute(moduleSymbol.GetAttributes(), "ScanAttribute"))
+		{
+			return null;
+		}
+
+		Compilation compilation = context.SemanticModel.Compilation;
+		List<DiagnosticInfo> diagnostics = new();
+
+		// The module must be partial for the generator to add the factories and registration attributes. Every part
+		// of a partial type carries the partial modifier, so the declaration bearing the [Module] attribute suffices.
+		bool isPartial = context.TargetNode is ClassDeclarationSyntax declaration
+		                 && declaration.Modifiers.Any(SyntaxKind.PartialKeyword);
+
+		List<ModuleFactory> factories = new();
+		if (!isPartial)
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.NonPartialModuleScan,
+				LocationInfo.From(moduleSymbol.Locations.FirstOrDefault()),
+				new EquatableArray<string>([Display(moduleSymbol.ToDisplayString(FullyQualified)),])));
+		}
+		else
+		{
+			factories = CollectModuleScanFactories(moduleSymbol, compilation, diagnostics);
+		}
+
+		string? moduleNamespace = moduleSymbol.ContainingNamespace is { IsGlobalNamespace: false, } ns
+			? ns.ToDisplayString()
+			: null;
+
+		List<TypeDeclaration> containingTypes = new();
+		for (INamedTypeSymbol? outer = moduleSymbol.ContainingType; outer is not null; outer = outer.ContainingType)
+		{
+			containingTypes.Insert(0, new TypeDeclaration(KeywordOf(outer), outer.Name));
+		}
+
+		string typePath = containingTypes.Count > 0
+			? $"{string.Join("+", containingTypes.Select(t => t.Name))}+{moduleSymbol.Name}"
+			: moduleSymbol.Name;
+		string hintName = moduleNamespace is null
+			? $"Awaiten.ModuleScan.{typePath}.g.cs"
+			: $"Awaiten.ModuleScan.{moduleNamespace}.{typePath}.g.cs";
+
+		return new ModuleScanModel(
+			moduleNamespace,
+			new EquatableArray<TypeDeclaration>(containingTypes.ToArray()),
+			moduleSymbol.Name,
+			hintName,
+			new EquatableArray<ModuleFactory>(factories.ToArray()),
+			new EquatableArray<DiagnosticInfo>(diagnostics.ToArray()));
 	}
 
 	private static ContainerModel? BuildModel(GeneratorAttributeSyntaxContext context, CancellationToken cancellationToken)
@@ -208,7 +302,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			AsyncDisposableSupport(compilation),
 			compilation.GetTypeByMetadataName("Awaiten.IAsyncInitializable"));
 
-		// The imported modules, resolved once. Import validation (AWT149-152, AWT154) is reported while collecting.
+		// The imported modules, resolved once. Import validation (AWT149-152) is reported while collecting.
 		List<ImportedModule> modules = CollectImportedModules(containerSymbol, diagnostics);
 
 		// [ImportServices]: any otherwise-unresolved direct dependency falls through to the external provider
