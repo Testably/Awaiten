@@ -5,7 +5,7 @@
 		     support assembly, so the cross-assembly scans here can pin that it is not registered. A "!InternalPlugin"
 		     NamePatterns entry would silence the warning, but it would also make the filter the reason the type is
 		     skipped, which is exactly what these scans exist to prove is not the case: it is the accessibility that
-		     skips it. So the warning is expected here, and suppressed rather than filtered away. -->
+		     skips it. Suppressed project-wide because AWT193 is emitted by the source generator. -->
 		<NoWarn>$(NoWarn);AWT193</NoWarn>
 	</PropertyGroup>
 

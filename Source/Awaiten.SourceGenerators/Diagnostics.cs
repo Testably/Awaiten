@@ -1384,12 +1384,13 @@ internal static class Diagnostics
 	///     green build, which is exactly what a library author hits after narrowing an implementation to
 	///     <c>internal</c>. Reported only for a type the marker matched and the scan's filters kept, so an unrelated
 	///     internal type, or one the author already excluded, stays quiet. Widen the type's accessibility, or exclude
-	///     it from the scan to say the skip is intended.
+	///     it with a <c>NamePatterns</c>/<c>NamespacePatterns</c> entry to say the skip is intended (the <c>Exclude</c>
+	///     type list cannot name an inaccessible type).
 	/// </summary>
 	public static readonly DiagnosticDescriptor ScanTypeInaccessible = new(
 		"AWT193",
 		"Scan matched an inaccessible type",
-		"'{0}' matched the scan, but the type itself is not accessible to the generated container, so it is not registered; widen the type's accessibility (or grant the container's assembly InternalsVisibleTo), or exclude it from the scan",
+		"'{0}' matched the scan, but the type itself is not accessible to the generated container, so it is not registered; widen the type's accessibility (or grant the container's assembly InternalsVisibleTo), or exclude it from the scan with a NamePatterns/NamespacePatterns entry",
 		"Awaiten",
 		DiagnosticSeverity.Warning,
 		isEnabledByDefault: true);
