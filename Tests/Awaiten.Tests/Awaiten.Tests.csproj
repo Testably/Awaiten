@@ -1,5 +1,12 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
+	<PropertyGroup>
+		<!-- AWT193: the ScanTests fixture deliberately keeps an internal ICrossAssemblyPlugin in the referenced
+		     support assembly, so the cross-assembly scans can pin that it is not registered. Those scans have no way
+		     to filter it out (an Exclude would have to name the inaccessible type), so the warning is expected here. -->
+		<NoWarn>$(NoWarn);AWT193</NoWarn>
+	</PropertyGroup>
+
 	<ItemGroup>
 		<ProjectReference Include="..\..\Source\Awaiten.SourceGenerators\Awaiten.SourceGenerators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
 		<ProjectReference Include="..\..\Source\Awaiten\Awaiten.csproj" />

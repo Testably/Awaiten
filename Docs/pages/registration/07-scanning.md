@@ -16,6 +16,8 @@ Every concrete, public, non-generic type assignable to `IDrink` is registered. T
 [Scan(typeof(IDrink))]
 ```
 
+A type the container cannot name is skipped rather than registered: an implementation that is `internal` to another assembly (with no `InternalsVisibleTo`), or a private nested class. Since a match quietly vanishing from the container is almost never what you meant, the scan reports the skip as [AWT193](../diagnostics#awt193). Widening the type to `public` brings it back. Only a type your scan actually asked for is reported, so the internal plumbing of a scanned assembly stays quiet, as does anything you filtered out. Whether the *interfaces* a match is exposed under are accessible is a separate question, covered below.
+
 ## Choose how they register
 
 By default each match registers as itself. Use `As` to register under the marker interface instead, or both.
