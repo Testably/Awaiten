@@ -213,4 +213,96 @@ public class SelfCompiledModuleScanTests
 		await That(result.Diagnostics).DoesNotContain("*AWT111*").AsWildcard()
 			.Because("self-compiled scan matches are collection-eligible, not conflicting single-service factories");
 	}
+
+	[Fact]
+	public async Task TwoModulesWithSameNamedMatchesUnderOneInterfaceBothCollect()
+	{
+		GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly("""
+			using Awaiten;
+
+			namespace Lib
+			{
+			    public interface IPlugin { }
+
+			    [Module]
+			    [Scan<IPlugin>(As = ScanAs.Marker, NamespacePatterns = new[] { "Lib.A" })]
+			    public static partial class ModuleA { }
+
+			    [Module]
+			    [Scan<IPlugin>(As = ScanAs.Marker, NamespacePatterns = new[] { "Lib.B" })]
+			    public static partial class ModuleB { }
+			}
+
+			namespace Lib.A
+			{
+			    internal sealed class Handler : Lib.IPlugin { }
+			}
+
+			namespace Lib.B
+			{
+			    internal sealed class Handler : Lib.IPlugin { }
+			}
+			""", """
+			using System.Collections.Generic;
+			using Awaiten;
+			using Lib;
+
+			namespace MyCode;
+
+			public sealed class Host
+			{
+			    public Host(IEnumerable<IPlugin> plugins) { }
+			}
+
+			[Container]
+			[Import(typeof(ModuleA))]
+			[Import(typeof(ModuleB))]
+			[Singleton<Host>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+		await That(source).Contains("global::Lib.ModuleA.Awaiten__Scan_0_Handler")
+			.Because("module A's match is a member of the collection");
+		await That(source).Contains("global::Lib.ModuleB.Awaiten__Scan_0_Handler")
+			.Because("module B's match must not be deduped away by sharing module A's per-module factory name");
+	}
+
+	[Fact]
+	public async Task SameCompilationModuleScanIsExpandedByTheContainer()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace Lib;
+
+			public interface IClock { }
+			public sealed class SystemClock : IClock { }
+
+			public interface IPlugin { }
+			public interface IRoaster { }
+
+			internal sealed class Roaster : IPlugin, IRoaster
+			{
+			    public Roaster(IClock clock) { }
+			}
+
+			[Module]
+			[Scan<IPlugin>(As = ScanAs.MatchingInterface)]
+			public static partial class PluginModule { }
+
+			[Container]
+			[Import(typeof(PluginModule))]
+			[Singleton<SystemClock, IClock>]
+			public static partial class MyContainer { }
+			""");
+
+		await That(result.Diagnostics).IsEmpty()
+			.Because("a same-compilation module's [Scan] is expanded by the container itself, so nothing is dropped and AWT151 does not misfire");
+		string source = result.Sources["Awaiten.Lib.MyContainer.g.cs"];
+		await That(source).Contains("new global::Lib.Roaster(")
+			.Because("with no assembly boundary the container constructs the internal match directly, as if the [Scan] were its own");
+	}
 }

@@ -40,6 +40,20 @@ partial class AwaitenGenerator
 		List<RawRegistration> scans = CollectScans(containerSymbol, compilation, diagnostics);
 		result.AddRange(scans);
 
+		// A same-compilation module's [Scan] is expanded here, exactly as if it were declared on the container:
+		// the generator cannot see its own output, so the module's self-compiled [GeneratedScanRegistration]
+		// attributes are invisible within the compilation that declares the module — but there is no assembly
+		// boundary either, so the container can evaluate the scan directly, with full container-scan semantics.
+		// A referenced-assembly module is excluded: its metadata carries the self-compiled expansion instead, and
+		// re-running its scan here would double-register every match.
+		foreach (ImportedModule module in modules)
+		{
+			if (SymbolEqualityComparer.Default.Equals(module.Symbol.ContainingAssembly, containerSymbol.ContainingAssembly))
+			{
+				result.AddRange(CollectScans(module.Symbol, compilation, diagnostics));
+			}
+		}
+
 		// Expand open generic registrations: for every closed generic service required from the graph
 		// whose open form is registered but which has no concrete registration, synthesize the closed
 		// implementation (iterating to a fixpoint over its own generic dependencies).
@@ -176,9 +190,11 @@ partial class AwaitenGenerator
 	///     registration, so the consuming container treats it exactly like a container <c>[Scan]</c> match:
 	///     collection-eligible (several matches under one interface resolve as an <c>IEnumerable</c>) and overridable
 	///     by an explicit registration (scans rank last). Each match gets a synthetic implementation identity keyed
-	///     by its unique factory name, distinct from the service's own type so the emitter still constructs through
-	///     the accessible service; without it two matches of one interface would collapse into one implementation
-	///     and collide as conflicting factories.
+	///     by its module-qualified factory name, distinct from the service's own type so the emitter still constructs
+	///     through the accessible service; without it two matches of one interface would collapse into one
+	///     implementation and collide as conflicting factories. The module qualification matters: factory names are
+	///     only unique per module, so two imported modules whose matches share a simple type name would otherwise
+	///     collapse into one member, silently dropping the later module's match from the collection.
 	/// </summary>
 	private static void CollectGeneratedScanRegistration(
 		AttributeData attribute,
@@ -206,10 +222,11 @@ partial class AwaitenGenerator
 
 		string serviceType = service.ToDisplayString(FullyQualified);
 		Location? location = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? fallbackLocation;
+		string qualifiedFactory = origin is null ? factory : $"{origin.ToDisplayString(FullyQualified)}.{factory}";
 
 		result.Add(new RawRegistration(
 			serviceType,
-			$"{serviceType}@scan:{factory}",
+			$"{serviceType}@scan:{qualifiedFactory}",
 			lifetime,
 			service,
 			location,
@@ -284,7 +301,8 @@ partial class AwaitenGenerator
 			// not the module declaration, which may live in another file (or, for a module compiled into a
 			// referenced assembly, in no source at all).
 			Location? importLocation = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation();
-			if (ValidateImportedModule(module, importLocation, diagnostics))
+			bool sameCompilation = SymbolEqualityComparer.Default.Equals(module.ContainingAssembly, containerSymbol.ContainingAssembly);
+			if (ValidateImportedModule(module, importLocation, sameCompilation, diagnostics))
 			{
 				modules.Add(new ImportedModule(module, importLocation));
 			}
@@ -298,11 +316,14 @@ partial class AwaitenGenerator
 	///     importable. A non-<c>[Module]</c> target (AWT149) is skipped (<see langword="false" />); the other faults
 	///     are reported but still imported (<see langword="true" />): non-static (AWT152), a nested <c>[Import]</c>
 	///     (AWT150), or no registrations (AWT151). A module-declared <c>[Scan]</c> is accepted (self-compiled in the
-	///     module's own build, AWT154 retired) rather than rejected.
+	///     module's own build, AWT154 retired) rather than rejected. <paramref name="sameCompilation" /> marks a
+	///     module declared in the container's own compilation, whose <c>[Scan]</c> the container expands directly
+	///     (its self-compiled attributes are invisible here), so the scan counts as a registration for AWT151.
 	/// </summary>
 	private static bool ValidateImportedModule(
 		INamedTypeSymbol module,
 		Location? importLocation,
+		bool sameCompilation,
 		List<DiagnosticInfo> diagnostics)
 	{
 		LocationInfo? location = LocationInfo.From(importLocation);
@@ -335,12 +356,17 @@ partial class AwaitenGenerator
 				Diagnostics.NestedModuleImport, location, new EquatableArray<string>([moduleName,])));
 		}
 
-		// A [Scan] on a module is self-compiled in the module's own build (the module emits a generated factory
-		// and lifetime registration per match, which this collection reads like any other module registration),
-		// so the consumer neither re-runs it nor rejects it. See ExpandModuleScan; AWT154 was retired.
+		// A referenced-assembly module's [Scan] is self-compiled in the module's own build (the module emits a
+		// generated factory and lifetime registration per match, which this collection reads like any other module
+		// registration), so the consumer neither re-runs it nor rejects it. See ExpandModuleScan; AWT154 was
+		// retired. A same-compilation module's [Scan] is instead expanded by the container itself (see Collect).
 
-		// AWT151: a module that declares no lifetime registrations imports nothing useful.
-		if (!DeclaresAnyRegistration(moduleAttributes))
+		// AWT151: a module that declares no lifetime registrations imports nothing useful. A same-compilation
+		// module's [Scan] does contribute (the container expands it directly), so it counts here; a
+		// referenced-assembly module contributes through its self-compiled attributes instead, which
+		// DeclaresAnyRegistration already counts.
+		if (!DeclaresAnyRegistration(moduleAttributes)
+		    && !(sameCompilation && HasAwaitenAttribute(moduleAttributes, "ScanAttribute")))
 		{
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.EmptyModule, location, new EquatableArray<string>([moduleName,])));
