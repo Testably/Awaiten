@@ -108,6 +108,33 @@ public partial class DiagnosticTests
 		}
 
 		[Fact]
+		public async Task DoesNotReportWhenTwoMarkersConstructTheIdenticalMethod()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IView<TViewModel> { }
+			                                       public interface IEditor<TModel> { }
+			                                       public sealed class Dual : IView<int>, IEditor<int> { }
+
+			                                       [Container]
+			                                       [Scan(typeof(IView<>), As = ScanAs.Marker, OnActivated = nameof(Wire))]
+			                                       [Scan(typeof(IEditor<>), As = ScanAs.Marker, OnActivated = nameof(Wire))]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       	private static void Wire<TArg>(object instance) { }
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("both closings construct the identical Wire<int>, so the dispatch is the same and nothing is ambiguous");
+			await That(result.Sources.Values.Any(source => source.Contains("Wire<int>"))).IsTrue()
+				.Because("the single constructed dispatch is emitted");
+		}
+
+		[Fact]
 		public async Task DoesNotReportWhenNoHookIsNamed()
 		{
 			GeneratorResult result = Generator.Run("""
