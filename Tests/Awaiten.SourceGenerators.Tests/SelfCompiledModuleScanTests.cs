@@ -44,8 +44,8 @@ public class SelfCompiledModuleScanTests
 			.Because("the module is re-opened as partial to receive the generated factory");
 		await That(module).Contains("global::Awaiten.GeneratedScanRegistrationAttribute<global::Lib.IRoaster>(\"Awaiten__Scan_0_Roaster\", Lifetime = global::Awaiten.AwaitenLifetime.Singleton)")
 			.Because("the match is registered under its accessible MatchingInterface, as a singleton scan match");
-		await That(module).Contains("public static global::Lib.IRoaster Awaiten__Scan_0_Roaster(global::Lib.IClock clock) => new global::Lib.Roaster(clock);")
-			.Because("the factory returns the interface but constructs the internal implementation in the library");
+		await That(module).Contains("public static global::Lib.IRoaster Awaiten__Scan_0_Roaster(global::Lib.IClock @clock) => new global::Lib.Roaster(@clock);")
+			.Because("the factory returns the interface but constructs the internal implementation in the library, with verbatim-prefixed parameter names so keyword-named parameters stay legal");
 	}
 
 	[Fact]
@@ -304,5 +304,117 @@ public class SelfCompiledModuleScanTests
 		string source = result.Sources["Awaiten.Lib.MyContainer.g.cs"];
 		await That(source).Contains("new global::Lib.Roaster(")
 			.Because("with no assembly boundary the container constructs the internal match directly, as if the [Scan] were its own");
+	}
+
+	[Fact]
+	public async Task SameCompilationModuleScanReportsScanDiagnosticsOnce()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace Lib;
+
+			public interface IPlugin { }
+
+			[Module]
+			[Scan<IPlugin>]
+			public static partial class PluginModule { }
+
+			[Container]
+			[Import(typeof(PluginModule))]
+			public static partial class MyContainer { }
+			""");
+
+		await That(result.Diagnostics.Count(diagnostic => diagnostic.Contains("AWT138"))).IsEqualTo(1)
+			.Because("the module pipeline and the container both see the same [Scan], but only the module pipeline reports on it");
+	}
+
+	[Fact]
+	public async Task KeywordNamedConstructorParameterCompilesAndResolves()
+	{
+		GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly("""
+			using Awaiten;
+
+			namespace Lib;
+
+			public interface IClock { }
+			public sealed class SystemClock : IClock { }
+			public interface IPlugin { }
+			public interface IRoaster { }
+
+			internal sealed class Roaster : IPlugin, IRoaster
+			{
+			    public Roaster(IClock @event) { }
+			}
+
+			[Module]
+			[Scan<IPlugin>(As = ScanAs.MatchingInterface)]
+			public static partial class PluginModule { }
+			""", """
+			using Awaiten;
+			using Lib;
+
+			namespace MyCode;
+
+			[Container]
+			[Import(typeof(PluginModule))]
+			[Singleton<SystemClock, IClock>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty()
+			.Because("a keyword-named constructor parameter must be emitted verbatim-prefixed, not break the module's build");
+	}
+
+	[Fact]
+	public async Task OverlappingScansOnOneModuleEmitASingleFactoryPerMatch()
+	{
+		(_, Microsoft.CodeAnalysis.GeneratorDriverRunResult run) = Generator.RunGenerator("""
+			using Awaiten;
+
+			namespace Lib;
+
+			public interface IPlugin { }
+			public interface IRoaster { }
+			internal sealed class Roaster : IPlugin, IRoaster { }
+
+			[Module]
+			[Scan<IPlugin>(As = ScanAs.MatchingInterface)]
+			[Scan<IRoaster>(As = ScanAs.MatchingInterface)]
+			public static partial class PluginModule { }
+			""", [], []);
+		string module = run.Results
+			.SelectMany(r => r.GeneratedSources)
+			.Single(s => s.HintName.Contains("ModuleScan"))
+			.SourceText.ToString();
+
+		await That(module).Contains("Awaiten__Scan_0_Roaster")
+			.Because("the first scan's match is emitted");
+		await That(module).DoesNotContain("Awaiten__Scan_1_Roaster")
+			.Because("the second scan matched the same type under the same exposure, which a container would dedup to one collection member, so only one factory is emitted");
+	}
+
+	[Fact]
+	public async Task OverlappingScansWithDifferentLifetimesReportAwt142()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace Lib;
+
+			public interface IPlugin { }
+			public interface IRoaster { }
+			internal sealed class Roaster : IPlugin, IRoaster { }
+
+			[Module]
+			[Scan<IPlugin>(As = ScanAs.MatchingInterface, Lifetime = AwaitenLifetime.Singleton)]
+			[Scan<IRoaster>(As = ScanAs.MatchingInterface, Lifetime = AwaitenLifetime.Transient)]
+			public static partial class PluginModule { }
+			""");
+
+		await That(result.Diagnostics).Contains("*AWT142*Roaster*Singleton*Transient*").AsWildcard()
+			.Because("two scans of one module registering the same implementation with different lifetimes mirror the container's scan-lifetime conflict");
 	}
 }

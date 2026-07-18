@@ -77,8 +77,9 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 	/// <summary>
 	///     Builds the <see cref="ModuleScanModel" /> for a <c>[Module]</c> that declares a <c>[Scan]</c> (returning
 	///     <see langword="null" /> for a module without one, which self-compiles nothing). The module must be
-	///     <c>partial</c> to receive the generated factories and registration attributes (AWT194); when it is, its
-	///     scans are expanded into factories in its own build (see <see cref="CollectModuleScanFactories" />).
+	///     non-generic (AWT201) and <c>partial</c> to receive the generated factories and registration attributes
+	///     (AWT194); when it is, its scans are expanded into factories in its own build (see
+	///     <see cref="CollectModuleScanFactories" />).
 	/// </summary>
 	private static ModuleScanModel? BuildModuleModel(GeneratorAttributeSyntaxContext context, CancellationToken cancellationToken)
 	{
@@ -103,7 +104,16 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		                 && declaration.Modifiers.Any(SyntaxKind.PartialKeyword);
 
 		List<ModuleFactory> factories = new();
-		if (!isPartial)
+		if (HasOpenTypeParameters(moduleSymbol))
+		{
+			// AWT201: a generic module (or one nested in a generic type) has no single closed type a consumer could
+			// import, and re-opening it as a bare-named partial would emit an unrelated non-generic class instead.
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.GenericModuleScan,
+				LocationInfo.From(moduleSymbol.Locations.FirstOrDefault()),
+				new EquatableArray<string>([Display(moduleSymbol.ToDisplayString(FullyQualified)),])));
+		}
+		else if (!isPartial)
 		{
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.NonPartialModuleScan,

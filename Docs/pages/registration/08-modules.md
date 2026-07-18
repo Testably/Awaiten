@@ -60,6 +60,7 @@ A library often keeps its implementations `internal` and exposes only interfaces
 
 ```csharp
 public interface IClock;
+public interface IPlugin;
 public interface IRoaster;
 internal sealed class Roaster(IClock clock) : IPlugin, IRoaster;   // stays internal
 
@@ -70,7 +71,7 @@ public static partial class PluginModule;   // partial, so the generator can add
 
 A consuming container `[Import]`s the module and resolves `IRoaster` without ever naming `Roaster`. Each match is registered like a container scan match: an explicit registration of the same service in the container (or another module) **overrides** it, and when several matches expose the **same** interface they **collect** — a `[Scan<IPlugin>(As = ScanAs.Marker)]` over two internal plug-ins resolves as `IEnumerable<IPlugin>`, exactly as it would on a container. Because diagnostics are reported in the *library's* build, the library author — not the consumer — sees any problem.
 
-The module must be `partial` ([AWT194](../diagnostics#awt194)). A few v1 limitations apply, each reported at the library's source: a single match exposes through exactly one accessible interface ([AWT196](../diagnostics#awt196)/[AWT197](../diagnostics#awt197)) — several matches under one interface still collect, but one match cannot share a single instance across several interfaces the way a container scan can — and a match's constructor parameters must be types a consumer can name ([AWT195](../diagnostics#awt195)).
+The module must be `partial` ([AWT194](../diagnostics#awt194)). A few v1 limitations apply, each reported at the library's source: a single match exposes through exactly one accessible interface ([AWT196](../diagnostics#awt196)/[AWT197](../diagnostics#awt197)) — several matches under one interface still collect, but one match cannot share a single instance across several interfaces the way a container scan can — and a match's constructor parameters must be types a consumer can name ([AWT195](../diagnostics#awt195)) without carrying `[Inject]`/`[Arg]` metadata the factory could not mirror ([AWT200](../diagnostics#awt200)). The module itself must be non-generic ([AWT201](../diagnostics#awt201)).
 
 When the module lives in the **same assembly as the container**, there is no assembly boundary to bridge: the container expands the module's `[Scan]` directly, exactly as if it were declared on the container itself, with full container-scan semantics (multi-interface exposure, `SkipUnconstructable`, direct construction of `internal` matches). The self-compiled factories are still generated into the module, so the same module keeps working for any *other* assembly that imports it; but note that the v1 limitations above are checked in the module's build regardless, since the module cannot know whether a cross-assembly consumer exists.
 

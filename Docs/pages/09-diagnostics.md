@@ -1418,6 +1418,42 @@ public static partial class PluginModule;
 
 A self-compiled match is reached through a generated factory that returns a single accessible interface, so a shared instance across several interfaces cannot be expressed (unlike a container `[Scan]`, whose matches coalesce on the concrete type). Narrow the exposure to a single interface (typically `ScanAs.MatchingInterface`), or exclude the match. This is a v1 limitation.
 
+### AWT200
+
+:::danger[Error]
+A self-compiled module `[Scan]` match carries injection metadata the generated factory cannot mirror.
+:::
+
+```csharp
+internal sealed class Roaster : IRoaster
+{
+    public Roaster(IClock clock) { }
+
+    [Inject]                              // keys, optionality and deferral live on this attribute
+    public IGrinder Grinder { get; set; }
+}
+
+[Module]
+[Scan<IRoaster>(As = ScanAs.MatchingInterface)]
+public static partial class PluginModule;
+```
+
+The generated factory reduces a match to a plain parameter list resolved from the consuming container's graph. An `[Inject]` property, or a constructor parameter marked `[Inject]` or `[Arg]`, carries per-dependency semantics that plain parameters cannot express, so the consumer would silently construct the match differently than a container `[Scan]` would. Remove the attribute, exclude the match, or register the type through a hand-written module factory.
+
+### AWT201
+
+:::danger[Error]
+A generic `[Module]` (or one nested in a generic type) declares a `[Scan]`.
+:::
+
+```csharp
+[Module]
+[Scan<IPlugin>(As = ScanAs.MatchingInterface)]
+public static partial class PluginModule<T>;   // no closed PluginModule<T> exists to [Import]
+```
+
+A consumer imports a module by `typeof`, so there is no single closed module type to import from a generic declaration, and the generated partial could not re-open it by its bare name. Move the `[Scan]` onto a non-generic module.
+
 ## Keyed collections
 
 ### AWT159

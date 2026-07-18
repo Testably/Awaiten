@@ -98,3 +98,5 @@
  AWT195  | Awaiten   | Error    | A self-compiled module [Scan] match has a constructor parameter type inaccessible outside the module's assembly
  AWT196  | Awaiten   | Error    | A self-compiled module [Scan] match has no exposure interface accessible outside the module's assembly
  AWT197  | Awaiten   | Error    | A self-compiled module [Scan] match would be exposed under multiple interfaces, which a single-exposure factory cannot express
+ AWT200  | Awaiten   | Error    | A self-compiled module [Scan] match carries [Inject]/[Arg] metadata the generated factory cannot mirror
+ AWT201  | Awaiten   | Error    | A generic [Module] (or one nested in a generic type) declares a [Scan], so no closed module exists for a consumer to import

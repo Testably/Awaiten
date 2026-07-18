@@ -89,9 +89,11 @@ internal static partial class Sources
 			"Generated from a module [Scan]: constructs the scanned implementation and exposes it through its",
 			"accessible interface, so a consuming container resolves it without naming the implementation.");
 
+		// Parameter names are emitted verbatim-prefixed: a scanned constructor may legally name a parameter with a
+		// reserved keyword ('@event'), whose symbol name carries no '@', and the prefix is harmless otherwise.
 		FactoryParameter[] parameters = factory.Parameters.AsArray();
-		string signature = string.Join(", ", parameters.Select(parameter => $"{parameter.Type} {parameter.Name}"));
-		string arguments = string.Join(", ", parameters.Select(parameter => parameter.Name));
+		string signature = string.Join(", ", parameters.Select(parameter => $"{parameter.Type} @{parameter.Name}"));
+		string arguments = string.Join(", ", parameters.Select(parameter => $"@{parameter.Name}"));
 
 		Indent(builder, depth)
 			.Append("public static ").Append(factory.ServiceType).Append(' ').Append(factory.FactoryName)

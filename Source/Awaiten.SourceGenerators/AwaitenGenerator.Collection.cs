@@ -28,10 +28,14 @@ partial class AwaitenGenerator
 
 		// [Import(typeof(Module))] pulls a module's registrations in after the container's own, so the container
 		// wins ties and a module's overridable defaults (Fallback.Warn/Silent) only fill the gaps it leaves. Resolved
-		// one level deep; a module's own [Import] is not followed.
+		// one level deep; a module's own [Import] is not followed. A same-compilation module's
+		// [GeneratedScanRegistration] attributes are skipped: the generator itself never sees them (its own output),
+		// but an analyzer running over the post-generation compilation does, and collecting them alongside the
+		// direct scan expansion below would double every match in its graph.
 		foreach (ImportedModule module in modules)
 		{
-			CollectLifetimeRegistrations(module.Symbol, result, open, diagnostics, origin: module.Symbol, fallbackLocation: module.ImportLocation);
+			bool sameCompilation = SymbolEqualityComparer.Default.Equals(module.Symbol.ContainingAssembly, containerSymbol.ContainingAssembly);
+			CollectLifetimeRegistrations(module.Symbol, result, open, diagnostics, origin: module.Symbol, fallbackLocation: module.ImportLocation, skipGeneratedScanRegistrations: sameCompilation);
 		}
 
 		// Assembly scanning contributes overridable registrations for every concrete type assignable to a
@@ -45,12 +49,14 @@ partial class AwaitenGenerator
 		// attributes are invisible within the compilation that declares the module — but there is no assembly
 		// boundary either, so the container can evaluate the scan directly, with full container-scan semantics.
 		// A referenced-assembly module is excluded: its metadata carries the self-compiled expansion instead, and
-		// re-running its scan here would double-register every match.
+		// re-running its scan here would double-register every match. The expansion's diagnostics are discarded:
+		// the module pipeline (BuildModuleModel) already reports on the same [Scan] at the same location, and
+		// reporting here too would double every scan-level warning.
 		foreach (ImportedModule module in modules)
 		{
 			if (SymbolEqualityComparer.Default.Equals(module.Symbol.ContainingAssembly, containerSymbol.ContainingAssembly))
 			{
-				result.AddRange(CollectScans(module.Symbol, compilation, diagnostics));
+				result.AddRange(CollectScans(module.Symbol, compilation, new List<DiagnosticInfo>()));
 			}
 		}
 
@@ -89,7 +95,8 @@ partial class AwaitenGenerator
 		List<OpenRegistration> open,
 		List<DiagnosticInfo> diagnostics,
 		INamedTypeSymbol? origin,
-		Location? fallbackLocation)
+		Location? fallbackLocation,
+		bool skipGeneratedScanRegistrations = false)
 	{
 		foreach (AttributeData attribute in symbol.GetAttributes())
 		{
@@ -101,10 +108,15 @@ partial class AwaitenGenerator
 
 			// A [GeneratedScanRegistration<TService>(factory, Lifetime = …)] is what a [Module] self-compiled from
 			// its own [Scan] (one per match). Read it back like a container [Scan] match rather than a hand-written
-			// factory registration, so several matches under one interface collect instead of colliding.
+			// factory registration, so several matches under one interface collect instead of colliding. Skipped
+			// for a same-compilation module, whose [Scan] the container expands directly (see Collect).
 			if (attributeClass is { Name: "GeneratedScanRegistrationAttribute", IsGenericType: true, })
 			{
-				CollectGeneratedScanRegistration(attribute, attributeClass, result, origin, fallbackLocation);
+				if (!skipGeneratedScanRegistrations)
+				{
+					CollectGeneratedScanRegistration(attribute, attributeClass, result, origin, fallbackLocation);
+				}
+
 				continue;
 			}
 

@@ -1443,4 +1443,33 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A self-compiled module <c>[Scan]</c> match carries injection metadata the generated factory cannot
+	///     mirror: an <c>[Inject]</c> property, or a constructor parameter marked <c>[Inject]</c> or <c>[Arg]</c>.
+	///     The factory reduces a match to a plain parameter list resolved from the consumer's graph, so keys,
+	///     optionality, deferral and resolution arguments would be silently dropped, and the same type would behave
+	///     differently scanned by a container. Rejected rather than silently degraded.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ModuleScanInjectionMetadata = new(
+		"AWT200",
+		"Module scan match uses injection metadata",
+		"'{0}' matched the module scan, but {1}, which the generated factory cannot mirror and would silently drop; remove the attribute, exclude the type from the scan, or register it through a hand-written module factory",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A generic <c>[Module]</c> (or one nested in a generic type) declares a <c>[Scan]</c>. There is no single
+	///     closed module type a consumer could import, and the generated partial could not even re-open the generic
+	///     declaration by its bare name, so the scan could never reach a consumer. Reported instead of silently
+	///     emitting an unrelated non-generic partial.
+	/// </summary>
+	public static readonly DiagnosticDescriptor GenericModuleScan = new(
+		"AWT201",
+		"Module with a scan is generic",
+		"the module '{0}' declares a [Scan] but is generic (or nested in a generic type), so no closed module exists for a consumer to import; move the [Scan] onto a non-generic module",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }
