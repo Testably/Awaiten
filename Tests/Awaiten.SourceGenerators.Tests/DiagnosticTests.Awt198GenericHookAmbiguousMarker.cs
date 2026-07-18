@@ -128,5 +128,103 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).DoesNotContain("*AWT198*").AsWildcard()
 				.Because("a match closing the marker several times is ordinary without a hook to bind a type argument for");
 		}
+
+		[Fact]
+		public async Task DoesNotReportWhenTwoScansHookDifferentSlots()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IView<TViewModel> { }
+			                                       public interface IEditor<TModel> { }
+			                                       public sealed class Dual : IView<int>, IEditor<string> { }
+
+			                                       [Container]
+			                                       [Scan(typeof(IView<>), As = ScanAs.Marker, OnActivated = nameof(Wire))]
+			                                       [Scan(typeof(IEditor<>), As = ScanAs.Marker, OnRelease = nameof(Cleanup))]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       	private static void Wire<TViewModel>(IView<TViewModel> view) { }
+			                                       	private static void Cleanup(object instance) { }
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("each hook binds through its own scan's marker: Wire sees only IView<int>, so nothing is ambiguous and both hooks apply");
+		}
+
+		[Fact]
+		public async Task ReportsTheAmbiguousClosedFormsInTheMessage()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IView<TViewModel> { }
+			                                       public sealed class DualView : IView<int>, IView<string> { }
+
+			                                       [Container]
+			                                       [Scan(typeof(IView<>), As = ScanAs.Marker, OnActivated = nameof(Wire))]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       	private static void Wire<TViewModel>(IView<TViewModel> view) { }
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT198*'Wire'*MyCode.IView<int>, MyCode.IView<string>*").AsWildcard()
+				.Because("the message names the hook and every closed form it could bind, which is what makes the ambiguity actionable");
+		}
+
+		[Fact]
+		public async Task DoesNotReportWhenAConstraintLeavesASingleBindableForm()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IView<TViewModel> { }
+			                                       public sealed class Payments { }
+			                                       public sealed class DualView : IView<int>, IView<Payments> { }
+
+			                                       [Container]
+			                                       [Scan(typeof(IView<>), As = ScanAs.Marker, OnActivated = nameof(Wire))]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       	private static void Wire<TViewModel>(IView<TViewModel> view) where TViewModel : class { }
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("the class constraint rules out the int closing, so only IView<Payments> can bind the hook and nothing is ambiguous");
+		}
+
+		[Fact]
+		public async Task ReportsAwt164WhenTheGenericHookAritiesNeverMatchTheMarker()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IView<TViewModel> { }
+			                                       public sealed class DualView : IView<int>, IView<string> { }
+
+			                                       [Container]
+			                                       [Scan(typeof(IView<>), As = ScanAs.Marker, OnActivated = nameof(Wire))]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       	private static void Wire<TFirst, TSecond>(object instance) { }
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT164*").AsWildcard()
+				.Because("a two-parameter generic hook can never bind a one-argument marker closing, so the name is unusable, not ambiguous");
+			await That(result.Diagnostics).DoesNotContain("*AWT198*").AsWildcard()
+				.Because("ambiguity only applies to a hook that could actually bind more than one closed form");
+		}
 	}
 }

@@ -213,5 +213,30 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).DoesNotContain("*AWT164*").AsWildcard()
 				.Because("a hook typed as the scanned marker accepts every match");
 		}
+
+		[Fact]
+		public async Task ReportsForAGenericScanHookWhoseConstraintRejectsTheClosing()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IView<TViewModel> { }
+			                                       public sealed class IntView : IView<int> { }
+
+			                                       [Container]
+			                                       [Scan(typeof(IView<>), As = ScanAs.Marker, OnActivated = nameof(Wire))]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       	private static void Wire<TViewModel>(IView<TViewModel> view) where TViewModel : class { }
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT164*").AsWildcard()
+				.Because("the class constraint rejects the int closing, so the hook cannot be constructed for IntView");
+			await That(result.Diagnostics).DoesNotContain("*error CS*").AsWildcard()
+				.Because("the violation is caught before construction rather than surfacing as a compiler error inside the generated source");
+		}
 	}
 }

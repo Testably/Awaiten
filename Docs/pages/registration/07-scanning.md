@@ -113,7 +113,9 @@ public static partial class CoffeeShop
 }
 ```
 
-The hook's first parameter is the match, so it must accept every one: type it as the scanned marker (or `object`). Parameters after it are resolved from the graph exactly as for an [explicit registration's hook](../lifetime/lifecycle-hooks#hook-parameters), and the same rules and diagnostics apply: an unusable hook name is [AWT164](../diagnostics#awt164), an unregistered parameter is [AWT101](../diagnostics#awt101). A hook that conflicts with an explicit registration of the same type is caught as [AWT166](../diagnostics#awt166).
+The hook's first parameter is the match, so it must accept every one: type it as the scanned marker (or `object`). Parameters after it are resolved from the graph exactly as for an [explicit registration's hook](../lifetime/lifecycle-hooks#hook-parameters), and the same rules and diagnostics apply: an unusable hook name is [AWT164](../diagnostics#awt164), an unregistered parameter is [AWT101](../diagnostics#awt101).
+
+When two scans match the same type, their hooks merge: one scan's `OnActivated` combines with another's `OnRelease`, and both naming the same method is fine. Two scans naming *different* methods for the same slot contradict each other, so the first scan's method is used and the contradiction is surfaced as [AWT199](../diagnostics#awt199). An [explicit registration](#overriding-a-scanned-type) of a scanned type is different: it replaces the scan's hooks along with everything else, so name the hook on the explicit registration too if the special-cased type should keep it, and leave it off to deliberately opt that type out.
 
 ### Generic hooks on an open marker
 
@@ -132,7 +134,7 @@ public static partial class App
 
 For `MainWindow : IView<IMainViewModel>` the generator dispatches `WireView<IMainViewModel>(mainWindow, viewModel)`, resolving the matching `IMainViewModel` from the graph. The type argument is visible to graph analysis, so an unregistered view model fails the build ([AWT101](../diagnostics#awt101)) rather than at runtime. A non-generic method works too (its parameters typed as the marker or `object`); the type argument only applies when the method is generic.
 
-Because a *generic* hook takes its type argument from the match's *single* closed marker form, a match that closes the marker more than once (`Dual : IView<A>, IView<B>`) leaves that argument ambiguous and is reported as [AWT198](../diagnostics#awt198): register such a type explicitly with the hook it needs, or split the family so each match closes the marker once. A non-generic hook takes no type argument, so a match with several closings is fine for it.
+Because a *generic* hook takes its type argument from a closed marker form, it needs exactly one it can bind. A match offering several, by closing the marker more than once (`Dual : IView<A>, IView<B>`), leaves that argument ambiguous and is reported as [AWT198](../diagnostics#awt198): register such a type explicitly with the hook it needs, or split the family so only one closed form binds it. Only forms the hook could actually bind count, so a constraint (`where TViewModel : class`) that rules out all closings but one settles the choice. A non-generic hook takes no type argument, so a match with several closings is fine for it.
 
 ## Overriding a scanned type
 

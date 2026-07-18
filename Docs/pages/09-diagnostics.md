@@ -1260,7 +1260,7 @@ Where [AWT188](#awt188) is about an interface the match cannot be exposed under,
 ### AWT198
 
 :::danger[Error]
-A generic lifecycle hook on an open-generic `[Scan]` marker matched a type that closes the marker more than once, so the hook's type argument is ambiguous.
+A generic lifecycle hook on an open-generic `[Scan]` marker could bind a match through more than one closed marker form, so its type arguments are ambiguous.
 :::
 
 ```csharp
@@ -1275,7 +1275,28 @@ public static partial class CoffeeShop
 }
 ```
 
-A [generic scan hook](./registration/scanning#lifecycle-hooks) binds its type argument from the match's *single* closed marker form, so `DualView`, which closes `IView<>` at both `Orders` and `Payments`, leaves it ambiguous. Register the type explicitly with the intended hook, or split the family so each match closes the marker once. Only a *generic* hook is affected: a non-generic hook (its parameter typed as the marker or `object`) takes no type argument, so a match with several closings is fine for it, as is a match closing the marker several times *without* any hook (each closed form registers as its own collection member).
+A [generic scan hook](./registration/scanning#lifecycle-hooks) binds its type argument from a closed marker form, so it needs exactly one it can bind. `DualView`, which closes `IView<>` at both `Orders` and `Payments`, offers two; the same happens when two scans bind the same generic hook through differently-closed markers of one type. Only forms the hook could actually bind count: matching arity, satisfied constraints, and a first parameter that accepts the match. If exactly one form remains after those checks the hook binds it, so a `where TViewModel : class` constraint can settle a family that closes the marker at one class and one struct. Register the type explicitly with the intended hook, or split the family so only one closed form binds it. Only a *generic* hook is affected: a non-generic hook (its parameter typed as the marker or `object`) takes no type argument, so a match with several closings is fine for it, as is a match closing the marker several times *without* any hook (each closed form registers as its own collection member).
+
+### AWT199
+
+:::warning[Warning]
+Two `[Scan]` attributes match one implementation with conflicting lifecycle hooks; the first scan's hook is used.
+:::
+
+```csharp
+public sealed class Widget : IPlugin, IHandler;   // matched by both scans
+
+[Container]
+[Scan(typeof(IPlugin), OnActivated = nameof(PluginStarted))]
+[Scan(typeof(IHandler), OnActivated = nameof(HandlerStarted))]   // two OnActivated hooks for Widget
+public static partial class CoffeeShop
+{
+    private static void PluginStarted(object instance) { }
+    private static void HandlerStarted(object instance) { }
+}
+```
+
+Which method ran for `Widget` would depend on attribute order, so the contradiction is surfaced instead, mirroring [AWT142](#awt142) for lifetimes. Overlapping scans that agree are fine: two scans naming the *same* method merge, and so do scans hooking *different* slots (one scan's `OnActivated` combines with another's `OnRelease`). An explicit registration of the type is not reported either: a scan yields to it wholesale, hooks included, so the explicit registration's hooks (or its deliberate lack of them) replace the scan's.
 
 ## Modules
 

@@ -18,9 +18,10 @@ partial class AwaitenGenerator
 	///     instead, narrowed by those same filters. Reports
 	///     AWT138/AWT139/AWT140/AWT143/AWT172/AWT173/AWT174/AWT182/AWT183/AWT184/AWT185/AWT187/AWT188/AWT193. The synthesized
 	///     registrations are <see cref="RawRegistration.IsScan" />, so an explicit registration wins single
-	///     resolution while every match still joins its collection. A scan's lifecycle hook is resolved later in
+	///     resolution while every match still joins its collection. A scan's lifecycle hooks merge per slot across
+	///     scans in coalescing (<c>MergeScanHooks</c>, AWT199 when two scans contradict) and are resolved later in
 	///     <c>ResolveHook</c> like any other (AWT164/AWT190), where a generic hook bound by an open-generic marker may
-	///     also report AWT198 if a match closes the marker at more than one form.
+	///     also report AWT198 if more than one closed marker form could bind it.
 	/// </summary>
 	private static List<RawRegistration> CollectScans(
 		INamedTypeSymbol containerSymbol,
@@ -628,11 +629,12 @@ partial class AwaitenGenerator
 	///     The closed marker forms a match's lifecycle hook may bind its type argument from. For an open-generic marker
 	///     that names a hook, these are the forms the match closes the marker at, so
 	///     <c>MainWindow : IView&lt;IMainViewModel&gt;</c> yields <c>IView&lt;IMainViewModel&gt;</c> and the hook is
-	///     dispatched as <c>WireView&lt;IMainViewModel&gt;</c>. A match that closes the marker more than once yields
-	///     several forms; whether that is an error is decided in <c>ResolveHook</c>, where the hook's arity is known: a
-	///     generic hook has an ambiguous type argument (AWT198), a non-generic one is unaffected. A closed or markerless
-	///     scan, or a scan with no hook, binds no marker (<see langword="null" />), so a generic hook there is unusable
-	///     and a non-generic one resolves as-is.
+	///     dispatched as <c>WireView&lt;IMainViewModel&gt;</c>. Coalescing files the forms under the slot(s) whose
+	///     hook this scan names (<c>MergeScanHooks</c>). A match that closes the marker more than once yields several
+	///     forms; whether that is an error is decided in <c>ResolveHook</c>, where the hook's arity and constraints
+	///     are known: a generic hook that could bind more than one form is ambiguous (AWT198), a non-generic one is
+	///     unaffected. A closed or markerless scan, or a scan with no hook, binds no marker (<see langword="null" />),
+	///     so a generic hook there is unusable and a non-generic one resolves as-is.
 	/// </summary>
 	private static IReadOnlyList<INamedTypeSymbol>? ScanHookMarkers(
 		INamedTypeSymbol type,

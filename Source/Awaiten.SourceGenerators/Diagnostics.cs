@@ -1504,16 +1504,33 @@ internal static class Diagnostics
 
 	/// <summary>
 	///     A generic lifecycle hook (an <c>OnActivated</c>/<c>OnRelease</c> named on a
-	///     <c>[Scan(typeof(IView&lt;&gt;))]</c> open-generic marker) binds its type argument from the match's closed
-	///     marker form, so it needs exactly one: this match implements the marker at several closings (say
-	///     <c>IView&lt;A&gt;</c> and <c>IView&lt;B&gt;</c>), so the type argument would be ambiguous. Register the type
-	///     explicitly with the intended hook, or split the family so each match closes the marker once.
+	///     <c>[Scan(typeof(IView&lt;&gt;))]</c> open-generic marker) binds its type arguments from a closed marker
+	///     form, so it needs exactly one it can bind: this match offers several (implementing one marker at two
+	///     closings, say <c>IView&lt;A&gt;</c> and <c>IView&lt;B&gt;</c>, or two scans binding the same hook through
+	///     differently-closed markers), so the type arguments would be ambiguous. Register the type explicitly with
+	///     the intended hook, or split the family so only one closed form binds the hook.
 	/// </summary>
 	public static readonly DiagnosticDescriptor GenericHookAmbiguousMarker = new(
 		"AWT198",
 		"Ambiguous generic hook marker",
-		"'{0}' implements the scanned marker '{1}' at more than one closed form, so a generic lifecycle hook's type argument is ambiguous; register the type explicitly with the hook, or ensure it closes the marker only once",
+		"The generic lifecycle hook '{1}' could bind '{0}' through more than one closed marker form ({2}), so its type arguments are ambiguous; register the type explicitly with the intended hook, or ensure only one closed form binds it",
 		"Awaiten",
 		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     Two <c>[Scan]</c> attributes match the same implementation and name different methods for the same
+	///     lifecycle hook slot (<c>OnActivated</c> or <c>OnRelease</c>); the first scan's hook wins, so the
+	///     contradiction is surfaced rather than silently resolved by attribute order - mirroring AWT142 for
+	///     lifetimes. Two scans naming the same method, or hooking different slots, merge cleanly and are not
+	///     reported; neither is an explicit registration of the implementation, which a scan deliberately yields
+	///     to, hooks included.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ScanHookConflict = new(
+		"AWT199",
+		"Scans register one implementation with conflicting lifecycle hooks",
+		"'{0}' is matched by scans naming conflicting {1} hooks ('{2}' and '{3}'); the first scan's '{2}' is used",
+		"Awaiten",
+		DiagnosticSeverity.Warning,
 		isEnabledByDefault: true);
 }

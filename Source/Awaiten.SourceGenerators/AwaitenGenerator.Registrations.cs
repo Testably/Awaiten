@@ -173,25 +173,32 @@ partial class AwaitenGenerator
 		/// <summary>
 		///     The names of the <c>static void M(TImplementation)</c> container methods to run once the instance
 		///     is constructed (<see cref="OnActivated" />) and when its owner is disposed (<see cref="OnRelease" />),
-		///     or <see langword="null" /> when the winning registration named none. Resolved against the container
-		///     in <c>BuildInstance</c> (AWT164 when no matching method exists).
+		///     or <see langword="null" /> when no registration named one. Set from the winning registration; for a
+		///     scanned implementation a later scan's hook fills a slot the winner left unset (see
+		///     <c>MergeScanHooks</c>, AWT199 when two scans contradict). Resolved against the container in
+		///     <c>BuildInstance</c> (AWT164 when no matching method exists).
 		/// </summary>
-		public string? OnActivated { get; init; }
+		public string? OnActivated { get; set; }
 
 		/// <inheritdoc cref="OnActivated" />
-		public string? OnRelease { get; init; }
+		public string? OnRelease { get; set; }
 
 		/// <summary>
-		///     The closed marker forms a generic scan hook could bind its type argument from: the union, across every
-		///     registration of this implementation, of the closings each <c>[Scan(typeof(IView&lt;&gt;))]</c>
-		///     open-generic marker naming a hook contributed. Exactly one closing (say
-		///     <c>MainWindow : IView&lt;IMainViewModel&gt;</c> carries <c>IView&lt;IMainViewModel&gt;</c>) dispatches
-		///     the hook as <c>WireView&lt;IMainViewModel&gt;</c>; more than one leaves a generic hook's type argument
-		///     ambiguous (AWT198), decided in <c>ResolveHook</c> where the hook's arity is known. Empty when no scan
-		///     hook bound a marker (a closed or markerless scan, a non-scan, or a scan with no hook), so a generic
-		///     hook has nothing to bind and is unusable while a non-generic hook is unaffected.
+		///     The closed marker forms the <see cref="OnActivated" /> hook could bind its type arguments from: the
+		///     union, across every scan registration of this implementation naming that same hook, of the closings
+		///     its <c>[Scan(typeof(IView&lt;&gt;))]</c> open-generic marker contributed. Kept per hook slot (its
+		///     twin is <see cref="OnReleaseMarkers" />) so a second scan hooking the other slot does not widen this
+		///     one's set. Exactly one bindable closing (say <c>MainWindow : IView&lt;IMainViewModel&gt;</c> carries
+		///     <c>IView&lt;IMainViewModel&gt;</c>) dispatches a generic hook as <c>WireView&lt;IMainViewModel&gt;</c>;
+		///     more than one leaves its type arguments ambiguous (AWT198), decided in <c>ResolveHook</c> where the
+		///     hook's arity and constraints are known. Empty when no scan hook bound a marker (a closed or markerless
+		///     scan, a non-scan, or a scan with no hook), so a generic hook has nothing to bind and is unusable while
+		///     a non-generic hook is unaffected.
 		/// </summary>
-		public List<INamedTypeSymbol> HookClosedMarkers { get; } = new();
+		public List<INamedTypeSymbol> OnActivatedMarkers { get; } = new();
+
+		/// <inheritdoc cref="OnActivatedMarkers" />
+		public List<INamedTypeSymbol> OnReleaseMarkers { get; } = new();
 
 		/// <summary>
 		///     Whether the winning registration opted out of the container's built-in disposal
