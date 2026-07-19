@@ -238,5 +238,37 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).DoesNotContain("*error CS*").AsWildcard()
 				.Because("the violation is caught before construction rather than surfacing as a compiler error inside the generated source");
 		}
+
+		[Fact]
+		public async Task DoesNotReportForAGenericScanHookConstraintContainingAnArrayOfTheTypeParameter()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+			                                       using System.Collections;
+			                                       using System.Collections.Generic;
+
+			                                       namespace MyCode;
+
+			                                       public interface IView<TViewModel> { }
+			                                       public sealed class Rows : IEnumerable<Rows[]>
+			                                       {
+			                                       	public IEnumerator<Rows[]> GetEnumerator() => null!;
+			                                       	IEnumerator IEnumerable.GetEnumerator() => null!;
+			                                       }
+			                                       public sealed class RowsView : IView<Rows> { }
+
+			                                       [Container]
+			                                       [Scan(typeof(IView<>), As = ScanAs.Marker, OnActivated = nameof(Wire))]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       	private static void Wire<TViewModel>(IView<TViewModel> view) where TViewModel : IEnumerable<TViewModel[]> { }
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).DoesNotContain("*AWT164*").AsWildcard()
+				.Because("Rows satisfies IEnumerable<Rows[]>, so the constraint check must substitute the type parameter inside the array element type too");
+			await That(result.Diagnostics).IsEmpty()
+				.Because("the closing binds cleanly, so the hook is constructed as Wire<Rows> without any diagnostic");
+		}
 	}
 }

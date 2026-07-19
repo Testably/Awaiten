@@ -292,8 +292,10 @@ partial class AwaitenGenerator
 	///     kept per hook slot on <c>ImplInfo</c>: exactly one bindable form (matching arity, satisfied constraints,
 	///     a first parameter accepting the match; see <see cref="BindableHookConstructions" />) dispatches the
 	///     constructed method, none leaves it unusable like any other shape mismatch (falling through to AWT164),
-	///     and more than one is reported as <see cref="Diagnostics.GenericHookAmbiguousMarker">AWT198</see> (a
-	///     non-generic hook, needing no arguments, is unaffected).
+	///     and more than one is reported as <see cref="Diagnostics.GenericHookAmbiguousMarker">AWT198</see> when it
+	///     is the only usable overload (a non-generic hook, needing no arguments, is unaffected). A multi-form
+	///     generic overload beside another usable overload is an overload collision, AWT190, since settling the
+	///     closings would still leave two usable overloads.
 	/// </summary>
 	private static (string? Hook, EquatableArray<ParameterModel> Parameters) ResolveHook(
 		ImplInfo info,
@@ -312,6 +314,7 @@ partial class AwaitenGenerator
 
 		List<IMethodSymbol> matches = new();
 		List<INamedTypeSymbol>? ambiguousForms = null;
+		int ambiguousMethods = 0;
 		foreach (ISymbol member in AccessibleMembers(info.Origin ?? containerSymbol, hookName, compilation))
 		{
 			// A module hook must also be accessible from the generated container (its own private members are
@@ -336,8 +339,9 @@ partial class AwaitenGenerator
 
 			// A generic hook binds its type parameters from a closed marker form, so WireView<TViewModel> is
 			// dispatched as WireView<IMainViewModel>. Exactly one bindable form is that dispatch; more than one
-			// leaves the type arguments ambiguous (AWT198, with the forms recorded for the message); none means
-			// the method is not a usable hook and falls through to AWT164 with any other shape mismatch.
+			// leaves the type arguments ambiguous (AWT198, with the forms recorded for the message) yet still a
+			// usable overload, so it counts toward AWT190 when a sibling also matches; none means the method is
+			// not a usable hook and falls through to AWT164 with any other shape mismatch.
 			List<(INamedTypeSymbol Form, IMethodSymbol Constructed)> bindable = BindableHookConstructions(method, closedMarkers, info.Symbol, compilation);
 			if (bindable.Count == 1)
 			{
@@ -345,19 +349,22 @@ partial class AwaitenGenerator
 			}
 			else if (bindable.Count > 1)
 			{
+				ambiguousMethods++;
 				ambiguousForms ??= bindable.Select(candidate => candidate.Form).ToList();
 			}
 		}
 
-		if (matches.Count == 1)
+		if (matches.Count == 1 && ambiguousMethods == 0)
 		{
 			return (QualifiedHook(info, hookName, matches[0]), ClassifyHookParameters(matches[0], info, release, context));
 		}
 
-		// A generic hook whose only obstacle was an ambiguous closed marker (and nothing else usable matched) is
+		// A generic hook whose only obstacle is an ambiguous closed marker, with no other usable overload, is
 		// AWT198, distinct from an unusable name (AWT164) or an overload the container cannot pick between (AWT190):
-		// several closed forms could bind the hook, so its type arguments cannot be chosen. No hook is emitted.
-		if (matches.Count == 0 && ambiguousForms is not null)
+		// several closed forms could bind the hook, so its type arguments cannot be chosen. When another overload
+		// is also usable the collision is between methods, not closings (settling the closings would still leave
+		// two usable overloads), so it falls to AWT190 below - exactly as if the generic overload bound uniquely.
+		if (matches.Count == 0 && ambiguousMethods == 1 && ambiguousForms is not null)
 		{
 			context.Diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.GenericHookAmbiguousMarker,
@@ -371,10 +378,12 @@ partial class AwaitenGenerator
 		}
 
 		// No usable match is AWT164 (unusable hook); more than one is AWT190 (an overload the container cannot pick
-		// between). Either way no hook is emitted - the error fails the build, and picking one arbitrarily would only
-		// add a confusing secondary diagnostic from the parameters of the guessed overload.
+		// between), where a generic overload with several bindable closings counts as usable - it could dispatch,
+		// so silently preferring its sibling would let an extra marker closing change which method runs. Either way
+		// no hook is emitted - the error fails the build, and picking one arbitrarily would only add a confusing
+		// secondary diagnostic from the parameters of the guessed overload.
 		context.Diagnostics.Add(new DiagnosticInfo(
-			matches.Count == 0 ? Diagnostics.InvalidLifecycleHook : Diagnostics.AmbiguousLifecycleHook,
+			matches.Count + ambiguousMethods == 0 ? Diagnostics.InvalidLifecycleHook : Diagnostics.AmbiguousLifecycleHook,
 			info.Location,
 			new EquatableArray<string>([Display(info.OwningServiceOrImpl), hookName, DescribeOwner(info),])));
 		return (null, default);
@@ -538,7 +547,7 @@ partial class AwaitenGenerator
 
 			foreach (ITypeSymbol constraint in parameter.ConstraintTypes)
 			{
-				if (!compilation.HasImplicitConversion(argument, SubstituteTypeParameters(constraint, method, arguments)))
+				if (!compilation.HasImplicitConversion(argument, SubstituteTypeParameters(constraint, method, arguments, compilation)))
 				{
 					return false;
 				}
@@ -560,10 +569,11 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     Substitutes a generic hook method's own type parameters with the bound arguments inside a constraint type,
 	///     so <c>where T : IComparable&lt;T&gt;</c> becomes <c>IComparable&lt;int&gt;</c> for the conversion check in
-	///     <see cref="SatisfiesConstraints" />. Anything that is not the method's type parameter or a generic type
-	///     containing one passes through unchanged.
+	///     <see cref="SatisfiesConstraints" />. Descends into generic type arguments and array element types
+	///     (<c>where T : IEnumerable&lt;T[]&gt;</c>); anything else that is not the method's type parameter passes
+	///     through unchanged.
 	/// </summary>
-	private static ITypeSymbol SubstituteTypeParameters(ITypeSymbol type, IMethodSymbol method, ImmutableArray<ITypeSymbol> arguments)
+	private static ITypeSymbol SubstituteTypeParameters(ITypeSymbol type, IMethodSymbol method, ImmutableArray<ITypeSymbol> arguments, Compilation compilation)
 	{
 		if (type is ITypeParameterSymbol parameter && SymbolEqualityComparer.Default.Equals(parameter.DeclaringMethod, method))
 		{
@@ -573,8 +583,13 @@ partial class AwaitenGenerator
 		if (type is INamedTypeSymbol { IsGenericType: true, } named)
 		{
 			return named.ConstructedFrom.Construct(named.TypeArguments
-				.Select(argument => SubstituteTypeParameters(argument, method, arguments))
+				.Select(argument => SubstituteTypeParameters(argument, method, arguments, compilation))
 				.ToArray());
+		}
+
+		if (type is IArrayTypeSymbol array)
+		{
+			return compilation.CreateArrayTypeSymbol(SubstituteTypeParameters(array.ElementType, method, arguments, compilation), array.Rank);
 		}
 
 		return type;
