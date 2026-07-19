@@ -1136,9 +1136,18 @@ partial class AwaitenGenerator
 		HashSet<string> checkedImpls = new(StringComparer.Ordinal);
 		foreach (RawRegistration registration in raw.Where(r => r.ScanSkipsUnconstructable).ToList())
 		{
-			if (pinnedImpls.Contains(registration.ImplementationType)
-			    || !checkedImpls.Add(registration.ImplementationType)
-			    || FirstUnconstructableReason(registration.Implementation, containerSymbol, compilation, services, constraintRejected, external, variance) is not { } reason)
+			if (pinnedImpls.Contains(registration.ImplementationType) || !checkedImpls.Add(registration.ImplementationType))
+			{
+				continue;
+			}
+
+			// A self-compiled module-scan match is produced by its generated module factory, not by a constructor
+			// this container can see (the implementation is internal to the module's assembly), so its
+			// satisfiability is the factory's parameters, which mirror that constructor's.
+			string? reason = registration is { Production: ProductionKind.Factory, Origin: not null, ProductionMember: not null, }
+				? FirstUnsatisfiableFactoryReason(registration, services, constraintRejected, external, variance)
+				: FirstUnconstructableReason(registration.Implementation, containerSymbol, compilation, services, constraintRejected, external, variance);
+			if (reason is null)
 			{
 				continue;
 			}
@@ -1183,7 +1192,59 @@ partial class AwaitenGenerator
 			return "it has no constructor accessible to the container";
 		}
 
-		foreach (IParameterSymbol parameter in constructor.Parameters)
+		if (FirstUnsatisfiableParameterReason(constructor, services, constraintRejected, external, variance) is { } parameterReason)
+		{
+			return parameterReason;
+		}
+
+		foreach (IPropertySymbol property in InjectedProperties(implementation))
+		{
+			if (UnsatisfiableInjectedMemberReason(property, containerSymbol, compilation, services, constraintRejected, external.ServiceTypes) is { } reason)
+			{
+				return reason;
+			}
+		}
+
+		return null;
+	}
+
+	/// <summary>
+	///     The reason a self-compiled module-scan match cannot be produced (an AWT141 fragment), or
+	///     <see langword="null" /> when every parameter of its generated module factory is satisfiable. The factory's
+	///     parameters mirror the internal implementation's constructor, plain and unattributed (the module's own
+	///     build rejected the rest, AWT200), so the check is the same per-parameter satisfiability a scanned
+	///     constructor gets. A factory member missing from the module is not a prune concern; the emitted call would
+	///     fail compilation with a targeted error anyway.
+	/// </summary>
+	private static string? FirstUnsatisfiableFactoryReason(
+		RawRegistration registration,
+		HashSet<ServiceKey> services,
+		HashSet<string> constraintRejected,
+		ExternalSurface external,
+		VarianceState variance)
+	{
+		IMethodSymbol? factory = registration.Origin!.GetMembers(registration.ProductionMember!)
+			.OfType<IMethodSymbol>()
+			.FirstOrDefault();
+		return factory is null
+			? null
+			: FirstUnsatisfiableParameterReason(factory, services, constraintRejected, external, variance);
+	}
+
+	/// <summary>
+	///     The reason one of a production method's parameters cannot be satisfied from the round's surface (an
+	///     AWT141 fragment), or <see langword="null" /> when all are. Shared by the constructor check
+	///     (<see cref="FirstUnconstructableReason" />) and the generated-module-factory check
+	///     (<see cref="FirstUnsatisfiableFactoryReason" />), whose parameters resolve identically.
+	/// </summary>
+	private static string? FirstUnsatisfiableParameterReason(
+		IMethodSymbol method,
+		HashSet<ServiceKey> services,
+		HashSet<string> constraintRejected,
+		ExternalSurface external,
+		VarianceState variance)
+	{
+		foreach (IParameterSymbol parameter in method.Parameters)
 		{
 			ParameterModel model = ClassifyParameter(parameter, asyncFactory: false, external.ServiceTypes);
 			bool satisfiable =
@@ -1196,14 +1257,6 @@ partial class AwaitenGenerator
 			if (!satisfiable)
 			{
 				return $"it requires '{DisplayKeyed(model.ServiceType, model.Key)}', which is not registered";
-			}
-		}
-
-		foreach (IPropertySymbol property in InjectedProperties(implementation))
-		{
-			if (UnsatisfiableInjectedMemberReason(property, containerSymbol, compilation, services, constraintRejected, external.ServiceTypes) is { } reason)
-			{
-				return reason;
 			}
 		}
 

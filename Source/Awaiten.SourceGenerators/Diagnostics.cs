@@ -787,9 +787,21 @@ internal static class Diagnostics
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
 
-	// AWT154 (ScanOnModule) was retired: a [Scan] on a [Module] is now supported and self-compiled in the
-	// module's own build (the module emits a generated factory + registration per match), so a module-declared
-	// scan no longer errors on import. See ExpandModuleScan and the AWT194-AWT197 diagnostics.
+	/// <summary>
+	///     <em>(Repurposed.)</em> An imported module's metadata declares a <c>[Scan]</c> but carries no generated
+	///     expansion marker (<c>[GeneratedScanExpansion]</c>): the module assembly was compiled without the Awaiten
+	///     source generator, or with a version predating self-compiled module scans (whose AWT154 rejected a module
+	///     <c>[Scan]</c> outright). The scan would silently contribute nothing, so this stays an error, reported at
+	///     the consumer's <c>[Import]</c>. Not applicable to a same-compilation module, whose scan the container
+	///     expands directly and whose generated marker the generator cannot see (its own output).
+	/// </summary>
+	public static readonly DiagnosticDescriptor ModuleScanNotExpanded = new(
+		"AWT154",
+		"Module scan was not expanded",
+		"The imported module '{0}' declares a [Scan] but its assembly carries no generated expansion; it was compiled without the Awaiten source generator (or with a version predating self-compiled module scans), so the scan would contribute nothing; rebuild the module's assembly with the Awaiten generator referenced",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 
 	/// <summary>
 	///     Two different imported modules register the same service key with different implementations at
@@ -1415,18 +1427,19 @@ internal static class Diagnostics
 
 	/// <summary>
 	///     A self-compiled module <c>[Scan]</c> matched a type but no exposure selected an interface accessible
-	///     outside the module's assembly, so a consumer could never name what the match registers under. A
-	///     <c>ScanAs.Self</c> exposure of an <c>internal</c> implementation hits this (the implementation type is
-	///     itself inaccessible), as does a match whose only convention/marker interface is <c>internal</c>. Expose
-	///     an accessible interface (<c>ScanAs.MatchingInterface</c> or <c>ScanAs.Marker</c> over a public
-	///     interface), or exclude the type from the scan.
+	///     outside the module's assembly, so a consumer could never name what the match registers under and the
+	///     match is skipped. A <c>ScanAs.Self</c> exposure of an <c>internal</c> implementation hits this (the
+	///     implementation type is itself inaccessible), as does a match whose only convention/marker interface is
+	///     <c>internal</c>. Expose an accessible interface (<c>ScanAs.MatchingInterface</c> or <c>ScanAs.Marker</c>
+	///     over a public interface), or exclude the type from the scan. A warning, not an error, mirroring the
+	///     container scan's skip-with-warning for a match it cannot register (AWT182/AWT188/AWT193).
 	/// </summary>
 	public static readonly DiagnosticDescriptor ModuleScanNoAccessibleExposure = new(
 		"AWT196",
 		"Module scan match has no accessible exposure",
 		"'{0}' matched the module scan, but no exposure selected an interface accessible outside the module's assembly, so a consumer could not resolve it; expose it through a public interface (ScanAs.MatchingInterface or ScanAs.Marker) or exclude it from the scan",
 		"Awaiten",
-		DiagnosticSeverity.Error,
+		DiagnosticSeverity.Warning,
 		isEnabledByDefault: true);
 
 	/// <summary>
@@ -1469,6 +1482,21 @@ internal static class Diagnostics
 		"AWT201",
 		"Module with a scan is generic",
 		"the module '{0}' declares a [Scan] but is generic (or nested in a generic type), so no closed module exists for a consumer to import; move the [Scan] onto a non-generic module",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A module <c>[Scan]</c> declares <c>InAssembliesOf</c>. A self-compiled scan exists to reach the module's
+	///     own <c>internal</c> types; sweeping another assembly from a module sees only that assembly's public
+	///     types, which a container <c>[Scan]</c> already covers, so the module form would silently do less than
+	///     the container form. Rejected in v1: scan the module's own assembly, or move the <c>[Scan]</c> onto the
+	///     container.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ModuleScanForeignAssemblies = new(
+		"AWT202",
+		"Module scan names other assemblies",
+		"the module '{0}' declares a [Scan] with InAssembliesOf, but a self-compiled scan sweeps only the module's own assembly (another assembly's internal types stay invisible to it, and its public types a container [Scan] already covers); remove InAssembliesOf or move the [Scan] onto the container",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);

@@ -65,9 +65,11 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 				spc.ReportDiagnostic(diagnostic.ToDiagnostic());
 			}
 
-			// No factories means nothing to add (an errored or empty scan reports its diagnostics above); emitting
-			// an empty partial would be noise.
-			if (model.Factories.Count > 0)
+			// An expanded module always emits, even with zero factories: the partial then carries just the
+			// [GeneratedScanExpansion] marker, which a consuming container needs to tell "the scan matched
+			// nothing" from "the scan was never expanded" (AWT154). A module rejected before expansion
+			// (AWT152/AWT194/AWT201) emits nothing; its error already fails the build.
+			if (model.Expanded)
 			{
 				spc.AddSource(model.HintName, SourceText.From(Sources.EmitModule(model), Encoding.UTF8));
 			}
@@ -104,12 +106,23 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		                 && declaration.Modifiers.Any(SyntaxKind.PartialKeyword);
 
 		List<ModuleFactory> factories = new();
+		bool expanded = false;
 		if (HasOpenTypeParameters(moduleSymbol))
 		{
 			// AWT201: a generic module (or one nested in a generic type) has no single closed type a consumer could
 			// import, and re-opening it as a bare-named partial would emit an unrelated non-generic class instead.
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.GenericModuleScan,
+				LocationInfo.From(moduleSymbol.Locations.FirstOrDefault()),
+				new EquatableArray<string>([Display(moduleSymbol.ToDisplayString(FullyQualified)),])));
+		}
+		else if (!moduleSymbol.IsStatic)
+		{
+			// AWT152, reported here in the module's own build (the import-side check only reaches a module some
+			// container in the same solution imports): the generated partial re-opens the module as static, so
+			// emitting into a non-static class would surface as a raw partial-modifier compiler error instead.
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.NonStaticModule,
 				LocationInfo.From(moduleSymbol.Locations.FirstOrDefault()),
 				new EquatableArray<string>([Display(moduleSymbol.ToDisplayString(FullyQualified)),])));
 		}
@@ -123,6 +136,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		else
 		{
 			factories = CollectModuleScanFactories(moduleSymbol, compilation, diagnostics);
+			expanded = true;
 		}
 
 		string? moduleNamespace = moduleSymbol.ContainingNamespace is { IsGlobalNamespace: false, } ns
@@ -147,6 +161,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			new EquatableArray<TypeDeclaration>(containingTypes.ToArray()),
 			moduleSymbol.Name,
 			hintName,
+			expanded,
 			new EquatableArray<ModuleFactory>(factories.ToArray()),
 			new EquatableArray<DiagnosticInfo>(diagnostics.ToArray()));
 	}

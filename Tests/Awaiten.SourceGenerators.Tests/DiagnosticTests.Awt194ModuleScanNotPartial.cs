@@ -7,6 +7,28 @@ public partial class DiagnosticTests
 	public class Awt194ModuleScanNotPartial
 	{
 		[Fact]
+		public async Task Awt152_ReportsForANonStaticModuleWithAScanInTheModulesOwnBuild()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace Lib;
+
+			                                       public interface IPlugin { }
+			                                       internal sealed class Roaster : IPlugin { }
+
+			                                       [Module]
+			                                       [Scan<IPlugin>(As = ScanAs.Marker)]
+			                                       public partial class PluginModule { }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT152*PluginModule*").AsWildcard()
+				.Because("a non-static module is reported in its own build rather than surfacing as a raw partial-modifier compiler error inside the generated static partial");
+			await That(result.Sources.Keys.Where(key => key.Contains("ModuleScan"))).IsEmpty()
+				.Because("emitting a static partial for a non-static class would not compile");
+		}
+
+		[Fact]
 		public async Task ReportsWhenAModuleWithAScanIsNotPartial()
 		{
 			GeneratorResult result = Generator.Run("""

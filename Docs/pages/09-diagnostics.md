@@ -1332,7 +1332,22 @@ public static class EquipmentModule
 
 ### AWT154
 
-*Retired.* A `[Scan]` on a `[Module]` is now supported: the module compiles its own scan in its own build (see [self-compiled module scans](./registration/modules#self-compiled-scans)), so it is no longer rejected on import. The self-compilation constraints are reported as [AWT194](#awt194)–[AWT197](#awt197).
+:::danger[Error]
+An imported module declares a `[Scan]`, but its assembly carries no generated expansion.
+:::
+
+```csharp
+// In a referenced library that was compiled WITHOUT the Awaiten source generator:
+[Module]
+[Scan<IDrink>]   // never expanded, so it would contribute nothing
+public static partial class MenuModule;
+
+[Container]
+[Import(typeof(MenuModule))]
+public static partial class CoffeeShop;
+```
+
+*(Repurposed: this ID previously rejected any `[Scan]` on a module.)* A `[Scan]` on a `[Module]` is [self-compiled in the module's own build](./registration/modules#self-compiled-scans), which stamps the module with a generated marker even when the scan matched nothing. A module whose metadata carries a `[Scan]` but no marker was compiled without the Awaiten generator, or with a version predating self-compiled scans, so its scan would silently contribute nothing. Rebuild the library with the Awaiten generator referenced. Reported at the consumer's `[Import]`. The self-compilation constraints themselves are reported as [AWT194](#awt194)–[AWT197](#awt197), [AWT200](#awt200)–[AWT202](#awt202).
 
 ### AWT155
 
@@ -1388,8 +1403,8 @@ The generated factory is a `public` method whose parameters are resolved from th
 
 ### AWT196
 
-:::danger[Error]
-A self-compiled module `[Scan]` match has no exposure interface accessible outside the module's assembly.
+:::warning[Warning]
+A self-compiled module `[Scan]` match has no exposure interface accessible outside the module's assembly, so it is skipped.
 :::
 
 ```csharp
@@ -1400,7 +1415,7 @@ internal sealed class Roaster : IPlugin;
 public static partial class PluginModule;
 ```
 
-A consumer resolves a self-compiled match only through an accessible interface. `ScanAs.Self` over an `internal` implementation exposes nothing nameable; expose it through a public interface (`ScanAs.MatchingInterface` or `ScanAs.Marker`), or exclude the match.
+A consumer resolves a self-compiled match only through an accessible interface. `ScanAs.Self` over an `internal` implementation exposes nothing nameable, so the match registers nothing and is skipped, mirroring the warning severity a container scan gives a match it cannot register ([AWT182](#awt182)/[AWT188](#awt188)/[AWT193](#awt193)). Expose it through a public interface (`ScanAs.MatchingInterface` or `ScanAs.Marker`), or exclude the match.
 
 ### AWT197
 
@@ -1416,7 +1431,7 @@ internal sealed class Roaster : IPlugin, IRoaster;
 public static partial class PluginModule;
 ```
 
-A self-compiled match is reached through a generated factory that returns a single accessible interface, so a shared instance across several interfaces cannot be expressed (unlike a container `[Scan]`, whose matches coalesce on the concrete type). Narrow the exposure to a single interface (typically `ScanAs.MatchingInterface`), or exclude the match. This is a v1 limitation.
+A self-compiled match is reached through a generated factory that returns a single accessible interface, so a shared instance across several interfaces cannot be expressed (unlike a container `[Scan]`, whose matches coalesce on the concrete type). The same applies across scans: two `[Scan]`s on one module that expose the same type under two different interfaces would emit two factories and silently split the instance, so that overlap is also rejected. Narrow the exposure to a single interface (typically `ScanAs.MatchingInterface`), or exclude the match. This is a v1 limitation.
 
 ### AWT200
 
@@ -1453,6 +1468,20 @@ public static partial class PluginModule<T>;   // no closed PluginModule<T> exis
 ```
 
 A consumer imports a module by `typeof`, so there is no single closed module type to import from a generic declaration, and the generated partial could not re-open it by its bare name. Move the `[Scan]` onto a non-generic module.
+
+### AWT202
+
+:::danger[Error]
+A module `[Scan]` declares `InAssembliesOf`, but a self-compiled scan sweeps only the module's own assembly.
+:::
+
+```csharp
+[Module]
+[Scan<IPlugin>(As = ScanAs.Marker, InAssembliesOf = new[] { typeof(OtherLibMarker) })]
+public static partial class PluginModule;
+```
+
+A self-compiled scan exists to reach the module's own `internal` types. Sweeping another assembly from a module would see only that assembly's public types, which a container `[Scan]` with `InAssembliesOf` already covers, so the module form would silently do less than the container form. Remove `InAssembliesOf` to scan the module's own assembly, or move the `[Scan]` onto the container.
 
 ## Keyed collections
 

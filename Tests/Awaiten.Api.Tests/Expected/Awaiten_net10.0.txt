@@ -110,6 +110,11 @@ namespace Awaiten
         public FromKeyAttribute(string key) { }
         public object Key { get; }
     }
+    [System.AttributeUsage(System.AttributeTargets.Class, Inherited=false)]
+    public sealed class GeneratedScanExpansionAttribute : System.Attribute
+    {
+        public GeneratedScanExpansionAttribute() { }
+    }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
     public sealed class GeneratedScanRegistrationAttribute<TService> : System.Attribute
         where TService :  class
@@ -117,6 +122,7 @@ namespace Awaiten
         public GeneratedScanRegistrationAttribute(string factory) { }
         public string Factory { get; }
         public Awaiten.AwaitenLifetime Lifetime { get; set; }
+        public bool SkipUnconstructable { get; set; }
     }
     public interface IAsyncInitializable
     {

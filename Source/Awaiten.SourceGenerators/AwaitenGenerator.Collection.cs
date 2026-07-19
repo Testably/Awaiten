@@ -7,6 +7,13 @@ namespace Awaiten.SourceGenerators;
 
 partial class AwaitenGenerator
 {
+	/// <summary>
+	///     The marker inside a self-compiled module-scan match's synthetic implementation identity
+	///     (<c>&lt;service&gt;@scan:&lt;qualified factory&gt;</c>, see <see cref="CollectGeneratedScanRegistration" />).
+	///     <c>DisplayInstance</c> keys off it to trim the synthetic suffix from diagnostics.
+	/// </summary>
+	private const string ScanKeyMarker = "@scan:";
+
 	private static (List<RawRegistration> Raw, HashSet<string> ConstraintRejectedServices) Collect(
 		INamedTypeSymbol containerSymbol,
 		List<ImportedModule> modules,
@@ -224,11 +231,16 @@ partial class AwaitenGenerator
 		}
 
 		Lifetime lifetime = Lifetime.Transient;
+		bool skipUnconstructable = false;
 		foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
 		{
 			if (argument.Key == "Lifetime" && argument.Value.Value is int value)
 			{
 				lifetime = (Lifetime)value;
+			}
+			else if (argument.Key == "SkipUnconstructable" && argument.Value.Value is bool skip)
+			{
+				skipUnconstructable = skip;
 			}
 		}
 
@@ -238,7 +250,7 @@ partial class AwaitenGenerator
 
 		result.Add(new RawRegistration(
 			serviceType,
-			$"{serviceType}@scan:{qualifiedFactory}",
+			$"{serviceType}{ScanKeyMarker}{qualifiedFactory}",
 			lifetime,
 			service,
 			location,
@@ -246,6 +258,7 @@ partial class AwaitenGenerator
 			factory,
 			ServiceSymbol: service,
 			IsScan: true,
+			ScanSkipsUnconstructable: skipUnconstructable,
 			Origin: origin));
 	}
 
@@ -369,16 +382,27 @@ partial class AwaitenGenerator
 		}
 
 		// A referenced-assembly module's [Scan] is self-compiled in the module's own build (the module emits a
-		// generated factory and lifetime registration per match, which this collection reads like any other module
-		// registration), so the consumer neither re-runs it nor rejects it. See ExpandModuleScan; AWT154 was
-		// retired. A same-compilation module's [Scan] is instead expanded by the container itself (see Collect).
+		// generated factory and lifetime registration per match, plus a [GeneratedScanExpansion] marker), which
+		// this collection reads like any other module registration. A same-compilation module's [Scan] is instead
+		// expanded by the container itself (see Collect); the generator cannot see the module's generated marker
+		// there (its own output), so the skew check below excludes it.
+		bool declaresScan = HasAwaitenAttribute(moduleAttributes, "ScanAttribute");
 
-		// AWT151: a module that declares no lifetime registrations imports nothing useful. A same-compilation
-		// module's [Scan] does contribute (the container expands it directly), so it counts here; a
-		// referenced-assembly module contributes through its self-compiled attributes instead, which
-		// DeclaresAnyRegistration already counts.
-		if (!DeclaresAnyRegistration(moduleAttributes)
-		    && !(sameCompilation && HasAwaitenAttribute(moduleAttributes, "ScanAttribute")))
+		// AWT154: the metadata carries a [Scan] but no expansion marker, so the module assembly was built without
+		// the Awaiten generator (or a version predating self-compiled scans) and the scan would silently
+		// contribute nothing. The marker is emitted even for a scan that matched nothing, so its absence is
+		// conclusive, not a maybe.
+		if (!sameCompilation && declaresScan && !HasAwaitenAttribute(moduleAttributes, "GeneratedScanExpansionAttribute"))
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.ModuleScanNotExpanded, location, new EquatableArray<string>([moduleName,])));
+		}
+
+		// AWT151: a module that declares no lifetime registrations imports nothing useful. A module with a [Scan]
+		// is exempt regardless of what the scan produced: the module's own build reports an empty scan at its
+		// declaration (AWT138/AWT184), and an unexpanded one is AWT154 above, so repeating the blame at the
+		// consumer's [Import] would point at code the consumer does not own.
+		if (!DeclaresAnyRegistration(moduleAttributes) && !declaresScan)
 		{
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.EmptyModule, location, new EquatableArray<string>([moduleName,])));

@@ -17,9 +17,9 @@ partial class AwaitenGenerator
 	///     <em>module's own</em> build, so diagnostics land at the library's source locations, and the scan sees the
 	///     library's <c>internal</c> types (the whole point: keep implementations internal, expose interfaces).
 	///     Reuses the container scan's candidate discovery, filters and their diagnostics
-	///     (AWT138/AWT140/AWT143/AWT172/AWT173/AWT174/AWT183/AWT184/AWT185), and adds AWT195/AWT196/AWT197/AWT200
+	///     (AWT138/AWT143/AWT172/AWT173/AWT174/AWT183/AWT184/AWT185), and adds AWT195/AWT196/AWT197/AWT200/AWT202
 	///     for the self-compilation constraints (accessible parameters, a single accessible exposure per match, no
-	///     injection metadata the factory could not mirror).
+	///     injection metadata the factory could not mirror, the module's own assembly only).
 	/// </summary>
 	private static List<ModuleFactory> CollectModuleScanFactories(
 		INamedTypeSymbol module,
@@ -52,7 +52,7 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     Expands one module <c>[Scan]</c> over its candidates, mirroring <see cref="ExpandScan" /> but emitting a
 	///     generated factory per match instead of a <see cref="RawRegistration" />. A module scans its own assembly
-	///     (or the assemblies named by <c>InAssembliesOf</c>), so an <c>internal</c> match is legitimate.
+	///     only (AWT202 rejects <c>InAssembliesOf</c>), so an <c>internal</c> match is legitimate.
 	/// </summary>
 	private static void ExpandModuleScan(
 		AttributeData attribute,
@@ -64,10 +64,15 @@ partial class AwaitenGenerator
 	{
 		Location? location = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation();
 
-		List<IAssemblySymbol>? assemblies = ScanAssemblies(attribute);
-		if (assemblies is { Count: 0, })
+		// v1: a module scans its own assembly only. An InAssembliesOf sweep from a module would see just the
+		// target's public types, which a container [Scan] already covers, so it is rejected (AWT202) rather
+		// than silently doing less than the container form.
+		if (ScanAssemblies(attribute) is not null)
 		{
-			diagnostics.Add(new DiagnosticInfo(Diagnostics.ScanAssembliesEmpty, LocationInfo.From(location), new EquatableArray<string>([])));
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.ModuleScanForeignAssemblies,
+				LocationInfo.From(location),
+				new EquatableArray<string>([Display(module.ToDisplayString(FullyQualified)),])));
 			return;
 		}
 
@@ -80,7 +85,7 @@ partial class AwaitenGenerator
 			return;
 		}
 
-		if (marker is null && MarkerlessScanError(match.Exposure, filters, assemblies) is { } reason)
+		if (marker is null && MarkerlessScanError(match.Exposure, filters, assemblies: null) is { } reason)
 		{
 			diagnostics.Add(new DiagnosticInfo(Diagnostics.MarkerlessScanInvalid, LocationInfo.From(location), new EquatableArray<string>([reason,])));
 			return;
@@ -99,7 +104,7 @@ partial class AwaitenGenerator
 		int assignable = 0;
 		int registered = 0;
 		int produced = 0;
-		foreach (ScanCandidate candidate in ScanCandidates(assemblies, compilation, marker, location, diagnostics))
+		foreach (ScanCandidate candidate in ScanCandidates(assemblies: null, compilation, marker, location, diagnostics))
 		{
 			assignable++;
 			if (!PassesScanFilters(candidate.Type, filters, hits))
@@ -120,7 +125,7 @@ partial class AwaitenGenerator
 			produced += RegisterModuleScanMatch(candidate.Type, match, marker, openMarker, markerDefinition, module, compilation, factories, diagnostics);
 		}
 
-		ReportScanFilterDiagnostics(filters, hits, new ScanFilterCounts(assignable, registered, produced), assemblies, markerDisplay, location, diagnostics);
+		ReportScanFilterDiagnostics(filters, hits, new ScanFilterCounts(assignable, registered, produced), assemblies: null, markerDisplay, location, diagnostics);
 	}
 
 	/// <summary>
@@ -129,9 +134,11 @@ partial class AwaitenGenerator
 	///     factory returns one accessible type and a shared instance across interfaces cannot be expressed), and the
 	///     constructor's parameters must all be accessible outside the assembly (AWT195), because they appear on the
 	///     generated <c>public</c> factory and are resolved from the consumer's graph. A match carrying injection
-	///     metadata the factory cannot mirror ([Inject] properties, [Inject]/[Arg] parameters) is AWT200, and a
-	///     match another scan of this module already exposed the same way is deduped silently (a differing lifetime
-	///     across the overlap is AWT142, first scan wins). Returns the number of factories contributed (0 or 1).
+	///     metadata the factory cannot mirror ([Inject] properties, [Inject]/[Arg] parameters) is AWT200. A match
+	///     another scan of this module already exposed the same way is deduped silently (a differing lifetime
+	///     across the overlap is AWT142, first scan wins); one another scan exposed under a <em>different</em>
+	///     interface is AWT197, since two factories would split the shared instance. Returns the number of
+	///     factories contributed (0 or 1).
 	/// </summary>
 	private static int RegisterModuleScanMatch(
 		INamedTypeSymbol type,
@@ -201,14 +208,26 @@ partial class AwaitenGenerator
 		INamedTypeSymbol service = distinct[0];
 		string serviceName = service.ToDisplayString(FullyQualified);
 
-		// Two [Scan]s on one module can match the same type under the same exposure. A container dedups such
-		// overlaps to one collection member (per-implementation identity); factories are per-match identities on
-		// the consumer, so dedup here instead, keeping the first. A differing lifetime across the overlapping
-		// scans is AWT142, mirroring the container, and the first scan's lifetime wins consistently.
+		// Two [Scan]s on one module can match the same type. Under the same exposure the overlap is deduped to
+		// the first factory, mirroring the container's per-implementation dedup, with AWT142 when the lifetimes
+		// differ (first scan's lifetime wins consistently). Under different exposures it is AWT197: each factory
+		// constructs its own instance, so the single shared instance a container scan gives one implementation
+		// across several interfaces cannot be expressed, and emitting both would silently split it.
 		ModuleFactory? overlapping = factories.Find(factory => factory.ImplementationType == typeName);
-		Lifetime lifetime = overlapping?.Lifetime ?? match.Lifetime;
 		if (overlapping is not null)
 		{
+			if (overlapping.ServiceType != serviceName)
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.ModuleScanMultipleExposures,
+					LocationInfo.From(match.Location),
+					new EquatableArray<string>([
+						Display(typeName),
+						$"{Display(overlapping.ServiceType)}, {Display(serviceName)}",
+					])));
+				return 0;
+			}
+
 			if (overlapping.Lifetime != match.Lifetime)
 			{
 				diagnostics.Add(new DiagnosticInfo(
@@ -221,10 +240,7 @@ partial class AwaitenGenerator
 					])));
 			}
 
-			if (factories.Exists(factory => factory.ImplementationType == typeName && factory.ServiceType == serviceName))
-			{
-				return 0;
-			}
+			return 0;
 		}
 
 		// [Inject] properties and [Inject]/[Arg] constructor parameters carry per-dependency semantics (keys,
@@ -283,21 +299,33 @@ partial class AwaitenGenerator
 		}
 
 		factories.Add(new ModuleFactory(
-			ModuleFactoryName(type, factories.Count),
+			ModuleFactoryName(type),
 			serviceName,
 			typeName,
-			lifetime,
+			match.Lifetime,
+			match.SkipUnconstructable,
 			new EquatableArray<FactoryParameter>(parameters.ToArray())));
 		return 1;
 	}
 
 	/// <summary>
-	///     A deterministic, unique factory method name for one match: prefixed to avoid clashing with the module's
-	///     own members, suffixed with the running index so two matches of the same simple name never collide (which
-	///     would surface as an ambiguous factory on the consumer).
+	///     A deterministic factory method name for one match, stable across library versions: prefixed to avoid
+	///     clashing with the module's own members, carrying the match's simple name for readability, and suffixed
+	///     with an FNV-1a hash of its fully-qualified name so two same-named matches in different namespaces stay
+	///     distinct. The name depends only on the match's own full name — never on scan or discovery order — so
+	///     adding or removing other matches in a later library version does not rename it, and a consumer compiled
+	///     against the older assembly still binds after a drop-in upgrade.
 	/// </summary>
-	private static string ModuleFactoryName(INamedTypeSymbol type, int index)
-		=> $"Awaiten__Scan_{index}_{type.Name}";
+	private static string ModuleFactoryName(INamedTypeSymbol type)
+	{
+		uint hash = 2166136261;
+		foreach (char character in type.ToDisplayString(FullyQualified))
+		{
+			hash = unchecked((hash ^ character) * 16777619);
+		}
+
+		return $"Awaiten__Scan_{type.Name}_{hash:x8}";
+	}
 
 	/// <summary>
 	///     Whether a type can be named from an unrelated assembly: it (and every enclosing type) is <c>public</c>,

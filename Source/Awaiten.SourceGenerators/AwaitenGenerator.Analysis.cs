@@ -1299,6 +1299,13 @@ partial class AwaitenGenerator
 	internal static string DisplayInstance(string implementationType)
 	{
 		int marker = implementationType.IndexOf("@" + DecoratorKeyPrefix, StringComparison.Ordinal);
+		if (marker < 0)
+		{
+			// A self-compiled module-scan match carries a synthetic '<service>@scan:<factory>' identity (see
+			// CollectGeneratedScanRegistration); trim it so a diagnostic names the registered service.
+			marker = implementationType.IndexOf(ScanKeyMarker, StringComparison.Ordinal);
+		}
+
 		return Display(marker >= 0 ? implementationType.Substring(0, marker) : implementationType);
 	}
 }

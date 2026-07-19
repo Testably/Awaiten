@@ -35,6 +35,11 @@ internal static partial class Sources
 			depth++;
 		}
 
+		// The expansion marker: proof the module's [Scan] passed through the generator, emitted even when the
+		// scan matched nothing, so a consuming container can tell "matched nothing" from "never expanded" and
+		// report AWT154 only for the latter (a module assembly built without the Awaiten generator).
+		Indent(builder, depth).AppendLine("[global::Awaiten.GeneratedScanExpansionAttribute]");
+
 		// One [GeneratedScanRegistration] per generated factory, applied to the re-opened partial module. The
 		// consuming container reads these like a container [Scan]'s matches (collection-eligible and overridable).
 		foreach (ModuleFactory factory in model.Factories.AsArray())
@@ -81,7 +86,10 @@ internal static partial class Sources
 	///     registration - so a self-compiled scan behaves as close to a container scan as the assembly boundary allows.
 	/// </summary>
 	private static string RegistrationAttribute(ModuleFactory factory)
-		=> $"global::Awaiten.GeneratedScanRegistrationAttribute<{factory.ServiceType}>(\"{factory.FactoryName}\", Lifetime = global::Awaiten.AwaitenLifetime.{factory.Lifetime})";
+	{
+		string skip = factory.SkipUnconstructable ? ", SkipUnconstructable = true" : string.Empty;
+		return $"global::Awaiten.GeneratedScanRegistrationAttribute<{factory.ServiceType}>(\"{factory.FactoryName}\", Lifetime = global::Awaiten.AwaitenLifetime.{factory.Lifetime}{skip})";
+	}
 
 	private static void EmitModuleFactory(StringBuilder builder, int depth, ModuleFactory factory)
 	{

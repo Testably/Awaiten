@@ -9,6 +9,22 @@ namespace Awaiten.SourceGenerators.Tests;
 /// </summary>
 public class SelfCompiledModuleScanTests
 {
+	/// <summary>
+	///     Mirrors the generator's factory naming (<c>ModuleFactoryName</c>): the match's simple name plus an
+	///     FNV-1a hash of its fully-qualified name, stable across library versions and scan order.
+	/// </summary>
+	private static string FactoryName(string fullyQualifiedName)
+	{
+		uint hash = 2166136261;
+		foreach (char character in fullyQualifiedName)
+		{
+			hash = unchecked((hash ^ character) * 16777619);
+		}
+
+		string simpleName = fullyQualifiedName[(fullyQualifiedName.LastIndexOf('.') + 1)..];
+		return $"Awaiten__Scan_{simpleName}_{hash:x8}";
+	}
+
 	private const string LibrarySource = """
 	                                     using Awaiten;
 
@@ -42,9 +58,11 @@ public class SelfCompiledModuleScanTests
 
 		await That(module).Contains("static partial class PluginModule")
 			.Because("the module is re-opened as partial to receive the generated factory");
-		await That(module).Contains("global::Awaiten.GeneratedScanRegistrationAttribute<global::Lib.IRoaster>(\"Awaiten__Scan_0_Roaster\", Lifetime = global::Awaiten.AwaitenLifetime.Singleton)")
+		await That(module).Contains("[global::Awaiten.GeneratedScanExpansionAttribute]")
+			.Because("the expansion marker lets a consuming container tell an expanded scan from one built without the generator (AWT154)");
+		await That(module).Contains($"global::Awaiten.GeneratedScanRegistrationAttribute<global::Lib.IRoaster>(\"{FactoryName("global::Lib.Roaster")}\", Lifetime = global::Awaiten.AwaitenLifetime.Singleton)")
 			.Because("the match is registered under its accessible MatchingInterface, as a singleton scan match");
-		await That(module).Contains("public static global::Lib.IRoaster Awaiten__Scan_0_Roaster(global::Lib.IClock @clock) => new global::Lib.Roaster(@clock);")
+		await That(module).Contains($"public static global::Lib.IRoaster {FactoryName("global::Lib.Roaster")}(global::Lib.IClock @clock) => new global::Lib.Roaster(@clock);")
 			.Because("the factory returns the interface but constructs the internal implementation in the library, with verbatim-prefixed parameter names so keyword-named parameters stay legal");
 	}
 
@@ -69,7 +87,7 @@ public class SelfCompiledModuleScanTests
 			.Because("the internal implementation resolves through its interface with no missing dependency");
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		await That(source).Contains("global::Lib.PluginModule.Awaiten__Scan_0_Roaster")
+		await That(source).Contains($"global::Lib.PluginModule.{FactoryName("global::Lib.Roaster")}")
 			.Because("the container calls the module's generated factory to build the implementation");
 		await That(source).DoesNotContain("new global::Lib.Roaster")
 			.Because("the consumer never constructs the internal implementation directly");
@@ -188,9 +206,9 @@ public class SelfCompiledModuleScanTests
 		await That(result.Diagnostics).IsEmpty()
 			.Because("two internal implementations of one marker interface collect instead of colliding (no AWT111)");
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-		await That(source).Contains("global::Lib.PluginModule.Awaiten__Scan_0_Alpha")
+		await That(source).Contains($"global::Lib.PluginModule.{FactoryName("global::Lib.Alpha")}")
 			.Because("the first match is a member of the IEnumerable<IPlugin> collection");
-		await That(source).Contains("global::Lib.PluginModule.Awaiten__Scan_1_Bravo")
+		await That(source).Contains($"global::Lib.PluginModule.{FactoryName("global::Lib.Bravo")}")
 			.Because("the second match is a member of the IEnumerable<IPlugin> collection too, exactly as a container scan would collect them");
 	}
 
@@ -264,10 +282,10 @@ public class SelfCompiledModuleScanTests
 			""");
 
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-		await That(source).Contains("global::Lib.ModuleA.Awaiten__Scan_0_Handler")
+		await That(source).Contains($"global::Lib.ModuleA.{FactoryName("global::Lib.A.Handler")}")
 			.Because("module A's match is a member of the collection");
-		await That(source).Contains("global::Lib.ModuleB.Awaiten__Scan_0_Handler")
-			.Because("module B's match must not be deduped away by sharing module A's per-module factory name");
+		await That(source).Contains($"global::Lib.ModuleB.{FactoryName("global::Lib.B.Handler")}")
+			.Because("module B's match must not be deduped away by sharing module A's factory name, and the name hash keeps same-named matches distinct");
 	}
 
 	[Fact]
@@ -390,10 +408,55 @@ public class SelfCompiledModuleScanTests
 			.Single(s => s.HintName.Contains("ModuleScan"))
 			.SourceText.ToString();
 
-		await That(module).Contains("Awaiten__Scan_0_Roaster")
+		await That(module).Contains(FactoryName("global::Lib.Roaster"))
 			.Because("the first scan's match is emitted");
-		await That(module).DoesNotContain("Awaiten__Scan_1_Roaster")
+		await That(module.Split("public static").Length - 1).IsEqualTo(1)
 			.Because("the second scan matched the same type under the same exposure, which a container would dedup to one collection member, so only one factory is emitted");
+	}
+
+	[Fact]
+	public async Task SkipUnconstructableMatchIsPrunedAtTheConsumer()
+	{
+		GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly("""
+			using Awaiten;
+
+			namespace Lib;
+
+			public interface IExotic { }
+			public interface IPlugin { }
+			public interface IRoaster { }
+			public interface IGrinder { }
+
+			internal sealed class Roaster : IPlugin, IRoaster
+			{
+			    public Roaster(IExotic exotic) { }
+			}
+
+			internal sealed class Grinder : IPlugin, IGrinder { }
+
+			[Module]
+			[Scan<IPlugin>(As = ScanAs.MatchingInterface, SkipUnconstructable = true)]
+			public static partial class PluginModule { }
+			""", """
+			using Awaiten;
+			using Lib;
+
+			namespace MyCode;
+
+			[Container]
+			[Import(typeof(PluginModule))]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		await That(result.Diagnostics).Contains("*AWT141*IRoaster*IExotic*").AsWildcard()
+			.Because("the scan's SkipUnconstructable travels on the generated registration, so the consumer prunes the match whose factory parameter it cannot resolve, with the same AWT141 a container scan gives");
+		await That(result.Diagnostics).DoesNotContain("*error*").AsWildcard()
+			.Because("pruning replaces the missing-dependency error");
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+		await That(source).Contains($"global::Lib.PluginModule.{FactoryName("global::Lib.Grinder")}")
+			.Because("the constructable match survives the prune");
 	}
 
 	[Fact]

@@ -17,20 +17,23 @@ internal sealed record ModuleScanModel(
 	EquatableArray<TypeDeclaration> ContainingTypes,
 	string TypeName,
 	string HintName,
+	bool Expanded,
 	EquatableArray<ModuleFactory> Factories,
 	EquatableArray<DiagnosticInfo> Diagnostics);
 
 /// <summary>
 ///     One generated module-scan factory: the emitted method name, the accessible exposure interface it returns
-///     (also the service the registration exposes), the concrete implementation it constructs, the lifetime the
-///     scan declared, and the constructor parameters mirrored onto the factory signature (resolved from the
-///     consuming container's graph, exactly like a hand-written module factory's parameters).
+///     (also the service the registration exposes), the concrete implementation it constructs, the lifetime and
+///     <c>SkipUnconstructable</c> opt-in the scan declared, and the constructor parameters mirrored onto the
+///     factory signature (resolved from the consuming container's graph, exactly like a hand-written module
+///     factory's parameters).
 /// </summary>
 internal sealed record ModuleFactory(
 	string FactoryName,
 	string ServiceType,
 	string ImplementationType,
 	Lifetime Lifetime,
+	bool SkipUnconstructable,
 	EquatableArray<FactoryParameter> Parameters);
 
 /// <summary>A mirrored constructor parameter on a generated factory: its fully-qualified type and its name.</summary>

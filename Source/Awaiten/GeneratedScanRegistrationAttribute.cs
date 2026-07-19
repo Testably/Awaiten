@@ -38,6 +38,12 @@ public sealed class GeneratedScanRegistrationAttribute<TService> : Attribute
 
 	/// <summary>The lifetime the scan declared. Defaults to <see cref="AwaitenLifetime.Transient" />, matching <c>[Scan]</c>.</summary>
 	public AwaitenLifetime Lifetime { get; set; } = AwaitenLifetime.Transient;
+
+	/// <summary>
+	///     Whether the scan declared <c>SkipUnconstructable</c>: the consuming container drops the match with a
+	///     warning (AWT141) instead of an error when a factory parameter is not satisfiable from its graph.
+	/// </summary>
+	public bool SkipUnconstructable { get; set; }
 }
 
 #pragma warning restore S2326
