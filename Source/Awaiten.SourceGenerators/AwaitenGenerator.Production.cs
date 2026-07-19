@@ -3,6 +3,7 @@ using Awaiten.SourceGenerators.Entities;
 using Awaiten.SourceGenerators.Internals;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 
 namespace Awaiten.SourceGenerators;
 
@@ -289,8 +290,9 @@ partial class AwaitenGenerator
 	///     as its first parameter, and <see cref="Diagnostics.AmbiguousLifecycleHook">AWT190</see> (also returning
 	///     <c>(null, empty)</c>) when more than one does, so the choice would be order-dependent. A generic hook
 	///     (named on an open-generic <c>[Scan]</c> marker) binds its type arguments from the closed marker forms
-	///     kept per hook slot on <c>ImplInfo</c>: exactly one bindable form (matching arity, satisfied constraints,
-	///     a first parameter accepting the match; see <see cref="BindableHookConstructions" />) dispatches the
+	///     kept per hook slot on <c>ImplInfo</c>: exactly one bindable form (matching arity, accessible type
+	///     arguments, satisfied constraints, a first parameter accepting the match; see
+	///     <see cref="BindableHookConstructions" />) dispatches the
 	///     constructed method, none leaves it unusable like any other shape mismatch (falling through to AWT164),
 	///     and more than one is reported as <see cref="Diagnostics.GenericHookAmbiguousMarker">AWT198</see> when it
 	///     is the only usable overload (a non-generic hook, needing no arguments, is unaffected). A multi-form
@@ -342,7 +344,7 @@ partial class AwaitenGenerator
 			// leaves the type arguments ambiguous (AWT198, with the forms recorded for the message) yet still a
 			// usable overload, so it counts toward AWT190 when a sibling also matches; none means the method is
 			// not a usable hook and falls through to AWT164 with any other shape mismatch.
-			List<(INamedTypeSymbol Form, IMethodSymbol Constructed)> bindable = BindableHookConstructions(method, closedMarkers, info.Symbol, compilation);
+			List<(INamedTypeSymbol Form, IMethodSymbol Constructed)> bindable = BindableHookConstructions(method, closedMarkers, info.Symbol, containerSymbol, compilation);
 			if (bindable.Count == 1)
 			{
 				matches.Add(bindable[0].Constructed);
@@ -487,24 +489,30 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     The closed marker forms a generic hook method can actually bind, each paired with the method constructed
-	///     from its type arguments. A form is bindable when its arity matches the method's, its type arguments
-	///     satisfy the method's constraints (see <see cref="SatisfiesConstraints" />, so the constructed call
-	///     compiles rather than erroring inside the generated source), and the constructed method's first parameter
-	///     accepts the implementation. Two forms constructing the identical method (say <c>IView&lt;int&gt;</c> and
-	///     <c>IEditor&lt;int&gt;</c> both yielding <c>Wire&lt;int&gt;</c>) count once: the dispatch is the same, so
-	///     there is nothing to be ambiguous about. An empty result means the method is not a usable hook (AWT164);
-	///     more than one entry is the ambiguity AWT198 reports.
+	///     from its type arguments. A form is bindable when its arity matches the method's, the form (including its
+	///     type arguments, which become the constructed call's) is accessible from the generated container (an
+	///     internal type argument from a scanned foreign assembly would otherwise leak CS0122 into the generated
+	///     source), its type arguments satisfy the method's constraints (see <see cref="SatisfiesConstraints" />, so
+	///     the constructed call compiles rather than erroring inside the generated source), and the constructed
+	///     method's first parameter accepts the implementation. Two forms constructing the identical method (say
+	///     <c>IView&lt;int&gt;</c> and <c>IEditor&lt;int&gt;</c> both yielding <c>Wire&lt;int&gt;</c>) count once:
+	///     the dispatch is the same, so there is nothing to be ambiguous about. An empty result means the method is
+	///     not a usable hook (AWT164); more than one entry is the ambiguity AWT198 reports. Like a constraint, the
+	///     accessibility check can settle a family: an inaccessible closing beside an accessible one leaves a single
+	///     bindable form rather than an ambiguity.
 	/// </summary>
 	private static List<(INamedTypeSymbol Form, IMethodSymbol Constructed)> BindableHookConstructions(
 		IMethodSymbol method,
 		IReadOnlyList<INamedTypeSymbol> closedMarkers,
 		INamedTypeSymbol implementation,
+		INamedTypeSymbol containerSymbol,
 		Compilation compilation)
 	{
 		List<(INamedTypeSymbol Form, IMethodSymbol Constructed)> bindable = new();
 		foreach (INamedTypeSymbol form in closedMarkers)
 		{
 			if (method.Arity != form.TypeArguments.Length
+			    || !compilation.IsSymbolAccessibleWithin(form, containerSymbol)
 			    || !SatisfiesConstraints(method, form.TypeArguments, compilation))
 			{
 				continue;
@@ -527,8 +535,12 @@ partial class AwaitenGenerator
 	///     otherwise surface as a raw compiler error inside the generated source). Covers the constraint kinds C#
 	///     has: <c>class</c>, <c>struct</c> (excluding <c>Nullable&lt;T&gt;</c>), <c>unmanaged</c>, <c>new()</c>,
 	///     and constraint types, with the method's own type parameters substituted so <c>where T : IComparable&lt;T&gt;</c>
-	///     is checked at the bound argument. <c>notnull</c> is not checked: violating it is only a compiler warning,
-	///     so the constructed call still compiles.
+	///     is checked at the bound argument. A constraint type is satisfied only by an identity, implicit reference,
+	///     or boxing conversion (see <see cref="SatisfiesConstraintType" />), the conversions the language admits for
+	///     constraint satisfaction - notably <em>not</em> a user-defined implicit operator, which
+	///     <c>HasImplicitConversion</c> would accept and which would leak CS0311 into the generated source.
+	///     <c>notnull</c> is not checked: violating it is only a compiler warning, so the constructed call still
+	///     compiles.
 	/// </summary>
 	private static bool SatisfiesConstraints(IMethodSymbol method, ImmutableArray<ITypeSymbol> arguments, Compilation compilation)
 	{
@@ -547,7 +559,7 @@ partial class AwaitenGenerator
 
 			foreach (ITypeSymbol constraint in parameter.ConstraintTypes)
 			{
-				if (!compilation.HasImplicitConversion(argument, SubstituteTypeParameters(constraint, method, arguments, compilation)))
+				if (!SatisfiesConstraintType(argument, SubstituteTypeParameters(constraint, method, arguments, compilation), compilation))
 				{
 					return false;
 				}
@@ -555,6 +567,18 @@ partial class AwaitenGenerator
 		}
 
 		return true;
+	}
+
+	/// <summary>
+	///     Whether a type argument satisfies one constraint type under the language's constraint-satisfaction rules:
+	///     an identity, implicit reference, or boxing conversion. A user-defined implicit operator does not count
+	///     (the compiler rejects such a closing with CS0311), which is why this is not
+	///     <c>Compilation.HasImplicitConversion</c>.
+	/// </summary>
+	private static bool SatisfiesConstraintType(ITypeSymbol argument, ITypeSymbol constraint, Compilation compilation)
+	{
+		Conversion conversion = ((CSharpCompilation)compilation).ClassifyConversion(argument, constraint);
+		return conversion.IsIdentity || (conversion.IsImplicit && (conversion.IsReference || conversion.IsBoxing));
 	}
 
 	/// <summary>
@@ -569,9 +593,10 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     Substitutes a generic hook method's own type parameters with the bound arguments inside a constraint type,
 	///     so <c>where T : IComparable&lt;T&gt;</c> becomes <c>IComparable&lt;int&gt;</c> for the conversion check in
-	///     <see cref="SatisfiesConstraints" />. Descends into generic type arguments and array element types
-	///     (<c>where T : IEnumerable&lt;T[]&gt;</c>); anything else that is not the method's type parameter passes
-	///     through unchanged.
+	///     <see cref="SatisfiesConstraints" />. Descends into generic type arguments, array element types
+	///     (<c>where T : IEnumerable&lt;T[]&gt;</c>), and the containing types of a nested constraint type
+	///     (<c>where T : Outer&lt;T&gt;.IInner</c>, whose type parameter lives on the container rather than the
+	///     nested type itself); anything else that is not the method's type parameter passes through unchanged.
 	/// </summary>
 	private static ITypeSymbol SubstituteTypeParameters(ITypeSymbol type, IMethodSymbol method, ImmutableArray<ITypeSymbol> arguments, Compilation compilation)
 	{
@@ -580,11 +605,9 @@ partial class AwaitenGenerator
 			return arguments[parameter.Ordinal];
 		}
 
-		if (type is INamedTypeSymbol { IsGenericType: true, } named)
+		if (type is INamedTypeSymbol named)
 		{
-			return named.ConstructedFrom.Construct(named.TypeArguments
-				.Select(argument => SubstituteTypeParameters(argument, method, arguments, compilation))
-				.ToArray());
+			return SubstituteNamedType(named, method, arguments, compilation);
 		}
 
 		if (type is IArrayTypeSymbol array)
@@ -593,6 +616,41 @@ partial class AwaitenGenerator
 		}
 
 		return type;
+	}
+
+	/// <summary>
+	///     Substitutes through a named constraint type (see <see cref="SubstituteTypeParameters" />): the containing
+	///     chain first, so a nested type's outer arguments close too (<c>Outer&lt;T&gt;.IInner</c> becomes
+	///     <c>Outer&lt;int&gt;.IInner</c> by re-finding <c>IInner</c> on the substituted container), then the type's
+	///     own arguments. A container lookup miss fails safe by returning the type unsubstituted - the conversion
+	///     check in <see cref="SatisfiesConstraints" /> then simply rejects the closing (AWT164) instead of
+	///     constructing a call that would not compile.
+	/// </summary>
+	private static INamedTypeSymbol SubstituteNamedType(INamedTypeSymbol named, IMethodSymbol method, ImmutableArray<ITypeSymbol> arguments, Compilation compilation)
+	{
+		INamedTypeSymbol generic;
+		if (named.ContainingType is { } outer)
+		{
+			INamedTypeSymbol? member = SubstituteNamedType(outer, method, arguments, compilation)
+				.GetTypeMembers(named.Name, named.Arity)
+				.FirstOrDefault();
+			if (member is null)
+			{
+				return named;
+			}
+
+			generic = member;
+		}
+		else
+		{
+			generic = named.ConstructedFrom;
+		}
+
+		return named.Arity == 0
+			? generic
+			: generic.Construct(named.TypeArguments
+				.Select(argument => SubstituteTypeParameters(argument, method, arguments, compilation))
+				.ToArray());
 	}
 
 	/// <summary>

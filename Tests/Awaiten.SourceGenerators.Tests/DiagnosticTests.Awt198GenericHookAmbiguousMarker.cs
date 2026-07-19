@@ -230,6 +230,36 @@ public partial class DiagnosticTests
 		}
 
 		[Fact]
+		public async Task DoesNotReportWhenAccessibilityLeavesASingleBindableForm()
+		{
+			GeneratorResult result = Generator.RunWithReferencedAssembly("""
+				namespace Lib;
+
+				public interface IView<TViewModel> { }
+				public sealed class PublicVm { }
+				internal sealed class SecretVm { }
+				public sealed class DualView : IView<PublicVm>, IView<SecretVm> { }
+				""", """
+				using Awaiten;
+				using Lib;
+
+				namespace MyCode;
+
+				[Container]
+				[Scan(typeof(IView<>), InAssembliesOf = new[] { typeof(IView<>) }, OnActivated = nameof(Wire))]
+				public static partial class MyContainer
+				{
+					private static void Wire<TViewModel>(IView<TViewModel> view) { }
+				}
+				""");
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("the container cannot name the internal SecretVm, so like a constraint the accessibility check settles the family on IView<PublicVm>");
+			await That(result.Sources.Values.Any(source => source.Contains("Wire<global::Lib.PublicVm>"))).IsTrue()
+				.Because("the single accessible closing is the one dispatched");
+		}
+
+		[Fact]
 		public async Task ReportsAwt164WhenTheGenericHookAritiesNeverMatchTheMarker()
 		{
 			GeneratorResult result = Generator.Run("""
