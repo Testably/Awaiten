@@ -122,6 +122,8 @@ namespace Awaiten
         public GeneratedScanRegistrationAttribute(string factory) { }
         public string Factory { get; }
         public Awaiten.AwaitenLifetime Lifetime { get; set; }
+        public string? OnActivated { get; set; }
+        public string? OnRelease { get; set; }
         public bool SkipUnconstructable { get; set; }
     }
     public interface IAsyncInitializable

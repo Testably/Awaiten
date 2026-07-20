@@ -62,6 +62,8 @@ Combine `Eager` with async and `SyncResolveAfterInit`, and the singleton is cons
 
 A `[Scan]` can name the same `OnActivated`/`OnRelease` hooks, applied to every match, so a whole scanned family shares one routine. See [Scanning → Lifecycle hooks](../registration/scanning#lifecycle-hooks).
 
+This holds for a `[Scan]` on a `[Module]` too, where a library keeps its implementations `internal` and exposes only interfaces. The hook method may stay `internal` alongside the implementation: the module resolves it in its own build and emits a `public` wrapper a consumer runs, so nothing internal leaks across the assembly boundary. The one added constraint is that the hook's parameters after the instance, resolved from the consuming container's graph, must be types the consumer can name. See [Scanning → Scan from a module](../registration/scanning#scan-from-a-module).
+
 ## Where to go next
 
 - [Async initialization](../async-initialization) for `InitializeAsync`.

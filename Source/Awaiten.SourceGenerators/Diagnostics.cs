@@ -1533,4 +1533,22 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Warning,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A self-compiled module <c>[Scan]</c> names a lifecycle hook whose parameter after the instance is of a
+	///     type that is not accessible outside the module's assembly. The module emits a <c>public</c> wrapper for
+	///     the hook, and that wrapper's parameters after the instance are resolved from the consuming container's
+	///     graph, so every one has to be nameable by the consumer - exactly the constraint a factory parameter gets
+	///     (<see cref="ModuleScanParameterInaccessible">AWT195</see>), but for a hook parameter rather than a
+	///     constructor parameter. The instance parameter is exempt: it is the accessible exposure interface, cast to
+	///     the internal implementation inside the module. Widen the parameter type's accessibility, resolve a
+	///     different dependency, or drop the hook.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ModuleScanHookParameterInaccessible = new(
+		"AWT203",
+		"Module scan hook has an inaccessible parameter",
+		"'{0}' matched the module scan, but its {1} hook parameter of type '{2}' is not accessible outside the module's assembly, so the generated hook wrapper cannot expose it; widen the parameter type's accessibility, resolve a different dependency, or drop the hook",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

@@ -1524,6 +1524,25 @@ public static partial class PluginModule;
 
 A self-compiled scan exists to reach the module's own `internal` types. Sweeping another assembly from a module would see only that assembly's public types, which a container `[Scan]` with `InAssembliesOf` already covers, so the module form would silently do less than the container form. Remove `InAssembliesOf` to scan the module's own assembly, or move the `[Scan]` onto the container.
 
+### AWT203
+
+:::danger[Error]
+A self-compiled module `[Scan]` hook has a parameter, after the instance, whose type is not accessible outside the module's assembly.
+:::
+
+```csharp
+internal sealed class Secret;
+
+[Module]
+[Scan<IPlugin>(As = ScanAs.MatchingInterface, OnActivated = nameof(Wire))]
+public static partial class PluginModule
+{
+    internal static void Wire(Roaster roaster, Secret secret) { }   // Secret is internal to the module
+}
+```
+
+The module emits a `public` wrapper for the hook, and that wrapper's parameters after the instance are resolved from the consuming container's graph, so each type has to be nameable by the consumer, the same rule a self-compiled factory parameter gets ([AWT195](#awt195)). The instance parameter itself is exempt: it is the accessible exposure interface, cast back to the internal implementation inside the module. Widen the parameter type's accessibility, resolve a different dependency, or drop the hook.
+
 ## Keyed collections
 
 ### AWT159

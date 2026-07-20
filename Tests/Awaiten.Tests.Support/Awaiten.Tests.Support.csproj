@@ -17,9 +17,14 @@
 		<PackageReference Remove="aweXpect" />
 	</ItemGroup>
 
-	<!-- The Awaiten attributes only (not the analyzer): this library declares a [Module] but the generator
-	     runs on the importing container in Awaiten.Tests, never here. -->
+	<!-- The Awaiten attributes plus the generator: the container that [Import]s CrossAssemblySupportModule still
+	     reads its hand-written registrations from metadata (the generator emits nothing for a [Module] without a
+	     [Scan]), but a [Module] that self-compiles a [Scan] (HookedPluginModule) needs the generator to run here so
+	     its factories, hook wrappers and [GeneratedScanRegistration] attributes are compiled into this referenced
+	     assembly for a cross-assembly consumer to read. AWT134/AWT135 stay quiet: the boundary analyzer exempts a
+	     [Module], and no type here injects a resolver. -->
 	<ItemGroup>
+		<ProjectReference Include="..\..\Source\Awaiten.SourceGenerators\Awaiten.SourceGenerators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
 		<ProjectReference Include="..\..\Source\Awaiten\Awaiten.csproj" />
 	</ItemGroup>
 

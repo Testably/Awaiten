@@ -88,7 +88,16 @@ partial class AwaitenGenerator
 					ServiceSymbol: expansion.Service,
 					IsScan: true,
 					ScanSkipsUnconstructable: expansion.Factory.SkipUnconstructable,
-					GreedyConstructor: true));
+					GreedyConstructor: true,
+					// With no assembly boundary the container binds the module's own (possibly internal) hook directly
+					// rather than the generated wrapper it cannot see, so the hook resolves against the module (Origin)
+					// through the ordinary pipeline. The user hook names travel on the expansion (set only when the
+					// module resolved them validly at its build, so an invalid hook - already reported there - is not
+					// wired and re-reported here), and the closed marker forms bind a generic hook's type argument.
+					Origin: moduleSymbol,
+					OnActivated: expansion.OnActivated,
+					OnRelease: expansion.OnRelease,
+					HookClosedMarkers: expansion.HookClosedMarkers));
 			}
 		}
 
@@ -260,6 +269,8 @@ partial class AwaitenGenerator
 
 		Lifetime lifetime = Lifetime.Transient;
 		bool skipUnconstructable = false;
+		string? onActivated = null;
+		string? onRelease = null;
 		foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
 		{
 			if (argument.Key == "Lifetime" && argument.Value.Value is int value)
@@ -269,6 +280,14 @@ partial class AwaitenGenerator
 			else if (argument.Key == "SkipUnconstructable" && argument.Value.Value is bool flag)
 			{
 				skipUnconstructable = flag;
+			}
+			else if (argument.Key == "OnActivated" && argument.Value.Value is string activation)
+			{
+				onActivated = activation;
+			}
+			else if (argument.Key == "OnRelease" && argument.Value.Value is string release)
+			{
+				onRelease = release;
 			}
 		}
 
@@ -287,7 +306,12 @@ partial class AwaitenGenerator
 			ServiceSymbol: service,
 			IsScan: true,
 			ScanSkipsUnconstructable: skipUnconstructable,
-			Origin: origin));
+			Origin: origin,
+			// The hook wrapper names, resolved by the ordinary hook pipeline against the module (Origin): the
+			// wrapper is a plain public static method, so ResolveHook binds it directly and ClassifyHookParameters
+			// resolves its post-instance parameters from this container's graph.
+			OnActivated: onActivated,
+			OnRelease: onRelease));
 		return true;
 	}
 

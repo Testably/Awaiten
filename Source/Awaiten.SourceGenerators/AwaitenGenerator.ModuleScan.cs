@@ -64,13 +64,20 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     One expanded module-scan match: the equatable <see cref="ModuleFactory" /> the module's partial emits,
 	///     plus the live symbols behind it, which the model never carries (they would break incremental caching)
-	///     but a same-compilation container needs to register the match directly (see <c>Collect</c>).
+	///     but a same-compilation container needs to register the match directly (see <c>Collect</c>). The hook
+	///     fields carry what a same-compilation container needs to wire the match's lifecycle hooks directly against
+	///     the module (no assembly boundary, so it binds the module's own - possibly internal - hook rather than the
+	///     generated wrapper it cannot see): the user hook names (set only when the module resolved them validly at
+	///     its build) and the closed marker forms a generic hook binds its type argument from.
 	/// </summary>
 	private sealed record ModuleScanExpansion(
 		ModuleFactory Factory,
 		INamedTypeSymbol Service,
 		INamedTypeSymbol Implementation,
-		Location? Location);
+		Location? Location,
+		string? OnActivated = null,
+		string? OnRelease = null,
+		IReadOnlyList<INamedTypeSymbol>? HookClosedMarkers = null);
 
 	/// <summary>
 	///     Expands one module <c>[Scan]</c> over its candidates, mirroring <see cref="ExpandScan" /> but emitting a
@@ -100,11 +107,11 @@ partial class AwaitenGenerator
 			return;
 		}
 
-		// A self-compiled module scan does not carry OnActivated/OnRelease hooks: the hook pipeline resolves and
-		// emits against the container (Origin == null), so module-declared scan hooks need Origin-qualified wiring
-		// that does not exist yet. Pass null here until that lands.
+		// A module [Scan]'s OnActivated/OnRelease hooks are resolved and validated in the module's own build (so
+		// diagnostics land at the library source), then emitted as public wrappers a consumer runs through the
+		// ordinary hook pipeline - see RegisterModuleScanMatch.
 		ScanMatch match = new(ScanExposureOf(attribute), ScanLifetime(attribute), location, ScanSkipsUnconstructable(attribute),
-			OnActivated: null, OnRelease: null);
+			ScanHook(attribute, "OnActivated"), ScanHook(attribute, "OnRelease"));
 		ScanFilters filters = ScanFiltersOf(attribute);
 
 		if ((match.Exposure & ScanExposures.All) == 0)
@@ -223,6 +230,14 @@ partial class AwaitenGenerator
 			return 0;
 		}
 
+		// The scan's hooks, resolved and (for a generic hook) closed in the module's own build. Each becomes a
+		// public wrapper the module emits beside the factory, so a cross-assembly consumer runs it without naming the
+		// module's (possibly internal) hook; the closed marker forms let a same-compilation container bind that hook
+		// directly. A hook named but not resolvable is reported here and dropped (no wrapper, unnamed on the attribute).
+		IReadOnlyList<INamedTypeSymbol>? hookMarkers = ScanHookMarkers(type, match, markerInfo.Open, markerInfo.Definition);
+		ResolvedModuleHook? onActivated = ResolveModuleHook(type, module, match.OnActivated, release: false, hookMarkers, match.Location, compilation, diagnostics);
+		ResolvedModuleHook? onRelease = ResolveModuleHook(type, module, match.OnRelease, release: true, hookMarkers, match.Location, compilation, diagnostics);
+
 		factories.Add(new ModuleScanExpansion(
 			new ModuleFactory(
 				ModuleFactoryName(type),
@@ -230,11 +245,230 @@ partial class AwaitenGenerator
 				typeName,
 				match.Lifetime,
 				match.SkipUnconstructable,
-				parameters),
+				parameters,
+				onActivated?.Wrapper,
+				onRelease?.Wrapper),
 			service,
 			type,
-			match.Location));
+			match.Location,
+			onActivated?.UserHookName,
+			onRelease?.UserHookName,
+			hookMarkers));
 		return 1;
+	}
+
+	/// <summary>
+	///     One module-scan hook resolved in the module's own build: the module's own <see cref="UserHookName" /> (for
+	///     a same-compilation container to bind directly, no boundary in the way) and the <see cref="ModuleHook" />
+	///     the module emits and a cross-assembly consumer runs.
+	/// </summary>
+	private sealed record ResolvedModuleHook(string UserHookName, ModuleHook Wrapper);
+
+	/// <summary>
+	///     Resolves and validates one <c>OnActivated</c>/<c>OnRelease</c> hook a module <c>[Scan]</c> named, in the
+	///     module's own build, or reports why it cannot and returns <see langword="null" /> (the hook is then dropped:
+	///     no wrapper, unnamed on the registration). Mirrors the container's <see cref="ResolveHook" /> against the
+	///     module as owner: a hook is a <c>static void M(TMatch, …)</c> on the module (<c>internal</c> or wider, so a
+	///     same-compilation container can bind it directly as a cross-assembly one binds the wrapper), and a generic hook binds
+	///     its type arguments from the match's closed marker forms (exactly one - none is AWT164, several is AWT198).
+	///     No usable method is <see cref="Diagnostics.InvalidLifecycleHook">AWT164</see>, more than one is
+	///     <see cref="Diagnostics.AmbiguousLifecycleHook">AWT190</see>. The instance (first) parameter accepts the
+	///     internal match itself; the parameters after it are mirrored onto the public wrapper and resolved from the
+	///     consumer's graph, so they carry the same restrictions a container hook's do (AWT189/AWT191) plus the
+	///     external-accessibility rule a factory parameter gets (AWT203).
+	/// </summary>
+	private static ResolvedModuleHook? ResolveModuleHook(
+		INamedTypeSymbol matchType,
+		INamedTypeSymbol module,
+		string? hookName,
+		bool release,
+		IReadOnlyList<INamedTypeSymbol>? closedMarkers,
+		Location? location,
+		Compilation compilation,
+		List<DiagnosticInfo> diagnostics)
+	{
+		if (hookName is null)
+		{
+			return null;
+		}
+
+		string typeName = matchType.ToDisplayString(FullyQualified);
+		(List<IMethodSymbol> matches, List<IReadOnlyList<INamedTypeSymbol>> ambiguous) =
+			CollectModuleHookOverloads(matchType, module, hookName, closedMarkers, compilation);
+
+		// AWT198: a generic hook whose only obstacle is an ambiguous closed marker, with no other usable overload -
+		// its type arguments cannot be chosen. Mirrors ResolveHook.
+		if (matches.Count == 0 && ambiguous.Count == 1)
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.GenericHookAmbiguousMarker,
+				LocationInfo.From(location),
+				new EquatableArray<string>([
+					Display(typeName),
+					hookName,
+					string.Join(", ", ambiguous[0].Select(form => Display(form.ToDisplayString(FullyQualified)))),
+				])));
+			return null;
+		}
+
+		// AWT164 (no usable method) or AWT190 (an overload the module cannot pick between). Mirrors ResolveHook,
+		// naming the module as the owner the hook was looked up on.
+		if (matches.Count != 1 || ambiguous.Count > 0)
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				matches.Count + ambiguous.Count == 0 ? Diagnostics.InvalidLifecycleHook : Diagnostics.AmbiguousLifecycleHook,
+				LocationInfo.From(location),
+				new EquatableArray<string>([Display(typeName), hookName, $"the module '{Display(module.ToDisplayString(FullyQualified))}'",])));
+			return null;
+		}
+
+		IMethodSymbol hook = matches[0];
+		if (!TryMirrorHookParameters(typeName, hook, release, location, compilation, diagnostics, out EquatableArray<FactoryParameter> parameters))
+		{
+			return null;
+		}
+
+		// The wrapper casts the exposure interface it receives to the hook's first-parameter type (the internal
+		// concrete match, or the closed marker form of a generic hook) and forwards it to the user hook, carrying its
+		// bound type arguments for a generic one - all legal because the wrapper compiles inside the module.
+		string instanceCast = hook.Parameters[0].Type.ToDisplayString(FullyQualified);
+		string target = hook.TypeArguments.Length == 0
+			? hookName
+			: $"{hookName}<{string.Join(", ", hook.TypeArguments.Select(argument => argument.ToDisplayString(FullyQualified)))}>";
+		return new ResolvedModuleHook(hookName, new ModuleHook(ModuleHookWrapperName(matchType, release), target, instanceCast, parameters));
+	}
+
+	/// <summary>
+	///     The usable overloads of a module hook (see <see cref="ResolveModuleHook" />): the module's own
+	///     <c>static void</c> methods of that name whose first parameter accepts the match (a non-generic one
+	///     directly, a generic one bound to exactly one closed marker form), plus separately the closed-form sets of
+	///     any generic overload several forms could bind (AWT198 when it is the only candidate). A hook must be
+	///     accessible from a separate type in the module's assembly (<c>internal</c> or wider): the wrapper could
+	///     call even a <c>private</c> hook, but a same-compilation container binding the hook directly could not, so a
+	///     <c>private</c> method is not a usable hook here either and falls through to AWT164.
+	/// </summary>
+	private static (List<IMethodSymbol> Matches, List<IReadOnlyList<INamedTypeSymbol>> Ambiguous) CollectModuleHookOverloads(
+		INamedTypeSymbol matchType,
+		INamedTypeSymbol module,
+		string hookName,
+		IReadOnlyList<INamedTypeSymbol>? closedMarkers,
+		Compilation compilation)
+	{
+		List<IMethodSymbol> matches = new();
+		List<IReadOnlyList<INamedTypeSymbol>> ambiguous = new();
+		foreach (ISymbol member in AccessibleMembers(module, hookName, compilation))
+		{
+			// A hook must be reachable from a separate type in the module's assembly - internal or wider. The wrapper
+			// sits in the module class and could call even a private hook, but a same-compilation container binds the
+			// hook directly, so a private hook usable one way and AWT164 the other would be inconsistent; a private
+			// method is not a usable hook, falling through to AWT164 in both.
+			if (member is not IMethodSymbol { MethodKind: MethodKind.Ordinary, IsStatic: true, ReturnsVoid: true, Parameters.Length: >= 1, } method
+			    || !compilation.IsSymbolAccessibleWithin(method, module.ContainingAssembly))
+			{
+				continue;
+			}
+
+			if (method.Arity == 0)
+			{
+				if (compilation.HasImplicitConversion(matchType, method.Parameters[0].Type))
+				{
+					matches.Add(method);
+				}
+
+				continue;
+			}
+
+			List<(INamedTypeSymbol Form, IMethodSymbol Constructed)> bindable =
+				BindableHookConstructions(method, closedMarkers ?? Array.Empty<INamedTypeSymbol>(), matchType, module, compilation);
+			if (bindable.Count == 1)
+			{
+				matches.Add(bindable[0].Constructed);
+			}
+			else if (bindable.Count > 1)
+			{
+				ambiguous.Add(bindable.Select(candidate => candidate.Form).ToList());
+			}
+		}
+
+		return (matches, ambiguous);
+	}
+
+	/// <summary>
+	///     Mirrors a module hook's parameters after the instance onto the public wrapper (see
+	///     <see cref="ResolveModuleHook" />), or reports why it cannot and returns <see langword="false" /> (the hook
+	///     is dropped). Each parameter is resolved from the consumer's graph like a factory's, so a runtime
+	///     <c>[Arg]</c> is <see cref="Diagnostics.HookParameterIsArg">AWT189</see>, a <c>Func</c>/<c>Lazy</c> on a
+	///     release hook is <see cref="Diagnostics.ReleaseHookDeferredParameter">AWT191</see>, and a type not nameable
+	///     outside the assembly is <see cref="Diagnostics.ModuleScanHookParameterInaccessible">AWT203</see> (the
+	///     hook-parameter twin of the factory-parameter AWT195). The instance parameter is never checked here: it is
+	///     the accessible exposure interface, cast to the internal match inside the module.
+	/// </summary>
+	private static bool TryMirrorHookParameters(
+		string typeName,
+		IMethodSymbol hook,
+		bool release,
+		Location? location,
+		Compilation compilation,
+		List<DiagnosticInfo> diagnostics,
+		out EquatableArray<FactoryParameter> parameters)
+	{
+		parameters = default;
+		List<FactoryParameter> mirrored = new();
+		foreach (IParameterSymbol parameter in hook.Parameters.Skip(1))
+		{
+			ImmutableArray<AttributeData> attributes = parameter.GetAttributes();
+			if (HasArgAttribute(attributes))
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.HookParameterIsArg,
+					LocationInfo.From(location),
+					new EquatableArray<string>([parameter.Name, Display(typeName),])));
+				return false;
+			}
+
+			if (release)
+			{
+				DependencyKind kind = ClassifyParameter(parameter, asyncFactory: false, new HashSet<string>(StringComparer.Ordinal)).Kind;
+				if (kind is DependencyKind.Func or DependencyKind.Lazy or DependencyKind.FuncTask or DependencyKind.LazyTask)
+				{
+					diagnostics.Add(new DiagnosticInfo(
+						Diagnostics.ReleaseHookDeferredParameter,
+						LocationInfo.From(location),
+						new EquatableArray<string>([parameter.Name, Display(typeName),])));
+					return false;
+				}
+			}
+
+			if (!IsExternallyAccessible(parameter.Type))
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.ModuleScanHookParameterInaccessible,
+					LocationInfo.From(location),
+					new EquatableArray<string>([Display(typeName), release ? "OnRelease" : "OnActivated", Display(parameter.Type.ToDisplayString(FullyQualified)),])));
+				return false;
+			}
+
+			mirrored.Add(new FactoryParameter(parameter.Type.ToDisplayString(FullyQualifiedWithNullability), parameter.Name));
+		}
+
+		parameters = new EquatableArray<FactoryParameter>(mirrored.ToArray());
+		return true;
+	}
+
+	/// <summary>
+	///     A deterministic wrapper name for one match's hook slot, stable across library versions and scan order the
+	///     way <see cref="ModuleFactoryName" /> is: the slot and the match's simple name for readability, plus an
+	///     FNV-1a hash of the match's fully-qualified name so two same-named matches stay distinct.
+	/// </summary>
+	private static string ModuleHookWrapperName(INamedTypeSymbol type, bool release)
+	{
+		uint hash = 2166136261;
+		foreach (char character in type.ToDisplayString(FullyQualified))
+		{
+			hash = unchecked((hash ^ character) * 16777619);
+		}
+
+		return $"Awaiten__ScanHook_{(release ? "OnRelease" : "OnActivated")}_{type.Name}_{hash:x8}";
 	}
 
 	/// <summary>
