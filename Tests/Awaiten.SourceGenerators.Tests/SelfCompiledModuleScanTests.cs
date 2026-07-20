@@ -67,6 +67,37 @@ public class SelfCompiledModuleScanTests
 	}
 
 	[Fact]
+	public async Task NullableConstructorParameterKeepsItsAnnotationOnTheFactory()
+	{
+		(_, Microsoft.CodeAnalysis.GeneratorDriverRunResult run) = Generator.RunGenerator("""
+			#nullable enable
+			using Awaiten;
+
+			namespace Lib;
+
+			public interface IClock { }
+			public interface IPlugin { }
+			public interface IRoaster { }
+
+			internal sealed class Roaster : IPlugin, IRoaster
+			{
+			    public Roaster(IClock? clock) { }
+			}
+
+			[Module]
+			[Scan<IPlugin>(As = ScanAs.MatchingInterface)]
+			public static partial class PluginModule { }
+			""", [], []);
+		string module = run.Results
+			.SelectMany(r => r.GeneratedSources)
+			.Single(s => s.HintName.Contains("ModuleScan"))
+			.SourceText.ToString();
+
+		await That(module).Contains($"public static global::Lib.IRoaster {FactoryName("global::Lib.Roaster")}(global::Lib.IClock? @clock)")
+			.Because("the generated public factory must mirror the scanned constructor exactly, keeping the nullable annotation rather than widening the dependency to non-nullable");
+	}
+
+	[Fact]
 	public async Task ConsumerResolvesTheInternalImplementationThroughItsInterface()
 	{
 		GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(LibrarySource, """

@@ -8,6 +8,17 @@ namespace Awaiten.SourceGenerators;
 partial class AwaitenGenerator
 {
 	/// <summary>
+	///     <see cref="FullyQualified" /> plus the nullable reference type modifier, used for a generated module-scan
+	///     factory's parameter types. The factory is a <c>public</c> cross-assembly member, so its signature must
+	///     mirror the scanned constructor exactly; without the modifier a <c>IClock?</c> parameter would be emitted
+	///     as a non-nullable <c>IClock</c>, silently widening a nullable dependency the author declared.
+	/// </summary>
+	private static readonly SymbolDisplayFormat FullyQualifiedWithNullability =
+		SymbolDisplayFormat.FullyQualifiedFormat.WithMiscellaneousOptions(
+			SymbolDisplayFormat.FullyQualifiedFormat.MiscellaneousOptions
+			| SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
+
+	/// <summary>
 	///     Expands every <c>[Scan]</c> declared on a <c>[Module]</c> into the factories the module self-compiles:
 	///     one <c>public static</c> method per match that constructs the (possibly <c>internal</c>) implementation
 	///     and returns its accessible exposure interface. The emitter pairs each with a
@@ -309,7 +320,7 @@ partial class AwaitenGenerator
 				return 0;
 			}
 
-			parameters.Add(new FactoryParameter(parameter.Type.ToDisplayString(FullyQualified), parameter.Name));
+			parameters.Add(new FactoryParameter(parameter.Type.ToDisplayString(FullyQualifiedWithNullability), parameter.Name));
 		}
 
 		factories.Add(new ModuleScanExpansion(
