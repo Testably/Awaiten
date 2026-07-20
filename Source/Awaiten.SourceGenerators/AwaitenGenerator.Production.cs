@@ -310,13 +310,64 @@ partial class AwaitenGenerator
 			return (null, default);
 		}
 
+		(List<IMethodSymbol> matches, List<IReadOnlyList<INamedTypeSymbol>> ambiguousMethods) =
+			CollectHookOverloads(info, hookName, release, context);
+
+		if (matches.Count == 1 && ambiguousMethods.Count == 0)
+		{
+			return (QualifiedHook(info, hookName, matches[0]), ClassifyHookParameters(matches[0], info, release, context));
+		}
+
+		// A generic hook whose only obstacle is an ambiguous closed marker, with no other usable overload, is
+		// AWT198, distinct from an unusable name (AWT164) or an overload the container cannot pick between (AWT190):
+		// several closed forms could bind the hook, so its type arguments cannot be chosen. When another overload
+		// is also usable the collision is between methods, not closings (settling the closings would still leave
+		// two usable overloads), so it falls to AWT190 below - exactly as if the generic overload bound uniquely.
+		if (matches.Count == 0 && ambiguousMethods.Count == 1)
+		{
+			context.Diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.GenericHookAmbiguousMarker,
+				info.Location,
+				new EquatableArray<string>([
+					Display(info.ImplementationType),
+					hookName,
+					string.Join(", ", ambiguousMethods[0].Select(form => Display(form.ToDisplayString(FullyQualified)))),
+				])));
+			return (null, default);
+		}
+
+		// No usable match is AWT164 (unusable hook); more than one is AWT190 (an overload the container cannot pick
+		// between), where a generic overload with several bindable closings counts as usable - it could dispatch,
+		// so silently preferring its sibling would let an extra marker closing change which method runs. Either way
+		// no hook is emitted - the error fails the build, and picking one arbitrarily would only add a confusing
+		// secondary diagnostic from the parameters of the guessed overload.
+		context.Diagnostics.Add(new DiagnosticInfo(
+			matches.Count + ambiguousMethods.Count == 0 ? Diagnostics.InvalidLifecycleHook : Diagnostics.AmbiguousLifecycleHook,
+			info.Location,
+			new EquatableArray<string>([Display(info.OwningServiceOrImpl), hookName, DescribeOwner(info),])));
+		return (null, default);
+	}
+
+	/// <summary>
+	///     Collects the usable overloads of <paramref name="hookName" /> for <see cref="ResolveHook" />: the
+	///     dispatchable methods (non-generic ones whose first parameter accepts the instance, and generic ones bound
+	///     to a single closed marker form), and separately the closed-form sets of any generic overload that several
+	///     forms could bind, which stay usable (an AWT190 collision when a sibling also matches) yet cannot be
+	///     dispatched (AWT198 when they are the only candidate). The forms of each ambiguous overload are kept so the
+	///     AWT198 message can name them.
+	/// </summary>
+	private static (List<IMethodSymbol> Matches, List<IReadOnlyList<INamedTypeSymbol>> AmbiguousMethods) CollectHookOverloads(
+		ImplInfo info,
+		string hookName,
+		bool release,
+		BuildContext context)
+	{
 		INamedTypeSymbol containerSymbol = context.ContainerSymbol;
 		Compilation compilation = context.Compilation;
 		IReadOnlyList<INamedTypeSymbol> closedMarkers = release ? info.OnReleaseMarkers : info.OnActivatedMarkers;
 
 		List<IMethodSymbol> matches = new();
-		List<INamedTypeSymbol>? ambiguousForms = null;
-		int ambiguousMethods = 0;
+		List<IReadOnlyList<INamedTypeSymbol>> ambiguousMethods = new();
 		foreach (ISymbol member in AccessibleMembers(info.Origin ?? containerSymbol, hookName, compilation))
 		{
 			// A module hook must also be accessible from the generated container (its own private members are
@@ -351,44 +402,11 @@ partial class AwaitenGenerator
 			}
 			else if (bindable.Count > 1)
 			{
-				ambiguousMethods++;
-				ambiguousForms ??= bindable.Select(candidate => candidate.Form).ToList();
+				ambiguousMethods.Add(bindable.Select(candidate => candidate.Form).ToList());
 			}
 		}
 
-		if (matches.Count == 1 && ambiguousMethods == 0)
-		{
-			return (QualifiedHook(info, hookName, matches[0]), ClassifyHookParameters(matches[0], info, release, context));
-		}
-
-		// A generic hook whose only obstacle is an ambiguous closed marker, with no other usable overload, is
-		// AWT198, distinct from an unusable name (AWT164) or an overload the container cannot pick between (AWT190):
-		// several closed forms could bind the hook, so its type arguments cannot be chosen. When another overload
-		// is also usable the collision is between methods, not closings (settling the closings would still leave
-		// two usable overloads), so it falls to AWT190 below - exactly as if the generic overload bound uniquely.
-		if (matches.Count == 0 && ambiguousMethods == 1 && ambiguousForms is not null)
-		{
-			context.Diagnostics.Add(new DiagnosticInfo(
-				Diagnostics.GenericHookAmbiguousMarker,
-				info.Location,
-				new EquatableArray<string>([
-					Display(info.ImplementationType),
-					hookName,
-					string.Join(", ", ambiguousForms.Select(form => Display(form.ToDisplayString(FullyQualified)))),
-				])));
-			return (null, default);
-		}
-
-		// No usable match is AWT164 (unusable hook); more than one is AWT190 (an overload the container cannot pick
-		// between), where a generic overload with several bindable closings counts as usable - it could dispatch,
-		// so silently preferring its sibling would let an extra marker closing change which method runs. Either way
-		// no hook is emitted - the error fails the build, and picking one arbitrarily would only add a confusing
-		// secondary diagnostic from the parameters of the guessed overload.
-		context.Diagnostics.Add(new DiagnosticInfo(
-			matches.Count + ambiguousMethods == 0 ? Diagnostics.InvalidLifecycleHook : Diagnostics.AmbiguousLifecycleHook,
-			info.Location,
-			new EquatableArray<string>([Display(info.OwningServiceOrImpl), hookName, DescribeOwner(info),])));
-		return (null, default);
+		return (matches, ambiguousMethods);
 	}
 
 	/// <summary>
@@ -509,15 +527,11 @@ partial class AwaitenGenerator
 		Compilation compilation)
 	{
 		List<(INamedTypeSymbol Form, IMethodSymbol Constructed)> bindable = new();
-		foreach (INamedTypeSymbol form in closedMarkers)
+		foreach (INamedTypeSymbol form in closedMarkers.Where(form =>
+			         method.Arity == form.TypeArguments.Length
+			         && compilation.IsSymbolAccessibleWithin(form, containerSymbol)
+			         && SatisfiesConstraints(method, form.TypeArguments, compilation)))
 		{
-			if (method.Arity != form.TypeArguments.Length
-			    || !compilation.IsSymbolAccessibleWithin(form, containerSymbol)
-			    || !SatisfiesConstraints(method, form.TypeArguments, compilation))
-			{
-				continue;
-			}
-
 			IMethodSymbol constructed = method.Construct(form.TypeArguments.ToArray());
 			if (compilation.HasImplicitConversion(implementation, constructed.Parameters[0].Type)
 			    && !bindable.Any(candidate => SymbolEqualityComparer.Default.Equals(candidate.Constructed, constructed)))

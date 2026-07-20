@@ -259,12 +259,10 @@ partial class AwaitenGenerator
 
 		if (registration.HookClosedMarkers is { } markers)
 		{
-			foreach (INamedTypeSymbol marker in markers)
+			foreach (INamedTypeSymbol marker in markers.Where(marker =>
+				         !slotMarkers.Any(seen => SymbolEqualityComparer.Default.Equals(seen, marker))))
 			{
-				if (!slotMarkers.Any(seen => SymbolEqualityComparer.Default.Equals(seen, marker)))
-				{
-					slotMarkers.Add(marker);
-				}
+				slotMarkers.Add(marker);
 			}
 		}
 
