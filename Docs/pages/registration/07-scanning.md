@@ -110,6 +110,10 @@ An explicit registration of a scanned type wins over the scan, so you can specia
 Prefer explicit registrations. A scan trades away the property that makes the composition root useful: the whole graph visible in one place. Reach for a scan only for a large, uniform family that grows on its own, like message handlers, validators, or plug-ins, where listing each one adds churn without adding clarity. For a handful of services, spell them out, see [Design principles](../design-principles#when-power-becomes-a-smell).
 :::
 
+## Scan from a module
+
+A `[Scan]` may also sit on a `[Module]`, where it is compiled in the module's own build so a library can scan its `internal` implementations and expose them to consumers through their interfaces. See [self-compiled scans](./modules#self-compiled-scans).
+
 ## Where to go next
 
 - [Modules](./modules) to group registrations for reuse.

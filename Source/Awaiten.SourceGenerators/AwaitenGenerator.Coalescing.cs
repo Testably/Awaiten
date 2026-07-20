@@ -182,6 +182,7 @@ partial class AwaitenGenerator
 					LocationInfo.From(reg.Location), reg.Production, reg.ProductionMember)
 				{
 					IsScan = reg.IsScan,
+					GreedyConstructor = reg.GreedyConstructor,
 					Origin = reg.Origin,
 					Eager = reg.Eager,
 					OnActivated = reg.OnActivated,

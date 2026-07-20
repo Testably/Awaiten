@@ -7,6 +7,13 @@ namespace Awaiten.SourceGenerators;
 
 partial class AwaitenGenerator
 {
+	/// <summary>
+	///     The marker inside a self-compiled module-scan match's synthetic implementation identity
+	///     (<c>&lt;service&gt;@scan:&lt;qualified factory&gt;</c>, see <see cref="CollectGeneratedScanRegistration" />).
+	///     <c>DisplayInstance</c> keys off it to trim the synthetic suffix from diagnostics.
+	/// </summary>
+	private const string ScanKeyMarker = "@scan:";
+
 	private static (List<RawRegistration> Raw, HashSet<string> ConstraintRejectedServices) Collect(
 		INamedTypeSymbol containerSymbol,
 		List<ImportedModule> modules,
@@ -28,17 +35,62 @@ partial class AwaitenGenerator
 
 		// [Import(typeof(Module))] pulls a module's registrations in after the container's own, so the container
 		// wins ties and a module's overridable defaults (Fallback.Warn/Silent) only fill the gaps it leaves. Resolved
-		// one level deep; a module's own [Import] is not followed.
+		// one level deep; a module's own [Import] is not followed. A same-compilation module's
+		// [GeneratedScanRegistration] attributes are skipped: the generator itself never sees them (its own output),
+		// but an analyzer running over the post-generation compilation does, and collecting them alongside the
+		// direct scan expansion below would double every match in its graph.
 		foreach (ImportedModule module in modules)
 		{
-			CollectLifetimeRegistrations(module.Symbol, result, open, diagnostics, origin: module.Symbol, fallbackLocation: module.ImportLocation);
+			bool sameCompilation = SymbolEqualityComparer.Default.Equals(module.Symbol.ContainingAssembly, containerSymbol.ContainingAssembly);
+			CollectLifetimeRegistrations(module.Symbol, result, open, diagnostics, origin: module.Symbol, fallbackLocation: module.ImportLocation, skipGeneratedScanRegistrations: sameCompilation);
 		}
+
+		// The container's own scan matches must outrank a module's within the scan tier (the container wins ties
+		// there like everywhere else), so the module-collected [GeneratedScanRegistration] matches are pulled out
+		// and re-added after the container's scan expansion; the same-compilation expansions below append later
+		// still, giving both module forms the same rank relative to the container's own scans.
+		List<RawRegistration> moduleScanRegistrations = result.FindAll(registration => registration.IsScan);
+		result.RemoveAll(registration => registration.IsScan);
 
 		// Assembly scanning contributes overridable registrations for every concrete type assignable to a
 		// [Scan] marker. Appended before open generic expansion so scanned implementations seed it: their
 		// constructors may require closed generics only an open registration can provide.
 		List<RawRegistration> scans = CollectScans(containerSymbol, compilation, diagnostics);
 		result.AddRange(scans);
+		result.AddRange(moduleScanRegistrations);
+
+		// A same-compilation module's [Scan] is expanded here: the generator cannot see its own output, so the
+		// module's self-compiled [GeneratedScanRegistration] attributes are invisible within the compilation that
+		// declares the module. The expansion runs the module pipeline's own logic (CollectModuleScanFactories),
+		// so a scan means exactly the same thing wherever the module lives - one accessible exposure per match,
+		// matches the module build skipped (AWT196) stay skipped, and construction goes through the greediest
+		// accessible constructor, the one the generated factory mirrors - except that with no assembly boundary
+		// the container constructs the match directly instead of through the factory it cannot resolve. A
+		// referenced-assembly module is excluded: its metadata carries the self-compiled expansion instead, and
+		// re-running its scan here would double-register every match. The expansion's diagnostics are discarded:
+		// the module pipeline (BuildModuleModel) already reports on the same [Scan] at the same location, and
+		// reporting here too would double every scan-level warning.
+		foreach (INamedTypeSymbol moduleSymbol in modules.Select(module => module.Symbol))
+		{
+			if (!SymbolEqualityComparer.Default.Equals(moduleSymbol.ContainingAssembly, containerSymbol.ContainingAssembly))
+			{
+				continue;
+			}
+
+			foreach (ModuleScanExpansion expansion in CollectModuleScanFactories(moduleSymbol, compilation, new List<DiagnosticInfo>(), CancellationToken.None))
+			{
+				result.Add(new RawRegistration(
+					expansion.Factory.ServiceType,
+					expansion.Factory.ImplementationType,
+					expansion.Factory.Lifetime,
+					expansion.Implementation,
+					expansion.Location,
+					ServiceSymbol: expansion.Service,
+					IsScan: true,
+					ScanSkipsUnconstructable: expansion.Factory.SkipUnconstructable,
+					GreedyConstructor: true));
+			}
+		}
 
 		// Expand open generic registrations: for every closed generic service required from the graph
 		// whose open form is registered but which has no concrete registration, synthesize the closed
@@ -49,11 +101,13 @@ partial class AwaitenGenerator
 		}
 
 		// ...then moved back to the end: coalescing is first-wins per service, so the explicit registrations and
-		// the closed registrations expanded from them must precede the overridable scan ones.
-		if (scans.Count > 0)
+		// the closed registrations expanded from them must precede the overridable scan ones — the container's own
+		// [Scan] matches and a module's self-compiled [GeneratedScanRegistration] matches alike, both IsScan.
+		List<RawRegistration> scanMatches = result.FindAll(registration => registration.IsScan);
+		if (scanMatches.Count > 0)
 		{
 			result.RemoveAll(registration => registration.IsScan);
-			result.AddRange(scans);
+			result.AddRange(scanMatches);
 		}
 
 		return (result, constraintRejected);
@@ -73,12 +127,20 @@ partial class AwaitenGenerator
 		List<OpenRegistration> open,
 		List<DiagnosticInfo> diagnostics,
 		INamedTypeSymbol? origin,
-		Location? fallbackLocation)
+		Location? fallbackLocation,
+		bool skipGeneratedScanRegistrations = false)
 	{
 		foreach (AttributeData attribute in symbol.GetAttributes())
 		{
 			if (attribute.AttributeClass is not { } attributeClass
 			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace)
+			{
+				continue;
+			}
+
+			// A [GeneratedScanRegistration<TService>(factory, Lifetime = …)] is what a [Module] self-compiled from
+			// its own [Scan] (one per match), read back and consumed there.
+			if (CollectGeneratedScanRegistration(attribute, attributeClass, result, origin, fallbackLocation, skipGeneratedScanRegistrations))
 			{
 				continue;
 			}
@@ -160,6 +222,76 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
+	///     Reads one <c>[GeneratedScanRegistration&lt;TService&gt;(factory, Lifetime = …)]</c> - what a
+	///     <c>[Module]</c> self-compiled from its own <c>[Scan]</c>, one per match - into an <c>IsScan</c> factory
+	///     registration, so the consuming container treats it exactly like a container <c>[Scan]</c> match:
+	///     collection-eligible (several matches under one interface resolve as an <c>IEnumerable</c>) and overridable
+	///     by an explicit registration (scans rank last). Each match gets a synthetic implementation identity keyed
+	///     by its module-qualified factory name, distinct from the service's own type so the emitter still constructs
+	///     through the accessible service; without it two matches of one interface would collapse into one
+	///     implementation and collide as conflicting factories. The module qualification matters: factory names are
+	///     only unique per module, so two imported modules whose matches share a simple type name would otherwise
+	///     collapse into one member, silently dropping the later module's match from the collection. Returns whether
+	///     the attribute was a <c>[GeneratedScanRegistration]</c> (so the caller skips its lifetime handling), even
+	///     when <paramref name="skip" /> suppressed the collection for a same-compilation module whose <c>[Scan]</c>
+	///     the container expands directly (see <see cref="Collect" />).
+	/// </summary>
+	private static bool CollectGeneratedScanRegistration(
+		AttributeData attribute,
+		INamedTypeSymbol attributeClass,
+		List<RawRegistration> result,
+		INamedTypeSymbol? origin,
+		Location? fallbackLocation,
+		bool skip)
+	{
+		if (attributeClass is not { Name: "GeneratedScanRegistrationAttribute", IsGenericType: true, })
+		{
+			return false;
+		}
+
+		if (skip
+		    || attributeClass.TypeArguments.Length != 1
+		    || attributeClass.TypeArguments[0] is not INamedTypeSymbol service
+		    || attribute.ConstructorArguments.Length != 1
+		    || attribute.ConstructorArguments[0].Value is not string factory)
+		{
+			return true;
+		}
+
+		Lifetime lifetime = Lifetime.Transient;
+		bool skipUnconstructable = false;
+		foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
+		{
+			if (argument.Key == "Lifetime" && argument.Value.Value is int value)
+			{
+				lifetime = (Lifetime)value;
+			}
+			else if (argument.Key == "SkipUnconstructable" && argument.Value.Value is bool flag)
+			{
+				skipUnconstructable = flag;
+			}
+		}
+
+		string serviceType = service.ToDisplayString(FullyQualified);
+		Location? location = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? fallbackLocation;
+		string qualifiedFactory = origin is null ? factory : $"{origin.ToDisplayString(FullyQualified)}.{factory}";
+
+		result.Add(new RawRegistration(
+			serviceType,
+			$"{serviceType}{ScanKeyMarker}{qualifiedFactory}",
+			lifetime,
+			service,
+			location,
+			ProductionKind.Factory,
+			factory,
+			ServiceSymbol: service,
+			IsScan: true,
+			ScanSkipsUnconstructable: skipUnconstructable,
+			Origin: origin));
+		return true;
+	}
+
+	/// <summary>
 	///     AWT168: a contextual binding is stored under a synthetic per-consumer key (see <c>ContextKey</c>), which
 	///     overrides an explicit <c>Key</c> entirely, so the two together silently drop the <c>Key</c>. Report it
 	///     rather than let a <c>[FromKey]</c> the author expects to select this registration quietly never match.
@@ -223,7 +355,8 @@ partial class AwaitenGenerator
 			// not the module declaration, which may live in another file (or, for a module compiled into a
 			// referenced assembly, in no source at all).
 			Location? importLocation = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation();
-			if (ValidateImportedModule(module, importLocation, diagnostics))
+			bool sameCompilation = SymbolEqualityComparer.Default.Equals(module.ContainingAssembly, containerSymbol.ContainingAssembly);
+			if (ValidateImportedModule(module, importLocation, sameCompilation, diagnostics))
 			{
 				modules.Add(new ImportedModule(module, importLocation));
 			}
@@ -233,14 +366,18 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     Validates one <c>[Import(typeof(Module))]</c> target, reporting AWT149-154, and returns whether it is
+	///     Validates one <c>[Import(typeof(Module))]</c> target, reporting AWT149-152, and returns whether it is
 	///     importable. A non-<c>[Module]</c> target (AWT149) is skipped (<see langword="false" />); the other faults
 	///     are reported but still imported (<see langword="true" />): non-static (AWT152), a nested <c>[Import]</c>
-	///     (AWT150), a module-declared <c>[Scan]</c> (AWT154), or no registrations (AWT151).
+	///     (AWT150), or no registrations (AWT151). A module-declared <c>[Scan]</c> is accepted (self-compiled in the
+	///     module's own build, AWT154 retired) rather than rejected. <paramref name="sameCompilation" /> marks a
+	///     module declared in the container's own compilation, whose <c>[Scan]</c> the container expands directly
+	///     (its self-compiled attributes are invisible here), so the scan counts as a registration for AWT151.
 	/// </summary>
 	private static bool ValidateImportedModule(
 		INamedTypeSymbol module,
 		Location? importLocation,
+		bool sameCompilation,
 		List<DiagnosticInfo> diagnostics)
 	{
 		LocationInfo? location = LocationInfo.From(importLocation);
@@ -273,19 +410,28 @@ partial class AwaitenGenerator
 				Diagnostics.NestedModuleImport, location, new EquatableArray<string>([moduleName,])));
 		}
 
-		// AWT154: [Scan] sweeps an assembly relative to the container and is not collected from modules, so a
-		// module-declared scan would be silently ignored; reject it instead. Reported at the module's own [Scan]
-		// when in source, else at the container's [Import].
-		if (TryGetAwaitenAttribute(moduleAttributes, "ScanAttribute", out AttributeData? scan))
+		// A referenced-assembly module's [Scan] is self-compiled in the module's own build (the module emits a
+		// generated factory and lifetime registration per match, plus a [GeneratedScanExpansion] marker), which
+		// this collection reads like any other module registration. A same-compilation module's [Scan] is instead
+		// expanded by the container itself (see Collect); the generator cannot see the module's generated marker
+		// there (its own output), so the skew check below excludes it.
+		bool declaresScan = HasAwaitenAttribute(moduleAttributes, "ScanAttribute");
+
+		// AWT154: the metadata carries a [Scan] but no expansion marker, so the module assembly was built without
+		// the Awaiten generator (or a version predating self-compiled scans) and the scan would silently
+		// contribute nothing. The marker is emitted even for a scan that matched nothing, so its absence is
+		// conclusive, not a maybe.
+		if (!sameCompilation && declaresScan && !HasAwaitenAttribute(moduleAttributes, "GeneratedScanExpansionAttribute"))
 		{
 			diagnostics.Add(new DiagnosticInfo(
-				Diagnostics.ScanOnModule,
-				LocationInfo.From(scan?.ApplicationSyntaxReference?.GetSyntax().GetLocation()) ?? location,
-				new EquatableArray<string>([moduleName,])));
+				Diagnostics.ModuleScanNotExpanded, location, new EquatableArray<string>([moduleName,])));
 		}
 
-		// AWT151: a module that declares no lifetime registrations imports nothing useful.
-		if (!DeclaresAnyRegistration(moduleAttributes))
+		// AWT151: a module that declares no lifetime registrations imports nothing useful. A module with a [Scan]
+		// is exempt regardless of what the scan produced: the module's own build reports an empty scan at its
+		// declaration (AWT138/AWT184), and an unexpanded one is AWT154 above, so repeating the blame at the
+		// consumer's [Import] would point at code the consumer does not own.
+		if (!DeclaresAnyRegistration(moduleAttributes) && !declaresScan)
 		{
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.EmptyModule, location, new EquatableArray<string>([moduleName,])));
@@ -298,8 +444,9 @@ partial class AwaitenGenerator
 	///     Whether an attribute list carries anything a module contributes to an importing container: a
 	///     <c>[Singleton]</c>/<c>[Transient]</c>/<c>[Scoped]</c> lifetime registration (generic or open
 	///     <c>typeof</c> form), a <c>[Decorate]</c>, a <c>[Composite]</c>, or <c>[ImportServices]</c>. Used to
-	///     detect a module that declares nothing to import (AWT151); a module-declared <c>[Scan]</c> does not
-	///     count, being uncollected and its own error (AWT154).
+	///     detect a module that declares nothing to import (AWT151). A module-declared <c>[Scan]</c> does not
+	///     count here on its own: its matches are self-compiled into <c>[GeneratedScanRegistration]</c> attributes
+	///     (which do count), so a scan-only module whose scan matched something carries those generated attributes.
 	/// </summary>
 	private static bool DeclaresAnyRegistration(ImmutableArray<AttributeData> attributes)
 	{
@@ -308,7 +455,8 @@ partial class AwaitenGenerator
 			if (attribute.AttributeClass is { } attributeClass
 			    && attributeClass.ContainingNamespace?.ToDisplayString() == AttributeNamespace
 			    && attributeClass.Name is "SingletonAttribute" or "TransientAttribute" or "ScopedAttribute"
-				    or "DecorateAttribute" or "CompositeAttribute" or "ImportServicesAttribute")
+				    or "DecorateAttribute" or "CompositeAttribute" or "ImportServicesAttribute"
+				    or "GeneratedScanRegistrationAttribute")
 			{
 				return true;
 			}

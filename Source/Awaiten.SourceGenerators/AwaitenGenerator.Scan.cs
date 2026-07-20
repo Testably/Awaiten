@@ -1129,16 +1129,20 @@ partial class AwaitenGenerator
 			}
 		}
 
-		VarianceState variance = new(varianceCandidates, compilation);
+		ScanSatisfiability surface = new(services, constraintRejected, external, new VarianceState(varianceCandidates, compilation));
 
 		// Check each opted-in implementation once (its registrations share symbol and location).
 		bool dropped = false;
 		HashSet<string> checkedImpls = new(StringComparer.Ordinal);
 		foreach (RawRegistration registration in raw.Where(r => r.ScanSkipsUnconstructable).ToList())
 		{
-			if (pinnedImpls.Contains(registration.ImplementationType)
-			    || !checkedImpls.Add(registration.ImplementationType)
-			    || FirstUnconstructableReason(registration.Implementation, containerSymbol, compilation, services, constraintRejected, external, variance) is not { } reason)
+			if (pinnedImpls.Contains(registration.ImplementationType) || !checkedImpls.Add(registration.ImplementationType))
+			{
+				continue;
+			}
+
+			string? reason = UnconstructableScanMatchReason(registration, containerSymbol, compilation, surface);
+			if (reason is null)
 			{
 				continue;
 			}
@@ -1161,6 +1165,34 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
+	///     The round's satisfiable surface, threaded through the unconstructable-match checks as one value: every
+	///     registered <c>(service, key)</c>, the constraint-rejected services, the container's external-resolution
+	///     surface, and the variance candidates a Direct/Func parameter could be redirected to.
+	/// </summary>
+	private readonly record struct ScanSatisfiability(
+		HashSet<ServiceKey> Services,
+		HashSet<string> ConstraintRejected,
+		ExternalSurface External,
+		VarianceState Variance);
+
+	/// <summary>
+	///     The reason one opted-in scan match cannot be produced against the round's surface (an AWT141 fragment),
+	///     or <see langword="null" /> when it can. A self-compiled module-scan match is produced by its generated
+	///     module factory, not by a constructor this container can see (the implementation is internal to the
+	///     module's assembly), so its satisfiability is the factory's parameters, which mirror that constructor's. A
+	///     same-compilation module-scan match is constructed directly, but through the same greedy constructor pick
+	///     the factory would mirror, so its prune asks about that constructor too.
+	/// </summary>
+	private static string? UnconstructableScanMatchReason(
+		RawRegistration registration,
+		INamedTypeSymbol containerSymbol,
+		Compilation compilation,
+		ScanSatisfiability surface)
+		=> registration is { Production: ProductionKind.Factory, Origin: not null, ProductionMember: not null, }
+			? FirstUnsatisfiableFactoryReason(registration, surface)
+			: FirstUnconstructableReason(registration.Implementation, containerSymbol, compilation, surface, registration.GreedyConstructor);
+
+	/// <summary>
 	///     The reason a scanned implementation cannot be constructed (an AWT141 fragment), or <see langword="null" />
 	///     when every dependency is satisfiable. Mirrors the AWT101 checks in <see cref="BuildInstance" /> against
 	///     the round's satisfiable surface (registered services, always-satisfiable kinds, <c>[ImportServices]</c>
@@ -1171,39 +1203,72 @@ partial class AwaitenGenerator
 		INamedTypeSymbol implementation,
 		INamedTypeSymbol containerSymbol,
 		Compilation compilation,
-		HashSet<ServiceKey> services,
-		HashSet<string> constraintRejected,
-		ExternalSurface external,
-		VarianceState variance)
+		ScanSatisfiability surface,
+		bool greedyConstructor = false)
 	{
 		IMethodSymbol? constructor = SelectConstructor(
-			implementation, containerSymbol, compilation, services.Select(service => service.Service), external);
+			implementation, containerSymbol, compilation, surface.Services.Select(service => service.Service), surface.External,
+			greedyConstructor ? _ => true : null);
 		if (constructor is null)
 		{
 			return "it has no constructor accessible to the container";
 		}
 
-		foreach (IParameterSymbol parameter in constructor.Parameters)
+		if (FirstUnsatisfiableParameterReason(constructor, surface) is { } parameterReason)
 		{
-			ParameterModel model = ClassifyParameter(parameter, asyncFactory: false, external.ServiceTypes);
-			bool satisfiable =
-				model.Kind is DependencyKind.Arg or DependencyKind.External
-				|| IsSynthesizedCollection(model.Kind)
-				|| (external.ImportServices && model is { Kind: DependencyKind.Direct, Key: null, })
-				|| services.Contains(KeyOf(model))
-				|| constraintRejected.Contains(model.ServiceType)
-				|| IsVarianceSatisfiable(model, parameter.Type, variance);
-			if (!satisfiable)
-			{
-				return $"it requires '{DisplayKeyed(model.ServiceType, model.Key)}', which is not registered";
-			}
+			return parameterReason;
 		}
 
 		foreach (IPropertySymbol property in InjectedProperties(implementation))
 		{
-			if (UnsatisfiableInjectedMemberReason(property, containerSymbol, compilation, services, constraintRejected, external.ServiceTypes) is { } reason)
+			if (UnsatisfiableInjectedMemberReason(property, containerSymbol, compilation, surface.Services, surface.ConstraintRejected, surface.External.ServiceTypes) is { } reason)
 			{
 				return reason;
+			}
+		}
+
+		return null;
+	}
+
+	/// <summary>
+	///     The reason a self-compiled module-scan match cannot be produced (an AWT141 fragment), or
+	///     <see langword="null" /> when every parameter of its generated module factory is satisfiable. The factory's
+	///     parameters mirror the internal implementation's constructor, plain and unattributed (the module's own
+	///     build rejected the rest, AWT200), so the check is the same per-parameter satisfiability a scanned
+	///     constructor gets. A factory member missing from the module is not a prune concern; the emitted call would
+	///     fail compilation with a targeted error anyway.
+	/// </summary>
+	private static string? FirstUnsatisfiableFactoryReason(RawRegistration registration, ScanSatisfiability surface)
+	{
+		IMethodSymbol? factory = registration.Origin!.GetMembers(registration.ProductionMember!)
+			.OfType<IMethodSymbol>()
+			.FirstOrDefault();
+		return factory is null
+			? null
+			: FirstUnsatisfiableParameterReason(factory, surface);
+	}
+
+	/// <summary>
+	///     The reason one of a production method's parameters cannot be satisfied from the round's surface (an
+	///     AWT141 fragment), or <see langword="null" /> when all are. Shared by the constructor check
+	///     (<see cref="FirstUnconstructableReason" />) and the generated-module-factory check
+	///     (<see cref="FirstUnsatisfiableFactoryReason" />), whose parameters resolve identically.
+	/// </summary>
+	private static string? FirstUnsatisfiableParameterReason(IMethodSymbol method, ScanSatisfiability surface)
+	{
+		foreach (IParameterSymbol parameter in method.Parameters)
+		{
+			ParameterModel model = ClassifyParameter(parameter, asyncFactory: false, surface.External.ServiceTypes);
+			bool satisfiable =
+				model.Kind is DependencyKind.Arg or DependencyKind.External
+				|| IsSynthesizedCollection(model.Kind)
+				|| (surface.External.ImportServices && model is { Kind: DependencyKind.Direct, Key: null, })
+				|| surface.Services.Contains(KeyOf(model))
+				|| surface.ConstraintRejected.Contains(model.ServiceType)
+				|| IsVarianceSatisfiable(model, parameter.Type, surface.Variance);
+			if (!satisfiable)
+			{
+				return $"it requires '{DisplayKeyed(model.ServiceType, model.Key)}', which is not registered";
 			}
 		}
 

@@ -253,7 +253,12 @@ partial class AwaitenGenerator
 			return null;
 		}
 
-		IMethodSymbol? constructor = SelectConstructor(info.Symbol, containerSymbol, compilation, serviceToImpl.Keys.Select(k => k.Service), external);
+		// A same-compilation module-scan match builds through the greediest accessible constructor - the one the
+		// module's generated factory mirrors - so the match constructs identically wherever the module is
+		// imported from, instead of quietly falling back to a smaller constructor the local graph happens to satisfy.
+		IMethodSymbol? constructor = SelectConstructor(
+			info.Symbol, containerSymbol, compilation, serviceToImpl.Keys.Select(k => k.Service), external,
+			info.GreedyConstructor ? _ => true : null);
 		if (constructor is null)
 		{
 			diagnostics.Add(new DiagnosticInfo(

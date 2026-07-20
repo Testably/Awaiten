@@ -40,6 +40,20 @@ public static class Generator
 		return Run(source, [EmitToReference(referenced),]);
 	}
 
+	/// <summary>
+	///     Like <see cref="RunWithReferencedAssembly" />, but runs the generator over
+	///     <paramref name="referencedSource" /> first, so the referenced assembly contains the generated code
+	///     (for example a <c>[Module]</c> that self-compiles its <c>[Scan]</c> into factory methods and registration
+	///     attributes). Then runs the generator over <paramref name="source" /> against that assembly.
+	/// </summary>
+	public static GeneratorResult RunWithGeneratedReferencedAssembly(
+		[StringSyntax("c#-test")] string referencedSource,
+		[StringSyntax("c#-test")] string source)
+	{
+		(Compilation referencedOutput, _) = RunGenerator(referencedSource, [], [], "ReferencedAssembly");
+		return Run(source, [EmitToReference(referencedOutput),]);
+	}
+
 	private static GeneratorResult Run(
 		[StringSyntax("c#-test")] string source,
 		MetadataReference[] additionalReferences,

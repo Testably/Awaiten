@@ -14,6 +14,9 @@ namespace Awaiten.SourceGenerators;
 ///     expansion, yielding to explicit registrations), and <c>Eager</c> (build-time construction, singletons only).
 ///     <c>WhenInjectedInto</c> names a consumer type for a contextual binding: the registration is stored under a
 ///     synthetic context key and reached only from that consumer's constructor parameters (AWT167 when it never applies).
+///     <c>GreedyConstructor</c> marks a same-compilation module-scan match, constructed through the greediest
+///     accessible constructor (the one a cross-assembly module's generated factory mirrors) rather than the
+///     registered-services-aware pick, so the match constructs identically wherever the module is imported from.
 /// </summary>
 /// <remarks>
 ///     <see cref="Location" /> is the live Roslyn location (with its syntax tree), not an equatable
@@ -41,7 +44,8 @@ internal sealed record RawRegistration(
 	string? OnActivated = null,
 	string? OnRelease = null,
 	bool SuppressDisposal = false,
-	string? WhenInjectedInto = null);
+	string? WhenInjectedInto = null,
+	bool GreedyConstructor = false);
 
 /// <summary>
 ///     An imported module: its symbol and the location of the container's <c>[Import]</c> attribute that
@@ -142,6 +146,14 @@ partial class AwaitenGenerator
 
 		/// <summary>Whether the first (winning) registration of this implementation came from a <c>[Scan]</c>.</summary>
 		public bool IsScan { get; init; }
+
+		/// <summary>
+		///     Whether construction picks the greediest accessible constructor unconditionally (the one a
+		///     cross-assembly module's generated factory mirrors) instead of the registered-services-aware pick.
+		///     Set for a same-compilation module-scan match, so the module's matches construct identically
+		///     wherever the module is imported from.
+		/// </summary>
+		public bool GreedyConstructor { get; init; }
 
 		/// <summary>
 		///     Whether the winning registration opted into eager build-time construction (<c>Eager = true</c>).

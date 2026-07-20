@@ -54,9 +54,32 @@ public static class ProductionModule
 }
 ```
 
+## Self-compiled scans
+
+A library often keeps its implementations `internal` and exposes only interfaces. A consuming container cannot construct an inaccessible type, so without a hand-written factory per type it could never register one. A `[Scan]` on a `[Module]` closes that gap: the module compiles its own scan **in its own build**, emitting a factory per match that constructs the implementation (which its own assembly can see) and returns the accessible interface. A consuming container reads each match like a container [`[Scan]`](./scanning) match, so a self-compiled scan behaves as close to a container scan as the assembly boundary allows.
+
+```csharp
+public interface IClock;
+public interface IPlugin;
+public interface IRoaster;
+internal sealed class Roaster(IClock clock) : IPlugin, IRoaster;   // stays internal
+
+[Module]
+[Scan<IPlugin>(As = ScanAs.MatchingInterface, Lifetime = AwaitenLifetime.Singleton)]
+public static partial class PluginModule;   // partial, so the generator can add the factory
+```
+
+A consuming container `[Import]`s the module and resolves `IRoaster` without ever naming `Roaster`. Each match is registered like a container scan match: an explicit registration of the same service in the container (or another module) **overrides** it, as does the container's own `[Scan]`, and when several matches expose the **same** interface they **collect**: a `[Scan<IPlugin>(As = ScanAs.Marker)]` over two internal plug-ins resolves as `IEnumerable<IPlugin>`, exactly as it would on a container. Because diagnostics are reported in the *library's* build, it is the library author who sees any problem, not the consumer.
+
+The module must be static ([AWT152](../diagnostics#awt152)), `partial` ([AWT194](../diagnostics#awt194)) and non-generic ([AWT201](../diagnostics#awt201)), and its scan sweeps the module's own assembly only ([AWT202](../diagnostics#awt202)). A few v1 limitations apply, each reported at the library's source. A match registers through exactly one accessible interface: a match with none is skipped with a warning ([AWT196](../diagnostics#awt196)), and one that would expose several is rejected ([AWT197](../diagnostics#awt197)), even when the exposures come from two different scans of the same module. Several matches under one interface still collect; what a self-compiled match cannot do is share a single instance across several interfaces the way a container scan can. A match's constructor parameters must be types a consumer can name ([AWT195](../diagnostics#awt195)), without `[Inject]`/`[Arg]` metadata the factory could not mirror ([AWT200](../diagnostics#awt200)). `SkipUnconstructable` works as on a container scan: it travels with each generated registration, so a consumer that cannot satisfy a match's dependencies drops the match with a warning ([AWT141](../diagnostics#awt141)) instead of failing the build.
+
+The expansion also stamps the module with a generated marker, present even when the scan matched nothing. A consuming container uses it as a version guard: importing a module whose metadata carries a `[Scan]` but no expansion, because the library was built without the Awaiten generator or with a version predating this feature, is an error ([AWT154](../diagnostics#awt154)) rather than a silent drop.
+
+When the module lives in the **same assembly as the container**, there is no assembly boundary to bridge, and the container expands the module's `[Scan]` directly. The scan still means exactly what it means across assemblies: one accessible exposure per match, the same v1 limitations, and construction through the same constructor the generated factory would mirror, so moving a module between the container's project and a library never changes what its scan registers. A match skipped in the module's build (AWT196) stays skipped here too. The only difference is mechanical: the container constructs the match directly instead of calling the generated factory, which it cannot see within its own compilation. The self-compiled factories are still generated into the module, so the same module keeps working for any *other* assembly that imports it.
+
 ## One level deep
 
-Imports are not transitive. A module's own `[Import]` is not followed, and a `[Scan]` inside a module is not collected. Keep the container as the single place that composes modules.
+Imports are not transitive. A module's own `[Import]` is not followed. Keep the container as the single place that composes modules. (A module's own `[Scan]`, by contrast, does reach the importing container: expanded directly by the container for a same-assembly module, or self-compiled in the module's build across assemblies, see above.)
 
 *Note: importing a type that is not a `[Module]` is an error ([AWT149](../diagnostics#awt149)), and a module must be static ([AWT152](../diagnostics#awt152)).*
 

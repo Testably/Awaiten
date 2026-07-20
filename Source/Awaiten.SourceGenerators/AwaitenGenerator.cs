@@ -2,6 +2,7 @@ using System.Text;
 using Awaiten.SourceGenerators.Entities;
 using Awaiten.SourceGenerators.Internals;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 
@@ -23,6 +24,7 @@ namespace Awaiten.SourceGenerators;
 public sealed partial class AwaitenGenerator : IIncrementalGenerator
 {
 	private const string ContainerAttributeName = "Awaiten.ContainerAttribute";
+	private const string ModuleAttributeName = "Awaiten.ModuleAttribute";
 	private const string AttributeNamespace = "Awaiten";
 
 	/// <inheritdoc />
@@ -45,6 +47,150 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 
 			spc.AddSource(model.HintName, SourceText.From(Sources.Emit(model), Encoding.UTF8));
 		});
+
+		// A second root: a [Module] that declares a [Scan] self-compiles it, emitting a factory + registration per
+		// match into its own partial (BuildModuleModel returns null for a plain module, which emits nothing).
+		IncrementalValuesProvider<ModuleScanModel> moduleModels = context.SyntaxProvider
+			.ForAttributeWithMetadataName(
+				ModuleAttributeName,
+				static (node, _) => node is ClassDeclarationSyntax,
+				static (ctx, ct) => BuildModuleModel(ctx, ct))
+			.Where(static model => model is not null)
+			.Select(static (model, _) => model!);
+
+		context.RegisterSourceOutput(moduleModels, static (spc, model) =>
+		{
+			foreach (DiagnosticInfo diagnostic in model.Diagnostics.AsArray())
+			{
+				spc.ReportDiagnostic(diagnostic.ToDiagnostic());
+			}
+
+			// An expanded module always emits, even with zero factories: the partial then carries just the
+			// [GeneratedScanExpansion] marker, which a consuming container needs to tell "the scan matched
+			// nothing" from "the scan was never expanded" (AWT154). A module rejected before expansion
+			// (AWT152/AWT194/AWT201) emits nothing; its error already fails the build.
+			if (model.Expanded)
+			{
+				spc.AddSource(model.HintName, SourceText.From(Sources.EmitModule(model), Encoding.UTF8));
+			}
+		});
+	}
+
+	/// <summary>
+	///     Builds the <see cref="ModuleScanModel" /> for a <c>[Module]</c> that declares a <c>[Scan]</c> (returning
+	///     <see langword="null" /> for a module without one, which self-compiles nothing). The module must be
+	///     non-generic (AWT201) and <c>partial</c>, as must every type enclosing a nested module, to receive the
+	///     generated factories and registration attributes (AWT194); when it is, its scans are expanded into
+	///     factories in its own build (see <see cref="CollectModuleScanFactories" />).
+	/// </summary>
+	private static ModuleScanModel? BuildModuleModel(GeneratorAttributeSyntaxContext context, CancellationToken cancellationToken)
+	{
+		if (context.TargetSymbol is not INamedTypeSymbol moduleSymbol)
+		{
+			return null;
+		}
+
+		// Only a module that declares a [Scan] self-compiles; a plain [Module] carries no generated code (and pays
+		// no analysis cost beyond this check).
+		if (!HasAwaitenAttribute(moduleSymbol.GetAttributes(), "ScanAttribute"))
+		{
+			return null;
+		}
+
+		Compilation compilation = context.SemanticModel.Compilation;
+		List<DiagnosticInfo> diagnostics = new();
+
+		// The module must be partial for the generator to add the factories and registration attributes. Every part
+		// of a partial type carries the partial modifier, so the declaration bearing the [Module] attribute suffices.
+		// A nested module's containing types are re-opened by the generated partial too, so they must all be
+		// partial as well, else the emission would surface as a raw CS0260 on the outer type.
+		bool isPartial = context.TargetNode is ClassDeclarationSyntax declaration
+		                 && declaration.Modifiers.Any(SyntaxKind.PartialKeyword)
+		                 && ContainingTypesArePartial(moduleSymbol);
+
+		List<ModuleFactory> factories = new();
+		bool expanded = false;
+		if (HasOpenTypeParameters(moduleSymbol))
+		{
+			// AWT201: a generic module (or one nested in a generic type) has no single closed type a consumer could
+			// import, and re-opening it as a bare-named partial would emit an unrelated non-generic class instead.
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.GenericModuleScan,
+				LocationInfo.From(moduleSymbol.Locations.FirstOrDefault()),
+				new EquatableArray<string>([Display(moduleSymbol.ToDisplayString(FullyQualified)),])));
+		}
+		else if (!moduleSymbol.IsStatic)
+		{
+			// AWT152, reported here in the module's own build (the import-side check only reaches a module some
+			// container in the same solution imports): the generated partial re-opens the module as static, so
+			// emitting into a non-static class would surface as a raw partial-modifier compiler error instead.
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.NonStaticModule,
+				LocationInfo.From(moduleSymbol.Locations.FirstOrDefault()),
+				new EquatableArray<string>([Display(moduleSymbol.ToDisplayString(FullyQualified)),])));
+		}
+		else if (!isPartial)
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.NonPartialModuleScan,
+				LocationInfo.From(moduleSymbol.Locations.FirstOrDefault()),
+				new EquatableArray<string>([Display(moduleSymbol.ToDisplayString(FullyQualified)),])));
+		}
+		else
+		{
+			factories = CollectModuleScanFactories(moduleSymbol, compilation, diagnostics, cancellationToken)
+				.Select(expansion => expansion.Factory)
+				.ToList();
+			expanded = true;
+		}
+
+		string? moduleNamespace = moduleSymbol.ContainingNamespace is { IsGlobalNamespace: false, } ns
+			? ns.ToDisplayString()
+			: null;
+
+		List<TypeDeclaration> containingTypes = new();
+		for (INamedTypeSymbol? outer = moduleSymbol.ContainingType; outer is not null; outer = outer.ContainingType)
+		{
+			containingTypes.Insert(0, new TypeDeclaration(KeywordOf(outer), outer.Name));
+		}
+
+		string typePath = containingTypes.Count > 0
+			? $"{string.Join("+", containingTypes.Select(t => t.Name))}+{moduleSymbol.Name}"
+			: moduleSymbol.Name;
+		string hintName = moduleNamespace is null
+			? $"Awaiten.ModuleScan.{typePath}.g.cs"
+			: $"Awaiten.ModuleScan.{moduleNamespace}.{typePath}.g.cs";
+
+		return new ModuleScanModel(
+			moduleNamespace,
+			new EquatableArray<TypeDeclaration>(containingTypes.ToArray()),
+			moduleSymbol.Name,
+			hintName,
+			expanded,
+			new EquatableArray<ModuleFactory>(factories.ToArray()),
+			new EquatableArray<DiagnosticInfo>(diagnostics.ToArray()));
+	}
+
+	/// <summary>
+	///     Whether every type enclosing a nested module is declared <c>partial</c>, so the generated partial can
+	///     re-open the whole nesting chain. A type with several declarations is necessarily partial; a single
+	///     declaration must carry the modifier itself.
+	/// </summary>
+	private static bool ContainingTypesArePartial(INamedTypeSymbol module)
+	{
+		for (INamedTypeSymbol? outer = module.ContainingType; outer is not null; outer = outer.ContainingType)
+		{
+			bool isPartial = outer.DeclaringSyntaxReferences
+				.Select(reference => reference.GetSyntax())
+				.OfType<TypeDeclarationSyntax>()
+				.Any(syntax => syntax.Modifiers.Any(SyntaxKind.PartialKeyword));
+			if (!isPartial)
+			{
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	private static ContainerModel? BuildModel(GeneratorAttributeSyntaxContext context, CancellationToken cancellationToken)
@@ -208,7 +354,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			AsyncDisposableSupport(compilation),
 			compilation.GetTypeByMetadataName("Awaiten.IAsyncInitializable"));
 
-		// The imported modules, resolved once. Import validation (AWT149-152, AWT154) is reported while collecting.
+		// The imported modules, resolved once. Import validation (AWT149-152) is reported while collecting.
 		List<ImportedModule> modules = CollectImportedModules(containerSymbol, diagnostics);
 
 		// [ImportServices]: any otherwise-unresolved direct dependency falls through to the external provider

@@ -55,7 +55,7 @@
  AWT151  | Awaiten   | Warning  | An imported module declares no registrations
  AWT152  | Awaiten   | Error    | An imported [Module] class is not declared static
  AWT153  | Awaiten   | Error    | A module Factory/Instance member is not accessible from the generated container
- AWT154  | Awaiten   | Error    | An imported module declares a [Scan], which is not collected from modules
+ AWT154  | Awaiten   | Error    | An imported module declares a [Scan] but its assembly carries no generated expansion, so it was built without the Awaiten generator (or a version predating self-compiled module scans)
  AWT155  | Awaiten   | Warning  | Two imported modules strongly register the same service with different implementations
  AWT156  | Awaiten   | Warning  | A generated Root/Scope is disposed synchronously although its container owns a service that implements IAsyncDisposable but not IDisposable
  AWT157  | Awaiten   | Error    | An [Inject(Optional = true)] property is required and cannot be omitted from the object initializer
@@ -95,3 +95,10 @@
  AWT191  | Awaiten   | Error    | An OnRelease hook parameter is a Func/Lazy relationship, which would defer resolution past the owner's teardown
  AWT192  | Awaiten   | Error    | SuppressDisposal is set on a pre-built Instance, which the container does not own or dispose, so it has no effect
  AWT193  | Awaiten   | Warning  | A [Scan] matched a type that is inaccessible to the generated container, so it is not registered
+ AWT194  | Awaiten   | Error    | A [Module] that declares a [Scan] is not partial (or is nested in a non-partial type), so its scan cannot be self-compiled
+ AWT195  | Awaiten   | Error    | A self-compiled module [Scan] match has a constructor parameter type inaccessible outside the module's assembly
+ AWT196  | Awaiten   | Warning  | A self-compiled module [Scan] match has no exposure interface accessible outside the module's assembly, so it is skipped
+ AWT197  | Awaiten   | Error    | A self-compiled module [Scan] match would be exposed under multiple interfaces, which a single-exposure factory cannot express
+ AWT200  | Awaiten   | Error    | A self-compiled module [Scan] match carries [Inject]/[Arg] metadata the generated factory cannot mirror
+ AWT201  | Awaiten   | Error    | A generic [Module] (or one nested in a generic type) declares a [Scan], so no closed module exists for a consumer to import
+ AWT202  | Awaiten   | Error    | A module [Scan] declares InAssembliesOf, but a self-compiled scan sweeps only the module's own assembly
