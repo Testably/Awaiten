@@ -487,6 +487,34 @@ public class SelfCompiledModuleScanHookTests
 	}
 
 	[Fact]
+	public async Task OverlappingScansNamingTheSameFailingHookReportItOnce()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace Lib;
+
+			public interface IClock { }
+			public interface IMarkerA { }
+			public interface IMarkerB { }
+			public interface IWorker { }
+
+			internal sealed class Worker : IMarkerA, IMarkerB, IWorker { }
+
+			[Module]
+			[Scan<IMarkerA>(As = ScanAs.MatchingInterface, OnActivated = nameof(Wire))]
+			[Scan<IMarkerB>(As = ScanAs.MatchingInterface, OnActivated = nameof(Wire))]
+			public static partial class WorkerModule
+			{
+			    internal static void Wire(Worker worker, [FromKey("main")] IClock clock) { }
+			}
+			""");
+
+		await That(result.Diagnostics.Count(diagnostic => diagnostic.Contains("AWT204"))).IsEqualTo(1)
+			.Because("the second overlapping scan re-resolves the same failed hook for the slot merge, but the first scan already reported it");
+	}
+
+	[Fact]
 	public async Task Awt199_ReportsOverlappingScansNamingDifferentHooksForOneSlot()
 	{
 		GeneratorResult result = Generator.Run("""

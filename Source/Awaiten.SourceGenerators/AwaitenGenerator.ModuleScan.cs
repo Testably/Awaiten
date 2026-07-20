@@ -39,6 +39,7 @@ partial class AwaitenGenerator
 		CancellationToken cancellationToken)
 	{
 		List<ModuleScanExpansion> factories = new();
+		ModuleScanContext context = new(module, compilation, diagnostics, new HashSet<string>(StringComparer.Ordinal));
 
 		foreach (AttributeData attribute in module.GetAttributes())
 		{
@@ -50,11 +51,11 @@ partial class AwaitenGenerator
 
 			if (ScanMarker(attribute, attributeClass) is { } marker)
 			{
-				ExpandModuleScan(attribute, marker, module, compilation, factories, diagnostics, cancellationToken);
+				ExpandModuleScan(attribute, marker, context, factories, cancellationToken);
 			}
 			else if (IsMarkerlessScan(attribute, attributeClass))
 			{
-				ExpandModuleScan(attribute, null, module, compilation, factories, diagnostics, cancellationToken);
+				ExpandModuleScan(attribute, null, context, factories, cancellationToken);
 			}
 		}
 
@@ -82,10 +83,17 @@ partial class AwaitenGenerator
 		IReadOnlyList<INamedTypeSymbol>? OnReleaseMarkers = null);
 
 	/// <summary>
-	///     The per-module state the scan-hook helpers share (the module that owns the hooks, the compilation, and
-	///     the diagnostics sink), bundled so each helper takes one value rather than three.
+	///     The per-module state the scan expansion shares (the module that owns the hooks, the compilation, and the
+	///     diagnostics sink), bundled so each helper takes one value rather than three. <see cref="FailedHooks" />
+	///     records every hook attempt that failed - as <c>match\0slot\0name</c>, across all of the module's scans -
+	///     so an overlapping scan re-naming the same failed hook re-resolves it (the slot merge needs the outcome)
+	///     without repeating the first scan's diagnostic (see <see cref="ResolveModuleHook" />).
 	/// </summary>
-	private readonly record struct ModuleScanContext(INamedTypeSymbol Module, Compilation Compilation, List<DiagnosticInfo> Diagnostics);
+	private readonly record struct ModuleScanContext(
+		INamedTypeSymbol Module,
+		Compilation Compilation,
+		List<DiagnosticInfo> Diagnostics,
+		HashSet<string> FailedHooks);
 
 	/// <summary>
 	///     Expands one module <c>[Scan]</c> over its candidates, mirroring <see cref="ExpandScan" /> but emitting a
@@ -95,12 +103,11 @@ partial class AwaitenGenerator
 	private static void ExpandModuleScan(
 		AttributeData attribute,
 		INamedTypeSymbol? marker,
-		INamedTypeSymbol module,
-		Compilation compilation,
+		ModuleScanContext context,
 		List<ModuleScanExpansion> factories,
-		List<DiagnosticInfo> diagnostics,
 		CancellationToken cancellationToken)
 	{
+		List<DiagnosticInfo> diagnostics = context.Diagnostics;
 		Location? location = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation();
 
 		// v1: a module scans its own assembly only. An InAssembliesOf sweep from a module would see just the
@@ -111,7 +118,7 @@ partial class AwaitenGenerator
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.ModuleScanForeignAssemblies,
 				LocationInfo.From(location),
-				new EquatableArray<string>([Display(module.ToDisplayString(FullyQualified)),])));
+				new EquatableArray<string>([Display(context.Module.ToDisplayString(FullyQualified)),])));
 			return;
 		}
 
@@ -148,7 +155,7 @@ partial class AwaitenGenerator
 		int assignable = 0;
 		int registered = 0;
 		int produced = 0;
-		foreach (ScanCandidate candidate in ScanCandidates(assemblies: null, compilation, marker, location, diagnostics))
+		foreach (ScanCandidate candidate in ScanCandidates(assemblies: null, context.Compilation, marker, location, diagnostics))
 		{
 			cancellationToken.ThrowIfCancellationRequested();
 			assignable++;
@@ -167,7 +174,7 @@ partial class AwaitenGenerator
 				continue;
 			}
 
-			produced += RegisterModuleScanMatch(candidate.Type, match, markerInfo, module, compilation, factories, diagnostics);
+			produced += RegisterModuleScanMatch(candidate.Type, match, markerInfo, context, factories);
 		}
 
 		ReportScanFilterDiagnostics(filters, hits, new ScanFilterCounts(assignable, registered, produced), assemblies: null, markerDisplay, location, diagnostics);
@@ -196,14 +203,13 @@ partial class AwaitenGenerator
 		INamedTypeSymbol type,
 		ScanMatch match,
 		ScanMarkerInfo markerInfo,
-		INamedTypeSymbol module,
-		Compilation compilation,
-		List<ModuleScanExpansion> factories,
-		List<DiagnosticInfo> diagnostics)
+		ModuleScanContext context,
+		List<ModuleScanExpansion> factories)
 	{
+		List<DiagnosticInfo> diagnostics = context.Diagnostics;
 		string typeName = type.ToDisplayString(FullyQualified);
 
-		List<INamedTypeSymbol> distinct = AccessibleExposures(type, match, markerInfo, compilation);
+		List<INamedTypeSymbol> distinct = AccessibleExposures(type, match, markerInfo, context.Compilation);
 
 		if (distinct.Count == 0)
 		{
@@ -228,7 +234,6 @@ partial class AwaitenGenerator
 
 		INamedTypeSymbol service = distinct[0];
 		string serviceName = service.ToDisplayString(FullyQualified);
-		ModuleScanContext context = new(module, compilation, diagnostics);
 
 		int overlap = factories.FindIndex(expansion => expansion.Factory.ImplementationType == typeName);
 		if (overlap >= 0)
@@ -237,7 +242,7 @@ partial class AwaitenGenerator
 			return 0;
 		}
 
-		if (!TryMirrorFactoryParameters(type, module, compilation, match, typeName, diagnostics, out EquatableArray<FactoryParameter> parameters))
+		if (!TryMirrorFactoryParameters(type, context.Module, context.Compilation, match, typeName, diagnostics, out EquatableArray<FactoryParameter> parameters))
 		{
 			return 0;
 		}
@@ -304,6 +309,33 @@ partial class AwaitenGenerator
 			return null;
 		}
 
+		// One failure report per (match, slot, name): an overlapping scan re-naming a hook that already failed
+		// still resolves it (the slot merge needs the outcome) but into a discarded sink, so the first scan's
+		// diagnostic is not repeated. A fresh failure - a new name, or a restated hook newly ambiguous over
+		// widened markers - has no recorded attempt and reports normally.
+		string attempt = matchType.ToDisplayString(FullyQualified) + "\0" + (release ? "OnRelease" : "OnActivated") + "\0" + hookName;
+		ResolvedModuleHook? resolved = ResolveModuleHookCore(matchType, hookName, match.Location, release, closedMarkers,
+			context.FailedHooks.Contains(attempt) ? context with { Diagnostics = new List<DiagnosticInfo>(), } : context);
+		if (resolved is null)
+		{
+			context.FailedHooks.Add(attempt);
+		}
+
+		return resolved;
+	}
+
+	/// <summary>
+	///     The resolution behind <see cref="ResolveModuleHook" />, reporting every failure into the context's sink;
+	///     the wrapper dedupes repeated failures of one already-reported attempt across overlapping scans.
+	/// </summary>
+	private static ResolvedModuleHook? ResolveModuleHookCore(
+		INamedTypeSymbol matchType,
+		string hookName,
+		Location? location,
+		bool release,
+		IReadOnlyList<INamedTypeSymbol>? closedMarkers,
+		ModuleScanContext context)
+	{
 		string typeName = matchType.ToDisplayString(FullyQualified);
 		(List<IMethodSymbol> matches, List<IReadOnlyList<INamedTypeSymbol>> ambiguous) =
 			CollectModuleHookOverloads(matchType, hookName, closedMarkers, context);
@@ -314,7 +346,7 @@ partial class AwaitenGenerator
 		{
 			context.Diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.GenericHookAmbiguousMarker,
-				LocationInfo.From(match.Location),
+				LocationInfo.From(location),
 				new EquatableArray<string>([
 					Display(typeName),
 					hookName,
@@ -329,13 +361,13 @@ partial class AwaitenGenerator
 		{
 			context.Diagnostics.Add(new DiagnosticInfo(
 				matches.Count + ambiguous.Count == 0 ? Diagnostics.InvalidLifecycleHook : Diagnostics.AmbiguousLifecycleHook,
-				LocationInfo.From(match.Location),
+				LocationInfo.From(location),
 				new EquatableArray<string>([Display(typeName), hookName, $"the module '{Display(context.Module.ToDisplayString(FullyQualified))}'",])));
 			return null;
 		}
 
 		IMethodSymbol hook = matches[0];
-		if (!TryMirrorHookParameters(typeName, hook, release, match.Location, context.Diagnostics, out EquatableArray<FactoryParameter> parameters))
+		if (!TryMirrorHookParameters(typeName, hook, release, location, context.Diagnostics, out EquatableArray<FactoryParameter> parameters))
 		{
 			return null;
 		}
