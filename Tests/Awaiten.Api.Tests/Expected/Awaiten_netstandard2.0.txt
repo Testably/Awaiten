@@ -239,6 +239,8 @@ namespace Awaiten
         public Awaiten.AwaitenLifetime Lifetime { get; set; }
         public string[]? NamePatterns { get; set; }
         public string[]? NamespacePatterns { get; set; }
+        public string? OnActivated { get; set; }
+        public string? OnRelease { get; set; }
         public bool SkipUnconstructable { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
@@ -251,6 +253,8 @@ namespace Awaiten
         public Awaiten.AwaitenLifetime Lifetime { get; set; }
         public string[]? NamePatterns { get; set; }
         public string[]? NamespacePatterns { get; set; }
+        public string? OnActivated { get; set; }
+        public string? OnRelease { get; set; }
         public bool SkipUnconstructable { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]

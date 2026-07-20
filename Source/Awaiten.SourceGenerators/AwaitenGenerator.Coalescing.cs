@@ -48,6 +48,7 @@ partial class AwaitenGenerator
 		HashSet<string> reportedConflicts = new(StringComparer.Ordinal);
 		HashSet<string> reportedProductionConflicts = new(StringComparer.Ordinal);
 		HashSet<string> reportedDirectiveConflicts = new(StringComparer.Ordinal);
+		HashSet<string> reportedHookConflicts = new(StringComparer.Ordinal);
 
 		// Collection membership: every registration of a service, keyed by (service type, key) and deduped by
 		// implementation, in registration order. serviceMemberOrder preserves first-seen order for emission.
@@ -149,7 +150,7 @@ partial class AwaitenGenerator
 			// Every registration is a member of the collection for its (service type, key), built even when it
 			// loses the single-resolution slot, since it is reachable through the collection.
 			AddCollectionMember(serviceMembers, serviceMemberOrder, serviceKey, registration.ImplementationType);
-			EnsureImpl(implInfos, implOrder, registration);
+			MergeScanHooks(EnsureImpl(implInfos, implOrder, registration), registration, reportedHookConflicts, diagnostics);
 
 			// A keyed registration is also a member of its service's keyed collection, indexed by its [Key].
 			AddKeyedMember(keyedMembers, keyedMemberOrder, registration, alreadyChosen);
@@ -195,6 +196,77 @@ partial class AwaitenGenerator
 
 			return info;
 		}
+	}
+
+	/// <summary>
+	///     Merges a scan registration's lifecycle hooks into its implementation's coalesced info, per hook slot.
+	///     Two scans matching one type combine: a hook fills a slot no earlier scan claimed (so one scan's
+	///     <c>OnActivated</c> and another's <c>OnRelease</c> both apply), and a scan restating the slot's hook name
+	///     contributes its closed marker forms to that slot's set, so a generic hook bound by two open-generic scans
+	///     that close their markers differently is seen as ambiguous in <c>ResolveHook</c> (AWT198) rather than
+	///     silently fixed to the first-seen closing. Naming a <em>different</em> method for a claimed slot is
+	///     <see cref="Diagnostics.ScanHookConflict">AWT199</see> (once per implementation and slot): which method ran
+	///     would depend on attribute order, the same order-dependence AWT142 surfaces for lifetimes. When the
+	///     implementation's winning registration is not a scan the whole merge is skipped: a scan yields to an
+	///     explicit registration, whose hooks (or deliberate lack of them) replace the scan's like its other options.
+	/// </summary>
+	private static void MergeScanHooks(
+		ImplInfo info,
+		RawRegistration registration,
+		HashSet<string> reportedHookConflicts,
+		List<DiagnosticInfo> diagnostics)
+	{
+		if (!registration.IsScan || !info.IsScan)
+		{
+			return;
+		}
+
+		info.OnActivated = MergeScanHookSlot(registration, "OnActivated", info.OnActivated, registration.OnActivated, info.OnActivatedMarkers, reportedHookConflicts, diagnostics);
+		info.OnRelease = MergeScanHookSlot(registration, "OnRelease", info.OnRelease, registration.OnRelease, info.OnReleaseMarkers, reportedHookConflicts, diagnostics);
+	}
+
+	/// <summary>
+	///     Merges one hook slot (see <see cref="MergeScanHooks" />): returns the slot's coalesced hook name, unioning
+	///     the registration's closed marker forms into the slot's set when it fills or restates the slot, and
+	///     reporting AWT199 (keeping the first-seen name) when it contradicts it.
+	/// </summary>
+	private static string? MergeScanHookSlot(
+		RawRegistration registration,
+		string slot,
+		string? current,
+		string? name,
+		List<INamedTypeSymbol> slotMarkers,
+		HashSet<string> reportedHookConflicts,
+		List<DiagnosticInfo> diagnostics)
+	{
+		if (name is null)
+		{
+			return current;
+		}
+
+		if (current is not null && !string.Equals(current, name, StringComparison.Ordinal))
+		{
+			if (reportedHookConflicts.Add(registration.ImplementationType + "\0" + slot))
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.ScanHookConflict,
+					LocationInfo.From(registration.Location),
+					new EquatableArray<string>([Display(registration.ImplementationType), slot, current, name,])));
+			}
+
+			return current;
+		}
+
+		if (registration.HookClosedMarkers is { } markers)
+		{
+			foreach (INamedTypeSymbol marker in markers.Where(marker =>
+				         !slotMarkers.Any(seen => SymbolEqualityComparer.Default.Equals(seen, marker))))
+			{
+				slotMarkers.Add(marker);
+			}
+		}
+
+		return name;
 	}
 
 	/// <summary>

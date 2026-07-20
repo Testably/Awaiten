@@ -100,6 +100,42 @@ An unbound generic marker matches closed forms, the way Autofac's closed-types-o
 [Scan(typeof(IView<>), As = ScanAs.Marker)]
 ```
 
+## Lifecycle hooks
+
+A scan can name `OnActivated` and `OnRelease` hooks, applied to every match, so a whole family shares one activation or teardown routine without a registration line per type.
+
+```csharp
+[Container]
+[Scan<IDrink>(Lifetime = AwaitenLifetime.Singleton, OnActivated = nameof(Prime))]
+public static partial class CoffeeShop
+{
+    private static void Prime(IDrink drink) => drink.Prime();
+}
+```
+
+The hook's first parameter is the match, so it must accept every one: type it as the scanned marker (or `object`). Parameters after it are resolved from the graph exactly as for an [explicit registration's hook](../lifetime/lifecycle-hooks#hook-parameters), and the same rules and diagnostics apply: an unusable hook name is [AWT164](../diagnostics#awt164), an unregistered parameter is [AWT101](../diagnostics#awt101).
+
+When two scans match the same type, their hooks merge: one scan's `OnActivated` combines with another's `OnRelease`, and both naming the same method is fine. Two scans naming *different* methods for the same slot contradict each other, so the first scan's method is used and the contradiction is surfaced as [AWT199](../diagnostics#awt199). An [explicit registration](#overriding-a-scanned-type) of a scanned type is different: it replaces the scan's hooks along with everything else, so name the hook on the explicit registration too if the special-cased type should keep it, and leave it off to deliberately opt that type out. The replacement follows the type, not the service: an explicit registration of just the concrete type, say `[Transient<Espresso>]` beside a marker scan, strips the scan's hooks from `Espresso` even where the scan still supplies its marker mapping.
+
+### Generic hooks on an open marker
+
+An [open generic marker](#open-generic-markers) knows each match's closed type argument at compile time, so a hook can be *generic* and receive it directly, with no reflection and no `object`. The classic case is a WPF-style view/view-model family: bind each view to its matching view model as it is activated.
+
+```csharp
+[Container]
+[Singleton<MainViewModel, IMainViewModel>]
+[Scan(typeof(IView<>), As = ScanAs.Marker, OnActivated = nameof(WireView))]
+public static partial class App
+{
+    private static void WireView<TViewModel>(IView<TViewModel> view, TViewModel viewModel)
+        => view.DataContext = viewModel;
+}
+```
+
+For `MainWindow : IView<IMainViewModel>` the generator dispatches `WireView<IMainViewModel>(mainWindow, viewModel)`, resolving the matching `IMainViewModel` from the graph. The type argument is visible to graph analysis, so an unregistered view model fails the build ([AWT101](../diagnostics#awt101)) rather than at runtime. A non-generic method works too (its parameters typed as the marker or `object`); the type argument only applies when the method is generic.
+
+Because a *generic* hook takes its type argument from a closed marker form, it needs exactly one it can bind. A match offering several, by closing the marker more than once (`Dual : IView<A>, IView<B>`), leaves that argument ambiguous and is reported as [AWT198](../diagnostics#awt198): register such a type explicitly with the hook it needs, or split the family so only one closed form binds it. Only forms the hook could actually bind count, so a constraint (`where TViewModel : class`) that rules out all closings but one settles the choice, as does accessibility: a closing at another assembly's internal type cannot be dispatched and yields to an accessible sibling. If the hook name is overloaded and another overload also accepts the match, the collision is between overloads rather than closings and is reported as [AWT190](../diagnostics#awt190) instead. A non-generic hook takes no type argument, so a match with several closings is fine for it.
+
 ## Overriding a scanned type
 
 An explicit registration of a scanned type wins over the scan, so you can special-case one drink while scanning the rest.

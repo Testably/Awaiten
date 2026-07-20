@@ -80,6 +80,56 @@ public partial class DiagnosticTests
 		}
 
 		[Fact]
+		public async Task ReportsWhenAGenericScanHookOverloadBindsBesideANonGenericOne()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IView<TViewModel> { }
+			                                       public sealed class MainWindow : IView<int> { }
+
+			                                       [Container]
+			                                       [Scan(typeof(IView<>), As = ScanAs.Marker, OnActivated = nameof(Wire))]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       	private static void Wire<TViewModel>(IView<TViewModel> view) { }
+			                                       	private static void Wire(object instance) { }
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT190*").AsWildcard()
+				.Because("the generic overload binds the single closing and the object overload also accepts the match, so the container cannot choose one");
+		}
+
+		[Fact]
+		public async Task ReportsWhenAnAmbiguousGenericScanHookOverloadSitsBesideANonGenericOne()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IView<TViewModel> { }
+			                                       public sealed class DualView : IView<int>, IView<string> { }
+
+			                                       [Container]
+			                                       [Scan(typeof(IView<>), As = ScanAs.Marker, OnActivated = nameof(Wire))]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       	private static void Wire<TViewModel>(IView<TViewModel> view) { }
+			                                       	private static void Wire(object instance) { }
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT190*").AsWildcard()
+				.Because("the generic overload could dispatch through either closing and the object overload also accepts the match, so silently preferring the sibling would let an extra closing change which method runs");
+			await That(result.Diagnostics).DoesNotContain("*AWT198*").AsWildcard()
+				.Because("the collision is between overloads, not closings: settling the closings would still leave two usable overloads");
+		}
+
+		[Fact]
 		public async Task DoesNotReportWhenTheSameNameServesDistinctRegistrationsOneMatchEach()
 		{
 			GeneratorResult result = Generator.Run("""

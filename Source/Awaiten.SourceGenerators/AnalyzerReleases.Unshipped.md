@@ -99,6 +99,8 @@
  AWT195  | Awaiten   | Error    | A self-compiled module [Scan] match has a constructor parameter type inaccessible outside the module's assembly
  AWT196  | Awaiten   | Warning  | A self-compiled module [Scan] match has no exposure interface accessible outside the module's assembly, so it is skipped
  AWT197  | Awaiten   | Error    | A self-compiled module [Scan] match would be exposed under multiple interfaces, which a single-exposure factory cannot express
+ AWT198  | Awaiten   | Error    | A generic lifecycle hook on an open-generic [Scan] marker could bind a match through more than one closed marker form, so its type arguments are ambiguous
+ AWT199  | Awaiten   | Warning  | Two [Scan] attributes match one implementation with conflicting OnActivated/OnRelease hooks; the first scan's hook is used
  AWT200  | Awaiten   | Error    | A self-compiled module [Scan] match carries [Inject]/[Arg] metadata the generated factory cannot mirror
  AWT201  | Awaiten   | Error    | A generic [Module] (or one nested in a generic type) declares a [Scan], so no closed module exists for a consumer to import
  AWT202  | Awaiten   | Error    | A module [Scan] declares InAssembliesOf, but a self-compiled scan sweeps only the module's own assembly

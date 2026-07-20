@@ -103,6 +103,228 @@ public partial class ScanTests
 	public static partial class SelfAndInterfaceScanContainer;
 
 	[Fact]
+	public async Task Scan_LifecycleHooks_RunForEveryMatch_WithGraphResolvedParameters()
+	{
+		HookProbe.Log.Clear();
+		using (HookScanContainer.Root container = new())
+		{
+			container.Resolve<AlphaHooked>();
+			container.Resolve<BetaHooked>();
+
+			// The scan's OnActivated ran once each match was constructed, receiving its graph-resolved HookSettings
+			// (a scan hook goes through the same parameter pipeline as an explicit registration's hook).
+			await That(HookProbe.Log).Contains("activated:AlphaHooked:True");
+			await That(HookProbe.Log).Contains("activated:BetaHooked:True");
+			await That(HookProbe.Log).DoesNotContain("released:AlphaHooked")
+				.Because("nothing is released while the container is alive");
+		}
+
+		// The scan's OnRelease ran for every match on disposal.
+		await That(HookProbe.Log).Contains("released:AlphaHooked");
+		await That(HookProbe.Log).Contains("released:BetaHooked");
+	}
+
+	public interface IHooked;
+
+	public sealed class AlphaHooked : IHooked;
+
+	public sealed class BetaHooked : IHooked;
+
+	public sealed class HookSettings;
+
+	private static class HookProbe
+	{
+		public static readonly List<string> Log = new();
+	}
+
+	[Container]
+	[Singleton<HookSettings>]
+	[Scan(typeof(IHooked), Lifetime = AwaitenLifetime.Singleton, OnActivated = nameof(Activated), OnRelease = nameof(Released))]
+	public static partial class HookScanContainer
+	{
+		private static void Activated(IHooked instance, HookSettings settings)
+			=> HookProbe.Log.Add($"activated:{instance.GetType().Name}:{settings is not null}");
+
+		private static void Released(IHooked instance) => HookProbe.Log.Add("released:" + instance.GetType().Name);
+	}
+
+	[Fact]
+	public async Task Scan_OpenGenericMarker_DispatchesAGenericHookWithTheClosedTypeArgument()
+	{
+		HookProbe.Log.Clear();
+		using HookViewContainer.Root container = new();
+
+		IHookView<IHookViewModel> view = container.Resolve<IHookView<IHookViewModel>>();
+
+		await That(view).IsNotNull();
+		// The scan's open marker closes as IHookView<IHookViewModel> for HookWindow, so the generic hook is dispatched
+		// as WireView<IHookViewModel> - binding the matching view model, resolved from the graph, with no reflection.
+		await That(HookProbe.Log).Contains("wired:HookWindow:HookViewModel")
+			.Because("a generic scan hook binds its type argument from the match's closed marker form");
+	}
+
+	public interface IHookView<TViewModel>;
+
+	public interface IHookViewModel;
+
+	public sealed class HookViewModel : IHookViewModel;
+
+	public sealed class HookWindow : IHookView<IHookViewModel>;
+
+	[Container]
+	[Singleton<HookViewModel, IHookViewModel>]
+	[Scan(typeof(IHookView<>), As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton, OnActivated = nameof(WireView))]
+	public static partial class HookViewContainer
+	{
+		private static void WireView<TViewModel>(IHookView<TViewModel> view, TViewModel viewModel)
+			=> HookProbe.Log.Add($"wired:{view.GetType().Name}:{viewModel!.GetType().Name}");
+	}
+
+	[Fact]
+	public async Task Scan_OpenGenericMarker_RunsANonGenericHookForAMatchClosingTheMarkerMoreThanOnce()
+	{
+		HookProbe.Log.Clear();
+		using DualPanelContainer.Root container = new();
+
+		DualPanel panel = container.Resolve<DualPanel>();
+
+		await That(panel).IsNotNull();
+		// DualPanel closes IPanel<> at both int and string, but a non-generic hook needs no type argument, so it
+		// is not ambiguous (no AWT198) and runs once for the single instance.
+		await That(HookProbe.Log).Contains("tracked:DualPanel")
+			.Because("a non-generic scan hook accepts every match as object, whatever closings the match implements");
+	}
+
+	public interface IPanel<TModel>;
+
+	public sealed class DualPanel : IPanel<int>, IPanel<string>;
+
+	[Container]
+	[Scan(typeof(IPanel<>), As = ScanAs.Self | ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton, OnActivated = nameof(Track))]
+	public static partial class DualPanelContainer
+	{
+		private static void Track(object instance) => HookProbe.Log.Add("tracked:" + instance.GetType().Name);
+	}
+
+	[Fact]
+	public async Task Scan_TwoScansHookingDifferentSlots_MergeSoBothHooksRun()
+	{
+		HookProbe.Log.Clear();
+		using (MergeHookContainer.Root container = new())
+		{
+			container.Resolve<MergeWorker>();
+
+			// MergeWorker is matched by both scans: one names OnActivated, the other OnRelease. The hooks occupy
+			// different slots, so they merge instead of the second scan's being dropped (or conflicting, AWT199).
+			await That(HookProbe.Log).Contains("merge-activated:MergeWorker");
+		}
+
+		await That(HookProbe.Log).Contains("merge-released:MergeWorker")
+			.Because("the second scan's OnRelease merged onto the coalesced registration and ran at disposal");
+	}
+
+	public interface IMergeStart;
+
+	public interface IMergeStop;
+
+	public sealed class MergeWorker : IMergeStart, IMergeStop;
+
+	[Container]
+	[Scan(typeof(IMergeStart), Lifetime = AwaitenLifetime.Singleton, OnActivated = nameof(Started))]
+	[Scan(typeof(IMergeStop), Lifetime = AwaitenLifetime.Singleton, OnRelease = nameof(Stopped))]
+	public static partial class MergeHookContainer
+	{
+		private static void Started(object instance) => HookProbe.Log.Add("merge-activated:" + instance.GetType().Name);
+
+		private static void Stopped(object instance) => HookProbe.Log.Add("merge-released:" + instance.GetType().Name);
+	}
+
+	[Fact]
+	public async Task Scan_OpenGenericMarker_DispatchesAGenericReleaseHookWithTheClosedTypeArgument()
+	{
+		HookProbe.Log.Clear();
+		using (UnwireViewContainer.Root container = new())
+		{
+			container.Resolve<IUnwireView<IUnwireViewModel>>();
+
+			await That(HookProbe.Log).DoesNotContain("unwired:IUnwireViewModel")
+				.Because("nothing is released while the container is alive");
+		}
+
+		// The marker closes as IUnwireView<IUnwireViewModel> for UnwireWindow, so the generic OnRelease hook is
+		// dispatched as UnwireView<IUnwireViewModel> at disposal, exactly like a generic OnActivated at construction.
+		await That(HookProbe.Log).Contains("unwired:IUnwireViewModel")
+			.Because("a generic scan hook binds its type argument on the release slot too");
+	}
+
+	public interface IUnwireView<TViewModel>;
+
+	public interface IUnwireViewModel;
+
+	public sealed class UnwireWindow : IUnwireView<IUnwireViewModel>;
+
+	[Container]
+	[Scan(typeof(IUnwireView<>), As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton, OnRelease = nameof(UnwireView))]
+	public static partial class UnwireViewContainer
+	{
+		private static void UnwireView<TViewModel>(IUnwireView<TViewModel> view)
+			=> HookProbe.Log.Add("unwired:" + typeof(TViewModel).Name);
+	}
+
+	[Fact]
+	public async Task Scan_OpenGenericMarker_DispatchesAGenericHookWithTwoTypeArguments()
+	{
+		HookProbe.Log.Clear();
+		using PairBinderContainer.Root container = new();
+
+		container.Resolve<IPairBinder<string, int>>();
+
+		// The marker closes at two type arguments, so the hook is constructed with both: BindPair<string, int>.
+		await That(HookProbe.Log).Contains("bound:String:Int32")
+			.Because("a generic scan hook binds every type parameter of a multi-argument marker closing");
+	}
+
+	public interface IPairBinder<TSource, TTarget>;
+
+	public sealed class PriceBinder : IPairBinder<string, int>;
+
+	[Container]
+	[Scan(typeof(IPairBinder<,>), As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton, OnActivated = nameof(BindPair))]
+	public static partial class PairBinderContainer
+	{
+		private static void BindPair<TSource, TTarget>(IPairBinder<TSource, TTarget> binder)
+			=> HookProbe.Log.Add($"bound:{typeof(TSource).Name}:{typeof(TTarget).Name}");
+	}
+
+	[Fact]
+	public async Task Scan_OpenGenericBaseClassMarker_DispatchesAGenericHookWithTheClosedTypeArgument()
+	{
+		HookProbe.Log.Clear();
+		using BasePanelContainer.Root container = new();
+
+		container.Resolve<OrdersPanel>();
+
+		// OrdersPanel closes the base-class marker as PanelBase<OrdersPanelModel>, so the generic hook binds the
+		// type argument from a base type exactly as it does from an implemented interface.
+		await That(HookProbe.Log).Contains("panel:OrdersPanelModel")
+			.Because("a marker closed through the inheritance chain feeds a generic hook like an interface closing");
+	}
+
+	public sealed class OrdersPanelModel;
+
+	public abstract class PanelBase<TModel>;
+
+	public sealed class OrdersPanel : PanelBase<OrdersPanelModel>;
+
+	[Container]
+	[Scan(typeof(PanelBase<>), Lifetime = AwaitenLifetime.Singleton, OnActivated = nameof(WirePanel))]
+	public static partial class BasePanelContainer
+	{
+		private static void WirePanel<TModel>(PanelBase<TModel> panel)
+			=> HookProbe.Log.Add("panel:" + typeof(TModel).Name);
+	}
+
+	[Fact]
 	public async Task GenericScan_RegistersMatchesLikeTheTypeofForm()
 	{
 		using GenericScanContainer.Root container = new();

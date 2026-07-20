@@ -61,6 +61,22 @@ public sealed class ScanAttribute : Attribute
 	public bool SkipUnconstructable { get; set; }
 
 	/// <summary>
+	///     The name of a <c>static void</c> method on the container invoked once each match has been constructed - a
+	///     synchronous post-construction hook applied to every match. Its first parameter is the match, so it must
+	///     accept every one: type it as the scanned marker (or <c>object</c>), and any parameters after it are
+	///     resolved from the graph like a constructor's.
+	/// </summary>
+	public string? OnActivated { get; set; }
+
+	/// <summary>
+	///     The name of a <c>static void</c> method on the container invoked when each match's owning container or
+	///     scope is disposed - in reverse creation order and before the instance's own disposal (in addition to, not
+	///     instead of, it). Its first parameter is the match (type it as the scanned marker or <c>object</c>); any
+	///     parameters after it are resolved from the graph.
+	/// </summary>
+	public string? OnRelease { get; set; }
+
+	/// <summary>
 	///     Widens the scan to the assemblies containing the listed types instead of the container's own assembly.
 	///     Each entry names one type whose <see cref="System.Reflection.Assembly" /> is searched, typically a
 	///     marker type per referenced project. Matches are discovered from assembly metadata at compile time and
@@ -123,6 +139,22 @@ public sealed class ScanAttribute<TMarker> : Attribute
 	///     registered explicitly is never skipped.
 	/// </summary>
 	public bool SkipUnconstructable { get; set; }
+
+	/// <summary>
+	///     The name of a <c>static void</c> method on the container invoked once each match has been constructed - a
+	///     synchronous post-construction hook applied to every match. Its first parameter is the match, so it must
+	///     accept every one: type it as <typeparamref name="TMarker" /> (or <c>object</c>), and any parameters after
+	///     it are resolved from the graph like a constructor's.
+	/// </summary>
+	public string? OnActivated { get; set; }
+
+	/// <summary>
+	///     The name of a <c>static void</c> method on the container invoked when each match's owning container or
+	///     scope is disposed - in reverse creation order and before the instance's own disposal (in addition to, not
+	///     instead of, it). Its first parameter is the match (type it as <typeparamref name="TMarker" /> or
+	///     <c>object</c>); any parameters after it are resolved from the graph.
+	/// </summary>
+	public string? OnRelease { get; set; }
 
 	/// <summary>
 	///     Widens the scan to the assemblies containing the listed types instead of the container's own assembly.
