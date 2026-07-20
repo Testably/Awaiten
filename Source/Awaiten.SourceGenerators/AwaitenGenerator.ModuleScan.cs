@@ -117,6 +117,7 @@ partial class AwaitenGenerator
 
 		bool openMarker = marker is not null && IsOpenGenericMarker(marker);
 		INamedTypeSymbol? markerDefinition = marker?.OriginalDefinition;
+		ScanMarkerInfo markerInfo = new(marker, openMarker, markerDefinition);
 
 		string? markerDisplay = null;
 		if (marker is not null)
@@ -147,11 +148,17 @@ partial class AwaitenGenerator
 				continue;
 			}
 
-			produced += RegisterModuleScanMatch(candidate.Type, match, marker, openMarker, markerDefinition, module, compilation, factories, diagnostics);
+			produced += RegisterModuleScanMatch(candidate.Type, match, markerInfo, module, compilation, factories, diagnostics);
 		}
 
 		ReportScanFilterDiagnostics(filters, hits, new ScanFilterCounts(assignable, registered, produced), assemblies: null, markerDisplay, location, diagnostics);
 	}
+
+	/// <summary>
+	///     The marker a module <c>[Scan]</c> selects on, plus whether it is an open generic and its original
+	///     definition, bundled so the per-match exposure computation takes one value rather than three.
+	/// </summary>
+	private readonly record struct ScanMarkerInfo(INamedTypeSymbol? Marker, bool Open, INamedTypeSymbol? Definition);
 
 	/// <summary>
 	///     Emits the factory for one module-scan match, or reports why it cannot: the exposure must resolve to a
@@ -168,9 +175,7 @@ partial class AwaitenGenerator
 	private static int RegisterModuleScanMatch(
 		INamedTypeSymbol type,
 		ScanMatch match,
-		INamedTypeSymbol? marker,
-		bool openMarker,
-		INamedTypeSymbol? markerDefinition,
+		ScanMarkerInfo markerInfo,
 		INamedTypeSymbol module,
 		Compilation compilation,
 		List<ModuleScanExpansion> factories,
@@ -178,36 +183,7 @@ partial class AwaitenGenerator
 	{
 		string typeName = type.ToDisplayString(FullyQualified);
 
-		// The interfaces this match would expose, restricted to those a consumer in any assembly can name. Self
-		// exposes the concrete type, externally usable only when the type itself is public.
-		List<INamedTypeSymbol> exposures = new();
-		if (match.RegisterSelf && IsExternallyAccessible(type))
-		{
-			exposures.Add(type);
-		}
-
-		if (match.RegisterMarker && marker is not null)
-		{
-			exposures.AddRange(
-				(openMarker ? ClosedMarkerInterfaces(type, markerDefinition!) : MarkerInterfaces(type, marker, compilation))
-				.Where(IsExternallyAccessible));
-		}
-
-		if (match.RegisterMatchingInterface)
-		{
-			exposures.AddRange(MatchingInterfaces(type).Where(IsExternallyAccessible));
-		}
-
-		// A combined Marker | MatchingInterface can select the same interface twice; dedup by name.
-		List<INamedTypeSymbol> distinct = new();
-		HashSet<string> seen = new(StringComparer.Ordinal);
-		foreach (INamedTypeSymbol exposure in exposures)
-		{
-			if (seen.Add(exposure.ToDisplayString(FullyQualified)))
-			{
-				distinct.Add(exposure);
-			}
-		}
+		List<INamedTypeSymbol> distinct = AccessibleExposures(type, match, markerInfo, compilation);
 
 		if (distinct.Count == 0)
 		{
@@ -233,94 +209,14 @@ partial class AwaitenGenerator
 		INamedTypeSymbol service = distinct[0];
 		string serviceName = service.ToDisplayString(FullyQualified);
 
-		// Two [Scan]s on one module can match the same type. Under the same exposure the overlap is deduped to
-		// the first factory, mirroring the container's per-implementation dedup, with AWT142 when the lifetimes
-		// differ (first scan's lifetime wins consistently). Under different exposures it is AWT197: each factory
-		// constructs its own instance, so the single shared instance a container scan gives one implementation
-		// across several interfaces cannot be expressed, and emitting both would silently split it.
-		ModuleScanExpansion? overlapping = factories.Find(expansion => expansion.Factory.ImplementationType == typeName);
-		if (overlapping is not null)
+		if (OverlapResolved(typeName, serviceName, match, factories, diagnostics))
 		{
-			if (overlapping.Factory.ServiceType != serviceName)
-			{
-				diagnostics.Add(new DiagnosticInfo(
-					Diagnostics.ModuleScanMultipleExposures,
-					LocationInfo.From(match.Location),
-					new EquatableArray<string>([
-						Display(typeName),
-						$"{Display(overlapping.Factory.ServiceType)}, {Display(serviceName)}",
-					])));
-				return 0;
-			}
-
-			if (overlapping.Factory.Lifetime != match.Lifetime)
-			{
-				diagnostics.Add(new DiagnosticInfo(
-					Diagnostics.ScanLifetimeConflict,
-					LocationInfo.From(match.Location),
-					new EquatableArray<string>([
-						Display(typeName),
-						overlapping.Factory.Lifetime.ToString(),
-						match.Lifetime.ToString(),
-					])));
-			}
-
 			return 0;
 		}
 
-		// [Inject] properties and [Inject]/[Arg] constructor parameters carry per-dependency semantics (keys,
-		// optionality, deferral, resolution arguments) that a mirrored factory signature cannot express, so the
-		// consumer would silently construct the match differently than a container scan would (AWT200).
-		foreach (IPropertySymbol property in InjectedProperties(type))
+		if (!TryMirrorFactoryParameters(type, module, compilation, match, typeName, diagnostics, out EquatableArray<FactoryParameter> parameters))
 		{
-			diagnostics.Add(new DiagnosticInfo(
-				Diagnostics.ModuleScanInjectionMetadata,
-				LocationInfo.From(match.Location),
-				new EquatableArray<string>([Display(typeName), $"its property '{property.Name}' is marked [Inject]",])));
 			return 0;
-		}
-
-		// The constructor the generated factory calls. Accessibility is asked against the module (it emits the
-		// 'new'), so an internal constructor in the module's own assembly qualifies. A greediest-fallback keeps a
-		// type with no satisfiable-here constructor building (its parameters are resolved by the consumer, not us).
-		IMethodSymbol? constructor = SelectConstructor(
-			type, module, compilation, Array.Empty<string>(), new ExternalSurface(false, new HashSet<string>(StringComparer.Ordinal)), _ => true);
-		if (constructor is null)
-		{
-			diagnostics.Add(new DiagnosticInfo(
-				Diagnostics.NoAccessibleConstructor,
-				LocationInfo.From(match.Location),
-				new EquatableArray<string>([Display(typeName),])));
-			return 0;
-		}
-
-		List<FactoryParameter> parameters = new();
-		foreach (IParameterSymbol parameter in constructor.Parameters)
-		{
-			// AWT200 for parameters, same reasoning as the [Inject] property check above.
-			ImmutableArray<AttributeData> parameterAttributes = parameter.GetAttributes();
-			if (HasInject(parameterAttributes) || HasArgAttribute(parameterAttributes))
-			{
-				string attributeName = HasInject(parameterAttributes) ? "[Inject]" : "[Arg]";
-				diagnostics.Add(new DiagnosticInfo(
-					Diagnostics.ModuleScanInjectionMetadata,
-					LocationInfo.From(match.Location),
-					new EquatableArray<string>([Display(typeName), $"its constructor parameter '{parameter.Name}' is marked {attributeName}",])));
-				return 0;
-			}
-
-			// The parameter type appears on the public factory signature and is resolved from the consumer's graph,
-			// so it must be nameable outside the assembly (AWT195). This is the v1 limitation on self-compiled scans.
-			if (!IsExternallyAccessible(parameter.Type))
-			{
-				diagnostics.Add(new DiagnosticInfo(
-					Diagnostics.ModuleScanParameterInaccessible,
-					LocationInfo.From(match.Location),
-					new EquatableArray<string>([Display(typeName), Display(parameter.Type.ToDisplayString(FullyQualified)),])));
-				return 0;
-			}
-
-			parameters.Add(new FactoryParameter(parameter.Type.ToDisplayString(FullyQualifiedWithNullability), parameter.Name));
 		}
 
 		factories.Add(new ModuleScanExpansion(
@@ -330,11 +226,169 @@ partial class AwaitenGenerator
 				typeName,
 				match.Lifetime,
 				match.SkipUnconstructable,
-				new EquatableArray<FactoryParameter>(parameters.ToArray())),
+				parameters),
 			service,
 			type,
 			match.Location));
 		return 1;
+	}
+
+	/// <summary>
+	///     The interfaces one module-scan match would expose, restricted to those a consumer in any assembly can
+	///     name and deduped by name. <c>Self</c> exposes the concrete type (externally usable only when it is
+	///     itself public); <c>Marker</c> and <c>MatchingInterface</c> contribute their accessible interfaces. A
+	///     combined <c>Marker | MatchingInterface</c> can select the same interface twice, hence the dedup.
+	/// </summary>
+	private static List<INamedTypeSymbol> AccessibleExposures(
+		INamedTypeSymbol type,
+		ScanMatch match,
+		ScanMarkerInfo markerInfo,
+		Compilation compilation)
+	{
+		List<INamedTypeSymbol> exposures = new();
+		if (match.RegisterSelf && IsExternallyAccessible(type))
+		{
+			exposures.Add(type);
+		}
+
+		if (match.RegisterMarker && markerInfo.Marker is not null)
+		{
+			exposures.AddRange(
+				(markerInfo.Open
+					? ClosedMarkerInterfaces(type, markerInfo.Definition!)
+					: MarkerInterfaces(type, markerInfo.Marker, compilation))
+				.Where(IsExternallyAccessible));
+		}
+
+		if (match.RegisterMatchingInterface)
+		{
+			exposures.AddRange(MatchingInterfaces(type).Where(IsExternallyAccessible));
+		}
+
+		HashSet<string> seen = new(StringComparer.Ordinal);
+		return exposures.Where(exposure => seen.Add(exposure.ToDisplayString(FullyQualified))).ToList();
+	}
+
+	/// <summary>
+	///     Whether an earlier scan of this module already matched <paramref name="typeName" />, in which case this
+	///     match adds no new factory. Two <c>[Scan]</c>s on one module can match the same type: under the same
+	///     exposure the overlap is deduped silently to the first factory (AWT142 when the lifetimes differ, the
+	///     first scan's lifetime winning consistently, mirroring the container's per-implementation dedup); under a
+	///     different exposure it is AWT197, because each factory constructs its own instance, so the single shared
+	///     instance a container scan gives one implementation across interfaces cannot be expressed and emitting
+	///     both would silently split it. Returns <see langword="true" /> when the overlap is handled here.
+	/// </summary>
+	private static bool OverlapResolved(
+		string typeName,
+		string serviceName,
+		ScanMatch match,
+		List<ModuleScanExpansion> factories,
+		List<DiagnosticInfo> diagnostics)
+	{
+		ModuleScanExpansion? overlapping = factories.Find(expansion => expansion.Factory.ImplementationType == typeName);
+		if (overlapping is null)
+		{
+			return false;
+		}
+
+		if (overlapping.Factory.ServiceType != serviceName)
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.ModuleScanMultipleExposures,
+				LocationInfo.From(match.Location),
+				new EquatableArray<string>([
+					Display(typeName),
+					$"{Display(overlapping.Factory.ServiceType)}, {Display(serviceName)}",
+				])));
+			return true;
+		}
+
+		if (overlapping.Factory.Lifetime != match.Lifetime)
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.ScanLifetimeConflict,
+				LocationInfo.From(match.Location),
+				new EquatableArray<string>([
+					Display(typeName),
+					overlapping.Factory.Lifetime.ToString(),
+					match.Lifetime.ToString(),
+				])));
+		}
+
+		return true;
+	}
+
+	/// <summary>
+	///     Builds the generated factory's parameter list by mirroring the greediest accessible constructor of
+	///     <paramref name="type" />, or reports why it cannot and returns <see langword="false" />. Accessibility is
+	///     asked against the module (it emits the <c>new</c>), so an internal constructor in the module's own
+	///     assembly qualifies, and a greediest-fallback keeps a type with no satisfiable-here constructor building
+	///     (its parameters are resolved by the consumer, not us). An <c>[Inject]</c> property or an <c>[Inject]</c>/
+	///     <c>[Arg]</c> parameter carries per-dependency semantics (keys, optionality, deferral, resolution
+	///     arguments) a mirrored factory signature cannot express, so it is AWT200 rather than silently dropped. A
+	///     parameter whose type is not nameable outside the assembly is AWT195, the v1 limitation, because it
+	///     appears on the <c>public</c> factory signature and is resolved from the consumer's graph.
+	/// </summary>
+	private static bool TryMirrorFactoryParameters(
+		INamedTypeSymbol type,
+		INamedTypeSymbol module,
+		Compilation compilation,
+		ScanMatch match,
+		string typeName,
+		List<DiagnosticInfo> diagnostics,
+		out EquatableArray<FactoryParameter> parameters)
+	{
+		parameters = default;
+
+		IPropertySymbol? injectedProperty = InjectedProperties(type).FirstOrDefault();
+		if (injectedProperty is not null)
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.ModuleScanInjectionMetadata,
+				LocationInfo.From(match.Location),
+				new EquatableArray<string>([Display(typeName), $"its property '{injectedProperty.Name}' is marked [Inject]",])));
+			return false;
+		}
+
+		IMethodSymbol? constructor = SelectConstructor(
+			type, module, compilation, Array.Empty<string>(), new ExternalSurface(false, new HashSet<string>(StringComparer.Ordinal)), _ => true);
+		if (constructor is null)
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.NoAccessibleConstructor,
+				LocationInfo.From(match.Location),
+				new EquatableArray<string>([Display(typeName),])));
+			return false;
+		}
+
+		List<FactoryParameter> mirrored = new();
+		foreach (IParameterSymbol parameter in constructor.Parameters)
+		{
+			ImmutableArray<AttributeData> parameterAttributes = parameter.GetAttributes();
+			if (HasInject(parameterAttributes) || HasArgAttribute(parameterAttributes))
+			{
+				string attributeName = HasInject(parameterAttributes) ? "[Inject]" : "[Arg]";
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.ModuleScanInjectionMetadata,
+					LocationInfo.From(match.Location),
+					new EquatableArray<string>([Display(typeName), $"its constructor parameter '{parameter.Name}' is marked {attributeName}",])));
+				return false;
+			}
+
+			if (!IsExternallyAccessible(parameter.Type))
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.ModuleScanParameterInaccessible,
+					LocationInfo.From(match.Location),
+					new EquatableArray<string>([Display(typeName), Display(parameter.Type.ToDisplayString(FullyQualified)),])));
+				return false;
+			}
+
+			mirrored.Add(new FactoryParameter(parameter.Type.ToDisplayString(FullyQualifiedWithNullability), parameter.Name));
+		}
+
+		parameters = new EquatableArray<FactoryParameter>(mirrored.ToArray());
+		return true;
 	}
 
 	/// <summary>

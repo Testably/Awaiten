@@ -350,6 +350,8 @@ public class SelfCompiledModuleScanTests
 
 		await That(result.Diagnostics).IsEmpty()
 			.Because("a same-compilation module's [Scan] is expanded by the container itself, so nothing is dropped and AWT151 does not misfire");
+		await That(result.Diagnostics).DoesNotContain("*AWT134*").AsWildcard()
+			.Because("the generated factory's 'new' of the internal implementation sits inside the [Module], which the boundary analyzer already treats as legitimate composition code, so it is not flagged as construction outside a composition root");
 		string source = result.Sources["Awaiten.Lib.MyContainer.g.cs"];
 		await That(source).Contains("new global::Lib.Roaster(")
 			.Because("with no assembly boundary the container constructs the internal match directly, as if the [Scan] were its own");

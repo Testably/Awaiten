@@ -70,14 +70,14 @@ partial class AwaitenGenerator
 		// re-running its scan here would double-register every match. The expansion's diagnostics are discarded:
 		// the module pipeline (BuildModuleModel) already reports on the same [Scan] at the same location, and
 		// reporting here too would double every scan-level warning.
-		foreach (ImportedModule module in modules)
+		foreach (INamedTypeSymbol moduleSymbol in modules.Select(module => module.Symbol))
 		{
-			if (!SymbolEqualityComparer.Default.Equals(module.Symbol.ContainingAssembly, containerSymbol.ContainingAssembly))
+			if (!SymbolEqualityComparer.Default.Equals(moduleSymbol.ContainingAssembly, containerSymbol.ContainingAssembly))
 			{
 				continue;
 			}
 
-			foreach (ModuleScanExpansion expansion in CollectModuleScanFactories(module.Symbol, compilation, new List<DiagnosticInfo>(), CancellationToken.None))
+			foreach (ModuleScanExpansion expansion in CollectModuleScanFactories(moduleSymbol, compilation, new List<DiagnosticInfo>(), CancellationToken.None))
 			{
 				result.Add(new RawRegistration(
 					expansion.Factory.ServiceType,
@@ -139,16 +139,9 @@ partial class AwaitenGenerator
 			}
 
 			// A [GeneratedScanRegistration<TService>(factory, Lifetime = …)] is what a [Module] self-compiled from
-			// its own [Scan] (one per match). Read it back like a container [Scan] match rather than a hand-written
-			// factory registration, so several matches under one interface collect instead of colliding. Skipped
-			// for a same-compilation module, whose [Scan] the container expands directly (see Collect).
-			if (attributeClass is { Name: "GeneratedScanRegistrationAttribute", IsGenericType: true, })
+			// its own [Scan] (one per match), read back and consumed there.
+			if (CollectGeneratedScanRegistration(attribute, attributeClass, result, origin, fallbackLocation, skipGeneratedScanRegistrations))
 			{
-				if (!skipGeneratedScanRegistrations)
-				{
-					CollectGeneratedScanRegistration(attribute, attributeClass, result, origin, fallbackLocation);
-				}
-
 				continue;
 			}
 
@@ -238,21 +231,31 @@ partial class AwaitenGenerator
 	///     through the accessible service; without it two matches of one interface would collapse into one
 	///     implementation and collide as conflicting factories. The module qualification matters: factory names are
 	///     only unique per module, so two imported modules whose matches share a simple type name would otherwise
-	///     collapse into one member, silently dropping the later module's match from the collection.
+	///     collapse into one member, silently dropping the later module's match from the collection. Returns whether
+	///     the attribute was a <c>[GeneratedScanRegistration]</c> (so the caller skips its lifetime handling), even
+	///     when <paramref name="skip" /> suppressed the collection for a same-compilation module whose <c>[Scan]</c>
+	///     the container expands directly (see <see cref="Collect" />).
 	/// </summary>
-	private static void CollectGeneratedScanRegistration(
+	private static bool CollectGeneratedScanRegistration(
 		AttributeData attribute,
 		INamedTypeSymbol attributeClass,
 		List<RawRegistration> result,
 		INamedTypeSymbol? origin,
-		Location? fallbackLocation)
+		Location? fallbackLocation,
+		bool skip)
 	{
-		if (attributeClass.TypeArguments.Length != 1
+		if (attributeClass is not { Name: "GeneratedScanRegistrationAttribute", IsGenericType: true, })
+		{
+			return false;
+		}
+
+		if (skip
+		    || attributeClass.TypeArguments.Length != 1
 		    || attributeClass.TypeArguments[0] is not INamedTypeSymbol service
 		    || attribute.ConstructorArguments.Length != 1
 		    || attribute.ConstructorArguments[0].Value is not string factory)
 		{
-			return;
+			return true;
 		}
 
 		Lifetime lifetime = Lifetime.Transient;
@@ -263,9 +266,9 @@ partial class AwaitenGenerator
 			{
 				lifetime = (Lifetime)value;
 			}
-			else if (argument.Key == "SkipUnconstructable" && argument.Value.Value is bool skip)
+			else if (argument.Key == "SkipUnconstructable" && argument.Value.Value is bool flag)
 			{
-				skipUnconstructable = skip;
+				skipUnconstructable = flag;
 			}
 		}
 
@@ -285,6 +288,7 @@ partial class AwaitenGenerator
 			IsScan: true,
 			ScanSkipsUnconstructable: skipUnconstructable,
 			Origin: origin));
+		return true;
 	}
 
 	/// <summary>
