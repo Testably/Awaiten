@@ -377,4 +377,206 @@ public class SelfCompiledModuleScanHookTests
 		await That(result.Diagnostics).Contains("*AWT203*Roaster*Secret*").AsWildcard()
 			.Because("the wrapper is public and resolves its parameters from the consumer's graph, so a hook dependency type must be nameable outside the module's assembly");
 	}
+
+	[Fact]
+	public async Task Awt204_ReportsAFromKeyHookDependencyParameter()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace Lib;
+
+			public interface IClock { }
+			public interface IPlugin { }
+			public interface IRoaster { }
+			internal sealed class Roaster : IPlugin, IRoaster { }
+
+			[Module]
+			[Scan<IPlugin>(As = ScanAs.MatchingInterface, OnActivated = nameof(Wire))]
+			public static partial class PluginModule
+			{
+			    internal static void Wire(Roaster roaster, [FromKey("main")] IClock clock) { }
+			}
+			""");
+
+		await That(result.Diagnostics).Contains("*AWT204*clock*FromKey*").AsWildcard()
+			.Because("the wrapper mirrors a bare type-and-name signature, so a [FromKey] would be silently dropped cross-assembly while a same-compilation container honored it");
+	}
+
+	[Fact]
+	public async Task Awt164_ReportsAHookWithAByRefParameter()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace Lib;
+
+			public interface IClock { }
+			public interface IPlugin { }
+			public interface IRoaster { }
+			internal sealed class Roaster : IPlugin, IRoaster { }
+
+			[Module]
+			[Scan<IPlugin>(As = ScanAs.MatchingInterface, OnActivated = nameof(Wire))]
+			public static partial class PluginModule
+			{
+			    internal static void Wire(Roaster roaster, ref IClock clock) { }
+			}
+			""");
+
+		await That(result.Diagnostics).Contains("*AWT164*Wire*").AsWildcard()
+			.Because("a by-ref parameter cannot be mirrored onto the wrapper or supplied by the container's hook invocation, so the method is not a usable hook");
+	}
+
+	[Fact]
+	public async Task AHookParameterNamedLikeTheSyntheticInstanceSuffixesTheSyntheticName()
+	{
+		string module = ReadModule("""
+			using Awaiten;
+
+			namespace Lib;
+
+			public interface IClock { }
+			public interface IPlugin { }
+			public interface IRoaster { }
+
+			internal sealed class Roaster : IPlugin, IRoaster { }
+
+			[Module]
+			[Scan<IPlugin>(As = ScanAs.MatchingInterface, OnActivated = nameof(Wire))]
+			public static partial class PluginModule
+			{
+			    internal static void Wire(Roaster roaster, IClock awaiten__instance) { }
+			}
+			""");
+
+		await That(module).Contains("(global::Lib.IRoaster @awaiten__instance_, global::Lib.IClock @awaiten__instance) => Wire((global::Lib.Roaster)@awaiten__instance_, @awaiten__instance);").AsWildcard()
+			.Because("a user hook parameter literally named awaiten__instance must not become a duplicate parameter on the wrapper, so the synthetic name is suffixed away from it");
+	}
+
+	[Fact]
+	public async Task TwoOverlappingScansFillEachOthersHookSlots()
+	{
+		string module = ReadModule("""
+			using Awaiten;
+
+			namespace Lib;
+
+			public interface IMarkerA { }
+			public interface IMarkerB { }
+			public interface IWorker { }
+
+			internal sealed class Worker : IMarkerA, IMarkerB, IWorker { }
+
+			[Module]
+			[Scan<IMarkerA>(As = ScanAs.MatchingInterface, OnActivated = nameof(Activate))]
+			[Scan<IMarkerB>(As = ScanAs.MatchingInterface, OnRelease = nameof(Release))]
+			public static partial class WorkerModule
+			{
+			    internal static void Activate(Worker worker) { }
+			    internal static void Release(Worker worker) { }
+			}
+			""");
+
+		await That(module).Contains("OnActivated = \"Awaiten__ScanHook_OnActivated_Worker_").AsWildcard()
+			.Because("the first scan's OnActivated stays on the single registration");
+		await That(module).Contains("OnRelease = \"Awaiten__ScanHook_OnRelease_Worker_").AsWildcard()
+			.Because("a second scan matching the same type fills the hook slot the first left empty, exactly like two container scans merging");
+		await That(module).Contains("public static void Awaiten__ScanHook_OnRelease_Worker_").AsWildcard()
+			.Because("the filled slot emits its wrapper beside the first scan's factory");
+	}
+
+	[Fact]
+	public async Task Awt199_ReportsOverlappingScansNamingDifferentHooksForOneSlot()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace Lib;
+
+			public interface IMarkerA { }
+			public interface IMarkerB { }
+			public interface IWorker { }
+
+			internal sealed class Worker : IMarkerA, IMarkerB, IWorker { }
+
+			[Module]
+			[Scan<IMarkerA>(As = ScanAs.MatchingInterface, OnActivated = nameof(Activate))]
+			[Scan<IMarkerB>(As = ScanAs.MatchingInterface, OnActivated = nameof(Other))]
+			public static partial class WorkerModule
+			{
+			    internal static void Activate(Worker worker) { }
+			    internal static void Other(Worker worker) { }
+			}
+			""");
+
+		await That(result.Diagnostics).Contains("*AWT199*Worker*Activate*Other*").AsWildcard()
+			.Because("two scans naming different methods for one slot is order-dependent, so it is surfaced like the container form surfaces it");
+	}
+
+	[Fact]
+	public async Task SameCompilationContainerScanAndModuleScanSharingAMatchResolveTheHookAgainstTheModule()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace Lib;
+
+			public interface IPlugin { }
+			public interface IRoaster { }
+
+			internal sealed class Roaster : IPlugin, IRoaster { }
+
+			[Module]
+			[Scan<IPlugin>(As = ScanAs.MatchingInterface, OnActivated = nameof(Wire))]
+			public static partial class PluginModule
+			{
+			    internal static void Wire(Roaster roaster) { }
+			}
+
+			[Container]
+			[Scan<IPlugin>(As = ScanAs.MatchingInterface)]
+			[Import(typeof(PluginModule))]
+			public static partial class MyContainer { }
+			""");
+
+		await That(result.Diagnostics).IsEmpty()
+			.Because("the hook name is owner-relative: it resolves against the module that named it, not the container the first (hookless) scan registration fixed as the implementation's origin");
+		string source = result.Sources["Awaiten.Lib.MyContainer.g.cs"];
+		await That(source).Contains("global::Lib.PluginModule.Wire(").AsWildcard()
+			.Because("the hook is emitted qualified on the module even though the container's own scan registered the match first");
+	}
+
+	[Fact]
+	public async Task Awt199_ReportsAModuleScanHookConflictingWithASameNamedContainerScanHook()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace Lib;
+
+			public interface IPlugin { }
+			public interface IRoaster { }
+
+			internal sealed class Roaster : IPlugin, IRoaster { }
+
+			[Module]
+			[Scan<IPlugin>(As = ScanAs.MatchingInterface, OnActivated = nameof(Wire))]
+			public static partial class PluginModule
+			{
+			    internal static void Wire(Roaster roaster) { }
+			}
+
+			[Container]
+			[Scan<IPlugin>(As = ScanAs.MatchingInterface, OnActivated = nameof(Wire))]
+			[Import(typeof(PluginModule))]
+			public static partial class MyContainer
+			{
+			    internal static void Wire(Roaster roaster) { }
+			}
+			""");
+
+		await That(result.Diagnostics).Contains("*AWT199*Lib.PluginModule.Wire*").AsWildcard()
+			.Because("the same hook name on a different origin is a different method, so merging it silently would run whichever origin registered first; the conflict names the module-owned loser qualified");
+	}
 }

@@ -188,6 +188,8 @@ partial class AwaitenGenerator
 					Eager = reg.Eager,
 					OnActivated = reg.OnActivated,
 					OnRelease = reg.OnRelease,
+					OnActivatedOrigin = reg.OnActivated is null ? null : reg.Origin,
+					OnReleaseOrigin = reg.OnRelease is null ? null : reg.Origin,
 					SuppressDisposal = reg.SuppressDisposal,
 				};
 				implInfos.Add(reg.ImplementationType, info);
@@ -201,14 +203,17 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     Merges a scan registration's lifecycle hooks into its implementation's coalesced info, per hook slot.
 	///     Two scans matching one type combine: a hook fills a slot no earlier scan claimed (so one scan's
-	///     <c>OnActivated</c> and another's <c>OnRelease</c> both apply), and a scan restating the slot's hook name
+	///     <c>OnActivated</c> and another's <c>OnRelease</c> both apply), and a scan restating the slot's hook
 	///     contributes its closed marker forms to that slot's set, so a generic hook bound by two open-generic scans
 	///     that close their markers differently is seen as ambiguous in <c>ResolveHook</c> (AWT198) rather than
 	///     silently fixed to the first-seen closing. Naming a <em>different</em> method for a claimed slot is
 	///     <see cref="Diagnostics.ScanHookConflict">AWT199</see> (once per implementation and slot): which method ran
-	///     would depend on attribute order, the same order-dependence AWT142 surfaces for lifetimes. When the
-	///     implementation's winning registration is not a scan the whole merge is skipped: a scan yields to an
-	///     explicit registration, whose hooks (or deliberate lack of them) replace the scan's like its other options.
+	///     would depend on attribute order, the same order-dependence AWT142 surfaces for lifetimes. A hook name is
+	///     owner-relative (each slot resolves against the origin that named it), so the same name from a different
+	///     origin - a container scan and a same-compilation module scan, or two modules - is a different method and
+	///     conflicts too; only a restatement from the same origin merges. When the implementation's winning
+	///     registration is not a scan the whole merge is skipped: a scan yields to an explicit registration, whose
+	///     hooks (or deliberate lack of them) replace the scan's like its other options.
 	/// </summary>
 	private static void MergeScanHooks(
 		ImplInfo info,
@@ -221,53 +226,72 @@ partial class AwaitenGenerator
 			return;
 		}
 
-		info.OnActivated = MergeScanHookSlot(registration, "OnActivated", info.OnActivated, registration.OnActivated, info.OnActivatedMarkers, reportedHookConflicts, diagnostics);
-		info.OnRelease = MergeScanHookSlot(registration, "OnRelease", info.OnRelease, registration.OnRelease, info.OnReleaseMarkers, reportedHookConflicts, diagnostics);
+		(info.OnActivated, info.OnActivatedOrigin) = MergeScanHookSlot(
+			registration, release: false, (info.OnActivated, info.OnActivatedOrigin), info.OnActivatedMarkers, reportedHookConflicts, diagnostics);
+		(info.OnRelease, info.OnReleaseOrigin) = MergeScanHookSlot(
+			registration, release: true, (info.OnRelease, info.OnReleaseOrigin), info.OnReleaseMarkers, reportedHookConflicts, diagnostics);
 	}
 
 	/// <summary>
-	///     Merges one hook slot (see <see cref="MergeScanHooks" />): returns the slot's coalesced hook name, unioning
-	///     the registration's closed marker forms into the slot's set when it fills or restates the slot, and
-	///     reporting AWT199 (keeping the first-seen name) when it contradicts it.
+	///     Merges one hook slot (see <see cref="MergeScanHooks" />): returns the slot's coalesced hook name and the
+	///     origin it resolves against, unioning the registration's closed marker forms into the slot's set when it
+	///     fills or restates the slot, and reporting AWT199 (keeping the first-seen hook) when it contradicts it -
+	///     by naming a different method, or the same name on a different origin, which is a different method too.
 	/// </summary>
-	private static string? MergeScanHookSlot(
+	private static (string? Name, INamedTypeSymbol? Origin) MergeScanHookSlot(
 		RawRegistration registration,
-		string slot,
-		string? current,
-		string? name,
+		bool release,
+		(string? Name, INamedTypeSymbol? Origin) current,
 		List<INamedTypeSymbol> slotMarkers,
 		HashSet<string> reportedHookConflicts,
 		List<DiagnosticInfo> diagnostics)
 	{
+		string? name = release ? registration.OnRelease : registration.OnActivated;
 		if (name is null)
 		{
 			return current;
 		}
 
-		if (current is not null && !string.Equals(current, name, StringComparison.Ordinal))
+		string slot = release ? "OnRelease" : "OnActivated";
+		if (current.Name is not null
+		    && (!string.Equals(current.Name, name, StringComparison.Ordinal)
+		        || !SymbolEqualityComparer.Default.Equals(current.Origin, registration.Origin)))
 		{
 			if (reportedHookConflicts.Add(registration.ImplementationType + "\0" + slot))
 			{
 				diagnostics.Add(new DiagnosticInfo(
 					Diagnostics.ScanHookConflict,
 					LocationInfo.From(registration.Location),
-					new EquatableArray<string>([Display(registration.ImplementationType), slot, current, name,])));
+					new EquatableArray<string>([
+						Display(registration.ImplementationType),
+						slot,
+						QualifiedHookDisplay(current.Name, current.Origin),
+						QualifiedHookDisplay(name, registration.Origin),
+					])));
 			}
 
 			return current;
 		}
 
-		if (registration.HookClosedMarkers is { } markers)
+		IReadOnlyList<INamedTypeSymbol>? markers = release ? registration.OnReleaseMarkers : registration.OnActivatedMarkers;
+		if (markers is { } contributed)
 		{
-			foreach (INamedTypeSymbol marker in markers.Where(marker =>
+			foreach (INamedTypeSymbol marker in contributed.Where(marker =>
 				         !slotMarkers.Any(seen => SymbolEqualityComparer.Default.Equals(seen, marker))))
 			{
 				slotMarkers.Add(marker);
 			}
 		}
 
-		return name;
+		return (name, registration.Origin);
 	}
+
+	/// <summary>
+	///     Names a hook in the AWT199 message: qualified with its owning module so two same-named hooks on
+	///     different origins read as the different methods they are; a container-owned hook stays a bare name.
+	/// </summary>
+	private static string QualifiedHookDisplay(string name, INamedTypeSymbol? origin)
+		=> origin is { } owner ? $"{Display(owner.ToDisplayString(FullyQualified))}.{name}" : name;
 
 	/// <summary>
 	///     The synthetic resolution key a contextual (WhenInjectedInto) registration is stored under: unique per

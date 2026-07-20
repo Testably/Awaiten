@@ -105,3 +105,4 @@
  AWT201  | Awaiten   | Error    | A generic [Module] (or one nested in a generic type) declares a [Scan], so no closed module exists for a consumer to import
  AWT202  | Awaiten   | Error    | A module [Scan] declares InAssembliesOf, but a self-compiled scan sweeps only the module's own assembly
  AWT203  | Awaiten   | Error    | A self-compiled module [Scan] hook has a parameter type inaccessible outside the module's assembly, so the generated hook wrapper cannot expose it
+ AWT204  | Awaiten   | Error    | A self-compiled module [Scan] hook parameter carries [FromKey]/[Inject] metadata the generated hook wrapper cannot mirror

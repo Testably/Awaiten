@@ -1551,4 +1551,22 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A self-compiled module <c>[Scan]</c> names a lifecycle hook with a parameter (after the instance) marked
+	///     <c>[FromKey]</c> or <c>[Inject]</c>. The hook's parameters mirror onto the generated <c>public</c>
+	///     wrapper as a bare type-and-name signature resolved from the consuming container's graph, so the
+	///     attribute's per-dependency semantics (a key, optionality, deferral) would be silently dropped there,
+	///     while a same-compilation container, binding the module's own hook directly, would honor them - the same
+	///     source injecting different instances depending on which side of the assembly boundary the consumer sits.
+	///     The hook-parameter twin of the factory's <see cref="ModuleScanInjectionMetadata">AWT200</see>, rejected
+	///     rather than silently degraded.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ModuleScanHookInjectionMetadata = new(
+		"AWT204",
+		"Module scan hook uses injection metadata",
+		"'{0}' matched the module scan, but its {1} hook parameter '{2}' is marked {3}, which the generated hook wrapper cannot mirror and would silently drop; remove the attribute, resolve the dependency plainly, or drop the hook",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

@@ -90,14 +90,16 @@ partial class AwaitenGenerator
 					ScanSkipsUnconstructable: expansion.Factory.SkipUnconstructable,
 					GreedyConstructor: true,
 					// With no assembly boundary the container binds the module's own (possibly internal) hook directly
-					// rather than the generated wrapper it cannot see, so the hook resolves against the module (Origin)
-					// through the ordinary pipeline. The user hook names travel on the expansion (set only when the
-					// module resolved them validly at its build, so an invalid hook - already reported there - is not
-					// wired and re-reported here), and the closed marker forms bind a generic hook's type argument.
+					// rather than the generated wrapper it cannot see, so each hook resolves against the module - the
+					// coalescer keeps the origin per hook slot - through the ordinary pipeline. The user hook names
+					// travel on the expansion (set only when the module resolved them validly at its build, so an
+					// invalid hook - already reported there - is not wired and re-reported here), and each slot's
+					// closed marker forms bind a generic hook's type argument.
 					Origin: moduleSymbol,
 					OnActivated: expansion.OnActivated,
 					OnRelease: expansion.OnRelease,
-					HookClosedMarkers: expansion.HookClosedMarkers));
+					OnActivatedMarkers: expansion.OnActivatedMarkers,
+					OnReleaseMarkers: expansion.OnReleaseMarkers));
 			}
 		}
 

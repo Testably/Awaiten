@@ -68,7 +68,8 @@ partial class AwaitenGenerator
 	///     fields carry what a same-compilation container needs to wire the match's lifecycle hooks directly against
 	///     the module (no assembly boundary, so it binds the module's own - possibly internal - hook rather than the
 	///     generated wrapper it cannot see): the user hook names (set only when the module resolved them validly at
-	///     its build) and the closed marker forms a generic hook binds its type argument from.
+	///     its build) and, per slot, the closed marker forms its hook resolved against - kept apart because two
+	///     overlapping scans can fill the two slots with differently-markered hooks (see <see cref="ResolveOverlap" />).
 	/// </summary>
 	private sealed record ModuleScanExpansion(
 		ModuleFactory Factory,
@@ -77,7 +78,14 @@ partial class AwaitenGenerator
 		Location? Location,
 		string? OnActivated = null,
 		string? OnRelease = null,
-		IReadOnlyList<INamedTypeSymbol>? HookClosedMarkers = null);
+		IReadOnlyList<INamedTypeSymbol>? OnActivatedMarkers = null,
+		IReadOnlyList<INamedTypeSymbol>? OnReleaseMarkers = null);
+
+	/// <summary>
+	///     The per-module state the scan-hook helpers share (the module that owns the hooks, the compilation, and
+	///     the diagnostics sink), bundled so each helper takes one value rather than three.
+	/// </summary>
+	private readonly record struct ModuleScanContext(INamedTypeSymbol Module, Compilation Compilation, List<DiagnosticInfo> Diagnostics);
 
 	/// <summary>
 	///     Expands one module <c>[Scan]</c> over its candidates, mirroring <see cref="ExpandScan" /> but emitting a
@@ -178,10 +186,11 @@ partial class AwaitenGenerator
 	///     constructor's parameters must all be accessible outside the assembly (AWT195), because they appear on the
 	///     generated <c>public</c> factory and are resolved from the consumer's graph. A match carrying injection
 	///     metadata the factory cannot mirror ([Inject] properties, [Inject]/[Arg] parameters) is AWT200. A match
-	///     another scan of this module already exposed the same way is deduped silently (a differing lifetime
-	///     across the overlap is AWT142, first scan wins); one another scan exposed under a <em>different</em>
-	///     interface is AWT197, since two factories would split the shared instance. Returns the number of
-	///     factories contributed (0 or 1).
+	///     another scan of this module already exposed the same way is deduped to the first factory, merging the
+	///     overlap's lifecycle hooks per slot like two container scans' (see <see cref="ResolveOverlap" />; a
+	///     differing lifetime across the overlap is AWT142, first scan wins); one another scan exposed under a
+	///     <em>different</em> interface is AWT197, since two factories would split the shared instance. Returns the
+	///     number of factories contributed (0 or 1).
 	/// </summary>
 	private static int RegisterModuleScanMatch(
 		INamedTypeSymbol type,
@@ -219,9 +228,12 @@ partial class AwaitenGenerator
 
 		INamedTypeSymbol service = distinct[0];
 		string serviceName = service.ToDisplayString(FullyQualified);
+		ModuleScanContext context = new(module, compilation, diagnostics);
 
-		if (OverlapResolved(typeName, serviceName, match, factories, diagnostics))
+		int overlap = factories.FindIndex(expansion => expansion.Factory.ImplementationType == typeName);
+		if (overlap >= 0)
 		{
+			factories[overlap] = ResolveOverlap(factories[overlap], typeName, serviceName, type, match, markerInfo, context);
 			return 0;
 		}
 
@@ -235,8 +247,8 @@ partial class AwaitenGenerator
 		// module's (possibly internal) hook; the closed marker forms let a same-compilation container bind that hook
 		// directly. A hook named but not resolvable is reported here and dropped (no wrapper, unnamed on the attribute).
 		IReadOnlyList<INamedTypeSymbol>? hookMarkers = ScanHookMarkers(type, match, markerInfo.Open, markerInfo.Definition);
-		ResolvedModuleHook? onActivated = ResolveModuleHook(type, module, match.OnActivated, release: false, hookMarkers, match.Location, compilation, diagnostics);
-		ResolvedModuleHook? onRelease = ResolveModuleHook(type, module, match.OnRelease, release: true, hookMarkers, match.Location, compilation, diagnostics);
+		ResolvedModuleHook? onActivated = ResolveModuleHook(type, match, release: false, hookMarkers, context);
+		ResolvedModuleHook? onRelease = ResolveModuleHook(type, match, release: true, hookMarkers, context);
 
 		factories.Add(new ModuleScanExpansion(
 			new ModuleFactory(
@@ -253,7 +265,8 @@ partial class AwaitenGenerator
 			match.Location,
 			onActivated?.UserHookName,
 			onRelease?.UserHookName,
-			hookMarkers));
+			onActivated is null ? null : hookMarkers,
+			onRelease is null ? null : hookMarkers));
 		return 1;
 	}
 
@@ -275,18 +288,17 @@ partial class AwaitenGenerator
 	///     <see cref="Diagnostics.AmbiguousLifecycleHook">AWT190</see>. The instance (first) parameter accepts the
 	///     internal match itself; the parameters after it are mirrored onto the public wrapper and resolved from the
 	///     consumer's graph, so they carry the same restrictions a container hook's do (AWT189/AWT191) plus the
-	///     external-accessibility rule a factory parameter gets (AWT203).
+	///     mirroring rules a factory parameter gets: externally accessible (AWT203), no per-dependency metadata the
+	///     bare wrapper signature would drop (AWT204).
 	/// </summary>
 	private static ResolvedModuleHook? ResolveModuleHook(
 		INamedTypeSymbol matchType,
-		INamedTypeSymbol module,
-		string? hookName,
+		ScanMatch match,
 		bool release,
 		IReadOnlyList<INamedTypeSymbol>? closedMarkers,
-		Location? location,
-		Compilation compilation,
-		List<DiagnosticInfo> diagnostics)
+		ModuleScanContext context)
 	{
+		string? hookName = release ? match.OnRelease : match.OnActivated;
 		if (hookName is null)
 		{
 			return null;
@@ -294,15 +306,15 @@ partial class AwaitenGenerator
 
 		string typeName = matchType.ToDisplayString(FullyQualified);
 		(List<IMethodSymbol> matches, List<IReadOnlyList<INamedTypeSymbol>> ambiguous) =
-			CollectModuleHookOverloads(matchType, module, hookName, closedMarkers, compilation);
+			CollectModuleHookOverloads(matchType, hookName, closedMarkers, context);
 
 		// AWT198: a generic hook whose only obstacle is an ambiguous closed marker, with no other usable overload -
 		// its type arguments cannot be chosen. Mirrors ResolveHook.
 		if (matches.Count == 0 && ambiguous.Count == 1)
 		{
-			diagnostics.Add(new DiagnosticInfo(
+			context.Diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.GenericHookAmbiguousMarker,
-				LocationInfo.From(location),
+				LocationInfo.From(match.Location),
 				new EquatableArray<string>([
 					Display(typeName),
 					hookName,
@@ -315,15 +327,15 @@ partial class AwaitenGenerator
 		// naming the module as the owner the hook was looked up on.
 		if (matches.Count != 1 || ambiguous.Count > 0)
 		{
-			diagnostics.Add(new DiagnosticInfo(
+			context.Diagnostics.Add(new DiagnosticInfo(
 				matches.Count + ambiguous.Count == 0 ? Diagnostics.InvalidLifecycleHook : Diagnostics.AmbiguousLifecycleHook,
-				LocationInfo.From(location),
-				new EquatableArray<string>([Display(typeName), hookName, $"the module '{Display(module.ToDisplayString(FullyQualified))}'",])));
+				LocationInfo.From(match.Location),
+				new EquatableArray<string>([Display(typeName), hookName, $"the module '{Display(context.Module.ToDisplayString(FullyQualified))}'",])));
 			return null;
 		}
 
 		IMethodSymbol hook = matches[0];
-		if (!TryMirrorHookParameters(typeName, hook, release, location, compilation, diagnostics, out EquatableArray<FactoryParameter> parameters))
+		if (!TryMirrorHookParameters(typeName, hook, release, match.Location, context.Diagnostics, out EquatableArray<FactoryParameter> parameters))
 		{
 			return null;
 		}
@@ -345,25 +357,29 @@ partial class AwaitenGenerator
 	///     any generic overload several forms could bind (AWT198 when it is the only candidate). A hook must be
 	///     accessible from a separate type in the module's assembly (<c>internal</c> or wider): the wrapper could
 	///     call even a <c>private</c> hook, but a same-compilation container binding the hook directly could not, so a
-	///     <c>private</c> method is not a usable hook here either and falls through to AWT164.
+	///     <c>private</c> method is not a usable hook here either and falls through to AWT164. A method with a
+	///     by-ref (<c>ref</c>/<c>in</c>/<c>out</c>) parameter is not usable either: the wrapper mirrors bare
+	///     by-value parameters and the container's hook invocation supplies plain graph values, so forwarding such a
+	///     method could not compile; it too falls through to AWT164.
 	/// </summary>
 	private static (List<IMethodSymbol> Matches, List<IReadOnlyList<INamedTypeSymbol>> Ambiguous) CollectModuleHookOverloads(
 		INamedTypeSymbol matchType,
-		INamedTypeSymbol module,
 		string hookName,
 		IReadOnlyList<INamedTypeSymbol>? closedMarkers,
-		Compilation compilation)
+		ModuleScanContext context)
 	{
+		Compilation compilation = context.Compilation;
 		List<IMethodSymbol> matches = new();
 		List<IReadOnlyList<INamedTypeSymbol>> ambiguous = new();
-		foreach (ISymbol member in AccessibleMembers(module, hookName, compilation))
+		foreach (ISymbol member in AccessibleMembers(context.Module, hookName, compilation))
 		{
 			// A hook must be reachable from a separate type in the module's assembly - internal or wider. The wrapper
 			// sits in the module class and could call even a private hook, but a same-compilation container binds the
 			// hook directly, so a private hook usable one way and AWT164 the other would be inconsistent; a private
 			// method is not a usable hook, falling through to AWT164 in both.
 			if (member is not IMethodSymbol { MethodKind: MethodKind.Ordinary, IsStatic: true, ReturnsVoid: true, Parameters.Length: >= 1, } method
-			    || !compilation.IsSymbolAccessibleWithin(method, module.ContainingAssembly))
+			    || !compilation.IsSymbolAccessibleWithin(method, context.Module.ContainingAssembly)
+			    || method.Parameters.Any(parameter => parameter.RefKind != RefKind.None))
 			{
 				continue;
 			}
@@ -379,7 +395,7 @@ partial class AwaitenGenerator
 			}
 
 			List<(INamedTypeSymbol Form, IMethodSymbol Constructed)> bindable =
-				BindableHookConstructions(method, closedMarkers ?? Array.Empty<INamedTypeSymbol>(), matchType, module, compilation);
+				BindableHookConstructions(method, closedMarkers ?? Array.Empty<INamedTypeSymbol>(), matchType, context.Module, compilation);
 			if (bindable.Count == 1)
 			{
 				matches.Add(bindable[0].Constructed);
@@ -398,17 +414,19 @@ partial class AwaitenGenerator
 	///     <see cref="ResolveModuleHook" />), or reports why it cannot and returns <see langword="false" /> (the hook
 	///     is dropped). Each parameter is resolved from the consumer's graph like a factory's, so a runtime
 	///     <c>[Arg]</c> is <see cref="Diagnostics.HookParameterIsArg">AWT189</see>, a <c>Func</c>/<c>Lazy</c> on a
-	///     release hook is <see cref="Diagnostics.ReleaseHookDeferredParameter">AWT191</see>, and a type not nameable
+	///     release hook is <see cref="Diagnostics.ReleaseHookDeferredParameter">AWT191</see>, a type not nameable
 	///     outside the assembly is <see cref="Diagnostics.ModuleScanHookParameterInaccessible">AWT203</see> (the
-	///     hook-parameter twin of the factory-parameter AWT195). The instance parameter is never checked here: it is
-	///     the accessible exposure interface, cast to the internal match inside the module.
+	///     hook-parameter twin of the factory-parameter AWT195), and <c>[FromKey]</c>/<c>[Inject]</c> metadata the
+	///     bare wrapper signature would silently drop is
+	///     <see cref="Diagnostics.ModuleScanHookInjectionMetadata">AWT204</see> (the twin of AWT200). The instance
+	///     parameter is never checked here: it is the accessible exposure interface, cast to the internal match
+	///     inside the module.
 	/// </summary>
 	private static bool TryMirrorHookParameters(
 		string typeName,
 		IMethodSymbol hook,
 		bool release,
 		Location? location,
-		Compilation compilation,
 		List<DiagnosticInfo> diagnostics,
 		out EquatableArray<FactoryParameter> parameters)
 	{
@@ -423,6 +441,24 @@ partial class AwaitenGenerator
 					Diagnostics.HookParameterIsArg,
 					LocationInfo.From(location),
 					new EquatableArray<string>([parameter.Name, Display(typeName),])));
+				return false;
+			}
+
+			// [FromKey]/[Inject] carry per-dependency semantics (a key, optionality, deferral) the wrapper mirrors
+			// away: its bare (type, name) signature would make a cross-assembly consumer resolve the plain type
+			// while a same-compilation container, binding the hook directly, honored the attribute. Rejected rather
+			// than silently degraded - the hook-parameter twin of the factory parameter's AWT200.
+			if (HasAwaitenAttribute(attributes, "FromKeyAttribute") || HasInject(attributes))
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.ModuleScanHookInjectionMetadata,
+					LocationInfo.From(location),
+					new EquatableArray<string>([
+						Display(typeName),
+						release ? "OnRelease" : "OnActivated",
+						parameter.Name,
+						HasInject(attributes) ? "[Inject]" : "[FromKey]",
+					])));
 				return false;
 			}
 
@@ -508,42 +544,42 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     Whether an earlier scan of this module already matched <paramref name="typeName" />, in which case this
-	///     match adds no new factory. Two <c>[Scan]</c>s on one module can match the same type: under the same
-	///     exposure the overlap is deduped silently to the first factory (AWT142 when the lifetimes differ, the
-	///     first scan's lifetime winning consistently, mirroring the container's per-implementation dedup); under a
-	///     different exposure it is AWT197, because each factory constructs its own instance, so the single shared
-	///     instance a container scan gives one implementation across interfaces cannot be expressed and emitting
-	///     both would silently split it. Returns <see langword="true" /> when the overlap is handled here.
+	///     Handles a match an earlier scan of this module already exposed, returning the (possibly hook-updated)
+	///     expansion that stands for both. Two <c>[Scan]</c>s on one module can match the same type: under the same
+	///     exposure the overlap is deduped to the first factory (AWT142 when the lifetimes differ, the first scan's
+	///     lifetime winning consistently, mirroring the container's per-implementation dedup), and the scans'
+	///     lifecycle hooks merge per slot exactly like two container scans' (<c>MergeScanHooks</c>): this scan's
+	///     hook fills a slot no earlier scan claimed, a restated hook contributes this scan's closed marker forms
+	///     (re-resolved over the union, so a closing that leaves a generic hook ambiguous is AWT198 at the module
+	///     build, just as a consuming container would see it), and naming a different method for a claimed slot is
+	///     AWT199, the first scan winning. Under a different exposure the overlap is AWT197, because each factory
+	///     constructs its own instance, so the single shared instance a container scan gives one implementation
+	///     across interfaces cannot be expressed and emitting both would silently split it.
 	/// </summary>
-	private static bool OverlapResolved(
+	private static ModuleScanExpansion ResolveOverlap(
+		ModuleScanExpansion overlapping,
 		string typeName,
 		string serviceName,
+		INamedTypeSymbol type,
 		ScanMatch match,
-		List<ModuleScanExpansion> factories,
-		List<DiagnosticInfo> diagnostics)
+		ScanMarkerInfo markerInfo,
+		ModuleScanContext context)
 	{
-		ModuleScanExpansion? overlapping = factories.Find(expansion => expansion.Factory.ImplementationType == typeName);
-		if (overlapping is null)
-		{
-			return false;
-		}
-
 		if (overlapping.Factory.ServiceType != serviceName)
 		{
-			diagnostics.Add(new DiagnosticInfo(
+			context.Diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.ModuleScanMultipleExposures,
 				LocationInfo.From(match.Location),
 				new EquatableArray<string>([
 					Display(typeName),
 					$"{Display(overlapping.Factory.ServiceType)}, {Display(serviceName)}",
 				])));
-			return true;
+			return overlapping;
 		}
 
 		if (overlapping.Factory.Lifetime != match.Lifetime)
 		{
-			diagnostics.Add(new DiagnosticInfo(
+			context.Diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.ScanLifetimeConflict,
 				LocationInfo.From(match.Location),
 				new EquatableArray<string>([
@@ -553,7 +589,111 @@ partial class AwaitenGenerator
 				])));
 		}
 
-		return true;
+		if (match.OnActivated is null && match.OnRelease is null)
+		{
+			return overlapping;
+		}
+
+		IReadOnlyList<INamedTypeSymbol>? markers = ScanHookMarkers(type, match, markerInfo.Open, markerInfo.Definition);
+		ModuleHookSlot onActivated = MergeModuleScanHookSlot(
+			new ModuleHookSlot(overlapping.OnActivated, overlapping.Factory.OnActivated, overlapping.OnActivatedMarkers),
+			type, match, release: false, markers, context);
+		ModuleHookSlot onRelease = MergeModuleScanHookSlot(
+			new ModuleHookSlot(overlapping.OnRelease, overlapping.Factory.OnRelease, overlapping.OnReleaseMarkers),
+			type, match, release: true, markers, context);
+
+		return overlapping with
+		{
+			Factory = overlapping.Factory with { OnActivated = onActivated.Wrapper, OnRelease = onRelease.Wrapper, },
+			OnActivated = onActivated.Name,
+			OnRelease = onRelease.Name,
+			OnActivatedMarkers = onActivated.Markers,
+			OnReleaseMarkers = onRelease.Markers,
+		};
+	}
+
+	/// <summary>
+	///     One hook slot of a module-scan expansion while overlapping scans merge (see <see cref="ResolveOverlap" />):
+	///     the user hook's name, its generated wrapper, and the closed marker forms it resolved against.
+	/// </summary>
+	private readonly record struct ModuleHookSlot(string? Name, ModuleHook? Wrapper, IReadOnlyList<INamedTypeSymbol>? Markers);
+
+	/// <summary>
+	///     Merges one hook slot of an overlapped module-scan match (see <see cref="ResolveOverlap" />), the module
+	///     build's counterpart of the container's <c>MergeScanHookSlot</c>: this scan's hook fills an unclaimed slot
+	///     (resolved with this scan's closed marker forms), a restated name contributes new marker forms and
+	///     re-resolves the slot over the union (a closing that leaves a generic hook ambiguous is AWT198 and drops
+	///     the hook, exactly what a same-compilation consumer resolving over the union would report), and a
+	///     different name for a claimed slot is AWT199, the first scan winning.
+	/// </summary>
+	private static ModuleHookSlot MergeModuleScanHookSlot(
+		ModuleHookSlot current,
+		INamedTypeSymbol type,
+		ScanMatch match,
+		bool release,
+		IReadOnlyList<INamedTypeSymbol>? markers,
+		ModuleScanContext context)
+	{
+		string? name = release ? match.OnRelease : match.OnActivated;
+		if (name is null)
+		{
+			return current;
+		}
+
+		if (current.Name is null)
+		{
+			ResolvedModuleHook? resolved = ResolveModuleHook(type, match, release, markers, context);
+			return resolved is null ? current : new ModuleHookSlot(resolved.UserHookName, resolved.Wrapper, markers);
+		}
+
+		if (!string.Equals(current.Name, name, StringComparison.Ordinal))
+		{
+			context.Diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.ScanHookConflict,
+				LocationInfo.From(match.Location),
+				new EquatableArray<string>([
+					Display(type.ToDisplayString(FullyQualified)),
+					release ? "OnRelease" : "OnActivated",
+					current.Name,
+					name,
+				])));
+			return current;
+		}
+
+		IReadOnlyList<INamedTypeSymbol>? union = UnionMarkers(current.Markers, markers);
+		if (ReferenceEquals(union, current.Markers))
+		{
+			return current;
+		}
+
+		ResolvedModuleHook? reresolved = ResolveModuleHook(type, match, release, union, context);
+		return reresolved is null
+			? new ModuleHookSlot(null, null, null)
+			: new ModuleHookSlot(reresolved.UserHookName, reresolved.Wrapper, union);
+	}
+
+	/// <summary>
+	///     The union of two closed-marker-form sets, deduped by symbol; returns <paramref name="current" /> itself
+	///     (reference-equal) when <paramref name="added" /> contributes nothing new, so the caller can skip
+	///     re-resolving an unchanged slot.
+	/// </summary>
+	private static IReadOnlyList<INamedTypeSymbol>? UnionMarkers(
+		IReadOnlyList<INamedTypeSymbol>? current,
+		IReadOnlyList<INamedTypeSymbol>? added)
+	{
+		if (added is null || added.Count == 0)
+		{
+			return current;
+		}
+
+		if (current is null || current.Count == 0)
+		{
+			return added;
+		}
+
+		List<INamedTypeSymbol> union = new(current);
+		union.AddRange(added.Where(marker => !current.Any(seen => SymbolEqualityComparer.Default.Equals(seen, marker))));
+		return union.Count == current.Count ? current : union;
 	}
 
 	/// <summary>

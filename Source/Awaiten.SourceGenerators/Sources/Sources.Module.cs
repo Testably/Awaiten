@@ -145,11 +145,19 @@ internal static partial class Sources
 		string signature = string.Concat(parameters.Select(parameter => $", {parameter.Type} @{parameter.Name}"));
 		string arguments = string.Concat(parameters.Select(parameter => $", @{parameter.Name}"));
 
-		// The synthetic instance parameter carries the reserved awaiten__ prefix so it cannot collide with a mirrored
-		// user hook parameter (a plain name like "instance" would be a duplicate-parameter error in the wrapper).
+		// The synthetic instance parameter starts from an awaiten__ prefix so it is very unlikely to collide with a
+		// mirrored user hook parameter (a plain name like "instance" would be a duplicate-parameter error in the
+		// wrapper), and is suffixed away from any mirrored name that does collide - the prefix is a convention, not
+		// enforced on the user's hook.
+		string instance = "awaiten__instance";
+		while (parameters.Any(parameter => parameter.Name == instance))
+		{
+			instance += "_";
+		}
+
 		Indent(builder, depth)
 			.Append("public static void ").Append(hook.WrapperName)
-			.Append('(').Append(factory.ServiceType).Append(" @awaiten__instance").Append(signature).Append(") => ")
-			.Append(hook.Target).Append("((").Append(hook.InstanceCast).Append(")@awaiten__instance").Append(arguments).AppendLine(");");
+			.Append('(').Append(factory.ServiceType).Append(" @").Append(instance).Append(signature).Append(") => ")
+			.Append(hook.Target).Append("((").Append(hook.InstanceCast).Append(")@").Append(instance).Append(arguments).AppendLine(");");
 	}
 }

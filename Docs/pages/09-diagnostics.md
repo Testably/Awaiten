@@ -1543,6 +1543,23 @@ public static partial class PluginModule
 
 The module emits a `public` wrapper for the hook, and that wrapper's parameters after the instance are resolved from the consuming container's graph, so each type has to be nameable by the consumer, the same rule a self-compiled factory parameter gets ([AWT195](#awt195)). The instance parameter itself is exempt: it is the accessible exposure interface, cast back to the internal implementation inside the module. Widen the parameter type's accessibility, resolve a different dependency, or drop the hook.
 
+### AWT204
+
+:::danger[Error]
+A self-compiled module `[Scan]` hook has a parameter, after the instance, marked `[FromKey]` or `[Inject]`.
+:::
+
+```csharp
+[Module]
+[Scan<IPlugin>(As = ScanAs.MatchingInterface, OnActivated = nameof(Wire))]
+public static partial class PluginModule
+{
+    internal static void Wire(Roaster roaster, [FromKey("main")] IClock clock) { }
+}
+```
+
+The hook's parameters after the instance mirror onto the generated `public` wrapper as a bare type-and-name signature, so the attribute's per-dependency semantics (a key, optionality, deferral) would be silently dropped: a cross-assembly consumer would resolve the plain type while a same-compilation container, binding the module's own hook directly, honored the attribute — the same source injecting different instances depending on which side of the assembly boundary the consumer sits. This is the hook-parameter twin of the factory's [AWT200](#awt200), rejected rather than silently degraded. Remove the attribute, resolve the dependency plainly, or drop the hook.
+
 ## Keyed collections
 
 ### AWT159
