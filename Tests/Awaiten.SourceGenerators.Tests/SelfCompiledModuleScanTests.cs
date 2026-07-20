@@ -459,6 +459,188 @@ public class SelfCompiledModuleScanTests
 			.Because("the constructable match survives the prune");
 	}
 
+	private const string RoasterProviderLibrarySource = """
+	                                                    using Awaiten;
+
+	                                                    namespace Lib;
+
+	                                                    public interface IPlugin { }
+	                                                    public interface IRoaster { }
+
+	                                                    internal sealed class Roaster : IPlugin, IRoaster { }
+
+	                                                    [Module]
+	                                                    [Scan<IPlugin>(As = ScanAs.MatchingInterface)]
+	                                                    public static partial class PluginModule { }
+	                                                    """;
+
+	private const string ScanningConsumerSource = """
+	                                              using Awaiten;
+	                                              using Lib;
+
+	                                              namespace MyCode;
+
+	                                              public sealed class AppRoaster : IRoaster { }
+
+	                                              public sealed class Host
+	                                              {
+	                                                  public Host(IRoaster roaster) { }
+	                                              }
+
+	                                              [Container]
+	                                              [Import(typeof(PluginModule))]
+	                                              [Scan<IRoaster>(As = ScanAs.Marker)]
+	                                              [Singleton<Host>]
+	                                              public static partial class MyContainer
+	                                              {
+	                                              }
+	                                              """;
+
+	[Fact]
+	public async Task ContainerScanOutranksACrossAssemblyModuleScanForTheSameService()
+	{
+		GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(RoasterProviderLibrarySource, ScanningConsumerSource);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+		await That(source).Contains("new global::MyCode.Host(ResolveAppRoaster")
+			.Because("within the scan tier the container's own [Scan] match wins the IRoaster slot over an imported module's, the container winning ties like everywhere else");
+	}
+
+	[Fact]
+	public async Task ContainerScanOutranksASameCompilationModuleScanForTheSameService()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace MyCode;
+
+			public interface IPlugin { }
+			public interface IRoaster { }
+
+			internal sealed class Roaster : IPlugin, IRoaster { }
+
+			[Module]
+			[Scan<IPlugin>(As = ScanAs.MatchingInterface)]
+			public static partial class PluginModule { }
+
+			public sealed class AppRoaster : IRoaster { }
+
+			public sealed class Host
+			{
+			    public Host(IRoaster roaster) { }
+			}
+
+			[Container]
+			[Import(typeof(PluginModule))]
+			[Scan<IRoaster>(As = ScanAs.Marker)]
+			[Singleton<Host>]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+		await That(source).Contains("new global::MyCode.Host(ResolveAppRoaster")
+			.Because("a same-compilation module's scan match ranks exactly like a cross-assembly one, below the container's own [Scan], so packaging the module differently never flips the winner");
+	}
+
+	[Fact]
+	public async Task SameCompilationMatchWithoutAccessibleExposureIsSkippedLikeAcrossAssemblies()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace MyCode;
+
+			public interface IPlugin { }
+
+			internal sealed class Roaster : IPlugin { }
+
+			[Module]
+			[Scan<IPlugin>(As = ScanAs.Self)]
+			public static partial class PluginModule { }
+
+			[Container]
+			[Import(typeof(PluginModule))]
+			public static partial class MyContainer { }
+			""");
+
+		await That(result.Diagnostics.Count(diagnostic => diagnostic.Contains("AWT196"))).IsEqualTo(1)
+			.Because("the match has no exposure accessible outside the module's assembly");
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+		await That(source).DoesNotContain("new global::MyCode.Roaster")
+			.Because("the AWT196-warned match must actually be skipped, also by a same-compilation container, so the warning and the behavior agree and the module scan registers the same matches wherever the module is imported from");
+	}
+
+	[Fact]
+	public async Task SameCompilationMatchConstructsThroughTheGreediestConstructor()
+	{
+		GeneratorResult result = Generator.Run("""
+			using Awaiten;
+
+			namespace MyCode;
+
+			public interface IExotic { }
+			public interface IPlugin { }
+			public interface IRoaster { }
+
+			internal sealed class Roaster : IPlugin, IRoaster
+			{
+			    public Roaster() { }
+			    public Roaster(IExotic exotic) { }
+			}
+
+			[Module]
+			[Scan<IPlugin>(As = ScanAs.MatchingInterface)]
+			public static partial class PluginModule { }
+
+			[Container]
+			[Import(typeof(PluginModule))]
+			public static partial class MyContainer { }
+			""");
+
+		await That(result.Diagnostics).Contains("*AWT101*IExotic*").AsWildcard()
+			.Because("a same-compilation module-scan match builds through the greediest accessible constructor, the one the generated factory mirrors, instead of quietly falling back to a smaller one the local graph satisfies");
+	}
+
+	[Fact]
+	public async Task CrossAssemblyMatchConstructsThroughTheGreediestConstructor()
+	{
+		GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly("""
+			using Awaiten;
+
+			namespace Lib;
+
+			public interface IExotic { }
+			public interface IPlugin { }
+			public interface IRoaster { }
+
+			internal sealed class Roaster : IPlugin, IRoaster
+			{
+			    public Roaster() { }
+			    public Roaster(IExotic exotic) { }
+			}
+
+			[Module]
+			[Scan<IPlugin>(As = ScanAs.MatchingInterface)]
+			public static partial class PluginModule { }
+			""", """
+			using Awaiten;
+			using Lib;
+
+			namespace MyCode;
+
+			[Container]
+			[Import(typeof(PluginModule))]
+			public static partial class MyContainer { }
+			""");
+
+		await That(result.Diagnostics).Contains("*AWT101*IExotic*").AsWildcard()
+			.Because("the generated factory mirrors the greediest accessible constructor, so the consumer sees the same missing dependency a same-compilation import reports");
+	}
+
 	[Fact]
 	public async Task OverlappingScansWithDifferentLifetimesReportAwt142()
 	{

@@ -95,7 +95,7 @@
  AWT191  | Awaiten   | Error    | An OnRelease hook parameter is a Func/Lazy relationship, which would defer resolution past the owner's teardown
  AWT192  | Awaiten   | Error    | SuppressDisposal is set on a pre-built Instance, which the container does not own or dispose, so it has no effect
  AWT193  | Awaiten   | Warning  | A [Scan] matched a type that is inaccessible to the generated container, so it is not registered
- AWT194  | Awaiten   | Error    | A [Module] that declares a [Scan] is not partial, so its scan cannot be self-compiled
+ AWT194  | Awaiten   | Error    | A [Module] that declares a [Scan] is not partial (or is nested in a non-partial type), so its scan cannot be self-compiled
  AWT195  | Awaiten   | Error    | A self-compiled module [Scan] match has a constructor parameter type inaccessible outside the module's assembly
  AWT196  | Awaiten   | Warning  | A self-compiled module [Scan] match has no exposure interface accessible outside the module's assembly, so it is skipped
  AWT197  | Awaiten   | Error    | A self-compiled module [Scan] match would be exposed under multiple interfaces, which a single-exposure factory cannot express

@@ -21,12 +21,13 @@ partial class AwaitenGenerator
 	///     for the self-compilation constraints (accessible parameters, a single accessible exposure per match, no
 	///     injection metadata the factory could not mirror, the module's own assembly only).
 	/// </summary>
-	private static List<ModuleFactory> CollectModuleScanFactories(
+	private static List<ModuleScanExpansion> CollectModuleScanFactories(
 		INamedTypeSymbol module,
 		Compilation compilation,
-		List<DiagnosticInfo> diagnostics)
+		List<DiagnosticInfo> diagnostics,
+		CancellationToken cancellationToken)
 	{
-		List<ModuleFactory> factories = new();
+		List<ModuleScanExpansion> factories = new();
 
 		foreach (AttributeData attribute in module.GetAttributes())
 		{
@@ -38,16 +39,27 @@ partial class AwaitenGenerator
 
 			if (ScanMarker(attribute, attributeClass) is { } marker)
 			{
-				ExpandModuleScan(attribute, marker, module, compilation, factories, diagnostics);
+				ExpandModuleScan(attribute, marker, module, compilation, factories, diagnostics, cancellationToken);
 			}
 			else if (IsMarkerlessScan(attribute, attributeClass))
 			{
-				ExpandModuleScan(attribute, null, module, compilation, factories, diagnostics);
+				ExpandModuleScan(attribute, null, module, compilation, factories, diagnostics, cancellationToken);
 			}
 		}
 
 		return factories;
 	}
+
+	/// <summary>
+	///     One expanded module-scan match: the equatable <see cref="ModuleFactory" /> the module's partial emits,
+	///     plus the live symbols behind it, which the model never carries (they would break incremental caching)
+	///     but a same-compilation container needs to register the match directly (see <c>Collect</c>).
+	/// </summary>
+	private sealed record ModuleScanExpansion(
+		ModuleFactory Factory,
+		INamedTypeSymbol Service,
+		INamedTypeSymbol Implementation,
+		Location? Location);
 
 	/// <summary>
 	///     Expands one module <c>[Scan]</c> over its candidates, mirroring <see cref="ExpandScan" /> but emitting a
@@ -59,8 +71,9 @@ partial class AwaitenGenerator
 		INamedTypeSymbol? marker,
 		INamedTypeSymbol module,
 		Compilation compilation,
-		List<ModuleFactory> factories,
-		List<DiagnosticInfo> diagnostics)
+		List<ModuleScanExpansion> factories,
+		List<DiagnosticInfo> diagnostics,
+		CancellationToken cancellationToken)
 	{
 		Location? location = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation();
 
@@ -106,6 +119,7 @@ partial class AwaitenGenerator
 		int produced = 0;
 		foreach (ScanCandidate candidate in ScanCandidates(assemblies: null, compilation, marker, location, diagnostics))
 		{
+			cancellationToken.ThrowIfCancellationRequested();
 			assignable++;
 			if (!PassesScanFilters(candidate.Type, filters, hits))
 			{
@@ -148,7 +162,7 @@ partial class AwaitenGenerator
 		INamedTypeSymbol? markerDefinition,
 		INamedTypeSymbol module,
 		Compilation compilation,
-		List<ModuleFactory> factories,
+		List<ModuleScanExpansion> factories,
 		List<DiagnosticInfo> diagnostics)
 	{
 		string typeName = type.ToDisplayString(FullyQualified);
@@ -213,29 +227,29 @@ partial class AwaitenGenerator
 		// differ (first scan's lifetime wins consistently). Under different exposures it is AWT197: each factory
 		// constructs its own instance, so the single shared instance a container scan gives one implementation
 		// across several interfaces cannot be expressed, and emitting both would silently split it.
-		ModuleFactory? overlapping = factories.Find(factory => factory.ImplementationType == typeName);
+		ModuleScanExpansion? overlapping = factories.Find(expansion => expansion.Factory.ImplementationType == typeName);
 		if (overlapping is not null)
 		{
-			if (overlapping.ServiceType != serviceName)
+			if (overlapping.Factory.ServiceType != serviceName)
 			{
 				diagnostics.Add(new DiagnosticInfo(
 					Diagnostics.ModuleScanMultipleExposures,
 					LocationInfo.From(match.Location),
 					new EquatableArray<string>([
 						Display(typeName),
-						$"{Display(overlapping.ServiceType)}, {Display(serviceName)}",
+						$"{Display(overlapping.Factory.ServiceType)}, {Display(serviceName)}",
 					])));
 				return 0;
 			}
 
-			if (overlapping.Lifetime != match.Lifetime)
+			if (overlapping.Factory.Lifetime != match.Lifetime)
 			{
 				diagnostics.Add(new DiagnosticInfo(
 					Diagnostics.ScanLifetimeConflict,
 					LocationInfo.From(match.Location),
 					new EquatableArray<string>([
 						Display(typeName),
-						overlapping.Lifetime.ToString(),
+						overlapping.Factory.Lifetime.ToString(),
 						match.Lifetime.ToString(),
 					])));
 			}
@@ -298,13 +312,17 @@ partial class AwaitenGenerator
 			parameters.Add(new FactoryParameter(parameter.Type.ToDisplayString(FullyQualified), parameter.Name));
 		}
 
-		factories.Add(new ModuleFactory(
-			ModuleFactoryName(type),
-			serviceName,
-			typeName,
-			match.Lifetime,
-			match.SkipUnconstructable,
-			new EquatableArray<FactoryParameter>(parameters.ToArray())));
+		factories.Add(new ModuleScanExpansion(
+			new ModuleFactory(
+				ModuleFactoryName(type),
+				serviceName,
+				typeName,
+				match.Lifetime,
+				match.SkipUnconstructable,
+				new EquatableArray<FactoryParameter>(parameters.ToArray())),
+			service,
+			type,
+			match.Location));
 		return 1;
 	}
 

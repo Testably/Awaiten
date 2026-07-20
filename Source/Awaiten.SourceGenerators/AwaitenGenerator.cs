@@ -79,9 +79,9 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 	/// <summary>
 	///     Builds the <see cref="ModuleScanModel" /> for a <c>[Module]</c> that declares a <c>[Scan]</c> (returning
 	///     <see langword="null" /> for a module without one, which self-compiles nothing). The module must be
-	///     non-generic (AWT201) and <c>partial</c> to receive the generated factories and registration attributes
-	///     (AWT194); when it is, its scans are expanded into factories in its own build (see
-	///     <see cref="CollectModuleScanFactories" />).
+	///     non-generic (AWT201) and <c>partial</c>, as must every type enclosing a nested module, to receive the
+	///     generated factories and registration attributes (AWT194); when it is, its scans are expanded into
+	///     factories in its own build (see <see cref="CollectModuleScanFactories" />).
 	/// </summary>
 	private static ModuleScanModel? BuildModuleModel(GeneratorAttributeSyntaxContext context, CancellationToken cancellationToken)
 	{
@@ -102,8 +102,11 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 
 		// The module must be partial for the generator to add the factories and registration attributes. Every part
 		// of a partial type carries the partial modifier, so the declaration bearing the [Module] attribute suffices.
+		// A nested module's containing types are re-opened by the generated partial too, so they must all be
+		// partial as well, else the emission would surface as a raw CS0260 on the outer type.
 		bool isPartial = context.TargetNode is ClassDeclarationSyntax declaration
-		                 && declaration.Modifiers.Any(SyntaxKind.PartialKeyword);
+		                 && declaration.Modifiers.Any(SyntaxKind.PartialKeyword)
+		                 && ContainingTypesArePartial(moduleSymbol);
 
 		List<ModuleFactory> factories = new();
 		bool expanded = false;
@@ -135,7 +138,9 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		}
 		else
 		{
-			factories = CollectModuleScanFactories(moduleSymbol, compilation, diagnostics);
+			factories = CollectModuleScanFactories(moduleSymbol, compilation, diagnostics, cancellationToken)
+				.Select(expansion => expansion.Factory)
+				.ToList();
 			expanded = true;
 		}
 
@@ -164,6 +169,28 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			expanded,
 			new EquatableArray<ModuleFactory>(factories.ToArray()),
 			new EquatableArray<DiagnosticInfo>(diagnostics.ToArray()));
+	}
+
+	/// <summary>
+	///     Whether every type enclosing a nested module is declared <c>partial</c>, so the generated partial can
+	///     re-open the whole nesting chain. A type with several declarations is necessarily partial; a single
+	///     declaration must carry the modifier itself.
+	/// </summary>
+	private static bool ContainingTypesArePartial(INamedTypeSymbol module)
+	{
+		for (INamedTypeSymbol? outer = module.ContainingType; outer is not null; outer = outer.ContainingType)
+		{
+			bool isPartial = outer.DeclaringSyntaxReferences
+				.Select(reference => reference.GetSyntax())
+				.OfType<TypeDeclarationSyntax>()
+				.Any(syntax => syntax.Modifiers.Any(SyntaxKind.PartialKeyword));
+			if (!isPartial)
+			{
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	private static ContainerModel? BuildModel(GeneratorAttributeSyntaxContext context, CancellationToken cancellationToken)

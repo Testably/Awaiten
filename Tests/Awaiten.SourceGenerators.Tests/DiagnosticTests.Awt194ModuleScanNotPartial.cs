@@ -50,6 +50,58 @@ public partial class DiagnosticTests
 		}
 
 		[Fact]
+		public async Task ReportsWhenAContainingTypeIsNotPartial()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace Lib;
+
+			                                       public interface IPlugin { }
+			                                       public interface IRoaster { }
+			                                       internal sealed class Roaster : IPlugin, IRoaster { }
+
+			                                       public class Outer
+			                                       {
+			                                           [Module]
+			                                           [Scan<IPlugin>(As = ScanAs.MatchingInterface)]
+			                                           public static partial class PluginModule { }
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT194*PluginModule*").AsWildcard()
+				.Because("the generated partial re-opens the whole nesting chain, so a non-partial containing type would surface as a raw CS0260 on the outer type instead");
+			await That(result.Sources.Keys.Where(key => key.Contains("ModuleScan"))).IsEmpty()
+				.Because("emitting into a non-partial containing type would not compile");
+		}
+
+		[Fact]
+		public async Task DoesNotReportForAModuleNestedInAPartialType()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace Lib;
+
+			                                       public interface IPlugin { }
+			                                       public interface IRoaster { }
+			                                       internal sealed class Roaster : IPlugin, IRoaster { }
+
+			                                       public partial class Outer
+			                                       {
+			                                           [Module]
+			                                           [Scan<IPlugin>(As = ScanAs.MatchingInterface)]
+			                                           public static partial class PluginModule { }
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).DoesNotContain("*AWT194*").AsWildcard()
+				.Because("a partial containing type can be re-opened by the generated partial");
+			await That(result.Sources.Keys.Where(key => key.Contains("ModuleScan"))).IsNotEmpty()
+				.Because("the nested module's scan is expanded normally");
+		}
+
+		[Fact]
 		public async Task DoesNotReportForAPartialModuleWithAScan()
 		{
 			GeneratorResult result = Generator.Run("""

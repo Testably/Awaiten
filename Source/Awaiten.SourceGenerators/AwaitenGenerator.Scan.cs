@@ -1143,10 +1143,12 @@ partial class AwaitenGenerator
 
 			// A self-compiled module-scan match is produced by its generated module factory, not by a constructor
 			// this container can see (the implementation is internal to the module's assembly), so its
-			// satisfiability is the factory's parameters, which mirror that constructor's.
+			// satisfiability is the factory's parameters, which mirror that constructor's. A same-compilation
+			// module-scan match is constructed directly, but through the same greedy constructor pick the factory
+			// would mirror, so its prune asks about that constructor too.
 			string? reason = registration is { Production: ProductionKind.Factory, Origin: not null, ProductionMember: not null, }
 				? FirstUnsatisfiableFactoryReason(registration, services, constraintRejected, external, variance)
-				: FirstUnconstructableReason(registration.Implementation, containerSymbol, compilation, services, constraintRejected, external, variance);
+				: FirstUnconstructableReason(registration.Implementation, containerSymbol, compilation, services, constraintRejected, external, variance, registration.GreedyConstructor);
 			if (reason is null)
 			{
 				continue;
@@ -1183,10 +1185,12 @@ partial class AwaitenGenerator
 		HashSet<ServiceKey> services,
 		HashSet<string> constraintRejected,
 		ExternalSurface external,
-		VarianceState variance)
+		VarianceState variance,
+		bool greedyConstructor = false)
 	{
 		IMethodSymbol? constructor = SelectConstructor(
-			implementation, containerSymbol, compilation, services.Select(service => service.Service), external);
+			implementation, containerSymbol, compilation, services.Select(service => service.Service), external,
+			greedyConstructor ? _ => true : null);
 		if (constructor is null)
 		{
 			return "it has no constructor accessible to the container";

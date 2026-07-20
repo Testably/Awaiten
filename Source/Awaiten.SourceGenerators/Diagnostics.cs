@@ -1398,14 +1398,15 @@ internal static class Diagnostics
 		isEnabledByDefault: true);
 
 	/// <summary>
-	///     A <c>[Module]</c> carries a <c>[Scan]</c> but is not declared <c>partial</c>, so the generator cannot
-	///     add the factory methods and registration attributes that self-compile the scan into it. Add the
+	///     A <c>[Module]</c> carries a <c>[Scan]</c> but is not declared <c>partial</c> (or is nested in a type
+	///     that is not), so the generator cannot add the factory methods and registration attributes that
+	///     self-compile the scan into it: the generated partial re-opens the whole nesting chain. Add the
 	///     <c>partial</c> modifier. Reported in the module's own build, at the module's declaration.
 	/// </summary>
 	public static readonly DiagnosticDescriptor NonPartialModuleScan = new(
 		"AWT194",
 		"Module with a scan is not partial",
-		"the module '{0}' declares a [Scan] but is not partial, so its scan cannot be self-compiled; add the partial modifier to the module class",
+		"the module '{0}' declares a [Scan] but is not partial (or is nested in a type that is not), so its scan cannot be self-compiled; add the partial modifier to the module class and every type containing it",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);

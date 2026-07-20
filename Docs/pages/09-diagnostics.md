@@ -1373,7 +1373,7 @@ public static partial class CoffeeShop;
 ### AWT194
 
 :::danger[Error]
-A `[Module]` that declares a `[Scan]` is not `partial`, so its scan cannot be self-compiled.
+A `[Module]` that declares a `[Scan]` is not `partial` (or is nested in a type that is not), so its scan cannot be self-compiled.
 :::
 
 ```csharp
@@ -1382,7 +1382,7 @@ A `[Module]` that declares a `[Scan]` is not `partial`, so its scan cannot be se
 public static class PluginModule;   // must be partial to receive the generated factories
 ```
 
-A [self-compiled module scan](./registration/modules#self-compiled-scans) emits a factory method and a registration attribute into the module's partial. Add the `partial` modifier. Reported in the module's own build.
+A [self-compiled module scan](./registration/modules#self-compiled-scans) emits a factory method and a registration attribute into the module's partial, re-opening the whole nesting chain of a nested module. Add the `partial` modifier to the module class and every type containing it. Reported in the module's own build.
 
 ### AWT195
 
@@ -1415,7 +1415,7 @@ internal sealed class Roaster : IPlugin;
 public static partial class PluginModule;
 ```
 
-A consumer resolves a self-compiled match only through an accessible interface. `ScanAs.Self` over an `internal` implementation exposes nothing nameable, so the match registers nothing and is skipped, mirroring the warning severity a container scan gives a match it cannot register ([AWT182](#awt182)/[AWT188](#awt188)/[AWT193](#awt193)). Expose it through a public interface (`ScanAs.MatchingInterface` or `ScanAs.Marker`), or exclude the match.
+A consumer resolves a self-compiled match only through an accessible interface. `ScanAs.Self` over an `internal` implementation exposes nothing nameable, so the match registers nothing and is skipped, mirroring the warning severity a container scan gives a match it cannot register ([AWT182](#awt182)/[AWT188](#awt188)/[AWT193](#awt193)). The skip holds even when the importing container lives in the module's own assembly, so a module scan registers the same matches wherever the module is imported from. Expose it through a public interface (`ScanAs.MatchingInterface` or `ScanAs.Marker`), or exclude the match.
 
 ### AWT197
 

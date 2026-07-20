@@ -45,25 +45,50 @@ partial class AwaitenGenerator
 			CollectLifetimeRegistrations(module.Symbol, result, open, diagnostics, origin: module.Symbol, fallbackLocation: module.ImportLocation, skipGeneratedScanRegistrations: sameCompilation);
 		}
 
+		// The container's own scan matches must outrank a module's within the scan tier (the container wins ties
+		// there like everywhere else), so the module-collected [GeneratedScanRegistration] matches are pulled out
+		// and re-added after the container's scan expansion; the same-compilation expansions below append later
+		// still, giving both module forms the same rank relative to the container's own scans.
+		List<RawRegistration> moduleScanRegistrations = result.FindAll(registration => registration.IsScan);
+		result.RemoveAll(registration => registration.IsScan);
+
 		// Assembly scanning contributes overridable registrations for every concrete type assignable to a
 		// [Scan] marker. Appended before open generic expansion so scanned implementations seed it: their
 		// constructors may require closed generics only an open registration can provide.
 		List<RawRegistration> scans = CollectScans(containerSymbol, compilation, diagnostics);
 		result.AddRange(scans);
+		result.AddRange(moduleScanRegistrations);
 
-		// A same-compilation module's [Scan] is expanded here, exactly as if it were declared on the container:
-		// the generator cannot see its own output, so the module's self-compiled [GeneratedScanRegistration]
-		// attributes are invisible within the compilation that declares the module — but there is no assembly
-		// boundary either, so the container can evaluate the scan directly, with full container-scan semantics.
-		// A referenced-assembly module is excluded: its metadata carries the self-compiled expansion instead, and
+		// A same-compilation module's [Scan] is expanded here: the generator cannot see its own output, so the
+		// module's self-compiled [GeneratedScanRegistration] attributes are invisible within the compilation that
+		// declares the module. The expansion runs the module pipeline's own logic (CollectModuleScanFactories),
+		// so a scan means exactly the same thing wherever the module lives - one accessible exposure per match,
+		// matches the module build skipped (AWT196) stay skipped, and construction goes through the greediest
+		// accessible constructor, the one the generated factory mirrors - except that with no assembly boundary
+		// the container constructs the match directly instead of through the factory it cannot resolve. A
+		// referenced-assembly module is excluded: its metadata carries the self-compiled expansion instead, and
 		// re-running its scan here would double-register every match. The expansion's diagnostics are discarded:
 		// the module pipeline (BuildModuleModel) already reports on the same [Scan] at the same location, and
 		// reporting here too would double every scan-level warning.
 		foreach (ImportedModule module in modules)
 		{
-			if (SymbolEqualityComparer.Default.Equals(module.Symbol.ContainingAssembly, containerSymbol.ContainingAssembly))
+			if (!SymbolEqualityComparer.Default.Equals(module.Symbol.ContainingAssembly, containerSymbol.ContainingAssembly))
 			{
-				result.AddRange(CollectScans(module.Symbol, compilation, new List<DiagnosticInfo>()));
+				continue;
+			}
+
+			foreach (ModuleScanExpansion expansion in CollectModuleScanFactories(module.Symbol, compilation, new List<DiagnosticInfo>(), CancellationToken.None))
+			{
+				result.Add(new RawRegistration(
+					expansion.Factory.ServiceType,
+					expansion.Factory.ImplementationType,
+					expansion.Factory.Lifetime,
+					expansion.Implementation,
+					expansion.Location,
+					ServiceSymbol: expansion.Service,
+					IsScan: true,
+					ScanSkipsUnconstructable: expansion.Factory.SkipUnconstructable,
+					GreedyConstructor: true));
 			}
 		}
 
