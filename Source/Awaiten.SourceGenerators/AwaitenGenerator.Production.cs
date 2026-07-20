@@ -571,12 +571,10 @@ partial class AwaitenGenerator
 				return false;
 			}
 
-			foreach (ITypeSymbol constraint in parameter.ConstraintTypes)
+			if (parameter.ConstraintTypes.Any(constraint =>
+				    !SatisfiesConstraintType(argument, SubstituteTypeParameters(constraint, method, arguments, compilation), compilation)))
 			{
-				if (!SatisfiesConstraintType(argument, SubstituteTypeParameters(constraint, method, arguments, compilation), compilation))
-				{
-					return false;
-				}
+				return false;
 			}
 		}
 
