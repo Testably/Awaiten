@@ -59,17 +59,48 @@ partial class AwaitenGenerator
 		result.AddRange(scans);
 		result.AddRange(moduleScanRegistrations);
 
-		// A same-compilation module's [Scan] is expanded here: the generator cannot see its own output, so the
-		// module's self-compiled [GeneratedScanRegistration] attributes are invisible within the compilation that
-		// declares the module. The expansion runs the module pipeline's own logic (CollectModuleScanFactories),
-		// so a scan means exactly the same thing wherever the module lives - one accessible exposure per match,
-		// matches the module build skipped (AWT196) stay skipped, and construction goes through the greediest
-		// accessible constructor, the one the generated factory mirrors - except that with no assembly boundary
-		// the container constructs the match directly instead of through the factory it cannot resolve. A
-		// referenced-assembly module is excluded: its metadata carries the self-compiled expansion instead, and
-		// re-running its scan here would double-register every match. The expansion's diagnostics are discarded:
-		// the module pipeline (BuildModuleModel) already reports on the same [Scan] at the same location, and
-		// reporting here too would double every scan-level warning.
+		CollectSameCompilationModuleScans(containerSymbol, modules, compilation, result);
+
+		// Expand open generic registrations: for every closed generic service required from the graph
+		// whose open form is registered but which has no concrete registration, synthesize the closed
+		// implementation (iterating to a fixpoint over its own generic dependencies).
+		if (open.Count > 0)
+		{
+			ExpandOpenGenerics(result, open, containerSymbol, compilation, external, diagnostics, constraintRejected);
+		}
+
+		// ...then moved back to the end: coalescing is first-wins per service, so the explicit registrations and
+		// the closed registrations expanded from them must precede the overridable scan ones — the container's own
+		// [Scan] matches and a module's self-compiled [GeneratedScanRegistration] matches alike, both IsScan.
+		List<RawRegistration> scanMatches = result.FindAll(registration => registration.IsScan);
+		if (scanMatches.Count > 0)
+		{
+			result.RemoveAll(registration => registration.IsScan);
+			result.AddRange(scanMatches);
+		}
+
+		return (result, constraintRejected);
+	}
+
+	/// <summary>
+	///     Expands a same-compilation module's <c>[Scan]</c> into <paramref name="result" />: the generator cannot
+	///     see its own output, so the module's self-compiled <c>[GeneratedScanRegistration]</c> attributes are
+	///     invisible within the compilation that declares the module. The expansion runs the module pipeline's own
+	///     logic (<see cref="CollectModuleScanFactories" />), so a scan means exactly the same thing wherever the
+	///     module lives - one accessible exposure per match, matches the module build skipped (AWT196) stay skipped,
+	///     and construction goes through the greediest accessible constructor, the one the generated factory mirrors -
+	///     except that with no assembly boundary the container constructs the match directly instead of through the
+	///     factory it cannot resolve. A referenced-assembly module is excluded: its metadata carries the self-compiled
+	///     expansion instead, and re-running its scan here would double-register every match. The expansion's
+	///     diagnostics are discarded: the module pipeline (BuildModuleModel) already reports on the same <c>[Scan]</c>
+	///     at the same location, and reporting here too would double every scan-level warning.
+	/// </summary>
+	private static void CollectSameCompilationModuleScans(
+		INamedTypeSymbol containerSymbol,
+		List<ImportedModule> modules,
+		Compilation compilation,
+		List<RawRegistration> result)
+	{
 		foreach (INamedTypeSymbol moduleSymbol in modules.Select(module => module.Symbol))
 		{
 			if (!SymbolEqualityComparer.Default.Equals(moduleSymbol.ContainingAssembly, containerSymbol.ContainingAssembly))
@@ -103,26 +134,6 @@ partial class AwaitenGenerator
 					OnReleaseMarkers: expansion.Factory.OnRelease is null ? null : expansion.OnReleaseMarkers));
 			}
 		}
-
-		// Expand open generic registrations: for every closed generic service required from the graph
-		// whose open form is registered but which has no concrete registration, synthesize the closed
-		// implementation (iterating to a fixpoint over its own generic dependencies).
-		if (open.Count > 0)
-		{
-			ExpandOpenGenerics(result, open, containerSymbol, compilation, external, diagnostics, constraintRejected);
-		}
-
-		// ...then moved back to the end: coalescing is first-wins per service, so the explicit registrations and
-		// the closed registrations expanded from them must precede the overridable scan ones — the container's own
-		// [Scan] matches and a module's self-compiled [GeneratedScanRegistration] matches alike, both IsScan.
-		List<RawRegistration> scanMatches = result.FindAll(registration => registration.IsScan);
-		if (scanMatches.Count > 0)
-		{
-			result.RemoveAll(registration => registration.IsScan);
-			result.AddRange(scanMatches);
-		}
-
-		return (result, constraintRejected);
 	}
 
 	/// <summary>
