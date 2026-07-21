@@ -1336,13 +1336,15 @@ internal static class Diagnostics
 	/// <summary>
 	///     An <c>OnActivated</c> / <c>OnRelease</c> registration names a method that is overloaded: more than one
 	///     accessible <c>static void</c> method of that name accepts the implementation type as its first parameter,
-	///     so the container's choice of hook (and of the graph dependencies its remaining parameters resolve) would
-	///     be order-dependent. Mirrors <see cref="AmbiguousFactory">AWT112</see> for factory methods.
+	///     so the choice of hook (and of the graph dependencies its remaining parameters resolve) would be
+	///     order-dependent. Reported by a container registration and by a module's self-compiled <c>[Scan]</c> alike;
+	///     the message names the owner the hook was looked up on. Mirrors <see cref="AmbiguousFactory">AWT112</see>
+	///     for factory methods.
 	/// </summary>
 	public static readonly DiagnosticDescriptor AmbiguousLifecycleHook = new(
 		"AWT190",
 		"Ambiguous lifecycle hook",
-		"'{0}' has an ambiguous lifecycle hook: {2} has more than one accessible method '{1}' accepting the instance; the container cannot choose one. Give the hook method a unique name.",
+		"'{0}' has an ambiguous lifecycle hook: {2} has more than one accessible method '{1}' accepting the instance, so the choice would be arbitrary. Give the hook method a unique name.",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
@@ -1522,9 +1524,11 @@ internal static class Diagnostics
 	///     Two <c>[Scan]</c> attributes match the same implementation and name different methods for the same
 	///     lifecycle hook slot (<c>OnActivated</c> or <c>OnRelease</c>); the first scan's hook wins, so the
 	///     contradiction is surfaced rather than silently resolved by attribute order - mirroring AWT142 for
-	///     lifetimes. Two scans naming the same method, or hooking different slots, merge cleanly and are not
-	///     reported; neither is an explicit registration of the implementation, which a scan deliberately yields
-	///     to, hooks included.
+	///     lifetimes. Two scans naming the same method on the same owner, or hooking different slots, merge cleanly
+	///     and are not reported. A hook name is owner-relative, so the same name from a different origin - a
+	///     module's scan and the container's, or two modules' - is a different method and conflicts too. An explicit
+	///     registration of the implementation is not reported either: a scan deliberately yields to it, hooks
+	///     included.
 	/// </summary>
 	public static readonly DiagnosticDescriptor ScanHookConflict = new(
 		"AWT199",

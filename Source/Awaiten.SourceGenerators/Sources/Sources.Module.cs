@@ -130,16 +130,17 @@ internal static partial class Sources
 
 	/// <summary>
 	///     Emits one lifecycle-hook wrapper: a <c>public static void</c> method taking the accessible exposure
-	///     interface as its first parameter, casting it back to the scanned implementation (or the closed marker form
-	///     of a generic hook) and forwarding it - plus the graph-resolved parameters after it - to the module's own
-	///     (possibly <c>internal</c>) hook. The cast and the call compile because the wrapper body sits in the
-	///     module's own assembly, while the <c>public</c> signature is all a consumer needs to run it.
+	///     interface as its first parameter, casting it to the hook's own instance parameter type (the internal
+	///     implementation, a base type it accepts, or the closed marker form of a generic hook) and forwarding it -
+	///     plus the graph-resolved parameters after it - to the module's own (possibly <c>internal</c>) hook. The
+	///     cast and the call compile because the wrapper body sits in the module's own assembly, while the
+	///     <c>public</c> signature is all a consumer needs to run it.
 	/// </summary>
 	private static void EmitModuleHook(StringBuilder builder, int depth, ModuleFactory factory, ModuleHook hook, bool release)
 	{
 		AppendXmlSummary(builder, depth,
 			$"Generated from a module [Scan]: the {(release ? "OnRelease" : "OnActivated")} lifecycle wrapper, casting the exposure",
-			"interface back to the scanned implementation and forwarding to the module's own hook, so a consumer runs it without naming the internal hook.");
+			"interface to the hook's own instance parameter type and forwarding to the module's own hook, so a consumer runs it without naming the internal hook.");
 
 		FactoryParameter[] parameters = hook.Parameters.AsArray();
 		string signature = string.Concat(parameters.Select(parameter => $", {parameter.Type} @{parameter.Name}"));
@@ -149,10 +150,11 @@ internal static partial class Sources
 		// mirrored user hook parameter (a plain name like "instance" would be a duplicate-parameter error in the
 		// wrapper), and is suffixed away from any mirrored name that does collide - the prefix is a convention, not
 		// enforced on the user's hook.
-		string instance = "awaiten__instance";
+		StringBuilder instanceName = new("awaiten__instance");
+		string instance = instanceName.ToString();
 		while (parameters.Any(parameter => parameter.Name == instance))
 		{
-			instance += "_";
+			instance = instanceName.Append('_').ToString();
 		}
 
 		Indent(builder, depth)

@@ -92,14 +92,15 @@ partial class AwaitenGenerator
 					// With no assembly boundary the container binds the module's own (possibly internal) hook directly
 					// rather than the generated wrapper it cannot see, so each hook resolves against the module - the
 					// coalescer keeps the origin per hook slot - through the ordinary pipeline. The user hook names
-					// travel on the expansion (set only when the module resolved them validly at its build, so an
-					// invalid hook - already reported there - is not wired and re-reported here), and each slot's
-					// closed marker forms bind a generic hook's type argument.
+					// travel on the expansion, but a slot whose hook failed to resolve keeps its claimed name with no
+					// wrapper on the factory (see MergeModuleScanHookSlot), so wiring is gated on the wrapper: an
+					// invalid hook - already reported at the module's build - is not wired and re-reported here. Each
+					// wired slot's closed marker forms bind a generic hook's type argument.
 					Origin: moduleSymbol,
-					OnActivated: expansion.OnActivated,
-					OnRelease: expansion.OnRelease,
-					OnActivatedMarkers: expansion.OnActivatedMarkers,
-					OnReleaseMarkers: expansion.OnReleaseMarkers));
+					OnActivated: expansion.Factory.OnActivated is null ? null : expansion.OnActivated,
+					OnRelease: expansion.Factory.OnRelease is null ? null : expansion.OnRelease,
+					OnActivatedMarkers: expansion.Factory.OnActivated is null ? null : expansion.OnActivatedMarkers,
+					OnReleaseMarkers: expansion.Factory.OnRelease is null ? null : expansion.OnReleaseMarkers));
 			}
 		}
 

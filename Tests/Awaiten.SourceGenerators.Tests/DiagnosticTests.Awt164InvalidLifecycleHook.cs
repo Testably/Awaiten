@@ -359,5 +359,75 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).IsEmpty()
 				.Because("the closing binds cleanly, so the hook is constructed as Wire<Model> without any diagnostic");
 		}
+
+		[Fact]
+		public async Task ReportsAPrivateModuleScanHook()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace Lib;
+
+			                                       public interface IPlugin { }
+			                                       public interface IRoaster { }
+			                                       internal sealed class Roaster : IPlugin, IRoaster { }
+
+			                                       [Module]
+			                                       [Scan<IPlugin>(As = ScanAs.MatchingInterface, OnActivated = nameof(Wire))]
+			                                       public static partial class PluginModule
+			                                       {
+			                                       	private static void Wire(Roaster roaster) { }
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT164*Wire*").AsWildcard()
+				.Because("a private module hook is not usable: the wrapper could call it, but a same-compilation container binding it directly could not, so it is rejected in both to stay consistent");
+		}
+
+		[Fact]
+		public async Task ReportsWhenAModuleScanHookNamesNoUsableMethod()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace Lib;
+
+			                                       public interface IPlugin { }
+			                                       public interface IRoaster { }
+			                                       internal sealed class Roaster : IPlugin, IRoaster { }
+
+			                                       [Module]
+			                                       [Scan<IPlugin>(As = ScanAs.MatchingInterface, OnActivated = "Missing")]
+			                                       public static partial class PluginModule { }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT164*Missing*").AsWildcard()
+				.Because("the module has no usable static void method 'Missing' accepting the match");
+		}
+
+		[Fact]
+		public async Task ReportsAModuleScanHookWithAByRefParameter()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace Lib;
+
+			                                       public interface IClock { }
+			                                       public interface IPlugin { }
+			                                       public interface IRoaster { }
+			                                       internal sealed class Roaster : IPlugin, IRoaster { }
+
+			                                       [Module]
+			                                       [Scan<IPlugin>(As = ScanAs.MatchingInterface, OnActivated = nameof(Wire))]
+			                                       public static partial class PluginModule
+			                                       {
+			                                       	internal static void Wire(Roaster roaster, ref IClock clock) { }
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT164*Wire*").AsWildcard()
+				.Because("a by-ref parameter cannot be mirrored onto the wrapper or supplied by the container's hook invocation, so the method is not a usable hook");
+		}
 	}
 }

@@ -51,5 +51,29 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).DoesNotContain("*AWT189*").AsWildcard()
 				.Because("a hook parameter resolved from the graph is not a runtime argument");
 		}
+
+		[Fact]
+		public async Task ReportsAnArgParameterOnAModuleScanHook()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace Lib;
+
+			                                       public interface IPlugin { }
+			                                       public interface IRoaster { }
+			                                       internal sealed class Roaster : IPlugin, IRoaster { }
+
+			                                       [Module]
+			                                       [Scan<IPlugin>(As = ScanAs.MatchingInterface, OnActivated = nameof(Wire))]
+			                                       public static partial class PluginModule
+			                                       {
+			                                       	internal static void Wire(Roaster roaster, [Arg] int count) { }
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT189*count*").AsWildcard()
+				.Because("a module hook parameter cannot be a runtime [Arg] either; the wrapper has no call site to supply one");
+		}
 	}
 }

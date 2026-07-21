@@ -68,9 +68,13 @@ partial class AwaitenGenerator
 	///     but a same-compilation container needs to register the match directly (see <c>Collect</c>). The hook
 	///     fields carry what a same-compilation container needs to wire the match's lifecycle hooks directly against
 	///     the module (no assembly boundary, so it binds the module's own - possibly internal - hook rather than the
-	///     generated wrapper it cannot see): the user hook names (set only when the module resolved them validly at
-	///     its build) and, per slot, the closed marker forms its hook resolved against - kept apart because two
-	///     overlapping scans can fill the two slots with differently-markered hooks (see <see cref="ResolveOverlap" />).
+	///     generated wrapper it cannot see): the user hook names and, per slot, the closed marker forms contributed
+	///     for it - kept apart because two overlapping scans can fill the two slots with differently-markered hooks
+	///     (see <see cref="ResolveOverlap" />). A slot's name and markers are kept even when its hook failed to
+	///     resolve (the wrapper on the factory is what marks a valid hook), so a later overlapping scan merges
+	///     against the claimed slot - a different name still conflicts, and a restated name re-resolves over the
+	///     accumulated union - rather than re-claiming it fresh from a narrower marker set; a consumer wires a hook
+	///     only when its wrapper exists (see <c>Collect</c>).
 	/// </summary>
 	private sealed record ModuleScanExpansion(
 		ModuleFactory Factory,
@@ -250,7 +254,9 @@ partial class AwaitenGenerator
 		// The scan's hooks, resolved and (for a generic hook) closed in the module's own build. Each becomes a
 		// public wrapper the module emits beside the factory, so a cross-assembly consumer runs it without naming the
 		// module's (possibly internal) hook; the closed marker forms let a same-compilation container bind that hook
-		// directly. A hook named but not resolvable is reported here and dropped (no wrapper, unnamed on the attribute).
+		// directly. A hook named but not resolvable is reported here and dropped (no wrapper on the factory, unnamed
+		// on the attribute); the expansion still records the claimed name and markers so overlapping scans merge
+		// against the failed slot instead of re-claiming it (see MergeModuleScanHookSlot).
 		IReadOnlyList<INamedTypeSymbol>? hookMarkers = ScanHookMarkers(type, match, markerInfo.Open, markerInfo.Definition);
 		ResolvedModuleHook? onActivated = ResolveModuleHook(type, match, release: false, hookMarkers, context);
 		ResolvedModuleHook? onRelease = ResolveModuleHook(type, match, release: true, hookMarkers, context);
@@ -268,10 +274,10 @@ partial class AwaitenGenerator
 			service,
 			type,
 			match.Location,
-			onActivated?.UserHookName,
-			onRelease?.UserHookName,
-			onActivated is null ? null : hookMarkers,
-			onRelease is null ? null : hookMarkers));
+			match.OnActivated,
+			match.OnRelease,
+			match.OnActivated is null ? null : hookMarkers,
+			match.OnRelease is null ? null : hookMarkers));
 		return 1;
 	}
 
@@ -466,53 +472,9 @@ partial class AwaitenGenerator
 		List<FactoryParameter> mirrored = new();
 		foreach (IParameterSymbol parameter in hook.Parameters.Skip(1))
 		{
-			ImmutableArray<AttributeData> attributes = parameter.GetAttributes();
-			if (HasArgAttribute(attributes))
+			if (HookParameterMirrorError(typeName, parameter, release, location) is { } error)
 			{
-				diagnostics.Add(new DiagnosticInfo(
-					Diagnostics.HookParameterIsArg,
-					LocationInfo.From(location),
-					new EquatableArray<string>([parameter.Name, Display(typeName),])));
-				return false;
-			}
-
-			// [FromKey]/[Inject] carry per-dependency semantics (a key, optionality, deferral) the wrapper mirrors
-			// away: its bare (type, name) signature would make a cross-assembly consumer resolve the plain type
-			// while a same-compilation container, binding the hook directly, honored the attribute. Rejected rather
-			// than silently degraded - the hook-parameter twin of the factory parameter's AWT200.
-			if (HasAwaitenAttribute(attributes, "FromKeyAttribute") || HasInject(attributes))
-			{
-				diagnostics.Add(new DiagnosticInfo(
-					Diagnostics.ModuleScanHookInjectionMetadata,
-					LocationInfo.From(location),
-					new EquatableArray<string>([
-						Display(typeName),
-						release ? "OnRelease" : "OnActivated",
-						parameter.Name,
-						HasInject(attributes) ? "[Inject]" : "[FromKey]",
-					])));
-				return false;
-			}
-
-			if (release)
-			{
-				DependencyKind kind = ClassifyParameter(parameter, asyncFactory: false, new HashSet<string>(StringComparer.Ordinal)).Kind;
-				if (kind is DependencyKind.Func or DependencyKind.Lazy or DependencyKind.FuncTask or DependencyKind.LazyTask)
-				{
-					diagnostics.Add(new DiagnosticInfo(
-						Diagnostics.ReleaseHookDeferredParameter,
-						LocationInfo.From(location),
-						new EquatableArray<string>([parameter.Name, Display(typeName),])));
-					return false;
-				}
-			}
-
-			if (!IsExternallyAccessible(parameter.Type))
-			{
-				diagnostics.Add(new DiagnosticInfo(
-					Diagnostics.ModuleScanHookParameterInaccessible,
-					LocationInfo.From(location),
-					new EquatableArray<string>([Display(typeName), release ? "OnRelease" : "OnActivated", Display(parameter.Type.ToDisplayString(FullyQualified)),])));
+				diagnostics.Add(error);
 				return false;
 			}
 
@@ -521,6 +483,59 @@ partial class AwaitenGenerator
 
 		parameters = new EquatableArray<FactoryParameter>(mirrored.ToArray());
 		return true;
+	}
+
+	/// <summary>
+	///     Why one hook parameter cannot be mirrored onto the public wrapper (see
+	///     <see cref="TryMirrorHookParameters" />), or <see langword="null" /> when it can.
+	/// </summary>
+	private static DiagnosticInfo? HookParameterMirrorError(string typeName, IParameterSymbol parameter, bool release, Location? location)
+	{
+		ImmutableArray<AttributeData> attributes = parameter.GetAttributes();
+		if (HasArgAttribute(attributes))
+		{
+			return new DiagnosticInfo(
+				Diagnostics.HookParameterIsArg,
+				LocationInfo.From(location),
+				new EquatableArray<string>([parameter.Name, Display(typeName),]));
+		}
+
+		// [FromKey]/[Inject] carry per-dependency semantics (a key, optionality, deferral) the wrapper mirrors
+		// away: its bare (type, name) signature would make a cross-assembly consumer resolve the plain type
+		// while a same-compilation container, binding the hook directly, honored the attribute. Rejected rather
+		// than silently degraded - the hook-parameter twin of the factory parameter's AWT200.
+		if (HasAwaitenAttribute(attributes, "FromKeyAttribute") || HasInject(attributes))
+		{
+			return new DiagnosticInfo(
+				Diagnostics.ModuleScanHookInjectionMetadata,
+				LocationInfo.From(location),
+				new EquatableArray<string>([
+					Display(typeName),
+					release ? "OnRelease" : "OnActivated",
+					parameter.Name,
+					HasInject(attributes) ? "[Inject]" : "[FromKey]",
+				]));
+		}
+
+		if (release
+		    && ClassifyParameter(parameter, asyncFactory: false, new HashSet<string>(StringComparer.Ordinal)).Kind
+			    is DependencyKind.Func or DependencyKind.Lazy or DependencyKind.FuncTask or DependencyKind.LazyTask)
+		{
+			return new DiagnosticInfo(
+				Diagnostics.ReleaseHookDeferredParameter,
+				LocationInfo.From(location),
+				new EquatableArray<string>([parameter.Name, Display(typeName),]));
+		}
+
+		if (!IsExternallyAccessible(parameter.Type))
+		{
+			return new DiagnosticInfo(
+				Diagnostics.ModuleScanHookParameterInaccessible,
+				LocationInfo.From(location),
+				new EquatableArray<string>([Display(typeName), release ? "OnRelease" : "OnActivated", Display(parameter.Type.ToDisplayString(FullyQualified)),]));
+		}
+
+		return null;
 	}
 
 	/// <summary>
@@ -646,7 +661,8 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     One hook slot of a module-scan expansion while overlapping scans merge (see <see cref="ResolveOverlap" />):
-	///     the user hook's name, its generated wrapper, and the closed marker forms it resolved against.
+	///     the user hook's name, its generated wrapper (absent when the hook failed to resolve, which keeps the
+	///     claim without wiring anything), and the closed marker forms contributed for it.
 	/// </summary>
 	private readonly record struct ModuleHookSlot(string? Name, ModuleHook? Wrapper, IReadOnlyList<INamedTypeSymbol>? Markers);
 
@@ -656,7 +672,11 @@ partial class AwaitenGenerator
 	///     (resolved with this scan's closed marker forms), a restated name contributes new marker forms and
 	///     re-resolves the slot over the union (a closing that leaves a generic hook ambiguous is AWT198 and drops
 	///     the hook, exactly what a same-compilation consumer resolving over the union would report), and a
-	///     different name for a claimed slot is AWT199, the first scan winning.
+	///     different name for a claimed slot is AWT199, the first scan winning. A failed resolution keeps the slot
+	///     claimed - name and accumulated markers intact, only the wrapper absent - so a later scan restating the
+	///     name re-resolves over the full union rather than quietly succeeding on its own narrower marker set (which
+	///     would wire the hook to a scan-order-dependent closing beside the already-reported failure), and a later
+	///     different name still conflicts.
 	/// </summary>
 	private static ModuleHookSlot MergeModuleScanHookSlot(
 		ModuleHookSlot current,
@@ -675,7 +695,7 @@ partial class AwaitenGenerator
 		if (current.Name is null)
 		{
 			ResolvedModuleHook? resolved = ResolveModuleHook(type, match, release, markers, context);
-			return resolved is null ? current : new ModuleHookSlot(resolved.UserHookName, resolved.Wrapper, markers);
+			return new ModuleHookSlot(name, resolved?.Wrapper, markers);
 		}
 
 		if (!string.Equals(current.Name, name, StringComparison.Ordinal))
@@ -699,9 +719,7 @@ partial class AwaitenGenerator
 		}
 
 		ResolvedModuleHook? reresolved = ResolveModuleHook(type, match, release, union, context);
-		return reresolved is null
-			? new ModuleHookSlot(null, null, null)
-			: new ModuleHookSlot(reresolved.UserHookName, reresolved.Wrapper, union);
+		return new ModuleHookSlot(name, reresolved?.Wrapper, union);
 	}
 
 	/// <summary>

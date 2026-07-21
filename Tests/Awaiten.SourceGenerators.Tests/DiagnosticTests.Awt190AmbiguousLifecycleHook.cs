@@ -152,5 +152,31 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).DoesNotContain("*AWT190*").AsWildcard()
 				.Because("a single shared object hook is one match per registration, so neither registration is ambiguous");
 		}
+
+		[Fact]
+		public async Task ReportsAnOverloadedModuleScanHook()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace Lib;
+
+			                                       public interface IClock { }
+			                                       public interface IPlugin { }
+			                                       public interface IRoaster { }
+			                                       internal sealed class Roaster : IPlugin, IRoaster { }
+
+			                                       [Module]
+			                                       [Scan<IPlugin>(As = ScanAs.MatchingInterface, OnActivated = nameof(Wire))]
+			                                       public static partial class PluginModule
+			                                       {
+			                                       	internal static void Wire(Roaster roaster) { }
+			                                       	internal static void Wire(Roaster roaster, IClock clock) { }
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT190*Wire*").AsWildcard()
+				.Because("two module methods named Wire accept the match, so the hook is ambiguous at the module's own build");
+		}
 	}
 }
