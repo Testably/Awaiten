@@ -695,4 +695,56 @@ public class SelfCompiledModuleScanTests
 		await That(result.Diagnostics).Contains("*AWT142*Roaster*Singleton*Transient*").AsWildcard()
 			.Because("two scans of one module registering the same implementation with different lifetimes mirror the container's scan-lifetime conflict");
 	}
+
+	private const string LibraryWithUnexposableMatchSource = """
+	                                                         using Awaiten;
+
+	                                                         namespace Lib;
+
+	                                                         public interface IPlugin { }
+	                                                         public interface IRoaster { }
+	                                                         internal interface IGrinder { }
+
+	                                                         internal sealed class Roaster : IPlugin, IRoaster { }
+	                                                         internal sealed class Grinder : IPlugin, IGrinder { }
+
+	                                                         [Module]
+	                                                         [Scan<IPlugin>(As = ScanAs.MatchingInterface)]
+	                                                         public static partial class PluginModule { }
+	                                                         """;
+
+	[Fact]
+	public async Task PerMatchScanDiagnosticsLandInTheLibrarysBuildAndNotTheConsumers()
+	{
+		(_, Microsoft.CodeAnalysis.GeneratorDriverRunResult libraryRun) =
+			Generator.RunGenerator(LibraryWithUnexposableMatchSource, [], [], "ReferencedAssembly");
+
+		Microsoft.CodeAnalysis.Diagnostic exposure =
+			libraryRun.Diagnostics.Single(diagnostic => diagnostic.Id == "AWT196");
+		int scanLine = LibraryWithUnexposableMatchSource
+			[..LibraryWithUnexposableMatchSource.IndexOf("[Scan<IPlugin>", StringComparison.Ordinal)]
+			.Count(character => character == '\n');
+		await That(exposure.Location.GetLineSpan().StartLinePosition.Line).IsEqualTo(scanLine)
+			.Because("evaluating the scan in the module's own compilation anchors the per-match warning on the library's own [Scan], the only build that can act on it");
+		await That(exposure.ToString()).Contains("Grinder")
+			.Because("the warning names the library's own type, not the module the consumer imported");
+
+		GeneratorResult consumer = Generator.RunWithGeneratedReferencedAssembly(LibraryWithUnexposableMatchSource, """
+			using Awaiten;
+			using Lib;
+
+			namespace MyCode;
+
+			[Container]
+			[Import(typeof(PluginModule))]
+			public static partial class MyContainer
+			{
+			}
+			""");
+
+		await That(consumer.Diagnostics).IsEmpty()
+			.Because("the scan is already resolved by the time the consumer imports the module, so it sees a plain module and no per-match warning about types it neither owns nor can fix");
+		await That(consumer.Sources["Awaiten.MyCode.MyContainer.g.cs"]).Contains(FactoryName("global::Lib.Roaster"))
+			.Because("only the unexposable match was dropped; the one with an accessible exposure interface still registers");
+	}
 }
