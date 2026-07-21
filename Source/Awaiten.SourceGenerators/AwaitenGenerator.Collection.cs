@@ -59,38 +59,7 @@ partial class AwaitenGenerator
 		result.AddRange(scans);
 		result.AddRange(moduleScanRegistrations);
 
-		// A same-compilation module's [Scan] is expanded here: the generator cannot see its own output, so the
-		// module's self-compiled [GeneratedScanRegistration] attributes are invisible within the compilation that
-		// declares the module. The expansion runs the module pipeline's own logic (CollectModuleScanFactories),
-		// so a scan means exactly the same thing wherever the module lives - one accessible exposure per match,
-		// matches the module build skipped (AWT196) stay skipped, and construction goes through the greediest
-		// accessible constructor, the one the generated factory mirrors - except that with no assembly boundary
-		// the container constructs the match directly instead of through the factory it cannot resolve. A
-		// referenced-assembly module is excluded: its metadata carries the self-compiled expansion instead, and
-		// re-running its scan here would double-register every match. The expansion's diagnostics are discarded:
-		// the module pipeline (BuildModuleModel) already reports on the same [Scan] at the same location, and
-		// reporting here too would double every scan-level warning.
-		foreach (INamedTypeSymbol moduleSymbol in modules.Select(module => module.Symbol))
-		{
-			if (!SymbolEqualityComparer.Default.Equals(moduleSymbol.ContainingAssembly, containerSymbol.ContainingAssembly))
-			{
-				continue;
-			}
-
-			foreach (ModuleScanExpansion expansion in CollectModuleScanFactories(moduleSymbol, compilation, new List<DiagnosticInfo>(), CancellationToken.None))
-			{
-				result.Add(new RawRegistration(
-					expansion.Factory.ServiceType,
-					expansion.Factory.ImplementationType,
-					expansion.Factory.Lifetime,
-					expansion.Implementation,
-					expansion.Location,
-					ServiceSymbol: expansion.Service,
-					IsScan: true,
-					ScanSkipsUnconstructable: expansion.Factory.SkipUnconstructable,
-					GreedyConstructor: true));
-			}
-		}
+		CollectSameCompilationModuleScans(containerSymbol, modules, compilation, result);
 
 		// Expand open generic registrations: for every closed generic service required from the graph
 		// whose open form is registered but which has no concrete registration, synthesize the closed
@@ -112,6 +81,66 @@ partial class AwaitenGenerator
 
 		return (result, constraintRejected);
 	}
+
+	/// <summary>
+	///     Expands a same-compilation module's <c>[Scan]</c> into <paramref name="result" />: the generator cannot
+	///     see its own output, so the module's self-compiled <c>[GeneratedScanRegistration]</c> attributes are
+	///     invisible within the compilation that declares the module. The expansion runs the module pipeline's own
+	///     logic (<see cref="CollectModuleScanFactories" />), so a scan means exactly the same thing wherever the
+	///     module lives - one accessible exposure per match, matches the module build skipped (AWT196) stay skipped,
+	///     and construction goes through the greediest accessible constructor, the one the generated factory mirrors -
+	///     except that with no assembly boundary the container constructs the match directly instead of through the
+	///     factory it cannot resolve. A referenced-assembly module is excluded: its metadata carries the self-compiled
+	///     expansion instead, and re-running its scan here would double-register every match. The expansion's
+	///     diagnostics are discarded: the module pipeline (BuildModuleModel) already reports on the same <c>[Scan]</c>
+	///     at the same location, and reporting here too would double every scan-level warning.
+	/// </summary>
+	private static void CollectSameCompilationModuleScans(
+		INamedTypeSymbol containerSymbol,
+		List<ImportedModule> modules,
+		Compilation compilation,
+		List<RawRegistration> result)
+	{
+		foreach (INamedTypeSymbol moduleSymbol in modules.Select(module => module.Symbol))
+		{
+			if (!SymbolEqualityComparer.Default.Equals(moduleSymbol.ContainingAssembly, containerSymbol.ContainingAssembly))
+			{
+				continue;
+			}
+
+			foreach (ModuleScanExpansion expansion in CollectModuleScanFactories(moduleSymbol, compilation, new List<DiagnosticInfo>(), CancellationToken.None))
+			{
+				result.Add(SameCompilationScanRegistration(expansion, moduleSymbol));
+			}
+		}
+	}
+
+	/// <summary>
+	///     The registration one same-compilation module-scan expansion contributes (see
+	///     <see cref="CollectSameCompilationModuleScans" />). With no assembly boundary the container binds the
+	///     module's own (possibly internal) hook directly rather than the generated wrapper it cannot see, so each
+	///     hook resolves against the module - the coalescer keeps the origin per hook slot - through the ordinary
+	///     pipeline. The user hook names travel on the expansion, but a slot whose hook failed to resolve keeps its
+	///     claimed name with no wrapper on the factory (see <c>MergeModuleScanHookSlot</c>), so wiring is gated on
+	///     the wrapper: an invalid hook - already reported at the module's build - is not wired and re-reported
+	///     here. Each wired slot's closed marker forms bind a generic hook's type argument.
+	/// </summary>
+	private static RawRegistration SameCompilationScanRegistration(ModuleScanExpansion expansion, INamedTypeSymbol moduleSymbol)
+		=> new(
+			expansion.Factory.ServiceType,
+			expansion.Factory.ImplementationType,
+			expansion.Factory.Lifetime,
+			expansion.Implementation,
+			expansion.Location,
+			ServiceSymbol: expansion.Service,
+			IsScan: true,
+			ScanSkipsUnconstructable: expansion.Factory.SkipUnconstructable,
+			GreedyConstructor: true,
+			Origin: moduleSymbol,
+			OnActivated: expansion.Factory.OnActivated is null ? null : expansion.OnActivated,
+			OnRelease: expansion.Factory.OnRelease is null ? null : expansion.OnRelease,
+			OnActivatedMarkers: expansion.Factory.OnActivated is null ? null : expansion.OnActivatedMarkers,
+			OnReleaseMarkers: expansion.Factory.OnRelease is null ? null : expansion.OnReleaseMarkers);
 
 	/// <summary>
 	///     Reads the <c>[Singleton]</c>/<c>[Transient]</c>/<c>[Scoped]</c> registrations declared on a symbol (a
@@ -260,6 +289,8 @@ partial class AwaitenGenerator
 
 		Lifetime lifetime = Lifetime.Transient;
 		bool skipUnconstructable = false;
+		string? onActivated = null;
+		string? onRelease = null;
 		foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
 		{
 			if (argument.Key == "Lifetime" && argument.Value.Value is int value)
@@ -269,6 +300,14 @@ partial class AwaitenGenerator
 			else if (argument.Key == "SkipUnconstructable" && argument.Value.Value is bool flag)
 			{
 				skipUnconstructable = flag;
+			}
+			else if (argument.Key == "OnActivated" && argument.Value.Value is string activation)
+			{
+				onActivated = activation;
+			}
+			else if (argument.Key == "OnRelease" && argument.Value.Value is string release)
+			{
+				onRelease = release;
 			}
 		}
 
@@ -287,7 +326,12 @@ partial class AwaitenGenerator
 			ServiceSymbol: service,
 			IsScan: true,
 			ScanSkipsUnconstructable: skipUnconstructable,
-			Origin: origin));
+			Origin: origin,
+			// The hook wrapper names, resolved by the ordinary hook pipeline against the module (Origin): the
+			// wrapper is a plain public static method, so ResolveHook binds it directly and ClassifyHookParameters
+			// resolves its post-instance parameters from this container's graph.
+			OnActivated: onActivated,
+			OnRelease: onRelease));
 		return true;
 	}
 

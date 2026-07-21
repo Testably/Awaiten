@@ -466,10 +466,10 @@ public static partial class CoffeeShop
 ### AWT190
 
 :::danger[Error]
-A lifecycle hook (`OnActivated` / `OnRelease`) names an overloaded method, so the container cannot choose which one to call.
+A lifecycle hook (`OnActivated` / `OnRelease`) names an overloaded method, so there is no way to choose which one to call.
 :::
 
-The container reaches a hook by simple name, so two accepting overloads leave the choice (and the graph dependencies the extra parameters resolve) order-dependent. Give the hook a unique name, exactly as a factory method must be unambiguous.
+A hook is looked up by simple name on its owner (the container, or a module whose `[Scan]` names it), so two accepting overloads leave the choice (and the graph dependencies the extra parameters resolve) order-dependent. Give the hook a unique name, exactly as a factory method must be unambiguous.
 
 ```csharp
 [Container]
@@ -1296,7 +1296,7 @@ public static partial class CoffeeShop
 }
 ```
 
-Which method ran for `Widget` would depend on attribute order, so the contradiction is surfaced instead, mirroring [AWT142](#awt142) for lifetimes. Overlapping scans that agree are fine: two scans naming the *same* method merge, and so do scans hooking *different* slots (one scan's `OnActivated` combines with another's `OnRelease`). An explicit registration of the type is not reported either: a scan yields to it wholesale, hooks included, so the explicit registration's hooks (or its deliberate lack of them) replace the scan's.
+Which method ran for `Widget` would depend on attribute order, so the contradiction is surfaced instead, mirroring [AWT142](#awt142) for lifetimes. Overlapping scans that agree are fine: two scans naming the *same* method merge, and so do scans hooking *different* slots (one scan's `OnActivated` combines with another's `OnRelease`). A hook name is owner-relative, though: a module `[Scan]` resolves its hooks against the module and a container `[Scan]` against the container, so a module scan and a container scan naming the same method name still conflict, because each means its own method. An explicit registration of the type is not reported either: a scan yields to it wholesale, hooks included, so the explicit registration's hooks (or its deliberate lack of them) replace the scan's.
 
 ## Modules
 
@@ -1523,6 +1523,45 @@ public static partial class PluginModule;
 ```
 
 A self-compiled scan exists to reach the module's own `internal` types. Sweeping another assembly from a module would see only that assembly's public types, which a container `[Scan]` with `InAssembliesOf` already covers, so the module form would silently do less than the container form. Remove `InAssembliesOf` to scan the module's own assembly, or move the `[Scan]` onto the container.
+
+### AWT203
+
+:::danger[Error]
+A self-compiled module `[Scan]` hook has a parameter, after the instance, whose type is not accessible outside the module's assembly.
+:::
+
+```csharp
+internal sealed class Secret;
+internal sealed class Roaster : IPlugin;
+
+[Module]
+[Scan<IPlugin>(As = ScanAs.MatchingInterface, OnActivated = nameof(Wire))]
+public static partial class PluginModule
+{
+    internal static void Wire(Roaster roaster, Secret secret) { }   // Secret is internal to the module
+}
+```
+
+The module emits a `public` wrapper for the hook, and that wrapper's parameters after the instance are resolved from the consuming container's graph, so each type has to be nameable by the consumer, the same rule a self-compiled factory parameter gets ([AWT195](#awt195)). The instance parameter itself is exempt: it is the accessible exposure interface, cast back to the internal implementation inside the module. Widen the parameter type's accessibility, resolve a different dependency, or drop the hook.
+
+### AWT204
+
+:::danger[Error]
+A self-compiled module `[Scan]` hook has a parameter, after the instance, marked `[FromKey]` or `[Inject]`.
+:::
+
+```csharp
+internal sealed class Roaster : IPlugin;
+
+[Module]
+[Scan<IPlugin>(As = ScanAs.MatchingInterface, OnActivated = nameof(Wire))]
+public static partial class PluginModule
+{
+    internal static void Wire(Roaster roaster, [FromKey("main")] IClock clock) { }
+}
+```
+
+The hook's parameters after the instance mirror onto the generated `public` wrapper as a bare type-and-name signature, so the attribute's per-dependency semantics (a key, optionality, deferral) would be silently dropped: a cross-assembly consumer would resolve the plain type while a same-compilation container, binding the module's own hook directly, honored the attribute, so the same source would inject different instances depending on which side of the assembly boundary the consumer sits. This is the hook-parameter twin of the factory's [AWT200](#awt200), rejected rather than silently degraded. Remove the attribute, resolve the dependency plainly, or drop the hook.
 
 ## Keyed collections
 

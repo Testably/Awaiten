@@ -137,5 +137,31 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).DoesNotContain("*AWT191*").AsWildcard()
 				.Because("a direct release dependency is resolved at construction and captured by value, which is the supported shape");
 		}
+
+		[Fact]
+		public async Task ReportsADeferredModuleScanReleaseHookParameter()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using System;
+			                                       using Awaiten;
+
+			                                       namespace Lib;
+
+			                                       public interface IClock { }
+			                                       public interface IPlugin { }
+			                                       public interface IRoaster { }
+			                                       internal sealed class Roaster : IPlugin, IRoaster { }
+
+			                                       [Module]
+			                                       [Scan<IPlugin>(As = ScanAs.MatchingInterface, OnRelease = nameof(Release))]
+			                                       public static partial class PluginModule
+			                                       {
+			                                       	internal static void Release(Roaster roaster, Func<IClock> clock) { }
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT191*clock*").AsWildcard()
+				.Because("a module release hook's Func/Lazy parameter is just as dead by the owner's teardown as a container one's");
+		}
 	}
 }

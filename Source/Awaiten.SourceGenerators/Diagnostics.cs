@@ -1336,13 +1336,15 @@ internal static class Diagnostics
 	/// <summary>
 	///     An <c>OnActivated</c> / <c>OnRelease</c> registration names a method that is overloaded: more than one
 	///     accessible <c>static void</c> method of that name accepts the implementation type as its first parameter,
-	///     so the container's choice of hook (and of the graph dependencies its remaining parameters resolve) would
-	///     be order-dependent. Mirrors <see cref="AmbiguousFactory">AWT112</see> for factory methods.
+	///     so the choice of hook (and of the graph dependencies its remaining parameters resolve) would be
+	///     order-dependent. Reported by a container registration and by a module's self-compiled <c>[Scan]</c> alike;
+	///     the message names the owner the hook was looked up on. Mirrors <see cref="AmbiguousFactory">AWT112</see>
+	///     for factory methods.
 	/// </summary>
 	public static readonly DiagnosticDescriptor AmbiguousLifecycleHook = new(
 		"AWT190",
 		"Ambiguous lifecycle hook",
-		"'{0}' has an ambiguous lifecycle hook: {2} has more than one accessible method '{1}' accepting the instance; the container cannot choose one. Give the hook method a unique name.",
+		"'{0}' has an ambiguous lifecycle hook: {2} has more than one accessible method '{1}' accepting the instance, so the choice would be arbitrary. Give the hook method a unique name.",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
@@ -1522,9 +1524,11 @@ internal static class Diagnostics
 	///     Two <c>[Scan]</c> attributes match the same implementation and name different methods for the same
 	///     lifecycle hook slot (<c>OnActivated</c> or <c>OnRelease</c>); the first scan's hook wins, so the
 	///     contradiction is surfaced rather than silently resolved by attribute order - mirroring AWT142 for
-	///     lifetimes. Two scans naming the same method, or hooking different slots, merge cleanly and are not
-	///     reported; neither is an explicit registration of the implementation, which a scan deliberately yields
-	///     to, hooks included.
+	///     lifetimes. Two scans naming the same method on the same owner, or hooking different slots, merge cleanly
+	///     and are not reported. A hook name is owner-relative, so the same name from a different origin - a
+	///     module's scan and the container's, or two modules' - is a different method and conflicts too. An explicit
+	///     registration of the implementation is not reported either: a scan deliberately yields to it, hooks
+	///     included.
 	/// </summary>
 	public static readonly DiagnosticDescriptor ScanHookConflict = new(
 		"AWT199",
@@ -1532,5 +1536,41 @@ internal static class Diagnostics
 		"'{0}' is matched by scans naming conflicting {1} hooks ('{2}' and '{3}'); the first scan's '{2}' is used",
 		"Awaiten",
 		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A self-compiled module <c>[Scan]</c> names a lifecycle hook whose parameter after the instance is of a
+	///     type that is not accessible outside the module's assembly. The module emits a <c>public</c> wrapper for
+	///     the hook, and that wrapper's parameters after the instance are resolved from the consuming container's
+	///     graph, so every one has to be nameable by the consumer - exactly the constraint a factory parameter gets
+	///     (<see cref="ModuleScanParameterInaccessible">AWT195</see>), but for a hook parameter rather than a
+	///     constructor parameter. The instance parameter is exempt: it is the accessible exposure interface, cast to
+	///     the internal implementation inside the module. Widen the parameter type's accessibility, resolve a
+	///     different dependency, or drop the hook.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ModuleScanHookParameterInaccessible = new(
+		"AWT203",
+		"Module scan hook has an inaccessible parameter",
+		"'{0}' matched the module scan, but its {1} hook parameter of type '{2}' is not accessible outside the module's assembly, so the generated hook wrapper cannot expose it; widen the parameter type's accessibility, resolve a different dependency, or drop the hook",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A self-compiled module <c>[Scan]</c> names a lifecycle hook with a parameter (after the instance) marked
+	///     <c>[FromKey]</c> or <c>[Inject]</c>. The hook's parameters mirror onto the generated <c>public</c>
+	///     wrapper as a bare type-and-name signature resolved from the consuming container's graph, so the
+	///     attribute's per-dependency semantics (a key, optionality, deferral) would be silently dropped there,
+	///     while a same-compilation container, binding the module's own hook directly, would honor them - the same
+	///     source injecting different instances depending on which side of the assembly boundary the consumer sits.
+	///     The hook-parameter twin of the factory's <see cref="ModuleScanInjectionMetadata">AWT200</see>, rejected
+	///     rather than silently degraded.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ModuleScanHookInjectionMetadata = new(
+		"AWT204",
+		"Module scan hook uses injection metadata",
+		"'{0}' matched the module scan, but its {1} hook parameter '{2}' is marked {3}, which the generated hook wrapper cannot mirror and would silently drop; remove the attribute, resolve the dependency plainly, or drop the hook",
+		"Awaiten",
+		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
 }

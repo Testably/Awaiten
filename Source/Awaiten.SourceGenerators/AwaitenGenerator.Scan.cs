@@ -623,7 +623,8 @@ partial class AwaitenGenerator
 	/// </summary>
 	private static RawRegistration ScanRegistration(string service, string implementation, INamedTypeSymbol type, INamedTypeSymbol serviceSymbol, ScanMatch match, IReadOnlyList<INamedTypeSymbol>? hookClosedMarkers)
 		=> new(service, implementation, match.Lifetime, type, match.Location, ProductionKind.Constructor, null, false, null, serviceSymbol, true, match.SkipUnconstructable,
-			OnActivated: match.OnActivated, OnRelease: match.OnRelease, HookClosedMarkers: hookClosedMarkers);
+			// One scan's marker forms apply to whichever slots its hooks fill (the merge unions per named slot).
+			OnActivated: match.OnActivated, OnRelease: match.OnRelease, OnActivatedMarkers: hookClosedMarkers, OnReleaseMarkers: hookClosedMarkers);
 
 	/// <summary>
 	///     The closed marker forms a match's lifecycle hook may bind its type argument from. For an open-generic marker

@@ -60,6 +60,20 @@ internal static partial class Sources
 
 			first = false;
 			EmitModuleFactory(builder, depth + 1, factory);
+
+			// The lifecycle-hook wrappers, emitted beside the factory: public so a cross-assembly consumer can run
+			// them, but bodied inside the module so they may cast to and call its internal implementation and hook.
+			if (factory.OnActivated is { } activation)
+			{
+				builder.AppendLine();
+				EmitModuleHook(builder, depth + 1, factory, activation, release: false);
+			}
+
+			if (factory.OnRelease is { } release)
+			{
+				builder.AppendLine();
+				EmitModuleHook(builder, depth + 1, factory, release, release: true);
+			}
 		}
 
 		Indent(builder, depth).AppendLine("}");
@@ -88,7 +102,12 @@ internal static partial class Sources
 	private static string RegistrationAttribute(ModuleFactory factory)
 	{
 		string skip = factory.SkipUnconstructable ? ", SkipUnconstructable = true" : string.Empty;
-		return $"global::Awaiten.GeneratedScanRegistrationAttribute<{factory.ServiceType}>(\"{factory.FactoryName}\", Lifetime = global::Awaiten.AwaitenLifetime.{factory.Lifetime}{skip})";
+
+		// The hook wrapper names travel on the registration so a consumer runs them through the ordinary hook
+		// pipeline, exactly like OnActivated/OnRelease on a container [Scan].
+		string onActivated = factory.OnActivated is { } activation ? $", OnActivated = \"{activation.WrapperName}\"" : string.Empty;
+		string onRelease = factory.OnRelease is { } release ? $", OnRelease = \"{release.WrapperName}\"" : string.Empty;
+		return $"global::Awaiten.GeneratedScanRegistrationAttribute<{factory.ServiceType}>(\"{factory.FactoryName}\", Lifetime = global::Awaiten.AwaitenLifetime.{factory.Lifetime}{skip}{onActivated}{onRelease})";
 	}
 
 	private static void EmitModuleFactory(StringBuilder builder, int depth, ModuleFactory factory)
@@ -107,5 +126,40 @@ internal static partial class Sources
 			.Append("public static ").Append(factory.ServiceType).Append(' ').Append(factory.FactoryName)
 			.Append('(').Append(signature).Append(") => new ").Append(factory.ImplementationType)
 			.Append('(').Append(arguments).AppendLine(");");
+	}
+
+	/// <summary>
+	///     Emits one lifecycle-hook wrapper: a <c>public static void</c> method taking the accessible exposure
+	///     interface as its first parameter, casting it to the hook's own instance parameter type (the internal
+	///     implementation, a base type it accepts, or the closed marker form of a generic hook) and forwarding it -
+	///     plus the graph-resolved parameters after it - to the module's own (possibly <c>internal</c>) hook. The
+	///     cast and the call compile because the wrapper body sits in the module's own assembly, while the
+	///     <c>public</c> signature is all a consumer needs to run it.
+	/// </summary>
+	private static void EmitModuleHook(StringBuilder builder, int depth, ModuleFactory factory, ModuleHook hook, bool release)
+	{
+		AppendXmlSummary(builder, depth,
+			$"Generated from a module [Scan]: the {(release ? "OnRelease" : "OnActivated")} lifecycle wrapper, casting the exposure",
+			"interface to the hook's own instance parameter type and forwarding to the module's own hook, so a consumer runs it without naming the internal hook.");
+
+		FactoryParameter[] parameters = hook.Parameters.AsArray();
+		string signature = string.Concat(parameters.Select(parameter => $", {parameter.Type} @{parameter.Name}"));
+		string arguments = string.Concat(parameters.Select(parameter => $", @{parameter.Name}"));
+
+		// The synthetic instance parameter starts from an awaiten__ prefix so it is very unlikely to collide with a
+		// mirrored user hook parameter (a plain name like "instance" would be a duplicate-parameter error in the
+		// wrapper), and is suffixed away from any mirrored name that does collide - the prefix is a convention, not
+		// enforced on the user's hook.
+		StringBuilder instanceName = new("awaiten__instance");
+		string instance = instanceName.ToString();
+		while (parameters.Any(parameter => parameter.Name == instance))
+		{
+			instance = instanceName.Append('_').ToString();
+		}
+
+		Indent(builder, depth)
+			.Append("public static void ").Append(hook.WrapperName)
+			.Append('(').Append(factory.ServiceType).Append(" @").Append(instance).Append(signature).Append(") => ")
+			.Append(hook.Target).Append("((").Append(hook.InstanceCast).Append(")@").Append(instance).Append(arguments).AppendLine(");");
 	}
 }

@@ -46,7 +46,8 @@ internal sealed record RawRegistration(
 	bool SuppressDisposal = false,
 	string? WhenInjectedInto = null,
 	bool GreedyConstructor = false,
-	IReadOnlyList<INamedTypeSymbol>? HookClosedMarkers = null);
+	IReadOnlyList<INamedTypeSymbol>? OnActivatedMarkers = null,
+	IReadOnlyList<INamedTypeSymbol>? OnReleaseMarkers = null);
 
 /// <summary>
 ///     An imported module: its symbol and the location of the container's <c>[Import]</c> attribute that
@@ -182,6 +183,17 @@ partial class AwaitenGenerator
 
 		/// <inheritdoc cref="OnActivated" />
 		public string? OnRelease { get; set; }
+
+		/// <summary>
+		///     The module whose registration named the <see cref="OnActivated" /> hook, or <see langword="null" />
+		///     for a container-named one. A hook name is owner-relative, and two scan registrations with different
+		///     origins can fill one implementation's two slots (see <c>MergeScanHooks</c>), so each slot resolves
+		///     against its own origin rather than the winning registration's <see cref="Origin" />.
+		/// </summary>
+		public INamedTypeSymbol? OnActivatedOrigin { get; set; }
+
+		/// <inheritdoc cref="OnActivatedOrigin" />
+		public INamedTypeSymbol? OnReleaseOrigin { get; set; }
 
 		/// <summary>
 		///     The closed marker forms the <see cref="OnActivated" /> hook could bind its type arguments from: the

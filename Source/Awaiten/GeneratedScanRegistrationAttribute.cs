@@ -44,6 +44,22 @@ public sealed class GeneratedScanRegistrationAttribute<TService> : Attribute
 	///     warning (AWT141) instead of an error when a factory parameter is not satisfiable from its graph.
 	/// </summary>
 	public bool SkipUnconstructable { get; set; }
+
+	/// <summary>
+	///     The name of the generated <c>public static void</c> activation wrapper on the module, run once the match
+	///     is constructed. The module resolves and closes its (possibly <c>internal</c>) <c>OnActivated</c> hook at
+	///     its own build and emits this public wrapper so the consumer can run it without naming the internal hook;
+	///     the wrapper's parameters after the instance resolve from the consumer's graph. Null when the scan
+	///     declared no activation hook.
+	/// </summary>
+	public string? OnActivated { get; set; }
+
+	/// <summary>
+	///     The name of the generated <c>public static void</c> release wrapper on the module, run when the match's
+	///     owner is disposed. The module counterpart of <see cref="OnActivated" /> for the <c>OnRelease</c> hook.
+	///     Null when the scan declared no release hook.
+	/// </summary>
+	public string? OnRelease { get; set; }
 }
 
 #pragma warning restore S2326

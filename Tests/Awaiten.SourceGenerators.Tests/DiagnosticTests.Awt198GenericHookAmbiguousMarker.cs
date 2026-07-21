@@ -283,5 +283,130 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).DoesNotContain("*AWT198*").AsWildcard()
 				.Because("ambiguity only applies to a hook that could actually bind more than one closed form");
 		}
+
+		[Fact]
+		public async Task ReportsAModuleScanGenericHookThatCouldBindTwoClosedMarkerForms()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace Lib;
+
+			                                       public interface IView<TViewModel> { }
+			                                       public interface IVmA { }
+			                                       public interface IVmB { }
+			                                       public interface IDualView { }
+
+			                                       internal sealed class DualView : IView<IVmA>, IView<IVmB>, IDualView { }
+
+			                                       [Module]
+			                                       [Scan(typeof(IView<>), As = ScanAs.MatchingInterface, OnActivated = nameof(Wire))]
+			                                       public static partial class ViewModule
+			                                       {
+			                                       	internal static void Wire<TViewModel>(IView<TViewModel> view) { }
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT198*Wire*DualView*").AsWildcard()
+				.Because("the generic module hook could bind the match through IView<IVmA> or IView<IVmB>, so its type arguments are ambiguous");
+		}
+
+		[Fact]
+		public async Task DoesNotRewireAFailedModuleScanHookFromALaterScansNarrowerMarkers()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace Lib;
+
+			                                       public interface IView<TViewModel> { }
+			                                       public interface IOther<TViewModel> { }
+			                                       public interface IVmA { }
+			                                       public interface IVmB { }
+			                                       public interface IDualView { }
+
+			                                       internal sealed class DualView : IView<IVmA>, IView<IVmB>, IOther<bool>, IDualView { }
+
+			                                       [Module]
+			                                       [Scan(typeof(IView<>), As = ScanAs.MatchingInterface, OnActivated = nameof(Wire))]
+			                                       [Scan(typeof(IOther<>), As = ScanAs.MatchingInterface, OnActivated = nameof(Wire))]
+			                                       public static partial class ViewModule
+			                                       {
+			                                       	internal static void Wire<TViewModel>(DualView view) { }
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics.Count(diagnostic => diagnostic.Contains("AWT198"))).IsEqualTo(1)
+				.Because("the first scan's closed marker forms already make the hook ambiguous, and the second scan's restatement re-resolves over the union without repeating the report");
+			string module = result.Sources.Single(source => source.Key.Contains("ModuleScan")).Value;
+			await That(module).DoesNotContain("Awaiten__ScanHook_OnActivated_DualView")
+				.Because("the second scan restates the failed hook over its own single closed form; resolving with only that narrower set would wire the hook to a scan-order-dependent closing beside the reported ambiguity, so the slot has to stay failed over the union");
+		}
+
+		[Fact]
+		public async Task DoesNotRewireAModuleScanHookWipedByAWideningRestatementFromAThirdScansMarkers()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace Lib;
+
+			                                       public interface IBarMarker<T> { }
+			                                       public interface IBazMarker<T> { }
+			                                       public interface IQuxMarker<T> { }
+			                                       public interface IWorker { }
+
+			                                       internal sealed class Worker : IBarMarker<int>, IBazMarker<string>, IQuxMarker<bool>, IWorker { }
+
+			                                       [Module]
+			                                       [Scan(typeof(IBarMarker<>), As = ScanAs.MatchingInterface, OnActivated = nameof(Wire))]
+			                                       [Scan(typeof(IBazMarker<>), As = ScanAs.MatchingInterface, OnActivated = nameof(Wire))]
+			                                       [Scan(typeof(IQuxMarker<>), As = ScanAs.MatchingInterface, OnActivated = nameof(Wire))]
+			                                       public static partial class WorkerModule
+			                                       {
+			                                       	internal static void Wire<T>(Worker worker) { }
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics.Count(diagnostic => diagnostic.Contains("AWT198"))).IsEqualTo(1)
+				.Because("the second scan widens the marker union into ambiguity, reported once; the third scan's restatement re-resolves over the same failed union without repeating it");
+			string module = result.Sources.Single(source => source.Key.Contains("ModuleScan")).Value;
+			await That(module).DoesNotContain("Awaiten__ScanHook_OnActivated_Worker")
+				.Because("the first scan's successfully wired hook is dropped when the widened union turns ambiguous, and the third scan's restatement must not re-wire it from its own single closed form");
+		}
+
+		[Fact]
+		public async Task ReportsAFreshAmbiguityAfterAFailedModuleScanHookWasRewiredByALaterScan()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace Lib;
+
+			                                       public interface IPairMarker<T1, T2> { }
+			                                       public interface IBarMarker<T> { }
+			                                       public interface IBazMarker<T> { }
+			                                       public interface IWorker { }
+
+			                                       internal sealed class Worker : IPairMarker<int, string>, IBarMarker<int>, IBazMarker<bool>, IWorker { }
+
+			                                       [Module]
+			                                       [Scan(typeof(IPairMarker<,>), As = ScanAs.MatchingInterface, OnActivated = nameof(Wire))]
+			                                       [Scan(typeof(IBarMarker<>), As = ScanAs.MatchingInterface, OnActivated = nameof(Wire))]
+			                                       [Scan(typeof(IBazMarker<>), As = ScanAs.MatchingInterface, OnActivated = nameof(Wire))]
+			                                       public static partial class WorkerModule
+			                                       {
+			                                       	internal static void Wire<T>(Worker worker) { }
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT164*Wire*").AsWildcard()
+				.Because("the first scan's two-argument closed form cannot bind the one-argument generic hook, so its attempt fails outright");
+			await That(result.Diagnostics).Contains("*AWT198*Wire*").AsWildcard()
+				.Because("the second scan's restatement rewires the hook and clears the failure record, so the third scan widening the union into ambiguity is a fresh outcome that must report rather than hide behind the first scan's stale failure");
+			string module = result.Sources.Single(source => source.Key.Contains("ModuleScan")).Value;
+			await That(module).DoesNotContain("Awaiten__ScanHook_OnActivated_Worker")
+				.Because("the slot's final resolution over the full union is ambiguous, so no wrapper is wired");
+		}
 	}
 }

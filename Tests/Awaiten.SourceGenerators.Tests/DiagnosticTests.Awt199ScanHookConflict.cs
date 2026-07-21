@@ -165,5 +165,101 @@ public partial class DiagnosticTests
 			await That(result.Sources.Values.Any(source => source.Contains("FromScan("))).IsFalse()
 				.Because("leaving the hook off the explicit registration deliberately opts the type out of it");
 		}
+
+		[Fact]
+		public async Task ReportsOverlappingModuleScansNamingDifferentHooksForOneSlot()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace Lib;
+
+			                                       public interface IMarkerA { }
+			                                       public interface IMarkerB { }
+			                                       public interface IWorker { }
+
+			                                       internal sealed class Worker : IMarkerA, IMarkerB, IWorker { }
+
+			                                       [Module]
+			                                       [Scan<IMarkerA>(As = ScanAs.MatchingInterface, OnActivated = nameof(Activate))]
+			                                       [Scan<IMarkerB>(As = ScanAs.MatchingInterface, OnActivated = nameof(Other))]
+			                                       public static partial class WorkerModule
+			                                       {
+			                                       	internal static void Activate(Worker worker) { }
+			                                       	internal static void Other(Worker worker) { }
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT199*Worker*Activate*Other*").AsWildcard()
+				.Because("two module scans naming different methods for one slot is order-dependent, so it is surfaced like the container form surfaces it");
+		}
+
+		[Fact]
+		public async Task ReportsAModuleScanHookConflictingWithASameNamedContainerScanHook()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace Lib;
+
+			                                       public interface IPlugin { }
+			                                       public interface IRoaster { }
+
+			                                       internal sealed class Roaster : IPlugin, IRoaster { }
+
+			                                       [Module]
+			                                       [Scan<IPlugin>(As = ScanAs.MatchingInterface, OnActivated = nameof(Wire))]
+			                                       public static partial class PluginModule
+			                                       {
+			                                       	internal static void Wire(Roaster roaster) { }
+			                                       }
+
+			                                       [Container]
+			                                       [Scan<IPlugin>(As = ScanAs.MatchingInterface, OnActivated = nameof(Wire))]
+			                                       [Import(typeof(PluginModule))]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       	internal static void Wire(Roaster roaster) { }
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT199*Lib.PluginModule.Wire*").AsWildcard()
+				.Because("the same hook name on a different origin is a different method, so merging it silently would run whichever origin registered first; the conflict names the module-owned loser qualified");
+		}
+
+		[Fact]
+		public async Task ReportsALaterModuleScanNamingADifferentHookForAClaimedSlotWhoseHookFailed()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace Lib;
+
+			                                       public interface IView<TViewModel> { }
+			                                       public interface IVmA { }
+			                                       public interface IVmB { }
+			                                       public interface IMarkerB { }
+			                                       public interface IDualView { }
+
+			                                       internal sealed class DualView : IView<IVmA>, IView<IVmB>, IMarkerB, IDualView { }
+
+			                                       [Module]
+			                                       [Scan(typeof(IView<>), As = ScanAs.MatchingInterface, OnActivated = nameof(Wire))]
+			                                       [Scan<IMarkerB>(As = ScanAs.MatchingInterface, OnActivated = nameof(Other))]
+			                                       public static partial class ViewModule
+			                                       {
+			                                       	internal static void Wire<TViewModel>(DualView view) { }
+			                                       	internal static void Other(DualView view) { }
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT198*Wire*").AsWildcard()
+				.Because("the first scan's generic hook is ambiguous over its two closed marker forms");
+			await That(result.Diagnostics).Contains("*AWT199*DualView*Wire*Other*").AsWildcard()
+				.Because("the failed hook still claims the slot, so a later scan naming a different method is the same order-dependent contradiction it would be after a successful resolution");
+			string module = result.Sources.Single(source => source.Key.Contains("ModuleScan")).Value;
+			await That(module).DoesNotContain("Awaiten__ScanHook_OnActivated_DualView")
+				.Because("the first scan's claim wins the slot and stays failed, so the later scan's resolvable hook must not be wired in its place");
+		}
 	}
 }

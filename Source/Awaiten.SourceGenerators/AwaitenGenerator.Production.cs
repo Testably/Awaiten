@@ -274,8 +274,9 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     Resolves an <c>OnActivated</c> / <c>OnRelease</c> lifecycle hook to a <c>static void M(TImplementation, …)</c>
-	///     method on its owner - the container, or the module that declared the registration for an imported one
-	///     (never falling back to the container) - returning the name the generated Root/Scope calls it by and its
+	///     method on its owner - the container, or the module whose registration named the hook, kept per slot on
+	///     <c>ImplInfo</c> since two scan registrations with different origins can fill one implementation's two
+	///     slots (never falling back to the container) - returning the name the generated Root/Scope calls it by and its
 	///     graph-resolved parameters (every parameter after the instance), or <c>(null, empty)</c> when the
 	///     registration named none. The first parameter is the instance and accepts the implementation type; each
 	///     parameter after it is resolved from the object graph exactly like a constructor parameter (see
@@ -313,9 +314,10 @@ partial class AwaitenGenerator
 		(List<IMethodSymbol> matches, List<IReadOnlyList<INamedTypeSymbol>> ambiguousMethods) =
 			CollectHookOverloads(info, hookName, release, context);
 
+		INamedTypeSymbol? origin = release ? info.OnReleaseOrigin : info.OnActivatedOrigin;
 		if (matches.Count == 1 && ambiguousMethods.Count == 0)
 		{
-			return (QualifiedHook(info, hookName, matches[0]), ClassifyHookParameters(matches[0], info, release, context));
+			return (QualifiedHook(origin, hookName, matches[0]), ClassifyHookParameters(matches[0], info, release, context));
 		}
 
 		// A generic hook whose only obstacle is an ambiguous closed marker, with no other usable overload, is
@@ -344,7 +346,7 @@ partial class AwaitenGenerator
 		context.Diagnostics.Add(new DiagnosticInfo(
 			matches.Count + ambiguousMethods.Count == 0 ? Diagnostics.InvalidLifecycleHook : Diagnostics.AmbiguousLifecycleHook,
 			info.Location,
-			new EquatableArray<string>([Display(info.OwningServiceOrImpl), hookName, DescribeOwner(info),])));
+			new EquatableArray<string>([Display(info.OwningServiceOrImpl), hookName, DescribeOwner(origin),])));
 		return (null, default);
 	}
 
@@ -366,14 +368,18 @@ partial class AwaitenGenerator
 		Compilation compilation = context.Compilation;
 		IReadOnlyList<INamedTypeSymbol> closedMarkers = release ? info.OnReleaseMarkers : info.OnActivatedMarkers;
 
+		// The hook's own origin (the registration that named it), not the implementation's winning Origin: two
+		// scan registrations with different origins can fill the two slots, and each name binds only on its owner.
+		INamedTypeSymbol? origin = release ? info.OnReleaseOrigin : info.OnActivatedOrigin;
+
 		List<IMethodSymbol> matches = new();
 		List<IReadOnlyList<INamedTypeSymbol>> ambiguousMethods = new();
-		foreach (ISymbol member in AccessibleMembers(info.Origin ?? containerSymbol, hookName, compilation))
+		foreach (ISymbol member in AccessibleMembers(origin ?? containerSymbol, hookName, compilation))
 		{
 			// A module hook must also be accessible from the generated container (its own private members are
 			// reachable from the partial, a module's are not); an inaccessible module method is not a usable hook.
 			if (member is not IMethodSymbol { MethodKind: MethodKind.Ordinary, IsStatic: true, ReturnsVoid: true, Parameters.Length: >= 1, } method
-			    || (info.Origin is not null && !compilation.IsSymbolAccessibleWithin(method, containerSymbol)))
+			    || (origin is not null && !compilation.IsSymbolAccessibleWithin(method, containerSymbol)))
 			{
 				continue;
 			}
@@ -489,13 +495,14 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     A module's lifecycle hook is emitted qualified with the module type (the generated container is another
 	///     class, so the simple name would not bind); the container's own hooks stay unqualified, in scope inside
-	///     the generated partial. Mirrors <c>QualifiedProductionMember</c> for Factory/Instance members. A generic
+	///     the generated partial. <paramref name="origin" /> is the hook slot's own origin (see <c>ResolveHook</c>).
+	///     Mirrors <c>QualifiedProductionMember</c> for Factory/Instance members. A generic
 	///     hook carries its bound type arguments (<c>WireView&lt;global::App.IMainViewModel&gt;</c>) so the emitter,
 	///     which writes the name verbatim, needs no generic awareness.
 	/// </summary>
-	private static string QualifiedHook(ImplInfo info, string hookName, IMethodSymbol hook)
+	private static string QualifiedHook(INamedTypeSymbol? origin, string hookName, IMethodSymbol hook)
 	{
-		string name = info.Origin is { } origin ? $"{origin.ToDisplayString(FullyQualified)}.{hookName}" : hookName;
+		string name = origin is { } owner ? $"{owner.ToDisplayString(FullyQualified)}.{hookName}" : hookName;
 		if (hook.TypeArguments.Length == 0)
 		{
 			return name;
@@ -896,8 +903,11 @@ partial class AwaitenGenerator
 	///     Names the owner of a Factory/Instance member in a diagnostic: the module that declared the
 	///     registration, or the container for its own registrations.
 	/// </summary>
-	private static string DescribeOwner(ImplInfo info)
-		=> info.Origin is { } origin ? $"the module '{Display(origin.ToDisplayString(FullyQualified))}'" : "the container";
+	private static string DescribeOwner(ImplInfo info) => DescribeOwner(info.Origin);
+
+	/// <summary>Names an owner in a diagnostic: the module, or the container when <paramref name="origin" /> is null.</summary>
+	private static string DescribeOwner(INamedTypeSymbol? origin)
+		=> origin is { } owner ? $"the module '{Display(owner.ToDisplayString(FullyQualified))}'" : "the container";
 
 	/// <summary>
 	///     A module's Factory/Instance member is emitted qualified with the module type (the generated container is
