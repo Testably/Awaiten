@@ -374,5 +374,39 @@ public partial class DiagnosticTests
 			await That(module).DoesNotContain("Awaiten__ScanHook_OnActivated_Worker")
 				.Because("the first scan's successfully wired hook is dropped when the widened union turns ambiguous, and the third scan's restatement must not re-wire it from its own single closed form");
 		}
+
+		[Fact]
+		public async Task ReportsAFreshAmbiguityAfterAFailedModuleScanHookWasRewiredByALaterScan()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace Lib;
+
+			                                       public interface IPairMarker<T1, T2> { }
+			                                       public interface IBarMarker<T> { }
+			                                       public interface IBazMarker<T> { }
+			                                       public interface IWorker { }
+
+			                                       internal sealed class Worker : IPairMarker<int, string>, IBarMarker<int>, IBazMarker<bool>, IWorker { }
+
+			                                       [Module]
+			                                       [Scan(typeof(IPairMarker<,>), As = ScanAs.MatchingInterface, OnActivated = nameof(Wire))]
+			                                       [Scan(typeof(IBarMarker<>), As = ScanAs.MatchingInterface, OnActivated = nameof(Wire))]
+			                                       [Scan(typeof(IBazMarker<>), As = ScanAs.MatchingInterface, OnActivated = nameof(Wire))]
+			                                       public static partial class WorkerModule
+			                                       {
+			                                       	internal static void Wire<T>(Worker worker) { }
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT164*Wire*").AsWildcard()
+				.Because("the first scan's two-argument closed form cannot bind the one-argument generic hook, so its attempt fails outright");
+			await That(result.Diagnostics).Contains("*AWT198*Wire*").AsWildcard()
+				.Because("the second scan's restatement rewires the hook and clears the failure record, so the third scan widening the union into ambiguity is a fresh outcome that must report rather than hide behind the first scan's stale failure");
+			string module = result.Sources.Single(source => source.Key.Contains("ModuleScan")).Value;
+			await That(module).DoesNotContain("Awaiten__ScanHook_OnActivated_Worker")
+				.Because("the slot's final resolution over the full union is ambiguous, so no wrapper is wired");
+		}
 	}
 }

@@ -89,9 +89,10 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     The per-module state the scan expansion shares (the module that owns the hooks, the compilation, and the
 	///     diagnostics sink), bundled so each helper takes one value rather than three. <see cref="FailedHooks" />
-	///     records every hook attempt that failed - as <c>match\0slot\0name</c>, across all of the module's scans -
-	///     so an overlapping scan re-naming the same failed hook re-resolves it (the slot merge needs the outcome)
-	///     without repeating the first scan's diagnostic (see <see cref="ResolveModuleHook" />).
+	///     records every hook attempt whose <em>latest</em> resolution failed - as <c>match\0slot\0name</c>, across
+	///     all of the module's scans - so an overlapping scan re-naming the same failed hook re-resolves it (the
+	///     slot merge needs the outcome) without repeating the first scan's diagnostic; a successful re-resolution
+	///     clears the record, so a later failure reports afresh (see <see cref="ResolveModuleHook" />).
 	/// </summary>
 	private readonly record struct ModuleScanContext(
 		INamedTypeSymbol Module,
@@ -318,13 +319,19 @@ partial class AwaitenGenerator
 		// One failure report per (match, slot, name): an overlapping scan re-naming a hook that already failed
 		// still resolves it (the slot merge needs the outcome) but into a discarded sink, so the first scan's
 		// diagnostic is not repeated. A fresh failure - a new name, or a restated hook newly ambiguous over
-		// widened markers - has no recorded attempt and reports normally.
+		// widened markers - has no recorded attempt and reports normally. A successful re-resolution clears the
+		// record: the reported failure no longer describes the slot, so a still-later failure over a further
+		// widened union is a new outcome and must report, not hide behind the stale entry.
 		string attempt = matchType.ToDisplayString(FullyQualified) + "\0" + (release ? "OnRelease" : "OnActivated") + "\0" + hookName;
 		ResolvedModuleHook? resolved = ResolveModuleHookCore(matchType, hookName, match.Location, release, closedMarkers,
 			context.FailedHooks.Contains(attempt) ? context with { Diagnostics = new List<DiagnosticInfo>(), } : context);
 		if (resolved is null)
 		{
 			context.FailedHooks.Add(attempt);
+		}
+		else
+		{
+			context.FailedHooks.Remove(attempt);
 		}
 
 		return resolved;
