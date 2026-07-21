@@ -110,31 +110,37 @@ partial class AwaitenGenerator
 
 			foreach (ModuleScanExpansion expansion in CollectModuleScanFactories(moduleSymbol, compilation, new List<DiagnosticInfo>(), CancellationToken.None))
 			{
-				result.Add(new RawRegistration(
-					expansion.Factory.ServiceType,
-					expansion.Factory.ImplementationType,
-					expansion.Factory.Lifetime,
-					expansion.Implementation,
-					expansion.Location,
-					ServiceSymbol: expansion.Service,
-					IsScan: true,
-					ScanSkipsUnconstructable: expansion.Factory.SkipUnconstructable,
-					GreedyConstructor: true,
-					// With no assembly boundary the container binds the module's own (possibly internal) hook directly
-					// rather than the generated wrapper it cannot see, so each hook resolves against the module - the
-					// coalescer keeps the origin per hook slot - through the ordinary pipeline. The user hook names
-					// travel on the expansion, but a slot whose hook failed to resolve keeps its claimed name with no
-					// wrapper on the factory (see MergeModuleScanHookSlot), so wiring is gated on the wrapper: an
-					// invalid hook - already reported at the module's build - is not wired and re-reported here. Each
-					// wired slot's closed marker forms bind a generic hook's type argument.
-					Origin: moduleSymbol,
-					OnActivated: expansion.Factory.OnActivated is null ? null : expansion.OnActivated,
-					OnRelease: expansion.Factory.OnRelease is null ? null : expansion.OnRelease,
-					OnActivatedMarkers: expansion.Factory.OnActivated is null ? null : expansion.OnActivatedMarkers,
-					OnReleaseMarkers: expansion.Factory.OnRelease is null ? null : expansion.OnReleaseMarkers));
+				result.Add(SameCompilationScanRegistration(expansion, moduleSymbol));
 			}
 		}
 	}
+
+	/// <summary>
+	///     The registration one same-compilation module-scan expansion contributes (see
+	///     <see cref="CollectSameCompilationModuleScans" />). With no assembly boundary the container binds the
+	///     module's own (possibly internal) hook directly rather than the generated wrapper it cannot see, so each
+	///     hook resolves against the module - the coalescer keeps the origin per hook slot - through the ordinary
+	///     pipeline. The user hook names travel on the expansion, but a slot whose hook failed to resolve keeps its
+	///     claimed name with no wrapper on the factory (see <c>MergeModuleScanHookSlot</c>), so wiring is gated on
+	///     the wrapper: an invalid hook - already reported at the module's build - is not wired and re-reported
+	///     here. Each wired slot's closed marker forms bind a generic hook's type argument.
+	/// </summary>
+	private static RawRegistration SameCompilationScanRegistration(ModuleScanExpansion expansion, INamedTypeSymbol moduleSymbol)
+		=> new(
+			expansion.Factory.ServiceType,
+			expansion.Factory.ImplementationType,
+			expansion.Factory.Lifetime,
+			expansion.Implementation,
+			expansion.Location,
+			ServiceSymbol: expansion.Service,
+			IsScan: true,
+			ScanSkipsUnconstructable: expansion.Factory.SkipUnconstructable,
+			GreedyConstructor: true,
+			Origin: moduleSymbol,
+			OnActivated: expansion.Factory.OnActivated is null ? null : expansion.OnActivated,
+			OnRelease: expansion.Factory.OnRelease is null ? null : expansion.OnRelease,
+			OnActivatedMarkers: expansion.Factory.OnActivated is null ? null : expansion.OnActivatedMarkers,
+			OnReleaseMarkers: expansion.Factory.OnRelease is null ? null : expansion.OnReleaseMarkers);
 
 	/// <summary>
 	///     Reads the <c>[Singleton]</c>/<c>[Transient]</c>/<c>[Scoped]</c> registrations declared on a symbol (a
