@@ -42,7 +42,8 @@
         "PublishBenchmarkReport",
         "Restore",
         "UnitTests",
-        "UpdateReadme"
+        "UpdateReadme",
+        "WebSample"
       ]
     },
     "Verbosity": {
