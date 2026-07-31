@@ -155,6 +155,14 @@ public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScop
 			}
 		}
 
+		// The container has this keyed service but declined to build it here (a root-withheld disposable
+		// transient, exactly as in GetService): Resolve surfaces the guidance naming the fix instead of a
+		// silent null the probe's answer would contradict.
+		if (_metadata is not null && _metadata.IsResolvable(serviceType, serviceKey))
+		{
+			return _container.Resolve(serviceType, serviceKey);
+		}
+
 		return null;
 	}
 

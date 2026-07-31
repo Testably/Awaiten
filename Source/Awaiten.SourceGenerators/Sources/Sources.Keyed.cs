@@ -13,10 +13,7 @@ internal static partial class Sources
 	///     <c>__keyed</c> table keyed by <c>(Type, key)</c>, populated only from user-declared <c>[Key]</c>s
 	///     (<see cref="AwaitenGenerator.IsUserKey" />): the synthetic decorator/contextual keys stay internal and
 	///     unreachable. Async-taint and strict lifetime-safety withholding follow the same rules as the unkeyed
-	///     dispatch, with the same guidance messages.
-	/// </summary>
-	/// <summary>
-	///     Emits the keyed resolution surface and reports whether the <c>__keyed</c> table was emitted, so the
+	///     dispatch, with the same guidance messages. Returns whether the <c>__keyed</c> table was emitted, so the
 	///     resolvability probe knows whether it may look there.
 	/// </summary>
 	private static bool EmitKeyedResolutionApi(ApiRegions regions, int depth, EmitContext context, bool strict, bool syncResolveAfterInit, bool asObjectEmitted)

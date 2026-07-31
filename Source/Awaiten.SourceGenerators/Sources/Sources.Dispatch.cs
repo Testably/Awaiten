@@ -275,6 +275,19 @@ internal static partial class Sources
 			builder.AppendLine();
 		}
 
+		if (hasWithheld && varianceEntries.Count > 0)
+		{
+			// A variant closing TryResolve declined because its nearest candidate is withheld on the Root: the
+			// closing itself has no __withheld entry, so surface the candidate's guidance rather than claiming
+			// no registration exists for a closing the container does serve from a child scope.
+			Indent(builder, depth + 1).AppendLine("global::System.Type? __variantMatch = __FindVariantMatch(serviceType);");
+			Indent(builder, depth + 1).AppendLine("if (__variantMatch is not null && __withheld.TryGetValue(__variantMatch, out string? __variantGuidance))");
+			Indent(builder, depth + 1).AppendLine("{");
+			Indent(builder, depth + 2).AppendLine("throw new global::System.InvalidOperationException(__variantGuidance);");
+			Indent(builder, depth + 1).AppendLine("}");
+			builder.AppendLine();
+		}
+
 		Indent(builder, depth + 1).AppendLine(
 			"throw new global::System.InvalidOperationException($\"No registration for type '{serviceType}' on this container.\");");
 		Indent(builder, depth).AppendLine("}");
@@ -342,34 +355,30 @@ internal static partial class Sources
 			Indent(builder, depth + 1).AppendLine("return __TryResolveVariant(serviceType, out instance);");
 			Indent(builder, depth).AppendLine("}");
 			EmitVarianceFallback(fields, helpers, depth, varianceEntries, hasWithheld);
-			return new DispatchShape(true, true, hasWithheld);
+			return new DispatchShape(true, true);
 		}
 
 		Indent(builder, depth + 1).AppendLine("instance = null;");
 		Indent(builder, depth + 1).AppendLine("return false;");
 		Indent(builder, depth).AppendLine("}");
-		return new DispatchShape(true, false, hasWithheld);
+		return new DispatchShape(true, false);
 	}
 
 	/// <summary>
-	///     Which dispatch structures the synchronous resolution surface emitted: the <c>__buckets</c> table, the
-	///     variance fallback's candidate list, and the <c>__withheld</c> guidance lookup. All false for a container
-	///     with nothing to dispatch.
+	///     Which dispatch structures the synchronous resolution surface emitted: the <c>__buckets</c> table and the
+	///     variance fallback's candidate list. Both false for a container with nothing to dispatch.
 	/// </summary>
 	private readonly struct DispatchShape
 	{
-		public DispatchShape(bool hasBuckets, bool hasVariance, bool hasWithheld)
+		public DispatchShape(bool hasBuckets, bool hasVariance)
 		{
 			HasBuckets = hasBuckets;
 			HasVariance = hasVariance;
-			HasWithheld = hasWithheld;
 		}
 
 		public bool HasBuckets { get; }
 
 		public bool HasVariance { get; }
-
-		public bool HasWithheld { get; }
 	}
 
 	/// <summary>
@@ -387,8 +396,7 @@ internal static partial class Sources
 	private static void EmitResolvabilityApi(
 		ApiRegions regions, int depth, DispatchShape dispatch, bool hasKeyedEntries)
 	{
-		(StringBuilder members, _, StringBuilder helpers) = regions;
-		StringBuilder builder = members;
+		StringBuilder builder = regions.Members;
 		Separate(builder);
 		AppendXmlSummary(builder, depth,
 			"Whether this container can resolve <paramref name=\"serviceType\" /> under <paramref name=\"key\" />, without constructing anything.");
@@ -446,38 +454,9 @@ internal static partial class Sources
 			return;
 		}
 
-		Indent(builder, depth + 1).AppendLine("return __IsVariantResolvable(serviceType);");
+		// A cached route or a fresh match answers existence; which candidate wins only matters when resolving.
+		Indent(builder, depth + 1).AppendLine("return __varianceRoutes.ContainsKey(serviceType) || __FindVariantMatch(serviceType) is not null;");
 		Indent(builder, depth).AppendLine("}");
-
-		Separate(helpers);
-		Indent(helpers, depth).AppendLine("private static bool __IsVariantResolvable(global::System.Type serviceType)");
-		Indent(helpers, depth).AppendLine("{");
-		Indent(helpers, depth + 1).AppendLine("if (__varianceRoutes.ContainsKey(serviceType))");
-		Indent(helpers, depth + 1).AppendLine("{");
-		Indent(helpers, depth + 2).AppendLine("return true;");
-		Indent(helpers, depth + 1).AppendLine("}");
-		helpers.AppendLine();
-		Indent(helpers, depth + 1).Append("if (!serviceType.IsConstructedGenericType || !serviceType.IsInterface")
-			.AppendLine(dispatch.HasWithheld ? " || __withheld.ContainsKey(serviceType))" : ")");
-		Indent(helpers, depth + 1).AppendLine("{");
-		Indent(helpers, depth + 2).AppendLine("return false;");
-		Indent(helpers, depth + 1).AppendLine("}");
-		helpers.AppendLine();
-		Indent(helpers, depth + 1).AppendLine("global::System.Type __definition = serviceType.GetGenericTypeDefinition();");
-		Indent(helpers, depth + 1).AppendLine("foreach (global::System.Type __candidate in __varianceCandidates)");
-		Indent(helpers, depth + 1).AppendLine("{");
-		// Any variance-compatible candidate answers the question; the fallback's nearest-match tie-break only
-		// matters when picking which one to resolve through.
-		Indent(helpers, depth + 2).AppendLine("if ((object)__candidate != (object)serviceType");
-		Indent(helpers, depth + 2).AppendLine("    && __candidate.GetGenericTypeDefinition() == __definition");
-		Indent(helpers, depth + 2).AppendLine("    && serviceType.IsAssignableFrom(__candidate))");
-		Indent(helpers, depth + 2).AppendLine("{");
-		Indent(helpers, depth + 3).AppendLine("return true;");
-		Indent(helpers, depth + 2).AppendLine("}");
-		Indent(helpers, depth + 1).AppendLine("}");
-		helpers.AppendLine();
-		Indent(helpers, depth + 1).AppendLine("return false;");
-		Indent(helpers, depth).AppendLine("}");
 	}
 
 	/// <summary>
@@ -502,7 +481,9 @@ internal static partial class Sources
 	///     service, using the same conversion rule and nearest-wins selection as the compile-time redirect, so
 	///     imperative and injected resolution agree even for a closed type no consumer ever requested. Successful
 	///     routes are memoized in <c>__varianceRoutes</c>; failures are not (they throw anyway, and junk types must
-	///     not grow the cache). A type with withheld guidance keeps its targeted error instead of being routed.
+	///     not grow the cache). A type with withheld guidance keeps its targeted error instead of being routed. The
+	///     matching itself lives in the static <c>__FindVariantMatch</c>, shared with the resolvability probe and
+	///     with <c>Resolve</c>'s withheld guidance so all three pick the same candidate.
 	/// </summary>
 	private static void EmitVarianceFallback(StringBuilder fields, StringBuilder helpers, int depth, List<string> candidates, bool hasWithheld)
 	{
@@ -531,12 +512,25 @@ internal static partial class Sources
 		Indent(builder, depth + 1).AppendLine("}");
 		builder.AppendLine();
 		Indent(builder, depth + 1).AppendLine("instance = null;");
+		Indent(builder, depth + 1).AppendLine("global::System.Type? __match = __FindVariantMatch(serviceType);");
+		Indent(builder, depth + 1).AppendLine("if (__match is null || !TryResolve(__match, out instance))");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).AppendLine("return false;");
+		Indent(builder, depth + 1).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("__varianceRoutes.TryAdd(serviceType, __match);");
+		Indent(builder, depth + 1).AppendLine("return true;");
+		Indent(builder, depth).AppendLine("}");
+		builder.AppendLine();
+
+		Indent(builder, depth).AppendLine("private static global::System.Type? __FindVariantMatch(global::System.Type serviceType)");
+		Indent(builder, depth).AppendLine("{");
 		// Only a constructed generic interface can be variance-satisfied. A type with withheld guidance (a
 		// root-withheld disposable on the Root, an async-only service) keeps its targeted error from Resolve.
 		Indent(builder, depth + 1).Append("if (!serviceType.IsConstructedGenericType || !serviceType.IsInterface")
 			.AppendLine(hasWithheld ? " || __withheld.ContainsKey(serviceType))" : ")");
 		Indent(builder, depth + 1).AppendLine("{");
-		Indent(builder, depth + 2).AppendLine("return false;");
+		Indent(builder, depth + 2).AppendLine("return null;");
 		Indent(builder, depth + 1).AppendLine("}");
 		builder.AppendLine();
 		Indent(builder, depth + 1).AppendLine("global::System.Type __definition = serviceType.GetGenericTypeDefinition();");
@@ -561,13 +555,7 @@ internal static partial class Sources
 		Indent(builder, depth + 2).AppendLine("}");
 		Indent(builder, depth + 1).AppendLine("}");
 		builder.AppendLine();
-		Indent(builder, depth + 1).AppendLine("if (__match is null || !TryResolve(__match, out instance))");
-		Indent(builder, depth + 1).AppendLine("{");
-		Indent(builder, depth + 2).AppendLine("return false;");
-		Indent(builder, depth + 1).AppendLine("}");
-		builder.AppendLine();
-		Indent(builder, depth + 1).AppendLine("__varianceRoutes.TryAdd(serviceType, __match);");
-		Indent(builder, depth + 1).AppendLine("return true;");
+		Indent(builder, depth + 1).AppendLine("return __match;");
 		Indent(builder, depth).AppendLine("}");
 	}
 

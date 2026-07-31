@@ -583,6 +583,10 @@ public sealed partial class FeatureDetectionTests
 		[Transient<DisposableTransient>]
 		public static partial class WithheldContainer;
 
+		[Container]
+		[Transient<DisposableTransient>(Key = "x")]
+		public static partial class KeyedWithheldContainer;
+
 		[Fact]
 		public async Task AreReportedAndNamedOnTheRoot()
 		{
@@ -596,6 +600,26 @@ public sealed partial class FeatureDetectionTests
 
 			await That(Act).Throws<InvalidOperationException>()
 				.Because("resolution surfaces the container's guidance naming the fix, which is what MS.DI does for a scoping violation; a null would have let a host bind the parameter from somewhere else and fail far from the cause");
+		}
+
+		[Fact]
+		public async Task AreReportedAndNamedOnTheRootUnderAKeyToo()
+		{
+			using KeyedWithheldContainer.Root container = new();
+			using AwaitenServiceProvider provider = new(container, ownsContainer: false);
+
+			await That(provider.IsKeyedService(typeof(DisposableTransient), "x")).IsTrue()
+				.Because("the keyed probe answers existence exactly like the unkeyed one, ignoring the root withholding");
+
+			void Act() => provider.GetKeyedService(typeof(DisposableTransient), "x");
+
+			await That(Act).Throws<InvalidOperationException>().WithMessage("*withheld*").AsWildcard()
+				.Because("the keyed resolution surfaces the container's guidance like the unkeyed one; a silent null would contradict the probe");
+
+			using IServiceScope scope = provider.CreateScope();
+			IKeyedServiceProvider keyed = (IKeyedServiceProvider)scope.ServiceProvider;
+			await That(keyed.GetKeyedService(typeof(DisposableTransient), "x")).IsNotNull()
+				.Because("inside a scope such a transient is bounded, so it is built as asked");
 		}
 
 		[Fact]
@@ -648,6 +672,17 @@ public sealed partial class FeatureDetectionTests
 		[Singleton<DerivedHandler, IHandler<DerivedEvent>>]
 		public static partial class VarianceContainer;
 
+		public sealed class DisposableHandler : IHandler<DerivedEvent>, IDisposable
+		{
+			public void Dispose()
+			{
+			}
+		}
+
+		[Container]
+		[Transient<DisposableHandler, IHandler<DerivedEvent>>]
+		public static partial class WithheldVarianceContainer;
+
 		[Fact]
 		public async Task ACompatibleClosingIsReported()
 		{
@@ -661,6 +696,25 @@ public sealed partial class FeatureDetectionTests
 				.Because("the container's variance fallback satisfies a differently-closed variant interface, and the probe runs the same matching rather than looking for a registration that does not exist");
 			await That(provider.IsService(typeof(IHandler<DerivedEvent>))).IsTrue()
 				.Because("the declared closure resolves directly");
+		}
+
+		[Fact]
+		public async Task AWithheldCandidateKeepsItsGuidanceThroughAVariantClosing()
+		{
+			using WithheldVarianceContainer.Root container = new();
+			using AwaitenServiceProvider provider = new(container, ownsContainer: false);
+
+			await That(provider.IsService(typeof(IHandler<IEvent>))).IsTrue()
+				.Because("the closing exists; only the root declines to build its disposable transient candidate");
+
+			void Act() => provider.GetService(typeof(IHandler<IEvent>));
+
+			await That(Act).Throws<InvalidOperationException>().WithMessage("*withheld*").AsWildcard()
+				.Because("the miss names the withheld candidate's guidance instead of claiming no registration exists for a closing the container serves");
+
+			using IServiceScope scope = provider.CreateScope();
+			await That(scope.ServiceProvider.GetService(typeof(IHandler<IEvent>))).IsNotNull()
+				.Because("a child scope bounds the disposable, so the variance fallback serves the closing there");
 		}
 	}
 
