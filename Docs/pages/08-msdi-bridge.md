@@ -54,6 +54,24 @@ using IServiceScope scope = provider.CreateScope();
 
 Pass `ownsContainer: false` if you want to keep ownership of the container yourself.
 
+### Feature detection
+
+The provider also answers `IServiceProviderIsService` and `IServiceProviderIsKeyedService`, from the container's registration metadata and without constructing anything. ASP.NET Core depends on this: minimal APIs ask it whether a handler parameter comes from dependency injection or from the request, and MVC's controller activation asks the same.
+
+```csharp
+var probe = provider.GetRequiredService<IServiceProviderIsService>();
+probe.IsService(typeof(IBrewer));                 // true
+probe.IsService(typeof(EspressoMachine));         // false: async-only, ask for Task<EspressoMachine>
+```
+
+It reports the provider's own services, a synchronously resolvable registration, the `Task<T>` projection of an async-only one, the collection shapes over a registered element type, and an `IReadOnlyDictionary<TKey, T>` over registrations keyed by a `string` or an enum. A relationship shape (`Func<T>`, `Lazy<T>`, `Owned<T>`) reports `false` even though the container resolves it, matching what MS.DI answers for shapes it does not have.
+
+Wrapping a bare scope rather than a `Root` leaves the provider without metadata, and it then does not offer the probe at all, so the framework keeps its own fallback.
+
+Two answers over-report. A collection whose members are not *all* synchronously initializable is not synthesized, and the registration metadata cannot show that; and a disposable transient, along with the collection views over it, is withheld on the root under the strict lifetime default. In both cases the probe reports a service and `GetRequiredService` then throws at request time. That is deliberate — answering `false` instead would misbind every ordinary collection silently.
+
+One answer under-reports: a [variance](./advanced/generic-variance)-compatible closing of a generic interface resolves but is not advertised, so `IsService(typeof(IHandler<IEvent>))` is `false` for a container registering `IHandler<DerivedEvent>`. Annotate such a parameter with `[FromServices]`. Each of the three is pinned by a test in `FeatureDetectionTests`, which records the reasoning and what would close it.
+
 ## Warm async services on startup
 
 `AddAwaitenInitialization<TContainer>` registers an `IHostedService` that calls `InitializeAsync` on startup. It wires the external resolver first, so `[ImportService<T>]` dependencies resolve during warm-up. It is idempotent.
