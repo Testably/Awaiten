@@ -114,6 +114,24 @@ jobs:
             -   name: Publish and run the native-AOT sample
                 run: ./build.ps1 AotSample
 
+    web-sample:
+        name: "Web sample"
+        runs-on: ubuntu-latest
+        env:
+            DOTNET_NOLOGO: true
+        steps:
+            -   uses: actions/checkout@v5
+                with:
+                    fetch-depth: 0
+            -   name: Setup .NET SDKs
+                uses: actions/setup-dotnet@v6
+                with:
+                    dotnet-version: |
+                        8.0.x
+                        10.0.x
+            -   name: Run the web sample's smoke test
+                run: ./build.sh WebSample
+
     static-code-analysis:
         name: "Static code analysis"
         if: ${{ github.actor != 'dependabot[bot]'&& github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name }}

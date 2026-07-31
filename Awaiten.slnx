@@ -9,6 +9,7 @@
 	</Folder>
 	<Folder Name="/Samples/">
 		<Project Path="Samples/Awaiten.AotSample/Awaiten.AotSample.csproj" />
+		<Project Path="Samples/Awaiten.WebSample/Awaiten.WebSample.csproj" />
 	</Folder>
 	<Folder Name="/Tests/">
 		<File Path="Tests/Directory.Build.props" />
