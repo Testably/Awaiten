@@ -47,6 +47,8 @@ public sealed class AwaitenServiceCollectionExtensionsTests
 
 		public IExternalResolver? ExternalResolver { get; set; }
 
+		public bool IsResolvable(Type serviceType, object? key) => false;
+
 		public object Resolve(Type serviceType) => throw new NotSupportedException();
 
 		public object Resolve(Type serviceType, object? key) => throw new NotSupportedException();

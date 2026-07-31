@@ -428,29 +428,34 @@ public sealed partial class FeatureDetectionTests
 		}
 
 		[Fact]
-		public async Task AMixedContainerAgreesOnEverythingButTheSynchronousShapes()
+		public async Task AMemberThatNeedsAsyncInitialization()
 		{
-			Type[] shapes =
-			[
-				typeof(IThing),
-				typeof(Task<IEnumerable<IThing>>),
-				typeof(Task<IReadOnlyList<IThing>>),
-				typeof(Task<IThing[]>),
-				typeof(IReadOnlyDictionary<string, IThing>),
-				typeof(Task<IReadOnlyDictionary<string, IThing>>),
-				typeof(IReadOnlyDictionary<object, IThing>),
-				typeof(Task<IReadOnlyDictionary<object, IThing>>),
-				typeof(IReadOnlyDictionary<Speed, IThing>),
-				typeof(Task<IAsyncEnumerable<IThing>>),
-				typeof(IEnumerable<Unregistered>),
-				typeof(Unregistered),
-			];
-
 			using MixedCollectionContainer.Root container = new();
 			using AwaitenServiceProvider provider = new(container, ownsContainer: false);
 
-			await That(ProbeAgreement.Disagreements(provider, shapes)).IsEqualTo(string.Empty)
-				.Because("only the synchronous collection shapes are affected by an async member; the awaited views over them still resolve");
+			await That(ProbeAgreement.Disagreements(provider, ThingShapes)).IsEqualTo(string.Empty);
+			await That(provider.IsService(typeof(IEnumerable<IThing>))).IsFalse()
+				.Because("one member that needs async initialization means no synchronous collection shape is synthesized at all, which the container knows and the registration metadata could never have shown");
+			await That(provider.IsService(typeof(Task<IEnumerable<IThing>>))).IsTrue()
+				.Because("the awaited view over it does still resolve");
+		}
+
+		[Fact]
+		public async Task RelationshipShapesOverARegisteredService()
+		{
+			Type[] shapes =
+			[
+				typeof(Func<IThing>),
+				typeof(Lazy<IThing>),
+				typeof(Owned<IThing>),
+			];
+
+			using SyncCollectionContainer.Root container = new();
+			using AwaitenServiceProvider provider = new(container, ownsContainer: false);
+
+			await That(ProbeAgreement.Disagreements(provider, shapes)).IsEqualTo(string.Empty);
+			await That(provider.IsService(typeof(Func<IThing>))).IsTrue()
+				.Because("the container dispatches the relationship shapes, so reporting them is what lets a host take one from the provider instead of binding it from somewhere else");
 		}
 	}
 
@@ -561,26 +566,117 @@ public sealed partial class FeatureDetectionTests
 	}
 
 	/// <summary>
-	///     Divergences from the invariant that the bridge cannot avoid, each pinned so a change of behaviour fails
-	///     here rather than passing unnoticed.
+	///     A service the container withholds from the root, where it exists but will not be built. The probe reports
+	///     it, as MS.DI's does for a scoped service asked on the root, and resolution names the reason instead of
+	///     answering with <see langword="null" />.
+	/// </summary>
+	public sealed partial class WithheldServices
+	{
+		public sealed class DisposableTransient : IDisposable
+		{
+			public void Dispose()
+			{
+			}
+		}
+
+		[Container]
+		[Transient<DisposableTransient>]
+		public static partial class WithheldContainer;
+
+		[Fact]
+		public async Task AreReportedAndNamedOnTheRoot()
+		{
+			using WithheldContainer.Root container = new();
+			using AwaitenServiceProvider provider = new(container, ownsContainer: false);
+
+			await That(provider.IsService(typeof(DisposableTransient))).IsTrue()
+				.Because("under the strict lifetime default the container withholds a disposable transient on the root, where each resolution would accumulate for the container's lifetime, but the service exists");
+
+			void Act() => provider.GetService(typeof(DisposableTransient));
+
+			await That(Act).Throws<InvalidOperationException>()
+				.Because("resolution surfaces the container's guidance naming the fix, which is what MS.DI does for a scoping violation; a null would have let a host bind the parameter from somewhere else and fail far from the cause");
+		}
+
+		[Fact]
+		public async Task AreResolvableInsideAScope()
+		{
+			using WithheldContainer.Root container = new();
+			using AwaitenServiceProvider provider = new(container, ownsContainer: false);
+			using IServiceScope scope = provider.CreateScope();
+
+			await That(((IServiceProviderIsService)scope.ServiceProvider).IsService(typeof(DisposableTransient)))
+				.IsTrue();
+			await That(scope.ServiceProvider.GetService(typeof(DisposableTransient))).IsNotNull()
+				.Because("inside a scope such a transient is bounded, so it is built as asked");
+		}
+
+		[Fact]
+		public async Task AgreeAcrossTheirShapes()
+		{
+			Type[] shapes =
+			[
+				typeof(DisposableTransient),
+				typeof(IEnumerable<DisposableTransient>),
+				typeof(DisposableTransient[]),
+				typeof(Func<DisposableTransient>),
+				typeof(Task<IEnumerable<DisposableTransient>>),
+			];
+
+			using WithheldContainer.Root container = new();
+			using AwaitenServiceProvider provider = new(container, ownsContainer: false);
+
+			await That(ProbeAgreement.Disagreements(provider, shapes)).IsEqualTo(string.Empty);
+		}
+	}
+
+	/// <summary>
+	///     A variance-compatible closing of a registered variant generic interface, which the container satisfies
+	///     through its runtime variance fallback rather than through a registration of its own.
+	/// </summary>
+	public sealed partial class GenericVariance
+	{
+		public interface IEvent;
+
+		public sealed class DerivedEvent : IEvent;
+
+		public interface IHandler<out TEvent>;
+
+		public sealed class DerivedHandler : IHandler<DerivedEvent>;
+
+		[Container]
+		[Singleton<DerivedHandler, IHandler<DerivedEvent>>]
+		public static partial class VarianceContainer;
+
+		[Fact]
+		public async Task ACompatibleClosingIsReported()
+		{
+			using VarianceContainer.Root container = new();
+			using AwaitenServiceProvider provider = new(container, ownsContainer: false);
+
+			await That(ProbeAgreement.Disagreements(provider,
+					[typeof(IHandler<IEvent>), typeof(IHandler<DerivedEvent>), typeof(IHandler<DerivedHandler>),]))
+				.IsEqualTo(string.Empty);
+			await That(provider.IsService(typeof(IHandler<IEvent>))).IsTrue()
+				.Because("the container's variance fallback satisfies a differently-closed variant interface, and the probe runs the same matching rather than looking for a registration that does not exist");
+			await That(provider.IsService(typeof(IHandler<DerivedEvent>))).IsTrue()
+				.Because("the declared closure resolves directly");
+		}
+	}
+
+	/// <summary>
+	///     What remains divergent from MS.DI, pinned so a change of behaviour fails here rather than passing
+	///     unnoticed. Both are cases where the probe faithfully reports this container and it is MS.DI that would
+	///     answer differently, so neither is a disagreement between the probe and resolution.
 	/// </summary>
 	/// <remarks>
-	///     Two over-report and two under-report, and the direction is deliberate. A false positive has the
-	///     framework bind from dependency injection and <c>GetRequiredService</c> throw at request time, which is
-	///     loud; a false negative has it bind the parameter from the request body, which is silent. The
-	///     mixed-member collection and the variance closing are both cases of the metadata not being able to show
-	///     what the container dispatches, and closing them needs the container to advertise that set — it builds it
-	///     at compile time already — instead of the bridge inferring it from registrations. The open-generic closing
-	///     is not: it is genuinely not dispatchable until something in the graph asks for it, so advertising the
-	///     dispatched shapes would still leave it reported <see langword="false" />.
+	///     Both under-report, which is the silent direction: a minimal API told <see langword="false" /> binds the
+	///     parameter from the request body rather than failing to resolve it, so annotate such a parameter with
+	///     <c>[FromServices]</c>. Neither is reachable by advertising what the container dispatches, because in both
+	///     cases the container genuinely has no resolution to advertise.
 	/// </remarks>
 	public sealed partial class AcceptedDivergences
 	{
-		public sealed class Consumer
-		{
-			public Consumer(Alpha alpha) => _ = alpha;
-		}
-
 		public interface IRepo<T>;
 
 		public sealed class Repo<T> : IRepo<T>;
@@ -595,108 +691,25 @@ public sealed partial class FeatureDetectionTests
 			public LedgerReader(IRepo<Ledger> repo) => _ = repo;
 		}
 
-		public sealed class DisposableTransient : IDisposable
-		{
-			public void Dispose()
-			{
-			}
-		}
-
-		public interface IEvent;
-
-		public sealed class DerivedEvent : IEvent;
-
-		public interface IHandler<out TEvent>;
-
-		public sealed class DerivedHandler : IHandler<DerivedEvent>;
-
-		[Container]
-		[Singleton<Alpha>]
-		[Transient<Consumer>]
-		public static partial class RelationshipContainer;
-
-		[Container]
-		[Transient<DisposableTransient>]
-		public static partial class WithheldContainer;
-
-		[Container]
-		[Singleton<DerivedHandler, IHandler<DerivedEvent>>]
-		public static partial class VarianceContainer;
-
 		[Container]
 		[Singleton(typeof(Repo<>), typeof(IRepo<>))]
 		[Transient<LedgerReader>]
 		public static partial class OpenGenericContainer;
 
-		[Fact]
-		public async Task ACollectionWithANonSynchronousMemberIsOverReported()
-		{
-			using MixedCollectionContainer.Root container = new();
-			using AwaitenServiceProvider provider = new(container, ownsContainer: false);
-
-			await That(provider.IsService(typeof(IEnumerable<IThing>))).IsTrue();
-			await That(provider.GetService(typeof(IEnumerable<IThing>))).IsNull()
-				.Because("an async-initialized member stops the synchronous collection being synthesized, and no rule over the metadata can see that: the implementations of one service type coalesce into a single advertised entry, so this container and one with only the synchronous member advertise byte-identical metadata and resolve differently");
-
-			await That(provider.IsService(typeof(IThing))).IsTrue();
-			await That(provider.GetService(typeof(IThing))).IsNotNull()
-				.Because("the element type itself is reported correctly");
-		}
+		[Container]
+		[Singleton<Alpha, IThing>]
+		public static partial class SingleRegistrationContainer;
 
 		[Fact]
-		public async Task ADisposableTransientIsOverReportedOnTheRoot()
+		public async Task AnEnumerableOfAnUnmentionedElementTypeIsUnderReported()
 		{
-			using WithheldContainer.Root container = new();
+			using SingleRegistrationContainer.Root container = new();
 			using AwaitenServiceProvider provider = new(container, ownsContainer: false);
 
-			await That(provider.IsService(typeof(DisposableTransient))).IsTrue();
-			await That(provider.GetService(typeof(DisposableTransient))).IsNull()
-				.Because("under the strict lifetime default the container withholds a disposable transient on the root, where each resolution would accumulate for the container's lifetime; IsService answers whether the service exists, as MS.DI's does, not whether this scope will serve it");
-
-			await That(provider.IsService(typeof(IEnumerable<DisposableTransient>))).IsTrue();
-			await That(provider.GetService(typeof(IEnumerable<DisposableTransient>))).IsNull()
-				.Because("the collection views over it are withheld on the root too, not just the bare type");
-		}
-
-		[Fact]
-		public async Task ADisposableTransientAgreesInsideAScope()
-		{
-			using WithheldContainer.Root container = new();
-			using AwaitenServiceProvider provider = new(container, ownsContainer: false);
-			using IServiceScope scope = provider.CreateScope();
-
-			await That(((IServiceProviderIsService)scope.ServiceProvider).IsService(typeof(DisposableTransient)))
-				.IsTrue();
-			await That(scope.ServiceProvider.GetService(typeof(DisposableTransient))).IsNotNull()
-				.Because("inside a scope such a transient is bounded, so the two agree again");
-		}
-
-		[Fact]
-		public async Task RelationshipShapesAreUnderReported()
-		{
-			using RelationshipContainer.Root container = new();
-			using AwaitenServiceProvider provider = new(container, ownsContainer: false);
-
-			await That(provider.GetService(typeof(Func<Alpha>))).IsNotNull();
-			await That(provider.IsService(typeof(Func<Alpha>))).IsFalse()
-				.Because("a relationship shape is not an advertised registration, and MS.DI has no such shapes at all, so a framework calibrated against MS.DI is told what it expects");
-			await That(provider.GetService(typeof(Lazy<Alpha>))).IsNotNull();
-			await That(provider.IsService(typeof(Lazy<Alpha>))).IsFalse();
-			await That(provider.GetService(typeof(Owned<Alpha>))).IsNotNull();
-			await That(provider.IsService(typeof(Owned<Alpha>))).IsFalse();
-		}
-
-		[Fact]
-		public async Task AVarianceCompatibleClosingIsUnderReported()
-		{
-			using VarianceContainer.Root container = new();
-			using AwaitenServiceProvider provider = new(container, ownsContainer: false);
-
-			await That(provider.GetService(typeof(IHandler<IEvent>))).IsNotNull();
-			await That(provider.IsService(typeof(IHandler<IEvent>))).IsFalse()
-				.Because("the container's variance fallback satisfies a differently-closed variant interface at run time, but only the declared closure is advertised as a registration");
-			await That(provider.IsService(typeof(IHandler<DerivedEvent>))).IsTrue()
-				.Because("the declared closure is advertised and resolves");
+			await That(provider.IsService(typeof(IEnumerable<Unregistered>))).IsFalse()
+				.Because("MS.DI special-cases IEnumerable<T> and answers true for any T, registered or not, because it can always manifest an empty sequence; the generator emits collection cases only for element types the graph mentions, so this one has no resolution to report");
+			await That(provider.GetService(typeof(IEnumerable<Unregistered>))).IsNull()
+				.Because("the under-report is faithful to the container: MS.DI would hand back an empty sequence here, and matching that needs a collection built for a type unknown at compile time, which is the reflection this package does not do");
 		}
 
 		[Fact]

@@ -226,7 +226,12 @@ internal static partial class Sources
 		_ => "global::Awaiten.AwaitenLifetime.Scoped",
 	};
 
-	private static void EmitResolutionApi(ApiRegions regions, int depth, EmitContext context, bool strict, bool syncResolveAfterInit, string[] varianceCandidates)
+	/// <summary>
+	///     Emits the synchronous by-type resolution surface and reports which of its dispatch structures exist, so
+	///     <see cref="EmitResolvabilityApi" /> can probe the same tables without duplicating the decision of whether
+	///     they were emitted at all.
+	/// </summary>
+	private static DispatchShape EmitResolutionApi(ApiRegions regions, int depth, EmitContext context, bool strict, bool syncResolveAfterInit, string[] varianceCandidates)
 	{
 		(StringBuilder members, StringBuilder fields, StringBuilder helpers) = regions;
 		InstanceModel[] instances = context.Instances;
@@ -288,7 +293,7 @@ internal static partial class Sources
 			Indent(builder, depth + 1).AppendLine("instance = null;");
 			Indent(builder, depth + 1).AppendLine("return false;");
 			Indent(builder, depth).AppendLine("}");
-			return;
+			return default;
 		}
 
 		// Open-addressed probe: hash the requested type into its bucket window and scan the (small, fixed-width)
@@ -337,12 +342,142 @@ internal static partial class Sources
 			Indent(builder, depth + 1).AppendLine("return __TryResolveVariant(serviceType, out instance);");
 			Indent(builder, depth).AppendLine("}");
 			EmitVarianceFallback(fields, helpers, depth, varianceEntries, hasWithheld);
-			return;
+			return new DispatchShape(true, true, hasWithheld);
 		}
 
 		Indent(builder, depth + 1).AppendLine("instance = null;");
 		Indent(builder, depth + 1).AppendLine("return false;");
 		Indent(builder, depth).AppendLine("}");
+		return new DispatchShape(true, false, hasWithheld);
+	}
+
+	/// <summary>
+	///     Which dispatch structures the synchronous resolution surface emitted: the <c>__buckets</c> table, the
+	///     variance fallback's candidate list, and the <c>__withheld</c> guidance lookup. All false for a container
+	///     with nothing to dispatch.
+	/// </summary>
+	private readonly struct DispatchShape
+	{
+		public DispatchShape(bool hasBuckets, bool hasVariance, bool hasWithheld)
+		{
+			HasBuckets = hasBuckets;
+			HasVariance = hasVariance;
+			HasWithheld = hasWithheld;
+		}
+
+		public bool HasBuckets { get; }
+
+		public bool HasVariance { get; }
+
+		public bool HasWithheld { get; }
+	}
+
+	/// <summary>
+	///     Emits <c>IsResolvable(Type, object?)</c>, the <c>IAwaitenContainerMetadata</c> member a host uses to
+	///     decide whether a value comes from the container. It probes the very tables <c>TryResolve</c> dispatches
+	///     through, so it covers every shape the container serves: relationship shapes, synthesized collections and
+	///     dictionaries, awaited views, variance-compatible closings, with no separate rule set to drift out of step.
+	/// </summary>
+	/// <remarks>
+	///     Two deliberate differences from <c>TryResolve</c>: nothing is invoked, and the per-scope
+	///     <c>RootWithheld</c> flag is ignored. The latter is what makes this an existence question rather than a
+	///     "can this scope serve it" question, which is the semantics a host's feature-detection surface needs. A
+	///     root-withheld disposable exists, and <c>Resolve</c> names why the root will not build it.
+	/// </remarks>
+	private static void EmitResolvabilityApi(
+		ApiRegions regions, int depth, DispatchShape dispatch, bool hasKeyedEntries)
+	{
+		(StringBuilder members, _, StringBuilder helpers) = regions;
+		StringBuilder builder = members;
+		Separate(builder);
+		AppendXmlSummary(builder, depth,
+			"Whether this container can resolve <paramref name=\"serviceType\" /> under <paramref name=\"key\" />, without constructing anything.");
+		Indent(builder, depth).AppendLine("public bool IsResolvable(global::System.Type serviceType, object? key)");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).AppendLine("if (serviceType is null)");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).AppendLine("return false;");
+		Indent(builder, depth + 1).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("if (key is not null)");
+		Indent(builder, depth + 1).AppendLine("{");
+		if (hasKeyedEntries)
+		{
+			// A keyed slot exists for the host's purposes when it has a synchronous arm; the RootWithheld flag is
+			// deliberately not consulted, mirroring the unkeyed probe below.
+			Indent(builder, depth + 2).AppendLine(
+				"return __keyed.TryGetValue(new __KeyedKey(serviceType, key), out __KeyedEntry __entry) && __entry.Sync is not null;");
+		}
+		else
+		{
+			Indent(builder, depth + 2).AppendLine("return false;");
+		}
+
+		Indent(builder, depth + 1).AppendLine("}");
+		builder.AppendLine();
+		if (!dispatch.HasBuckets)
+		{
+			Indent(builder, depth + 1).AppendLine("return false;");
+			Indent(builder, depth).AppendLine("}");
+			return;
+		}
+
+		// The same open-addressed probe TryResolve uses, stopping at the identity match instead of invoking it.
+		Indent(builder, depth + 1).AppendLine("int __i = (int)((uint)serviceType.TypeHandle.GetHashCode() % (uint)__bucketCount) * __bucketSize;");
+		Indent(builder, depth + 1).AppendLine("int __end = __i + __bucketSize;");
+		Indent(builder, depth + 1).AppendLine("for (; __i < __end; __i++)");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).AppendLine("ref readonly __Bucket __b = ref __buckets[__i];");
+		Indent(builder, depth + 2).AppendLine("if ((object?)__b.Key == (object?)serviceType)");
+		Indent(builder, depth + 2).AppendLine("{");
+		Indent(builder, depth + 3).AppendLine("return true;");
+		Indent(builder, depth + 2).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, depth + 2).AppendLine("if (__b.Key is null)");
+		Indent(builder, depth + 2).AppendLine("{");
+		Indent(builder, depth + 3).AppendLine("break;");
+		Indent(builder, depth + 2).AppendLine("}");
+		Indent(builder, depth + 1).AppendLine("}");
+		builder.AppendLine();
+		if (!dispatch.HasVariance)
+		{
+			Indent(builder, depth + 1).AppendLine("return false;");
+			Indent(builder, depth).AppendLine("}");
+			return;
+		}
+
+		Indent(builder, depth + 1).AppendLine("return __IsVariantResolvable(serviceType);");
+		Indent(builder, depth).AppendLine("}");
+
+		Separate(helpers);
+		Indent(helpers, depth).AppendLine("private static bool __IsVariantResolvable(global::System.Type serviceType)");
+		Indent(helpers, depth).AppendLine("{");
+		Indent(helpers, depth + 1).AppendLine("if (__varianceRoutes.ContainsKey(serviceType))");
+		Indent(helpers, depth + 1).AppendLine("{");
+		Indent(helpers, depth + 2).AppendLine("return true;");
+		Indent(helpers, depth + 1).AppendLine("}");
+		helpers.AppendLine();
+		Indent(helpers, depth + 1).Append("if (!serviceType.IsConstructedGenericType || !serviceType.IsInterface")
+			.AppendLine(dispatch.HasWithheld ? " || __withheld.ContainsKey(serviceType))" : ")");
+		Indent(helpers, depth + 1).AppendLine("{");
+		Indent(helpers, depth + 2).AppendLine("return false;");
+		Indent(helpers, depth + 1).AppendLine("}");
+		helpers.AppendLine();
+		Indent(helpers, depth + 1).AppendLine("global::System.Type __definition = serviceType.GetGenericTypeDefinition();");
+		Indent(helpers, depth + 1).AppendLine("foreach (global::System.Type __candidate in __varianceCandidates)");
+		Indent(helpers, depth + 1).AppendLine("{");
+		// Any variance-compatible candidate answers the question; the fallback's nearest-match tie-break only
+		// matters when picking which one to resolve through.
+		Indent(helpers, depth + 2).AppendLine("if ((object)__candidate != (object)serviceType");
+		Indent(helpers, depth + 2).AppendLine("    && __candidate.GetGenericTypeDefinition() == __definition");
+		Indent(helpers, depth + 2).AppendLine("    && serviceType.IsAssignableFrom(__candidate))");
+		Indent(helpers, depth + 2).AppendLine("{");
+		Indent(helpers, depth + 3).AppendLine("return true;");
+		Indent(helpers, depth + 2).AppendLine("}");
+		Indent(helpers, depth + 1).AppendLine("}");
+		helpers.AppendLine();
+		Indent(helpers, depth + 1).AppendLine("return false;");
+		Indent(helpers, depth).AppendLine("}");
 	}
 
 	/// <summary>

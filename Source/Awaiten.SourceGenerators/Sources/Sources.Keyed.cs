@@ -15,7 +15,11 @@ internal static partial class Sources
 	///     unreachable. Async-taint and strict lifetime-safety withholding follow the same rules as the unkeyed
 	///     dispatch, with the same guidance messages.
 	/// </summary>
-	private static void EmitKeyedResolutionApi(ApiRegions regions, int depth, EmitContext context, bool strict, bool syncResolveAfterInit, bool asObjectEmitted)
+	/// <summary>
+	///     Emits the keyed resolution surface and reports whether the <c>__keyed</c> table was emitted, so the
+	///     resolvability probe knows whether it may look there.
+	/// </summary>
+	private static bool EmitKeyedResolutionApi(ApiRegions regions, int depth, EmitContext context, bool strict, bool syncResolveAfterInit, bool asObjectEmitted)
 	{
 		(StringBuilder members, StringBuilder fields, StringBuilder helpers) = regions;
 		List<KeyedDispatchEntry> entries = BuildKeyedEntries(context, strict, syncResolveAfterInit);
@@ -120,7 +124,7 @@ internal static partial class Sources
 
 		if (!hasEntries)
 		{
-			return;
+			return false;
 		}
 
 		EmitKeyedTable(fields, helpers, depth, entries);
@@ -130,6 +134,8 @@ internal static partial class Sources
 		{
 			EmitAsObjectHelper(helpers, depth);
 		}
+
+		return true;
 	}
 
 	/// <summary>

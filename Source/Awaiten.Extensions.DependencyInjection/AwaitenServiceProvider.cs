@@ -97,6 +97,16 @@ public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScop
 			}
 		}
 
+		// The container has this service but declined to build it here: a disposable transient asked on the root
+		// under the strict lifetime default, whose every resolution would accumulate there for the container's
+		// lifetime. Resolve turns that into the guidance naming the fix, without constructing anything, which is
+		// what MS.DI does for a scoping violation too. Returning null would instead let a host bind the parameter
+		// from somewhere else and fail far from the cause.
+		if (_metadata is not null && _metadata.IsResolvable(serviceType, null))
+		{
+			return _container.Resolve(serviceType);
+		}
+
 		return null;
 	}
 
@@ -164,11 +174,13 @@ public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScop
 
 	/// <inheritdoc />
 	/// <remarks>
-	///     Answered from the container's registration metadata, without constructing anything. Reports the
-	///     shapes <see cref="GetService" /> serves: the provider's own services, an advertised registration,
-	///     the <c>Task&lt;T&gt;</c> projection of an async-only registration, and a collection over an
-	///     advertised element type. A keyed registration is not reported here — ask
-	///     <see cref="IsKeyedService" /> — mirroring how <see cref="GetService" /> resolves only the unkeyed one.
+	///     Delegated to <see cref="IAwaitenContainerMetadata.IsResolvable" />, so it covers every shape the
+	///     container dispatches rather than a re-derivation of the generator's synthesis rules: a registration, the
+	///     relationship shapes over it, the synthesized collections and keyed dictionaries, the awaited views over
+	///     those, and a variance-compatible closing. The container's own answer cannot drift from what
+	///     <see cref="GetService" /> does, because both read the same tables. A keyed registration is not reported
+	///     here, mirroring how <see cref="GetService" /> resolves only the unkeyed one; ask
+	///     <see cref="IsKeyedService" /> for those.
 	/// </remarks>
 	/// <exception cref="ArgumentNullException"><paramref name="serviceType" /> is <see langword="null" />.</exception>
 	public bool IsService(Type serviceType)
@@ -178,7 +190,7 @@ public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScop
 			throw new ArgumentNullException(nameof(serviceType));
 		}
 
-		return IsProviderService(serviceType) || IsAdvertisedShape(serviceType, null);
+		return IsProviderService(serviceType) || IsResolvableShape(serviceType, null);
 	}
 
 	/// <inheritdoc />
@@ -200,7 +212,7 @@ public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScop
 			return IsService(serviceType);
 		}
 
-		return !ReferenceEquals(serviceKey, KeyedService.AnyKey) && IsAdvertisedShape(serviceType, serviceKey);
+		return !ReferenceEquals(serviceKey, KeyedService.AnyKey) && IsResolvableShape(serviceType, serviceKey);
 	}
 
 	/// <inheritdoc />
@@ -254,252 +266,28 @@ public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScop
 		           || serviceType == typeof(IServiceProviderIsKeyedService)));
 
 	/// <summary>
-	///     Whether the container advertises a resolution for <paramref name="serviceType" /> under
-	///     <paramref name="key" />, in any of the shapes the resolution methods above serve.
+	///     Whether the container can resolve <paramref name="serviceType" /> under <paramref name="key" />, or the
+	///     bridge can serve it as the <c>Task&lt;T&gt;</c> projection of an async-only registration. Those are the
+	///     two paths <see cref="GetService" /> and <see cref="GetKeyedService" /> take, in the same order.
 	/// </summary>
-	/// <remarks>
-	///     <para>
-	///         A relationship shape (<c>Func&lt;T&gt;</c>, <c>Lazy&lt;T&gt;</c>, <c>Owned&lt;T&gt;</c>) reports
-	///         <see langword="false" /> even though the container resolves it, because it is not advertised as a
-	///         registration. That matches what MS.DI answers — it has no such shapes — so a framework calibrated
-	///         against MS.DI is told what it expects.
-	///     </para>
-	///     <para>
-	///         This reports whether the service exists, not whether resolving it from <em>this</em> scope will
-	///         succeed: a scoped service reports <see langword="true" /> on the root, as does a disposable
-	///         transient whose bare type the container withholds there under the strict lifetime default.
-	///     </para>
-	/// </remarks>
-	private bool IsAdvertisedShape(Type serviceType, object? key)
+	private bool IsResolvableShape(Type serviceType, object? key)
 	{
 		if (_metadata is null)
 		{
 			return false;
 		}
 
-		if (HasSyncRegistration(serviceType, key))
+		if (_metadata.IsResolvable(serviceType, key))
 		{
 			return true;
 		}
 
-		// A single-rank array is a collection shape; the container synthesizes it alongside the interfaces.
-		if (serviceType.IsArray)
-		{
-			return key is null && serviceType.GetArrayRank() == 1
-			                   && SynthesizesCollection(serviceType.GetElementType()!, requireSyncMember: true);
-		}
-
-		if (!serviceType.IsConstructedGenericType)
-		{
-			return false;
-		}
-
-		Type definition = serviceType.GetGenericTypeDefinition();
-		Type[] arguments = serviceType.GenericTypeArguments;
-
-		if (definition == typeof(Task<>))
-		{
-			// Either an async-only registration served through ResolveAsync, or an awaited view over a
-			// collection or keyed dictionary.
-			return AsyncConverterFor(arguments[0], key) is not null
-			       || (key is null && SynthesizesAwaitedShape(arguments[0]));
-		}
-
-		if (key is not null)
-		{
-			return false;
-		}
-
-		if (IsCollectionDefinition(definition))
-		{
-			return SynthesizesCollection(arguments[0], requireSyncMember: true);
-		}
-
-		// Synthesized under the same conditions as the synchronous shapes, and kept out of
-		// IsCollectionDefinition because it is neither an awaited shape nor one that suppresses the others.
-		// It does claim its own slot though: an explicitly registered one steps the synthesized view aside, and
-		// when that registration is async-only it has no synchronous path either.
-		if (definition == typeof(IAsyncEnumerable<>))
-		{
-			return AsyncConverterFor(serviceType, null) is null
-			       && SynthesizesCollection(arguments[0], requireSyncMember: true);
-		}
-
-		// A keyed-dictionary view over the registrations of the element type that carry a key of this type.
-		return definition == typeof(IReadOnlyDictionary<,>)
-		       && SynthesizesKeyedDictionary(arguments[0], arguments[1], requireSyncMembers: true);
-	}
-
-	/// <summary>
-	///     Whether the container serves <paramref name="awaited" /> as the payload of a <c>Task&lt;&gt;</c>: an
-	///     awaited collection or keyed-dictionary view.
-	/// </summary>
-	private bool SynthesizesAwaitedShape(Type awaited)
-	{
-		if (awaited.IsArray)
-		{
-			return awaited.GetArrayRank() == 1
-			       && SynthesizesCollection(awaited.GetElementType()!, requireSyncMember: false);
-		}
-
-		if (!awaited.IsConstructedGenericType)
-		{
-			return false;
-		}
-
-		Type definition = awaited.GetGenericTypeDefinition();
-		Type[] arguments = awaited.GenericTypeArguments;
-		if (IsCollectionDefinition(definition))
-		{
-			return SynthesizesCollection(arguments[0], requireSyncMember: false);
-		}
-
-		return definition == typeof(IReadOnlyDictionary<,>)
-		       && SynthesizesKeyedDictionary(arguments[0], arguments[1], requireSyncMembers: false);
-	}
-
-	/// <summary>
-	///     Whether the container synthesizes a collection over <paramref name="elementType" />: it needs an
-	///     unkeyed registration of that type — a synchronously resolvable one when
-	///     <paramref name="requireSyncMember" /> is set, as the synchronous collection shapes need — and no
-	///     explicitly registered collection shape of it, since such a registration replaces the synthesized
-	///     shapes entirely.
-	/// </summary>
-	/// <remarks>
-	///     One case here cannot be made exact, and the reason is worth recording. The container synthesizes the
-	///     synchronous shapes only when <em>every</em> member can be materialized synchronously, but
-	///     <c>Registrations</c> coalesces the implementations of one service type into a single advertised entry,
-	///     so the members cannot be counted. A container with one synchronous implementation and a container with
-	///     that same one plus an async-initialized sibling advertise identical metadata and resolve differently.
-	///     Both report <see langword="true" />, which is right for the common case and, for the other, surfaces as
-	///     a named <see cref="InvalidOperationException" /> on resolution rather than a silently misbound
-	///     parameter. Answering it exactly needs the container to advertise the shapes it dispatches — which it
-	///     knows at compile time — instead of the bridge inferring them from registrations.
-	/// </remarks>
-	private bool SynthesizesCollection(Type elementType, bool requireSyncMember)
-	{
-		bool anyMember = false;
-		IReadOnlyList<AwaitenRegistration> registrations = _metadata!.Registrations;
-		for (int index = 0; index < registrations.Count; index++)
-		{
-			AwaitenRegistration registration = registrations[index];
-			if (registration.Key is not null)
-			{
-				continue;
-			}
-
-			if (registration.ServiceType == elementType)
-			{
-				anyMember |= !requireSyncMember || !registration.RequiresAsync;
-			}
-			else if (IsCollectionOf(registration.ServiceType, elementType))
-			{
-				return false;
-			}
-		}
-
-		return anyMember;
-	}
-
-	/// <summary>
-	///     Whether the container synthesizes an <c>IReadOnlyDictionary&lt;TKey, TValue&gt;</c> over the keyed
-	///     registrations of <paramref name="valueType" />. It needs at least one of them, every one keyed by
-	///     exactly <paramref name="keyType" /> — which has to be a <see cref="string" /> or an enum, the only key
-	///     kinds a dictionary is emitted for — no explicitly registered dictionary of the same shape, and, for the
-	///     synchronous shape, every member synchronously resolvable.
-	/// </summary>
-	/// <remarks>
-	///     The key type must match exactly rather than merely be assignable: a dictionary is emitted per key kind,
-	///     so <c>IReadOnlyDictionary&lt;object, T&gt;</c> over string-keyed registrations is not a service even
-	///     though every key is an <see cref="object" />. Registrations keyed under more than one kind get no
-	///     dictionary at all. Unlike the collection members, keyed registrations are advertised one per key and
-	///     never coalesced, so all of this is exact.
-	/// </remarks>
-	private bool SynthesizesKeyedDictionary(Type keyType, Type valueType, bool requireSyncMembers)
-	{
-		if (keyType != typeof(string) && !keyType.IsEnum)
-		{
-			return false;
-		}
-
-		bool anyMember = false;
-		IReadOnlyList<AwaitenRegistration> registrations = _metadata!.Registrations;
-		for (int index = 0; index < registrations.Count; index++)
-		{
-			AwaitenRegistration registration = registrations[index];
-			if (registration.ServiceType == valueType && registration.Key is not null)
-			{
-				if (registration.Key.GetType() != keyType || (requireSyncMembers && registration.RequiresAsync))
-				{
-					return false;
-				}
-
-				anyMember = true;
-			}
-			else if (registration.Key is null
-			         && IsKeyedDictionaryOf(registration.ServiceType, keyType, valueType))
-			{
-				// Only an unkeyed registration of the dictionary shape replaces the synthesized one, exactly as
-				// for the collection shapes: a keyed one is reached under its key and suppresses nothing.
-				return false;
-			}
-		}
-
-		return anyMember;
-	}
-
-	/// <summary>Whether <paramref name="candidate" /> is the keyed-dictionary shape being asked about.</summary>
-	private static bool IsKeyedDictionaryOf(Type candidate, Type keyType, Type valueType)
-		=> candidate.IsConstructedGenericType
-		   && candidate.GetGenericTypeDefinition() == typeof(IReadOnlyDictionary<,>)
-		   && candidate.GenericTypeArguments[0] == keyType
-		   && candidate.GenericTypeArguments[1] == valueType;
-
-	/// <summary>Whether <paramref name="candidate" /> is one of the collection shapes over <paramref name="elementType" />.</summary>
-	private static bool IsCollectionOf(Type candidate, Type elementType)
-	{
-		if (candidate.IsArray)
-		{
-			return candidate.GetArrayRank() == 1 && candidate.GetElementType() == elementType;
-		}
-
-		return candidate.IsConstructedGenericType
-		       && IsCollectionDefinition(candidate.GetGenericTypeDefinition())
-		       && candidate.GenericTypeArguments[0] == elementType;
-	}
-
-	/// <summary>The collection interfaces the container synthesizes over a registered element type.</summary>
-	private static bool IsCollectionDefinition(Type definition)
-		=> definition == typeof(IEnumerable<>)
-		   || definition == typeof(IReadOnlyList<>)
-		   || definition == typeof(IReadOnlyCollection<>)
-		   || definition == typeof(IList<>)
-		   || definition == typeof(ICollection<>);
-
-	/// <summary>
-	///     Whether the metadata carries a <em>synchronously resolvable</em> registration of
-	///     <paramref name="serviceType" /> under <paramref name="key" />.
-	/// </summary>
-	/// <remarks>
-	///     An async-only registration is advertised too, but it has no synchronous path: the bare service type
-	///     is not resolvable, only its <c>Task&lt;T&gt;</c> projection. Counting it here would report a service
-	///     that <see cref="GetService" /> then answers with <see langword="null" />. (A container that opted into
-	///     <c>SyncResolveAfterInit</c> advertises such a registration as synchronous, and it is one.)
-	/// </remarks>
-	private bool HasSyncRegistration(Type serviceType, object? key)
-	{
-		IReadOnlyList<AwaitenRegistration> registrations = _metadata!.Registrations;
-		for (int index = 0; index < registrations.Count; index++)
-		{
-			AwaitenRegistration registration = registrations[index];
-			if (!registration.RequiresAsync && registration.ServiceType == serviceType
-			                                && Equals(registration.Key, key))
-			{
-				return true;
-			}
-		}
-
-		return false;
+		// The container withholds an async-only service from synchronous resolution, so the bridge serves it as a
+		// Task<T> built from the registration metadata. That projection is the bridge's own, so it is answered
+		// here rather than by the container.
+		return serviceType.IsConstructedGenericType
+		       && serviceType.GetGenericTypeDefinition() == typeof(Task<>)
+		       && AsyncConverterFor(serviceType.GenericTypeArguments[0], key) is not null;
 	}
 
 	/// <summary>

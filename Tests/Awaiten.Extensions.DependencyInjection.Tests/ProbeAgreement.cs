@@ -12,7 +12,7 @@ namespace Awaiten.Extensions.DependencyInjection.Tests;
 internal static class ProbeAgreement
 {
 	/// <summary>
-	///     Every shape where the probe and the resolution disagree, as one readable string — empty when they agree
+	///     Every shape where the probe and the resolution disagree, as one readable string, empty when they agree
 	///     everywhere. Both the root provider and a scope of it are asked, because some of the container's
 	///     resolution rules differ between the two, so checking only one would hide them.
 	/// </summary>
@@ -72,9 +72,10 @@ internal static class ProbeAgreement
 	}
 
 	/// <summary>
-	///     Appends a line when the claim and the resolution disagree. A shape may also be withheld by throwing; for
-	///     a framework's purposes that is still "no instance", but it is recorded distinctly so a failure says which
-	///     happened.
+	///     Appends a line when the claim and the resolution disagree. Both an instance and a throw count as the
+	///     container acknowledging the shape: resolution throws where the service exists but this scope will not
+	///     build it, naming the reason, which is what the claim promises. Only a silent <see langword="null" />
+	///     contradicts it. The outcome is recorded either way so a failure says which of the three happened.
 	/// </summary>
 	private static void Record(
 		string where, Type shape, bool claimed, Func<object?> resolve, List<string> disagreements)
@@ -89,7 +90,7 @@ internal static class ProbeAgreement
 			outcome = exception.GetType().Name;
 		}
 
-		if (claimed != (outcome == "instance"))
+		if (claimed == (outcome == "null"))
 		{
 			disagreements.Add($"{where} {shape}: claimed={claimed}, resolved={outcome}");
 		}

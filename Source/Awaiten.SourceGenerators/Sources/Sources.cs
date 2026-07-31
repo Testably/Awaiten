@@ -222,7 +222,7 @@ internal static partial class Sources
 		Indent(members, body).AppendLine("}");
 
 		ApiRegions regions = new(members, fields, helpers);
-		EmitResolutionApi(regions, body, context, strict, syncResolveAfterInit, varianceCandidates);
+		DispatchShape dispatch = EmitResolutionApi(regions, body, context, strict, syncResolveAfterInit, varianceCandidates);
 		Separate(members);
 		EmitGenericResolveMethod(members, body);
 		// The asynchronous surface: ResolveAsync(Type) on every owner, plus CreateScopeAsync. The Root's
@@ -230,7 +230,9 @@ internal static partial class Sources
 		bool asObjectEmitted = EmitAsyncResolutionApi(regions, body, instances, names, serviceToIndex, strict, syncResolveAfterInit);
 		// The keyed resolution surface (Resolve/TryResolve/ResolveAsync over object? key), sharing the __AsObject
 		// helper with the async dispatch above.
-		EmitKeyedResolutionApi(regions, body, context, strict, syncResolveAfterInit, asObjectEmitted);
+		bool hasKeyedEntries = EmitKeyedResolutionApi(regions, body, context, strict, syncResolveAfterInit, asObjectEmitted);
+		// The resolvability probe reads the dispatch tables both surfaces just emitted, so it comes after both.
+		EmitResolvabilityApi(regions, body, dispatch, hasKeyedEntries);
 		Separate(members);
 		EmitCreateScopeAsync(members, body);
 		// Nesting shares the same root (same singletons), so a child created from a child is no different from one
@@ -657,6 +659,8 @@ internal static partial class Sources
 		Indent(builder, depth + 1).AppendLine("global::System.Collections.Generic.IReadOnlyList<global::Awaiten.AwaitenRegistration> global::Awaiten.IAwaitenContainerMetadata.Registrations => global::System.Array.Empty<global::Awaiten.AwaitenRegistration>();");
 		builder.AppendLine();
 		Indent(builder, depth + 1).AppendLine("global::System.Collections.Generic.IReadOnlyList<global::Awaiten.AwaitenExternalDependency> global::Awaiten.IAwaitenContainerMetadata.ExternalDependencies => global::System.Array.Empty<global::Awaiten.AwaitenExternalDependency>();");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("public bool IsResolvable(global::System.Type serviceType, object? key) => false;");
 		builder.AppendLine();
 		Indent(builder, depth + 1).AppendLine("global::Awaiten.IExternalResolver? global::Awaiten.IExternalResolverHost.ExternalResolver { get; set; }");
 
