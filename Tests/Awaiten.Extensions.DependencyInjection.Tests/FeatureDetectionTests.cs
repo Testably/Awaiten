@@ -192,6 +192,19 @@ public sealed partial class FeatureDetectionTests
 		[Singleton<Beta, IThing>(Key = "only")]
 		public static partial class KeyOnlyContainer;
 
+		[Container]
+		[Singleton<AsyncOnly>(Key = "async")]
+		public static partial class KeyedAsyncOnlyContainer;
+
+		/// <summary>
+		///     <c>SyncResolveAfterInit</c> makes a warmed async-tainted service synchronously resolvable, and the
+		///     metadata advertises it as synchronous — the one input <c>HasSyncRegistration</c> and the
+		///     <c>Task&lt;T&gt;</c> projection read, so the reported shapes swap over with it.
+		/// </summary>
+		[Container(SyncResolveAfterInit = true)]
+		[Singleton<AsyncOnly>]
+		public static partial class SyncAfterInitContainer;
+
 		[Fact]
 		public async Task AnAsyncOnlyRegistrationIsReportedUnderItsTaskProjection()
 		{
@@ -266,6 +279,61 @@ public sealed partial class FeatureDetectionTests
 				.Because("GetService resolves only the unkeyed registration, so asked unkeyed this is not a service");
 			await That(provider.GetService(typeof(IThing))).IsNull();
 			await That(provider.IsKeyedService(typeof(IThing), "only")).IsTrue();
+		}
+
+		/// <summary>
+		///     The keyed probe over the same wide shape list the unkeyed one is swept with. The collection and
+		///     dictionary shapes are unkeyed-only, so under a key they must all report false, and a key that matches
+		///     nothing must report false for everything.
+		/// </summary>
+		[Fact]
+		public async Task TheKeyedProbeAgreesAcrossTheShapesUnderAKey()
+		{
+			using KeyedContainer.Root container = new();
+			using AwaitenServiceProvider provider = new(container, ownsContainer: false);
+
+			await That(ProbeAgreement.Disagreements(provider, ThingShapes, "beta")).IsEqualTo(string.Empty);
+			await That(ProbeAgreement.Disagreements(provider, ThingShapes, "missing")).IsEqualTo(string.Empty);
+			await That(provider.IsKeyedService(typeof(IEnumerable<IThing>), "beta")).IsFalse()
+				.Because("a collection shape is synthesized unkeyed only, and GetKeyedService declines it the same way");
+		}
+
+		[Fact]
+		public async Task AKeyedAsyncOnlyRegistrationIsReportedUnderItsTaskProjectionAndKey()
+		{
+			Type[] shapes = [typeof(AsyncOnly), typeof(Task<AsyncOnly>), typeof(Task<Unregistered>),];
+
+			using KeyedAsyncOnlyContainer.Root container = new();
+			using AwaitenServiceProvider provider = new(container, ownsContainer: false);
+
+			await That(ProbeAgreement.Disagreements(provider, shapes, "async")).IsEqualTo(string.Empty);
+			await That(provider.IsKeyedService(typeof(Task<AsyncOnly>), "async")).IsTrue()
+				.Because("the keyed Task<T> projection is served through the keyed ResolveAsync");
+			await That(provider.IsKeyedService(typeof(AsyncOnly), "async")).IsFalse()
+				.Because("the keyed registration has no synchronous path either");
+		}
+
+		[Fact]
+		public async Task SyncResolveAfterInitMovesTheAnswerToTheBareType()
+		{
+			Type[] shapes =
+			[
+				typeof(AsyncOnly),
+				typeof(Task<AsyncOnly>),
+				typeof(IEnumerable<AsyncOnly>),
+				typeof(AsyncOnly[]),
+				typeof(Task<IEnumerable<AsyncOnly>>),
+			];
+
+			using SyncAfterInitContainer.Root container = new();
+			await container.InitializeAsync(TestContext.Current.CancellationToken);
+			using AwaitenServiceProvider provider = new(container, ownsContainer: false);
+
+			await That(ProbeAgreement.Disagreements(provider, shapes)).IsEqualTo(string.Empty);
+			await That(provider.IsService(typeof(AsyncOnly))).IsTrue()
+				.Because("the metadata advertises the warmed service as synchronous, and it is one");
+			await That(provider.IsService(typeof(Task<AsyncOnly>))).IsFalse()
+				.Because("there is no async registration left to project, so the Task<T> shape is not a service");
 		}
 	}
 
@@ -497,17 +565,34 @@ public sealed partial class FeatureDetectionTests
 	///     here rather than passing unnoticed.
 	/// </summary>
 	/// <remarks>
-	///     Two over-report and one under-reports, and the direction is deliberate. A false positive has the
+	///     Two over-report and two under-report, and the direction is deliberate. A false positive has the
 	///     framework bind from dependency injection and <c>GetRequiredService</c> throw at request time, which is
-	///     loud; a false negative has it bind the parameter from the request body, which is silent. Closing the
-	///     first and third needs the container to advertise the shapes it dispatches — it builds that set at compile
-	///     time already — instead of the bridge inferring them from registrations.
+	///     loud; a false negative has it bind the parameter from the request body, which is silent. The
+	///     mixed-member collection and the variance closing are both cases of the metadata not being able to show
+	///     what the container dispatches, and closing them needs the container to advertise that set — it builds it
+	///     at compile time already — instead of the bridge inferring it from registrations. The open-generic closing
+	///     is not: it is genuinely not dispatchable until something in the graph asks for it, so advertising the
+	///     dispatched shapes would still leave it reported <see langword="false" />.
 	/// </remarks>
 	public sealed partial class AcceptedDivergences
 	{
 		public sealed class Consumer
 		{
 			public Consumer(Alpha alpha) => _ = alpha;
+		}
+
+		public interface IRepo<T>;
+
+		public sealed class Repo<T> : IRepo<T>;
+
+		public sealed class Ledger;
+
+		public sealed class Audit;
+
+		/// <summary>Puts <c>IRepo&lt;Ledger&gt;</c> in the container's own graph, so that closing is expanded.</summary>
+		public sealed class LedgerReader
+		{
+			public LedgerReader(IRepo<Ledger> repo) => _ = repo;
 		}
 
 		public sealed class DisposableTransient : IDisposable
@@ -537,6 +622,11 @@ public sealed partial class FeatureDetectionTests
 		[Container]
 		[Singleton<DerivedHandler, IHandler<DerivedEvent>>]
 		public static partial class VarianceContainer;
+
+		[Container]
+		[Singleton(typeof(Repo<>), typeof(IRepo<>))]
+		[Transient<LedgerReader>]
+		public static partial class OpenGenericContainer;
 
 		[Fact]
 		public async Task ACollectionWithANonSynchronousMemberIsOverReported()
@@ -607,6 +697,25 @@ public sealed partial class FeatureDetectionTests
 				.Because("the container's variance fallback satisfies a differently-closed variant interface at run time, but only the declared closure is advertised as a registration");
 			await That(provider.IsService(typeof(IHandler<DerivedEvent>))).IsTrue()
 				.Because("the declared closure is advertised and resolves");
+		}
+
+		[Fact]
+		public async Task AnOpenGenericClosingNothingInTheGraphAsksForIsUnderReported()
+		{
+			using OpenGenericContainer.Root container = new();
+			using AwaitenServiceProvider provider = new(container, ownsContainer: false);
+
+			await That(provider.IsService(typeof(IRepo<Ledger>))).IsTrue()
+				.Because("a closing the container's own graph consumes is expanded into a concrete registration, so it is advertised like a hand-written one");
+			await That(provider.GetService(typeof(IRepo<Ledger>))).IsNotNull();
+
+			await That(provider.IsService(typeof(IRepo<Audit>))).IsFalse()
+				.Because("open generics are expanded per closing that something in the graph asks for, and a framework's handler parameter is not in the graph, so this closing is never synthesized; MS.DI would answer true here, and a minimal API told false binds the parameter from the request body instead of failing to resolve it");
+			await That(provider.GetService(typeof(IRepo<Audit>))).IsNull()
+				.Because("the under-report is faithful to the container: the closing genuinely has no resolution either, so the divergence is from MS.DI's answer, not from this container's behaviour");
+
+			await That(ProbeAgreement.Disagreements(provider, [typeof(IRepo<Ledger>), typeof(IRepo<Audit>),]))
+				.IsEqualTo(string.Empty);
 		}
 	}
 }

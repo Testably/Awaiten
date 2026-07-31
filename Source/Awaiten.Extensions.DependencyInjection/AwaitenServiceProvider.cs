@@ -32,7 +32,7 @@ namespace Awaiten.Extensions.DependencyInjection;
 ///     </para>
 /// </remarks>
 [SuppressMessage("Awaiten", "AWT135:Service locator: a resolver interface is injected into a service", Justification = "This is the MS.DI bridge adapter: holding the IAwaitenScope is the adaptation itself, not a hidden run-time dependency.")]
-public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScopeFactory, IServiceProviderIsService,
+public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScopeFactory,
 	IServiceProviderIsKeyedService, IDisposable, IAsyncDisposable
 {
 	private readonly IAwaitenScope _container;
