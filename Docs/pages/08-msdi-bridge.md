@@ -54,6 +54,24 @@ using IServiceScope scope = provider.CreateScope();
 
 Pass `ownsContainer: false` if you want to keep ownership of the container yourself.
 
+### Feature detection
+
+The provider also answers `IServiceProviderIsService` and `IServiceProviderIsKeyedService`, from the container's registration metadata and without constructing anything. ASP.NET Core depends on this: minimal APIs ask it whether a handler parameter comes from dependency injection or from the request, and MVC's controller activation asks the same.
+
+```csharp
+var probe = provider.GetRequiredService<IServiceProviderIsService>();
+probe.IsService(typeof(IBrewer));                 // true
+probe.IsService(typeof(EspressoMachine));         // false: async-only, ask for Task<EspressoMachine>
+```
+
+The answer comes from the container itself, through `IAwaitenContainerMetadata.IsResolvable`, so it covers every shape the container dispatches and not merely what it advertises as a registration: a registration, the [relationship shapes](./resolution/relationships) over it, the synthesized [collections](./resolution/collections) and [keyed dictionaries](./resolution/keyed-dictionaries), the awaited views over those, and a [variance](./advanced/generic-variance)-compatible closing of a registered variant generic interface. The `Task<T>` projection of an async-only registration is reported too, and its bare service type is not, matching what each resolves to.
+
+Wrapping a bare scope rather than a `Root` leaves the provider without metadata, and it then does not offer the probe at all, so the framework keeps its own fallback.
+
+`IsService` answers whether the service *exists*, not whether this scope will build it, which is MS.DI's own semantics. A disposable transient asked on the root is reported, and resolving it there throws the container's guidance naming the fix rather than returning `null`, so the failure lands at the cause.
+
+Two answers still differ from MS.DI, both under-reporting, and both want a `[FromServices]` on the parameter. An [open generic](./registration/open-generics) registration is expanded per closing that something in the container's own graph asks for, so a closing only a framework asks for is never synthesized: with `[Singleton(typeof(Repo<>), typeof(IRepo<>))]` and nothing in the graph consuming `IRepo<Order>`, `IsService(typeof(IRepo<Order>))` is `false` where MS.DI answers `true`. And MS.DI special-cases `IEnumerable<T>`, answering `true` for any `T` because it can always manifest an empty sequence, where a compile-time container has no case emitted for an element type the graph never mentioned. In both the probe is faithful to this container, which has no resolution either; matching MS.DI would mean building a collection for a type unknown at compile time. Each is pinned by a test in `FeatureDetectionTests`.
+
 ## Warm async services on startup
 
 `AddAwaitenInitialization<TContainer>` registers an `IHostedService` that calls `InitializeAsync` on startup. It wires the external resolver first, so `[ImportService<T>]` dependencies resolve during warm-up. It is idempotent.

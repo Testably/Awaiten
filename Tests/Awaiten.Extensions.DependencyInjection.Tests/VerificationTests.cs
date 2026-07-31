@@ -2,8 +2,91 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Awaiten.Extensions.DependencyInjection.Tests;
 
-public sealed class VerificationTests
+public sealed partial class VerificationTests
 {
+	public interface IEvent;
+
+	public sealed class DerivedEvent : IEvent;
+
+	public interface IHandler<out TEvent>;
+
+	public sealed class DerivedHandler : IHandler<DerivedEvent>;
+
+	/// <summary>Consumes a variant closing that only the provider's variance fallback can satisfy.</summary>
+	public sealed class Dispatcher
+	{
+		public Dispatcher(IHandler<IEvent> handler) => _ = handler;
+	}
+
+	[Container]
+	[ImportService<IHandler<IEvent>>]
+	[Singleton<Dispatcher>]
+	public static partial class ImportingContainer;
+
+	[Container]
+	[Singleton<DerivedHandler, IHandler<DerivedEvent>>]
+	public static partial class ProvidingContainer;
+
+	[Fact]
+	public async Task VerifyAgainst_AnAwaitenProvider_AcceptsWhatThatProviderResolves()
+	{
+		// One container's imports satisfied by another container through the provider seam. The provider's own
+		// feature-detection surface is consulted first, and a shape it does not report must still be accepted when
+		// the provider resolves it, or a satisfiable import fails verification at startup.
+		using ProvidingContainer.Root providing = new();
+		using AwaitenServiceProvider provider = new(providing, ownsContainer: false);
+		using ImportingContainer.Root importing = new();
+
+		await That(provider.GetService(typeof(IHandler<IEvent>))).IsNotNull()
+			.Because("the providing container satisfies the variant closing through its variance fallback");
+		await That(() => ((IAwaitenContainerMetadata)importing).VerifyAgainst(provider)).DoesNotThrow();
+	}
+
+	[Fact]
+	public async Task VerifyAgainst_AnAwaitenProvider_StillReportsWhatIsGenuinelyMissing()
+	{
+		using ConformanceOnlyContainer.Root providing = new();
+		using AwaitenServiceProvider provider = new(providing, ownsContainer: false);
+		using ImportingContainer.Root importing = new();
+
+		await That(() => ((IAwaitenContainerMetadata)importing).VerifyAgainst(provider))
+			.Throws<InvalidOperationException>().WithMessage("*IHandler*").AsWildcard();
+	}
+
+	[Container]
+	[Singleton<DerivedEvent>]
+	public static partial class ConformanceOnlyContainer;
+
+	/// <summary>
+	///     A provider that resolves a service its own feature detection denies. Contrived, but it is the shape of
+	///     the hazard: any probe that under-reports would otherwise turn a satisfiable import into a startup
+	///     failure, and no container in this repository under-reports a shape it resolves, so nothing else pins it.
+	/// </summary>
+	private sealed class UnderReportingProvider : IServiceProvider, IServiceProviderIsService
+	{
+		public bool IsService(Type serviceType) => false;
+
+		public object? GetService(Type serviceType)
+		{
+			if (serviceType == typeof(IServiceProviderIsService))
+			{
+				return this;
+			}
+
+			return serviceType == typeof(IHandler<IEvent>) ? new DerivedHandler() : null;
+		}
+	}
+
+	[Fact]
+	public async Task VerifyAgainst_AProviderThatUnderReports_FallsBackToResolution()
+	{
+		using ImportingContainer.Root importing = new();
+
+		await That(() => ((IAwaitenContainerMetadata)importing).VerifyAgainst(new UnderReportingProvider()))
+			.DoesNotThrow()
+			.Because("only a positive from the probe is final; a negative has to fall through to resolution, or verification reports an import the provider would have satisfied");
+	}
+
 	[Fact]
 	public async Task VerifyAwaitenContainers_PassesWhenExternalDependencyIsRegistered()
 	{

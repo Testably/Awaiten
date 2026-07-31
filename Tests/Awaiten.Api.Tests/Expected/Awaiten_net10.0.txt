@@ -139,6 +139,7 @@ namespace Awaiten
     {
         System.Collections.Generic.IReadOnlyList<Awaiten.AwaitenExternalDependency> ExternalDependencies { get; }
         System.Collections.Generic.IReadOnlyList<Awaiten.AwaitenRegistration> Registrations { get; }
+        bool IsResolvable(System.Type serviceType, object? key);
     }
     public interface IAwaitenResolver
     {

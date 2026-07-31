@@ -70,21 +70,24 @@ public static class AwaitenVerificationExtensions
 
 	private static bool IsRegistered(IServiceProvider provider, AwaitenExternalDependency dependency)
 	{
-		// A registration check without constructing the service: keyed dependencies probe the keyed surface
-		// (a [FromKey] parameter resolves the registration under that key, not the unkeyed one), unkeyed ones
-		// the ordinary surface. IServiceProviderIs(Keyed)Service is available on the modern abstractions this
-		// package references; a provider that predates it (or does not implement it) falls through to the
-		// resolution-based check below.
+		// A registration check that avoids constructing the service when it can: keyed dependencies probe the keyed
+		// surface (a [FromKey] parameter resolves the registration under that key, not the unkeyed one), unkeyed
+		// ones the ordinary surface. Only a positive answer is taken as final. A negative falls through to the
+		// resolution check below, because a probe may under-report a shape its provider still serves, and a
+		// verification that turned that into a startup failure would be worse than the one extra resolution. A
+		// provider without the probe interfaces falls through the same way.
 		if (dependency.Key is null)
 		{
-			if (provider.GetService(typeof(IServiceProviderIsService)) is IServiceProviderIsService probe)
+			if (provider.GetService(typeof(IServiceProviderIsService)) is IServiceProviderIsService probe
+			    && probe.IsService(dependency.ServiceType))
 			{
-				return probe.IsService(dependency.ServiceType);
+				return true;
 			}
 		}
-		else if (provider.GetService(typeof(IServiceProviderIsKeyedService)) is IServiceProviderIsKeyedService keyedProbe)
+		else if (provider.GetService(typeof(IServiceProviderIsKeyedService)) is IServiceProviderIsKeyedService keyedProbe
+		         && keyedProbe.IsKeyedService(dependency.ServiceType, dependency.Key))
 		{
-			return keyedProbe.IsKeyedService(dependency.ServiceType, dependency.Key);
+			return true;
 		}
 
 		try
