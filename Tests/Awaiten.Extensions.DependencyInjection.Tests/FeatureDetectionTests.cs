@@ -390,8 +390,10 @@ public sealed partial class FeatureDetectionTests
 			await That(provider.IsService(typeof(ICollection<IThing>))).IsTrue();
 			await That(provider.IsService(typeof(IThing[]))).IsTrue();
 			await That(provider.IsService(typeof(IAsyncEnumerable<IThing>))).IsTrue();
-			await That(provider.IsService(typeof(IEnumerable<Unregistered>))).IsFalse()
-				.Because("the container has no collection case for an element type the graph never mentioned");
+			await That(provider.IsService(typeof(IEnumerable<Unregistered>))).IsTrue()
+				.Because("the container has no collection case for an element type the graph never mentioned, and the bridge answers that shape with the empty sequence MS.DI guarantees for every element type");
+			await That(provider.IsService(typeof(Unregistered[]))).IsFalse()
+				.Because("the guarantee covers IEnumerable<T> only, so the other shapes over an unmentioned element type stay unreported");
 		}
 
 		[Fact]
@@ -755,15 +757,19 @@ public sealed partial class FeatureDetectionTests
 		public static partial class SingleRegistrationContainer;
 
 		[Fact]
-		public async Task AnEnumerableOfAnUnmentionedElementTypeIsUnderReported()
+		public async Task AnEnumerableOfAnUnmentionedValueElementTypeIsUnderReported()
 		{
 			using SingleRegistrationContainer.Root container = new();
 			using AwaitenServiceProvider provider = new(container, ownsContainer: false);
 
-			await That(provider.IsService(typeof(IEnumerable<Unregistered>))).IsFalse()
-				.Because("MS.DI special-cases IEnumerable<T> and answers true for any T, registered or not, because it can always manifest an empty sequence; the generator emits collection cases only for element types the graph mentions, so this one has no resolution to report");
-			await That(provider.GetService(typeof(IEnumerable<Unregistered>))).IsNull()
-				.Because("the under-report is faithful to the container: MS.DI would hand back an empty sequence here, and matching that needs a collection built for a type unknown at compile time, which is the reflection this package does not do");
+			await That(provider.IsService(typeof(IEnumerable<Speed>))).IsFalse()
+				.Because("MS.DI answers true for any element type, because it can always manifest an empty sequence; the bridge can only do so for a reference element type, whose array type native AOT generates on demand, and a value one throws NotSupportedException there instead");
+			await That(provider.GetService(typeof(IEnumerable<Speed>))).IsNull()
+				.Because("the under-report is faithful to what the bridge will do: reporting a shape it would crash on under AOT would be the worse trade");
+
+			await That(ProbeAgreement.Disagreements(provider, [typeof(IEnumerable<Speed>), typeof(IEnumerable<Unregistered>),]))
+				.IsEqualTo(string.Empty)
+				.Because("the residue is an under-report on both sides at once, so the probe and resolution still agree; the reference-element case beside it is answered rather than under-reported");
 		}
 
 		[Fact]

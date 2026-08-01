@@ -1,69 +1,12 @@
 using System;
-using System.Threading;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
-using Awaiten;
+using Awaiten.AotSample.Domain;
 using Awaiten.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Awaiten.AotSample;
-
-public interface IClock
-{
-	string Today();
-}
-
-public sealed class SystemClock : IClock
-{
-	public string Today() => "2026-06-24";
-}
-
-/// <summary>A host-owned (external) service, registered directly in the service collection.</summary>
-public sealed class Banner
-{
-	public string Text { get; } = "Awaiten on AOT";
-}
-
-/// <summary>
-///     A transient Awaiten service that mixes an Awaiten-owned dependency (<see cref="IClock" />) with a
-///     host-owned one (<see cref="Banner" />, resolved across the seam).
-/// </summary>
-public sealed class Report
-{
-	private readonly IClock _clock;
-	private readonly Banner _banner;
-
-	public Report(IClock clock, Banner banner)
-	{
-		_clock = clock;
-		_banner = banner;
-	}
-
-	public string Render() => $"{_banner.Text} @ {_clock.Today()}";
-}
-
-/// <summary>
-///     An async-initialized Awaiten service. Because it is <see cref="IAsyncInitializable" />, the bridge
-///     has no synchronous resolution path and projects it as <c>Task&lt;Warmup&gt;</c>, building the closed
-///     <c>Task&lt;T&gt;</c> and its converter from generator-emitted metadata so it publishes natively
-///     without reflection.
-/// </summary>
-public sealed class Warmup : IAsyncInitializable
-{
-	public bool Ready { get; private set; }
-
-	public Task InitializeAsync(CancellationToken cancellationToken)
-	{
-		Ready = true;
-		return Task.CompletedTask;
-	}
-}
-
-[Container]
-[ImportService<Banner>]
-[Singleton<SystemClock, IClock>]
-[Transient<Report>]
-[Singleton<Warmup>]
-public static partial class SampleContainer;
 
 public static class Program
 {
@@ -73,7 +16,7 @@ public static class Program
 		services.AddSingleton<Banner>();
 		services.AddGeneratedContainer<SampleContainer.Root>();
 
-		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
+		using ServiceProvider provider = services.BuildServiceProvider(true);
 		provider.VerifyAwaitenContainers();
 
 		using IServiceScope scope = provider.CreateScope();
@@ -86,6 +29,18 @@ public static class Program
 		Warmup warmup = await scope.ServiceProvider.GetRequiredService<Task<Warmup>>();
 		Console.WriteLine($"warmup ready: {warmup.Ready}");
 
-		return rendered == "Awaiten on AOT @ 2026-06-24" && warmup.Ready ? 0 : 1;
+		// The provider-replacement path's empty-collection answer, and the one place the bridge constructs a type
+		// at run time: the T[] backing IEnumerable<T> for an element type the container never saw. Native AOT
+		// generates that array type on demand for a reference element type, which is why the bridge suppresses the
+		// dynamic-code warning there, and running it here is what keeps that suppression honest rather than
+		// asserted.
+		SampleContainer.Root root = provider.GetRequiredService<SampleContainer.Root>();
+		using AwaitenServiceProvider replacement = new(root, false);
+		IEnumerable<Unmentioned>? unmentioned =
+			(IEnumerable<Unmentioned>?)replacement.GetService(typeof(IEnumerable<Unmentioned>));
+		bool emptySequence = unmentioned is not null && !unmentioned.Any();
+		Console.WriteLine($"empty sequence for an unmentioned element type: {emptySequence}");
+
+		return rendered == "Awaiten on AOT @ 2026-06-24" && warmup.Ready && emptySequence ? 0 : 1;
 	}
 }

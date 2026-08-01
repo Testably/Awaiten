@@ -13,7 +13,9 @@ namespace Awaiten.Extensions.DependencyInjection;
 ///     <see cref="IAwaitenResolver.TryResolve(Type, out object)" />, returning <see langword="null" /> for an unregistered
 ///     service as <see cref="IServiceProvider" /> requires. A service that requires asynchronous resolution
 ///     (advertised through <see cref="IAwaitenContainerMetadata" />) is served as a <c>Task&lt;T&gt;</c>
-///     (request <c>Task&lt;TService&gt;</c> and await it), mirroring the collection projection.
+///     (request <c>Task&lt;TService&gt;</c> and await it), mirroring the collection projection. An
+///     <c>IEnumerable&lt;T&gt;</c> the container has no registration for is the one exception to the null: it
+///     resolves to an empty sequence for a reference element type, as MS.DI guarantees for every element type.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -107,6 +109,14 @@ public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScop
 			return _container.Resolve(serviceType);
 		}
 
+		// MS.DI resolves IEnumerable<T> for every T, so a consumer enumerates one without a null check and a
+		// framework uses it as an extension point. See EmptyEnumerableElement for which element types the bridge
+		// can honour that for.
+		if (EmptyEnumerableElement(serviceType) is { } elementType)
+		{
+			return EmptyArrayOf(elementType);
+		}
+
 		return null;
 	}
 
@@ -198,7 +208,11 @@ public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScop
 			throw new ArgumentNullException(nameof(serviceType));
 		}
 
-		return IsProviderService(serviceType) || IsResolvableShape(serviceType, null);
+		// The empty-sequence answer is unkeyed only, matching GetService: MS.DI's keyed surface has no equivalent
+		// guarantee, and IsResolvableShape is shared with the keyed probe.
+		return IsProviderService(serviceType)
+		       || IsResolvableShape(serviceType, null)
+		       || EmptyEnumerableElement(serviceType) is not null;
 	}
 
 	/// <inheritdoc />
@@ -297,6 +311,78 @@ public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScop
 		       && serviceType.GetGenericTypeDefinition() == typeof(Task<>)
 		       && AsyncConverterFor(serviceType.GenericTypeArguments[0], key) is not null;
 	}
+
+	/// <summary>
+	///     The element type of an <c>IEnumerable&lt;T&gt;</c> the container has no registration for, which the
+	///     bridge answers with an empty sequence, or <see langword="null" /> when the shape is not one of those.
+	/// </summary>
+	/// <remarks>
+	///     <para>
+	///         MS.DI resolves <c>IEnumerable&lt;T&gt;</c> for every <c>T</c>, empty when nothing is registered, so
+	///         consumers enumerate one without a null check and frameworks use it as an extension point ("every
+	///         registered handler, of which there may be none"). The generator emits collection cases only for
+	///         element types the graph mentions, so one it never saw has no case to hit, and returning
+	///         <see langword="null" /> there breaks such a consumer on its first enumeration.
+	///     </para>
+	///     <para>
+	///         Only <c>IEnumerable&lt;T&gt;</c> qualifies, because that is the extent of MS.DI's guarantee: it
+	///         answers <see langword="null" /> for <c>T[]</c>, <c>IList&lt;T&gt;</c> and
+	///         <c>IReadOnlyList&lt;T&gt;</c> of an unregistered element type as well.
+	///     </para>
+	///     <para>
+	///         An element type the container does have a registration for is excluded. A collection of it that did
+	///         not resolve was withheld rather than absent (a collection with an async-tainted member cannot be
+	///         materialized synchronously), and an empty sequence would both hide the container's guidance and
+	///         silently drop the members that do exist, which is the worst answer available.
+	///     </para>
+	///     <para>
+	///         A value-typed element is excluded too, and that is an AOT constraint rather than a semantic one.
+	///         Manifesting the empty array needs the <c>T[]</c> type, which native AOT generates on demand for a
+	///         reference element type but not for a value one, where it throws
+	///         <see cref="NotSupportedException" /> at run time. Reporting the shape as unavailable is honest;
+	///         trading a <see langword="null" /> for a crash would not be.
+	///     </para>
+	/// </remarks>
+	private Type? EmptyEnumerableElement(Type serviceType)
+	{
+		if (_metadata is null
+		    || !serviceType.IsConstructedGenericType
+		    || serviceType.GetGenericTypeDefinition() != typeof(IEnumerable<>))
+		{
+			return null;
+		}
+
+		Type elementType = serviceType.GenericTypeArguments[0];
+		if (elementType.IsValueType)
+		{
+			return null;
+		}
+
+		foreach (AwaitenRegistration registration in _metadata.Registrations)
+		{
+			if (registration.ServiceType == elementType)
+			{
+				return null;
+			}
+		}
+
+		return elementType;
+	}
+
+	/// <summary>The empty <c>T[]</c> for a reference element type, which is an <c>IEnumerable&lt;T&gt;</c>.</summary>
+	/// <remarks>
+	///     The only place either shipped assembly constructs a type at run time. Native AOT generates the array
+	///     type on demand for every reference element kind (interface, class, abstract class, generic closing,
+	///     string), and only a value-typed element fails, which <see cref="EmptyEnumerableElement" /> has already
+	///     excluded. So the dynamic-code warning does not apply to the calls that reach here.
+	/// </remarks>
+#if NET8_0_OR_GREATER
+	// Conditional because UnconditionalSuppressMessageAttribute is not public in netstandard2.0, and nothing
+	// publishes that target with native AOT, so the suppression has nowhere to apply there.
+	[UnconditionalSuppressMessage("AotAnalysis", "IL3050:RequiresDynamicCode",
+		Justification = "The element type is always a reference type here, whose array type native AOT generates on demand; a value-typed element is excluded by EmptyEnumerableElement.")]
+#endif
+	private static Array EmptyArrayOf(Type elementType) => Array.CreateInstance(elementType, 0);
 
 	/// <summary>
 	///     The generator-emitted <c>Task&lt;object&gt;</c> to <c>Task&lt;T&gt;</c> converter for an unkeyed
