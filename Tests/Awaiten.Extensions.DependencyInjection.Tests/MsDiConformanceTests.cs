@@ -155,15 +155,43 @@ public sealed partial class MsDiConformanceTests
 	public sealed class AbsentServices
 	{
 		[Fact]
-		public async Task AnEnumerableOfAnUnmentionedTypeReturnsNull_KnownGap()
+		public async Task AnEnumerableOfAnUnmentionedTypeIsEmpty()
 		{
 			using ConformanceContainer.Root container = new();
 			using AwaitenServiceProvider provider = new(container, false);
 
 			object? resolved = provider.GetService(typeof(IEnumerable<UnregisteredService>));
 
+			await That(resolved).IsNotNull()
+				.Because("MS.DI guarantees IEnumerable<T> resolves for any T, so consumers enumerate without a null check and frameworks use it as an extension point");
+			await That((IEnumerable<UnregisteredService>)resolved!).IsEmpty()
+				.Because("nothing is registered for the element type, and the empty sequence is what MS.DI hands back");
+		}
+
+		[Fact]
+		public async Task AnEnumerableOfAnUnmentionedValueTypeReturnsNull_AotConstraint()
+		{
+			using ConformanceContainer.Root container = new();
+			using AwaitenServiceProvider provider = new(container, false);
+
+			object? resolved = provider.GetService(typeof(IEnumerable<int>));
+
 			await That(resolved).IsNull()
-				.Because("MS.DI guarantees IEnumerable<T> resolves to an empty sequence for any T, so consumers enumerate without a null check; the generator only emits collection cases for element types the graph mentions, so one it never saw has no case to hit. Pinned so that closing the gap breaks this test rather than passing unnoticed");
+				.Because("manifesting the empty sequence needs the T[] type, which native AOT generates on demand for a reference element type but not for a value one, where it throws NotSupportedException at run time; reporting the shape as unavailable beats trading a null for a crash. Pinned so that a change of behaviour fails here rather than surfacing as an AOT crash");
+		}
+
+		[Fact]
+		public async Task AnArrayOfAnUnmentionedTypeReturnsNull()
+		{
+			using ConformanceContainer.Root container = new();
+			using AwaitenServiceProvider provider = new(container, false);
+
+			await That(provider.GetService(typeof(UnregisteredService[]))).IsNull()
+				.Because("MS.DI's guarantee covers IEnumerable<T> only; it answers null for an array of an unregistered element type too");
+			await That(provider.GetService(typeof(IList<UnregisteredService>))).IsNull()
+				.Because("the same limit applies to the other collection shapes MS.DI does not synthesize");
+			await That(provider.GetService(typeof(IReadOnlyList<UnregisteredService>))).IsNull()
+				.Because("the same limit applies to the other collection shapes MS.DI does not synthesize");
 		}
 
 		[Fact]
