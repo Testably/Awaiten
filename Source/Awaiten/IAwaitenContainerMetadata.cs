@@ -10,6 +10,10 @@ namespace Awaiten;
 ///     Microsoft.Extensions.DependencyInjection service collection and to wire the container's external
 ///     dependencies to the host's provider.
 /// </summary>
+/// <remarks>
+///     Implemented by the generator, not by hand, so it may gain members as the container learns to advertise
+///     more about itself. Consume it; do not implement it.
+/// </remarks>
 public interface IAwaitenContainerMetadata : IAwaitenRoot, IExternalResolverHost
 {
 	/// <summary>
@@ -53,4 +57,40 @@ public interface IAwaitenContainerMetadata : IAwaitenRoot, IExternalResolverHost
 	/// <param name="serviceType">The service type to test.</param>
 	/// <param name="key">The resolution key, or <see langword="null" /> for the unkeyed registration.</param>
 	bool IsResolvable(Type serviceType, object? key);
+
+	/// <summary>
+	///     Why the container has <paramref name="serviceType" /> but will not hand it over synchronously, or
+	///     <see langword="null" /> when it has no such reason. This is the message <c>Resolve</c> throws, made
+	///     available without throwing.
+	/// </summary>
+	/// <remarks>
+	///     <para>
+	///         Ask this after <c>TryResolve</c> reports no service, to tell the two negatives apart: "no
+	///         registration at all" and "registered, but withheld from the synchronous path" are the same
+	///         <see langword="false" /> there, yet call for opposite responses. The first is genuinely not the
+	///         container's; the second is a mistake with a named fix. A host adapter that must answer an unknown
+	///         type with <see langword="null" />, because that is how it says "not mine", needs this to report the
+	///         container's specific failure rather than the framework's generic one.
+	///     </para>
+	///     <para>
+	///         A service is withheld when it needs asynchronous initialization but was reached synchronously, or
+	///         when the strict lifetime default declines to build it on the root because the root would then track
+	///         it for the container's lifetime, which covers a disposable or release-hooked transient and the
+	///         shapes over one. A variance-compatible closing reports its nearest withheld candidate's reason,
+	///         matching what <c>Resolve</c> throws for it. Rather than enumerate the cases, read the reason: each
+	///         names the service and what to change.
+	///     </para>
+	///     <para>
+	///         <see cref="IsResolvable" /> is no substitute, in either direction. It answers existence, so it
+	///         reports a root-withheld transient as resolvable and an async-initialized service as not, while both
+	///         have a reason here.
+	///     </para>
+	///     <para>
+	///         The answer belongs to the container root: a child scope builds a root-withheld transient normally,
+	///         so only the root can say it is withholding one.
+	///     </para>
+	/// </remarks>
+	/// <param name="serviceType">The service type to ask about.</param>
+	/// <param name="key">The resolution key, or <see langword="null" /> for the unkeyed registration.</param>
+	string? WithheldReason(Type serviceType, object? key);
 }

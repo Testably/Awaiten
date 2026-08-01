@@ -7,8 +7,10 @@ namespace Awaiten.Extensions.DependencyInjection.Tests;
 /// <summary>
 ///     <see cref="IServiceProviderIsService" /> and <see cref="IServiceProviderIsKeyedService" /> on the
 ///     provider-replacement path. ASP.NET Core consults these to decide whether a parameter comes from
-///     dependency injection or from the request, so the invariant that matters is that
-///     <c>IsService(t)</c> is true exactly when <c>GetService(t)</c> returns an instance.
+///     dependency injection or from the request, so the invariant that matters is that <c>IsService(t)</c> is true
+///     exactly when <c>GetService(t)</c> does not answer <see langword="null" />. A throw counts as acknowledging
+///     the shape, because the container is naming why it will not build it; only a silent null contradicts the
+///     claim.
 /// </summary>
 /// <remarks>
 ///     The container dispatches far more resolvable shapes than it advertises as registrations, and the rules it
@@ -212,8 +214,8 @@ public sealed partial class FeatureDetectionTests
 			using AwaitenServiceProvider provider = new(container, ownsContainer: false);
 
 			await That(provider.IsService(typeof(Task<AsyncOnly>))).IsTrue();
-			await That(provider.IsService(typeof(AsyncOnly))).IsFalse()
-				.Because("it is advertised, but has no synchronous path, so reporting the bare type would promise a service GetService answers with null");
+			await That(provider.IsService(typeof(AsyncOnly))).IsTrue()
+				.Because("the bare type exists, which is what IsService answers, and GetService throws the container's guidance for it rather than returning a null a host would bind from elsewhere");
 			await That(provider.IsService(typeof(Task<Unregistered>))).IsFalse();
 		}
 
@@ -309,8 +311,8 @@ public sealed partial class FeatureDetectionTests
 			await That(ProbeAgreement.Disagreements(provider, shapes, "async")).IsEqualTo(string.Empty);
 			await That(provider.IsKeyedService(typeof(Task<AsyncOnly>), "async")).IsTrue()
 				.Because("the keyed Task<T> projection is served through the keyed ResolveAsync");
-			await That(provider.IsKeyedService(typeof(AsyncOnly), "async")).IsFalse()
-				.Because("the keyed registration has no synchronous path either");
+			await That(provider.IsKeyedService(typeof(AsyncOnly), "async")).IsTrue()
+				.Because("the keyed registration exists without a synchronous path, and the keyed GetKeyedService throws its guidance rather than a silent null, exactly as the unkeyed surface does");
 		}
 
 		[Fact]
@@ -416,8 +418,8 @@ public sealed partial class FeatureDetectionTests
 			using AwaitenServiceProvider provider = new(container, ownsContainer: false);
 
 			await That(ProbeAgreement.Disagreements(provider, ThingShapes)).IsEqualTo(string.Empty);
-			await That(provider.IsService(typeof(IAsyncEnumerable<IThing>))).IsFalse()
-				.Because("the explicit registration takes the shape over from the synthesized view, and being async-only it has no synchronous path either");
+			await That(provider.IsService(typeof(IAsyncEnumerable<IThing>))).IsTrue()
+				.Because("the explicit registration takes the shape over from the synthesized view, and being async-only it exists without a synchronous path, so GetService throws its guidance");
 		}
 
 		[Fact]
@@ -430,14 +432,26 @@ public sealed partial class FeatureDetectionTests
 		}
 
 		[Fact]
+		public async Task KeyedRegistrationsAloneYieldAnEmptyUnkeyedCollection()
+		{
+			using KeyedOnlyContainer.Root container = new();
+			using AwaitenServiceProvider provider = new(container, ownsContainer: false);
+
+			await That(provider.GetService(typeof(IEnumerable<IThing>))).IsNotNull()
+				.Because("MS.DI leaves keyed registrations out of an unkeyed IEnumerable<T>, so the empty sequence is the whole truth here rather than a dropped member");
+			await That((IEnumerable<IThing>)provider.GetService(typeof(IEnumerable<IThing>))!).IsEmpty();
+			await That(provider.IsService(typeof(IEnumerable<IThing>))).IsTrue();
+		}
+
+		[Fact]
 		public async Task AMemberThatNeedsAsyncInitialization()
 		{
 			using MixedCollectionContainer.Root container = new();
 			using AwaitenServiceProvider provider = new(container, ownsContainer: false);
 
 			await That(ProbeAgreement.Disagreements(provider, ThingShapes)).IsEqualTo(string.Empty);
-			await That(provider.IsService(typeof(IEnumerable<IThing>))).IsFalse()
-				.Because("one member that needs async initialization means no synchronous collection shape is synthesized at all, which the container knows and the registration metadata could never have shown");
+			await That(provider.IsService(typeof(IEnumerable<IThing>))).IsTrue()
+				.Because("one member that needs async initialization means no synchronous collection shape is synthesized, which the container knows; it exists, so GetService throws the guidance naming the fix rather than reporting an empty sequence that would drop the members");
 			await That(provider.IsService(typeof(Task<IEnumerable<IThing>>))).IsTrue()
 				.Because("the awaited view over it does still resolve");
 		}
@@ -568,6 +582,131 @@ public sealed partial class FeatureDetectionTests
 	}
 
 	/// <summary>
+	///     <c>IAwaitenContainerMetadata.WithheldReason</c>, which tells "no registration" apart from "registered but
+	///     not served synchronously". Both are the same <see langword="false" /> from <c>TryResolve</c>, so without
+	///     this an adapter that answers an unknown type with <see langword="null" /> reports its framework's generic
+	///     failure in place of the container's specific one.
+	/// </summary>
+	public sealed partial class WithheldReasons
+	{
+		[Fact]
+		public async Task TellAnUnregisteredTypeFromAWithheldOne()
+		{
+			using Registrations.AsyncOnlyContainer.Root container = new();
+
+			await That(container.TryResolve(typeof(Registrations.AsyncOnly), out _)).IsFalse();
+			await That(container.TryResolve(typeof(Unregistered), out _)).IsFalse()
+				.Because("the two are indistinguishable through TryResolve alone, which is the gap this closes");
+
+			await That(container.WithheldReason(typeof(Registrations.AsyncOnly), null)).IsNotNull();
+			await That(container.WithheldReason(typeof(Unregistered), null)).IsNull();
+		}
+
+		[Fact]
+		public async Task NameTheFixRatherThanOnlyTheProblem()
+		{
+			using Registrations.AsyncOnlyContainer.Root container = new();
+
+			string? reason = container.WithheldReason(typeof(Registrations.AsyncOnly), null);
+
+			await That(reason).Contains("ResolveAsync");
+			await That(reason).Contains("SyncResolveAfterInit")
+				.Because("a reason a caller cannot act on is no better than the generic failure it replaces");
+		}
+
+		/// <summary>
+		///     Pins the classification rather than the string: a reason exists for exactly those shapes whose
+		///     resolution is refused with guidance, and not for the ones refused as simply absent.
+		/// </summary>
+		[Fact]
+		public async Task MarkExactlyTheShapesResolveRefusesWithGuidance()
+		{
+			using MixedCollectionContainer.Root container = new();
+			List<string> mismatches = [];
+
+			foreach (Type shape in ThingShapes)
+			{
+				bool hasReason = container.WithheldReason(shape, null) is not null;
+				bool guided = RefusalMessage(container, shape) is { } message
+				              && !message.StartsWith("No registration for type", StringComparison.Ordinal);
+				if (hasReason != guided)
+				{
+					mismatches.Add($"{shape}: reason={hasReason}, guided={guided}");
+				}
+			}
+
+			await That(string.Join("; ", mismatches)).IsEqualTo(string.Empty)
+				.Because("a shape the container withholds must carry the reason, and one it merely has no registration for must not, or an adapter cannot tell them apart");
+		}
+
+		[Fact]
+		public async Task RepeatWhatResolveThrowsForAVariantClosing()
+		{
+			using GenericVariance.WithheldVarianceContainer.Root container = new();
+			Type closing = typeof(GenericVariance.IHandler<GenericVariance.IEvent>);
+
+			await That(container.WithheldReason(closing, null)).IsEqualTo(RefusalMessage(container, closing))
+				.Because("a variant closing has no withheld entry of its own, so both paths have to reach its nearest candidate's reason through the variance match");
+		}
+
+		/// <summary>
+		///     The reason belongs to the root, so the generated <c>Scope</c> must not offer it: a child scope builds a
+		///     root-withheld disposable transient normally, and would report the root's refusal as its own.
+		/// </summary>
+		[Fact]
+		public async Task AreOfferedByTheRootAlone()
+		{
+			await That(typeof(WithheldServices.WithheldContainer.Root).GetMethod("WithheldReason")).IsNotNull();
+			await That(typeof(WithheldServices.WithheldContainer.Scope).GetMethod("WithheldReason")).IsNull()
+				.Because("a scope cannot answer the question correctly, so it must not be asked");
+
+			using WithheldServices.WithheldContainer.Root container = new();
+			using IAwaitenScope scope = container.CreateScope();
+
+			await That(container.WithheldReason(typeof(WithheldServices.DisposableTransient), null)).IsNotNull()
+				.Because("the strict lifetime default withholds a disposable transient on the root");
+			await That(scope.Resolve<WithheldServices.DisposableTransient>()).IsNotNull()
+				.Because("the same service is built by a scope, which is why the root's answer is not the scope's");
+		}
+
+		[Fact]
+		public async Task AreAbsentForAContainerThatWithholdsNothing()
+		{
+			using AcceptedDivergences.SingleRegistrationContainer.Root container = new();
+
+			await That(container.WithheldReason(typeof(IThing), null)).IsNull()
+				.Because("a resolvable service has no reason to report");
+			await That(container.WithheldReason(typeof(Unregistered), null)).IsNull();
+		}
+
+		[Fact]
+		public async Task CoverTheKeyedSurfaceToo()
+		{
+			using Registrations.KeyedAsyncOnlyContainer.Root container = new();
+			Type service = typeof(Registrations.AsyncOnly);
+
+			await That(container.WithheldReason(service, "async"))
+				.IsEqualTo(RefusalMessage(container, service, "async"))
+				.Because("the keyed Resolve throws its own targeted guidance, so a keyed adapter needs the same answer the unkeyed one gets");
+			await That(container.WithheldReason(service, "absent")).IsNull()
+				.Because("no slot exists under that key, so there is nothing withheld to explain");
+		}
+
+		private static string? RefusalMessage(IAwaitenResolver resolver, Type shape, object? key = null)
+		{
+			try
+			{
+				_ = key is null ? resolver.Resolve(shape) : resolver.Resolve(shape, key);
+				return null;
+			}
+			catch (InvalidOperationException exception)
+			{
+				return exception.Message;
+			}
+		}
+	}
+
+	/// <summary>
 	///     A service the container withholds from the root, where it exists but will not be built. The probe reports
 	///     it, as MS.DI's does for a scoped service asked on the root, and resolution names the reason instead of
 	///     answering with <see langword="null" />.
@@ -622,6 +761,11 @@ public sealed partial class FeatureDetectionTests
 			IKeyedServiceProvider keyed = (IKeyedServiceProvider)scope.ServiceProvider;
 			await That(keyed.GetKeyedService(typeof(DisposableTransient), "x")).IsNotNull()
 				.Because("inside a scope such a transient is bounded, so it is built as asked");
+
+			await That(ProbeAgreement.Disagreements(provider,
+					[typeof(DisposableTransient), typeof(Unregistered), typeof(IEnumerable<DisposableTransient>),], "x"))
+				.IsEqualTo(string.Empty)
+				.Because("the keyed probe and the keyed resolution have to agree on a withheld slot exactly as the unkeyed pair do");
 		}
 
 		[Fact]

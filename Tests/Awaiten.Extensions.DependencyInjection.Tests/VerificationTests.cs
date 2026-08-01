@@ -1,3 +1,4 @@
+using System.Threading;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Awaiten.Extensions.DependencyInjection.Tests;
@@ -27,6 +28,26 @@ public sealed partial class VerificationTests
 	[Singleton<DerivedHandler, IHandler<DerivedEvent>>]
 	public static partial class ProvidingContainer;
 
+	public sealed class AsyncService : IAsyncInitializable
+	{
+		public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+	}
+
+	public sealed class AsyncConsumer
+	{
+		public AsyncConsumer(AsyncService service) => _ = service;
+	}
+
+	/// <summary>Provides the import, but only asynchronously, so it is withheld from the synchronous path.</summary>
+	[Container]
+	[Singleton<AsyncService>]
+	public static partial class AsyncProvidingContainer;
+
+	[Container]
+	[ImportService<AsyncService>]
+	[Singleton<AsyncConsumer>]
+	public static partial class AsyncImportingContainer;
+
 	[Fact]
 	public async Task VerifyAgainst_AnAwaitenProvider_AcceptsWhatThatProviderResolves()
 	{
@@ -40,6 +61,24 @@ public sealed partial class VerificationTests
 		await That(provider.GetService(typeof(IHandler<IEvent>))).IsNotNull()
 			.Because("the providing container satisfies the variant closing through its variance fallback");
 		await That(() => ((IAwaitenContainerMetadata)importing).VerifyAgainst(provider)).DoesNotThrow();
+	}
+
+	[Fact]
+	public async Task VerifyAgainst_AnAwaitenProviderThatWithholdsTheImport_SurfacesThatProvidersGuidance()
+	{
+		using AsyncProvidingContainer.Root providing = new();
+		using AwaitenServiceProvider provider = new(providing, ownsContainer: false);
+		using AsyncImportingContainer.Root importing = new();
+
+		await That(() => ((IAwaitenContainerMetadata)importing).VerifyAgainst(provider))
+			.DoesNotThrow()
+			.Because("the import exists on the providing side, so verification passes rather than reporting it missing; reaching it synchronously is the consumer's problem");
+
+		((IExternalResolverHost)importing).ExternalResolver = new ServiceProviderExternalResolver(provider);
+
+		await That(() => importing.Resolve<AsyncConsumer>()).Throws<InvalidOperationException>()
+			.WithMessage("*ResolveAsync*").AsWildcard()
+			.Because("the providing container names why it withholds the import, and that reaches the consumer instead of the importing container's generic 'external dependency unavailable'");
 	}
 
 	[Fact]

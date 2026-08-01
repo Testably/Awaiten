@@ -181,5 +181,23 @@ public partial class DiagnosticTests
 			await That(diagnostics.Any(d => d.Contains("AWT135"))).IsFalse()
 				.Because("the diagnostic is suppressible, so a deliberate seam like the MS.DI bridge adapter can opt out");
 		}
+
+		[Fact]
+		public async Task PointsAnAdapterAtSuppressionRatherThanAtInjectingTheDependency()
+		{
+			string[] diagnostics = await Analyzer.Run<AwaitenBoundaryAnalyzer>("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public sealed class OrderProcessor
+			                                       {
+			                                       	public OrderProcessor(IAwaitenResolver resolver) { }
+			                                       }
+			                                       """);
+
+			await That(diagnostics.Single(d => d.Contains("AWT135"))).Contains("suppress this in source")
+				.Because("the standing advice to inject the dependency instead is wrong for a host-integration adapter, where holding the resolver is the adaptation, and suppression is the sanctioned answer");
+		}
 	}
 }

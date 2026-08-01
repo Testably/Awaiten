@@ -304,15 +304,17 @@ public sealed partial class BridgeTests
 		using BridgeContainer.Root container = new();
 		using AwaitenServiceProvider provider = new(container);
 
-		// An async-initialized service has no synchronous path, so the bare type is not resolvable...
-		await That(provider.GetService(typeof(AsyncService))).IsNull();
+		void ResolveBareType() => provider.GetService(typeof(AsyncService));
 
-		// ...but the registration metadata advertises it, so Task<T> resolves through ResolveAsync.
+		await That(ResolveBareType).Throws<InvalidOperationException>().WithMessage("*ResolveAsync*").AsWildcard()
+			.Because("the bare type has no synchronous path, and the container's guidance names the fix, so a caller is not left with a null to misread as 'no such service'");
+
 		AsyncService resolved = await (Task<AsyncService>)provider.GetService(typeof(Task<AsyncService>))!;
-		await That(resolved.Initialized).IsTrue();
+		await That(resolved.Initialized).IsTrue()
+			.Because("the registration metadata advertises it, so Task<T> resolves through ResolveAsync");
 
-		// A Task<T> over a type the container does not advertise stays unresolved.
-		await That(provider.GetService(typeof(Task<string>))).IsNull();
+		await That(provider.GetService(typeof(Task<string>))).IsNull()
+			.Because("a Task<T> over a type the container does not advertise is genuinely not its service");
 	}
 
 	[Fact]

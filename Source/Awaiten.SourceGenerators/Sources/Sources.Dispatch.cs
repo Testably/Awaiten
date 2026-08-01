@@ -231,7 +231,7 @@ internal static partial class Sources
 	///     <see cref="EmitResolvabilityApi" /> can probe the same tables without duplicating the decision of whether
 	///     they were emitted at all.
 	/// </summary>
-	private static DispatchShape EmitResolutionApi(ApiRegions regions, int depth, EmitContext context, bool strict, bool syncResolveAfterInit, string[] varianceCandidates)
+	private static DispatchShape EmitResolutionApi(ApiRegions regions, int depth, EmitContext context, bool strict, bool syncResolveAfterInit, string[] varianceCandidates, bool hasWithheld)
 	{
 		(StringBuilder members, StringBuilder fields, StringBuilder helpers) = regions;
 		InstanceModel[] instances = context.Instances;
@@ -246,12 +246,9 @@ internal static partial class Sources
 		// synchronous dispatch (async-tainted under the strict default, or failed to build) is dropped. The
 		// fallback can only route a request to an existing bucket.
 		List<string> varianceEntries = VarianceDispatchTypes(varianceCandidates, entries);
-		List<DispatchEntry> rootWithheld = Withheld(entries);
-		// hasWithheld gates the __withheld guidance lookup in Resolve (root-withheld disposables plus
-		// async-only services); hasRootWithheld gates the RootWithheld slot-flag check in TryResolve, which only
-		// the dispatchable root-withheld disposables need (async-only services have no dispatch entry).
-		bool hasRootWithheld = rootWithheld.Count > 0;
-		bool hasWithheld = WithheldTypes(rootWithheld, instances, names, serviceToIndex, syncResolveAfterInit).Count > 0;
+		// Only the dispatchable root-withheld disposables need the RootWithheld slot-flag check in TryResolve; an
+		// async-only service has no dispatch entry to carry it. The caller's hasWithheld covers both sources.
+		bool hasRootWithheld = Withheld(entries).Count > 0;
 
 		AppendXmlSummary(builder, depth,
 			"Resolves the service registered for <paramref name=\"serviceType\" />, throwing when it is not resolvable.");
@@ -268,22 +265,9 @@ internal static partial class Sources
 			// scope resolved it through TryResolve and returned above), or it is an async-only service excluded
 			// from synchronous resolution on every scope. Surface the targeted guidance (Owned<T> / ResolveAsync)
 			// instead of the generic "no registration" message. TryResolve stays non-throwing in both cases.
-			Indent(builder, depth + 1).AppendLine("if (__withheld.TryGetValue(serviceType, out string? __guidance))");
+			Indent(builder, depth + 1).AppendLine("if (__WithheldReason(serviceType, null) is string __guidance)");
 			Indent(builder, depth + 1).AppendLine("{");
 			Indent(builder, depth + 2).AppendLine("throw new global::System.InvalidOperationException(__guidance);");
-			Indent(builder, depth + 1).AppendLine("}");
-			builder.AppendLine();
-		}
-
-		if (hasWithheld && varianceEntries.Count > 0)
-		{
-			// A variant closing TryResolve declined because its nearest candidate is withheld on the Root: the
-			// closing itself has no __withheld entry, so surface the candidate's guidance rather than claiming
-			// no registration exists for a closing the container does serve from a child scope.
-			Indent(builder, depth + 1).AppendLine("global::System.Type? __variantMatch = __FindVariantMatch(serviceType);");
-			Indent(builder, depth + 1).AppendLine("if (__variantMatch is not null && __withheld.TryGetValue(__variantMatch, out string? __variantGuidance))");
-			Indent(builder, depth + 1).AppendLine("{");
-			Indent(builder, depth + 2).AppendLine("throw new global::System.InvalidOperationException(__variantGuidance);");
 			Indent(builder, depth + 1).AppendLine("}");
 			builder.AppendLine();
 		}
@@ -306,7 +290,7 @@ internal static partial class Sources
 			Indent(builder, depth + 1).AppendLine("instance = null;");
 			Indent(builder, depth + 1).AppendLine("return false;");
 			Indent(builder, depth).AppendLine("}");
-			return default;
+			return new DispatchShape(false, false, hasWithheld);
 		}
 
 		// Open-addressed probe: hash the requested type into its bucket window and scan the (small, fixed-width)
@@ -355,30 +339,35 @@ internal static partial class Sources
 			Indent(builder, depth + 1).AppendLine("return __TryResolveVariant(serviceType, out instance);");
 			Indent(builder, depth).AppendLine("}");
 			EmitVarianceFallback(fields, helpers, depth, varianceEntries, hasWithheld);
-			return new DispatchShape(true, true);
+			return new DispatchShape(true, true, hasWithheld);
 		}
 
 		Indent(builder, depth + 1).AppendLine("instance = null;");
 		Indent(builder, depth + 1).AppendLine("return false;");
 		Indent(builder, depth).AppendLine("}");
-		return new DispatchShape(true, false);
+		return new DispatchShape(true, false, hasWithheld);
 	}
 
 	/// <summary>
-	///     Which dispatch structures the synchronous resolution surface emitted: the <c>__buckets</c> table and the
-	///     variance fallback's candidate list. Both false for a container with nothing to dispatch.
+	///     Which dispatch structures the emitted container carries: the <c>__buckets</c> table and the variance
+	///     fallback's candidate list, both from the synchronous resolution surface, and the <c>__withheld</c>
+	///     guidance table, which the caller emits and reports here so every reader of it agrees with the decision
+	///     to emit it. All false for a container with nothing to dispatch and nothing to withhold.
 	/// </summary>
 	private readonly struct DispatchShape
 	{
-		public DispatchShape(bool hasBuckets, bool hasVariance)
+		public DispatchShape(bool hasBuckets, bool hasVariance, bool hasWithheld)
 		{
 			HasBuckets = hasBuckets;
 			HasVariance = hasVariance;
+			HasWithheld = hasWithheld;
 		}
 
 		public bool HasBuckets { get; }
 
 		public bool HasVariance { get; }
+
+		public bool HasWithheld { get; }
 	}
 
 	/// <summary>
@@ -460,6 +449,75 @@ internal static partial class Sources
 	}
 
 	/// <summary>
+	///     Emits the <c>__WithheldReason(Type, object?)</c> lookup that both the unkeyed and the keyed
+	///     <c>Resolve</c> throw from, and that the Root's <c>IAwaitenContainerMetadata.WithheldReason</c> reports
+	///     without throwing. Called only when one of the two tables it reads exists; a container that withholds
+	///     nothing reports the constant instead, so no such container carries a lookup that cannot answer.
+	/// </summary>
+	/// <remarks>
+	///     The public member is emitted on the Root, not here, because the answer is the Root's: a root-withheld
+	///     disposable transient is built normally by a child scope, so a scope reporting the Root's refusal would
+	///     be wrong. On the Root every withheld entry is one <c>TryResolve</c> genuinely declines, which is what
+	///     makes the lookup and the thrown message the same answer.
+	/// </remarks>
+	private static void EmitWithheldReasonApi(
+		ApiRegions regions, int depth, DispatchShape dispatch, bool hasKeyedEntries)
+	{
+		StringBuilder helpers = regions.Helpers;
+		Separate(helpers);
+		// private protected so the derived Root can read it without publishing it to the consuming assembly.
+		Indent(helpers, depth).AppendLine("private protected static string? __WithheldReason(global::System.Type serviceType, object? key)");
+		Indent(helpers, depth).AppendLine("{");
+		Indent(helpers, depth + 1).AppendLine("if (key is not null)");
+		Indent(helpers, depth + 1).AppendLine("{");
+		Indent(helpers, depth + 2).AppendLine(hasKeyedEntries
+			? "return __keyed.TryGetValue(new __KeyedKey(serviceType, key), out __KeyedEntry __entry) ? __entry.Guidance : null;"
+			: "return null;");
+		Indent(helpers, depth + 1).AppendLine("}");
+		helpers.AppendLine();
+		if (dispatch.HasWithheld)
+		{
+			Indent(helpers, depth + 1).AppendLine("if (__withheld.TryGetValue(serviceType, out string? __guidance))");
+			Indent(helpers, depth + 1).AppendLine("{");
+			Indent(helpers, depth + 2).AppendLine("return __guidance;");
+			Indent(helpers, depth + 1).AppendLine("}");
+			helpers.AppendLine();
+			if (dispatch.HasVariance)
+			{
+				// A variant closing has no withheld entry of its own, so it reports its nearest candidate's reason.
+				Indent(helpers, depth + 1).AppendLine("global::System.Type? __variantMatch = __FindVariantMatch(serviceType);");
+				Indent(helpers, depth + 1).AppendLine("if (__variantMatch is not null && __withheld.TryGetValue(__variantMatch, out string? __variantGuidance))");
+				Indent(helpers, depth + 1).AppendLine("{");
+				Indent(helpers, depth + 2).AppendLine("return __variantGuidance;");
+				Indent(helpers, depth + 1).AppendLine("}");
+				helpers.AppendLine();
+			}
+		}
+
+		Indent(helpers, depth + 1).AppendLine("return null;");
+		Indent(helpers, depth).AppendLine("}");
+	}
+
+	/// <summary>
+	///     Emits the Root's <c>IAwaitenContainerMetadata.WithheldReason</c> over the Scope's
+	///     <c>__WithheldReason</c> lookup, or as a constant <see langword="null" /> when the container withholds
+	///     nothing, so that no lookup is emitted for it to read.
+	/// </summary>
+	private static void EmitWithheldReasonMember(StringBuilder builder, int depth, bool hasWithheldReasons)
+	{
+		AppendXmlSummary(builder, depth,
+			"Why this container has <paramref name=\"serviceType\" /> but will not hand it over synchronously, or <see langword=\"null\" /> when it has no such reason.");
+		if (!hasWithheldReasons)
+		{
+			Indent(builder, depth).AppendLine("public string? WithheldReason(global::System.Type serviceType, object? key) => null;");
+			return;
+		}
+
+		Indent(builder, depth).AppendLine("public string? WithheldReason(global::System.Type serviceType, object? key)");
+		Indent(builder, depth + 1).AppendLine("=> serviceType is null ? null : __WithheldReason(serviceType, key);");
+	}
+
+	/// <summary>
 	///     The variance candidates that have a by-type dispatch entry (in candidate registration order): the
 	///     service types the runtime variance fallback may route a differently-closed request to. Empty when the
 	///     container registers no variant closed generic interface, so typical containers emit no fallback at all.
@@ -483,7 +541,8 @@ internal static partial class Sources
 	///     routes are memoized in <c>__varianceRoutes</c>; failures are not (they throw anyway, and junk types must
 	///     not grow the cache). A type with withheld guidance keeps its targeted error instead of being routed. The
 	///     matching itself lives in the static <c>__FindVariantMatch</c>, shared with the resolvability probe and
-	///     with <c>Resolve</c>'s withheld guidance so all three pick the same candidate.
+	///     with the withheld-reason lookup that <c>Resolve</c> and <c>WithheldReason</c> read, so every consumer
+	///     picks the same candidate.
 	/// </summary>
 	private static void EmitVarianceFallback(StringBuilder fields, StringBuilder helpers, int depth, List<string> candidates, bool hasWithheld)
 	{
