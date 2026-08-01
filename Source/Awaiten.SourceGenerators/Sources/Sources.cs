@@ -84,10 +84,13 @@ internal static partial class Sources
 		EmitContext context = new(model.Instances.AsArray(), names, serviceToIndex, model.HasAsyncDisposable);
 
 		// The base Scope holds the dispatch table and scoped/transient logic and delegates singletons to the
-		// root; the sealed Root owns the singletons and is the usable instance (new MyContainer.Root()).
-		EmitRootClass(builder, depth, context, model.SyncResolveAfterInit);
+		// root; the sealed Root owns the singletons and is the usable instance (new MyContainer.Root()). Buffering
+		// the Scope keeps the Root first in the file while still reading what only the Scope's emit can decide.
+		StringBuilder scope = new();
+		bool hasWithheldReasons = EmitScopeBaseClass(scope, depth, context, model.Strict, model.SyncResolveAfterInit, model.VarianceCandidates.AsArray());
+		EmitRootClass(builder, depth, context, model.SyncResolveAfterInit, hasWithheldReasons);
 		builder.AppendLine();
-		EmitScopeBaseClass(builder, depth, context, model.Strict, model.SyncResolveAfterInit, model.VarianceCandidates.AsArray());
+		builder.Append(scope);
 
 		// The __AsyncArray<T> backing type for IAsyncEnumerable<T> collections is emitted only when the async
 		// collection materialization is actually used.
@@ -113,9 +116,10 @@ internal static partial class Sources
 	/// <summary>
 	///     Emits the base <c>Scope</c>: the home of resolution logic. It caches scoped instances, constructs
 	///     transients, and resolves singletons through virtual delegators the <c>Root</c> overrides. Child scopes
-	///     are instances of this type.
+	///     are instances of this type. Returns whether it emitted a <c>__WithheldReason</c> lookup with anything to
+	///     find, which is what the Root's <c>WithheldReason</c> reports over.
 	/// </summary>
-	private static void EmitScopeBaseClass(StringBuilder builder, int depth, EmitContext context, bool strict, bool syncResolveAfterInit, string[] varianceCandidates)
+	private static bool EmitScopeBaseClass(StringBuilder builder, int depth, EmitContext context, bool strict, bool syncResolveAfterInit, string[] varianceCandidates)
 	{
 		InstanceModel[] instances = context.Instances;
 		Names names = context.Names;
@@ -222,7 +226,9 @@ internal static partial class Sources
 		Indent(members, body).AppendLine("}");
 
 		ApiRegions regions = new(members, fields, helpers);
-		DispatchShape dispatch = EmitResolutionApi(regions, body, context, strict, syncResolveAfterInit, varianceCandidates);
+		// hasWithheld is passed rather than re-derived, so the decision to emit __withheld cannot drift from the
+		// decision to read it.
+		DispatchShape dispatch = EmitResolutionApi(regions, body, context, strict, syncResolveAfterInit, varianceCandidates, withheldTypes.Count > 0);
 		Separate(members);
 		EmitGenericResolveMethod(members, body);
 		// The asynchronous surface: ResolveAsync(Type) on every owner, plus CreateScopeAsync. The Root's
@@ -233,6 +239,14 @@ internal static partial class Sources
 		bool hasKeyedEntries = EmitKeyedResolutionApi(regions, body, context, strict, syncResolveAfterInit, asObjectEmitted);
 		// The resolvability probe reads the dispatch tables both surfaces just emitted, so it comes after both.
 		EmitResolvabilityApi(regions, body, dispatch, hasKeyedEntries);
+		// Gated on a table that can answer: without this a container withholding nothing carries a lookup whose
+		// every path returns null.
+		bool hasWithheldReasons = dispatch.HasWithheld || hasKeyedEntries;
+		if (hasWithheldReasons)
+		{
+			EmitWithheldReasonApi(regions, body, dispatch, hasKeyedEntries);
+		}
+
 		Separate(members);
 		EmitCreateScopeAsync(members, body);
 		// Nesting shares the same root (same singletons), so a child created from a child is no different from one
@@ -295,6 +309,7 @@ internal static partial class Sources
 			new MemberSection("Helpers", helpers));
 
 		Indent(builder, depth).AppendLine("}");
+		return hasWithheldReasons;
 	}
 
 	/// <summary>
@@ -418,7 +433,7 @@ internal static partial class Sources
 	///     instance (<c>new MyContainer.Root()</c>). It overrides the base's virtual singleton delegators, so a
 	///     child scope delegating through <c>__root</c> lands here.
 	/// </summary>
-	private static void EmitRootClass(StringBuilder builder, int depth, EmitContext context, bool syncResolveAfterInit)
+	private static void EmitRootClass(StringBuilder builder, int depth, EmitContext context, bool syncResolveAfterInit, bool hasWithheldReasons)
 	{
 		InstanceModel[] instances = context.Instances;
 		Names names = context.Names;
@@ -461,6 +476,8 @@ internal static partial class Sources
 		// The external-dependency metadata: the advertised list (fields region when non-empty) and its getter
 		// (members region); the getter returns an empty array when the container has no external dependencies.
 		EmitExternalMetadata(fields, members, body, instances);
+		Separate(members);
+		EmitWithheldReasonMember(members, body, hasWithheldReasons);
 
 		// Resolvers region: the per-singleton static resolvers overriding the base Scope's delegators.
 		for (int i = 0; i < instances.Length; i++)
@@ -661,6 +678,8 @@ internal static partial class Sources
 		Indent(builder, depth + 1).AppendLine("global::System.Collections.Generic.IReadOnlyList<global::Awaiten.AwaitenExternalDependency> global::Awaiten.IAwaitenContainerMetadata.ExternalDependencies => global::System.Array.Empty<global::Awaiten.AwaitenExternalDependency>();");
 		builder.AppendLine();
 		Indent(builder, depth + 1).AppendLine("public bool IsResolvable(global::System.Type serviceType, object? key) => false;");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("public string? WithheldReason(global::System.Type serviceType, object? key) => null;");
 		builder.AppendLine();
 		Indent(builder, depth + 1).AppendLine("global::Awaiten.IExternalResolver? global::Awaiten.IExternalResolverHost.ExternalResolver { get; set; }");
 

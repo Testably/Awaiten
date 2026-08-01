@@ -1703,7 +1703,7 @@ public sealed class EspressoMachine;
 ### AWT135
 
 :::warning[Warning]
-A resolver seam (`IAwaitenResolver`, `IAwaitenScope`, `IAwaitenRoot`, and the like) is injected into a type that is not the `[Container]` composition root. Resolving from the container at run time is the Service Locator anti-pattern: it hides the type's real dependencies and defeats the compile-time graph check. Inject the dependency you actually need instead. The typed fast-path `IAwaitenResolver<T>` is a single-service seam and is not reported.
+A resolver seam (`IAwaitenResolver`, `IAwaitenScope`, `IAwaitenRoot`, and the like) is injected into a type that is not the `[Container]` composition root. Resolving from the container at run time is the Service Locator anti-pattern: it hides the type's real dependencies and defeats the compile-time graph check. Inject the dependency you actually need instead, or, if the type is a host-integration adapter, suppress this on it with a justification. The typed fast-path `IAwaitenResolver<T>` is a single-service seam and is not reported.
 :::
 
 ```csharp
@@ -1712,3 +1712,60 @@ public sealed class Barista(IAwaitenResolver resolver)   // locates dependencies
     public Cup Serve() => resolver.Resolve<Cup>();
 }
 ```
+
+One kind of type is meant to hold a resolver: an adapter that bridges the container to a host's own dependency-injection surface, where holding it *is* the adaptation rather than a hidden run-time dependency. `AwaitenServiceProvider` is one, and anything you write against a framework's own registrar is another. This is an analyzer diagnostic, so suppress it in source, with the justification saying which adapter it is.
+
+Below, `IServiceLocator` stands for whatever single-method resolution interface your framework declares, where returning `null` is how an adapter says "not mine". Both answers that are not a plain instance carry their weight: the [collection convention](./msdi-bridge#feature-detection) every framework expects, and the withheld reason that keeps a container's own failure from being reported as absence.
+
+```csharp
+using System.Diagnostics.CodeAnalysis;
+
+[SuppressMessage("Awaiten", "AWT135:Service locator: a resolver interface is injected into a service",
+    Justification = "This is a custom bridge adapter: holding the scope is the adaptation itself, not a hidden run-time dependency.")]
+internal sealed class AwaitenServiceLocator(IAwaitenContainerMetadata container, IAwaitenScope scope) : IServiceLocator
+{
+    public object? Resolve(Type? type)
+    {
+        if (type is null)
+        {
+            return null;
+        }
+
+        if (scope.TryResolve(type, out object? instance))
+        {
+            return instance;
+        }
+
+        // Reported as absent, the framework would bind it from elsewhere and fail far from the cause.
+        if (container.WithheldReason(type, null) is { } reason)
+        {
+            throw new InvalidOperationException(reason);
+        }
+
+        return EmptyCollectionElement(type) is { } elementType
+            ? Array.CreateInstance(elementType, 0)
+            : null;
+    }
+
+    /// <summary>
+    ///     The element type to answer with an empty sequence rather than <see langword="null" />, because a
+    ///     framework uses a collection as an extension point and "no handlers" still has to enumerate. A value
+    ///     element would need an array type native AOT does not generate; a resolvable one has members an empty
+    ///     sequence would drop.
+    /// </summary>
+    private Type? EmptyCollectionElement(Type type)
+    {
+        if (!type.IsConstructedGenericType || type.GetGenericTypeDefinition() != typeof(IEnumerable<>))
+        {
+            return null;
+        }
+
+        Type elementType = type.GenericTypeArguments[0];
+        return elementType.IsValueType || container.IsResolvable(elementType, null) ? null : elementType;
+    }
+}
+```
+
+`AwaitenServiceProvider` is the same shape against MS.DI's `IServiceProvider`, so read it alongside this if your framework's surface is keyed or asks resolvability questions.
+
+Suppress it on the adapter, never project-wide: the diagnostic is right about every other type.

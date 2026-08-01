@@ -523,7 +523,7 @@ internal static class Diagnostics
 	public static readonly DiagnosticDescriptor ServiceLocatorInjection = new(
 		"AWT135",
 		"Service locator: a resolver interface is injected into a service",
-		"'{0}' takes the resolver interface '{1}'; resolving from the container at run time hides real dependencies and defeats the compile-time graph check. Inject the dependency you need instead; only the [Container] composition root should hold '{1}'.",
+		"'{0}' takes the resolver interface '{1}'; resolving from the container at run time hides real dependencies and defeats the compile-time graph check. Inject the dependency you need instead; only the [Container] composition root should hold '{1}'. If '{0}' adapts the container to a host's own dependency-injection surface, holding the resolver is the adaptation itself: suppress this in source with a justification.",
 		"Awaiten",
 		DiagnosticSeverity.Warning,
 		isEnabledByDefault: true);

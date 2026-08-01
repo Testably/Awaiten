@@ -14,8 +14,10 @@ namespace Awaiten.Extensions.DependencyInjection;
 ///     service as <see cref="IServiceProvider" /> requires. A service that requires asynchronous resolution
 ///     (advertised through <see cref="IAwaitenContainerMetadata" />) is served as a <c>Task&lt;T&gt;</c>
 ///     (request <c>Task&lt;TService&gt;</c> and await it), mirroring the collection projection. An
-///     <c>IEnumerable&lt;T&gt;</c> the container has no registration for is the one exception to the null: it
-///     resolves to an empty sequence for a reference element type, as MS.DI guarantees for every element type.
+///     <c>IEnumerable&lt;T&gt;</c> the container has no unkeyed registration for resolves to an empty sequence for
+///     a reference element type, as MS.DI guarantees for every element type. A service the container withholds
+///     throws its guidance naming the fix rather than answering <see langword="null" />, so the failure lands at
+///     the cause.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -68,6 +70,12 @@ public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScop
 	}
 
 	/// <inheritdoc />
+	/// <exception cref="ArgumentNullException"><paramref name="serviceType" /> is <see langword="null" />.</exception>
+	/// <exception cref="InvalidOperationException">
+	///     The container has <paramref name="serviceType" /> but withholds it from synchronous resolution, and the
+	///     exception carries the reason and the fix. Returning <see langword="null" /> instead would let a host bind
+	///     the value from somewhere else and fail far from the cause.
+	/// </exception>
 	public object? GetService(Type serviceType)
 	{
 		if (serviceType is null)
@@ -109,6 +117,14 @@ public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScop
 			return _container.Resolve(serviceType);
 		}
 
+		// The container has the service and withholds it from the synchronous path, typically because it needs
+		// asynchronous initialization. It knows exactly why and what to change, so throwing that beats returning a
+		// null the caller would report as "no such service", naming the symptom instead of the cause.
+		if (_metadata?.WithheldReason(serviceType, null) is { } reason)
+		{
+			throw new InvalidOperationException(reason);
+		}
+
 		// MS.DI resolves IEnumerable<T> for every T, so a consumer enumerates one without a null check and a
 		// framework uses it as an extension point. See EmptyEnumerableElement for which element types the bridge
 		// can honour that for.
@@ -127,6 +143,11 @@ public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScop
 	///     semantics), returning <see langword="null" />. An async-tainted keyed service is served as a
 	///     <c>Task&lt;T&gt;</c> under the same key, mirroring the unkeyed projection.
 	/// </remarks>
+	/// <exception cref="ArgumentNullException"><paramref name="serviceType" /> is <see langword="null" />.</exception>
+	/// <exception cref="InvalidOperationException">
+	///     The container has the keyed service but withholds it from synchronous resolution, as in
+	///     <see cref="GetService" />, and the exception carries the reason and the fix.
+	/// </exception>
 	public object? GetKeyedService(Type serviceType, object? serviceKey)
 	{
 		if (serviceType is null)
@@ -173,6 +194,11 @@ public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScop
 			return _container.Resolve(serviceType, serviceKey);
 		}
 
+		if (_metadata?.WithheldReason(serviceType, serviceKey) is { } reason)
+		{
+			throw new InvalidOperationException(reason);
+		}
+
 		return null;
 	}
 
@@ -192,13 +218,16 @@ public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScop
 
 	/// <inheritdoc />
 	/// <remarks>
-	///     Delegated to <see cref="IAwaitenContainerMetadata.IsResolvable" />, so it covers every shape the
+	///     Answered from <see cref="IAwaitenContainerMetadata.IsResolvable" />, so it covers every shape the
 	///     container dispatches rather than a re-derivation of the generator's synthesis rules: a registration, the
 	///     relationship shapes over it, the synthesized collections and keyed dictionaries, the awaited views over
-	///     those, and a variance-compatible closing. The container's own answer cannot drift from what
-	///     <see cref="GetService" /> does, because both read the same tables. A keyed registration is not reported
-	///     here, mirroring how <see cref="GetService" /> resolves only the unkeyed one; ask
-	///     <see cref="IsKeyedService" /> for those.
+	///     those, and a variance-compatible closing. Shapes the container does not dispatch are reported when
+	///     <see cref="GetService" /> still answers them with something other than <see langword="null" />: the
+	///     bridge's own <c>Task&lt;T&gt;</c> projection, a service withheld with a reason, and an
+	///     <c>IEnumerable&lt;T&gt;</c> served as an empty sequence. So the probe cannot drift from what
+	///     <see cref="GetService" /> does. A keyed
+	///     registration is not reported here, mirroring how <see cref="GetService" /> resolves only the unkeyed
+	///     one; ask <see cref="IsKeyedService" /> for those.
 	/// </remarks>
 	/// <exception cref="ArgumentNullException"><paramref name="serviceType" /> is <see langword="null" />.</exception>
 	public bool IsService(Type serviceType)
@@ -208,10 +237,13 @@ public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScop
 			throw new ArgumentNullException(nameof(serviceType));
 		}
 
-		// The empty-sequence answer is unkeyed only, matching GetService: MS.DI's keyed surface has no equivalent
-		// guarantee, and IsResolvableShape is shared with the keyed probe.
+		// A withheld service exists, which is what this answers, and GetService throws its guidance rather than
+		// returning null, so reporting it keeps the probe and resolution in step. The empty-sequence answer is
+		// unkeyed only, matching GetService: MS.DI's keyed surface has no equivalent guarantee, and
+		// IsResolvableShape is shared with the keyed probe.
 		return IsProviderService(serviceType)
 		       || IsResolvableShape(serviceType, null)
+		       || _metadata?.WithheldReason(serviceType, null) is not null
 		       || EmptyEnumerableElement(serviceType) is not null;
 	}
 
@@ -219,7 +251,9 @@ public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScop
 	/// <remarks>
 	///     A <see langword="null" /> <paramref name="serviceKey" /> asks about the unkeyed registration, exactly
 	///     like <see cref="IsService" />. <see cref="KeyedService.AnyKey" /> reports <see langword="false" />,
-	///     because <see cref="GetKeyedService" /> declines it: Awaiten has no wildcard-key semantics.
+	///     because <see cref="GetKeyedService" /> declines it: Awaiten has no wildcard-key semantics. A keyed
+	///     service the container withholds is reported, as on the unkeyed surface, because
+	///     <see cref="GetKeyedService" /> answers it with its guidance rather than <see langword="null" />.
 	/// </remarks>
 	/// <exception cref="ArgumentNullException"><paramref name="serviceType" /> is <see langword="null" />.</exception>
 	public bool IsKeyedService(Type serviceType, object? serviceKey)
@@ -234,7 +268,9 @@ public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScop
 			return IsService(serviceType);
 		}
 
-		return !ReferenceEquals(serviceKey, KeyedService.AnyKey) && IsResolvableShape(serviceType, serviceKey);
+		return !ReferenceEquals(serviceKey, KeyedService.AnyKey)
+		       && (IsResolvableShape(serviceType, serviceKey)
+		           || _metadata?.WithheldReason(serviceType, serviceKey) is not null);
 	}
 
 	/// <inheritdoc />
@@ -313,34 +349,28 @@ public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScop
 	}
 
 	/// <summary>
-	///     The element type of an <c>IEnumerable&lt;T&gt;</c> the container has no registration for, which the
-	///     bridge answers with an empty sequence, or <see langword="null" /> when the shape is not one of those.
+	///     The element type of an <c>IEnumerable&lt;T&gt;</c> the container has no unkeyed registration for, which
+	///     the bridge answers with an empty sequence, or <see langword="null" /> when the shape is not one of those.
 	/// </summary>
 	/// <remarks>
 	///     <para>
 	///         MS.DI resolves <c>IEnumerable&lt;T&gt;</c> for every <c>T</c>, empty when nothing is registered, so
-	///         consumers enumerate one without a null check and frameworks use it as an extension point ("every
-	///         registered handler, of which there may be none"). The generator emits collection cases only for
-	///         element types the graph mentions, so one it never saw has no case to hit, and returning
-	///         <see langword="null" /> there breaks such a consumer on its first enumeration.
+	///         consumers enumerate one without a null check and frameworks use it as an extension point. Only that
+	///         shape qualifies, because that is the extent of the guarantee: MS.DI answers <see langword="null" />
+	///         for <c>T[]</c>, <c>IList&lt;T&gt;</c> and <c>IReadOnlyList&lt;T&gt;</c> of an unregistered element
+	///         type too.
 	///     </para>
 	///     <para>
-	///         Only <c>IEnumerable&lt;T&gt;</c> qualifies, because that is the extent of MS.DI's guarantee: it
-	///         answers <see langword="null" /> for <c>T[]</c>, <c>IList&lt;T&gt;</c> and
-	///         <c>IReadOnlyList&lt;T&gt;</c> of an unregistered element type as well.
+	///         An <em>unkeyed</em> registration of the element type excludes it: the container then has members and
+	///         merely cannot produce this shape for them (an async-tainted member, or an explicitly registered
+	///         shape suppressing the synthesized siblings), so an empty sequence would silently drop real members.
+	///         Keyed registrations do not exclude it, because they are not part of an unkeyed
+	///         <c>IEnumerable&lt;T&gt;</c> in MS.DI either.
 	///     </para>
 	///     <para>
-	///         An element type the container does have a registration for is excluded. A collection of it that did
-	///         not resolve was withheld rather than absent (a collection with an async-tainted member cannot be
-	///         materialized synchronously), and an empty sequence would both hide the container's guidance and
-	///         silently drop the members that do exist, which is the worst answer available.
-	///     </para>
-	///     <para>
-	///         A value-typed element is excluded too, and that is an AOT constraint rather than a semantic one.
-	///         Manifesting the empty array needs the <c>T[]</c> type, which native AOT generates on demand for a
-	///         reference element type but not for a value one, where it throws
-	///         <see cref="NotSupportedException" /> at run time. Reporting the shape as unavailable is honest;
-	///         trading a <see langword="null" /> for a crash would not be.
+	///         A value-typed element is excluded for an AOT reason rather than a semantic one: the empty array
+	///         needs the <c>T[]</c> type, which native AOT generates on demand for a reference element type but not
+	///         for a value one, where it throws <see cref="NotSupportedException" /> at run time.
 	///     </para>
 	/// </remarks>
 	private Type? EmptyEnumerableElement(Type serviceType)
@@ -360,7 +390,7 @@ public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScop
 
 		foreach (AwaitenRegistration registration in _metadata.Registrations)
 		{
-			if (registration.ServiceType == elementType)
+			if (registration.Key is null && registration.ServiceType == elementType)
 			{
 				return null;
 			}

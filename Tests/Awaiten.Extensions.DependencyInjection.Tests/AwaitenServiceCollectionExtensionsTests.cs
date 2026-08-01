@@ -49,6 +49,8 @@ public sealed class AwaitenServiceCollectionExtensionsTests
 
 		public bool IsResolvable(Type serviceType, object? key) => false;
 
+		public string? WithheldReason(Type serviceType, object? key) => null;
+
 		public object Resolve(Type serviceType) => throw new NotSupportedException();
 
 		public object Resolve(Type serviceType, object? key) => throw new NotSupportedException();
