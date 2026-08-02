@@ -51,7 +51,16 @@ public sealed class SingletonAttribute : Attribute
 ///     <see cref="ContainerAttribute">container</see>. One instance is constructed and cached for the
 ///     container's lifetime. The service type is the implementation itself.
 /// </summary>
-/// <typeparam name="TImplementation">The concrete type to construct and resolve.</typeparam>
+/// <remarks>
+///     With <see cref="Factory" /> or <see cref="Instance" />, <typeparamref name="TImplementation" /> may be
+///     an interface or abstract type: the container constructs nothing then, so the type argument only names
+///     the service the produced instance is resolved as. That is the shape for a library factory whose
+///     concrete type cannot be named, such as an internal implementation behind a public interface.
+/// </remarks>
+/// <typeparam name="TImplementation">
+///     The type to construct and resolve; concrete unless <see cref="Factory" /> or <see cref="Instance" />
+///     produces the instance.
+/// </typeparam>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
 public sealed class SingletonAttribute<TImplementation> : Attribute
 	where TImplementation : class

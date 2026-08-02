@@ -50,8 +50,15 @@ public sealed class ScopedAttribute : Attribute
 ///     Registers <typeparamref name="TImplementation" /> as scoped on the
 ///     <see cref="ContainerAttribute">container</see>. The service type is the implementation itself.
 /// </summary>
-/// <remarks>A scoped registration resolves to one instance per scope created via <c>CreateScope</c>. The container is the root scope.</remarks>
-/// <typeparam name="TImplementation">The concrete type to construct and resolve.</typeparam>
+/// <remarks>
+///     A scoped registration resolves to one instance per scope created via <c>CreateScope</c>. The container
+///     is the root scope. With <see cref="Factory" />, <typeparamref name="TImplementation" /> may be an
+///     interface or abstract type: the container constructs nothing then, so the type argument only names the
+///     service the produced instance is resolved as.
+/// </remarks>
+/// <typeparam name="TImplementation">
+///     The type to construct and resolve; concrete unless <see cref="Factory" /> produces the instance.
+/// </typeparam>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
 public sealed class ScopedAttribute<TImplementation> : Attribute
 	where TImplementation : class

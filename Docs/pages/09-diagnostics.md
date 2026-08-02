@@ -48,7 +48,7 @@ public static partial class CoffeeShop;
 ### AWT103
 
 :::danger[Error]
-An implementation type is abstract or an interface.
+An implementation type is abstract or an interface, and no `Factory` or `Instance` member produces it.
 :::
 
 ```csharp
@@ -57,6 +57,19 @@ public interface IBrewer;
 [Container]
 [Singleton<IBrewer>]    // IBrewer is an interface, not something to construct
 public static partial class CoffeeShop;
+```
+
+A `Factory` (or, on a singleton, `Instance`) member lifts the requirement: the container constructs nothing then, so the type argument only names the service the produced instance is resolved as. That is the shape for a library factory whose concrete type cannot be named — an internal implementation behind a public interface, such as the logger a `SerilogLoggerFactory` creates.
+
+```csharp
+public interface IBrewer;
+
+[Container]
+[Singleton<IBrewer>(Factory = nameof(CreateBrewer))]    // the factory produces it; IBrewer names the service
+public static partial class CoffeeShop
+{
+    private static IBrewer CreateBrewer() => BrewerLibrary.Create();   // returns an internal implementation
+}
 ```
 
 ### AWT104

@@ -80,6 +80,15 @@ public partial class FactoryAndInstanceTests
 	}
 
 	[Fact]
+	public async Task Instance_BehindAnInterfaceTypeArgument_HandsBackTheMember()
+	{
+		using InterfaceInstanceContainer.Root container = new();
+
+		await That(container.Resolve<IVault>()).IsSameAs(InterfaceInstanceContainer.Vault)
+			.Because("with an Instance member nothing is constructed, so the type argument may be the interface itself, naming only the service the member is resolved as");
+	}
+
+	[Fact]
 	public async Task Factory_RegisteredUnderSeveralServices_SharesOneInstance()
 	{
 		using SharedFactoryContainer.Root container = new();
@@ -345,5 +354,18 @@ public partial class FactoryAndInstanceTests
 	{
 		// A pre-built instance shared across both services it is registered under.
 		internal static readonly Store Store = new();
+	}
+
+	public interface IVault;
+
+	public sealed class MemoryVault : IVault;
+
+	[Container]
+	[Singleton<IVault>(Instance = nameof(Vault))]
+	public static partial class InterfaceInstanceContainer
+	{
+		// The member's declared type is the interface, as it is for a library-created instance whose
+		// concrete type cannot be named.
+		internal static readonly IVault Vault = new MemoryVault();
 	}
 }
