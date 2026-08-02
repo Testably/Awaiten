@@ -32,12 +32,14 @@ internal static class Diagnostics
 		isEnabledByDefault: true);
 
 	/// <summary>
-	///     A registered implementation type cannot be instantiated (it is abstract or an interface).
+	///     A registered implementation type cannot be instantiated (it is abstract or an interface) and no
+	///     <c>Factory</c> or <c>Instance</c> member produces it. Either member lifts the requirement: nothing is
+	///     constructed by the container then, so the type argument only names the service.
 	/// </summary>
 	public static readonly DiagnosticDescriptor NotInstantiable = new(
 		"AWT103",
 		"Implementation is not instantiable",
-		"'{0}' cannot be used as an implementation: it is abstract or an interface. Register a concrete type.",
+		"'{0}' cannot be used as an implementation: it is abstract or an interface, so the container cannot construct it. Register a concrete type, or produce the instance through a Factory or Instance member; the type argument may then stay abstract, naming only the service.",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);

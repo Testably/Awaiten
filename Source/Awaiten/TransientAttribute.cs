@@ -51,7 +51,14 @@ public sealed class TransientAttribute : Attribute
 ///     <see cref="ContainerAttribute">container</see>. A new instance is constructed on every request.
 ///     The service type is the implementation itself.
 /// </summary>
-/// <typeparam name="TImplementation">The concrete type to construct and resolve.</typeparam>
+/// <remarks>
+///     With <see cref="Factory" />, <typeparamref name="TImplementation" /> may be an interface or abstract
+///     type: the container constructs nothing then, so the type argument only names the service the produced
+///     instance is resolved as.
+/// </remarks>
+/// <typeparam name="TImplementation">
+///     The type to construct and resolve; concrete unless <see cref="Factory" /> produces the instance.
+/// </typeparam>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
 public sealed class TransientAttribute<TImplementation> : Attribute
 	where TImplementation : class
