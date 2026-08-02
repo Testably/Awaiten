@@ -364,8 +364,6 @@ public partial class FactoryAndInstanceTests
 	[Singleton<IVault>(Instance = nameof(Vault))]
 	public static partial class InterfaceInstanceContainer
 	{
-		// The member's declared type is the interface, as it is for a library-created instance whose
-		// concrete type cannot be named.
 		internal static readonly IVault Vault = new MemoryVault();
 	}
 }

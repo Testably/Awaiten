@@ -59,7 +59,7 @@ public interface IBrewer;
 public static partial class CoffeeShop;
 ```
 
-A `Factory` (or, on a singleton, `Instance`) member lifts the requirement: the container constructs nothing then, so the type argument only names the service the produced instance is resolved as. That is the shape for a library factory whose concrete type cannot be named — an internal implementation behind a public interface, such as the logger a `SerilogLoggerFactory` creates.
+A `Factory` (or, on a singleton, `Instance`) member lifts the requirement: the container constructs nothing then, so the type argument only names the service the produced instance is resolved as. That is the shape for a library factory whose concrete type cannot be named: an internal implementation behind a public interface, such as the logger a `SerilogLoggerFactory` creates.
 
 ```csharp
 public interface IBrewer;
