@@ -2,12 +2,6 @@ window.BENCHMARK_DATA = {
   "Resolve (Size=8)": {
     "commits": [
       {
-        "sha": "b839be2a397b74b5dc455567b5bb21325ea21192",
-        "author": "Valentin Breu\u00DF",
-        "date": "Wed Jul 8 20:51:08 2026 \u002B0200",
-        "message": "docs: rename principles page to \u0027Design principles\u0027 (#101)"
-      },
-      {
         "sha": "fe678a9977280ee9c19cd4fb617e1e1f55e137c6",
         "author": "Valentin Breu\u00DF",
         "date": "Thu Jul 9 08:28:53 2026 \u002B0200",
@@ -300,10 +294,15 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sun Oct 18 13:03:07 2026 \u002B0200",
         "message": "docs: add an agent guide (#172)"
+      },
+      {
+        "sha": "3809b3d9ee5350b6d74babed902702cf7d706964",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sun Oct 18 13:29:03 2026 \u002B0200",
+        "message": "chore: align the repository with aweXpect (#169)"
       }
     ],
     "labels": [
-      "b839be2a",
       "fe678a99",
       "73b65c8c",
       "7f16291b",
@@ -352,14 +351,14 @@ window.BENCHMARK_DATA = {
       "a6543c16",
       "9de1c494",
       "624191fa",
-      "2619e92d"
+      "2619e92d",
+      "3809b3d9"
     ],
     "datasets": [
       {
         "label": "Awaiten time",
         "unit": "ns",
         "data": [
-          5.703463063140711,
           8.0992802633689,
           7.504717579254737,
           8.100218528260788,
@@ -408,7 +407,8 @@ window.BENCHMARK_DATA = {
           5.619939387838046,
           6.823595168193181,
           4.427171872059504,
-          3.5882540371801173
+          3.5882540371801173,
+          5.410474885503451
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -484,7 +484,6 @@ window.BENCHMARK_DATA = {
         "label": "MsDI time",
         "unit": "ns",
         "data": [
-          6.44696174791226,
           9.320823708176613,
           8.373257969816526,
           7.8103649243712425,
@@ -533,7 +532,8 @@ window.BENCHMARK_DATA = {
           5.474461223681768,
           6.033521421750387,
           4.224719238777955,
-          3.8529476162332754
+          3.8529476162332754,
+          6.4879028445908
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -609,7 +609,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac time",
         "unit": "ns",
         "data": [
-          89.66465620994568,
           138.2178951581319,
           137.7865421930949,
           122.32449339230855,
@@ -658,7 +657,8 @@ window.BENCHMARK_DATA = {
           95.53053188323975,
           115.7332680384318,
           59.125925379140035,
-          55.34157576010777
+          55.34157576010777,
+          82.13013702233633
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -734,7 +734,6 @@ window.BENCHMARK_DATA = {
         "label": "Jab time",
         "unit": "ns",
         "data": [
-          2.4369581701854863,
           2.877655703822772,
           3.0952845479433355,
           2.651002581541737,
@@ -783,7 +782,8 @@ window.BENCHMARK_DATA = {
           3.154719943304856,
           2.989250893394152,
           1.5536950886249543,
-          1.44287583604455
+          1.44287583604455,
+          1.875156273799283
         ],
         "borderColor": "#4A6FA5",
         "backgroundColor": "#4A6FA5",
@@ -859,7 +859,6 @@ window.BENCHMARK_DATA = {
         "label": "PureDI time",
         "unit": "ns",
         "data": [
-          4.534621610705342,
           5.430252806498454,
           5.46470433473587,
           5.420578898145602,
@@ -908,7 +907,8 @@ window.BENCHMARK_DATA = {
           3.9003242601950965,
           4.602471960087617,
           2.361686304708322,
-          2.0460071633259456
+          2.0460071633259456,
+          4.317604037125905
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
@@ -984,7 +984,6 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc time",
         "unit": "ns",
         "data": [
-          7.078843265771866,
           8.443676197758087,
           9.482060743371646,
           9.089679438334246,
@@ -1033,7 +1032,8 @@ window.BENCHMARK_DATA = {
           7.386968143284321,
           8.378399251898129,
           4.865201144346169,
-          4.78885141313076
+          4.78885141313076,
+          6.375912805398305
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -1109,7 +1109,6 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector time",
         "unit": "ns",
         "data": [
-          8.617186004916826,
           10.899093740261518,
           10.933962317449707,
           11.278606569766998,
@@ -1158,7 +1157,8 @@ window.BENCHMARK_DATA = {
           10.243747750563282,
           9.902239747842152,
           6.44132410188516,
-          6.150907699267069
+          6.150907699267069,
+          8.17340463399887
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -1235,12 +1235,6 @@ window.BENCHMARK_DATA = {
   "Resolve (Size=256)": {
     "commits": [
       {
-        "sha": "b839be2a397b74b5dc455567b5bb21325ea21192",
-        "author": "Valentin Breu\u00DF",
-        "date": "Wed Jul 8 20:51:08 2026 \u002B0200",
-        "message": "docs: rename principles page to \u0027Design principles\u0027 (#101)"
-      },
-      {
         "sha": "fe678a9977280ee9c19cd4fb617e1e1f55e137c6",
         "author": "Valentin Breu\u00DF",
         "date": "Thu Jul 9 08:28:53 2026 \u002B0200",
@@ -1533,10 +1527,15 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sun Oct 18 13:03:07 2026 \u002B0200",
         "message": "docs: add an agent guide (#172)"
+      },
+      {
+        "sha": "3809b3d9ee5350b6d74babed902702cf7d706964",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sun Oct 18 13:29:03 2026 \u002B0200",
+        "message": "chore: align the repository with aweXpect (#169)"
       }
     ],
     "labels": [
-      "b839be2a",
       "fe678a99",
       "73b65c8c",
       "7f16291b",
@@ -1585,14 +1584,14 @@ window.BENCHMARK_DATA = {
       "a6543c16",
       "9de1c494",
       "624191fa",
-      "2619e92d"
+      "2619e92d",
+      "3809b3d9"
     ],
     "datasets": [
       {
         "label": "Awaiten time",
         "unit": "ns",
         "data": [
-          6.213354308406512,
           8.925397067020336,
           8.409097443024317,
           8.747919248846861,
@@ -1641,7 +1640,8 @@ window.BENCHMARK_DATA = {
           6.68081417466913,
           8.107070768108734,
           4.815908618271351,
-          4.387451821565628
+          4.387451821565628,
+          5.951252866784731
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -1717,7 +1717,6 @@ window.BENCHMARK_DATA = {
         "label": "MsDI time",
         "unit": "ns",
         "data": [
-          6.440217928091685,
           7.976539974411328,
           7.846946627895037,
           7.946234328406198,
@@ -1766,7 +1765,8 @@ window.BENCHMARK_DATA = {
           5.526186714214938,
           5.971381839896951,
           4.1655616919199625,
-          3.8832311326494584
+          3.8832311326494584,
+          6.429090369492769
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -1842,7 +1842,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac time",
         "unit": "ns",
         "data": [
-          91.55382074628558,
           144.9231522401174,
           137.9212085088094,
           116.03581496647426,
@@ -1891,7 +1890,8 @@ window.BENCHMARK_DATA = {
           93.18288156191508,
           117.27525372505188,
           59.22109740575154,
-          58.27901465552194
+          58.27901465552194,
+          82.75664390967442
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -1967,7 +1967,6 @@ window.BENCHMARK_DATA = {
         "label": "Jab time",
         "unit": "ns",
         "data": [
-          36.15622196289209,
           42.688086743865696,
           42.76939858381565,
           42.66693961123625,
@@ -2016,7 +2015,8 @@ window.BENCHMARK_DATA = {
           43.18931011053232,
           43.101545532544456,
           64.62243889172872,
-          62.34639910062154
+          62.34639910062154,
+          36.147184929677415
         ],
         "borderColor": "#4A6FA5",
         "backgroundColor": "#4A6FA5",
@@ -2092,7 +2092,6 @@ window.BENCHMARK_DATA = {
         "label": "PureDI time",
         "unit": "ns",
         "data": [
-          6.648409329354763,
           7.652973961371642,
           8.233449998497964,
           8.2670916307431,
@@ -2141,7 +2140,8 @@ window.BENCHMARK_DATA = {
           6.352891715509551,
           7.428857733805974,
           3.369828455682312,
-          2.9149933909731254
+          2.9149933909731254,
+          6.233925311611249
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
@@ -2217,7 +2217,6 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc time",
         "unit": "ns",
         "data": [
-          6.840370509486932,
           8.584382891654968,
           9.376513866583506,
           9.024448658029238,
@@ -2266,7 +2265,8 @@ window.BENCHMARK_DATA = {
           7.081506381432216,
           8.647566406854562,
           5.114290768901507,
-          4.457134578663569
+          4.457134578663569,
+          6.537640063890389
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -2342,7 +2342,6 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector time",
         "unit": "ns",
         "data": [
-          8.759860377226557,
           14.661164148577623,
           14.923780345491,
           14.920020852770124,
@@ -2391,7 +2390,8 @@ window.BENCHMARK_DATA = {
           9.794564024607341,
           9.959293653567633,
           7.289448534448941,
-          5.988113327821096
+          5.988113327821096,
+          8.598636985889502
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -2468,12 +2468,6 @@ window.BENCHMARK_DATA = {
   "Build (Size=8)": {
     "commits": [
       {
-        "sha": "b839be2a397b74b5dc455567b5bb21325ea21192",
-        "author": "Valentin Breu\u00DF",
-        "date": "Wed Jul 8 20:51:08 2026 \u002B0200",
-        "message": "docs: rename principles page to \u0027Design principles\u0027 (#101)"
-      },
-      {
         "sha": "fe678a9977280ee9c19cd4fb617e1e1f55e137c6",
         "author": "Valentin Breu\u00DF",
         "date": "Thu Jul 9 08:28:53 2026 \u002B0200",
@@ -2766,10 +2760,15 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sun Oct 18 13:03:07 2026 \u002B0200",
         "message": "docs: add an agent guide (#172)"
+      },
+      {
+        "sha": "3809b3d9ee5350b6d74babed902702cf7d706964",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sun Oct 18 13:29:03 2026 \u002B0200",
+        "message": "chore: align the repository with aweXpect (#169)"
       }
     ],
     "labels": [
-      "b839be2a",
       "fe678a99",
       "73b65c8c",
       "7f16291b",
@@ -2818,14 +2817,14 @@ window.BENCHMARK_DATA = {
       "a6543c16",
       "9de1c494",
       "624191fa",
-      "2619e92d"
+      "2619e92d",
+      "3809b3d9"
     ],
     "datasets": [
       {
         "label": "Awaiten time",
         "unit": "ns",
         "data": [
-          17.166645737489066,
           20.44678539633751,
           18.40701818664869,
           16.965535918871563,
@@ -2874,7 +2873,8 @@ window.BENCHMARK_DATA = {
           22.040372810761134,
           17.341467062632244,
           13.675906106829643,
-          13.514564810054642
+          13.514564810054642,
+          17.856431049108505
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -2950,7 +2950,6 @@ window.BENCHMARK_DATA = {
         "label": "MsDI time",
         "unit": "ns",
         "data": [
-          1405.937064743042,
           1684.8384099324544,
           1573.2199055989583,
           1229.616373198373,
@@ -2999,7 +2998,8 @@ window.BENCHMARK_DATA = {
           1812.548974445888,
           1479.0893763224283,
           1225.3268095652263,
-          1189.816290310451
+          1189.816290310451,
+          1507.9293820517403
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -3075,7 +3075,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac time",
         "unit": "ns",
         "data": [
-          33238.251752580916,
           31191.889963003305,
           30650.97276204427,
           21869.892956542968,
@@ -3124,7 +3123,8 @@ window.BENCHMARK_DATA = {
           24080.072003173827,
           29014.78402005709,
           26005.087594839242,
-          25931.288411458332
+          25931.288411458332,
+          29321.86093575614
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -3136,7 +3136,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
-          33098,
           33094,
           33098,
           33092,
@@ -3185,7 +3184,8 @@ window.BENCHMARK_DATA = {
           32476,
           32482,
           32478,
-          32478
+          32478,
+          32482
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -3200,7 +3200,6 @@ window.BENCHMARK_DATA = {
         "label": "Jab time",
         "unit": "ns",
         "data": [
-          8.431482155735676,
           11.418494828542073,
           11.058111953948226,
           8.501657649874687,
@@ -3249,7 +3248,8 @@ window.BENCHMARK_DATA = {
           11.54027715921402,
           11.144711920193263,
           6.847186548511187,
-          6.612483084201813
+          6.612483084201813,
+          16.47584312558174
         ],
         "borderColor": "#4A6FA5",
         "backgroundColor": "#4A6FA5",
@@ -3325,7 +3325,6 @@ window.BENCHMARK_DATA = {
         "label": "PureDI time",
         "unit": "ns",
         "data": [
-          15.301717774073284,
           17.925895176331203,
           16.753817205627758,
           13.901948173131261,
@@ -3374,7 +3373,8 @@ window.BENCHMARK_DATA = {
           19.23765034079552,
           16.05864565571149,
           12.302872259702001,
-          12.350857847929001
+          12.350857847929001,
+          16.06005901694298
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
@@ -3450,7 +3450,6 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc time",
         "unit": "ns",
         "data": [
-          736.6953780174256,
           798.1282445907593,
           802.147387568156,
           611.4901093800862,
@@ -3499,7 +3498,8 @@ window.BENCHMARK_DATA = {
           752.0567885807583,
           740.0551575342814,
           626.9307458060129,
-          582.7132515907288
+          582.7132515907288,
+          762.0813524382455
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -3575,7 +3575,6 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector time",
         "unit": "ns",
         "data": [
-          11002.95225759653,
           13114.070474897113,
           13173.08188527425,
           10516.820317586264,
@@ -3624,7 +3623,8 @@ window.BENCHMARK_DATA = {
           12548.617035929363,
           12192.927481079101,
           9298.386102294922,
-          9320.282438151042
+          9320.282438151042,
+          12343.852441641
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -3637,7 +3637,6 @@ window.BENCHMARK_DATA = {
         "unit": "b",
         "data": [
           24760,
-          24760,
           24761,
           24760,
           24760,
@@ -3685,6 +3684,7 @@ window.BENCHMARK_DATA = {
           24760,
           24761,
           24760,
+          24761,
           24761
         ],
         "borderColor": "#43A047",
@@ -3700,12 +3700,6 @@ window.BENCHMARK_DATA = {
   },
   "Build (Size=256)": {
     "commits": [
-      {
-        "sha": "b839be2a397b74b5dc455567b5bb21325ea21192",
-        "author": "Valentin Breu\u00DF",
-        "date": "Wed Jul 8 20:51:08 2026 \u002B0200",
-        "message": "docs: rename principles page to \u0027Design principles\u0027 (#101)"
-      },
       {
         "sha": "fe678a9977280ee9c19cd4fb617e1e1f55e137c6",
         "author": "Valentin Breu\u00DF",
@@ -3999,10 +3993,15 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sun Oct 18 13:03:07 2026 \u002B0200",
         "message": "docs: add an agent guide (#172)"
+      },
+      {
+        "sha": "3809b3d9ee5350b6d74babed902702cf7d706964",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sun Oct 18 13:29:03 2026 \u002B0200",
+        "message": "chore: align the repository with aweXpect (#169)"
       }
     ],
     "labels": [
-      "b839be2a",
       "fe678a99",
       "73b65c8c",
       "7f16291b",
@@ -4051,14 +4050,14 @@ window.BENCHMARK_DATA = {
       "a6543c16",
       "9de1c494",
       "624191fa",
-      "2619e92d"
+      "2619e92d",
+      "3809b3d9"
     ],
     "datasets": [
       {
         "label": "Awaiten time",
         "unit": "ns",
         "data": [
-          80.83368628365653,
           94.7999116341273,
           97.75797831217447,
           95.07028720929073,
@@ -4107,7 +4106,8 @@ window.BENCHMARK_DATA = {
           139.89229128910944,
           97.63492346726932,
           64.45643738337925,
-          62.17564712251936
+          62.17564712251936,
+          101.50272866090138
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -4183,7 +4183,6 @@ window.BENCHMARK_DATA = {
         "label": "MsDI time",
         "unit": "ns",
         "data": [
-          13333.354302978516,
           16176.742881266277,
           16355.348927815756,
           11804.766768319267,
@@ -4232,7 +4231,8 @@ window.BENCHMARK_DATA = {
           15662.409061686198,
           14587.067241414388,
           10840.477353922526,
-          10825.122408040364
+          10825.122408040364,
+          15045.591801961264
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -4308,7 +4308,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac time",
         "unit": "ns",
         "data": [
-          797555.6589543269,
           754280.3709635417,
           743925.0988932292,
           524937.4245117188,
@@ -4357,7 +4356,8 @@ window.BENCHMARK_DATA = {
           574786.0366586539,
           711307.9421574519,
           630511.9791434152,
-          620898.1062825521
+          620898.1062825521,
+          721182.4188755581
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -4369,7 +4369,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
-          740932,
           736652,
           740932,
           737550,
@@ -4418,7 +4417,8 @@ window.BENCHMARK_DATA = {
           735904,
           736859,
           737527,
-          737509
+          737509,
+          739292
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -4433,7 +4433,6 @@ window.BENCHMARK_DATA = {
         "label": "Jab time",
         "unit": "ns",
         "data": [
-          66.52917310595512,
           88.20756129707608,
           80.31237819365093,
           82.65707745722362,
@@ -4482,7 +4481,8 @@ window.BENCHMARK_DATA = {
           126.81684739249093,
           78.47983171542485,
           53.41125785907109,
-          52.47332875728607
+          52.47332875728607,
+          84.02320415973664
         ],
         "borderColor": "#4A6FA5",
         "backgroundColor": "#4A6FA5",
@@ -4558,7 +4558,6 @@ window.BENCHMARK_DATA = {
         "label": "PureDI time",
         "unit": "ns",
         "data": [
-          74.74302075459407,
           88.895161483969,
           88.22738691965739,
           89.13557416200638,
@@ -4607,7 +4606,8 @@ window.BENCHMARK_DATA = {
           126.04378254073006,
           88.60570754210154,
           59.13128065268199,
-          59.06881965909685
+          59.06881965909685,
+          90.55386188824971
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
@@ -4683,7 +4683,6 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc time",
         "unit": "ns",
         "data": [
-          43913.301967075895,
           45463.70332438151,
           44098.376924641925,
           35449.61164738582,
@@ -4732,7 +4731,8 @@ window.BENCHMARK_DATA = {
           43559.670910644534,
           43327.06249060998,
           36234.454154459636,
-          36497.22782592774
+          36497.22782592774,
+          42888.507267543246
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -4744,7 +4744,6 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
-          80673,
           79818,
           80668,
           81156,
@@ -4793,7 +4792,8 @@ window.BENCHMARK_DATA = {
           79824,
           80462,
           80945,
-          80943
+          80943,
+          79761
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -4808,7 +4808,6 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector time",
         "unit": "ns",
         "data": [
-          335368.5618614784,
           371461.3037109375,
           379395.69140625,
           298263.4706054687,
@@ -4857,7 +4856,8 @@ window.BENCHMARK_DATA = {
           365770.4984700521,
           358089.5468374399,
           284222.58349609375,
-          279565.71421595983
+          279565.71421595983,
+          376284.1708007812
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -4869,7 +4869,6 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
-          573026,
           573060,
           573025,
           571221,
@@ -4918,7 +4917,8 @@ window.BENCHMARK_DATA = {
           572329,
           573105,
           573057,
-          573088
+          573088,
+          573140
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -4933,12 +4933,6 @@ window.BENCHMARK_DATA = {
   },
   "Realistic": {
     "commits": [
-      {
-        "sha": "b839be2a397b74b5dc455567b5bb21325ea21192",
-        "author": "Valentin Breu\u00DF",
-        "date": "Wed Jul 8 20:51:08 2026 \u002B0200",
-        "message": "docs: rename principles page to \u0027Design principles\u0027 (#101)"
-      },
       {
         "sha": "fe678a9977280ee9c19cd4fb617e1e1f55e137c6",
         "author": "Valentin Breu\u00DF",
@@ -5232,10 +5226,15 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sun Oct 18 13:03:07 2026 \u002B0200",
         "message": "docs: add an agent guide (#172)"
+      },
+      {
+        "sha": "3809b3d9ee5350b6d74babed902702cf7d706964",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sun Oct 18 13:29:03 2026 \u002B0200",
+        "message": "chore: align the repository with aweXpect (#169)"
       }
     ],
     "labels": [
-      "b839be2a",
       "fe678a99",
       "73b65c8c",
       "7f16291b",
@@ -5284,14 +5283,14 @@ window.BENCHMARK_DATA = {
       "a6543c16",
       "9de1c494",
       "624191fa",
-      "2619e92d"
+      "2619e92d",
+      "3809b3d9"
     ],
     "datasets": [
       {
         "label": "Awaiten time",
         "unit": "ns",
         "data": [
-          247.61969807942708,
           243.53616421563285,
           254.07475096384684,
           248.9799064318339,
@@ -5340,7 +5339,8 @@ window.BENCHMARK_DATA = {
           281.13160451253253,
           239.6024164835612,
           262.039945602417,
-          153.4977854149682
+          153.4977854149682,
+          201.6665074189504
         ],
         "borderColor": "#3949AB",
         "backgroundColor": "#3949AB",
@@ -5416,7 +5416,6 @@ window.BENCHMARK_DATA = {
         "label": "MsDI time",
         "unit": "ns",
         "data": [
-          630.3114050547282,
           569.9616921742758,
           602.8300207773844,
           602.4863144801213,
@@ -5465,7 +5464,8 @@ window.BENCHMARK_DATA = {
           700.1157230230478,
           614.6647637440608,
           583.5708726474217,
-          396.2826144695282
+          396.2826144695282,
+          450.6966699918111
         ],
         "borderColor": "#512BD4",
         "backgroundColor": "#512BD4",
@@ -5541,7 +5541,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac time",
         "unit": "ns",
         "data": [
-          8860.297388203939,
           8321.445668538412,
           4515.031395975749,
           6715.627210489909,
@@ -5590,7 +5589,8 @@ window.BENCHMARK_DATA = {
           6417.50713289701,
           6704.841366577149,
           6120.2005299159455,
-          3359.153157043457
+          3359.153157043457,
+          4728.489524296352
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -5603,7 +5603,7 @@ window.BENCHMARK_DATA = {
         "unit": "b",
         "data": [
           13696,
-          13696,
+          10784,
           10784,
           10784,
           10784,
@@ -5666,7 +5666,6 @@ window.BENCHMARK_DATA = {
         "label": "Jab time",
         "unit": "ns",
         "data": [
-          183.95295125643412,
           180.25229598794664,
           210.6971892118454,
           180.69499281247457,
@@ -5715,7 +5714,8 @@ window.BENCHMARK_DATA = {
           221.76095621926444,
           181.6081965310233,
           195.8169139793941,
-          114.82501974900563
+          114.82501974900563,
+          151.28668568815505
         ],
         "borderColor": "#D9534F",
         "backgroundColor": "#D9534F",
@@ -5791,7 +5791,6 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc time",
         "unit": "ns",
         "data": [
-          397.66158434549965,
           407.60795062383016,
           357.9303299358913,
           403.79808340072634,
@@ -5840,7 +5839,8 @@ window.BENCHMARK_DATA = {
           432.9832587560018,
           401.7756684507643,
           423.62300497690836,
-          240.42173034804208
+          240.42173034804208,
+          329.9882695674896
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -5916,7 +5916,6 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector time",
         "unit": "ns",
         "data": [
-          719.272831662496,
           723.57300391564,
           672.0578830718994,
           734.0853619893392,
@@ -5965,7 +5964,8 @@ window.BENCHMARK_DATA = {
           756.9612790425618,
           724.3612221399943,
           686.5312637329101,
-          379.76530838012695
+          379.76530838012695,
+          527.0984228574313
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -6041,7 +6041,6 @@ window.BENCHMARK_DATA = {
         "label": "PureDI time",
         "unit": "ns",
         "data": [
-          185.9234330336253,
           179.65276721807626,
           170.14135997635978,
           183.92411523598892,
@@ -6090,7 +6089,8 @@ window.BENCHMARK_DATA = {
           199.28713736534118,
           190.01199374198913,
           187.79812438147408,
-          108.74298429489136
+          108.74298429489136,
+          147.6140720163073
         ],
         "borderColor": "#F0AD4E",
         "backgroundColor": "#F0AD4E",
