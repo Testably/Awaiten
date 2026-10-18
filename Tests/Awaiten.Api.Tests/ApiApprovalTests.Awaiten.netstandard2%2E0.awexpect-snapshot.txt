@@ -18,21 +18,15 @@ namespace Awaiten
         public static bool operator ==(Awaiten.AwaitenExternalDependency left, Awaiten.AwaitenExternalDependency right) { }
         public static bool operator !=(Awaiten.AwaitenExternalDependency left, Awaiten.AwaitenExternalDependency right) { }
     }
-    public enum AwaitenLifetime
-    {
-        Singleton = 0,
-        Transient = 1,
-        Scoped = 2,
-    }
     public readonly struct AwaitenRegistration : System.IEquatable<Awaiten.AwaitenRegistration>
     {
-        public AwaitenRegistration(System.Type serviceType, Awaiten.AwaitenLifetime lifetime, System.Type asyncTaskType, System.Func<System.Threading.Tasks.Task<object>, object> asyncTaskConverter, object? key = null) { }
-        public AwaitenRegistration(System.Type serviceType, Awaiten.AwaitenLifetime lifetime, bool externallyOwned = false, object? key = null) { }
+        public AwaitenRegistration(System.Type serviceType, Awaiten.Lifetime lifetime, System.Type asyncTaskType, System.Func<System.Threading.Tasks.Task<object>, object> asyncTaskConverter, object? key = null) { }
+        public AwaitenRegistration(System.Type serviceType, Awaiten.Lifetime lifetime, bool externallyOwned = false, object? key = null) { }
         public System.Func<System.Threading.Tasks.Task<object>, object>? AsyncTaskConverter { get; }
         public System.Type? AsyncTaskType { get; }
         public bool ExternallyOwned { get; }
         public object? Key { get; }
-        public Awaiten.AwaitenLifetime Lifetime { get; }
+        public Awaiten.Lifetime Lifetime { get; }
         public bool RequiresAsync { get; }
         public System.Type ServiceType { get; }
         public bool Equals(Awaiten.AwaitenRegistration other) { }
@@ -65,14 +59,14 @@ namespace Awaiten
     {
         public CompositeAttribute(System.Type composite, System.Type service) { }
         public System.Type Composite { get; }
-        public Awaiten.AwaitenLifetime Lifetime { get; set; }
+        public Awaiten.Lifetime Lifetime { get; set; }
         public System.Type Service { get; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
     public sealed class CompositeAttribute<TComposite, TService> : System.Attribute where TComposite : class, TService
     {
         public CompositeAttribute() { }
-        public Awaiten.AwaitenLifetime Lifetime { get; set; }
+        public Awaiten.Lifetime Lifetime { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, Inherited = false)]
     public sealed class ContainerAttribute : System.Attribute
@@ -120,7 +114,7 @@ namespace Awaiten
     {
         public GeneratedScanRegistrationAttribute(string factory) { }
         public string Factory { get; }
-        public Awaiten.AwaitenLifetime Lifetime { get; set; }
+        public Awaiten.Lifetime Lifetime { get; set; }
         public string? OnActivated { get; set; }
         public string? OnRelease { get; set; }
         public bool SkipUnconstructable { get; set; }
@@ -134,12 +128,16 @@ namespace Awaiten
         System.Threading.Tasks.Task<object> ResolveAsync(System.Type serviceType, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
         System.Threading.Tasks.Task<object> ResolveAsync(System.Type serviceType, object? key, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
     }
-    public interface IAwaitenContainerMetadata : Awaiten.IAwaitenAsyncResolver, Awaiten.IAwaitenResolver, Awaiten.IAwaitenRoot, Awaiten.IAwaitenScope, Awaiten.IExternalResolverHost, System.IDisposable
+    public interface IAwaitenContainerMetadata : Awaiten.IAwaitenAsyncResolver, Awaiten.IAwaitenExternalResolverHost, Awaiten.IAwaitenResolver, Awaiten.IAwaitenRoot, Awaiten.IAwaitenScope, System.IDisposable
     {
         System.Collections.Generic.IReadOnlyList<Awaiten.AwaitenExternalDependency> ExternalDependencies { get; }
         System.Collections.Generic.IReadOnlyList<Awaiten.AwaitenRegistration> Registrations { get; }
         bool IsResolvable(System.Type serviceType, object? key);
         string? WithheldReason(System.Type serviceType, object? key);
+    }
+    public interface IAwaitenExternalResolverHost
+    {
+        Awaiten.IExternalResolver? ExternalResolver { get; set; }
     }
     public interface IAwaitenResolver
     {
@@ -164,10 +162,6 @@ namespace Awaiten
     public interface IExternalResolver
     {
         bool TryResolve(System.Type serviceType, object? serviceKey, out object? instance);
-    }
-    public interface IExternalResolverHost
-    {
-        Awaiten.IExternalResolver? ExternalResolver { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
     public sealed class ImportAttribute : System.Attribute
@@ -200,6 +194,12 @@ namespace Awaiten
         public object? Key { get; set; }
         public bool Optional { get; set; }
         public string PropertyName { get; }
+    }
+    public enum Lifetime
+    {
+        Singleton = 0,
+        Transient = 1,
+        Scoped = 2,
     }
     public enum LifetimeSafety
     {
@@ -238,7 +238,7 @@ namespace Awaiten
         public System.Type? AssignableTo { get; }
         public System.Type[]? Exclude { get; set; }
         public System.Type[]? InAssembliesOf { get; set; }
-        public Awaiten.AwaitenLifetime Lifetime { get; set; }
+        public Awaiten.Lifetime Lifetime { get; set; }
         public string[]? NamePatterns { get; set; }
         public string[]? NamespacePatterns { get; set; }
         public string? OnActivated { get; set; }
@@ -252,7 +252,7 @@ namespace Awaiten
         public Awaiten.ScanAs As { get; set; }
         public System.Type[]? Exclude { get; set; }
         public System.Type[]? InAssembliesOf { get; set; }
-        public Awaiten.AwaitenLifetime Lifetime { get; set; }
+        public Awaiten.Lifetime Lifetime { get; set; }
         public string[]? NamePatterns { get; set; }
         public string[]? NamespacePatterns { get; set; }
         public string? OnActivated { get; set; }

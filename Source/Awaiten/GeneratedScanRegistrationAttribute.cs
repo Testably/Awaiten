@@ -36,8 +36,8 @@ public sealed class GeneratedScanRegistrationAttribute<TService> : Attribute
 	/// <summary>The generated factory method that constructs the match.</summary>
 	public string Factory { get; }
 
-	/// <summary>The lifetime the scan declared. Defaults to <see cref="AwaitenLifetime.Transient" />, matching <c>[Scan]</c>.</summary>
-	public AwaitenLifetime Lifetime { get; set; } = AwaitenLifetime.Transient;
+	/// <summary>The lifetime the scan declared. Defaults to <see cref="Lifetime.Transient" />, matching <c>[Scan]</c>.</summary>
+	public Lifetime Lifetime { get; set; } = Lifetime.Transient;
 
 	/// <summary>
 	///     Whether the scan declared <c>SkipUnconstructable</c>: the consuming container drops the match with a

@@ -9,7 +9,7 @@ namespace Awaiten.Benchmarks.Helpers;
 internal partial class PureContainer8
 {
 	private static void Setup() => DI.Setup(nameof(PureContainer8))
-		.DefaultLifetime(Lifetime.Singleton)
+		.DefaultLifetime(Pure.DI.Lifetime.Singleton)
 		.Bind<B0>().To<B0>().Root<B0>("R0")
 		.Bind<B1>().To<B1>().Root<B1>("R1")
 		.Bind<B2>().To<B2>().Root<B2>("R2")
@@ -23,7 +23,7 @@ internal partial class PureContainer8
 internal partial class PureContainer256
 {
 	private static void Setup() => DI.Setup(nameof(PureContainer256))
-		.DefaultLifetime(Lifetime.Singleton)
+		.DefaultLifetime(Pure.DI.Lifetime.Singleton)
 		.Bind<B0>().To<B0>().Root<B0>("R0")
 		.Bind<B1>().To<B1>().Root<B1>("R1")
 		.Bind<B2>().To<B2>().Root<B2>("R2")

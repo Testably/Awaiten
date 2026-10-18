@@ -200,7 +200,7 @@ public partial class CompositeTests
 	[Container]
 	[Transient<EmailNotifier, INotifier>]
 	[Transient<SmsNotifier, INotifier>]
-	[Composite<CompositeNotifier, INotifier>(Lifetime = AwaitenLifetime.Singleton)]
+	[Composite<CompositeNotifier, INotifier>(Lifetime = Lifetime.Singleton)]
 	public static partial class SingletonCompositeContainer;
 
 	// A second, unrelated service with its own composite, so [Composite]'s AllowMultiple is exercised across

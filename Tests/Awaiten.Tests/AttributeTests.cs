@@ -57,13 +57,13 @@ public sealed class AttributeTests
 	{
 		ScanAttribute scan = new(typeof(IService))
 		{
-			Lifetime = AwaitenLifetime.Scoped, As = ScanAs.Self | ScanAs.Marker, SkipUnconstructable = true,
+			Lifetime = Lifetime.Scoped, As = ScanAs.Self | ScanAs.Marker, SkipUnconstructable = true,
 			InAssembliesOf = [typeof(Impl)], NamePatterns = ["*Service"], NamespacePatterns = ["App.**"],
 			Exclude = [typeof(Impl)],
 		};
 
 		await That(scan.AssignableTo).IsEqualTo(typeof(IService));
-		await That(scan.Lifetime).IsEqualTo(AwaitenLifetime.Scoped);
+		await That(scan.Lifetime).IsEqualTo(Lifetime.Scoped);
 		await That(scan.As).IsEqualTo(ScanAs.Self | ScanAs.Marker);
 		await That(scan.SkipUnconstructable).IsTrue();
 		await That(scan.InAssembliesOf).IsEqualTo(new[] { typeof(Impl) });
@@ -77,11 +77,11 @@ public sealed class AttributeTests
 	{
 		ScanAttribute<IService> scan = new()
 		{
-			Lifetime = AwaitenLifetime.Singleton, As = ScanAs.Marker, SkipUnconstructable = true,
+			Lifetime = Lifetime.Singleton, As = ScanAs.Marker, SkipUnconstructable = true,
 			InAssembliesOf = [typeof(Impl)], NamePatterns = ["A*"], NamespacePatterns = ["N.*"], Exclude = [typeof(Impl)],
 		};
 
-		await That(scan.Lifetime).IsEqualTo(AwaitenLifetime.Singleton);
+		await That(scan.Lifetime).IsEqualTo(Lifetime.Singleton);
 		await That(scan.As).IsEqualTo(ScanAs.Marker);
 		await That(scan.SkipUnconstructable).IsTrue();
 		await That(scan.Exclude).IsEqualTo(new[] { typeof(Impl) });
@@ -90,13 +90,13 @@ public sealed class AttributeTests
 	[Test]
 	public async Task CompositeAttributes_ExposeTheirTypesAndLifetime()
 	{
-		CompositeAttribute<Impl, IService> generic = new() { Lifetime = AwaitenLifetime.Singleton };
-		await That(generic.Lifetime).IsEqualTo(AwaitenLifetime.Singleton);
+		CompositeAttribute<Impl, IService> generic = new() { Lifetime = Lifetime.Singleton };
+		await That(generic.Lifetime).IsEqualTo(Lifetime.Singleton);
 
-		CompositeAttribute open = new(typeof(Impl), typeof(IService)) { Lifetime = AwaitenLifetime.Scoped };
+		CompositeAttribute open = new(typeof(Impl), typeof(IService)) { Lifetime = Lifetime.Scoped };
 		await That(open.Composite).IsEqualTo(typeof(Impl));
 		await That(open.Service).IsEqualTo(typeof(IService));
-		await That(open.Lifetime).IsEqualTo(AwaitenLifetime.Scoped);
+		await That(open.Lifetime).IsEqualTo(Lifetime.Scoped);
 	}
 
 	[Test]
@@ -115,7 +115,7 @@ public sealed class AttributeTests
 	public async Task FromKeyAttribute_AcceptsStringAndObjectKeys()
 	{
 		await That(new FromKeyAttribute("utc").Key).IsEqualTo("utc");
-		await That(new FromKeyAttribute((object)AwaitenLifetime.Scoped).Key).IsEqualTo(AwaitenLifetime.Scoped);
+		await That(new FromKeyAttribute((object)Lifetime.Scoped).Key).IsEqualTo(Lifetime.Scoped);
 	}
 
 	[Test]

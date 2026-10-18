@@ -90,26 +90,26 @@ public partial class ScanFilteringTests
 	}
 
 	[Container]
-	[Scan(typeof(IScanFilterCandidate), InAssembliesOf = new[] { typeof(IScanFilterCandidate) }, As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton, NamePatterns = new[] { "*Handler" })]
+	[Scan(typeof(IScanFilterCandidate), InAssembliesOf = new[] { typeof(IScanFilterCandidate) }, As = ScanAs.Marker, Lifetime = Lifetime.Singleton, NamePatterns = new[] { "*Handler" })]
 	public static partial class NamePatternContainer;
 
 	[Container]
-	[Scan(typeof(IScanFilterCandidate), InAssembliesOf = new[] { typeof(IScanFilterCandidate) }, As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton, NamePatterns = new[] { "*Handler", "!Legacy*" })]
+	[Scan(typeof(IScanFilterCandidate), InAssembliesOf = new[] { typeof(IScanFilterCandidate) }, As = ScanAs.Marker, Lifetime = Lifetime.Singleton, NamePatterns = new[] { "*Handler", "!Legacy*" })]
 	public static partial class NameIncludeExcludeContainer;
 
 	[Container]
-	[Scan(typeof(IScanFilterCandidate), InAssembliesOf = new[] { typeof(IScanFilterCandidate) }, As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton, NamespacePatterns = new[] { "Awaiten.Tests.Support.Filtering.Primary" })]
+	[Scan(typeof(IScanFilterCandidate), InAssembliesOf = new[] { typeof(IScanFilterCandidate) }, As = ScanAs.Marker, Lifetime = Lifetime.Singleton, NamespacePatterns = new[] { "Awaiten.Tests.Support.Filtering.Primary" })]
 	public static partial class NamespacePatternContainer;
 
 	[Container]
-	[Scan(typeof(IScanFilterCandidate), InAssembliesOf = new[] { typeof(IScanFilterCandidate) }, As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton, NamespacePatterns = new[] { "!**.Legacy" })]
+	[Scan(typeof(IScanFilterCandidate), InAssembliesOf = new[] { typeof(IScanFilterCandidate) }, As = ScanAs.Marker, Lifetime = Lifetime.Singleton, NamespacePatterns = new[] { "!**.Legacy" })]
 	public static partial class NamespaceExcludeContainer;
 
 	[Container]
-	[Scan(typeof(IScanFilterCandidate), InAssembliesOf = new[] { typeof(IScanFilterCandidate) }, As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton, Exclude = new[] { typeof(PaymentService) })]
+	[Scan(typeof(IScanFilterCandidate), InAssembliesOf = new[] { typeof(IScanFilterCandidate) }, As = ScanAs.Marker, Lifetime = Lifetime.Singleton, Exclude = new[] { typeof(PaymentService) })]
 	public static partial class ExcludeTypeContainer;
 
 	[Container]
-	[Scan(typeof(IScanFilterCandidate), InAssembliesOf = new[] { typeof(IScanFilterCandidate) }, As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton, NamePatterns = new[] { "*Handler" }, NamespacePatterns = new[] { "**.Primary" })]
+	[Scan(typeof(IScanFilterCandidate), InAssembliesOf = new[] { typeof(IScanFilterCandidate) }, As = ScanAs.Marker, Lifetime = Lifetime.Singleton, NamePatterns = new[] { "*Handler" }, NamespacePatterns = new[] { "**.Primary" })]
 	public static partial class ComposedFilterContainer;
 }

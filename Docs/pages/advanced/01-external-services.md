@@ -56,7 +56,7 @@ Awaiten does not create the external provider. It asks an *external resolver* fo
 
 Under the [MS.DI bridge](../msdi-bridge) this is automatic. `AddGeneratedContainer` and the startup initialization wire the container to the host's `IServiceProvider`, so `[ImportService<T>]` and `[ImportServices]` dependencies resolve from the host with nothing extra to do.
 
-Standing alone, you set it yourself. Implement `IExternalResolver` and assign it through `IExternalResolverHost` before the first resolve.
+Standing alone, you set it yourself. Implement `IExternalResolver` and assign it through `IAwaitenExternalResolverHost` before the first resolve.
 
 ```csharp
 public sealed class HostResolver : IExternalResolver
@@ -75,7 +75,7 @@ public sealed class HostResolver : IExternalResolver
 }
 
 using var shop = new CoffeeShop.Root();
-((IExternalResolverHost)shop).ExternalResolver = new HostResolver();
+((IAwaitenExternalResolverHost)shop).ExternalResolver = new HostResolver();
 
 var register = shop.Resolve<Register>();   // its IPaymentGateway comes from HostResolver
 ```

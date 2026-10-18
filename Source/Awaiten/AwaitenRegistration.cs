@@ -23,7 +23,7 @@ public readonly struct AwaitenRegistration : IEquatable<AwaitenRegistration>
 	/// <param name="externallyOwned">Whether the instance is a pre-built member the container exposes but does not own.</param>
 	/// <param name="key">The user-declared <c>[Key]</c> of a keyed registration, or <see langword="null" /> when unkeyed.</param>
 	/// <exception cref="ArgumentNullException"><paramref name="serviceType" /> is <see langword="null" />.</exception>
-	public AwaitenRegistration(Type serviceType, AwaitenLifetime lifetime, bool externallyOwned = false, object? key = null)
+	public AwaitenRegistration(Type serviceType, Lifetime lifetime, bool externallyOwned = false, object? key = null)
 	{
 		ServiceType = serviceType ?? throw new ArgumentNullException(nameof(serviceType));
 		Lifetime = lifetime;
@@ -48,7 +48,7 @@ public readonly struct AwaitenRegistration : IEquatable<AwaitenRegistration>
 	/// </param>
 	/// <param name="key">The user-declared <c>[Key]</c> of a keyed registration, or <see langword="null" /> when unkeyed.</param>
 	/// <exception cref="ArgumentNullException">Any non-<paramref name="key" /> argument is <see langword="null" />.</exception>
-	public AwaitenRegistration(Type serviceType, AwaitenLifetime lifetime, Type asyncTaskType, Func<Task<object>, object> asyncTaskConverter, object? key = null)
+	public AwaitenRegistration(Type serviceType, Lifetime lifetime, Type asyncTaskType, Func<Task<object>, object> asyncTaskConverter, object? key = null)
 	{
 		ServiceType = serviceType ?? throw new ArgumentNullException(nameof(serviceType));
 		Lifetime = lifetime;
@@ -63,7 +63,7 @@ public readonly struct AwaitenRegistration : IEquatable<AwaitenRegistration>
 	public Type ServiceType { get; }
 
 	/// <summary>The lifetime under which the container owns the service.</summary>
-	public AwaitenLifetime Lifetime { get; }
+	public Lifetime Lifetime { get; }
 
 	/// <summary>
 	///     The user-declared <c>[Key]</c> of a keyed registration, or <see langword="null" /> when the registration

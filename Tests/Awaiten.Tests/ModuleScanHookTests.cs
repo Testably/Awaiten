@@ -92,7 +92,7 @@ internal sealed class SameCompRoaster : ISameCompPlugin, ISameCompRoaster;
 ///     directly and binds the module's own <c>internal</c> hooks (no generated wrapper to cross a boundary).
 /// </summary>
 [Module]
-[Scan<ISameCompPlugin>(As = ScanAs.MatchingInterface, Lifetime = AwaitenLifetime.Singleton, OnActivated = nameof(Activate), OnRelease = nameof(Release))]
+[Scan<ISameCompPlugin>(As = ScanAs.MatchingInterface, Lifetime = Lifetime.Singleton, OnActivated = nameof(Activate), OnRelease = nameof(Release))]
 public static partial class SameCompHookModule
 {
 	internal static void Activate(ISameCompPlugin plugin) => SameCompLog.Entries.Add("activated:" + plugin.GetType().Name);

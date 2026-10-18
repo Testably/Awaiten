@@ -671,7 +671,7 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     The lifetime named on a <c>[Scan]</c> (<c>Lifetime = AwaitenLifetime.X</c>); its underlying int lines up
+	///     The lifetime named on a <c>[Scan]</c> (<c>Lifetime = Lifetime.X</c>); its underlying int lines up
 	///     with the generator's <c>Lifetime</c> enum. Defaults to <c>Transient</c> when unset, matching the
 	///     attribute default.
 	/// </summary>

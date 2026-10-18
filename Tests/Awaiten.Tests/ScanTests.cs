@@ -75,7 +75,7 @@ public partial class ScanTests
 	public sealed class BetaPlugin : IPlugin;
 
 	[Container]
-	[Scan(typeof(IPlugin), Lifetime = AwaitenLifetime.Singleton)]
+	[Scan(typeof(IPlugin), Lifetime = Lifetime.Singleton)]
 	[Transient<BetaPlugin>]
 	public static partial class ScanContainer;
 
@@ -91,7 +91,7 @@ public partial class ScanTests
 	}
 
 	[Container]
-	[Scan(typeof(INotification), As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton)]
+	[Scan(typeof(INotification), As = ScanAs.Marker, Lifetime = Lifetime.Singleton)]
 	[Singleton<NotificationHub>]
 	public static partial class InterfaceScanContainer;
 
@@ -100,7 +100,7 @@ public partial class ScanTests
 	public sealed class SalesReport : IReport;
 
 	[Container]
-	[Scan(typeof(IReport), As = ScanAs.Self | ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton)]
+	[Scan(typeof(IReport), As = ScanAs.Self | ScanAs.Marker, Lifetime = Lifetime.Singleton)]
 	public static partial class SelfAndInterfaceScanContainer;
 
 	[Test]
@@ -140,7 +140,7 @@ public partial class ScanTests
 
 	[Container]
 	[Singleton<HookSettings>]
-	[Scan(typeof(IHooked), Lifetime = AwaitenLifetime.Singleton, OnActivated = nameof(Activated), OnRelease = nameof(Released))]
+	[Scan(typeof(IHooked), Lifetime = Lifetime.Singleton, OnActivated = nameof(Activated), OnRelease = nameof(Released))]
 	public static partial class HookScanContainer
 	{
 		private static void Activated(IHooked instance, HookSettings settings)
@@ -174,7 +174,7 @@ public partial class ScanTests
 
 	[Container]
 	[Singleton<HookViewModel, IHookViewModel>]
-	[Scan(typeof(IHookView<>), As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton, OnActivated = nameof(WireView))]
+	[Scan(typeof(IHookView<>), As = ScanAs.Marker, Lifetime = Lifetime.Singleton, OnActivated = nameof(WireView))]
 	public static partial class HookViewContainer
 	{
 		private static void WireView<TViewModel>(IHookView<TViewModel> view, TViewModel viewModel)
@@ -201,7 +201,7 @@ public partial class ScanTests
 	public sealed class DualPanel : IPanel<int>, IPanel<string>;
 
 	[Container]
-	[Scan(typeof(IPanel<>), As = ScanAs.Self | ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton, OnActivated = nameof(Track))]
+	[Scan(typeof(IPanel<>), As = ScanAs.Self | ScanAs.Marker, Lifetime = Lifetime.Singleton, OnActivated = nameof(Track))]
 	public static partial class DualPanelContainer
 	{
 		private static void Track(object instance) => HookProbe.Log.Add("tracked:" + instance.GetType().Name);
@@ -231,8 +231,8 @@ public partial class ScanTests
 	public sealed class MergeWorker : IMergeStart, IMergeStop;
 
 	[Container]
-	[Scan(typeof(IMergeStart), Lifetime = AwaitenLifetime.Singleton, OnActivated = nameof(Started))]
-	[Scan(typeof(IMergeStop), Lifetime = AwaitenLifetime.Singleton, OnRelease = nameof(Stopped))]
+	[Scan(typeof(IMergeStart), Lifetime = Lifetime.Singleton, OnActivated = nameof(Started))]
+	[Scan(typeof(IMergeStop), Lifetime = Lifetime.Singleton, OnRelease = nameof(Stopped))]
 	public static partial class MergeHookContainer
 	{
 		private static void Started(object instance) => HookProbe.Log.Add("merge-activated:" + instance.GetType().Name);
@@ -265,7 +265,7 @@ public partial class ScanTests
 	public sealed class UnwireWindow : IUnwireView<IUnwireViewModel>;
 
 	[Container]
-	[Scan(typeof(IUnwireView<>), As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton, OnRelease = nameof(UnwireView))]
+	[Scan(typeof(IUnwireView<>), As = ScanAs.Marker, Lifetime = Lifetime.Singleton, OnRelease = nameof(UnwireView))]
 	public static partial class UnwireViewContainer
 	{
 		private static void UnwireView<TViewModel>(IUnwireView<TViewModel> view)
@@ -290,7 +290,7 @@ public partial class ScanTests
 	public sealed class PriceBinder : IPairBinder<string, int>;
 
 	[Container]
-	[Scan(typeof(IPairBinder<,>), As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton, OnActivated = nameof(BindPair))]
+	[Scan(typeof(IPairBinder<,>), As = ScanAs.Marker, Lifetime = Lifetime.Singleton, OnActivated = nameof(BindPair))]
 	public static partial class PairBinderContainer
 	{
 		private static void BindPair<TSource, TTarget>(IPairBinder<TSource, TTarget> binder)
@@ -318,7 +318,7 @@ public partial class ScanTests
 	public sealed class OrdersPanel : PanelBase<OrdersPanelModel>;
 
 	[Container]
-	[Scan(typeof(PanelBase<>), Lifetime = AwaitenLifetime.Singleton, OnActivated = nameof(WirePanel))]
+	[Scan(typeof(PanelBase<>), Lifetime = Lifetime.Singleton, OnActivated = nameof(WirePanel))]
 	public static partial class BasePanelContainer
 	{
 		private static void WirePanel<TModel>(PanelBase<TModel> panel)
@@ -337,7 +337,7 @@ public partial class ScanTests
 	}
 
 	[Container]
-	[Scan<IReport>(As = ScanAs.Self | ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton)]
+	[Scan<IReport>(As = ScanAs.Self | ScanAs.Marker, Lifetime = Lifetime.Singleton)]
 	public static partial class GenericScanContainer;
 
 	[Test]
@@ -390,7 +390,7 @@ public partial class ScanTests
 	}
 
 	[Container]
-	[Scan(typeof(IOrderPlugin), Lifetime = AwaitenLifetime.Singleton)]
+	[Scan(typeof(IOrderPlugin), Lifetime = Lifetime.Singleton)]
 	[Transient(typeof(Repository<>), typeof(IRepository<>))]
 	public static partial class OpenGenericSeedScanContainer;
 
@@ -409,12 +409,12 @@ public partial class ScanTests
 	}
 
 	[Container]
-	[Scan(typeof(ICrossAssemblyPlugin), InAssembliesOf = new[] { typeof(ICrossAssemblyPlugin) }, Lifetime = AwaitenLifetime.Singleton)]
+	[Scan(typeof(ICrossAssemblyPlugin), InAssembliesOf = new[] { typeof(ICrossAssemblyPlugin) }, Lifetime = Lifetime.Singleton)]
 	[Transient<DeltaPlugin>]
 	public static partial class CrossAssemblyScanContainer;
 
 	[Container]
-	[Scan(typeof(ICrossAssemblyPlugin), InAssembliesOf = new[] { typeof(ICrossAssemblyPlugin) }, As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton)]
+	[Scan(typeof(ICrossAssemblyPlugin), InAssembliesOf = new[] { typeof(ICrossAssemblyPlugin) }, As = ScanAs.Marker, Lifetime = Lifetime.Singleton)]
 	[Singleton<CrossAssemblyHub>]
 	public static partial class CrossAssemblyInterfaceScanContainer;
 
@@ -502,16 +502,16 @@ public partial class ScanTests
 	public sealed class DualView : IView<ViewModelOne>, IView<ViewModelTwo>;
 
 	[Container]
-	[Scan(typeof(IView<>), As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton)]
+	[Scan(typeof(IView<>), As = ScanAs.Marker, Lifetime = Lifetime.Singleton)]
 	[Transient<ViewTwo, IView<ViewModelTwo>>]
 	public static partial class ClosedTypesOfScanContainer;
 
 	[Container]
-	[Scan(typeof(IView<>), Lifetime = AwaitenLifetime.Singleton)]
+	[Scan(typeof(IView<>), Lifetime = Lifetime.Singleton)]
 	public static partial class ClosedTypesOfSelfScanContainer;
 
 	[Container]
-	[Scan(typeof(ICrossAssemblyView<>), InAssembliesOf = new[] { typeof(ICrossAssemblyView<>) }, As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton)]
+	[Scan(typeof(ICrossAssemblyView<>), InAssembliesOf = new[] { typeof(ICrossAssemblyView<>) }, As = ScanAs.Marker, Lifetime = Lifetime.Singleton)]
 	public static partial class CrossAssemblyClosedTypesOfScanContainer;
 
 	[Test]
@@ -558,11 +558,11 @@ public partial class ScanTests
 	public sealed class TimerGadget : IGadget, ITimerGadget;
 
 	[Container]
-	[Scan<IGadget>(As = ScanAs.MatchingInterface, Lifetime = AwaitenLifetime.Singleton)]
+	[Scan<IGadget>(As = ScanAs.MatchingInterface, Lifetime = Lifetime.Singleton)]
 	public static partial class MatchingInterfaceScanContainer;
 
 	[Container]
-	[Scan<IGadget>(As = ScanAs.Marker | ScanAs.MatchingInterface, Lifetime = AwaitenLifetime.Singleton)]
+	[Scan<IGadget>(As = ScanAs.Marker | ScanAs.MatchingInterface, Lifetime = Lifetime.Singleton)]
 	public static partial class MarkerAndMatchingScanContainer;
 
 	public interface IMklAlpha;
@@ -574,6 +574,6 @@ public partial class ScanTests
 	public sealed class MklBeta : IMklBeta;
 
 	[Container]
-	[Scan(As = ScanAs.MatchingInterface, NamePatterns = new[] { "Mkl*" }, Lifetime = AwaitenLifetime.Singleton)]
+	[Scan(As = ScanAs.MatchingInterface, NamePatterns = new[] { "Mkl*" }, Lifetime = Lifetime.Singleton)]
 	public static partial class MarkerlessScanContainer;
 }

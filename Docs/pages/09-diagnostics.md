@@ -1099,8 +1099,8 @@ Scans register one implementation with conflicting lifetimes.
 public sealed class Widget : IPlugin, IHandler;   // matched by both scans
 
 [Container]
-[Scan(typeof(IPlugin), Lifetime = AwaitenLifetime.Singleton)]
-[Scan(typeof(IHandler), Lifetime = AwaitenLifetime.Transient)]   // two lifetimes for Widget
+[Scan(typeof(IPlugin), Lifetime = Lifetime.Singleton)]
+[Scan(typeof(IHandler), Lifetime = Lifetime.Transient)]   // two lifetimes for Widget
 public static partial class CoffeeShop;
 ```
 

@@ -54,8 +54,10 @@ Here `MainViewModel : IViewModel, IMainViewModel` registers only under `IMainVie
 Scans register as transient unless you say otherwise.
 
 ```csharp
-[Scan<IDrink>(Lifetime = AwaitenLifetime.Singleton)]
+[Scan<IDrink>(Lifetime = Lifetime.Singleton)]
 ```
+
+If another `Lifetime` type is in scope, write `Awaiten.Lifetime.Singleton` or add a using alias.
 
 ## Scan other assemblies
 
@@ -106,7 +108,7 @@ A scan can name `OnActivated` and `OnRelease` hooks, applied to every match, so 
 
 ```csharp
 [Container]
-[Scan<IDrink>(Lifetime = AwaitenLifetime.Singleton, OnActivated = nameof(Prime))]
+[Scan<IDrink>(Lifetime = Lifetime.Singleton, OnActivated = nameof(Prime))]
 public static partial class CoffeeShop
 {
     private static void Prime(IDrink drink) => drink.Prime();

@@ -42,7 +42,7 @@ public class SelfCompiledModuleScanTests
 	                                     }
 
 	                                     [Module]
-	                                     [Scan<IPlugin>(As = ScanAs.MatchingInterface, Lifetime = AwaitenLifetime.Singleton)]
+	                                     [Scan<IPlugin>(As = ScanAs.MatchingInterface, Lifetime = Lifetime.Singleton)]
 	                                     public static partial class PluginModule { }
 	                                     """;
 
@@ -60,7 +60,7 @@ public class SelfCompiledModuleScanTests
 			.Because("the module is re-opened as partial to receive the generated factory");
 		await That(module).Contains("[global::Awaiten.GeneratedScanExpansionAttribute]")
 			.Because("the expansion marker lets a consuming container tell an expanded scan from one built without the generator (AWT154)");
-		await That(module).Contains($"global::Awaiten.GeneratedScanRegistrationAttribute<global::Lib.IRoaster>(\"{FactoryName("global::Lib.Roaster")}\", Lifetime = global::Awaiten.AwaitenLifetime.Singleton)")
+		await That(module).Contains($"global::Awaiten.GeneratedScanRegistrationAttribute<global::Lib.IRoaster>(\"{FactoryName("global::Lib.Roaster")}\", Lifetime = global::Awaiten.Lifetime.Singleton)")
 			.Because("the match is registered under its accessible MatchingInterface, as a singleton scan match");
 		await That(module).Contains($"public static global::Lib.IRoaster {FactoryName("global::Lib.Roaster")}(global::Lib.IClock @clock) => new global::Lib.Roaster(@clock);")
 			.Because("the factory returns the interface but constructs the internal implementation in the library, with verbatim-prefixed parameter names so keyword-named parameters stay legal");
@@ -174,7 +174,7 @@ public class SelfCompiledModuleScanTests
 			}
 
 			[Module]
-			[Scan<IPlugin>(As = ScanAs.MatchingInterface, Lifetime = AwaitenLifetime.Singleton)]
+			[Scan<IPlugin>(As = ScanAs.MatchingInterface, Lifetime = Lifetime.Singleton)]
 			public static partial class PluginModule { }
 			""", """
 			using Awaiten;
@@ -207,7 +207,7 @@ public class SelfCompiledModuleScanTests
 	                                          internal sealed class Bravo : IPlugin { }
 
 	                                          [Module]
-	                                          [Scan<IPlugin>(As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton)]
+	                                          [Scan<IPlugin>(As = ScanAs.Marker, Lifetime = Lifetime.Singleton)]
 	                                          public static partial class PluginModule { }
 	                                          """;
 
@@ -687,8 +687,8 @@ public class SelfCompiledModuleScanTests
 			internal sealed class Roaster : IPlugin, IRoaster { }
 
 			[Module]
-			[Scan<IPlugin>(As = ScanAs.MatchingInterface, Lifetime = AwaitenLifetime.Singleton)]
-			[Scan<IRoaster>(As = ScanAs.MatchingInterface, Lifetime = AwaitenLifetime.Transient)]
+			[Scan<IPlugin>(As = ScanAs.MatchingInterface, Lifetime = Lifetime.Singleton)]
+			[Scan<IRoaster>(As = ScanAs.MatchingInterface, Lifetime = Lifetime.Transient)]
 			public static partial class PluginModule { }
 			""");
 

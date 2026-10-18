@@ -19,7 +19,7 @@ namespace Awaiten;
 ///     composite whose constructor has no collection parameter of the composed service reports AWT130.
 ///     <para>The type parameters are ordered concrete type first, then service, to match the lifetime attributes and <see cref="DecorateAttribute{TDecorator,TService}" />.</para>
 ///     <para>
-///         The composite defaults to <see cref="AwaitenLifetime.Transient" />, re-materializing its member array on
+///         The composite defaults to <see cref="Lifetime.Transient" />, re-materializing its member array on
 ///         every resolve while each member keeps its own lifetime. Set <see cref="Lifetime" /> to share one instance.
 ///         A singleton composite over a shorter-lived scoped member is the usual captive case (AWT105).
 ///     </para>
@@ -32,10 +32,10 @@ public sealed class CompositeAttribute<TComposite, TService> : Attribute
 	where TComposite : class, TService
 {
 	/// <summary>
-	///     The composite's lifetime. Defaults to <see cref="AwaitenLifetime.Transient" />, so the composite
+	///     The composite's lifetime. Defaults to <see cref="Lifetime.Transient" />, so the composite
 	///     re-materializes its member array on every resolve. Members keep their own lifetimes regardless.
 	/// </summary>
-	public AwaitenLifetime Lifetime { get; set; } = AwaitenLifetime.Transient;
+	public Lifetime Lifetime { get; set; } = Lifetime.Transient;
 }
 
 /// <summary>
@@ -73,7 +73,7 @@ public sealed class CompositeAttribute : Attribute
 
 	/// <summary>
 	///     The composite's lifetime, applied to every synthesized closing. Defaults to
-	///     <see cref="AwaitenLifetime.Transient" />, so each closing re-materializes its member array on every resolve.
+	///     <see cref="Lifetime.Transient" />, so each closing re-materializes its member array on every resolve.
 	/// </summary>
-	public AwaitenLifetime Lifetime { get; set; } = AwaitenLifetime.Transient;
+	public Lifetime Lifetime { get; set; } = Lifetime.Transient;
 }

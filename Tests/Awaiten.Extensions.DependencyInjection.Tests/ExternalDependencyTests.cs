@@ -100,7 +100,7 @@ public sealed partial class ExternalDependencyTests
 	public async Task StandaloneContainer_UsesExplicitlyWiredExternalResolver()
 	{
 		using ExternalContainer.Root container = new();
-		((IExternalResolverHost)container).ExternalResolver = new ClockResolver();
+		((IAwaitenExternalResolverHost)container).ExternalResolver = new ClockResolver();
 
 		TimeReporter reporter = container.Resolve<TimeReporter>();
 
@@ -153,7 +153,7 @@ public sealed partial class ExternalDependencyTests
 		DisposableClock clock = new();
 		using (ExternalContainer.Root container = new())
 		{
-			((IExternalResolverHost)container).ExternalResolver = new FixedResolver(clock);
+			((IAwaitenExternalResolverHost)container).ExternalResolver = new FixedResolver(clock);
 			_ = container.Resolve<TimeReporter>();
 		}
 
@@ -166,7 +166,7 @@ public sealed partial class ExternalDependencyTests
 	public async Task ChildScope_FallsBackToTheRootsExternalResolver()
 	{
 		using ScopedExternalContainer.Root container = new();
-		((IExternalResolverHost)container).ExternalResolver = new ClockResolver();
+		((IAwaitenExternalResolverHost)container).ExternalResolver = new ClockResolver();
 		using IAwaitenScope scope = container.CreateScope();
 
 		// The child scope has no resolver of its own, so its external dependency routes through the root's.

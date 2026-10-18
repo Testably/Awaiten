@@ -166,7 +166,7 @@ internal static partial class Sources
 	private static void EmitRegistrationEntry(StringBuilder builder, int depth, ServiceKey service, InstanceModel instance, bool requiresAsync, bool externallyOwned)
 	{
 		Indent(builder, depth).Append("new global::Awaiten.AwaitenRegistration(typeof(").Append(service.Service)
-			.Append("), ").Append(AwaitenLifetimeOf(instance.Lifetime));
+			.Append("), ").Append(PublicLifetimeOf(instance.Lifetime));
 		if (requiresAsync)
 		{
 			// The async ctor carries the closed generics the bridge projects with, so it never
@@ -219,11 +219,11 @@ internal static partial class Sources
 			"global::System.Collections.Generic.IReadOnlyList<global::Awaiten.AwaitenExternalDependency> global::Awaiten.IAwaitenContainerMetadata.ExternalDependencies => __externalDependencies;");
 	}
 
-	private static string AwaitenLifetimeOf(Lifetime lifetime) => lifetime switch
+	private static string PublicLifetimeOf(Lifetime lifetime) => lifetime switch
 	{
-		Lifetime.Singleton => "global::Awaiten.AwaitenLifetime.Singleton",
-		Lifetime.Transient => "global::Awaiten.AwaitenLifetime.Transient",
-		_ => "global::Awaiten.AwaitenLifetime.Scoped",
+		Lifetime.Singleton => "global::Awaiten.Lifetime.Singleton",
+		Lifetime.Transient => "global::Awaiten.Lifetime.Transient",
+		_ => "global::Awaiten.Lifetime.Scoped",
 	};
 
 	/// <summary>

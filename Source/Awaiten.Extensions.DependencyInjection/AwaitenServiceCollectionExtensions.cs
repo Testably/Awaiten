@@ -86,7 +86,7 @@ public static class AwaitenServiceCollectionExtensions
 			IAwaitenScope scope = root.CreateScope();
 			if (hasExternal)
 			{
-				((IExternalResolverHost)scope).ExternalResolver = new ServiceProviderExternalResolver(sp);
+				((IAwaitenExternalResolverHost)scope).ExternalResolver = new ServiceProviderExternalResolver(sp);
 			}
 
 			return new AwaitenScopeHolder<TRoot>(scope);
@@ -109,7 +109,7 @@ public static class AwaitenServiceCollectionExtensions
 		where TRoot : class, IAwaitenContainerMetadata, new()
 	{
 		Type serviceType = registration.ServiceType;
-		AwaitenLifetime lifetime = registration.Lifetime;
+		Lifetime lifetime = registration.Lifetime;
 		object? key = registration.Key;
 
 		if (registration.ExternallyOwned)
@@ -180,9 +180,9 @@ public static class AwaitenServiceCollectionExtensions
 	///     inside a scope (so their disposables are bounded by the scope), falling back to the root only when
 	///     resolved from the root provider itself.
 	/// </summary>
-	private static IAwaitenScope ScopeFor<TRoot>(IServiceProvider provider, AwaitenLifetime lifetime, TRoot root)
+	private static IAwaitenScope ScopeFor<TRoot>(IServiceProvider provider, Lifetime lifetime, TRoot root)
 		where TRoot : class, IAwaitenContainerMetadata, new()
-		=> lifetime == AwaitenLifetime.Singleton || (lifetime == AwaitenLifetime.Transient && IsRootProvider(provider))
+		=> lifetime == Lifetime.Singleton || (lifetime == Lifetime.Transient && IsRootProvider(provider))
 			? root
 			: provider.GetRequiredService<AwaitenScopeHolder<TRoot>>().Scope;
 
@@ -215,10 +215,10 @@ public static class AwaitenServiceCollectionExtensions
 		}
 	}
 
-	private static ServiceLifetime ToServiceLifetime(AwaitenLifetime lifetime) => lifetime switch
+	private static ServiceLifetime ToServiceLifetime(Lifetime lifetime) => lifetime switch
 	{
-		AwaitenLifetime.Singleton => ServiceLifetime.Singleton,
-		AwaitenLifetime.Scoped => ServiceLifetime.Scoped,
+		Lifetime.Singleton => ServiceLifetime.Singleton,
+		Lifetime.Scoped => ServiceLifetime.Scoped,
 		_ => ServiceLifetime.Transient,
 	};
 

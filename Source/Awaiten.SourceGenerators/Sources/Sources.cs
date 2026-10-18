@@ -128,7 +128,7 @@ internal static partial class Sources
 
 		AppendXmlSummary(builder, depth,
 			"A resolution scope: caches scoped services and disposes the instances it created.");
-		Indent(builder, depth).Append("public class Scope : global::Awaiten.IAwaitenScope, global::Awaiten.IExternalResolverHost");
+		Indent(builder, depth).Append("public class Scope : global::Awaiten.IAwaitenScope, global::Awaiten.IAwaitenExternalResolverHost");
 		if (asyncDisposal)
 		{
 			// IAsyncDisposable is implemented on the concrete Scope, not the IAwaitenScope interface (which would
@@ -201,7 +201,7 @@ internal static partial class Sources
 
 		// The external resolver this scope routes its [ImportService<T>] / [ImportServices] dependencies through. A
 		// host wires each scope; a child without its own falls back to the root's in __ResolveExternal. The
-		// explicit IExternalResolverHost.ExternalResolver property lands in the members region.
+		// explicit IAwaitenExternalResolverHost.ExternalResolver property lands in the members region.
 		Separate(fields);
 		Indent(fields, body).AppendLine("private global::Awaiten.IExternalResolver? __externalResolver;");
 
@@ -219,7 +219,7 @@ internal static partial class Sources
 		Indent(members, body).AppendLine("}");
 
 		Separate(members);
-		Indent(members, body).AppendLine("global::Awaiten.IExternalResolver? global::Awaiten.IExternalResolverHost.ExternalResolver");
+		Indent(members, body).AppendLine("global::Awaiten.IExternalResolver? global::Awaiten.IAwaitenExternalResolverHost.ExternalResolver");
 		Indent(members, body).AppendLine("{");
 		Indent(members, body + 1).AppendLine("get => __externalResolver;");
 		Indent(members, body + 1).AppendLine("set => __externalResolver = value;");
@@ -681,7 +681,7 @@ internal static partial class Sources
 		builder.AppendLine();
 		Indent(builder, depth + 1).AppendLine("public string? WithheldReason(global::System.Type serviceType, object? key) => null;");
 		builder.AppendLine();
-		Indent(builder, depth + 1).AppendLine("global::Awaiten.IExternalResolver? global::Awaiten.IExternalResolverHost.ExternalResolver { get; set; }");
+		Indent(builder, depth + 1).AppendLine("global::Awaiten.IExternalResolver? global::Awaiten.IAwaitenExternalResolverHost.ExternalResolver { get; set; }");
 
 		Indent(builder, depth).AppendLine("}");
 	}

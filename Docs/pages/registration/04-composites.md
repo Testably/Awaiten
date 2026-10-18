@@ -56,7 +56,7 @@ Awaiten synthesizes a closed composite for every closing present in the graph. E
 A composite is transient by default. Set `Lifetime` to change it.
 
 ```csharp
-[Composite<CompositeReceiptChannel, IReceiptChannel>(Lifetime = AwaitenLifetime.Singleton)]
+[Composite<CompositeReceiptChannel, IReceiptChannel>(Lifetime = Lifetime.Singleton)]
 ```
 
 With no members registered, the composite still resolves and fans out to an empty collection.

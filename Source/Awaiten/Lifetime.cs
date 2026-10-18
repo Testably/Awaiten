@@ -13,7 +13,7 @@ namespace Awaiten;
 ///     to its internal <c>Lifetime</c> enum, so the numeric values are load-bearing: do not renumber or
 ///     reorder, and keep them aligned with that mirror.
 /// </remarks>
-public enum AwaitenLifetime
+public enum Lifetime
 {
 	/// <summary>Created once and shared for the container's life.</summary>
 	Singleton = 0,

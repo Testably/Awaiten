@@ -27,7 +27,7 @@ public static class AwaitenInitializationServiceCollectionExtensions
 	///     The warm-up resolves the container root directly rather than through a bridged registration, which
 	///     is where a container's external (<c>[ImportService&lt;T&gt;]</c> / <c>[ImportServices]</c>) dependencies are
 	///     normally wired to the host's provider. So when the container has external dependencies and its
-	///     <see cref="IExternalResolverHost.ExternalResolver" /> was not wired explicitly, the hosted service
+	///     <see cref="IAwaitenExternalResolverHost.ExternalResolver" /> was not wired explicitly, the hosted service
 	///     wires it to the host's (root) provider before warming, so an async-initialized singleton that draws
 	///     on an external service can be constructed during startup. Registering the same container's
 	///     initialization more than once is a no-op.

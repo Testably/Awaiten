@@ -120,7 +120,7 @@ public class SelfCompiledModuleScanHookTests
 			internal sealed class Roaster : IPlugin, IRoaster { }
 
 			[Module]
-			[Scan<IPlugin>(As = ScanAs.MatchingInterface, Lifetime = AwaitenLifetime.Singleton, OnActivated = nameof(Wire))]
+			[Scan<IPlugin>(As = ScanAs.MatchingInterface, Lifetime = Lifetime.Singleton, OnActivated = nameof(Wire))]
 			public static partial class PluginModule
 			{
 			    internal static void Wire(Roaster roaster, IClock clock) { }
@@ -160,7 +160,7 @@ public class SelfCompiledModuleScanHookTests
 			internal sealed class Roaster : IPlugin, IRoaster { }
 
 			[Module]
-			[Scan<IPlugin>(As = ScanAs.MatchingInterface, Lifetime = AwaitenLifetime.Singleton, OnActivated = nameof(Wire))]
+			[Scan<IPlugin>(As = ScanAs.MatchingInterface, Lifetime = Lifetime.Singleton, OnActivated = nameof(Wire))]
 			public static partial class PluginModule
 			{
 			    internal static void Wire(Roaster roaster, IClock clock) { }

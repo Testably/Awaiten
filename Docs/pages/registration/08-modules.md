@@ -65,7 +65,7 @@ public interface IRoaster;
 internal sealed class Roaster(IClock clock) : IPlugin, IRoaster;   // stays internal
 
 [Module]
-[Scan<IPlugin>(As = ScanAs.MatchingInterface, Lifetime = AwaitenLifetime.Singleton)]
+[Scan<IPlugin>(As = ScanAs.MatchingInterface, Lifetime = Lifetime.Singleton)]
 public static partial class PluginModule;   // partial, so the generator can add the factory
 ```
 

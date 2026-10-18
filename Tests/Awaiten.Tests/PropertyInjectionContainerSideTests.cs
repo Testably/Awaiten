@@ -170,7 +170,7 @@ public partial class PropertyInjectionContainerSideTests
 
 	[Container]
 	[Singleton<Clock>]
-	[Scan(typeof(IWidget), Lifetime = AwaitenLifetime.Singleton)]
+	[Scan(typeof(IWidget), Lifetime = Lifetime.Singleton)]
 	[InjectProperty<Widget>(nameof(Widget.Clock))]
 	public static partial class ScanContainer;
 

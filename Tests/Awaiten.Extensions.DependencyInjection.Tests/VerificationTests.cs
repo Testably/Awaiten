@@ -74,7 +74,7 @@ public sealed partial class VerificationTests
 			.DoesNotThrow()
 			.Because("the import exists on the providing side, so verification passes rather than reporting it missing; reaching it synchronously is the consumer's problem");
 
-		((IExternalResolverHost)importing).ExternalResolver = new ServiceProviderExternalResolver(provider);
+		((IAwaitenExternalResolverHost)importing).ExternalResolver = new ServiceProviderExternalResolver(provider);
 
 		await That(() => importing.Resolve<AsyncConsumer>()).Throws<InvalidOperationException>()
 			.WithMessage("*ResolveAsync*").AsWildcard()

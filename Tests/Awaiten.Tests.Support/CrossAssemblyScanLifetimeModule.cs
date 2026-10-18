@@ -26,6 +26,6 @@ internal sealed class ScanTransient : ITransientPlugin, IScanTransient;
 ///     transient match is a new instance per resolve, without naming either internal implementation.
 /// </summary>
 [Module]
-[Scan<ISingletonPlugin>(As = ScanAs.MatchingInterface, Lifetime = AwaitenLifetime.Singleton)]
-[Scan<ITransientPlugin>(As = ScanAs.MatchingInterface, Lifetime = AwaitenLifetime.Transient)]
+[Scan<ISingletonPlugin>(As = ScanAs.MatchingInterface, Lifetime = Lifetime.Singleton)]
+[Scan<ITransientPlugin>(As = ScanAs.MatchingInterface, Lifetime = Lifetime.Transient)]
 public static partial class ScanLifetimeModule;

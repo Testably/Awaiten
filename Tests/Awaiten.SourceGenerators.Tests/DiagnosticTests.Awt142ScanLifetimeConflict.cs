@@ -19,8 +19,8 @@ public partial class DiagnosticTests
 			                                       public sealed class Both : IA, IB { }
 
 			                                       [Container]
-			                                       [Scan(typeof(IA), Lifetime = AwaitenLifetime.Singleton)]
-			                                       [Scan(typeof(IB), Lifetime = AwaitenLifetime.Transient)]
+			                                       [Scan(typeof(IA), Lifetime = Lifetime.Singleton)]
+			                                       [Scan(typeof(IB), Lifetime = Lifetime.Transient)]
 			                                       public static partial class MyContainer
 			                                       {
 			                                       }
@@ -43,8 +43,8 @@ public partial class DiagnosticTests
 			                                       public sealed class Both : IA, IB { }
 
 			                                       [Container]
-			                                       [Scan(typeof(IA), Lifetime = AwaitenLifetime.Singleton)]
-			                                       [Scan(typeof(IB), Lifetime = AwaitenLifetime.Singleton)]
+			                                       [Scan(typeof(IA), Lifetime = Lifetime.Singleton)]
+			                                       [Scan(typeof(IB), Lifetime = Lifetime.Singleton)]
 			                                       public static partial class MyContainer
 			                                       {
 			                                       }
@@ -66,7 +66,7 @@ public partial class DiagnosticTests
 			                                       public sealed class AlphaPlugin : IPlugin { }
 
 			                                       [Container]
-			                                       [Scan(typeof(IPlugin), Lifetime = AwaitenLifetime.Singleton)]
+			                                       [Scan(typeof(IPlugin), Lifetime = Lifetime.Singleton)]
 			                                       [Transient<AlphaPlugin>]
 			                                       public static partial class MyContainer
 			                                       {
