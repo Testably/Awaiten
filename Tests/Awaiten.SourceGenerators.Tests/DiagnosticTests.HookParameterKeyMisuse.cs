@@ -12,7 +12,7 @@ public partial class DiagnosticTests
 	/// </summary>
 	public class HookParameterKeyMisuse
 	{
-		[Fact]
+		[Test]
 		public async Task FromKeyOfUnsupportedTypeOnAHookParameter_ReportsAwt170()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -39,7 +39,7 @@ public partial class DiagnosticTests
 				.Because("a hook parameter's [FromKey] is validated exactly like a constructor parameter's");
 		}
 
-		[Fact]
+		[Test]
 		public async Task KeyedCollectionHookParameterWithUnsupportedKeyType_ReportsAwt159()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -67,7 +67,7 @@ public partial class DiagnosticTests
 				.Because("a keyed-collection hook parameter is validated like a constructor parameter's");
 		}
 
-		[Fact]
+		[Test]
 		public async Task FromKeyOnASynthesizedKeyedDictionaryHookParameter_ReportsAwt160()
 		{
 			GeneratorResult result = Generator.Run("""

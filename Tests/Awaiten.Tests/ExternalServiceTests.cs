@@ -88,7 +88,7 @@ public partial class ExternalServiceTests
 		}
 	}
 
-	[Fact]
+	[Test]
 	public async Task ImportService_ConstructorDependency_ResolvesThroughTheExternalResolver()
 	{
 		using ExternalContainer.Root container = new();
@@ -100,7 +100,7 @@ public partial class ExternalServiceTests
 			.Because("the unregistered [ImportService<IClock>] dependency is drawn from the external resolver");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ImportService_InjectedProperty_ResolvesThroughTheExternalResolver()
 	{
 		using ExternalContainer.Root container = new();
@@ -112,7 +112,7 @@ public partial class ExternalServiceTests
 			.Because("[ImportService<T>] routes an [Inject] property of that type externally too");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ImportService_WithFromKey_ForwardsTheKeyToTheExternalResolver()
 	{
 		using ExternalContainer.Root container = new();
@@ -124,7 +124,7 @@ public partial class ExternalServiceTests
 			.Because("[ImportService<T>] with [FromKey] forwards the key to the resolver");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ImportService_AdvertisesTheDeclaredExternalDependency()
 	{
 		using ExternalContainer.Root container = new();
@@ -136,7 +136,7 @@ public partial class ExternalServiceTests
 			.Because("the keyed consumer advertises the forwarded key");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ImportService_LifecycleHookParameter_ResolvesThroughTheExternalResolver()
 	{
 		using HookExternalContainer.Root container = new();
@@ -148,7 +148,7 @@ public partial class ExternalServiceTests
 			.Because("a lifecycle hook parameter of an [ImportService<T>] type is drawn from the external resolver");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ImportService_ConsumedOnlyByAHookParameter_AdvertisesTheExternalDependency()
 	{
 		using HookExternalContainer.Root container = new();

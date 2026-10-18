@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt176UnconsumedExternalService
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenADeclaredExternalTypeIsNeverConsumed()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -31,7 +31,7 @@ public partial class DiagnosticTests
 				.Because("a declared [ImportService<T>] no dependency consumes is dead");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenTheExternalTypeIsReferencedOnlyThroughACollection_WhichIsInertNotRouted()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -58,7 +58,7 @@ public partial class DiagnosticTests
 				.Because("a collection element reference is not routed and gives no signal, so the [ImportService<T>] declaration is genuinely dead");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenTheExternalTypeIsReferencedOnlyThroughARelationship_TheAwt101IsTheOneSignal()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -87,7 +87,7 @@ public partial class DiagnosticTests
 				.Because("the external type is referenced (via the relationship), so it is not a dead declaration - the AWT101 is the one signal");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenTheExternalTypeIsConsumed()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -110,7 +110,7 @@ public partial class DiagnosticTests
 				.Because("a consumed [ImportService<T>] declaration is live");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenTheExternalTypeIsConsumedByALifecycleHookParameter()
 		{
 			GeneratorResult result = Generator.Run("""

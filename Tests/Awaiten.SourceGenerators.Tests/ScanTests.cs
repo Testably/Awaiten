@@ -10,7 +10,7 @@ namespace Awaiten.SourceGenerators.Tests;
 /// </summary>
 public class ScanTests
 {
-	[Fact]
+	[Test]
 	public async Task Scan_SelfRegistersEveryConcreteImplementationOfTheMarker()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -44,7 +44,7 @@ public class ScanTests
 			.Because("an abstract class is skipped by the scan");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Scan_IsOverriddenByAnExplicitRegistrationOfTheSameType()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -79,7 +79,7 @@ public class ScanTests
 			.Because("the scan match is skipped for a type already registered explicitly, so BetaPlugin is built once");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ScanAsMarker_RegistersMatchesUnderTheMarkerAsACollection()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -110,7 +110,7 @@ public class ScanTests
 			.Because("Marker registers under the marker interface, not the concrete type");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ScanAsSelfBitOrMarkerBit_RegistersBoth()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -140,7 +140,7 @@ public class ScanTests
 			.Because("Self | Marker also registers the match under the marker collection");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ScanInAssembliesOf_RegistersConcreteTypesFromTheReferencedAssembly()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -168,7 +168,7 @@ public class ScanTests
 			.Because("the abstract base in the referenced assembly is skipped");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ScanInAssembliesOf_RegistersMatchesInADeterministicOrder()
 	{
 		string Generate() => Generator.Run("""
@@ -192,7 +192,7 @@ public class ScanTests
 			.IsLessThan(first.IndexOf("ResolveGammaPlugin", System.StringComparison.Ordinal));
 	}
 
-	[Fact]
+	[Test]
 	public async Task ScanClosedTypesOf_RegistersEachMatchUnderItsClosedMarkerInterface()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -228,7 +228,7 @@ public class ScanTests
 			.Because("Marker registers under the closed marker interface, not the concrete view");
 	}
 
-	[Fact]
+	[Test]
 	public async Task GenericScan_ProducesTheSameRegistrationsAsTheTypeofForm()
 	{
 		const string body = """
@@ -261,7 +261,7 @@ public class ScanTests
 			.Because("[Scan<IHandler>] is the generic spelling of [Scan(typeof(IHandler))] and generates identically");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Scan_SkipsOpenGenericImplementers()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -288,7 +288,7 @@ public class ScanTests
 			.Because("a generic type definition is skipped by the scan");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ScanClosedTypesOf_SkipsOpenGenericImplementers()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -316,7 +316,7 @@ public class ScanTests
 			.Because("a generic type definition is skipped by the scan");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Scan_SkipsTypesTheContainerCannotAccess()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -346,7 +346,7 @@ public class ScanTests
 		await That(source).DoesNotContain("HiddenPlugin");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Scan_SeedsOpenGenericExpansionForScannedDependencies()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -379,7 +379,7 @@ public class ScanTests
 			.Because("the scanned OrderPlugin's IRepository<Order> dependency seeds open generic expansion");
 	}
 
-	[Fact]
+	[Test]
 	public async Task GenericScan_HonorsInAssembliesOfAndSelfExposure()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -405,7 +405,7 @@ public class ScanTests
 		await That(source).Contains("new __Bucket(typeof(global::Awaiten.Tests.Support.DeltaPlugin)");
 	}
 
-	[Fact]
+	[Test]
 	public async Task NamePatterns_RegisterOnlyMatchingNamesAndOrMultiplePatterns()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -435,7 +435,7 @@ public class ScanTests
 			.Because("a candidate matching no include pattern is filtered out");
 	}
 
-	[Fact]
+	[Test]
 	public async Task NamePatterns_ExcludeDropsNegatedMatches()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -463,7 +463,7 @@ public class ScanTests
 			.Because("a !-prefixed pattern excludes the matching candidate");
 	}
 
-	[Fact]
+	[Test]
 	public async Task NamePatterns_AreCaseSensitive()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -486,7 +486,7 @@ public class ScanTests
 		await That(result.Sources["Awaiten.MyCode.MyContainer.g.cs"]).DoesNotContain("OrderHandler");
 	}
 
-	[Fact]
+	[Test]
 	public async Task NamespacePatterns_MatchTheSubtreeButNotASibling()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -515,7 +515,7 @@ public class ScanTests
 			.Because("segment-aware matching does not leak into the sibling App.ServicesLegacy");
 	}
 
-	[Fact]
+	[Test]
 	public async Task NamespacePatterns_SingleStarMatchesImmediateChildrenOnly()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -542,7 +542,7 @@ public class ScanTests
 			.Because("'*' does not match a two-segment-deeper namespace");
 	}
 
-	[Fact]
+	[Test]
 	public async Task NamespacePatterns_ExcludeByTrailingSegment()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -567,7 +567,7 @@ public class ScanTests
 			.Because("'!**.Tests' excludes any namespace whose last segment is Tests");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Exclude_RemovesTheExactTypeOnly()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -594,7 +594,7 @@ public class ScanTests
 			.Because("an Exclude entry removes that exact type");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Filters_ComposeAcrossAxesWithAnd()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -622,7 +622,7 @@ public class ScanTests
 			.Because("it fails the namespace filter");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Filters_ApplyToReferencedAssemblyCandidates()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -646,7 +646,7 @@ public class ScanTests
 			.Because("the name filter narrows referenced-assembly candidates too");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ScanAsMatchingInterface_PrependsIEvenWhenTheNameAlreadyStartsWithI()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -671,7 +671,7 @@ public class ScanTests
 			.Because("Identity's convention interface is I + Identity = IIdentity");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ScanAsMatchingInterface_DoesNotMatchAGenericInterfaceOfTheConventionName()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -695,7 +695,7 @@ public class ScanTests
 			.Because("a generic IWidget<T> is not the non-generic IWidget the convention requires");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ScanAsMatchingInterface_RegistersUnderASameNamedInterfaceInAnotherNamespace()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -722,7 +722,7 @@ public class ScanTests
 			.Because("with no same-namespace IWorker, the convention falls back to the implemented IWorker");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ScanAsMarkerOrMatchingInterface_DeduplicatesWhenTheMarkerIsTheConventionInterface()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -752,7 +752,7 @@ public class ScanTests
 			.Because("the same interface selected by both exposures is registered only once");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ScanAsMatchingInterface_SkipsAConventionInterfaceTheGeneratedCodeCannotReference()
 	{
 		GeneratorResult result = Generator.RunWithReferencedAssembly("""
@@ -783,7 +783,7 @@ public class ScanTests
 			.Because("an interface inaccessible to the generated code is dropped from the contracts");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ScanAsMatchingInterface_PrefersTheOwnNamespaceInterfaceAcrossAssemblies()
 	{
 		GeneratorResult result = Generator.RunWithReferencedAssembly("""
@@ -815,7 +815,7 @@ public class ScanTests
 			.Because("the same-named interface in a foreign namespace loses to the own-namespace one");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ScanAs_IsMirroredBitForBitByTheGeneratorsScanExposures()
 	{
 		// The generator reads ScanAs as its underlying int off the attribute's TypedConstant and casts it to its
@@ -830,7 +830,7 @@ public class ScanTests
 		}
 	}
 
-	[Fact]
+	[Test]
 	public async Task ScanAsMatchingInterface_RegistersUnderEverySameNamedInterfaceWhenNoneIsInItsNamespace()
 	{
 		GeneratorResult result = Generator.Run("""

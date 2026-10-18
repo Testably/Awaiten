@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt123Awt124Decorator
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsAwt123WhenTheDecoratedServiceHasNoRegistration()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -29,7 +29,7 @@ public partial class DiagnosticTests
 				.Because("a [Decorate] over a service with no registration has nothing to wrap");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsAwt124WhenTheDecoratorHasNoSingleInnerParameter()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -54,7 +54,7 @@ public partial class DiagnosticTests
 				.Because("a decorator with more than one parameter assignable to the service is ambiguous");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsAwt124WhenTheDecoratorTakesNoInnerParameter()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -79,7 +79,7 @@ public partial class DiagnosticTests
 				.Because("a decorator with no parameter assignable to the service cannot receive the inner instance");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForAWellFormedDecorator()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -103,7 +103,7 @@ public partial class DiagnosticTests
 				.Because("a decorator with exactly one inner parameter over a registered service is well-formed");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportAwt124WhenAnExtraParameterIsAlsoAssignableFromTheService()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -129,7 +129,7 @@ public partial class DiagnosticTests
 				.Because("the inner is the most-derived assignable parameter, so an unrelated `object` sibling is not ambiguous");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportAwt124ForADecoratorWithAnInternalConstructor()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -155,7 +155,7 @@ public partial class DiagnosticTests
 				.Because("the decorator's internal same-assembly constructor is the one the container constructs, so it is well-formed");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsAwt124WhenTheOnlyServiceAssignableParameterIsKeyed()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -182,7 +182,7 @@ public partial class DiagnosticTests
 				.Because("a [FromKey] parameter is not the chain inner, so the decorator has no parameter to receive it");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DiagnosticsNameTheRealDecoratorTypeNotTheSyntheticIdentity()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -211,7 +211,7 @@ public partial class DiagnosticTests
 				.Because("the internal synthetic '@__dec:' identity must not leak into user-facing diagnostics");
 		}
 
-		[Fact]
+		[Test]
 		public async Task CaptiveDependencyDiagnosticNamesTheRealDecoratorType()
 		{
 			GeneratorResult result = Generator.Run("""

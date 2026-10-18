@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt200Awt201ModuleScanLimitations
 	{
-		[Fact]
+		[Test]
 		public async Task Awt200_ReportsWhenAMatchHasAnInjectProperty()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -33,7 +33,7 @@ public partial class DiagnosticTests
 				.Because("an [Inject] property's semantics cannot be mirrored by the generated factory, so silently skipping it would construct the match differently than a container scan");
 		}
 
-		[Fact]
+		[Test]
 		public async Task Awt200_ReportsWhenAMatchConstructorParameterIsMarkedArg()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -58,7 +58,7 @@ public partial class DiagnosticTests
 				.Because("an [Arg] parameter takes its value from the resolution call, which a mirrored factory parameter resolved from the graph would silently change");
 		}
 
-		[Fact]
+		[Test]
 		public async Task Awt201_ReportsForAGenericModuleWithAScan()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -81,7 +81,7 @@ public partial class DiagnosticTests
 				.Because("the orphan partial must not be emitted");
 		}
 
-		[Fact]
+		[Test]
 		public async Task Awt201_ReportsForAModuleNestedInAGenericTypeWithAScan()
 		{
 			GeneratorResult result = Generator.Run("""

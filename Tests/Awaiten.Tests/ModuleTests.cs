@@ -8,7 +8,7 @@ namespace Awaiten.Tests;
 /// </summary>
 public partial class ModuleTests
 {
-	[Fact]
+	[Test]
 	public async Task ImportedModule_ContributesItsStrongRegistrations()
 	{
 		using DefaultsContainer.Root container = new();
@@ -16,7 +16,7 @@ public partial class ModuleTests
 		await That(container.Resolve<Logger>()).IsNotNull();
 	}
 
-	[Fact]
+	[Test]
 	public async Task ContainerRegistration_OverridesAnImportedDefault()
 	{
 		using AppContainer.Root container = new();
@@ -24,7 +24,7 @@ public partial class ModuleTests
 		await That(container.Resolve<IClock>()).Is<AppClock>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task ImportedDefault_IsUsedWhenTheContainerDoesNotOverrideIt()
 	{
 		using DefaultsContainer.Root container = new();
@@ -32,7 +32,7 @@ public partial class ModuleTests
 		await That(container.Resolve<IClock>()).Is<ModuleClock>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task ImportedSilentFallbackRegistration_ContributesWhenNothingElseProvidesTheService()
 	{
 		using DefaultsContainer.Root container = new();
@@ -40,7 +40,7 @@ public partial class ModuleTests
 		await That(container.Resolve<ICache>()).Is<MemoryCache>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task OverriddenDefault_IsAbsentFromTheServiceCollection()
 	{
 		using AppContainer.Root container = new();
@@ -52,7 +52,7 @@ public partial class ModuleTests
 		await That(clocks[0]).Is<AppClock>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task ModuleFactory_ProducesTheServiceThroughTheModuleMethod()
 	{
 		using ProductionContainer.Root container = new();
@@ -60,7 +60,7 @@ public partial class ModuleTests
 		await That(container.Resolve<IClock>()).Is<ModuleClock>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task ModuleInstance_ExposesTheModulesPreBuiltMember()
 	{
 		using ProductionContainer.Root container = new();

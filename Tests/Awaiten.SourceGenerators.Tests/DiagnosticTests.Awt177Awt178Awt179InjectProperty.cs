@@ -7,7 +7,7 @@ public partial class DiagnosticTests
 {
 	public class Awt177Awt178Awt179InjectProperty
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsAwt177WhenInjectPropertyNamesAnUnknownProperty()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -35,7 +35,7 @@ public partial class DiagnosticTests
 				.Because("an [InjectProperty] name must resolve to a settable property on the implementation");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsAwt177WhenInjectPropertyNamesAReadOnlyProperty()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -63,7 +63,7 @@ public partial class DiagnosticTests
 				.Because("a read-only (get-only) member is not a settable property, so [InjectProperty] cannot fill it");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsAwt178WhenInjectPropertyTargetsAFactoryProducedImplementation()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -93,7 +93,7 @@ public partial class DiagnosticTests
 				.Because("a Factory-produced implementation is registered, so it is AWT178 rather than the unmatched AWT180");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsAwt178WhenInjectPropertyTargetsAnInstanceRegistration()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -121,7 +121,7 @@ public partial class DiagnosticTests
 				.Because("a pre-built Instance is produced whole by its source, so [InjectProperty] cannot fill it");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsAwt179WhenTwoInjectPropertyEntriesNameTheSameProperty()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -150,7 +150,7 @@ public partial class DiagnosticTests
 				.Because("a property is injected once, so a duplicate [InjectProperty] entry is a suppressible warning");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsAwt180WhenInjectPropertyTargetsAnUnregisteredImplementation()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -175,7 +175,7 @@ public partial class DiagnosticTests
 				.Because("an [InjectProperty] whose implementation has no container-constructed registration is never applied");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportAwt180ForADecoratorTypeTarget()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -206,7 +206,7 @@ public partial class DiagnosticTests
 				.Because("a decorator chain link is constructed (under a synthetic identity), so a decorator-type target must not be misreported as unmatched");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsAwt170WhenInjectPropertyKeyIsAnUnsupportedConstant()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -234,7 +234,7 @@ public partial class DiagnosticTests
 				.Because("an [InjectProperty] Key must be a supported key constant, guarded like a registration's Key and [FromKey]");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsAwt181WhenAPropertyCarriesBothInjectAndInjectProperty()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -262,7 +262,7 @@ public partial class DiagnosticTests
 				.Because("a property named by both [Inject] and [InjectProperty] warns that the [Inject] member wins");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportAwt181WhenOnlyInjectPropertyApplies()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -290,7 +290,7 @@ public partial class DiagnosticTests
 				.Because("a property named only by [InjectProperty] (no [Inject]) is filled cleanly, with no diagnostic");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ContainerSideShapeDiagnostic_PointsAtTheAttribute_NotThePocoProperty()
 		{
 			const string source = """

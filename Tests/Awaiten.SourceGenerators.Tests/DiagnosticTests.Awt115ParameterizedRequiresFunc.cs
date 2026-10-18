@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt115ParameterizedRequiresFunc
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenAParameterizedServiceIsRequiredAsAPlainDependency()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -32,7 +32,7 @@ public partial class DiagnosticTests
 				.Because("a parameterized service cannot be supplied its runtime arguments through a plain dependency");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenAParameterizedServiceIsRequiredThroughLazy()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -59,7 +59,7 @@ public partial class DiagnosticTests
 				.Because("Lazy<T> cannot carry runtime arguments either, so it cannot build a parameterized service");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenTheParameterizedServiceIsRequestedThroughAMatchingFunc()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -86,7 +86,7 @@ public partial class DiagnosticTests
 				.Because("a Func<TArg…, T> supplies the runtime arguments, so it is the correct way to obtain it");
 		}
 
-		[Fact]
+		[Test]
 		public async Task PointsTheDiagnosticAtTheOffendingDependencyNotTheRegistration()
 		{
 			const string source = """
@@ -117,7 +117,7 @@ public partial class DiagnosticTests
 				.Because("the diagnostic points at the plain Robot dependency, not the [Singleton<Plant>] registration");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsForALifecycleHookParameterOverAParameterizedTarget()
 		{
 			GeneratorResult result = Generator.Run("""

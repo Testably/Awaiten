@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt199ScanHookConflict
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenTwoScansNameDifferentOnActivatedHooks()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -32,7 +32,7 @@ public partial class DiagnosticTests
 				.Because("which OnActivated ran for Widget would depend on attribute order, so the contradiction is surfaced with the first scan's winner named");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenTwoScansNameDifferentOnReleaseHooks()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -58,7 +58,7 @@ public partial class DiagnosticTests
 				.Because("the OnRelease slot contradicts across the two scans exactly like OnActivated");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenTwoScansNameTheSameHook()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -83,7 +83,7 @@ public partial class DiagnosticTests
 				.Because("both scans agree on the method, so there is nothing order-dependent to surface");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenTwoScansHookDifferentSlots()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -111,7 +111,7 @@ public partial class DiagnosticTests
 				.Because("the merged registration carries both scans' hooks, not just the first scan's");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenAnExplicitRegistrationOverridesTheScanHook()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -140,7 +140,7 @@ public partial class DiagnosticTests
 				.Because("the scan's hook is replaced, not merged in beside the explicit one");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenAnExplicitRegistrationWithoutHooksOptsOutOfTheScanHook()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -166,7 +166,7 @@ public partial class DiagnosticTests
 				.Because("leaving the hook off the explicit registration deliberately opts the type out of it");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsOverlappingModuleScansNamingDifferentHooksForOneSlot()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -194,7 +194,7 @@ public partial class DiagnosticTests
 				.Because("two module scans naming different methods for one slot is order-dependent, so it is surfaced like the container form surfaces it");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsAModuleScanHookConflictingWithASameNamedContainerScanHook()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -227,7 +227,7 @@ public partial class DiagnosticTests
 				.Because("the same hook name on a different origin is a different method, so merging it silently would run whichever origin registered first; the conflict names the module-owned loser qualified");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsALaterModuleScanNamingADifferentHookForAClaimedSlotWhoseHookFailed()
 		{
 			GeneratorResult result = Generator.Run("""

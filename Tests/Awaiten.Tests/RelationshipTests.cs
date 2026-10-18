@@ -6,7 +6,7 @@ namespace Awaiten.Tests;
 /// </summary>
 public partial class RelationshipTests
 {
-	[Fact]
+	[Test]
 	public async Task Func_BoundToAScope_ResolvesScopedInstancesFromThatScope()
 	{
 		using RelationshipContainer.Root container = new();
@@ -18,7 +18,7 @@ public partial class RelationshipTests
 			.Because("the injected Func is bound to the scope, so it returns the scope's single scoped instance");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Func_OfScopedInASingleton_ResolvesFromTheRootNotTheRequestingScope()
 	{
 		using RelationshipContainer.Root container = new();
@@ -32,7 +32,7 @@ public partial class RelationshipTests
 			.Because("the Func is never rebound to whichever scope later asks for the singleton, so it does not return the requesting child scope's instance");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Func_OfSingleton_ResolvesTheSameInstanceEachCall()
 	{
 		using RelationshipContainer.Root container = new();
@@ -43,7 +43,7 @@ public partial class RelationshipTests
 		await That(factory()).IsSameAs(container.Resolve<Engine>());
 	}
 
-	[Fact]
+	[Test]
 	public async Task Func_OfTransient_ResolvesAFreshInstanceEachCall()
 	{
 		using RelationshipContainer.Root container = new();
@@ -55,7 +55,7 @@ public partial class RelationshipTests
 		await That(first).IsNotSameAs(second);
 	}
 
-	[Fact]
+	[Test]
 	public async Task Lazy_MemoizesItsValue()
 	{
 		using RelationshipContainer.Root container = new();

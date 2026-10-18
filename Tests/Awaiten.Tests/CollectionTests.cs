@@ -13,7 +13,7 @@ namespace Awaiten.Tests;
 /// </summary>
 public partial class CollectionTests
 {
-	[Fact]
+	[Test]
 	public async Task Enumerable_ResolvesEveryRegistrationInOrder()
 	{
 		using CollectionContainer.Root container = new();
@@ -25,7 +25,7 @@ public partial class CollectionTests
 		await That(host.Plugins[1].Name).IsEqualTo("beta");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Enumerable_IsPubliclyResolvable()
 	{
 		using CollectionContainer.Root container = new();
@@ -37,7 +37,7 @@ public partial class CollectionTests
 		await That(names[1]).IsEqualTo("beta");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Array_IsPubliclyResolvable()
 	{
 		using CollectionContainer.Root container = new();
@@ -47,7 +47,7 @@ public partial class CollectionTests
 		await That(plugins).HasCount(2);
 	}
 
-	[Fact]
+	[Test]
 	public async Task SingletonMembers_ShareTheInstanceWithSingleResolution()
 	{
 		using CollectionContainer.Root container = new();
@@ -59,7 +59,7 @@ public partial class CollectionTests
 		await That(plugins.First()).IsSameAs(container.Resolve<IPlugin>());
 	}
 
-	[Fact]
+	[Test]
 	public async Task EmptyCollection_ResolvesToAnEmptyCollection()
 	{
 		using CollectionContainer.Root container = new();
@@ -70,7 +70,7 @@ public partial class CollectionTests
 		await That(host.Count).IsEqualTo(0);
 	}
 
-	[Fact]
+	[Test]
 	public async Task TransientMembers_AreFreshOnEachCollectionResolution()
 	{
 		using CollectionContainer.Root container = new();
@@ -82,7 +82,7 @@ public partial class CollectionTests
 		await That(ReferenceEquals(first[0], second[0])).IsFalse();
 	}
 
-	[Fact]
+	[Test]
 	public async Task ScopedMembers_ResolveFromTheScope()
 	{
 		using CollectionContainer.Root container = new();
@@ -93,7 +93,7 @@ public partial class CollectionTests
 		await That(units.Single()).IsSameAs(scope.Resolve<IUnit>());
 	}
 
-	[Fact]
+	[Test]
 	public async Task Strict_ResolvingACollectionOfDisposableTransientsFromTheRoot_ThrowsGuidance()
 	{
 		using DisposableCollectionContainer.Root container = new();
@@ -104,7 +104,7 @@ public partial class CollectionTests
 			.Because("the IEnumerable<T> shape of the same collection is withheld on the root too");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Strict_TryResolvingAWithheldCollectionFromTheRoot_ReturnsFalseRatherThanThrowing()
 	{
 		using DisposableCollectionContainer.Root container = new();
@@ -116,7 +116,7 @@ public partial class CollectionTests
 		await That(widgets).IsNull();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Strict_ResolvingAWithheldCollectionFromAScope_Works()
 	{
 		using DisposableCollectionContainer.Root container = new();
@@ -128,7 +128,7 @@ public partial class CollectionTests
 			.Because("a child scope bounds the members' lifetime, so it resolves by type the collection the root withholds");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Strict_AWithheldCollectionResolvedFromAScope_IsDisposedWithTheScope()
 	{
 		using DisposableCollectionContainer.Root container = new();
@@ -145,7 +145,7 @@ public partial class CollectionTests
 			.Because("the scope tracks the transient members it materialized and disposes them with the scope - the accumulation the root would suffer is bounded here");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Loose_ResolvingACollectionOfDisposableTransientsFromTheRoot_Works()
 	{
 		using LooseCollectionContainer.Root container = new();
@@ -156,7 +156,7 @@ public partial class CollectionTests
 			.Because("Loose lifetime safety keeps the collection resolvable by type on the root, like a singular disposable transient");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ExplicitCollectionRegistration_WinsOverSynthesis()
 	{
 		using ExplicitCollectionContainer.Root container = new();
@@ -176,7 +176,7 @@ public partial class CollectionTests
 			.Because("registering one collection shape of IPlugin suppresses synthesis for every shape of IPlugin");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AllCollectionShapes_ArePubliclyResolvable()
 	{
 		using CollectionContainer.Root container = new();
@@ -189,7 +189,7 @@ public partial class CollectionTests
 		await That(container.Resolve<ICollection<IPlugin>>()).HasCount(2);
 	}
 
-	[Fact]
+	[Test]
 	public async Task FromKey_CollectionResolvesOnlyTheMembersUnderThatKey()
 	{
 		using KeyedCollectionContainer.Root container = new();
@@ -209,12 +209,12 @@ public partial class CollectionTests
 		await That(host.Unkeyed[0].Name).IsEqualTo("plain");
 	}
 
-	[Fact]
+	[Test]
 	public async Task SyncResolveAfterInit_CollectionWithAnAsyncMember_ResolvesInitializedMembersAfterWarmUp()
 	{
 		using PragmaticCollectionContainer.Root container = new();
 
-		await container.InitializeAsync(TestContext.Current.CancellationToken);
+		await container.InitializeAsync(TestContext.Current!.Execution.CancellationToken);
 
 		// The collection holds an async-initialized member. In the strict default this is AWT122 (a synchronous
 		// materialization cannot await the initialization); SyncResolveAfterInit warms the graph first, so the
@@ -232,7 +232,7 @@ public partial class CollectionTests
 			.Because("the publicly resolved collection returns the same warmed singleton member");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncEnumerable_AwaitsMemberInitializationAndYieldsInRegistrationOrder()
 	{
 		using AsyncStreamContainer.Root container = new();
@@ -240,10 +240,10 @@ public partial class CollectionTests
 		// The host captures an async-tainted async-collection, so it is itself async-tainted and resolved through
 		// ResolveAsync. In the strict default this is legal precisely because the collection is IAsyncEnumerable<T>
 		// (a synchronous IEnumerable<T> of the same members would be AWT122).
-		AsyncStreamHost host = await container.ResolveAsync<AsyncStreamHost>(TestContext.Current.CancellationToken);
+		AsyncStreamHost host = await container.ResolveAsync<AsyncStreamHost>(TestContext.Current!.Execution.CancellationToken);
 
 		List<IPlugin> plugins = new();
-		await foreach (IPlugin plugin in host.Plugins.WithCancellation(TestContext.Current.CancellationToken))
+		await foreach (IPlugin plugin in host.Plugins.WithCancellation(TestContext.Current!.Execution.CancellationToken))
 		{
 			plugins.Add(plugin);
 		}
@@ -255,7 +255,7 @@ public partial class CollectionTests
 			.Because("materializing the IAsyncEnumerable<T> awaited the async member's initialization in registration order");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncEnumerable_AllSynchronousMembers_IsSynchronouslyResolvable()
 	{
 		using SyncAsyncStreamContainer.Root container = new();
@@ -265,7 +265,7 @@ public partial class CollectionTests
 		AsyncStreamHost host = container.Resolve<AsyncStreamHost>();
 
 		List<IPlugin> plugins = new();
-		await foreach (IPlugin plugin in host.Plugins.WithCancellation(TestContext.Current.CancellationToken))
+		await foreach (IPlugin plugin in host.Plugins.WithCancellation(TestContext.Current!.Execution.CancellationToken))
 		{
 			plugins.Add(plugin);
 		}
@@ -275,7 +275,7 @@ public partial class CollectionTests
 		await That(plugins[1].Name).IsEqualTo("beta");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncEnumerable_NoRegistrations_YieldsAnEmptyStream()
 	{
 		using EmptyAsyncStreamContainer.Root container = new();
@@ -283,7 +283,7 @@ public partial class CollectionTests
 		AsyncExtensionHost host = container.Resolve<AsyncExtensionHost>();
 
 		int count = 0;
-		await foreach (IExtension _ in host.Extensions.WithCancellation(TestContext.Current.CancellationToken))
+		await foreach (IExtension _ in host.Extensions.WithCancellation(TestContext.Current!.Execution.CancellationToken))
 		{
 			count++;
 		}
@@ -292,7 +292,7 @@ public partial class CollectionTests
 			.Because("an element type with no registration yields an empty async collection, not a missing-dependency error");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncEnumerable_ScopedDisposableMember_ResolvesFromScopeAndIsDisposedWithIt()
 	{
 		using ScopedAsyncStreamContainer.Root container = new();
@@ -303,7 +303,7 @@ public partial class CollectionTests
 			AsyncStreamHost host = scope.Resolve<AsyncStreamHost>();
 
 			List<IPlugin> plugins = new();
-			await foreach (IPlugin plugin in host.Plugins.WithCancellation(TestContext.Current.CancellationToken))
+			await foreach (IPlugin plugin in host.Plugins.WithCancellation(TestContext.Current!.Execution.CancellationToken))
 			{
 				plugins.Add(plugin);
 			}
@@ -319,7 +319,7 @@ public partial class CollectionTests
 			.Because("the scope tracked the member the async collection materialized and disposed it with the scope");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncEnumerable_SynchronousMembers_IsResolvableByTypeSynchronously()
 	{
 		using SyncAsyncStreamContainer.Root container = new();
@@ -329,7 +329,7 @@ public partial class CollectionTests
 		IAsyncEnumerable<IPlugin> stream = container.Resolve<IAsyncEnumerable<IPlugin>>();
 
 		List<IPlugin> plugins = new();
-		await foreach (IPlugin plugin in stream.WithCancellation(TestContext.Current.CancellationToken))
+		await foreach (IPlugin plugin in stream.WithCancellation(TestContext.Current!.Execution.CancellationToken))
 		{
 			plugins.Add(plugin);
 		}
@@ -339,17 +339,17 @@ public partial class CollectionTests
 		await That(plugins[1].Name).IsEqualTo("beta");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncEnumerable_WithAnAsyncMember_IsResolvableByTypeThroughResolveAsync()
 	{
 		using AsyncStreamContainer.Root container = new();
 
 		// The collection holds an async-initialized member, so its IAsyncEnumerable<T> shape is resolvable by type
 		// only asynchronously: ResolveAsync materializes it, awaiting each member's initialization.
-		IAsyncEnumerable<IPlugin> stream = await container.ResolveAsync<IAsyncEnumerable<IPlugin>>(TestContext.Current.CancellationToken);
+		IAsyncEnumerable<IPlugin> stream = await container.ResolveAsync<IAsyncEnumerable<IPlugin>>(TestContext.Current!.Execution.CancellationToken);
 
 		List<IPlugin> plugins = new();
-		await foreach (IPlugin plugin in stream.WithCancellation(TestContext.Current.CancellationToken))
+		await foreach (IPlugin plugin in stream.WithCancellation(TestContext.Current!.Execution.CancellationToken))
 		{
 			plugins.Add(plugin);
 		}
@@ -360,7 +360,7 @@ public partial class CollectionTests
 			.Because("ResolveAsync materialized the async collection, awaiting the async member's initialization");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncEnumerable_WithAnAsyncMember_SynchronousResolveThrowsGuidance()
 	{
 		using AsyncStreamContainer.Root container = new();
@@ -369,7 +369,7 @@ public partial class CollectionTests
 			.Because("the async collection awaits its members, so it has no synchronous materialization - synchronous Resolve steers to ResolveAsync");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncEnumerable_RootWithheldDisposableMember_ResolveAsyncFromTheRootThrowsGuidance()
 	{
 		using AsyncDisposableCollectionContainer.Root container = new();
@@ -377,12 +377,12 @@ public partial class CollectionTests
 		// The member is a build-on-demand disposable, so materializing the async collection by type on the root
 		// would accumulate the transients for the container's lifetime, so it is withheld under strict lifetime
 		// safety, mirroring the synchronous shapes and the singular resolution of such a member.
-		Func<Task> resolveOnRoot = () => container.ResolveAsync<IAsyncEnumerable<IWidget>>(TestContext.Current.CancellationToken);
+		Func<Task> resolveOnRoot = () => container.ResolveAsync<IAsyncEnumerable<IWidget>>(TestContext.Current!.Execution.CancellationToken);
 		await That(resolveOnRoot).Throws<InvalidOperationException>()
 			.Because("the async collection of a build-on-demand disposable is withheld from by-type ResolveAsync on the root");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncEnumerable_RootWithheldDisposableMember_ResolveAsyncFromAScope_WorksAndIsDisposedWithTheScope()
 	{
 		using AsyncDisposableCollectionContainer.Root container = new();
@@ -390,10 +390,10 @@ public partial class CollectionTests
 		AsyncDisposableWidget member;
 		using (IAwaitenScope scope = container.CreateScope())
 		{
-			IAsyncEnumerable<IWidget> stream = await scope.ResolveAsync<IAsyncEnumerable<IWidget>>(TestContext.Current.CancellationToken);
+			IAsyncEnumerable<IWidget> stream = await scope.ResolveAsync<IAsyncEnumerable<IWidget>>(TestContext.Current!.Execution.CancellationToken);
 
 			List<IWidget> widgets = new();
-			await foreach (IWidget widget in stream.WithCancellation(TestContext.Current.CancellationToken))
+			await foreach (IWidget widget in stream.WithCancellation(TestContext.Current!.Execution.CancellationToken))
 			{
 				widgets.Add(widget);
 			}
@@ -407,7 +407,7 @@ public partial class CollectionTests
 			.Because("a child scope bounds the members the async collection materializes and disposes them with the scope - the accumulation the root would suffer is bounded here");
 	}
 
-	[Fact]
+	[Test]
 	public async Task FromKey_AsyncEnumerableResolvesOnlyTheMembersUnderThatKey()
 	{
 		using KeyedAsyncStreamContainer.Root container = new();
@@ -418,13 +418,13 @@ public partial class CollectionTests
 		// unkeyed async collection resolves only the unkeyed registration. The buckets stay disjoint, exactly as
 		// for the synchronous shapes.
 		List<IPlugin> primary = new();
-		await foreach (IPlugin plugin in host.Primary.WithCancellation(TestContext.Current.CancellationToken))
+		await foreach (IPlugin plugin in host.Primary.WithCancellation(TestContext.Current!.Execution.CancellationToken))
 		{
 			primary.Add(plugin);
 		}
 
 		List<IPlugin> unkeyed = new();
-		await foreach (IPlugin plugin in host.Unkeyed.WithCancellation(TestContext.Current.CancellationToken))
+		await foreach (IPlugin plugin in host.Unkeyed.WithCancellation(TestContext.Current!.Execution.CancellationToken))
 		{
 			unkeyed.Add(plugin);
 		}
@@ -435,19 +435,19 @@ public partial class CollectionTests
 		await That(unkeyed[0].Name).IsEqualTo("plain");
 	}
 
-	[Fact]
+	[Test]
 	public async Task SyncResolveAfterInit_AsyncEnumerable_IsSynchronouslyResolvableAfterWarmUp()
 	{
 		using PragmaticCollectionContainer.Root container = new();
 
-		await container.InitializeAsync(TestContext.Current.CancellationToken);
+		await container.InitializeAsync(TestContext.Current!.Execution.CancellationToken);
 
 		// In pragmatic mode every member has a synchronous resolver after warm-up, so the IAsyncEnumerable<T> view
 		// joins the synchronous by-type dispatch instead of being served by an async arm.
 		IAsyncEnumerable<IPlugin> stream = container.Resolve<IAsyncEnumerable<IPlugin>>();
 
 		List<IPlugin> plugins = new();
-		await foreach (IPlugin plugin in stream.WithCancellation(TestContext.Current.CancellationToken))
+		await foreach (IPlugin plugin in stream.WithCancellation(TestContext.Current!.Execution.CancellationToken))
 		{
 			plugins.Add(plugin);
 		}
@@ -457,7 +457,7 @@ public partial class CollectionTests
 			.Because("InitializeAsync warmed the async member before the synchronously materialized stream handed it back");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ExplicitlyRegisteredAsyncEnumerable_IsServedByTypeOnBothResolveAndResolveAsync()
 	{
 		using ExplicitAsyncStreamContainer.Root container = new();
@@ -466,13 +466,13 @@ public partial class CollectionTests
 		// surfaces: no async collection is synthesized behind it from the (async-tainted) IPlugin registration, and
 		// Resolve and ResolveAsync hand back the same registered singleton.
 		PluginChannel channel = (PluginChannel)container.Resolve<IAsyncEnumerable<IPlugin>>();
-		object viaAsync = await container.ResolveAsync<IAsyncEnumerable<IPlugin>>(TestContext.Current.CancellationToken);
+		object viaAsync = await container.ResolveAsync<IAsyncEnumerable<IPlugin>>(TestContext.Current!.Execution.CancellationToken);
 
 		await That(viaAsync).IsSameAs(channel)
 			.Because("both surfaces serve the explicitly registered channel, never a synthesized collection that would disagree with it");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncTaintedRegisteredAsyncEnumerable_SyncResolveThrowsItsGuidanceAndResolveAsyncServesIt()
 	{
 		using AsyncChannelContainer.Root container = new();
@@ -483,12 +483,12 @@ public partial class CollectionTests
 		await That(() => container.Resolve<IAsyncEnumerable<IPlugin>>()).Throws<InvalidOperationException>()
 			.Because("the registered channel's slot is not shadowed by the synthesized async view");
 
-		AsyncPluginChannel channel = (AsyncPluginChannel)await container.ResolveAsync<IAsyncEnumerable<IPlugin>>(TestContext.Current.CancellationToken);
+		AsyncPluginChannel channel = (AsyncPluginChannel)await container.ResolveAsync<IAsyncEnumerable<IPlugin>>(TestContext.Current!.Execution.CancellationToken);
 		await That(channel.Initialized).IsTrue()
 			.Because("ResolveAsync serves the registered channel, initialized");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AwaitedCollection_AwaitsMemberInitializationWithoutTaintingTheConsumer()
 	{
 		using AwaitedStreamContainer.Root container = new();
@@ -507,7 +507,7 @@ public partial class CollectionTests
 			.Because("awaiting the collection awaited the async member's initialization in registration order");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AwaitedCollection_InjectedIntoAProperty_AwaitsMemberInitializationWithoutTaintingTheConsumer()
 	{
 		using AwaitedPropertyContainer.Root container = new();
@@ -527,7 +527,7 @@ public partial class CollectionTests
 			.Because("awaiting the property-injected collection awaited the async member's initialization in registration order");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AwaitedCollection_AllSynchronousMembers_IsACompletedTask()
 	{
 		using SyncAwaitedStreamContainer.Root container = new();
@@ -545,7 +545,7 @@ public partial class CollectionTests
 		await That(plugins[1].Name).IsEqualTo("beta");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AwaitedCollection_NoRegistrations_YieldsACompletedEmptyCollection()
 	{
 		using EmptyAwaitedStreamContainer.Root container = new();
@@ -557,7 +557,7 @@ public partial class CollectionTests
 			.Because("an element type with no registration yields a completed empty awaited collection, not a missing-dependency error");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AwaitedCollection_SingletonMembers_AreSharedAcrossResolutions()
 	{
 		using AwaitedStreamContainer.Root container = new();
@@ -571,7 +571,7 @@ public partial class CollectionTests
 		await That((await second.Plugins)[1]).IsSameAs((await first.Plugins)[1]);
 	}
 
-	[Fact]
+	[Test]
 	public async Task FromKey_AwaitedCollectionResolvesOnlyTheMembersUnderThatKey()
 	{
 		using KeyedAwaitedStreamContainer.Root container = new();
@@ -589,7 +589,7 @@ public partial class CollectionTests
 		await That(unkeyed[0].Name).IsEqualTo("plain");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AwaitedCollection_AllShapesArePubliclyResolvableByType()
 	{
 		using SyncAwaitedStreamContainer.Root container = new();
@@ -604,7 +604,7 @@ public partial class CollectionTests
 		await That(await container.Resolve<Task<IPlugin[]>>()).HasCount(2);
 	}
 
-	[Fact]
+	[Test]
 	public async Task AwaitedCollection_WithAnAsyncMember_IsPubliclyResolvableByTypeSynchronously()
 	{
 		using AwaitedStreamContainer.Root container = new();
@@ -621,7 +621,7 @@ public partial class CollectionTests
 			.Because("awaiting the by-type awaited collection awaited the async member's initialization");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AwaitedCollection_ScopedDisposableMember_ResolvesFromScopeAndIsDisposedWithIt()
 	{
 		using ScopedAsyncStreamContainer.Root container = new();
@@ -642,7 +642,7 @@ public partial class CollectionTests
 			.Because("the scope tracked the member the awaited collection materialized and disposed it with the scope");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Strict_AwaitedCollectionOfDisposableTransients_IsWithheldFromTheRoot()
 	{
 		using DisposableCollectionContainer.Root container = new();
@@ -657,7 +657,7 @@ public partial class CollectionTests
 			.Because("a failed TryResolve leaves the awaited collection null");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Strict_AwaitedCollectionOfDisposableTransients_ResolvedFromAScope_WorksAndIsDisposedWithTheScope()
 	{
 		using DisposableCollectionContainer.Root container = new();
@@ -674,7 +674,7 @@ public partial class CollectionTests
 			.Because("a child scope bounds the members the awaited collection materializes and disposes them with the scope - the accumulation the root would suffer is bounded here");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AwaitedCollection_BuiltOnTheAsyncPath_ForwardsTheResolveTimeTokenToItsAwaitedMembers()
 	{
 		using AsyncPathAwaitedContainer.Root container = new();

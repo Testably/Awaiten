@@ -16,7 +16,7 @@ public partial class AdapterConventionTests
 {
 	public sealed class ResolvingASingleService
 	{
-		[Fact]
+		[Test]
 		public async Task HandsBackWhatTheContainerHas()
 		{
 			using LocatorContainer.Root container = new();
@@ -25,7 +25,7 @@ public partial class AdapterConventionTests
 			await That(locator.Resolve(typeof(Widget))).Is<Widget>();
 		}
 
-		[Fact]
+		[Test]
 		public async Task AnswersNullForATypeTheContainerDoesNotHave()
 		{
 			using LocatorContainer.Root container = new();
@@ -35,7 +35,7 @@ public partial class AdapterConventionTests
 				.Because("null is how the adapter tells the framework the type is not the container's, which is the answer a genuinely absent service earns");
 		}
 
-		[Fact]
+		[Test]
 		public async Task AnswersNullForANullType()
 		{
 			using LocatorContainer.Root container = new();
@@ -44,7 +44,7 @@ public partial class AdapterConventionTests
 			await That(locator.Resolve(null)).IsNull();
 		}
 
-		[Fact]
+		[Test]
 		public async Task ThrowsTheContainersGuidanceForAWithheldService()
 		{
 			using LocatorContainer.Root container = new();
@@ -56,7 +56,7 @@ public partial class AdapterConventionTests
 				.Because("an async-initialized service reached synchronously exists but is withheld, and reporting that as null would let the framework bind it from elsewhere and fail far from the cause");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DistinguishesWithheldFromAbsent()
 		{
 			using LocatorContainer.Root container = new();
@@ -70,7 +70,7 @@ public partial class AdapterConventionTests
 
 	public sealed class ResolvingACollection
 	{
-		[Fact]
+		[Test]
 		public async Task EnumeratesEmptyForAnUnregisteredElementType()
 		{
 			using LocatorContainer.Root container = new();
@@ -83,7 +83,7 @@ public partial class AdapterConventionTests
 			await That(((IEnumerable<Stranger>)resolved!).Any()).IsFalse();
 		}
 
-		[Fact]
+		[Test]
 		public async Task EnumeratesEmptyForAnElementTypeRegisteredOnlyUnderAKey()
 		{
 			using LocatorContainer.Root container = new();
@@ -96,7 +96,7 @@ public partial class AdapterConventionTests
 			await That(((IEnumerable<IChannel>)resolved!).Any()).IsFalse();
 		}
 
-		[Fact]
+		[Test]
 		public async Task AnswersNullForAValueElementType()
 		{
 			using LocatorContainer.Root container = new();
@@ -106,7 +106,7 @@ public partial class AdapterConventionTests
 				.Because("manifesting the empty array would need the value type's array type, which native AOT does not generate on demand, so the shape is reported unavailable rather than traded for a run-time crash");
 		}
 
-		[Fact]
+		[Test]
 		public async Task AnswersNullForACollectionShapeTheConventionDoesNotCover()
 		{
 			using LocatorContainer.Root container = new();
@@ -116,7 +116,7 @@ public partial class AdapterConventionTests
 				.Because("the guarantee frameworks rely on covers IEnumerable<T> alone, exactly as in MS.DI");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ThrowsRatherThanEnumeratingEmptyWhenMembersExistButTheShapeCannotBeBuilt()
 		{
 			using AsyncCollectionContainer.Root container = new();
@@ -129,7 +129,7 @@ public partial class AdapterConventionTests
 				.Because("one member that needs async initialization means the synchronous collection cannot be built, and an empty sequence would silently drop the members that do exist, so the container's reason reaches the caller instead");
 		}
 
-		[Fact]
+		[Test]
 		public async Task AnswersNullRatherThanEmptyWhenTheElementTypeResolvesButTheCollectionShapeDoesNot()
 		{
 			using SuppressedCollectionContainer.Root container = new();

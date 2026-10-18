@@ -11,7 +11,7 @@ namespace Awaiten.Tests;
 /// </summary>
 public partial class KeyedDictionaryTests
 {
-	[Fact]
+	[Test]
 	public async Task Dictionary_ResolvesEveryKeyedRegistrationByItsKey()
 	{
 		using DictionaryContainer.Root container = new();
@@ -25,7 +25,7 @@ public partial class KeyedDictionaryTests
 			.Because("the 'slow' key resolves the implementation registered under it");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Dictionary_IsPubliclyResolvableByType()
 	{
 		using DictionaryContainer.Root container = new();
@@ -37,7 +37,7 @@ public partial class KeyedDictionaryTests
 		await That(channels["slow"]).Is<SlowChannel>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Dictionary_ExcludesUnkeyedRegistrations()
 	{
 		using DictionaryContainer.Root container = new();
@@ -59,7 +59,7 @@ public partial class KeyedDictionaryTests
 			.Because("an unkeyed registration is not a keyed-dictionary member");
 	}
 
-	[Fact]
+	[Test]
 	public async Task SingletonMembers_ShareTheInstanceAcrossResolutions()
 	{
 		using DictionaryContainer.Root container = new();
@@ -72,7 +72,7 @@ public partial class KeyedDictionaryTests
 			.Because("a singleton keyed member is shared across every dictionary that includes it");
 	}
 
-	[Fact]
+	[Test]
 	public async Task TransientMembers_AreFreshOnEachDictionaryResolution()
 	{
 		using DictionaryContainer.Root container = new();
@@ -85,7 +85,7 @@ public partial class KeyedDictionaryTests
 			.Because("a transient keyed member is built fresh for each dictionary");
 	}
 
-	[Fact]
+	[Test]
 	public async Task EmptyDictionary_ResolvesToAnEmptyDictionary()
 	{
 		using DictionaryContainer.Root container = new();
@@ -97,7 +97,7 @@ public partial class KeyedDictionaryTests
 			.Because("a service with no keyed registration yields an empty dictionary, not AWT101");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Dictionary_InjectedIntoAProperty_ResolvesEveryKeyedRegistration()
 	{
 		using DictionaryContainer.Root container = new();
@@ -109,7 +109,7 @@ public partial class KeyedDictionaryTests
 			.Because("an [Inject] property typed as a keyed dictionary is filled exactly like a constructor parameter");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Dictionary_ResolvedFromAScope_ResolvesScopedMembersOnThatScope()
 	{
 		using DictionaryContainer.Root container = new();
@@ -127,7 +127,7 @@ public partial class KeyedDictionaryTests
 			.Because("a different scope materializes its own scoped keyed member");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Strict_KeyedDictionaryOfDisposableTransients_IsWithheldFromTheRootButResolvesFromAScope()
 	{
 		using WidgetContainer.Root container = new();
@@ -200,7 +200,7 @@ public partial class KeyedDictionaryTests
 	[Singleton<GadgetHost>]
 	public static partial class DictionaryContainer;
 
-	[Fact]
+	[Test]
 	public async Task SameImplementationUnderTwoKeys_SharesTheSingletonAcrossKeys()
 	{
 		using TwinContainer.Root container = new();
@@ -212,7 +212,7 @@ public partial class KeyedDictionaryTests
 			.Because("one singleton implementation registered under two keys backs both dictionary entries");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ExplicitlyRegisteredDictionary_WinsOverSynthesis()
 	{
 		using RegisteredMapContainer.Root container = new();
@@ -269,7 +269,7 @@ public partial class KeyedDictionaryTests
 
 	// ----- Awaited keyed dictionary (Task<IReadOnlyDictionary<string, TService>>) -----
 
-	[Fact]
+	[Test]
 	public async Task AwaitedDictionary_AwaitsMemberInitializationWithoutTaintingTheConsumer()
 	{
 		using AwaitedDictionaryContainer.Root container = new();
@@ -288,7 +288,7 @@ public partial class KeyedDictionaryTests
 			.Because("awaiting the keyed dictionary awaited the async member's initialization behind the produced task");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AwaitedDictionary_InjectedIntoAProperty_AwaitsMemberInitialization()
 	{
 		using AwaitedDictionaryContainer.Root container = new();
@@ -302,7 +302,7 @@ public partial class KeyedDictionaryTests
 			.Because("an [Inject] property typed as an awaited keyed dictionary awaits its members exactly like a constructor parameter");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AwaitedDictionary_AllSynchronousMembers_IsACompletedTask()
 	{
 		using AwaitedDictionaryContainer.Root container = new();
@@ -316,7 +316,7 @@ public partial class KeyedDictionaryTests
 		await That(await task).HasCount(1);
 	}
 
-	[Fact]
+	[Test]
 	public async Task AwaitedDictionary_EmptyMembership_YieldsACompletedEmptyDictionary()
 	{
 		using AwaitedDictionaryContainer.Root container = new();
@@ -328,7 +328,7 @@ public partial class KeyedDictionaryTests
 			.Because("a service with no keyed registration yields a completed empty awaited keyed dictionary, not AWT101");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AwaitedDictionary_IsPubliclyResolvableByType()
 	{
 		using AwaitedDictionaryContainer.Root container = new();
@@ -340,7 +340,7 @@ public partial class KeyedDictionaryTests
 			.Because("the awaited keyed dictionary joins the by-type dispatch and awaits its async member when awaited");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AwaitedDictionary_SingletonMembers_AreSharedAcrossResolutions()
 	{
 		using AwaitedDictionaryContainer.Root container = new();
@@ -352,7 +352,7 @@ public partial class KeyedDictionaryTests
 			.Because("a singleton keyed member is shared across every awaited dictionary that includes it");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AwaitedDictionary_TransientMembers_AreFreshOnEachResolution()
 	{
 		using AwaitedDictionaryContainer.Root container = new();
@@ -364,7 +364,7 @@ public partial class KeyedDictionaryTests
 			.Because("a transient keyed member is built fresh for each awaited dictionary");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AwaitedDictionary_ScopedMembers_AreResolvedPerScope()
 	{
 		using AwaitedDictionaryContainer.Root container = new();
@@ -381,7 +381,7 @@ public partial class KeyedDictionaryTests
 			.Because("a different scope materializes its own scoped keyed member");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Strict_AwaitedKeyedDictionaryOfDisposableTransients_IsWithheldFromTheRootButResolvesFromAScope()
 	{
 		using WidgetContainer.Root container = new();
@@ -452,7 +452,7 @@ public partial class KeyedDictionaryTests
 	[Singleton<AwaitedEmptyRouter>]
 	public static partial class AwaitedDictionaryContainer;
 
-	[Fact]
+	[Test]
 	public async Task AwaitedDictionary_FromKeyOverAKeyRegisteredDictionary_ResolvesTheRegistration()
 	{
 		using RegisteredAwaitedMapContainer.Root container = new();
@@ -469,7 +469,7 @@ public partial class KeyedDictionaryTests
 			.Because("the registered (empty) map is handed out as-is; the keyed IChannel registrations do not leak into it");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AwaitedDictionary_NonStringKeyOverARegisteredDictionary_ResolvesTheRegistration()
 	{
 		using RegisteredAwaitedMapContainer.Root container = new();

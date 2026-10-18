@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt167ContextualBinding
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenTheNamedConsumerHasNoDependencyOnTheService()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -32,7 +32,7 @@ public partial class DiagnosticTests
 				.Because("the named consumer has no constructor dependency on the service, so the binding is dead");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenTheNamedConsumerDependsOnTheService()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -58,7 +58,7 @@ public partial class DiagnosticTests
 				.Because("the contextual binding is consumed by the named consumer's constructor parameter");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenTheConsumersOnlyDependencyIsSelectedByAnExplicitFromKey()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -86,7 +86,7 @@ public partial class DiagnosticTests
 				.Because("the [FromKey] parameter takes precedence, so the contextual binding is never applied");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenTheConsumerDependsOnlyThroughAFuncRelationship()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -113,7 +113,7 @@ public partial class DiagnosticTests
 				.Because("a Func-deferred dependency is not an unkeyed direct parameter, so the contextual binding is never applied");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenTheNamedConsumerDependsThroughAnInjectProperty()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -142,7 +142,7 @@ public partial class DiagnosticTests
 
 	public class Awt168ContextualBindingWithKey
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenARegistrationSetsBothWhenInjectedIntoAndKey()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -168,7 +168,7 @@ public partial class DiagnosticTests
 				.Because("WhenInjectedInto and Key claim the same resolution slot, so the Key is silently dropped");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForWhenInjectedIntoAlone()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -197,7 +197,7 @@ public partial class DiagnosticTests
 
 	public class Awt169DuplicateContextualBinding
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenTwoImplementationsTargetTheSameServiceAndConsumer()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -225,7 +225,7 @@ public partial class DiagnosticTests
 				.Because("both bindings claim the one contextual slot for the consumer, so the resolution is ambiguous");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForTwoContextualBindingsIntoDifferentConsumers()
 		{
 			GeneratorResult result = Generator.Run("""

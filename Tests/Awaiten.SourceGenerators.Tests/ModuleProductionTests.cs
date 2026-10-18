@@ -7,7 +7,7 @@ namespace Awaiten.SourceGenerators.Tests;
 /// </summary>
 public class ModuleProductionTests
 {
-	[Fact]
+	[Test]
 	public async Task ModuleFactory_ResolvesAgainstTheModule_AndIsEmittedQualified()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -39,7 +39,7 @@ public class ModuleProductionTests
 			.Because("a module's factory is called qualified with the module type - the generated container is another class");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ModuleInstance_ResolvesAgainstTheModule_AndIsEmittedQualified()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -71,7 +71,7 @@ public class ModuleProductionTests
 			.Because("a module's pre-built instance member is read qualified with the module type");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ModuleFactory_DoesNotFallBackToAContainerMemberOfTheSameName()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -100,7 +100,7 @@ public class ModuleProductionTests
 			.Because("a module registration's factory must live on the module; a same-named container member is not a silent fallback");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ModuleFactory_MissingMember_ReportsAwt108NamingTheModule()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -128,7 +128,7 @@ public class ModuleProductionTests
 			.Because("the message points at the module the user declared the factory on, not at the container");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ModuleInstance_MissingMember_ReportsAwt109NamingTheModule()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -156,7 +156,7 @@ public class ModuleProductionTests
 			.Because("the message points at the module the user declared the instance member on");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ModuleFactory_PrivateMember_ReportsAwt153()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -185,7 +185,7 @@ public class ModuleProductionTests
 			.Because("a private module member exists but cannot be called from the generated container");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ModuleInstance_PrivateMember_ReportsAwt153()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -214,7 +214,7 @@ public class ModuleProductionTests
 			.Because("a private module instance member exists but cannot be read from the generated container");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ContainerFactory_MessageStillNamesTheContainer()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -236,7 +236,7 @@ public class ModuleProductionTests
 			.Because("the container's own registrations keep the existing wording");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ModuleHook_ResolvesAgainstTheModule_AndIsEmittedQualified()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -270,7 +270,7 @@ public class ModuleProductionTests
 			.Because("a module's release hook is likewise qualified with the module type");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ModuleHook_DoesNotFallBackToAContainerMemberOfTheSameName()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -298,7 +298,7 @@ public class ModuleProductionTests
 			.Because("a module registration's hook must live on the module; a same-named container member is not a silent fallback");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ModuleHook_PrivateMember_ReportsAwt164()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -326,7 +326,7 @@ public class ModuleProductionTests
 			.Because("a private module hook cannot be called from the generated container, so it is not a usable hook");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ContainerHook_MessageStillNamesTheContainer()
 	{
 		GeneratorResult result = Generator.Run("""

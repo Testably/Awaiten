@@ -26,7 +26,7 @@ public partial class DiagnosticTests
 
 		                                          """;
 
-		[Fact]
+		[Test]
 		public async Task ReportsForASynchronousUsingOfTheRoot()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>(AsyncOnlyContainer + """
@@ -43,7 +43,7 @@ public partial class DiagnosticTests
 				.Because("a synchronous using of the Root throws at runtime when its drain reaches the IAsyncDisposable-only service");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForAnAwaitUsingOfTheRoot()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>(AsyncOnlyContainer + """
@@ -60,7 +60,7 @@ public partial class DiagnosticTests
 				.Because("await using reaches DisposeAsync, which tears an async-only disposable down correctly");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForTheRegistrationAlone()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>(AsyncOnlyContainer);
@@ -69,7 +69,7 @@ public partial class DiagnosticTests
 				.Because("registering an async-only disposable is fully supported; only a synchronous disposal site is at fault");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenTheContainerOwnsNoAsyncOnlyDisposable()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>("""
@@ -104,7 +104,7 @@ public partial class DiagnosticTests
 				.Because("a service that also implements IDisposable is torn down on either disposal path");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenTheAsyncOnlyDisposableSuppressesDisposal()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>("""
@@ -135,7 +135,7 @@ public partial class DiagnosticTests
 				.Because("a SuppressDisposal instance is never tracked for teardown, so a synchronous drain can never reach it and throw");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForASynchronousUsingOfAScopeWhenTheAsyncOnlyDisposableIsASingleton()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>(AsyncOnlyContainer + """
@@ -153,7 +153,7 @@ public partial class DiagnosticTests
 				.Because("a singleton always tracks on the Root - even when first resolved inside a child scope - so the scope's synchronous drain can never reach it");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsForASynchronousUsingOfAScopeWhenTheAsyncOnlyDisposableIsScoped()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>("""
@@ -185,7 +185,7 @@ public partial class DiagnosticTests
 				.Because("a scoped async-only service is tracked on the scope that resolves it, so the scope's synchronous using is the same latent throw");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsForASynchronousParenthesizedUsingStatement()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>(AsyncOnlyContainer + """
@@ -207,7 +207,7 @@ public partial class DiagnosticTests
 				.Because("the diagnostic points at the declarator, not at the whole statement including its body block");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsForASynchronousUsingStatementOverAnExistingVariable()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>(AsyncOnlyContainer + """
@@ -230,7 +230,7 @@ public partial class DiagnosticTests
 				.Because("the diagnostic points at the resource expression, not at the whole statement including its body block");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsOncePerDeclaratorOfAMultiDeclaratorUsingDeclaration()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>(AsyncOnlyContainer + """
@@ -252,7 +252,7 @@ public partial class DiagnosticTests
 				.Because("the second diagnostic points at the second declarator, not at the shared whole-statement span twice");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsForADirectDisposeCall()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>(AsyncOnlyContainer + """
@@ -270,7 +270,7 @@ public partial class DiagnosticTests
 				.Because("an explicit synchronous Dispose() on the Root is the same latent throw as a using statement");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForADisposeThroughTheScopeInterface()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>(AsyncOnlyContainer + """
@@ -288,7 +288,7 @@ public partial class DiagnosticTests
 				.Because("an interface-typed receiver does not reveal the container, so the runtime throw remains the backstop (a documented false negative)");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForAUserAuthoredScopeTypeNestedInTheContainer()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>("""
@@ -332,7 +332,7 @@ public partial class DiagnosticTests
 				.Because("a user-authored IAwaitenScope nested in the container class is not the generated Root/Scope; only those own the container's instances");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForAContainerDeclaredInAReferencedAssembly()
 		{
 			string[] diagnostics = await Analyzer.RunWithReferencedAssembly<AwaitenAnalyzer>(AsyncOnlyContainer, """

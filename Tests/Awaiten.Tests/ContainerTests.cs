@@ -2,7 +2,7 @@ namespace Awaiten.Tests;
 
 public sealed class ContainerTests
 {
-	[Fact]
+	[Test]
 	public async Task ContainerAttribute_ShouldBeSealed()
 	{
 		Type sut = typeof(ContainerAttribute);
@@ -10,7 +10,7 @@ public sealed class ContainerTests
 		await That(sut.IsSealed).IsTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task SyncResolveAfterInit_ShouldInitializeToFalse()
 	{
 		ContainerAttribute sut = new();

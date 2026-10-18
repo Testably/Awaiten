@@ -4,7 +4,7 @@ public partial class DiagnosticTests
 {
 	public class Awt116NonStaticContainer
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsForANonStaticContainerClass()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -24,7 +24,7 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).Contains("*AWT116*").AsWildcard();
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForAStaticContainerClass()
 		{
 			GeneratorResult result = Generator.Run("""

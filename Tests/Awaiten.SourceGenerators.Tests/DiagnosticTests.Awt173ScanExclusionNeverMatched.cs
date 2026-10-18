@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt173ScanExclusionNeverMatched
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsAStaleExcludeType()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -29,7 +29,7 @@ public partial class DiagnosticTests
 				.Because("Unrelated is not a scan candidate, so the exclusion never applies");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsAStaleExcludePattern()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -51,7 +51,7 @@ public partial class DiagnosticTests
 				.Because("no candidate name starts with Legacy, so the exclusion is dead");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportAnExclusionThatApplied()
 		{
 			GeneratorResult result = Generator.Run("""

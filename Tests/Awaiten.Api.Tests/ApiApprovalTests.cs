@@ -23,22 +23,23 @@ public sealed class ApiApprovalTests
 		"Awaiten.Extensions.DependencyInjection",
 	];
 
-	[Theory]
-	[MemberData(nameof(Builds))]
+	[Test]
+	[MethodDataSource(nameof(Builds))]
 	public async Task VerifyPublicApi(string assemblyName, string framework)
 		=> await MatchesPublicApiSnapshot(assemblyName, framework);
 
 	/// <summary>
 	///     Execute this test to update the expected public API to the current API surface.
 	/// </summary>
-	[Fact(Explicit = true)]
+	[Test]
+	[Explicit]
 	public async Task AcceptApiChanges()
 	{
-		foreach (TheoryDataRow<string, string> build in Builds())
+		foreach ((string assemblyName, string framework) in Builds())
 		{
 			try
 			{
-				await MatchesPublicApiSnapshot(build.Data.Item1, build.Data.Item2).Accepting(SnapshotAcceptance.All);
+				await MatchesPublicApiSnapshot(assemblyName, framework).Accepting(SnapshotAcceptance.All);
 			}
 			catch (Exception exception) when (exception.Message.Contains("Accepted snapshot"))
 			{
@@ -47,18 +48,15 @@ public sealed class ApiApprovalTests
 		}
 	}
 
-	public static TheoryData<string, string> Builds()
+	public static IEnumerable<(string AssemblyName, string Framework)> Builds()
 	{
-		TheoryData<string, string> theoryData = new();
 		foreach (string assemblyName in AssemblyNames)
 		{
 			foreach (string framework in Helper.GetTargetFrameworks())
 			{
-				theoryData.Add(assemblyName, framework);
+				yield return (assemblyName, framework);
 			}
 		}
-
-		return theoryData;
 	}
 
 	/// <summary>

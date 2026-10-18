@@ -4,7 +4,7 @@ public partial class DiagnosticTests
 {
 	public class Awt108InvalidFactory
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenNoMethodOfThatNameReturnsTheServiceType()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -25,7 +25,7 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).Contains("*AWT108*").AsWildcard();
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenTheNamedMemberIsNotAMethod()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -47,7 +47,7 @@ public partial class DiagnosticTests
 				.Because("a field is not a usable factory method even when its type matches");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenTheFactoryNameIsEmpty()
 		{
 			GeneratorResult result = Generator.Run("""

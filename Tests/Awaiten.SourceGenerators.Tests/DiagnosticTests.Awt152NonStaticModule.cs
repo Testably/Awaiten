@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt152NonStaticModule
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenAnImportedModuleIsNotStatic()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -31,7 +31,7 @@ public partial class DiagnosticTests
 				.Because("a module, like a container, is a pure definition and must be a static class");
 		}
 
-		[Fact]
+		[Test]
 		public async Task StillImportsTheNonStaticModulesRegistrations()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -61,7 +61,7 @@ public partial class DiagnosticTests
 				.Because("the module is still imported, so its registrations do not additionally cascade as missing dependencies");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForAStaticModule()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -86,7 +86,7 @@ public partial class DiagnosticTests
 				.Because("a static module satisfies the requirement");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForANonModuleImport_WhichAlreadyFailsWithAwt149()
 		{
 			GeneratorResult result = Generator.Run("""

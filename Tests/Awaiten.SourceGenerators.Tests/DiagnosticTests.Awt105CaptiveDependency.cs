@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt105CaptiveDependency
 	{
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenAScopedDependsOnScoped()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -29,7 +29,7 @@ public partial class DiagnosticTests
 				.Because("a scoped service sharing the scope's lifetime does not capture it");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenASingletonDependsOnASingleton()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -52,7 +52,7 @@ public partial class DiagnosticTests
 				.Because("a singleton depending on a same-or-longer lifetime is not captive");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenASingletonDependsOnScopedThroughAFunc()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -76,7 +76,7 @@ public partial class DiagnosticTests
 				.Because("a deferred Func<T> does not capture the scoped instance for the singleton's lifetime");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenATransientDependsOnScoped()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -99,7 +99,7 @@ public partial class DiagnosticTests
 				.Because("only a singleton outlives a scope and so captures it");
 		}
 
-		[Fact]
+		[Test]
 		public async Task NamesTheServiceAliasTheConstructorReferenced()
 		{
 			// Store is registered as IReader (first) then IWriter; the diagnostic must name IWriter, the
@@ -130,7 +130,7 @@ public partial class DiagnosticTests
 				.Because("not an arbitrary other service the implementation is registered as");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenASingletonDependsOnScoped()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -152,7 +152,7 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).Contains("*AWT105*").AsWildcard();
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenASingletonDependsOnScopedThroughATransient()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -176,7 +176,7 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).Contains("*AWT105*").AsWildcard();
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenASingletonCapturesScopedThroughADeferredProperty()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -201,7 +201,7 @@ public partial class DiagnosticTests
 				.Because("deferring the assignment does not shorten how long the singleton holds the scoped instance");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenASingletonHoldsScopedThroughADeferredFunc()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -227,7 +227,7 @@ public partial class DiagnosticTests
 				.Because("a deferred Func<T> stores a factory rather than the scoped instance, so it does not capture it");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenASingletonCapturesAScopedKeyedDictionaryMember()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -252,7 +252,7 @@ public partial class DiagnosticTests
 				.Because("a keyed dictionary captures its members eagerly, so a singleton holding one over a scoped member makes that member captive");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForAnAwaitedKeyedDictionaryMember()
 		{
 			GeneratorResult result = Generator.Run("""

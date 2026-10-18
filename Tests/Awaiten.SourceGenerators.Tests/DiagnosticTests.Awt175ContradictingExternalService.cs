@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt175ContradictingExternalService
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenADeclaredExternalTypeIsAlsoRegistered()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -32,7 +32,7 @@ public partial class DiagnosticTests
 				.Because("a type is either host-owned ([ImportService<T>]) or Awaiten-owned (registered), not both");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenTheExternalTypeIsNotRegistered()
 		{
 			GeneratorResult result = Generator.Run("""

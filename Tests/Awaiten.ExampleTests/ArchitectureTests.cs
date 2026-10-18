@@ -10,7 +10,7 @@ namespace Awaiten.ExampleTests;
 /// </summary>
 public class ArchitectureTests
 {
-	[Fact]
+	[Test]
 	public async Task Domain_has_no_reference_to_Awaiten()
 	{
 		// every type in the namespace that holds the coffee-shop domain and application code

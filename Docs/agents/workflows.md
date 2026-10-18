@@ -5,22 +5,23 @@ Commands run from the repository root. On Linux and macOS use `./build.sh` inste
 ## Build and test
 
 - Build everything: `dotnet build Awaiten.slnx`. The solution excludes `Pipeline/Build.csproj` from the build. Library builds also produce packages (`GeneratePackageOnBuild`).
-- Run one test project: `dotnet test Tests/Awaiten.Tests`. Without `-f`, every target framework runs (`net10.0`, `net8.0` and, on Windows, `net48`); pass `-f net10.0` for a quick loop.
-- Filter: the tests use xUnit v3 through `Microsoft.NET.Test.Sdk`, so VSTest filters work, for example `dotnet test Tests/Awaiten.SourceGenerators.Tests --filter "FullyQualifiedName~Awt116"`.
+- Run one test project: `dotnet test --project Tests/Awaiten.Tests`. The tests are TUnit executables of the Microsoft.Testing.Platform, which `global.json` selects as the runner of `dotnet test`. Without `-f`, every target framework runs (`net10.0`, `net8.0` and, on Windows, `net48`); pass `-f net10.0` for a quick loop. `dotnet run --project Tests/Awaiten.Tests -f net10.0` runs the same tests.
+- Filter: TUnit selects tests with a tree node filter (`/<assembly>/<namespace>/<class>/<test>`, a nested class is `Outer+Inner`), for example `dotnet test --project Tests/Awaiten.SourceGenerators.Tests --treenode-filter "/*/*/*Awt116*/*"`.
+- TUnit runs all tests in parallel, also those of one class. A class whose tests share static state (a static probe or counter) is marked `[NotInParallel(nameof(...))]`.
 - Test projects:
   - `Tests/Awaiten.Tests`: runtime behaviour of generated containers, declared as `[Container]` classes in the test files.
   - `Tests/Awaiten.SourceGenerators.Tests` (net10.0 only): runs the generator over in-memory sources with `TestHelpers/Generator.cs` and analyzers with `TestHelpers/Analyzer.cs`; one `DiagnosticTests.AwtNNN*.cs` file per diagnostic.
   - `Tests/Awaiten.Extensions.DependencyInjection.Tests`: the MS.DI bridge, including MS.DI conformance and host initialization.
-  - `Tests/Awaiten.ExampleTests`: the documented examples, an ASP.NET Core example (not on net48) and the architecture test from the design principles page. Not run by CI.
+  - `Tests/Awaiten.ExampleTests`: the documented examples, an ASP.NET Core example (not on net48) and the architecture test from the design principles page.
   - `Tests/Awaiten.Api.Tests` (net10.0 only): public API snapshots.
   - `Tests/Awaiten.Tests.Support`: a plain library, not a test project, that gives `Awaiten.Tests` a referenced assembly for cross-assembly `[Scan]` and `[Module]` scenarios.
 - Tests assert with aweXpect (`await That(...)`), put the reason in `.Because(...)` and group related cases in a (often nested or partial) class per feature.
 
 ## Public API snapshots
 
-`Tests/Awaiten.Api.Tests/ApiApprovalTests.cs` reads the public API of `Awaiten` and `Awaiten.Extensions.DependencyInjection` for every framework in `Source/Directory.Build.props` with `aweXpect.Snapshots.PublicApi` and compares it to `ApiApprovalTests.<assembly>.<framework>.awexpect-snapshot.txt`. The test project builds all target frameworks of the referenced projects, so a plain `dotnet test Tests/Awaiten.Api.Tests` is enough.
+`Tests/Awaiten.Api.Tests/ApiApprovalTests.cs` reads the public API of `Awaiten` and `Awaiten.Extensions.DependencyInjection` for every framework in `Source/Directory.Build.props` with `aweXpect.Snapshots.PublicApi` and compares it to `ApiApprovalTests.<assembly>.<framework>.awexpect-snapshot.txt`. The test project builds all target frameworks of the referenced projects, so a plain `dotnet test --project Tests/Awaiten.Api.Tests` is enough.
 
-To accept an intentional change, run the tests with the environment variable `AWEXPECT_ACCEPT_SNAPSHOTS` set to `all` (PowerShell: `$env:AWEXPECT_ACCEPT_SNAPSHOTS = 'all'; dotnet test Tests/Awaiten.Api.Tests`), or run the explicit `AcceptApiChanges` test from the IDE, then review and commit the snapshot diff.
+To accept an intentional change, run the tests with the environment variable `AWEXPECT_ACCEPT_SNAPSHOTS` set to `all` (PowerShell: `$env:AWEXPECT_ACCEPT_SNAPSHOTS = 'all'; dotnet test --project Tests/Awaiten.Api.Tests`), or run the explicit `AcceptApiChanges` test (`--treenode-filter "/*/*/*/AcceptApiChanges"` or from the IDE), then review and commit the snapshot diff.
 
 ## Samples
 
@@ -44,15 +45,15 @@ Always run in Release and compare before and after on the same machine. There is
 - The `README.md` is packed into the NuGet packages; `UpdateReadme` rewrites badges for a release.
 - Code fences in the docs are not compiled. Keep examples that matter covered by `Tests/Awaiten.ExampleTests`.
 
-## Build pipeline (Nuke)
+## Build pipeline (Fallout)
 
-`build.ps1`, `build.sh` and `build.cmd` build and run `Pipeline/Build.csproj` (Nuke 10). `./build.ps1 --help` lists the targets. Running without a target executes the defaults `ApiChecks`, `Benchmarks` and `CodeAnalysis`, so always name a target. `--configuration` defaults to Debug locally and Release on CI.
+`build.ps1`, `build.sh` and `build.cmd` build and run `Pipeline/Build.csproj` (Fallout 10). `./build.ps1 --help` lists the targets. Running without a target executes the defaults `ApiChecks`, `Benchmarks` and `CodeAnalysis`, so always name a target. `--configuration` defaults to Debug locally and Release on CI.
 
 | Target | What it does |
 |---|---|
 | `Compile` | Clean `Artifacts/` and `TestResults/`, restore, compute the version with GitVersion and build the solution. |
-| `UnitTests` | `dotnet test` for `Awaiten.Tests`, `Awaiten.Extensions.DependencyInjection.Tests` and `Awaiten.SourceGenerators.Tests` per framework (net48 only on Windows), with coverage and trx logs. |
-| `CodeCoverage` | `UnitTests`, then ReportGenerator to an OpenCover report. |
+| `UnitTests` | `dotnet test` for `Awaiten.Tests`, `Awaiten.Extensions.DependencyInjection.Tests`, `Awaiten.SourceGenerators.Tests` and `Awaiten.ExampleTests` per framework (net48 only on Windows), with `<project>_<framework>.trx` and `.cobertura.xml` in `TestResults/`. |
+| `CodeCoverage` | `UnitTests`, then ReportGenerator to the generic coverage report of SonarQube. |
 | `CodeAnalysis` | SonarCloud scan around `Compile` and `CodeCoverage` (needs `SONAR_TOKEN`). |
 | `ApiChecks` | Runs `Awaiten.Api.Tests`. |
 | `Pack` | `UpdateReadme` and `Compile`, then moves the `Awaiten` and `Awaiten.Extensions.DependencyInjection` packages to `Artifacts/Packages`. |

@@ -8,7 +8,7 @@ namespace Awaiten.Tests;
 /// </summary>
 public sealed class AwaitenResolverExtensionsTests
 {
-	[Fact]
+	[Test]
 	public async Task Resolve_CastsTheResolvedInstanceToT()
 	{
 		FakeResolver resolver = new()
@@ -22,7 +22,7 @@ public sealed class AwaitenResolverExtensionsTests
 		await That(resolver.RequestedResolveType).IsEqualTo(typeof(string));
 	}
 
-	[Fact]
+	[Test]
 	public async Task Resolve_WhenResolverIsNull_Throws()
 	{
 		IAwaitenResolver resolver = null!;
@@ -31,7 +31,7 @@ public sealed class AwaitenResolverExtensionsTests
 			.WithParamName("resolver");
 	}
 
-	[Fact]
+	[Test]
 	public async Task TryResolve_WhenNotResolved_ReturnsFalseAndDefaultsInstance()
 	{
 		FakeResolver resolver = new()
@@ -45,7 +45,7 @@ public sealed class AwaitenResolverExtensionsTests
 		await That(instance).IsNull();
 	}
 
-	[Fact]
+	[Test]
 	public async Task TryResolve_WhenResolved_ReturnsTrueAndCastsInstance()
 	{
 		FakeResolver resolver = new()
@@ -61,7 +61,7 @@ public sealed class AwaitenResolverExtensionsTests
 		await That(resolver.RequestedTryResolveType).IsEqualTo(typeof(string));
 	}
 
-	[Fact]
+	[Test]
 	public async Task TryResolve_WhenResolverIsNull_Throws()
 	{
 		IAwaitenResolver resolver = null!;
@@ -70,7 +70,7 @@ public sealed class AwaitenResolverExtensionsTests
 			.WithParamName("resolver");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ResolveAsync_ForwardsTheRequestedTypeAndCastsTheResult()
 	{
 		FakeResolver resolver = new()
@@ -78,13 +78,13 @@ public sealed class AwaitenResolverExtensionsTests
 			ResolveResult = "value",
 		};
 
-		string resolved = await resolver.ResolveAsync<string>(TestContext.Current.CancellationToken);
+		string resolved = await resolver.ResolveAsync<string>(TestContext.Current!.Execution.CancellationToken);
 
 		await That(resolved).IsEqualTo("value");
 		await That(resolver.RequestedResolveAsyncType).IsEqualTo(typeof(string));
 	}
 
-	[Fact]
+	[Test]
 	public async Task ResolveAsync_WhenResolverIsNull_ThrowsSynchronously()
 	{
 		IAwaitenAsyncResolver resolver = null!;
@@ -94,7 +94,7 @@ public sealed class AwaitenResolverExtensionsTests
 			.WithParamName("resolver");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ResolveWithKey_ForwardsTheKeyAndCastsTheResolvedInstance()
 	{
 		FakeResolver resolver = new()
@@ -109,7 +109,7 @@ public sealed class AwaitenResolverExtensionsTests
 		await That(resolver.RequestedKey).IsEqualTo("special");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ResolveWithKey_WhenResolverIsNull_Throws()
 	{
 		IAwaitenResolver resolver = null!;
@@ -118,7 +118,7 @@ public sealed class AwaitenResolverExtensionsTests
 			.WithParamName("resolver");
 	}
 
-	[Fact]
+	[Test]
 	public async Task TryResolveWithKey_WhenResolved_ReturnsTrueAndCastsInstance()
 	{
 		FakeResolver resolver = new()
@@ -135,7 +135,7 @@ public sealed class AwaitenResolverExtensionsTests
 		await That(resolver.RequestedKey).IsEqualTo("special");
 	}
 
-	[Fact]
+	[Test]
 	public async Task TryResolveWithKey_WhenNotResolved_ReturnsFalseAndDefaultsInstance()
 	{
 		FakeResolver resolver = new()
@@ -149,7 +149,7 @@ public sealed class AwaitenResolverExtensionsTests
 		await That(instance).IsNull();
 	}
 
-	[Fact]
+	[Test]
 	public async Task ResolveAsyncWithKey_ForwardsTheKeyAndCastsTheResult()
 	{
 		FakeResolver resolver = new()
@@ -157,7 +157,7 @@ public sealed class AwaitenResolverExtensionsTests
 			ResolveResult = "value",
 		};
 
-		string resolved = await resolver.ResolveAsync<string>("special", TestContext.Current.CancellationToken);
+		string resolved = await resolver.ResolveAsync<string>("special", TestContext.Current!.Execution.CancellationToken);
 
 		await That(resolved).IsEqualTo("value");
 		await That(resolver.RequestedResolveAsyncType).IsEqualTo(typeof(string));

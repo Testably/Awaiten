@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt141ScanMatchSkipped
 	{
-		[Fact]
+		[Test]
 		public async Task SkipUnconstructable_SkipsAnUnconstructableScanMatchWithAWarning()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -40,7 +40,7 @@ public partial class DiagnosticTests
 				.Because("the unconstructable match is dropped from the container");
 		}
 
-		[Fact]
+		[Test]
 		public async Task SkipUnconstructable_KeepsAMatchWithAnEmptyInjectedAwaitedCollectionMember()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -75,7 +75,7 @@ public partial class DiagnosticTests
 				.Because("the match is registered with its awaited collection member filled");
 		}
 
-		[Fact]
+		[Test]
 		public async Task Default_KeepsTheMissingDependencyError()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -101,7 +101,7 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).DoesNotContain("*AWT141*").AsWildcard();
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotSkipAnExplicitlyRegisteredImplementation()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -128,7 +128,7 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).DoesNotContain("*AWT141*").AsWildcard();
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotSkipAMatchAlsoMatchedByAScanWithoutTheOptIn()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -156,7 +156,7 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).DoesNotContain("*AWT141*").AsWildcard();
 		}
 
-		[Fact]
+		[Test]
 		public async Task SkipsAMatchOrphanedByAnotherSkippedMatch()
 		{
 			GeneratorResult result = Generator.Run("""

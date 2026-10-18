@@ -25,7 +25,7 @@ public sealed partial class HostInitializationTests
 	[Singleton<AsyncResource>]
 	public static partial class HostContainer;
 
-	[Fact]
+	[Test]
 	public async Task AddAwaitenInitialization_WarmsAsyncSingletonsOnStartup()
 	{
 		using IHost host = new HostBuilder()
@@ -38,7 +38,7 @@ public sealed partial class HostInitializationTests
 
 		await That(AsyncResource.InitializeCount).IsEqualTo(0);
 
-		await host.StartAsync(TestContext.Current.CancellationToken);
+		await host.StartAsync(TestContext.Current!.Execution.CancellationToken);
 
 		// The hosted service warmed the async singleton on startup, before any manual resolution.
 		await That(AsyncResource.InitializeCount).IsEqualTo(1);
@@ -48,7 +48,7 @@ public sealed partial class HostInitializationTests
 		await That(AsyncResource.InitializeCount).IsEqualTo(1);
 		await That(resource).IsNotNull();
 
-		await host.StopAsync(TestContext.Current.CancellationToken);
+		await host.StopAsync(TestContext.Current!.Execution.CancellationToken);
 	}
 
 	public interface IClock
@@ -83,7 +83,7 @@ public sealed partial class HostInitializationTests
 	[Singleton<ExternalAsyncResource>]
 	public static partial class ExternalHostContainer;
 
-	[Fact]
+	[Test]
 	public async Task AddAwaitenInitialization_WithExternalDependency_WiresResolverBeforeWarming()
 	{
 		using IHost host = new HostBuilder()
@@ -99,7 +99,7 @@ public sealed partial class HostInitializationTests
 
 		// Without the hosted service wiring the external resolver, constructing the singleton's external
 		// dependency during warm-up would throw. The resolver is null until a bridged resolution wires it.
-		await host.StartAsync(TestContext.Current.CancellationToken);
+		await host.StartAsync(TestContext.Current!.Execution.CancellationToken);
 
 		await That(ExternalAsyncResource.InitializeCount).IsEqualTo(1);
 
@@ -107,14 +107,14 @@ public sealed partial class HostInitializationTests
 		await That(resource.Clock.Now).IsEqualTo("noon");
 		await That(ExternalAsyncResource.InitializeCount).IsEqualTo(1);
 
-		await host.StopAsync(TestContext.Current.CancellationToken);
+		await host.StopAsync(TestContext.Current!.Execution.CancellationToken);
 	}
 
 	[Container]
 	[Singleton<AsyncResource>]
 	public static partial class DoubleContainer;
 
-	[Fact]
+	[Test]
 	public async Task AddAwaitenInitialization_CalledTwice_RegistersHostedServiceOnce()
 	{
 		ServiceCollection services = new();
@@ -128,7 +128,7 @@ public sealed partial class HostInitializationTests
 		await That(hostedServices).IsEqualTo(1);
 	}
 
-	[Fact]
+	[Test]
 	public async Task AddAwaitenInitialization_WhenServicesIsNull_ShouldThrowArgumentNullException()
 	{
 		void Act() => AwaitenInitializationServiceCollectionExtensions.AddAwaitenInitialization<HostContainer.Root>(null!);

@@ -9,7 +9,7 @@ namespace Awaiten.SourceGenerators.Tests;
 /// </summary>
 public class ModuleTests
 {
-	[Fact]
+	[Test]
 	public async Task Module_ImportsRegistrationsAndTheContainerOverridesOverridableDefaults()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -46,7 +46,7 @@ public class ModuleTests
 			.Because("an overridden default is dropped in full");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Module_ImportedDefault_IsEmittedWhenTheContainerDoesNotOverrideIt()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -75,7 +75,7 @@ public class ModuleTests
 			.Because("an imported default fills the gap when the container provides no IClock of its own");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Module_Default_BeatsScanMatch_WhenTheDefaultImplementationSortsFirstAmongMatches()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -106,7 +106,7 @@ public class ModuleTests
 			.Because("an explicit overridable default beats a scan match for single resolution");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Module_Default_BeatsScanMatch_WhenTheDefaultImplementationSortsLastAmongMatches()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -137,7 +137,7 @@ public class ModuleTests
 			.Because("the explicit default wins independently of how the scan enumerates its matches");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Module_Default_BeatsScanMatch_WhenTheScanIsDeclaredBeforeTheImport()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -168,7 +168,7 @@ public class ModuleTests
 			.Because("attribute declaration order between [Scan] and [Import] does not affect default-over-scan precedence");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Module_Default_LifetimeWins_OverAScanMatchingTheSameImplementationWithAnotherLifetime()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -199,7 +199,7 @@ public class ModuleTests
 			.Because("the explicit default's lifetime is kept; the scan's conflicting lifetime yields");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Container_Default_BeatsScanMatch()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -226,7 +226,7 @@ public class ModuleTests
 			.Because("Fallback.Warn on the container itself also beats a scan match");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Module_ClosedDefault_BeatsOpenGenericExpansion()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -263,7 +263,7 @@ public class ModuleTests
 			.Because("an explicit closed default - a deliberate declaration - beats the closed registration the blanket open template expands on demand, like it beats a blanket scan");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Module_DefaultOverriddenByAnEarlierDefault_DoesNotSeedOpenGenericExpansion()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -305,7 +305,7 @@ public class ModuleTests
 			.Because("a default dropped by an earlier default is not built, so its constructor must not seed open generic expansion either");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Module_OverriddenDefault_DoesNotSeedOpenGenericExpansion()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -343,7 +343,7 @@ public class ModuleTests
 			.Because("a dropped (overridden) default is not built, so its constructor must not synthesize closed registrations either");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Module_SurvivingDefault_StillSeedsOpenGenericExpansion()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -379,7 +379,7 @@ public class ModuleTests
 			.Because("a default that wins its service is built, so its constructor dependencies drive the expansion");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Module_Decorate_WrapsAServiceLikeAContainerDeclaredDecorator()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -413,7 +413,7 @@ public class ModuleTests
 			.Because("a module's [Decorate] wraps the service exactly like one declared on the container");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Module_ImportedTwice_ContributesItsDecoratorOnlyOnce()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -449,7 +449,7 @@ public class ModuleTests
 			.Because("a module imported twice is deduped, so its [Decorate] wraps the service once, not D(D(service))");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Module_Composite_FrontsAServiceLikeAContainerDeclaredComposite()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -486,7 +486,7 @@ public class ModuleTests
 			.Because("a module's [Composite] fronts the service exactly like one declared on the container");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Module_ImportServices_LetsUnresolvedDependenciesFallThroughToTheExternalProvider()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -516,7 +516,7 @@ public class ModuleTests
 			.Because("a module's [ImportServices] lets its registrations' unresolved dependencies fall through instead of raising AWT101");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Module_ImportService_RoutesTheDeclaredTypeToTheExternalProvider()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -548,7 +548,7 @@ public class ModuleTests
 		await That(source).Contains("(global::MyCode.IExternal)__s.__ResolveExternal(typeof(global::MyCode.IExternal), null)");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Module_WithOnlyADecorator_IsNotReportedAsEmpty()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -578,7 +578,7 @@ public class ModuleTests
 		await That(result.Diagnostics).IsEmpty()
 			.Because("a [Decorate] is a contribution, so a decorator-only module is not empty (no AWT151)");
 	}
-	[Fact]
+	[Test]
 	public async Task Module_KeyedDefault_IsOverriddenOnlyByTheSameKey()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -613,7 +613,7 @@ public class ModuleTests
 			.Because("a default under a different key is not overridden");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Container_OwnDefault_YieldsToItsOwnStrongRegistration_RegardlessOfDeclarationOrder()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -642,7 +642,7 @@ public class ModuleTests
 			.Because("the container's own overridden default is dropped in full, like a module's");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Module_OpenGenericTypeofRegistration_IsImportedAndExpanded()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -677,7 +677,7 @@ public class ModuleTests
 			.Because("a module's open generic typeof registration is imported and expanded on demand like the container's own");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Module_ImportedTwice_IsHarmless()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -708,7 +708,7 @@ public class ModuleTests
 			.Because("the duplicate import does not duplicate the collection membership either");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Module_WithOwnImport_StillContributesItsRegistrationsDespiteTheError()
 	{
 		GeneratorResult result = Generator.Run("""

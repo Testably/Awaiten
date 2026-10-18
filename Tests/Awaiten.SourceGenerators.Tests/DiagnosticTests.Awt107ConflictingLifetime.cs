@@ -4,7 +4,7 @@ public partial class DiagnosticTests
 {
 	public class Awt107ConflictingLifetime
 	{
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForTheSameLifetimeAcrossServices()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -28,7 +28,7 @@ public partial class DiagnosticTests
 				.Because("registering one implementation under several services with the same lifetime is valid");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsAcrossDifferentServiceTypes()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -51,7 +51,7 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).Contains("*AWT107*").AsWildcard();
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsForAWinningDefaultThatContradictsWhatAStrongRegistrationFixed()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -79,7 +79,7 @@ public partial class DiagnosticTests
 				.Because("the Fallback.Silent keeps its service key, so its declared Transient lifetime would be silently replaced by the Singleton the strong registration fixed - a contradiction, not a transparent override");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsForTwoDefaultsRegisteringTheSameImplementationWithDifferentLifetimes()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -110,7 +110,7 @@ public partial class DiagnosticTests
 				.Because("the two defaults contradict each other's lifetime with nothing stronger to resolve them, and the same implementation rules out AWT148 - without AWT107 the loser's declared lifetime would be discarded silently");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForADefaultOverriddenByAStrongRegistration()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -137,7 +137,7 @@ public partial class DiagnosticTests
 				.Because("a default losing its service key to a strong registration is replaced transparently - even by the same implementation with a different lifetime");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsForTheSameServiceTypeWithDifferentLifetimes()
 		{
 			GeneratorResult result = Generator.Run("""

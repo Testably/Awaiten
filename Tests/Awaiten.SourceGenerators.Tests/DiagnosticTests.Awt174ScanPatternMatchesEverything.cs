@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt174ScanPatternMatchesEverything
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsANameIncludeOfStar()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -28,7 +28,7 @@ public partial class DiagnosticTests
 				.Because("'*' matches every name, so it does not narrow the scan");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsANamespaceIncludeOfDoubleStar()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -50,7 +50,7 @@ public partial class DiagnosticTests
 				.Because("'**' matches every namespace, so it does not narrow the scan");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportANarrowingPattern()
 		{
 			GeneratorResult result = Generator.Run("""

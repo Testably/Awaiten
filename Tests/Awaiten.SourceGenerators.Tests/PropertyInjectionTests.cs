@@ -9,7 +9,7 @@ namespace Awaiten.SourceGenerators.Tests;
 /// </summary>
 public class PropertyInjectionTests
 {
-	[Fact]
+	[Test]
 	public async Task Inject_EmitsAnObjectInitializerFillingTheMarkedProperties()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -41,7 +41,7 @@ public class PropertyInjectionTests
 		await That(source).Contains("new global::MyCode.Consumer() { Bus = ResolveBus(__s), Log = ResolveLog(__s) }");
 	}
 
-	[Fact]
+	[Test]
 	public async Task PlainProperty_IsNotAutoInjected()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -71,7 +71,7 @@ public class PropertyInjectionTests
 		await That(source).DoesNotContain("Plain =");
 	}
 
-	[Fact]
+	[Test]
 	public async Task CycleThroughAnInjectedProperty_ReportsAwt102()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -95,7 +95,7 @@ public class PropertyInjectionTests
 		await That(result.Diagnostics).Contains("*AWT102*").AsWildcard();
 	}
 
-	[Fact]
+	[Test]
 	public async Task DeferredProperty_BreaksAMutualSingletonCycle_NoAwt102_AndAssignsAfterCaching()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -132,7 +132,7 @@ public class PropertyInjectionTests
 		await That(source).Contains("_orderServiceWired = true;");
 	}
 
-	[Fact]
+	[Test]
 	public async Task DeferredProperty_WiringFlagField_DoesNotCollideWithAServiceNamedLikeIt()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -160,7 +160,7 @@ public class PropertyInjectionTests
 			.Because("the name table reserves the derived 'Wired' suffix, so a service named like another service's wiring flag is renamed instead of colliding");
 	}
 
-	[Fact]
+	[Test]
 	public async Task DeferredProperty_TheSameCycleWithoutDeferred_StillReportsAwt102()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -183,7 +183,7 @@ public class PropertyInjectionTests
 		await That(result.Diagnostics).Contains("*AWT102*").AsWildcard();
 	}
 
-	[Fact]
+	[Test]
 	public async Task DeferredProperty_ToAnAsyncTarget_TaintsTheOwnerAndAwaitsTheTarget()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -219,7 +219,7 @@ public class PropertyInjectionTests
 		await That(source).Contains(".Dep = await Root.ResolveAsyncDepAsync(__s.__root, cancellationToken).ConfigureAwait(false);");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ExplicitlyRegisteredCollectionShape_WinsOverSynthesisOnAnInjectedProperty()
 	{
 		GeneratorResult result = Generator.Run("""

@@ -137,7 +137,7 @@ Awaiten guards part of this for you: applying a composition attribute (`[Singlet
 using aweXpect;
 using aweXpect.Reflection;
 
-[Fact]
+[Test]
 public async Task Domain_has_no_reference_to_Awaiten()
 {
     // every type in the assembly that holds your domain and application code

@@ -9,7 +9,7 @@ namespace Awaiten.Tests;
 /// </summary>
 public partial class PropertyInjectionContainerSideTests
 {
-	[Fact]
+	[Test]
 	public async Task RequiredProperty_DeclaredOnTheContainer_IsFilled()
 	{
 		using RequiredContainer.Root container = new();
@@ -20,7 +20,7 @@ public partial class PropertyInjectionContainerSideTests
 			.Because("a plain POCO property named by [InjectProperty] is filled from the graph like an [Inject] one");
 	}
 
-	[Fact]
+	[Test]
 	public async Task OptionalProperty_WithNoRegistration_IsLeftAtItsDefault()
 	{
 		using OptionalMissingContainer.Root container = new();
@@ -31,7 +31,7 @@ public partial class PropertyInjectionContainerSideTests
 			.Because("an Optional [InjectProperty] whose service type is not registered is left at its default rather than being a missing dependency");
 	}
 
-	[Fact]
+	[Test]
 	public async Task DeferredProperty_BreaksAMutualSingletonCycle()
 	{
 		using DeferredCycleContainer.Root container = new();
@@ -44,7 +44,7 @@ public partial class PropertyInjectionContainerSideTests
 			.Because("both back-references are deferred, so each singleton is cached before it is wired and the mutual cycle terminates");
 	}
 
-	[Fact]
+	[Test]
 	public async Task KeyedProperty_SelectsTheKeyedRegistration()
 	{
 		using KeyedContainer.Root container = new();
@@ -56,7 +56,7 @@ public partial class PropertyInjectionContainerSideTests
 			.Because("the Key on each [InjectProperty] selects the matching keyed registration");
 	}
 
-	[Fact]
+	[Test]
 	public async Task PropertyOnAScannedType_IsFilled()
 	{
 		using ScanContainer.Root container = new();
@@ -67,7 +67,7 @@ public partial class PropertyInjectionContainerSideTests
 			.Because("[InjectProperty] keys off the implementation type, so it fills a property on a type registered via [Scan]");
 	}
 
-	[Fact]
+	[Test]
 	public async Task InheritedProperty_DeclaredOnABaseType_IsFilled()
 	{
 		using InheritedContainer.Root container = new();
@@ -78,7 +78,7 @@ public partial class PropertyInjectionContainerSideTests
 			.Because("the base-type walk resolves an inherited property, so [InjectProperty] fills a property declared on a base class of the implementation");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ShadowedProperty_TheMostDerivedOneWins()
 	{
 		using ShadowContainer.Root container = new();
@@ -91,7 +91,7 @@ public partial class PropertyInjectionContainerSideTests
 			.Because("the shadowed base property is a distinct member and is left unset");
 	}
 
-	[Fact]
+	[Test]
 	public async Task InitOnlyProperty_NonDeferred_IsFilled()
 	{
 		using InitOnlyContainer.Root container = new();

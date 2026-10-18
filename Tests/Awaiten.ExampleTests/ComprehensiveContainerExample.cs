@@ -547,7 +547,7 @@ public partial class ComprehensiveContainerExample
 	// ScopedAsyncDisposable_IsTornDownAsynchronouslyWithItsScope inside a child scope drained through
 	// DisposeAsync, so a root never tracks one (AWT156 warns on what the disposed owner could track).
 #pragma warning disable AWT156
-	[Fact]
+	[Test]
 	public async Task Singleton_Scoped_Transient_ResolveAndShareCorrectly()
 	{
 		using CoffeeShop.Root shop = new();
@@ -561,7 +561,7 @@ public partial class ComprehensiveContainerExample
 			.Because("a transient is a fresh instance per resolve");
 	}
 
-	[Fact]
+	[Test]
 	public async Task OpenGeneric_Factory_And_Instance_Resolve()
 	{
 		using CoffeeShop.Root shop = new();
@@ -586,10 +586,10 @@ public partial class ComprehensiveContainerExample
 			.Because("one implementation registered under two services with the same factory shares one instance");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncInitialized_Services_ResolveThroughResolveAsync()
 	{
-		CancellationToken ct = TestContext.Current.CancellationToken;
+		CancellationToken ct = TestContext.Current!.Execution.CancellationToken;
 		using CoffeeShop.Root shop = new();
 		await shop.InitializeAsync(ct);
 
@@ -607,7 +607,7 @@ public partial class ComprehensiveContainerExample
 			.Because("an async transient is a fresh, initialized instance per resolve");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ScopedDisposable_IsTornDownWithItsScope()
 	{
 		using CoffeeShop.Root shop = new();
@@ -624,10 +624,10 @@ public partial class ComprehensiveContainerExample
 	}
 
 #if NET8_0_OR_GREATER
-	[Fact]
+	[Test]
 	public async Task ScopedAsyncDisposable_IsTornDownAsynchronouslyWithItsScope()
 	{
-		CancellationToken ct = TestContext.Current.CancellationToken;
+		CancellationToken ct = TestContext.Current!.Execution.CancellationToken;
 		await using CoffeeShop.Root shop = new();
 
 		IAwaitenScope order = await shop.CreateScopeAsync(ct);
@@ -640,7 +640,7 @@ public partial class ComprehensiveContainerExample
 	}
 #endif
 
-	[Fact]
+	[Test]
 	public async Task Keyed_Decorated_And_Composite_Resolve()
 	{
 		using CoffeeShop.Root shop = new();
@@ -659,7 +659,7 @@ public partial class ComprehensiveContainerExample
 			.Because("the composite carries an explicit Singleton lifetime, so it is shared");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Relationships_Collections_And_Parameterized_Resolve()
 	{
 		using CoffeeShop.Root shop = new();
@@ -685,7 +685,7 @@ public partial class ComprehensiveContainerExample
 		await That(counter.Cup.Value).IsNotNull();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Owned_DisposesOnlyItsOwnScope()
 	{
 		using CoffeeShop.Root shop = new();
@@ -699,7 +699,7 @@ public partial class ComprehensiveContainerExample
 			.Because("disposing the Owned handle disposes the throwaway scope backing it");
 	}
 
-	[Fact]
+	[Test]
 	public async Task PropertyInjection_Plain_And_DeferredCycle_AreWired()
 	{
 		using CoffeeShop.Root shop = new();
@@ -713,7 +713,7 @@ public partial class ComprehensiveContainerExample
 			.Because("the deferred mutual cycle is wired back to the same cached singletons");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncFactoryRelationship_ProducesAnInitializedInstance()
 	{
 		using CoffeeShop.Root shop = new();
@@ -728,7 +728,7 @@ public partial class ComprehensiveContainerExample
 			.Because("a Func<Task<T>> produces an initialized instance per call");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncFactory_WithCancellationToken_ReceivesTheResolveTimeToken()
 	{
 		using CoffeeShop.Root shop = new();
@@ -740,10 +740,10 @@ public partial class ComprehensiveContainerExample
 			.Because("the async factory's CancellationToken parameter receives the resolve-time token");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncCollections_AwaitTheirAsyncTaintedMember()
 	{
-		CancellationToken ct = TestContext.Current.CancellationToken;
+		CancellationToken ct = TestContext.Current!.Execution.CancellationToken;
 		using CoffeeShop.Root shop = new();
 
 		// IAsyncEnumerable<T> injection taints its consumer, so the tasting flight is reached through ResolveAsync
@@ -767,7 +767,7 @@ public partial class ComprehensiveContainerExample
 			.Because("the awaited collection produces every registered pour once its task completes");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ExternalDependency_ResolvesThroughTheWiredResolver()
 	{
 		using CoffeeShop.Root shop = new();
@@ -777,7 +777,7 @@ public partial class ComprehensiveContainerExample
 			.Because("an [ImportService<T>] dependency is satisfied by the wired external resolver");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ImportedModule_ContributesItsRegistrations()
 	{
 		using CoffeeShop.Root shop = new();
@@ -793,7 +793,7 @@ public partial class ComprehensiveContainerExample
 	}
 #pragma warning restore AWT156
 
-	[Fact]
+	[Test]
 	public async Task SelfServeKiosk_ResolvesADisposableByTypeAndThroughAFunc()
 	{
 		using SelfServeKiosk.Root kiosk = new();
@@ -807,10 +807,10 @@ public partial class ComprehensiveContainerExample
 		await That(dispenser()).IsNotNull();
 	}
 
-	[Fact]
+	[Test]
 	public async Task DriveThru_ResolvesAnAsyncServiceSynchronouslyAfterWarmUp()
 	{
-		CancellationToken ct = TestContext.Current.CancellationToken;
+		CancellationToken ct = TestContext.Current!.Execution.CancellationToken;
 		using DriveThru.Root driveThru = new();
 		await driveThru.InitializeAsync(ct);
 

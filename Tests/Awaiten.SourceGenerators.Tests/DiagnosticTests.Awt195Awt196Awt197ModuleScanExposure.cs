@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt195Awt196Awt197ModuleScanExposure
 	{
-		[Fact]
+		[Test]
 		public async Task Awt195_ReportsWhenAMatchConstructorParameterIsInaccessible()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -32,7 +32,7 @@ public partial class DiagnosticTests
 				.Because("the generated factory's parameter type must be nameable by a consumer, and Secret is internal");
 		}
 
-		[Fact]
+		[Test]
 		public async Task Awt196_ReportsWhenNoExposureIsAccessible()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -52,7 +52,7 @@ public partial class DiagnosticTests
 				.Because("a Self exposure of an internal implementation gives a consumer no accessible type to resolve; the match is skipped with a warning, mirroring the container scan's AWT182/AWT188/AWT193 severity");
 		}
 
-		[Fact]
+		[Test]
 		public async Task Awt197_ReportsWhenAMatchWouldHaveMultipleExposures()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -73,7 +73,7 @@ public partial class DiagnosticTests
 				.Because("a self-compiled match is reached through a single-interface factory, so multiple exposures are unsupported in v1");
 		}
 
-		[Fact]
+		[Test]
 		public async Task Awt197_ReportsWhenTwoScansExposeOneMatchUnderDifferentInterfaces()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -95,7 +95,7 @@ public partial class DiagnosticTests
 				.Because("two scans exposing the same type under different interfaces would emit two factories, splitting the single shared instance a container scan gives one implementation, so the overlap is rejected like a multi-exposure within one scan");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForASingleAccessibleExposure()
 		{
 			GeneratorResult result = Generator.Run("""

@@ -16,7 +16,7 @@ namespace Awaiten.Tests;
 /// </summary>
 public partial class ScanFilteringTests
 {
-	[Fact]
+	[Test]
 	public async Task NamePatterns_RegisterOnlyCandidatesMatchingAnIncludeName()
 	{
 		using NamePatternContainer.Root container = new();
@@ -28,7 +28,7 @@ public partial class ScanFilteringTests
 		await That(registered).Contains(typeof(OrderHandler)).And.Contains(typeof(LegacyHandler));
 	}
 
-	[Fact]
+	[Test]
 	public async Task NamePatterns_IncludeAndExcludeCombineToASingleMatch()
 	{
 		using NameIncludeExcludeContainer.Root container = new();
@@ -40,7 +40,7 @@ public partial class ScanFilteringTests
 		await That(registered).Contains(typeof(OrderHandler));
 	}
 
-	[Fact]
+	[Test]
 	public async Task NamespacePatterns_RestrictToTheNamedNamespace()
 	{
 		using NamespacePatternContainer.Root container = new();
@@ -52,7 +52,7 @@ public partial class ScanFilteringTests
 		await That(registered).Contains(typeof(OrderHandler)).And.Contains(typeof(PaymentService));
 	}
 
-	[Fact]
+	[Test]
 	public async Task NamespacePatterns_ExcludeALegacyNamespaceByTrailingSegment()
 	{
 		using NamespaceExcludeContainer.Root container = new();
@@ -64,7 +64,7 @@ public partial class ScanFilteringTests
 		await That(registered).Contains(typeof(OrderHandler)).And.Contains(typeof(PaymentService));
 	}
 
-	[Fact]
+	[Test]
 	public async Task Exclude_RemovesTheExactCrossAssemblyType()
 	{
 		using ExcludeTypeContainer.Root container = new();
@@ -76,7 +76,7 @@ public partial class ScanFilteringTests
 		await That(registered).Contains(typeof(OrderHandler)).And.Contains(typeof(LegacyHandler));
 	}
 
-	[Fact]
+	[Test]
 	public async Task Filters_ComposeAcrossNameAndNamespaceWithAnd()
 	{
 		using ComposedFilterContainer.Root container = new();

@@ -8,9 +8,9 @@ public partial class DiagnosticTests
 	// (CS8785 / KeyNotFoundException) and the real registration error is lost.
 	public class RelationshipOverFailedImplementation
 	{
-		[Theory]
-		[InlineData("Func")]
-		[InlineData("Lazy")]
+		[Test]
+		[Arguments("Func")]
+		[Arguments("Lazy")]
 		public async Task ReportsTheRegistrationError_RatherThanCrashingTheGenerator(string relationship)
 		{
 			GeneratorResult result = Generator.Run($$"""

@@ -1,6 +1,6 @@
 # Architecture and source locations
 
-Product code is in `Source/`, tests in `Tests/`, benchmarks in `Benchmarks/`, runnable samples in `Samples/`, the Nuke build in `Pipeline/` and the user documentation in `Docs/pages/`. `Awaiten.slnx` contains all of them.
+Product code is in `Source/`, tests in `Tests/`, benchmarks in `Benchmarks/`, runnable samples in `Samples/`, the Fallout build in `Pipeline/` and the user documentation in `Docs/pages/`. `Awaiten.slnx` contains all of them.
 
 ## Projects (`Source/`)
 
@@ -39,5 +39,5 @@ Containers and modules must be `static partial` classes; a non-static one is a d
 
 - `Directory.Build.props` (root): strong naming with `strongname.snk` for every project; test, sample and benchmark projects turn signing off.
 - `Source/Directory.Build.props`: package metadata, target frameworks, warnings as errors (CS1591 and NU5104 stay warnings), packing with symbols. The generator project overrides the target framework and does not pack itself.
-- `Tests/Directory.Build.props`: xUnit v3, `Microsoft.NET.Test.Sdk`, coverlet and aweXpect for every test project; implicit usings off (each project has a `Usings.cs`).
+- `Tests/Directory.Build.props`: TUnit (`TUnit.Engine`) as executables of the Microsoft.Testing.Platform, its TRX and code coverage extensions, and aweXpect for every test project; implicit usings off (each project has a `Usings.cs`).
 - `Pipeline/` has its own `Directory.Build.props` so the root settings do not leak into the build project.

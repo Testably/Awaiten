@@ -38,7 +38,7 @@ public sealed partial class KeyedBridgeTests
 	[Singleton<SlowChannel, IChannel>(Key = "slow")]
 	public static partial class KeyedContainer;
 
-	[Fact]
+	[Test]
 	public async Task AddGeneratedContainer_ProjectsKeyedRegistrations_ForGetKeyedService()
 	{
 		ServiceCollection services = new();
@@ -51,7 +51,7 @@ public sealed partial class KeyedBridgeTests
 			.Because("the unkeyed registration is still projected as the default service");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AddGeneratedContainer_KeyedRegistration_FlowsIntoFromKeyedServicesConsumer()
 	{
 		ServiceCollection services = new();
@@ -67,7 +67,7 @@ public sealed partial class KeyedBridgeTests
 			.Because("[FromKeyedServices(\"slow\")] selects the Awaiten registration keyed 'slow'");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AddGeneratedContainer_UnknownKey_ReturnsNull()
 	{
 		ServiceCollection services = new();
@@ -77,7 +77,7 @@ public sealed partial class KeyedBridgeTests
 		await That(provider.GetKeyedService<IChannel>("unknown")).IsNull();
 	}
 
-	[Fact]
+	[Test]
 	public async Task AwaitenServiceProvider_ServesKeyedRegistrationsThroughIKeyedServiceProvider()
 	{
 		await using AwaitenServiceProvider provider = new(new KeyedContainer.Root());
@@ -90,7 +90,7 @@ public sealed partial class KeyedBridgeTests
 			.Because("a null key falls back to the unkeyed registration");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AwaitenServiceProvider_AnyKey_IsDeclined()
 	{
 		await using AwaitenServiceProvider provider = new(new KeyedContainer.Root());
@@ -99,7 +99,7 @@ public sealed partial class KeyedBridgeTests
 			.Because("Awaiten has no wildcard-key semantics, so AnyKey matches nothing");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Registrations_ExposeTheUserKeyOfKeyedRegistrations()
 	{
 		KeyedContainer.Root root = new();

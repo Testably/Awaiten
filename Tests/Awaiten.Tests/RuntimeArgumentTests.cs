@@ -7,7 +7,7 @@ namespace Awaiten.Tests;
 /// </summary>
 public partial class RuntimeArgumentTests
 {
-	[Fact]
+	[Test]
 	public async Task Func_WithRuntimeArgument_BuildsTheServiceFromBothTheArgumentAndTheGraph()
 	{
 		using RuntimeArgumentContainer.Root container = new();
@@ -25,7 +25,7 @@ public partial class RuntimeArgumentTests
 			.Because("the non-argument dependency is still resolved from the graph (a shared singleton)");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Func_WithTwoRuntimeArguments_ForwardsThemPositionally()
 	{
 		using RuntimeArgumentContainer.Root container = new();
@@ -37,7 +37,7 @@ public partial class RuntimeArgumentTests
 		await That(gadget.Serial).IsEqualTo(42);
 	}
 
-	[Fact]
+	[Test]
 	public async Task Func_BoundToAScope_ReleasesTheBuiltDisposablesWithThatScope()
 	{
 		using RuntimeArgumentContainer.Root container = new();
@@ -56,7 +56,7 @@ public partial class RuntimeArgumentTests
 			.Because("a disposable parameterized service is tracked by the owner its factory is bound to");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Func_OverAParameterizedServiceThatItselfTakesRuntimeArguments_Composes()
 	{
 		using RuntimeArgumentContainer.Root container = new();
@@ -77,7 +77,7 @@ public partial class RuntimeArgumentTests
 			.Because("the nested graph dependency is still the shared singleton");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Factory_WithRuntimeArgument_ForwardsItToTheFactoryMethod()
 	{
 		using FactoryArgContainer.Root container = new();
@@ -89,7 +89,7 @@ public partial class RuntimeArgumentTests
 		await That(badges("B2").Code).IsEqualTo("B2");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Arg_WhoseTypeIsAlsoRegistered_IsSuppliedAtRuntimeRatherThanFromTheGraph()
 	{
 		using RuntimeArgumentContainer.Root container = new();
@@ -102,7 +102,7 @@ public partial class RuntimeArgumentTests
 			.Because("a [Arg] parameter is supplied at runtime, bypassing the registered Engine even though its type is registered");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Func_BoundToASingleton_ReleasesTheBuiltDisposablesWithTheContainer()
 	{
 		RuntimeArgumentContainer.Root container = new();

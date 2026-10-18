@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt172ScanFiltersMatchedNothing
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenFiltersRemoveEveryMatch()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -30,7 +30,7 @@ public partial class DiagnosticTests
 				.Because("AWT138 is for a marker that matched nothing, distinct from a filter that removed everything");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenAFilteredScanStillRegistersSomething()
 		{
 			GeneratorResult result = Generator.Run("""

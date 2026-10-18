@@ -10,7 +10,7 @@ namespace Awaiten.Tests;
 /// </summary>
 public partial class OpenGenericTests
 {
-	[Fact]
+	[Test]
 	public async Task ClosedService_ConstructsTheMatchingClosedImplementation()
 	{
 		using OpenGenericContainer.Root container = new();
@@ -21,7 +21,7 @@ public partial class OpenGenericTests
 		await That(repository.Describe()).IsEqualTo("Repository<Order>");
 	}
 
-	[Fact]
+	[Test]
 	public async Task DifferentTypeArguments_ConstructDistinctClosedImplementations()
 	{
 		using OpenGenericContainer.Root container = new();
@@ -33,7 +33,7 @@ public partial class OpenGenericTests
 		await That(customers.Describe()).IsEqualTo("Repository<Customer>");
 	}
 
-	[Fact]
+	[Test]
 	public async Task TransitiveOpenChain_ResolvesAllClosedGenericDependencies()
 	{
 		using OpenGenericContainer.Root container = new();
@@ -44,7 +44,7 @@ public partial class OpenGenericTests
 		await That(handler.Validator).Is<Validator<Order>>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task SingletonClosedInstance_IsSharedAcrossResolutions()
 	{
 		using OpenGenericContainer.Root container = new();
@@ -55,7 +55,7 @@ public partial class OpenGenericTests
 		await That(first).IsSameAs(second);
 	}
 
-	[Fact]
+	[Test]
 	public async Task TransientClosedInstance_IsFreshOnEachResolution()
 	{
 		using OpenGenericContainer.Root container = new();

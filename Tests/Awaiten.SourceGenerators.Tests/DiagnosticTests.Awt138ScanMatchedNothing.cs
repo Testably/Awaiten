@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt138ScanMatchedNothing
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenAScanMatchesNoConcreteType()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -29,7 +29,7 @@ public partial class DiagnosticTests
 				.Because("a scan whose marker matches no concrete type is a typo or an empty marker");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenAScanMatchesAtLeastOneConcreteType()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -51,7 +51,7 @@ public partial class DiagnosticTests
 				.Because("the scan matched a concrete type, so it contributes a registration");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenTheOnlyMatchIsOverriddenByAnExplicitRegistration()
 		{
 			GeneratorResult result = Generator.Run("""

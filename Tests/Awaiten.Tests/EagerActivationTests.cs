@@ -14,9 +14,10 @@ namespace Awaiten.Tests;
 ///     initialization and disposal are observed through a static probe because the container is a static
 ///     definition and the usable instance is <c>new …Root()</c>.
 /// </summary>
+[NotInParallel(nameof(EagerActivationTests))]
 public partial class EagerActivationTests
 {
-	[Fact]
+	[Test]
 	public async Task EagerSingleton_IsConstructedBeforeAnyResolve()
 	{
 		Probe.Constructed.Clear();
@@ -33,7 +34,7 @@ public partial class EagerActivationTests
 		await That(container.Resolve<Eager>()).IsSameAs(first);
 	}
 
-	[Fact]
+	[Test]
 	public async Task LazySingleton_IsNotConstructedUntilResolved()
 	{
 		Probe.Constructed.Clear();
@@ -48,7 +49,7 @@ public partial class EagerActivationTests
 		await That(Probe.Constructed).Contains("Lazy");
 	}
 
-	[Fact]
+	[Test]
 	public async Task EagerSingletons_AreConstructedInRegistrationOrder()
 	{
 		Probe.Constructed.Clear();
@@ -59,7 +60,7 @@ public partial class EagerActivationTests
 		await That(Probe.Constructed.IndexOf("First") < Probe.Constructed.IndexOf("Second")).IsTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task DisposableEagerSingleton_IsDisposedWithTheContainer()
 	{
 		Disposable instance;
@@ -72,7 +73,7 @@ public partial class EagerActivationTests
 		await That(instance.Disposed).IsTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task EagerDisposableSingleton_IsTrackedForDisposalByConstructionAlone()
 	{
 		Probe.Constructed.Clear();
@@ -90,7 +91,7 @@ public partial class EagerActivationTests
 		await That(Probe.Disposed).Contains("ProbeDisposable");
 	}
 
-	[Fact]
+	[Test]
 	public async Task PragmaticMode_EagerAsyncSingleton_IsConstructedAndInitializedBeforeAnyResolve()
 	{
 		Probe.Constructed.Clear();

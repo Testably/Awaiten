@@ -10,10 +10,9 @@
 	     has a referenced assembly with marker-implementing types to discover, and so a container in the test
 	     assembly can [Import] a [Module] compiled into a real referenced assembly. Not a test project. -->
 	<ItemGroup>
-		<PackageReference Remove="xunit.v3" />
-		<PackageReference Remove="xunit.runner.visualstudio" />
-		<PackageReference Remove="Microsoft.NET.Test.Sdk" />
-		<PackageReference Remove="coverlet.collector" />
+		<PackageReference Remove="TUnit.Engine" />
+		<PackageReference Remove="Microsoft.Testing.Extensions.TrxReport" />
+		<PackageReference Remove="Microsoft.Testing.Extensions.CodeCoverage" />
 		<PackageReference Remove="aweXpect" />
 	</ItemGroup>
 

@@ -63,7 +63,7 @@ public sealed partial class BridgeTests
 	[Scoped<SecondScopedService>]
 	public static partial class SecondContainer;
 
-	[Fact]
+	[Test]
 	public async Task AddGeneratedContainer_ResolvesSingletonThroughMsDi()
 	{
 		ServiceCollection services = new();
@@ -77,7 +77,7 @@ public sealed partial class BridgeTests
 		await That(first).IsSameAs(second);
 	}
 
-	[Fact]
+	[Test]
 	public async Task AddGeneratedContainer_AlignsScopedToMsDiScope()
 	{
 		ServiceCollection services = new();
@@ -102,7 +102,7 @@ public sealed partial class BridgeTests
 		await That(ReferenceEquals(outer1, inner)).IsFalse();
 	}
 
-	[Fact]
+	[Test]
 	public async Task AddGeneratedContainer_TransientIsFreshEachResolve()
 	{
 		ServiceCollection services = new();
@@ -116,7 +116,7 @@ public sealed partial class BridgeTests
 		await That(ReferenceEquals(first, second)).IsFalse();
 	}
 
-	[Fact]
+	[Test]
 	public async Task AddGeneratedContainer_DisposesScopedOnceWithMsDiScope()
 	{
 		ServiceCollection services = new();
@@ -133,7 +133,7 @@ public sealed partial class BridgeTests
 		await That(scoped.DisposeCount).IsEqualTo(1);
 	}
 
-	[Fact]
+	[Test]
 	public async Task AddGeneratedContainer_DisposesSingletonOnceWithRootProvider()
 	{
 		ServiceCollection services = new();
@@ -148,7 +148,7 @@ public sealed partial class BridgeTests
 		await That(singleton.DisposeCount).IsEqualTo(1);
 	}
 
-	[Fact]
+	[Test]
 	public async Task AwaitenServiceProvider_MapsGetServiceToTryResolve()
 	{
 		using BridgeContainer.Root container = new();
@@ -161,7 +161,7 @@ public sealed partial class BridgeTests
 		await That(missing).IsNull();
 	}
 
-	[Fact]
+	[Test]
 	public async Task AwaitenServiceProvider_CreatesScopeOverAwaitenScope()
 	{
 		using BridgeContainer.Root container = new();
@@ -174,7 +174,7 @@ public sealed partial class BridgeTests
 		await That(a).IsSameAs(b);
 	}
 
-	[Fact]
+	[Test]
 	public async Task AwaitenServiceProvider_ExposesItselfAndScopeFactory()
 	{
 		using BridgeContainer.Root container = new();
@@ -184,7 +184,7 @@ public sealed partial class BridgeTests
 		await That(provider.GetService(typeof(IServiceScopeFactory))).IsSameAs(provider);
 	}
 
-	[Fact]
+	[Test]
 	public async Task AwaitenServiceProvider_ScopeExposesScopeFactory()
 	{
 		using BridgeContainer.Root container = new();
@@ -200,7 +200,7 @@ public sealed partial class BridgeTests
 		await That(nested.ServiceProvider.GetService(typeof(ScopedService))).IsNotNull();
 	}
 
-	[Fact]
+	[Test]
 	public async Task AddGeneratedContainer_ResolvesTransientFromRootProvider()
 	{
 		ServiceCollection services = new();
@@ -214,7 +214,7 @@ public sealed partial class BridgeTests
 		await That(ReferenceEquals(first, second)).IsFalse();
 	}
 
-	[Fact]
+	[Test]
 	public async Task AddGeneratedContainer_ProjectsAsyncServiceAsTask()
 	{
 		ServiceCollection services = new();
@@ -229,7 +229,7 @@ public sealed partial class BridgeTests
 		await That(resolved.Initialized).IsTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task AwaitenServiceProviderFactory_BuildsProviderFromEmptyCollection()
 	{
 		AwaitenServiceProviderFactory<BridgeContainer.Root> factory = new();
@@ -249,7 +249,7 @@ public sealed partial class BridgeTests
 		public IService Service { get; }
 	}
 
-	[Fact]
+	[Test]
 	public async Task AwaitenServiceProviderFactory_CoexistsWithHostRegistrations()
 	{
 		AwaitenServiceProviderFactory<BridgeContainer.Root> factory = new();
@@ -268,7 +268,7 @@ public sealed partial class BridgeTests
 		await That(provider.GetRequiredService<HostConsumer>().Service).Is<SingletonService>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task AddGeneratedContainer_TransientSharesScopedDependenciesWithItsScope()
 	{
 		ServiceCollection services = new();
@@ -283,7 +283,7 @@ public sealed partial class BridgeTests
 			.Because("a transient resolved inside an MS.DI scope resolves from the Awaiten scope aligned to it, so it shares that scope's instances");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AddGeneratedContainer_TwoContainers_KeepSeparateScopeAlignment()
 	{
 		ServiceCollection services = new();
@@ -298,7 +298,7 @@ public sealed partial class BridgeTests
 		await That(scope.ServiceProvider.GetRequiredService<SecondScopedService>()).IsNotNull();
 	}
 
-	[Fact]
+	[Test]
 	public async Task AwaitenServiceProvider_ServesAsyncServiceAsTask()
 	{
 		using BridgeContainer.Root container = new();
@@ -317,7 +317,7 @@ public sealed partial class BridgeTests
 			.Because("a Task<T> over a type the container does not advertise is genuinely not its service");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AwaitenServiceProvider_ScopeServesAsyncServiceAsTask()
 	{
 		using BridgeContainer.Root container = new();

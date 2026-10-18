@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt187ScanAmbiguousMatchingInterfaces
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenAMatchImplementsSeveralSameNamedInterfaces()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -32,7 +32,7 @@ public partial class DiagnosticTests
 				.Because("neither IWorker is in Worker's own namespace, so the match registers under both");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenTheOwnNamespaceInterfaceWinsTheTiebreak()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -58,7 +58,7 @@ public partial class DiagnosticTests
 				.Because("the own-namespace IWorker decides the tie, so a single interface registers");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenTheAccessibilityFilterResolvesTheTie()
 		{
 			GeneratorResult result = Generator.RunWithReferencedAssembly("""
@@ -89,7 +89,7 @@ public partial class DiagnosticTests
 			await That(source).DoesNotContain("A.IWorker");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenEverySameNamedInterfaceIsInaccessible()
 		{
 			GeneratorResult result = Generator.RunWithReferencedAssembly("""
@@ -119,7 +119,7 @@ public partial class DiagnosticTests
 				.Because("claiming the match is registered under each interface would contradict AWT188");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForAMarkerlessScan()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -148,7 +148,7 @@ public partial class DiagnosticTests
 				.Because("the ambiguous match still registers under each interface, just without the warning");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenTheMatchIsPrunedAsUnconstructable()
 		{
 			GeneratorResult result = Generator.Run("""

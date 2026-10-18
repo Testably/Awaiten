@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt127OpenGenericNotUnbound
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenTheTypeofArgumentIsAClosedGeneric()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -28,7 +28,7 @@ public partial class DiagnosticTests
 				.Because("a closed generic in the typeof-ctor form would silently drop its type arguments; the generic attribute form registers closed types");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenTheTypeofArgumentIsNonGeneric()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -49,7 +49,7 @@ public partial class DiagnosticTests
 				.Because("a non-generic type matches no closed service through the open generic path; the generic attribute form registers it");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForAnUnboundOpenGeneric()
 		{
 			GeneratorResult result = Generator.Run("""

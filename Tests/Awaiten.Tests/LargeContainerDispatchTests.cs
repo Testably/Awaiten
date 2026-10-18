@@ -6,7 +6,7 @@ namespace Awaiten.Tests;
 /// </summary>
 public partial class LargeContainerDispatchTests
 {
-	[Fact]
+	[Test]
 	public async Task DirectServices_ResolveAcrossTheWholeTable()
 	{
 		LargeContainer.Root container = new();
@@ -20,7 +20,7 @@ public partial class LargeContainerDispatchTests
 		await That(middle).Is<S10>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Scope_ResolvesThroughTheSharedTable()
 	{
 		LargeContainer.Root container = new();
@@ -31,7 +31,7 @@ public partial class LargeContainerDispatchTests
 		await That(service).Is<S15>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Singleton_ReturnsTheSameInstanceThroughTheTable()
 	{
 		LargeContainer.Root container = new();
@@ -39,7 +39,7 @@ public partial class LargeContainerDispatchTests
 		await That(container.Resolve<S07>()).IsSameAs(container.Resolve<S07>());
 	}
 
-	[Fact]
+	[Test]
 	public async Task UnregisteredType_FallsThroughToFalse()
 	{
 		LargeContainer.Root container = new();

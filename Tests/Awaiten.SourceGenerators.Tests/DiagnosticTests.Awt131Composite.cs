@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt131Composite
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsAwt131WhenTheCompositeIsAlsoRegisteredAsABareMember()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -32,7 +32,7 @@ public partial class DiagnosticTests
 				.Because("the composite is also registered as a bare member of its own service, which has no effect");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotSurfaceTheDroppedMembershipAsAnAwt102Cycle()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -58,7 +58,7 @@ public partial class DiagnosticTests
 				.Because("dropping the redundant membership keeps the composite out of its own collection, so there is no self-edge cycle");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportAwt131WhenTheCompositeIsRegisteredAsAMemberOfADifferentService()
 		{
 			GeneratorResult result = Generator.Run("""

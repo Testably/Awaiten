@@ -9,7 +9,7 @@ namespace Awaiten.SourceGenerators.Tests;
 /// </summary>
 public class AsyncRelationshipTypesTests
 {
-	[Fact]
+	[Test]
 	public async Task AsyncRelationships_ResolveAnAsyncServiceWithoutTaintingAStrictConsumer()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -47,7 +47,7 @@ public class AsyncRelationshipTypesTests
 		await That(source).Contains("new global::System.Lazy<global::System.Threading.Tasks.Task<global::MyCode.Connection>>(() => Root.ResolveConnectionAsync(__s.__root, default))");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ParameterizedFuncOfTask_ForwardsArgumentsThroughTheAsyncResolver()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -88,7 +88,7 @@ public class AsyncRelationshipTypesTests
 			.Because("the async parameterized resolver awaits the service's initialization");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ParameterizedFuncOfTask_WithMismatchedArguments_ReportsAwt113()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -121,7 +121,7 @@ public class AsyncRelationshipTypesTests
 			.Because("a Func<string, Task<Robot>> requests a string but Robot's [Arg] parameter expects an int");
 	}
 
-	[Fact]
+	[Test]
 	public async Task PragmaticMode_ParameterizedAsync_SyncResolverForwardsArgumentsAndBlocksOnTheAsyncResolver()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -160,7 +160,7 @@ public class AsyncRelationshipTypesTests
 			.Because("it forwards the argument and blocks on the single async (initializing) resolver");
 	}
 
-	[Fact]
+	[Test]
 	public async Task BareTaskOfAParameterizedService_ReportsAwt115()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -192,7 +192,7 @@ public class AsyncRelationshipTypesTests
 			.Because("a bare Task<Robot> supplies no runtime arguments, so a parameterized service must instead be reached through a Func<TArg…, Task<T>>");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncOwned_FuncOfTaskOfOwned_AsyncResolvesIntoAThrowawayScopeAndIsExemptFromAwt118()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -229,7 +229,7 @@ public class AsyncRelationshipTypesTests
 			.Because("the throwaway scope awaits the service's async resolver (initialization included)");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncDisposableService_EmitsDisposeAsyncAndAnAwaitingDrain()
 	{
 		GeneratorResult result = Generator.Run("""

@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt133Composite
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsAwt133WhenTheCollectionIsOfABaseTypeOfTheComposedService()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -36,7 +36,7 @@ public partial class DiagnosticTests
 				.Because("the composite has a collection parameter, it is of the wrong element type, not missing");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportAwt133WhenAnExactCollectionAlsoAccompaniesABaseTypedOne()
 		{
 			GeneratorResult result = Generator.Run("""

@@ -9,9 +9,10 @@ namespace Awaiten.Tests;
 ///     marker with the chosen lifetime (as itself and/or under the scanned marker interface), and an explicit
 ///     registration of the same type takes precedence over the scan for single resolution.
 /// </summary>
+[NotInParallel(nameof(ScanTests))]
 public partial class ScanTests
 {
-	[Fact]
+	[Test]
 	public async Task Scan_RegistersEachConcreteImplementationWithTheChosenLifetime()
 	{
 		using ScanContainer.Root container = new();
@@ -25,7 +26,7 @@ public partial class ScanTests
 		await That(container.Resolve<AlphaPlugin>()).IsSameAs(alpha);
 	}
 
-	[Fact]
+	[Test]
 	public async Task Scan_RegistrationIsOverriddenByAnExplicitRegistration()
 	{
 		using ScanContainer.Root container = new();
@@ -35,7 +36,7 @@ public partial class ScanTests
 		await That(container.Resolve<BetaPlugin>()).IsNotSameAs(container.Resolve<BetaPlugin>());
 	}
 
-	[Fact]
+	[Test]
 	public async Task ScanAsMarker_MakesMatchesACollectionOfTheMarker()
 	{
 		using InterfaceScanContainer.Root container = new();
@@ -47,7 +48,7 @@ public partial class ScanTests
 			.Contains(typeof(EmailNotification)).And.Contains(typeof(SmsNotification));
 	}
 
-	[Fact]
+	[Test]
 	public async Task ScanAsMarker_RegistersUnderTheInterfaceNotTheConcreteType()
 	{
 		using InterfaceScanContainer.Root container = new();
@@ -57,7 +58,7 @@ public partial class ScanTests
 		await That(container.TryResolve(typeof(EmailNotification), out _)).IsFalse();
 	}
 
-	[Fact]
+	[Test]
 	public async Task ScanAsSelfBitOrMarkerBit_RegistersBoth()
 	{
 		using SelfAndInterfaceScanContainer.Root container = new();
@@ -102,7 +103,7 @@ public partial class ScanTests
 	[Scan(typeof(IReport), As = ScanAs.Self | ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton)]
 	public static partial class SelfAndInterfaceScanContainer;
 
-	[Fact]
+	[Test]
 	public async Task Scan_LifecycleHooks_RunForEveryMatch_WithGraphResolvedParameters()
 	{
 		HookProbe.Log.Clear();
@@ -148,7 +149,7 @@ public partial class ScanTests
 		private static void Released(IHooked instance) => HookProbe.Log.Add("released:" + instance.GetType().Name);
 	}
 
-	[Fact]
+	[Test]
 	public async Task Scan_OpenGenericMarker_DispatchesAGenericHookWithTheClosedTypeArgument()
 	{
 		HookProbe.Log.Clear();
@@ -180,7 +181,7 @@ public partial class ScanTests
 			=> HookProbe.Log.Add($"wired:{view.GetType().Name}:{viewModel!.GetType().Name}");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Scan_OpenGenericMarker_RunsANonGenericHookForAMatchClosingTheMarkerMoreThanOnce()
 	{
 		HookProbe.Log.Clear();
@@ -206,7 +207,7 @@ public partial class ScanTests
 		private static void Track(object instance) => HookProbe.Log.Add("tracked:" + instance.GetType().Name);
 	}
 
-	[Fact]
+	[Test]
 	public async Task Scan_TwoScansHookingDifferentSlots_MergeSoBothHooksRun()
 	{
 		HookProbe.Log.Clear();
@@ -239,7 +240,7 @@ public partial class ScanTests
 		private static void Stopped(object instance) => HookProbe.Log.Add("merge-released:" + instance.GetType().Name);
 	}
 
-	[Fact]
+	[Test]
 	public async Task Scan_OpenGenericMarker_DispatchesAGenericReleaseHookWithTheClosedTypeArgument()
 	{
 		HookProbe.Log.Clear();
@@ -271,7 +272,7 @@ public partial class ScanTests
 			=> HookProbe.Log.Add("unwired:" + typeof(TViewModel).Name);
 	}
 
-	[Fact]
+	[Test]
 	public async Task Scan_OpenGenericMarker_DispatchesAGenericHookWithTwoTypeArguments()
 	{
 		HookProbe.Log.Clear();
@@ -296,7 +297,7 @@ public partial class ScanTests
 			=> HookProbe.Log.Add($"bound:{typeof(TSource).Name}:{typeof(TTarget).Name}");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Scan_OpenGenericBaseClassMarker_DispatchesAGenericHookWithTheClosedTypeArgument()
 	{
 		HookProbe.Log.Clear();
@@ -324,7 +325,7 @@ public partial class ScanTests
 			=> HookProbe.Log.Add("panel:" + typeof(TModel).Name);
 	}
 
-	[Fact]
+	[Test]
 	public async Task GenericScan_RegistersMatchesLikeTheTypeofForm()
 	{
 		using GenericScanContainer.Root container = new();
@@ -339,7 +340,7 @@ public partial class ScanTests
 	[Scan<IReport>(As = ScanAs.Self | ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton)]
 	public static partial class GenericScanContainer;
 
-	[Fact]
+	[Test]
 	public async Task ScanInAssembliesOf_RegistersMatchesFromTheReferencedAssembly()
 	{
 		using CrossAssemblyScanContainer.Root container = new();
@@ -351,7 +352,7 @@ public partial class ScanTests
 		await That(container.Resolve<GammaPlugin>()).IsSameAs(container.Resolve<GammaPlugin>());
 	}
 
-	[Fact]
+	[Test]
 	public async Task ScanInAssembliesOf_AsMarker_MakesMatchesACollectionOfTheMarker()
 	{
 		using CrossAssemblyInterfaceScanContainer.Root container = new();
@@ -365,7 +366,7 @@ public partial class ScanTests
 			.Contains(typeof(GammaPlugin)).And.Contains(typeof(DeltaPlugin));
 	}
 
-	[Fact]
+	[Test]
 	public async Task Scan_SeedsOpenGenericExpansionForScannedDependencies()
 	{
 		using OpenGenericSeedScanContainer.Root container = new();
@@ -393,7 +394,7 @@ public partial class ScanTests
 	[Transient(typeof(Repository<>), typeof(IRepository<>))]
 	public static partial class OpenGenericSeedScanContainer;
 
-	[Fact]
+	[Test]
 	public async Task ScanInAssembliesOf_IsOverriddenByAnExplicitRegistration()
 	{
 		using CrossAssemblyScanContainer.Root container = new();
@@ -417,7 +418,7 @@ public partial class ScanTests
 	[Singleton<CrossAssemblyHub>]
 	public static partial class CrossAssemblyInterfaceScanContainer;
 
-	[Fact]
+	[Test]
 	public async Task ScanClosedTypesOf_RegistersEachMatchUnderItsClosedMarkerInterface()
 	{
 		using ClosedTypesOfScanContainer.Root container = new();
@@ -427,7 +428,7 @@ public partial class ScanTests
 		await That(container.Resolve<IView<ViewModelTwo>>()).IsNotNull();
 	}
 
-	[Fact]
+	[Test]
 	public async Task ScanClosedTypesOf_RegistersUnderTheClosedInterfaceNotTheConcreteType()
 	{
 		using ClosedTypesOfScanContainer.Root container = new();
@@ -436,7 +437,7 @@ public partial class ScanTests
 		await That(container.TryResolve(typeof(ViewOne), out _)).IsFalse();
 	}
 
-	[Fact]
+	[Test]
 	public async Task ScanClosedTypesOf_MakesEachClosedFormResolvableAsACollection()
 	{
 		using ClosedTypesOfScanContainer.Root container = new();
@@ -446,7 +447,7 @@ public partial class ScanTests
 		await That(container.Resolve<IEnumerable<IView<ViewModelTwo>>>().Count()).IsEqualTo(2);
 	}
 
-	[Fact]
+	[Test]
 	public async Task ScanClosedTypesOf_AtSeveralTypeArguments_RegistersUnderEachClosedInterface()
 	{
 		using ClosedTypesOfScanContainer.Root container = new();
@@ -458,7 +459,7 @@ public partial class ScanTests
 			.Contains(typeof(DualView));
 	}
 
-	[Fact]
+	[Test]
 	public async Task ScanClosedTypesOf_AsSelf_RegistersTheConcreteType()
 	{
 		using ClosedTypesOfSelfScanContainer.Root container = new();
@@ -468,7 +469,7 @@ public partial class ScanTests
 		await That(container.TryResolve(typeof(IView<ViewModelOne>), out _)).IsFalse();
 	}
 
-	[Fact]
+	[Test]
 	public async Task ScanClosedTypesOf_IsOverriddenByAnExplicitRegistration()
 	{
 		using ClosedTypesOfScanContainer.Root container = new();
@@ -477,7 +478,7 @@ public partial class ScanTests
 		await That(container.Resolve<IView<ViewModelTwo>>()).IsNotSameAs(container.Resolve<IView<ViewModelTwo>>());
 	}
 
-	[Fact]
+	[Test]
 	public async Task ScanClosedTypesOf_InAssembliesOf_RegistersMatchesFromTheReferencedAssembly()
 	{
 		using CrossAssemblyClosedTypesOfScanContainer.Root container = new();
@@ -513,7 +514,7 @@ public partial class ScanTests
 	[Scan(typeof(ICrossAssemblyView<>), InAssembliesOf = new[] { typeof(ICrossAssemblyView<>) }, As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton)]
 	public static partial class CrossAssemblyClosedTypesOfScanContainer;
 
-	[Fact]
+	[Test]
 	public async Task ScanAsMatchingInterface_RegistersUnderTheConventionInterface()
 	{
 		using MatchingInterfaceScanContainer.Root container = new();
@@ -525,7 +526,7 @@ public partial class ScanTests
 		await That(container.TryResolve(typeof(IGadget), out _)).IsFalse();
 	}
 
-	[Fact]
+	[Test]
 	public async Task ScanAsMarkerOrMatchingInterface_RegistersUnderBoth()
 	{
 		using MarkerAndMatchingScanContainer.Root container = new();
@@ -536,7 +537,7 @@ public partial class ScanTests
 		await That(container.Resolve<IEnumerable<IGadget>>().Count()).IsEqualTo(2);
 	}
 
-	[Fact]
+	[Test]
 	public async Task MarkerlessScan_RegistersEachMatchUnderItsConventionInterface()
 	{
 		using MarkerlessScanContainer.Root container = new();

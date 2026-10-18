@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt165LifecycleHookOnInstance
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenALifecycleHookIsSetOnAPreBuiltInstance()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -30,7 +30,7 @@ public partial class DiagnosticTests
 				.Because("the container does not own a pre-built instance, so the hook would never run");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForAPreBuiltInstanceWithoutHooks()
 		{
 			GeneratorResult result = Generator.Run("""

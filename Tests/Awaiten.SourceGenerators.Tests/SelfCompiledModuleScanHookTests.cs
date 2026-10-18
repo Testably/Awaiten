@@ -20,7 +20,7 @@ public class SelfCompiledModuleScanHookTests
 			.SourceText.ToString();
 	}
 
-	[Fact]
+	[Test]
 	public async Task ModuleEmitsAPublicWrapperForANonGenericInternalHook()
 	{
 		string module = ReadModule("""
@@ -49,7 +49,7 @@ public class SelfCompiledModuleScanHookTests
 			.Because("the wrapper takes the accessible exposure interface, casts it back to the internal implementation inside the module, and forwards to the internal hook");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ModuleClosesAGenericHookAtBuildAndEmitsANonGenericWrapper()
 	{
 		string module = ReadModule("""
@@ -78,7 +78,7 @@ public class SelfCompiledModuleScanHookTests
 			.Because("the generic hook is closed at module build, so the wrapper is non-generic and the consumer sees no generics even though the marker closes over an internal view-model");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ModuleMirrorsAGraphResolvedHookDependencyOntoTheWrapper()
 	{
 		string module = ReadModule("""
@@ -104,7 +104,7 @@ public class SelfCompiledModuleScanHookTests
 			.Because("the hook's parameter after the instance is mirrored onto the public wrapper, resolved from the consumer's graph like a factory parameter");
 	}
 
-	[Fact]
+	[Test]
 	public async Task CrossAssemblyConsumerRunsTheGeneratedHookWrapper()
 	{
 		GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly("""
@@ -144,7 +144,7 @@ public class SelfCompiledModuleScanHookTests
 			.Because("the container invokes the module's generated hook wrapper qualified on the module type");
 	}
 
-	[Fact]
+	[Test]
 	public async Task SameCompilationContainerBindsTheModulesOwnHookDirectly()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -179,7 +179,7 @@ public class SelfCompiledModuleScanHookTests
 			.Because("the container calls the module's own hook, qualified on the module, rather than the wrapper it cannot see in the same compilation");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AHookParameterNamedLikeTheInstanceDoesNotCollideOnTheWrapper()
 	{
 		string module = ReadModule("""
@@ -205,7 +205,7 @@ public class SelfCompiledModuleScanHookTests
 			.Because("the synthetic instance parameter carries a reserved name so a hook parameter literally named 'instance' does not become a duplicate parameter on the wrapper");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AHookParameterNamedLikeTheSyntheticInstanceSuffixesTheSyntheticName()
 	{
 		string module = ReadModule("""
@@ -231,7 +231,7 @@ public class SelfCompiledModuleScanHookTests
 			.Because("a user hook parameter literally named awaiten__instance must not become a duplicate parameter on the wrapper, so the synthetic name is suffixed away from it");
 	}
 
-	[Fact]
+	[Test]
 	public async Task TwoOverlappingScansFillEachOthersHookSlots()
 	{
 		string module = ReadModule("""
@@ -263,7 +263,7 @@ public class SelfCompiledModuleScanHookTests
 			.Because("the filled slot emits its wrapper beside the first scan's factory");
 	}
 
-	[Fact]
+	[Test]
 	public async Task SameCompilationContainerScanAndModuleScanSharingAMatchResolveTheHookAgainstTheModule()
 	{
 		GeneratorResult result = Generator.Run("""

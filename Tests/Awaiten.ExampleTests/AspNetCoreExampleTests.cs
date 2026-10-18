@@ -32,7 +32,7 @@ public partial class AspNetCoreExampleTests
 	///     <c>UseServiceProviderFactory</c>, and the container's services resolve into the app's dependency
 	///     injection. Here an endpoint injects the Awaiten <see cref="IGreeter" /> singleton from its handler.
 	/// </summary>
-	[Fact]
+	[Test]
 	public async Task AspNetCore_InjectsAwaitenSingletonIntoEndpoint()
 	{
 		WebApplicationBuilder builder = CreateBuilder();
@@ -52,7 +52,7 @@ public partial class AspNetCoreExampleTests
 	///     One Awaiten scope aligns to each ASP.NET Core request scope, so an Awaiten scoped service is one
 	///     instance within a request and fresh across requests, the same lifetime a native scoped service has.
 	/// </summary>
-	[Fact]
+	[Test]
 	public async Task AspNetCore_ResolvesScopedServiceOncePerRequest()
 	{
 		WebApplicationBuilder builder = CreateBuilder();
@@ -76,7 +76,7 @@ public partial class AspNetCoreExampleTests
 	///     <see cref="IAwaitenContainerMetadata" /> and await <c>InitializeAsync</c>), then endpoints await the
 	///     projected <c>Task&lt;T&gt;</c> to obtain the initialized instance.
 	/// </summary>
-	[Fact]
+	[Test]
 	public async Task AspNetCore_WarmsAndServesAsyncInitializedService()
 	{
 		WebApplicationBuilder builder = CreateBuilder();
@@ -101,7 +101,7 @@ public partial class AspNetCoreExampleTests
 	///     Standalone use case: project the container into a plain <see cref="IServiceCollection" /> with
 	///     <c>AddGeneratedContainer</c>. Awaiten lifetimes map to the matching <c>ServiceLifetime</c>.
 	/// </summary>
-	[Fact]
+	[Test]
 	public async Task Collection_ProjectsServicesWithTheirLifetimes()
 	{
 		ServiceCollection services = new();
@@ -122,7 +122,7 @@ public partial class AspNetCoreExampleTests
 	///     <see cref="AwaitenServiceProvider" />. Here Awaiten owns disposal, so disposing the provider (via
 	///     <c>await using</c>) disposes the container and the singletons it built.
 	/// </summary>
-	[Fact]
+	[Test]
 	public async Task Provider_AsWholeContainer_DisposesWhatItBuilt()
 	{
 		WebContainer.Root container = new();

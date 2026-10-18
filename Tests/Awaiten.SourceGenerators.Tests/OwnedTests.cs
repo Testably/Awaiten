@@ -9,7 +9,7 @@ namespace Awaiten.SourceGenerators.Tests;
 /// </summary>
 public class OwnedTests
 {
-	[Fact]
+	[Test]
 	public async Task FuncOwned_EmitsAThrowawayScopeFactoryThroughTheOwnedHelper()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -40,7 +40,7 @@ public class OwnedTests
 			.Because("the Func<Owned<Widget>> factory builds the widget into the throwaway scope through its resolver");
 	}
 
-	[Fact]
+	[Test]
 	public async Task BareOwnedAndFuncOwned_AreDispatchableByType()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -67,7 +67,7 @@ public class OwnedTests
 			.Because("a Func<Owned<Widget>> factory is resolvable by Type");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ParameterizedFuncOwned_ForwardsRuntimeArgumentsIntoTheThrowawayScope()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -94,7 +94,7 @@ public class OwnedTests
 			.Because("the runtime argument flows into the parameterized resolver called on the throwaway scope");
 	}
 
-	[Fact]
+	[Test]
 	public async Task LazyOwned_ReportsAwt121RatherThanAMissingOwnedDependency()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -122,7 +122,7 @@ public class OwnedTests
 			.Because("the clearer AWT121 replaces the generic missing-dependency diagnostic for the Owned<T> type");
 	}
 
-	[Fact]
+	[Test]
 	public async Task LazyTaskOwned_ReportsAwt121()
 	{
 		GeneratorResult result = Generator.Run("""

@@ -12,7 +12,7 @@ namespace Awaiten.Extensions.DependencyInjection.Tests;
 ///         The reference suite for a container's MS.DI compatibility is
 ///         <c>Microsoft.Extensions.DependencyInjection.Specification.Tests</c>. It cannot be inherited here for
 ///         two reasons: it is built against xunit v2 (<c>xunit.assert</c>, <c>xunit.extensibility.core</c>) while
-///         this repository is on xunit.v3, and — decisively — its contract is
+///         the tests of this repository run on TUnit, and — decisively — its contract is
 ///         <c>CreateServiceProvider(IServiceCollection)</c>, which hands the container the types to register at
 ///         run time. An Awaiten graph is fixed when the generator runs, so no implementation of that method can
 ///         exercise Awaiten.
@@ -49,7 +49,7 @@ public sealed partial class MsDiConformanceTests
 	/// </summary>
 	public sealed class Lifetimes
 	{
-		[Fact]
+		[Test]
 		public async Task ANestedScopeIsIndependentOfItsParent()
 		{
 			using ConformanceContainer.Root container = new();
@@ -67,7 +67,7 @@ public sealed partial class MsDiConformanceTests
 				.Because("a nested scope is a scope in its own right, not a view onto its parent");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ASingletonReachedFromAScopeIsTheRootsInstance()
 		{
 			using ConformanceContainer.Root container = new();
@@ -81,7 +81,7 @@ public sealed partial class MsDiConformanceTests
 				.Because("a singleton is owned by the root, so a scope must hand back the root's instance");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ATransientIsFreshPerResolution()
 		{
 			using ConformanceContainer.Root container = new();
@@ -93,7 +93,7 @@ public sealed partial class MsDiConformanceTests
 			await That(ReferenceEquals(first, second)).IsFalse();
 		}
 
-		[Fact]
+		[Test]
 		public async Task ScopedInstancesAreNotSharedBetweenSiblingScopes()
 		{
 			using ConformanceContainer.Root container = new();
@@ -120,7 +120,7 @@ public sealed partial class MsDiConformanceTests
 	/// </summary>
 	public sealed class ProviderOwnServices
 	{
-		[Fact]
+		[Test]
 		public async Task AScopeCanOpenFurtherScopes()
 		{
 			using ConformanceContainer.Root container = new();
@@ -135,7 +135,7 @@ public sealed partial class MsDiConformanceTests
 			await That(nested.ServiceProvider.GetService(typeof(ScopedService))).IsNotNull();
 		}
 
-		[Fact]
+		[Test]
 		public async Task AScopeResolvesIServiceProviderToItself()
 		{
 			using ConformanceContainer.Root container = new();
@@ -154,7 +154,7 @@ public sealed partial class MsDiConformanceTests
 	/// </summary>
 	public sealed class AbsentServices
 	{
-		[Fact]
+		[Test]
 		public async Task AnEnumerableOfAnUnmentionedTypeIsEmpty()
 		{
 			using ConformanceContainer.Root container = new();
@@ -168,7 +168,7 @@ public sealed partial class MsDiConformanceTests
 				.Because("nothing is registered for the element type, and the empty sequence is what MS.DI hands back");
 		}
 
-		[Fact]
+		[Test]
 		public async Task AnEnumerableOfAnUnmentionedValueTypeReturnsNull_AotConstraint()
 		{
 			using ConformanceContainer.Root container = new();
@@ -180,7 +180,7 @@ public sealed partial class MsDiConformanceTests
 				.Because("manifesting the empty sequence needs the T[] type, which native AOT generates on demand for a reference element type but not for a value one, where it throws NotSupportedException at run time; reporting the shape as unavailable beats trading a null for a crash. Pinned so that a change of behaviour fails here rather than surfacing as an AOT crash");
 		}
 
-		[Fact]
+		[Test]
 		public async Task AnArrayOfAnUnmentionedTypeReturnsNull()
 		{
 			using ConformanceContainer.Root container = new();
@@ -194,7 +194,7 @@ public sealed partial class MsDiConformanceTests
 				.Because("the same limit applies to the other collection shapes MS.DI does not synthesize");
 		}
 
-		[Fact]
+		[Test]
 		public async Task AnEnumerableOfARegisteredTypeYieldsEveryRegistration()
 		{
 			using KeyedServices.KeyedContainer.Root container = new();
@@ -205,7 +205,7 @@ public sealed partial class MsDiConformanceTests
 			await That(resolved).IsNotNull();
 		}
 
-		[Fact]
+		[Test]
 		public async Task GetRequiredServiceThrowsInvalidOperationException()
 		{
 			using ConformanceContainer.Root container = new();
@@ -219,7 +219,7 @@ public sealed partial class MsDiConformanceTests
 			await That(Act).Throws<InvalidOperationException>();
 		}
 
-		[Fact]
+		[Test]
 		public async Task GetServiceReturnsNull()
 		{
 			using ConformanceContainer.Root container = new();
@@ -234,7 +234,7 @@ public sealed partial class MsDiConformanceTests
 	/// </summary>
 	public sealed partial class Disposal
 	{
-		[Fact]
+		[Test]
 		public async Task DisposalRunsInReverseOrderOfCreation()
 		{
 			DisposeOrder.Clear();
@@ -252,7 +252,7 @@ public sealed partial class MsDiConformanceTests
 			await That(DisposeOrder[1]).IsEqualTo(nameof(OrderedFirst));
 		}
 
-		[Fact]
+		[Test]
 		public async Task DisposingAScopeLeavesSingletonsAlive()
 		{
 			using DisposalContainer.Root container = new();
@@ -268,7 +268,7 @@ public sealed partial class MsDiConformanceTests
 				.Because("a singleton outlives the scope that first reached it");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ResolvingFromADisposedProviderThrows()
 		{
 			DisposalContainer.Root container = new();
@@ -323,7 +323,7 @@ public sealed partial class MsDiConformanceTests
 	/// </summary>
 	public sealed partial class KeyedServices
 	{
-		[Fact]
+		[Test]
 		public async Task AKeyedSingletonIsSharedAcrossScopes()
 		{
 			using KeyedContainer.Root container = new();
@@ -337,7 +337,7 @@ public sealed partial class MsDiConformanceTests
 			await That(fromScope).IsSameAs(fromRoot);
 		}
 
-		[Fact]
+		[Test]
 		public async Task ANullKeyResolvesTheUnkeyedRegistration()
 		{
 			using KeyedContainer.Root container = new();
@@ -347,7 +347,7 @@ public sealed partial class MsDiConformanceTests
 				.Because("MS.DI treats a null key as a request for the unkeyed registration");
 		}
 
-		[Fact]
+		[Test]
 		public async Task AnUnknownKeyThrowsFromGetRequiredKeyedService()
 		{
 			using KeyedContainer.Root container = new();
@@ -361,7 +361,7 @@ public sealed partial class MsDiConformanceTests
 			await That(Act).Throws<InvalidOperationException>();
 		}
 
-		[Fact]
+		[Test]
 		public async Task ARegistrationResolvesUnderItsKey()
 		{
 			using KeyedContainer.Root container = new();

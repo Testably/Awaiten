@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt129OpenGenericRecursion
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsAndTerminatesWhenAnOpenRegistrationRecursesWithoutBound()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -34,7 +34,7 @@ public partial class DiagnosticTests
 				.Because("the open registration recurses into an ever-larger closed generic, so expansion is bounded and reported");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForADeepButFiniteOpenGenericChain()
 		{
 			GeneratorResult result = Generator.Run("""

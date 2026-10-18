@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt193ScanTypeInaccessible
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenTheMatchedTypeIsInaccessible()
 		{
 			GeneratorResult result = Generator.RunWithReferencedAssembly("""
@@ -34,7 +34,7 @@ public partial class DiagnosticTests
 				.Because("the marker did match a type; the reason nothing registered is the accessibility, which AWT193 names");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsOnlyForTypesTheMarkerMatched()
 		{
 			GeneratorResult result = Generator.RunWithReferencedAssembly("""
@@ -67,7 +67,7 @@ public partial class DiagnosticTests
 				.Because("Roaster is the one match the container cannot name");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenTheTypeIsAccessible()
 		{
 			GeneratorResult result = Generator.RunWithReferencedAssembly("""
@@ -91,7 +91,7 @@ public partial class DiagnosticTests
 				.Because("the public Grinder registers, so there is nothing to warn about");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForAnInternalTypeOfTheContainersOwnAssembly()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -113,7 +113,7 @@ public partial class DiagnosticTests
 				.Because("the generated container lives in the same assembly, so an internal type is perfectly nameable");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenNamePatternsExcludeTheType()
 		{
 			GeneratorResult result = Generator.RunWithReferencedAssembly("""
@@ -140,7 +140,7 @@ public partial class DiagnosticTests
 				.Because("the exclusion did remove a candidate, so it is not stale");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenNamespacePatternsExcludeTheType()
 		{
 			GeneratorResult result = Generator.RunWithReferencedAssembly("""
@@ -170,7 +170,7 @@ public partial class DiagnosticTests
 				.Because("the namespace filter never included Lib.Internals, so nothing there was asked for");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsForAMarkerlessScanInsideItsNamespace()
 		{
 			GeneratorResult result = Generator.RunWithReferencedAssembly("""
@@ -205,7 +205,7 @@ public partial class DiagnosticTests
 				.Because("the scan did register nothing, and AWT193 saying why does not make that untrue; the pair is deliberate");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenInternalsVisibleToGrantsAccess()
 		{
 			GeneratorResult result = Generator.RunWithReferencedAssembly("""

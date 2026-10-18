@@ -10,7 +10,7 @@ namespace Awaiten.SourceGenerators.Tests;
 /// </summary>
 public class AsyncFactoryTests
 {
-	[Fact]
+	[Test]
 	public async Task TaskFactory_ProducesTheUnwrappedServiceType_AndIsResolvedByAwaitingTheFactory()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -37,7 +37,7 @@ public class AsyncFactoryTests
 			.Because("the async creator awaits the Task-returning factory to obtain the produced instance");
 	}
 
-	[Fact]
+	[Test]
 	public async Task TaskFactory_IsAsyncTainted_SoTheSyncPathDoesNotExposeIt()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -64,7 +64,7 @@ public class AsyncFactoryTests
 			.Because("the async-tainted singleton's sole home is the memoized async Task cache - there is no synchronous caching field, so the sync path cannot hand out an unawaited instance");
 	}
 
-	[Fact]
+	[Test]
 	public async Task TaskFactory_TargetedByASyncFunc_ReportsAwt119()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -90,7 +90,7 @@ public class AsyncFactoryTests
 			.Because("a synchronous Func over an async-factory service resolves it without awaiting the factory");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ValueTaskFactory_ProducesTheUnwrappedServiceType()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -116,7 +116,7 @@ public class AsyncFactoryTests
 			.Because("a ValueTask-returning factory is awaited the same way a Task-returning one is");
 	}
 
-	[Fact]
+	[Test]
 	public async Task NonGenericTaskFactory_ProducesNoService_AndIsReportedAsAwt108()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -139,7 +139,7 @@ public class AsyncFactoryTests
 			.Because("a non-generic Task produces no result type, so it is not a usable factory for Foo");
 	}
 
-	[Fact]
+	[Test]
 	public async Task TaskFactory_WhoseResultIsAlsoAsyncInitializable_AwaitsTheFactoryThenInitializeAsyncExactlyOnceEach()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -170,7 +170,7 @@ public class AsyncFactoryTests
 			.Because("an async-initializable factory result still has its InitializeAsync awaited after construction - once for the factory call, once for initialization, with a single InitializeAsync call site proving no double-initialization");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ParameterizedTaskFactory_ConsumedViaFuncOfTask_IsLegalAndAwaitsTheFactory()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -202,7 +202,7 @@ public class AsyncFactoryTests
 			.Because("the consumer's Func<string, Task<Foo>> binds the async parameterized resolver");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ParameterizedTaskFactory_ConsumedViaSyncFunc_ReportsAwt119()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -230,7 +230,7 @@ public class AsyncFactoryTests
 			.Because("a synchronous Func relationship cannot await an async parameterized factory");
 	}
 
-	[Fact]
+	[Test]
 	public async Task TaskFactory_UnderSyncResolveAfterInit_WarmsTheSingletonAndExposesItSynchronously()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -255,7 +255,7 @@ public class AsyncFactoryTests
 		await That(source).Contains("await Create().ConfigureAwait(false)");
 	}
 
-	[Fact]
+	[Test]
 	public async Task TaskFactory_BehindAnInterface_WhoseImplIsDisposable_TracksDisposalFromTheUnwrappedType()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -282,7 +282,7 @@ public class AsyncFactoryTests
 			.Because("disposability is computed from the unwrapped FooImpl (behind the IFoo service and the Task), so the singleton is registered for disposal even though it sits behind Task<> and an interface");
 	}
 
-	[Fact]
+	[Test]
 	public async Task TaskFactory_WithCancellationTokenParameter_ForwardsTheResolveTimeToken()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -309,7 +309,7 @@ public class AsyncFactoryTests
 			.Because("the async creator forwards its in-scope resolve-time token into the factory's CancellationToken parameter");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ConstructorCancellationTokenParameter_IsNotForwarded_AndReportsAwt101()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -329,7 +329,7 @@ public class AsyncFactoryTests
 			.Because("token forwarding is scoped to asynchronous factory methods - a constructor has no ambient resolve-time token, so its CancellationToken parameter stays an ordinary (unregistered) dependency");
 	}
 
-	[Fact]
+	[Test]
 	public async Task SynchronousFactoryCancellationTokenParameter_IsNotForwarded_AndReportsAwt101()
 	{
 		GeneratorResult result = Generator.Run("""

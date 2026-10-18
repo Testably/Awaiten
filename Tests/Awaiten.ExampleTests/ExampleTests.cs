@@ -8,7 +8,7 @@ namespace Awaiten.ExampleTests;
 /// </summary>
 public partial class ExampleTests
 {
-	[Fact]
+	[Test]
 	public async Task Container_ResolvesTheRegisteredService()
 	{
 		Container.Root container = new();

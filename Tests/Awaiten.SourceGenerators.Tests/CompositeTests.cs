@@ -6,7 +6,7 @@ namespace Awaiten.SourceGenerators.Tests;
 /// </summary>
 public class CompositeTests
 {
-	[Fact]
+	[Test]
 	public async Task Composite_IsThePublicWinner_AndFansOutToTheBareMembers()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -46,7 +46,7 @@ public class CompositeTests
 			.Because("the composite is excluded from every collection, so a separate consumer sees the bare members");
 	}
 
-	[Fact]
+	[Test]
 	public async Task CompositeOverZeroMembers_FansOutToAnEmptyArray()
 	{
 		GeneratorResult result = Generator.Run("""

@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt149ImportNotAModule
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenAnImportNamesATypeThatIsNotAModule()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -32,7 +32,7 @@ public partial class DiagnosticTests
 				.Because("only [Module] types can be imported");
 		}
 
-		[Fact]
+		[Test]
 		public async Task SkipsANonModuleImportEntirely_SoItsRegistrationsAreNotPulledIn()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -59,7 +59,7 @@ public partial class DiagnosticTests
 				.Because("a non-module import is skipped, so its registrations are not imported");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenTheImportNamesAProperModule()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -88,7 +88,7 @@ public partial class DiagnosticTests
 
 	public class Awt150NestedModuleImport
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenAnImportedModuleHasItsOwnImport()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -120,7 +120,7 @@ public partial class DiagnosticTests
 				.Because("module imports are resolved one level deep, so a module's own [Import] is not followed");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForAModuleWithoutItsOwnImport()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -149,7 +149,7 @@ public partial class DiagnosticTests
 
 	public class Awt151EmptyModule
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenAnImportedModuleDeclaresNoRegistrations()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -171,7 +171,7 @@ public partial class DiagnosticTests
 				.Because("an imported module that declares no registrations contributes nothing");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForAModuleThatDeclaresRegistrations()
 		{
 			GeneratorResult result = Generator.Run("""

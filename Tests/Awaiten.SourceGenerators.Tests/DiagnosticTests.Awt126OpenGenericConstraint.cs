@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt126OpenGenericConstraint
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenAClosedTypeArgumentViolatesAReferenceTypeConstraint()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -31,7 +31,7 @@ public partial class DiagnosticTests
 				.Because("Repository<int> violates the implementation's where T : class constraint");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenTheClosedTypeArgumentSatisfiesTheConstraint()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -56,7 +56,7 @@ public partial class DiagnosticTests
 				.Because("Order is a reference type, so it satisfies where T : class");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForASelfReferentialConstraintTheArgumentSatisfies()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -84,7 +84,7 @@ public partial class DiagnosticTests
 				.Because("a constructed constraint mentioning the type parameter (IComparable<T>) is satisfied after substitution");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenAnImplementationOnlySelfReferentialConstraintIsViolated()
 		{
 			GeneratorResult result = Generator.Run("""

@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt140ScanAssemblyHasNoCandidates
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenAnInAssembliesOfAssemblyHasNoConcreteTypeAssignableToTheMarker()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -29,7 +29,7 @@ public partial class DiagnosticTests
 				.Because("the named referenced assembly holds no concrete type assignable to the marker");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenTheAssemblyHasAssignableTypes()
 		{
 			GeneratorResult result = Generator.Run("""

@@ -19,8 +19,13 @@ partial class Build
 		Solution.Tests.Awaiten_Tests,
 		Solution.Tests.Awaiten_Extensions_DependencyInjection_Tests,
 		Solution.Tests.Awaiten_SourceGenerators_Tests,
+		Solution.Tests.Awaiten_ExampleTests,
 	];
 
+	/// <remarks>
+	///     <c>global.json</c> runs <c>dotnet test</c> on the Microsoft.Testing.Platform, which takes the project
+	///     through <c>--project</c> and passes the TRX and coverage options on to the TUnit test application.
+	/// </remarks>
 	Target DotNetUnitTests => _ => _
 		.Unlisted()
 		.DependsOn(Compile)
@@ -34,17 +39,21 @@ partial class Build
 					.SetConfiguration(Configuration)
 					.SetProcessEnvironmentVariable("DOTNET_CLI_UI_LANGUAGE", "en-US")
 					.EnableNoBuild()
-					.SetDataCollector("XPlat Code Coverage")
 					.SetResultsDirectory(TestResultsDirectory)
 					.CombineWith(
 						UnitTestProjects,
 						(settings, project) => settings
-							.SetProjectFile(project)
 							.CombineWith(
 								project.GetTargetFrameworks()?.Except(excludedFrameworks),
 								(frameworkSettings, framework) => frameworkSettings
 									.SetFramework(framework)
-									.AddLoggers($"trx;LogFileName={project.Name}_{framework}.trx")
+									.SetProcessAdditionalArguments(
+										$"--project \"{project.Path}\"",
+										"--report-trx",
+										$"--report-trx-filename {project.Name}_{framework}.trx",
+										"--coverage",
+										"--coverage-output-format cobertura",
+										$"--coverage-output {project.Name}_{framework}.cobertura.xml")
 							)
 					), completeOnFailure: true
 			);

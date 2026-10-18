@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt106FactoryHidesAsyncInitialization
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenTheFactoryConstructsAnAsyncInitializableConcreteType()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -43,7 +43,7 @@ public partial class DiagnosticTests
 				.Because("the message identifies the hidden capability as asynchronous initialization");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenTheBodyReturnsALocalOfTheConcreteType()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -76,7 +76,7 @@ public partial class DiagnosticTests
 				.Because("the returned local's inferred type is the hidden concrete type");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsASingleDiagnostic_WhenSeveralReturnsYieldTheSameHiddenType()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -114,7 +114,7 @@ public partial class DiagnosticTests
 				.Because("several returns of the same hidden concrete type surface one diagnostic, not one per return");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReport_WhenTheDeclaredReturnTypeAlreadyExposesTheCapability()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -140,7 +140,7 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).DoesNotContain("*AWT106*").AsWildcard();
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReport_WhenTheDeclaredInterfaceExtendsIAsyncInitializable()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -168,7 +168,7 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).DoesNotContain("*AWT106*").AsWildcard();
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReport_WhenTheBodyReturnsANonSpecialType()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -191,7 +191,7 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).DoesNotContain("*AWT106*").AsWildcard();
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReport_WhenTheConcreteTypeIsNotStaticallyProvableFromTheBody()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -221,7 +221,7 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).DoesNotContain("*AWT106*").AsWildcard();
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReport_ForAConstructedRegistrationWithoutAFactory()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -247,7 +247,7 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).DoesNotContain("*AWT106*").AsWildcard();
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReport_WhenANestedLambdaReturnsTheConcreteType()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -282,7 +282,7 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).DoesNotContain("*AWT106*").AsWildcard();
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReport_ForAnAsyncTaskFactory_WhichOwnsItsInitialization()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -316,7 +316,7 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).DoesNotContain("*AWT106*").AsWildcard();
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReport_ForAnAsyncValueTaskFactory_WhichOwnsItsInitialization()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -349,7 +349,7 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).DoesNotContain("*AWT106*").AsWildcard();
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReport_ForAHiddenDisposable_SinceTheContainerDisposesFactoryOutputs()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -377,7 +377,7 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).DoesNotContain("*AWT106*").AsWildcard();
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsAsyncInitialization_WhenTheHiddenTypeIsAlsoDisposable()
 		{
 			GeneratorResult result = Generator.Run("""

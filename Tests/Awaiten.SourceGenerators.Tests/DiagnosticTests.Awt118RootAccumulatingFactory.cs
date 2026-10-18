@@ -7,7 +7,7 @@ public partial class DiagnosticTests
 	// AWT118 is reported by AwaitenAnalyzer (not the generator) so it can be suppressed in source, so these tests drive the analyzer. LifetimeSafetyTests covers the strict-error vs loose-warning escalation.
 	public class Awt118RootAccumulatingFactory
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenASingletonHoldsAFuncOverADisposableTransient()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>("""
@@ -31,7 +31,7 @@ public partial class DiagnosticTests
 				.Because("a singleton holding a Func over a disposable transient accumulates instances on the root");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsForADisposableParameterizedServiceReachedThroughAFunc()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>("""
@@ -55,7 +55,7 @@ public partial class DiagnosticTests
 				.Because("a disposable parameterized service built through a singleton-held Func accumulates on the root");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenTheFactoryHandsBackAnOwnedHandle()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>("""
@@ -79,7 +79,7 @@ public partial class DiagnosticTests
 				.Because("Func<Owned<T>> hands each instance back as a disposal handle, so nothing accumulates");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForADisposableTransientThatIsNotReachedThroughARootBoundFunc()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>("""
@@ -103,7 +103,7 @@ public partial class DiagnosticTests
 				.Because("a Func held by a scoped (not root-owned) consumer is bounded by that scope's lifetime, not the root's");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenTheFuncTargetIsAReleaseHookedPooledTransient()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>("""
@@ -128,7 +128,7 @@ public partial class DiagnosticTests
 				.Because("each Func call queues a release closure that retains the instance on the root, so a SuppressDisposal pooled transient accumulates there like a tracked disposable");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenTheFuncTargetSuppressesDisposalWithoutAReleaseHook()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>("""
@@ -152,7 +152,7 @@ public partial class DiagnosticTests
 				.Because("a SuppressDisposal transient without a release hook tracks nothing on the root, so the Func accumulates nothing");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForANonDisposableTransientFactory()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>("""
@@ -176,7 +176,7 @@ public partial class DiagnosticTests
 				.Because("a non-disposable transient with no disposable dependencies leaves nothing to accumulate");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenAFuncBuildsANonDisposableThatTransitivelyConstructsADisposable()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>("""
@@ -202,7 +202,7 @@ public partial class DiagnosticTests
 				.Because("building the non-disposable Tool on demand rebuilds its disposable transient Spark, which accumulates on the root just the same");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenAFuncBuildsAConsumerThatCollectsDisposableTransients()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>("""
@@ -230,7 +230,7 @@ public partial class DiagnosticTests
 				.Because("building the non-disposable Consumer on demand materializes its collection of disposable transients, which accumulate on the root just as a direct disposable transient dependency would - the transitive-disposable walk follows collection edges");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenASingletonHoldsAFuncOfTaskOverADisposableAsyncTransient()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>("""
@@ -262,7 +262,7 @@ public partial class DiagnosticTests
 				.Because("the async remedy points at the async owned form Func<…, Task<Owned<T>>>, the leak-free way to obtain a disposable async service per use (a synchronous Owned<T> is illegal here - AWT119)");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForANonDisposableAsyncTransientFactory()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>("""
@@ -291,7 +291,7 @@ public partial class DiagnosticTests
 				.Because("a non-disposable async transient leaves nothing to accumulate, so the async factory is not flagged");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenAFuncBuildsAConsumerThatCollectsDisposableKeyedMembers()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>("""
@@ -319,7 +319,7 @@ public partial class DiagnosticTests
 				.Because("building the non-disposable Consumer on demand materializes its keyed dictionary of disposable transients, which accumulate on the root - the transitive-disposable walk follows keyed-dictionary edges too");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenAFuncBuildsAConsumerThatCollectsDisposableAwaitedKeyedMembers()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>("""
@@ -348,7 +348,7 @@ public partial class DiagnosticTests
 				.Because("building the non-disposable Consumer on demand materializes its awaited keyed dictionary of disposable transients (the task starts materializing them at construction), which accumulate on the root - the transitive-disposable walk follows awaited-keyed-dictionary edges too");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenASingletonActivationHookHoldsAFuncOverADisposableTransient()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>("""

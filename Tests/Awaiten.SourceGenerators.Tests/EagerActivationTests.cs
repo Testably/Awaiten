@@ -8,7 +8,7 @@ namespace Awaiten.SourceGenerators.Tests;
 /// </summary>
 public class EagerActivationTests
 {
-	[Fact]
+	[Test]
 	public async Task EagerSingleton_IsConstructedInTheGeneratedRootConstructor()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -33,7 +33,7 @@ public class EagerActivationTests
 			.Because("the eager singleton is constructed in the root constructor through its cached resolver");
 	}
 
-	[Fact]
+	[Test]
 	public async Task EagerSingletons_AreConstructedInRegistrationOrder()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -60,7 +60,7 @@ public class EagerActivationTests
 			.Because("eager singletons are constructed in registration order");
 	}
 
-	[Fact]
+	[Test]
 	public async Task LazySingleton_IsNotConstructedInTheRootConstructor()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -82,7 +82,7 @@ public class EagerActivationTests
 			.Because("a lazy singleton is constructed on first resolve, not at container build time");
 	}
 
-	[Fact]
+	[Test]
 	public async Task EagerAsyncInitializedSingleton_InStrictMode_IsAwt161()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -108,7 +108,7 @@ public class EagerActivationTests
 			.Because("an async-initialized eager singleton has no synchronous construction path in strict mode");
 	}
 
-	[Fact]
+	[Test]
 	public async Task EagerAsyncInitializedSingleton_InPragmaticMode_IsAllowed()
 	{
 		GeneratorResult result = Generator.Run("""

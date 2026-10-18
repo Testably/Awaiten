@@ -4,7 +4,7 @@ public partial class DiagnosticTests
 {
 	public class Awt112AmbiguousFactory
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenTheFactoryNameMatchesMoreThanOneMethod()
 		{
 			GeneratorResult result = Generator.Run("""

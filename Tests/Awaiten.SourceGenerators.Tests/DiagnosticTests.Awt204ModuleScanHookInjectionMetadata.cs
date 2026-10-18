@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt204ModuleScanHookInjectionMetadata
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsAFromKeyHookDependencyParameter()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -31,7 +31,7 @@ public partial class DiagnosticTests
 				.Because("the wrapper mirrors a bare type-and-name signature, so a [FromKey] would be silently dropped cross-assembly while a same-compilation container honored it");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsOnceWhenOverlappingScansNameTheSameFailingHook()
 		{
 			GeneratorResult result = Generator.Run("""

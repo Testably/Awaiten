@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt143ScanAssembliesEmpty
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenInAssembliesOfResolvesToNoAssembly()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -35,7 +35,7 @@ public partial class DiagnosticTests
 				.Because("the scan registers nothing rather than silently scanning the container's own assembly");
 		}
 
-		[Fact]
+		[Test]
 		public async Task TreatsAnExplicitNullAsUnsetAndScansTheOwnAssembly()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -58,7 +58,7 @@ public partial class DiagnosticTests
 			await That(result.Sources["Awaiten.MyCode.MyContainer.g.cs"]).Contains("new global::MyCode.AlphaPlugin()");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenInAssembliesOfIsUnset()
 		{
 			GeneratorResult result = Generator.Run("""

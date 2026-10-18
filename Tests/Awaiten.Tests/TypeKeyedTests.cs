@@ -7,7 +7,7 @@ namespace Awaiten.Tests;
 /// </summary>
 public partial class TypeKeyedTests
 {
-	[Fact]
+	[Test]
 	public async Task FromKeyTypeof_SelectsTheImplementationRegisteredUnderThatTypeConstant()
 	{
 		using GatewayContainer.Root container = new();

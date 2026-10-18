@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt139ScanNoImplementedInterfaces
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenAnInterfacesOnlyScanMatchesATypeWithNoAssignableInterface()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -31,7 +31,7 @@ public partial class DiagnosticTests
 				.Because("an interfaces-only scan matched a type with no interface assignable to the marker");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenTheSelfFlagIsAlsoSet()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -53,7 +53,7 @@ public partial class DiagnosticTests
 				.Because("the Self flag still registers the match as its own concrete type");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenTheMatchImplementsAnAssignableInterface()
 		{
 			GeneratorResult result = Generator.Run("""

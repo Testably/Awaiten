@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt189HookParameterIsArg
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenAHookParameterIsMarkedArg()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -28,7 +28,7 @@ public partial class DiagnosticTests
 				.Because("a runtime [Arg] cannot be supplied to a lifecycle hook - its parameters resolve from the graph");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForAGraphResolvedHookParameter()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -52,7 +52,7 @@ public partial class DiagnosticTests
 				.Because("a hook parameter resolved from the graph is not a runtime argument");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsAnArgParameterOnAModuleScanHook()
 		{
 			GeneratorResult result = Generator.Run("""
