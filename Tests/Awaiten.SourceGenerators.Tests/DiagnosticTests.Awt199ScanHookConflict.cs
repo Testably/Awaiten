@@ -45,8 +45,8 @@ public partial class DiagnosticTests
 			                                       public sealed class Widget : IPlugin, IHandler { }
 
 			                                       [Container]
-			                                       [Scan(typeof(IPlugin), Lifetime = AwaitenLifetime.Singleton, OnRelease = nameof(PluginStopped))]
-			                                       [Scan(typeof(IHandler), Lifetime = AwaitenLifetime.Singleton, OnRelease = nameof(HandlerStopped))]
+			                                       [Scan(typeof(IPlugin), Lifetime = Lifetime.Singleton, OnRelease = nameof(PluginStopped))]
+			                                       [Scan(typeof(IHandler), Lifetime = Lifetime.Singleton, OnRelease = nameof(HandlerStopped))]
 			                                       public static partial class MyContainer
 			                                       {
 			                                       	private static void PluginStopped(object instance) { }
@@ -96,8 +96,8 @@ public partial class DiagnosticTests
 			                                       public sealed class Worker : IStartable, IStoppable { }
 
 			                                       [Container]
-			                                       [Scan(typeof(IStartable), Lifetime = AwaitenLifetime.Singleton, OnActivated = nameof(Started))]
-			                                       [Scan(typeof(IStoppable), Lifetime = AwaitenLifetime.Singleton, OnRelease = nameof(Stopped))]
+			                                       [Scan(typeof(IStartable), Lifetime = Lifetime.Singleton, OnActivated = nameof(Started))]
+			                                       [Scan(typeof(IStoppable), Lifetime = Lifetime.Singleton, OnRelease = nameof(Stopped))]
 			                                       public static partial class MyContainer
 			                                       {
 			                                       	private static void Started(object instance) { }

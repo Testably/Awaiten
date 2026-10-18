@@ -93,7 +93,7 @@ public class ModuleTests
 
 		                                       [Container]
 		                                       [Import(typeof(ClockModule))]
-		                                       [Scan(typeof(IClock), As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton)]
+		                                       [Scan(typeof(IClock), As = ScanAs.Marker, Lifetime = Lifetime.Singleton)]
 		                                       public static partial class MyContainer
 		                                       {
 		                                       }
@@ -124,7 +124,7 @@ public class ModuleTests
 
 		                                       [Container]
 		                                       [Import(typeof(ClockModule))]
-		                                       [Scan(typeof(IClock), As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton)]
+		                                       [Scan(typeof(IClock), As = ScanAs.Marker, Lifetime = Lifetime.Singleton)]
 		                                       public static partial class MyContainer
 		                                       {
 		                                       }
@@ -154,7 +154,7 @@ public class ModuleTests
 		                                       public static class ClockModule { }
 
 		                                       [Container]
-		                                       [Scan(typeof(IClock), As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton)]
+		                                       [Scan(typeof(IClock), As = ScanAs.Marker, Lifetime = Lifetime.Singleton)]
 		                                       [Import(typeof(ClockModule))]
 		                                       public static partial class MyContainer
 		                                       {
@@ -185,7 +185,7 @@ public class ModuleTests
 
 		                                       [Container]
 		                                       [Import(typeof(ClockModule))]
-		                                       [Scan(typeof(IClock), As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton)]
+		                                       [Scan(typeof(IClock), As = ScanAs.Marker, Lifetime = Lifetime.Singleton)]
 		                                       public static partial class MyContainer
 		                                       {
 		                                       }
@@ -195,7 +195,7 @@ public class ModuleTests
 			.Because("a scan yields to an explicit default exactly like it yields to a strong registration, so no AWT142/AWT107 is reported");
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		await That(source).Contains("AwaitenRegistration(typeof(global::MyCode.IClock), global::Awaiten.AwaitenLifetime.Transient)")
+		await That(source).Contains("AwaitenRegistration(typeof(global::MyCode.IClock), global::Awaiten.Lifetime.Transient)")
 			.Because("the explicit default's lifetime is kept; the scan's conflicting lifetime yields");
 	}
 
@@ -213,7 +213,7 @@ public class ModuleTests
 
 		                                       [Container]
 		                                       [Singleton<ZzDefaultClock, IClock>(Fallback = Fallback.Warn)]
-		                                       [Scan(typeof(IClock), As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton)]
+		                                       [Scan(typeof(IClock), As = ScanAs.Marker, Lifetime = Lifetime.Singleton)]
 		                                       public static partial class MyContainer
 		                                       {
 		                                       }

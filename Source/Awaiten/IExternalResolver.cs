@@ -7,7 +7,7 @@ namespace Awaiten;
 ///     <c>[ImportService&lt;T&gt;]</c> / <c>[ImportServices]</c> dependencies) from an external provider. The
 ///     <c>Awaiten.Extensions.DependencyInjection</c> companion adapts a Microsoft.Extensions.DependencyInjection
 ///     <see cref="IServiceProvider" /> to it. A standalone container may implement it however it likes and assign
-///     it to <see cref="IExternalResolverHost.ExternalResolver" />.
+///     it to <see cref="IAwaitenExternalResolverHost.ExternalResolver" />.
 /// </summary>
 public interface IExternalResolver
 {

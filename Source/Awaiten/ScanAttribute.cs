@@ -43,8 +43,8 @@ public sealed class ScanAttribute : Attribute
 	/// </summary>
 	public Type? AssignableTo { get; }
 
-	/// <summary>The lifetime applied to each discovered implementation. Defaults to <see cref="AwaitenLifetime.Transient" />.</summary>
-	public AwaitenLifetime Lifetime { get; set; } = AwaitenLifetime.Transient;
+	/// <summary>The lifetime applied to each discovered implementation. Defaults to <see cref="Lifetime.Transient" />.</summary>
+	public Lifetime Lifetime { get; set; } = Lifetime.Transient;
 
 	/// <summary>
 	///     How each match is exposed: as itself (the default), under its implemented interfaces, or both.
@@ -123,8 +123,8 @@ public sealed class ScanAttribute : Attribute
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
 public sealed class ScanAttribute<TMarker> : Attribute
 {
-	/// <summary>The lifetime applied to each discovered implementation. Defaults to <see cref="AwaitenLifetime.Transient" />.</summary>
-	public AwaitenLifetime Lifetime { get; set; } = AwaitenLifetime.Transient;
+	/// <summary>The lifetime applied to each discovered implementation. Defaults to <see cref="Lifetime.Transient" />.</summary>
+	public Lifetime Lifetime { get; set; } = Lifetime.Transient;
 
 	/// <summary>
 	///     How each match is exposed: as itself (the default), under its implemented interfaces, or both.

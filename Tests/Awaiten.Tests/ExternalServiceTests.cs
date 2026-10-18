@@ -92,7 +92,7 @@ public partial class ExternalServiceTests
 	public async Task ImportService_ConstructorDependency_ResolvesThroughTheExternalResolver()
 	{
 		using ExternalContainer.Root container = new();
-		((IExternalResolverHost)container).ExternalResolver = new ClockResolver();
+		((IAwaitenExternalResolverHost)container).ExternalResolver = new ClockResolver();
 
 		Reporter reporter = container.Resolve<Reporter>();
 
@@ -104,7 +104,7 @@ public partial class ExternalServiceTests
 	public async Task ImportService_InjectedProperty_ResolvesThroughTheExternalResolver()
 	{
 		using ExternalContainer.Root container = new();
-		((IExternalResolverHost)container).ExternalResolver = new ClockResolver();
+		((IAwaitenExternalResolverHost)container).ExternalResolver = new ClockResolver();
 
 		InjectedReporter reporter = container.Resolve<InjectedReporter>();
 
@@ -116,7 +116,7 @@ public partial class ExternalServiceTests
 	public async Task ImportService_WithFromKey_ForwardsTheKeyToTheExternalResolver()
 	{
 		using ExternalContainer.Root container = new();
-		((IExternalResolverHost)container).ExternalResolver = new ClockResolver();
+		((IAwaitenExternalResolverHost)container).ExternalResolver = new ClockResolver();
 
 		KeyedReporter reporter = container.Resolve<KeyedReporter>();
 
@@ -140,7 +140,7 @@ public partial class ExternalServiceTests
 	public async Task ImportService_LifecycleHookParameter_ResolvesThroughTheExternalResolver()
 	{
 		using HookExternalContainer.Root container = new();
-		((IExternalResolverHost)container).ExternalResolver = new ClockResolver();
+		((IAwaitenExternalResolverHost)container).ExternalResolver = new ClockResolver();
 
 		HookReporter reporter = container.Resolve<HookReporter>();
 

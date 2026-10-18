@@ -7,7 +7,7 @@ namespace Awaiten;
 ///     <see cref="ExternalResolver" /> on each scope so external dependencies resolve from the provider
 ///     aligned to that scope. A child scope with no resolver of its own falls back to the root's.
 /// </summary>
-public interface IExternalResolverHost
+public interface IAwaitenExternalResolverHost
 {
 	/// <summary>
 	///     The external resolver this scope routes its <c>[ImportService&lt;T&gt;]</c> / <c>[ImportServices]</c>

@@ -488,7 +488,7 @@ public partial class ComprehensiveContainerExample
 	[Decorate<VanillaSyrup, IDrink>(Order = 2)]
 	[Singleton<FreshnessCheck, IQualityCheck>]
 	[Singleton<TemperatureCheck, IQualityCheck>]
-	[Composite<FullInspection, IQualityCheck>(Lifetime = AwaitenLifetime.Singleton)]
+	[Composite<FullInspection, IQualityCheck>(Lifetime = Lifetime.Singleton)]
 	[Transient<Coffee>]
 	[Singleton<Chalkboard>]
 	[Singleton<FrontOfHouse>]
@@ -771,7 +771,7 @@ public partial class ComprehensiveContainerExample
 	public async Task ExternalDependency_ResolvesThroughTheWiredResolver()
 	{
 		using CoffeeShop.Root shop = new();
-		((IExternalResolverHost)shop).ExternalResolver = new GatewayResolver();
+		((IAwaitenExternalResolverHost)shop).ExternalResolver = new GatewayResolver();
 
 		await That(shop.Resolve<Register>().Gateway.Provider).IsEqualTo("stripe")
 			.Because("an [ImportService<T>] dependency is satisfied by the wired external resolver");

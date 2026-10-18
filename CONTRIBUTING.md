@@ -19,3 +19,15 @@ The tests run on [TUnit](https://tunit.dev) as Microsoft.Testing.Platform execut
 dotnet test --project Tests/Awaiten.Tests -f net10.0
 dotnet test --project Tests/Awaiten.Tests -f net10.0 --treenode-filter "/*/*/ScanTests/*"
 ```
+
+## Naming public types
+
+A public type carries the `Awaiten` prefix by its role:
+
+- **Prefixed:** the container and what it exposes to a host, which sits next to `IServiceProvider` or
+  `ServiceDescriptor` there: resolvers, scopes, the root, container and registration metadata
+  (`IAwaitenContainerMetadata`, `AwaitenRegistration`, `AwaitenExternalDependency`), host-side helpers and the types
+  of `Awaiten.Extensions.DependencyInjection`.
+- **Unprefixed:** the declaration DSL, that is the attributes and the enums used as their arguments (`Lifetime`,
+  `ScanAs`, `Fallback`, `LifetimeSafety`), and the types users implement or name in their own classes (`Owned<T>`,
+  `IAsyncInitializable`, `IExternalResolver`).

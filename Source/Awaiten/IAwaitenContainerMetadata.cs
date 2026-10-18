@@ -14,7 +14,7 @@ namespace Awaiten;
 ///     Implemented by the generator, not by hand, so it may gain members as the container learns to advertise
 ///     more about itself. Consume it; do not implement it.
 /// </remarks>
-public interface IAwaitenContainerMetadata : IAwaitenRoot, IExternalResolverHost
+public interface IAwaitenContainerMetadata : IAwaitenRoot, IAwaitenExternalResolverHost
 {
 	/// <summary>
 	///     The public service registrations the container can resolve, with their lifetimes. Both unkeyed
@@ -27,7 +27,7 @@ public interface IAwaitenContainerMetadata : IAwaitenRoot, IExternalResolverHost
 	/// <summary>
 	///     The <c>[ImportService&lt;T&gt;]</c> / <c>[ImportServices]</c> dependencies the container expects from an external
 	///     provider, each carrying its service type and optional <c>[FromKey]</c> resolution key. A host satisfies
-	///     these through <see cref="IExternalResolverHost.ExternalResolver" />. Empty when there are none.
+	///     these through <see cref="IAwaitenExternalResolverHost.ExternalResolver" />. Empty when there are none.
 	/// </summary>
 	IReadOnlyList<AwaitenExternalDependency> ExternalDependencies { get; }
 

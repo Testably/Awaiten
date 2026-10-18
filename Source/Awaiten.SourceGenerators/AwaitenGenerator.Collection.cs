@@ -647,7 +647,7 @@ partial class AwaitenGenerator
 				continue;
 			}
 
-			// The Lifetime named argument is an AwaitenLifetime enum whose members line up with the internal
+			// The Lifetime named argument is the public Awaiten.Lifetime enum whose members line up with the internal
 			// Lifetime enum; a boxed enum surfaces as its underlying int. Absent, the composite defaults to
 			// transient so it re-materializes its member array per resolve.
 			Lifetime lifetime = Lifetime.Transient;

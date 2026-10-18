@@ -107,7 +107,7 @@ internal static partial class Sources
 		// pipeline, exactly like OnActivated/OnRelease on a container [Scan].
 		string onActivated = factory.OnActivated is { } activation ? $", OnActivated = \"{activation.WrapperName}\"" : string.Empty;
 		string onRelease = factory.OnRelease is { } release ? $", OnRelease = \"{release.WrapperName}\"" : string.Empty;
-		return $"global::Awaiten.GeneratedScanRegistrationAttribute<{factory.ServiceType}>(\"{factory.FactoryName}\", Lifetime = global::Awaiten.AwaitenLifetime.{factory.Lifetime}{skip}{onActivated}{onRelease})";
+		return $"global::Awaiten.GeneratedScanRegistrationAttribute<{factory.ServiceType}>(\"{factory.FactoryName}\", Lifetime = global::Awaiten.Lifetime.{factory.Lifetime}{skip}{onActivated}{onRelease})";
 	}
 
 	private static void EmitModuleFactory(StringBuilder builder, int depth, ModuleFactory factory)

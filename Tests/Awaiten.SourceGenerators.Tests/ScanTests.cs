@@ -24,7 +24,7 @@ public class ScanTests
 		                                       public abstract class PluginBase : IPlugin { }
 
 		                                       [Container]
-		                                       [Scan(typeof(IPlugin), Lifetime = AwaitenLifetime.Singleton)]
+		                                       [Scan(typeof(IPlugin), Lifetime = Lifetime.Singleton)]
 		                                       public static partial class MyContainer
 		                                       {
 		                                       }
@@ -57,7 +57,7 @@ public class ScanTests
 		                                       public sealed class BetaPlugin : IPlugin { }
 
 		                                       [Container]
-		                                       [Scan(typeof(IPlugin), Lifetime = AwaitenLifetime.Singleton)]
+		                                       [Scan(typeof(IPlugin), Lifetime = Lifetime.Singleton)]
 		                                       [Transient<BetaPlugin>]
 		                                       public static partial class MyContainer
 		                                       {
@@ -94,7 +94,7 @@ public class ScanTests
 		                                       public sealed class Dispatcher { public Dispatcher(IEnumerable<IHandler> handlers) { } }
 
 		                                       [Container]
-		                                       [Scan(typeof(IHandler), As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton)]
+		                                       [Scan(typeof(IHandler), As = ScanAs.Marker, Lifetime = Lifetime.Singleton)]
 		                                       [Singleton<Dispatcher>]
 		                                       public static partial class MyContainer
 		                                       {
@@ -124,7 +124,7 @@ public class ScanTests
 		                                       public sealed class Consumer { public Consumer(SalesReport self, IEnumerable<IReport> all) { } }
 
 		                                       [Container]
-		                                       [Scan(typeof(IReport), As = ScanAs.Self | ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton)]
+		                                       [Scan(typeof(IReport), As = ScanAs.Self | ScanAs.Marker, Lifetime = Lifetime.Singleton)]
 		                                       [Singleton<Consumer>]
 		                                       public static partial class MyContainer
 		                                       {
@@ -150,7 +150,7 @@ public class ScanTests
 		                                       namespace MyCode;
 
 		                                       [Container]
-		                                       [Scan(typeof(ICrossAssemblyPlugin), InAssembliesOf = new[] { typeof(ICrossAssemblyPlugin) }, Lifetime = AwaitenLifetime.Singleton)]
+		                                       [Scan(typeof(ICrossAssemblyPlugin), InAssembliesOf = new[] { typeof(ICrossAssemblyPlugin) }, Lifetime = Lifetime.Singleton)]
 		                                       public static partial class MyContainer
 		                                       {
 		                                       }
@@ -178,7 +178,7 @@ public class ScanTests
 		                                   namespace MyCode;
 
 		                                   [Container]
-		                                   [Scan(typeof(ICrossAssemblyPlugin), InAssembliesOf = new[] { typeof(ICrossAssemblyPlugin) }, Lifetime = AwaitenLifetime.Singleton)]
+		                                   [Scan(typeof(ICrossAssemblyPlugin), InAssembliesOf = new[] { typeof(ICrossAssemblyPlugin) }, Lifetime = Lifetime.Singleton)]
 		                                   public static partial class MyContainer
 		                                   {
 		                                   }
@@ -209,7 +209,7 @@ public class ScanTests
 		                                       public sealed class DualView : IView<ViewModelOne>, IView<ViewModelTwo> { }
 
 		                                       [Container]
-		                                       [Scan(typeof(IView<>), As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton)]
+		                                       [Scan(typeof(IView<>), As = ScanAs.Marker, Lifetime = Lifetime.Singleton)]
 		                                       public static partial class MyContainer
 		                                       {
 		                                       }
@@ -251,10 +251,10 @@ public class ScanTests
 		                    """;
 
 		string typeofForm = Generator.Run(
-				body.Replace("{0}", "[Scan(typeof(IHandler), As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton)]"))
+				body.Replace("{0}", "[Scan(typeof(IHandler), As = ScanAs.Marker, Lifetime = Lifetime.Singleton)]"))
 			.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 		string genericForm = Generator.Run(
-				body.Replace("{0}", "[Scan<IHandler>(As = ScanAs.Marker, Lifetime = AwaitenLifetime.Singleton)]"))
+				body.Replace("{0}", "[Scan<IHandler>(As = ScanAs.Marker, Lifetime = Lifetime.Singleton)]"))
 			.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
 		await That(genericForm).IsEqualTo(typeofForm)
@@ -389,7 +389,7 @@ public class ScanTests
 		                                       namespace MyCode;
 
 		                                       [Container]
-		                                       [Scan<ICrossAssemblyPlugin>(InAssembliesOf = new[] { typeof(ICrossAssemblyPlugin) }, Lifetime = AwaitenLifetime.Singleton)]
+		                                       [Scan<ICrossAssemblyPlugin>(InAssembliesOf = new[] { typeof(ICrossAssemblyPlugin) }, Lifetime = Lifetime.Singleton)]
 		                                       public static partial class MyContainer
 		                                       {
 		                                       }
@@ -632,7 +632,7 @@ public class ScanTests
 			namespace MyCode;
 
 			[Container]
-			[Scan(typeof(ICrossAssemblyPlugin), InAssembliesOf = new[] { typeof(ICrossAssemblyPlugin) }, NamePatterns = new[] { "Gamma*" }, Lifetime = AwaitenLifetime.Singleton)]
+			[Scan(typeof(ICrossAssemblyPlugin), InAssembliesOf = new[] { typeof(ICrossAssemblyPlugin) }, NamePatterns = new[] { "Gamma*" }, Lifetime = Lifetime.Singleton)]
 			public static partial class MyContainer
 			{
 			}
@@ -736,7 +736,7 @@ public class ScanTests
 		                                       public sealed class Consumer { public Consumer(IEnumerable<IFoo> all) { } }
 
 		                                       [Container]
-		                                       [Scan(typeof(IFoo), As = ScanAs.Marker | ScanAs.MatchingInterface, Lifetime = AwaitenLifetime.Singleton)]
+		                                       [Scan(typeof(IFoo), As = ScanAs.Marker | ScanAs.MatchingInterface, Lifetime = Lifetime.Singleton)]
 		                                       [Singleton<Consumer>]
 		                                       public static partial class MyContainer
 		                                       {

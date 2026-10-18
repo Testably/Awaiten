@@ -4,7 +4,7 @@ namespace Awaiten;
 
 /// <summary>
 ///     A single external (host-owned) dependency a generated container expects to resolve through its
-///     <see cref="IExternalResolverHost.ExternalResolver" />: the service type of an <c>[ImportService&lt;T&gt;]</c> /
+///     <see cref="IAwaitenExternalResolverHost.ExternalResolver" />: the service type of an <c>[ImportService&lt;T&gt;]</c> /
 ///     <c>[ImportServices]</c> dependency and the optional <c>[FromKey]</c> resolution key
 ///     (<see langword="null" /> when unkeyed). A host verifies these against its provider at startup.
 /// </summary>

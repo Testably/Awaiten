@@ -53,8 +53,8 @@ internal sealed class HookedWindow : IHookedView<IMainViewModel>, IHookedWindow;
 ///     graph-resolved <see cref="HookLog" /> the consumer supplies.
 /// </summary>
 [Module]
-[Scan<IHookedPlugin>(As = ScanAs.MatchingInterface, Lifetime = AwaitenLifetime.Singleton, OnActivated = nameof(Activate), OnRelease = nameof(Release))]
-[Scan(typeof(IHookedView<>), As = ScanAs.MatchingInterface, Lifetime = AwaitenLifetime.Singleton, OnActivated = nameof(Wire))]
+[Scan<IHookedPlugin>(As = ScanAs.MatchingInterface, Lifetime = Lifetime.Singleton, OnActivated = nameof(Activate), OnRelease = nameof(Release))]
+[Scan(typeof(IHookedView<>), As = ScanAs.MatchingInterface, Lifetime = Lifetime.Singleton, OnActivated = nameof(Wire))]
 public static partial class HookedPluginModule
 {
 	internal static void Activate(IHookedPlugin plugin, HookLog log) => log.Entries.Add("activated:" + plugin.GetType().Name);
