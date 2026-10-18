@@ -1,8 +1,8 @@
 [assembly: System.Reflection.AssemblyMetadata("RepositoryUrl", "https://github.com/Testably/Awaiten.git")]
-[assembly: System.Runtime.Versioning.TargetFramework(".NETStandard,Version=v2.0", FrameworkDisplayName=".NET Standard 2.0")]
+[assembly: System.Runtime.Versioning.TargetFramework(".NETCoreApp,Version=v8.0", FrameworkDisplayName = ".NET 8.0")]
 namespace Awaiten
 {
-    [System.AttributeUsage(System.AttributeTargets.Property | System.AttributeTargets.Parameter, AllowMultiple=false, Inherited=false)]
+    [System.AttributeUsage(System.AttributeTargets.Property | System.AttributeTargets.Parameter, AllowMultiple = false, Inherited = false)]
     public sealed class ArgAttribute : System.Attribute
     {
         public ArgAttribute() { }
@@ -15,8 +15,8 @@ namespace Awaiten
         public bool Equals(Awaiten.AwaitenExternalDependency other) { }
         public override bool Equals(object? obj) { }
         public override int GetHashCode() { }
-        public static bool operator !=(Awaiten.AwaitenExternalDependency left, Awaiten.AwaitenExternalDependency right) { }
         public static bool operator ==(Awaiten.AwaitenExternalDependency left, Awaiten.AwaitenExternalDependency right) { }
+        public static bool operator !=(Awaiten.AwaitenExternalDependency left, Awaiten.AwaitenExternalDependency right) { }
     }
     public enum AwaitenLifetime
     {
@@ -26,8 +26,8 @@ namespace Awaiten
     }
     public readonly struct AwaitenRegistration : System.IEquatable<Awaiten.AwaitenRegistration>
     {
-        public AwaitenRegistration(System.Type serviceType, Awaiten.AwaitenLifetime lifetime, bool externallyOwned = false, object? key = null) { }
         public AwaitenRegistration(System.Type serviceType, Awaiten.AwaitenLifetime lifetime, System.Type asyncTaskType, System.Func<System.Threading.Tasks.Task<object>, object> asyncTaskConverter, object? key = null) { }
+        public AwaitenRegistration(System.Type serviceType, Awaiten.AwaitenLifetime lifetime, bool externallyOwned = false, object? key = null) { }
         public System.Func<System.Threading.Tasks.Task<object>, object>? AsyncTaskConverter { get; }
         public System.Type? AsyncTaskType { get; }
         public bool ExternallyOwned { get; }
@@ -38,11 +38,16 @@ namespace Awaiten
         public bool Equals(Awaiten.AwaitenRegistration other) { }
         public override bool Equals(object? obj) { }
         public override int GetHashCode() { }
-        public static bool operator !=(Awaiten.AwaitenRegistration left, Awaiten.AwaitenRegistration right) { }
         public static bool operator ==(Awaiten.AwaitenRegistration left, Awaiten.AwaitenRegistration right) { }
+        public static bool operator !=(Awaiten.AwaitenRegistration left, Awaiten.AwaitenRegistration right) { }
     }
     public static class AwaitenResolverExtensions
     {
+        extension(Awaiten.IAwaitenAsyncResolver resolver)
+        {
+            public System.Threading.Tasks.Task<T> ResolveAsync<T>(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) { }
+            public System.Threading.Tasks.Task<T> ResolveAsync<T>(object key, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) { }
+        }
         extension(Awaiten.IAwaitenResolver resolver)
         {
             public T Resolve<T>() { }
@@ -50,17 +55,12 @@ namespace Awaiten
             public bool TryResolve<T>([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out T? instance) { }
             public bool TryResolve<T>(object key, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out T? instance) { }
         }
-        extension(Awaiten.IAwaitenAsyncResolver resolver)
-        {
-            public System.Threading.Tasks.Task<T> ResolveAsync<T>(System.Threading.CancellationToken cancellationToken = default) { }
-            public System.Threading.Tasks.Task<T> ResolveAsync<T>(object key, System.Threading.CancellationToken cancellationToken = default) { }
-        }
     }
     public static class AwaitenTaskProjection
     {
         public static System.Threading.Tasks.Task<T> AsTask<T>(System.Threading.Tasks.Task<object> resolution) { }
     }
-    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
     public sealed class CompositeAttribute : System.Attribute
     {
         public CompositeAttribute(System.Type composite, System.Type service) { }
@@ -68,21 +68,20 @@ namespace Awaiten
         public Awaiten.AwaitenLifetime Lifetime { get; set; }
         public System.Type Service { get; }
     }
-    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
-    public sealed class CompositeAttribute<TComposite, TService> : System.Attribute
-        where TComposite :  class, TService
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
+    public sealed class CompositeAttribute<TComposite, TService> : System.Attribute where TComposite : class, TService
     {
         public CompositeAttribute() { }
         public Awaiten.AwaitenLifetime Lifetime { get; set; }
     }
-    [System.AttributeUsage(System.AttributeTargets.Class, Inherited=false)]
+    [System.AttributeUsage(System.AttributeTargets.Class, Inherited = false)]
     public sealed class ContainerAttribute : System.Attribute
     {
         public ContainerAttribute() { }
         public Awaiten.LifetimeSafety LifetimeSafety { get; set; }
         public bool SyncResolveAfterInit { get; set; }
     }
-    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
     public sealed class DecorateAttribute : System.Attribute
     {
         public DecorateAttribute(System.Type decorator, System.Type service) { }
@@ -90,9 +89,8 @@ namespace Awaiten
         public int Order { get; set; }
         public System.Type Service { get; }
     }
-    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
-    public sealed class DecorateAttribute<TDecorator, TService> : System.Attribute
-        where TDecorator :  class, TService
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
+    public sealed class DecorateAttribute<TDecorator, TService> : System.Attribute where TDecorator : class, TService
     {
         public DecorateAttribute() { }
         public int Order { get; set; }
@@ -103,21 +101,22 @@ namespace Awaiten
         Warn = 1,
         Silent = 2,
     }
-    [System.AttributeUsage(System.AttributeTargets.Property | System.AttributeTargets.Parameter, AllowMultiple=false, Inherited=false)]
+    [System.AttributeUsage(System.AttributeTargets.Property | System.AttributeTargets.Parameter, AllowMultiple = false, Inherited = false)]
     public sealed class FromKeyAttribute : System.Attribute
     {
         public FromKeyAttribute(object key) { }
         public FromKeyAttribute(string key) { }
         public object Key { get; }
     }
-    [System.AttributeUsage(System.AttributeTargets.Class, Inherited=false)]
+    [System.AttributeUsage(System.AttributeTargets.Class, Inherited = false)]
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
     public sealed class GeneratedScanExpansionAttribute : System.Attribute
     {
         public GeneratedScanExpansionAttribute() { }
     }
-    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
-    public sealed class GeneratedScanRegistrationAttribute<TService> : System.Attribute
-        where TService :  class
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
+    public sealed class GeneratedScanRegistrationAttribute<TService> : System.Attribute where TService : class
     {
         public GeneratedScanRegistrationAttribute(string factory) { }
         public string Factory { get; }
@@ -132,8 +131,8 @@ namespace Awaiten
     }
     public interface IAwaitenAsyncResolver : Awaiten.IAwaitenResolver
     {
-        System.Threading.Tasks.Task<object> ResolveAsync(System.Type serviceType, System.Threading.CancellationToken cancellationToken = default);
-        System.Threading.Tasks.Task<object> ResolveAsync(System.Type serviceType, object? key, System.Threading.CancellationToken cancellationToken = default);
+        System.Threading.Tasks.Task<object> ResolveAsync(System.Type serviceType, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+        System.Threading.Tasks.Task<object> ResolveAsync(System.Type serviceType, object? key, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
     }
     public interface IAwaitenContainerMetadata : Awaiten.IAwaitenAsyncResolver, Awaiten.IAwaitenResolver, Awaiten.IAwaitenRoot, Awaiten.IAwaitenScope, Awaiten.IExternalResolverHost, System.IDisposable
     {
@@ -155,12 +154,12 @@ namespace Awaiten
     }
     public interface IAwaitenRoot : Awaiten.IAwaitenAsyncResolver, Awaiten.IAwaitenResolver, Awaiten.IAwaitenScope, System.IDisposable
     {
-        System.Threading.Tasks.Task InitializeAsync(System.Threading.CancellationToken cancellationToken = default);
+        System.Threading.Tasks.Task InitializeAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
     }
     public interface IAwaitenScope : Awaiten.IAwaitenAsyncResolver, Awaiten.IAwaitenResolver, System.IDisposable
     {
         Awaiten.IAwaitenScope CreateScope();
-        System.Threading.Tasks.Task<Awaiten.IAwaitenScope> CreateScopeAsync(System.Threading.CancellationToken cancellationToken = default);
+        System.Threading.Tasks.Task<Awaiten.IAwaitenScope> CreateScopeAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
     }
     public interface IExternalResolver
     {
@@ -170,32 +169,31 @@ namespace Awaiten
     {
         Awaiten.IExternalResolver? ExternalResolver { get; set; }
     }
-    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
     public sealed class ImportAttribute : System.Attribute
     {
         public ImportAttribute(System.Type module) { }
         public System.Type Module { get; }
     }
-    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
     public sealed class ImportServiceAttribute<TService> : System.Attribute
     {
         public ImportServiceAttribute() { }
     }
-    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=false, Inherited=false)]
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
     public sealed class ImportServicesAttribute : System.Attribute
     {
         public ImportServicesAttribute() { }
     }
-    [System.AttributeUsage(System.AttributeTargets.Property, AllowMultiple=false, Inherited=false)]
+    [System.AttributeUsage(System.AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
     public sealed class InjectAttribute : System.Attribute
     {
         public InjectAttribute() { }
         public bool Deferred { get; set; }
         public bool Optional { get; set; }
     }
-    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
-    public sealed class InjectPropertyAttribute<TImplementation> : System.Attribute
-        where TImplementation :  class
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
+    public sealed class InjectPropertyAttribute<TImplementation> : System.Attribute where TImplementation : class
     {
         public InjectPropertyAttribute(string propertyName) { }
         public bool Deferred { get; set; }
@@ -208,18 +206,19 @@ namespace Awaiten
         Strict = 0,
         Loose = 1,
     }
-    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=false, Inherited=false)]
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
     public sealed class ModuleAttribute : System.Attribute
     {
         public ModuleAttribute() { }
     }
-    public readonly struct Owned<T> : System.IDisposable
+    public readonly struct Owned<T> : System.IAsyncDisposable, System.IDisposable
     {
         public Owned(Awaiten.IAwaitenScope scope, T value) { }
         public T Value { get; }
         public void Dispose() { }
+        public System.Threading.Tasks.ValueTask DisposeAsync() { }
     }
-    [System.AttributeUsage(System.AttributeTargets.Parameter, AllowMultiple=false, Inherited=false)]
+    [System.AttributeUsage(System.AttributeTargets.Parameter, AllowMultiple = false, Inherited = false)]
     public sealed class RequestingTypeAttribute : System.Attribute
     {
         public RequestingTypeAttribute() { }
@@ -231,7 +230,7 @@ namespace Awaiten
         Marker = 2,
         MatchingInterface = 4,
     }
-    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
     public sealed class ScanAttribute : System.Attribute
     {
         public ScanAttribute() { }
@@ -247,7 +246,7 @@ namespace Awaiten
         public string? OnRelease { get; set; }
         public bool SkipUnconstructable { get; set; }
     }
-    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
     public sealed class ScanAttribute<TMarker> : System.Attribute
     {
         public ScanAttribute() { }
@@ -261,7 +260,7 @@ namespace Awaiten
         public string? OnRelease { get; set; }
         public bool SkipUnconstructable { get; set; }
     }
-    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
     public sealed class ScopedAttribute : System.Attribute
     {
         public ScopedAttribute(System.Type implementation) { }
@@ -270,9 +269,8 @@ namespace Awaiten
         public object? Key { get; set; }
         public System.Type Service { get; }
     }
-    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
-    public sealed class ScopedAttribute<TImplementation> : System.Attribute
-        where TImplementation :  class
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
+    public sealed class ScopedAttribute<TImplementation> : System.Attribute where TImplementation : class
     {
         public ScopedAttribute() { }
         public string? Factory { get; set; }
@@ -283,9 +281,8 @@ namespace Awaiten
         public bool SuppressDisposal { get; set; }
         public System.Type? WhenInjectedInto { get; set; }
     }
-    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
-    public sealed class ScopedAttribute<TImplementation, TService> : System.Attribute
-        where TImplementation :  class, TService
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
+    public sealed class ScopedAttribute<TImplementation, TService> : System.Attribute where TImplementation : class, TService
     {
         public ScopedAttribute() { }
         public string? Factory { get; set; }
@@ -296,7 +293,7 @@ namespace Awaiten
         public bool SuppressDisposal { get; set; }
         public System.Type? WhenInjectedInto { get; set; }
     }
-    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
     public sealed class SingletonAttribute : System.Attribute
     {
         public SingletonAttribute(System.Type implementation) { }
@@ -305,9 +302,8 @@ namespace Awaiten
         public object? Key { get; set; }
         public System.Type Service { get; }
     }
-    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
-    public sealed class SingletonAttribute<TImplementation> : System.Attribute
-        where TImplementation :  class
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
+    public sealed class SingletonAttribute<TImplementation> : System.Attribute where TImplementation : class
     {
         public SingletonAttribute() { }
         public bool Eager { get; set; }
@@ -320,9 +316,8 @@ namespace Awaiten
         public bool SuppressDisposal { get; set; }
         public System.Type? WhenInjectedInto { get; set; }
     }
-    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
-    public sealed class SingletonAttribute<TImplementation, TService> : System.Attribute
-        where TImplementation :  class, TService
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
+    public sealed class SingletonAttribute<TImplementation, TService> : System.Attribute where TImplementation : class, TService
     {
         public SingletonAttribute() { }
         public bool Eager { get; set; }
@@ -335,7 +330,7 @@ namespace Awaiten
         public bool SuppressDisposal { get; set; }
         public System.Type? WhenInjectedInto { get; set; }
     }
-    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
     public sealed class TransientAttribute : System.Attribute
     {
         public TransientAttribute(System.Type implementation) { }
@@ -344,9 +339,8 @@ namespace Awaiten
         public object? Key { get; set; }
         public System.Type Service { get; }
     }
-    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
-    public sealed class TransientAttribute<TImplementation> : System.Attribute
-        where TImplementation :  class
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
+    public sealed class TransientAttribute<TImplementation> : System.Attribute where TImplementation : class
     {
         public TransientAttribute() { }
         public string? Factory { get; set; }
@@ -357,9 +351,8 @@ namespace Awaiten
         public bool SuppressDisposal { get; set; }
         public System.Type? WhenInjectedInto { get; set; }
     }
-    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=true, Inherited=false)]
-    public sealed class TransientAttribute<TImplementation, TService> : System.Attribute
-        where TImplementation :  class, TService
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
+    public sealed class TransientAttribute<TImplementation, TService> : System.Attribute where TImplementation : class, TService
     {
         public TransientAttribute() { }
         public string? Factory { get; set; }
@@ -371,3 +364,4 @@ namespace Awaiten
         public System.Type? WhenInjectedInto { get; set; }
     }
 }
+
