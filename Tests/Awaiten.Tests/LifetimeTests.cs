@@ -8,7 +8,7 @@ namespace Awaiten.Tests;
 /// </summary>
 public partial class LifetimeTests
 {
-	[Fact]
+	[Test]
 	public async Task Scoped_ReturnsOneInstancePerScope()
 	{
 		using LifetimeContainer.Root container = new();
@@ -23,7 +23,7 @@ public partial class LifetimeTests
 		await That(a).IsNotSameAs(c);
 	}
 
-	[Fact]
+	[Test]
 	public async Task ChildScope_FromAScope_HasItsOwnScopedInstancesAndSharesTheSingletons()
 	{
 		using LifetimeContainer.Root container = new();
@@ -34,7 +34,7 @@ public partial class LifetimeTests
 		await That(child.Resolve<ISingletonService>()).IsSameAs(container.Resolve<ISingletonService>());
 	}
 
-	[Fact]
+	[Test]
 	public async Task DisposingAChildScope_DoesNotDisposeTheParentScope()
 	{
 		using LifetimeContainer.Root container = new();
@@ -51,7 +51,7 @@ public partial class LifetimeTests
 		await That(parentScoped.Disposed).IsFalse();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Singleton_IsSharedAcrossScopesAndTheContainer()
 	{
 		using LifetimeContainer.Root container = new();
@@ -64,7 +64,7 @@ public partial class LifetimeTests
 		await That(scope2.Resolve<ISingletonService>()).IsSameAs(fromContainer);
 	}
 
-	[Fact]
+	[Test]
 	public async Task DisposingAScope_DisposesItsScopedInstances()
 	{
 		using LifetimeContainer.Root container = new();
@@ -78,7 +78,7 @@ public partial class LifetimeTests
 		await That(scoped.Disposed).IsTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task DisposingAScope_DisposesTransientsCreatedWithinIt()
 	{
 		using LifetimeContainer.Root container = new();
@@ -91,7 +91,7 @@ public partial class LifetimeTests
 		await That(transient.Disposed).IsTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task DisposingTheContainer_DisposesSingletons()
 	{
 		SingletonService singleton;
@@ -104,7 +104,7 @@ public partial class LifetimeTests
 		await That(singleton.Disposed).IsTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task DisposingTheContainer_DisposesInReverseOrderOfCreation()
 	{
 		DisposalRecorder recorder;
@@ -120,7 +120,7 @@ public partial class LifetimeTests
 		await That(recorder.Order[1]).IsEqualTo("Alpha");
 	}
 
-	[Fact]
+	[Test]
 	public async Task MultiServiceRegistration_ResolvesOneSharedInstance()
 	{
 		using MultiServiceContainer.Root container = new();
@@ -131,7 +131,7 @@ public partial class LifetimeTests
 		await That((object)reader).IsSameAs(writer);
 	}
 
-	[Fact]
+	[Test]
 	public async Task ResolvingFromADisposedContainer_Throws()
 	{
 		LifetimeContainer.Root container = new();
@@ -140,7 +140,7 @@ public partial class LifetimeTests
 		await That(() => container.Resolve<ISingletonService>()).Throws<ObjectDisposedException>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task ResolvingFromADisposedScope_Throws()
 	{
 		using LifetimeContainer.Root container = new();
@@ -150,7 +150,7 @@ public partial class LifetimeTests
 		await That(() => scope.Resolve<IScopedService>()).Throws<ObjectDisposedException>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task ResolvingASingletonFromADisposedScope_Throws()
 	{
 		using LifetimeContainer.Root container = new();

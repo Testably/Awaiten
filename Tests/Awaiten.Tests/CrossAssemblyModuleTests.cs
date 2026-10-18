@@ -11,7 +11,7 @@ namespace Awaiten.Tests;
 /// </summary>
 public partial class CrossAssemblyModuleTests
 {
-	[Fact]
+	[Test]
 	public async Task ImportedCrossAssemblyModule_ContributesItsStrongRegistration()
 	{
 		using SupportContainer.Root container = new();
@@ -19,7 +19,7 @@ public partial class CrossAssemblyModuleTests
 		await That(container.Resolve<SupportLogger>()).IsNotNull();
 	}
 
-	[Fact]
+	[Test]
 	public async Task CrossAssemblyDefault_IsUsedWhenTheContainerDoesNotOverrideIt()
 	{
 		using SupportContainer.Root container = new();
@@ -27,7 +27,7 @@ public partial class CrossAssemblyModuleTests
 		await That(container.Resolve<ICrossAssemblyClock>()).Is<SupportClock>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task ContainerRegistration_OverridesACrossAssemblyDefault()
 	{
 		using OverrideContainer.Root container = new();
@@ -35,7 +35,7 @@ public partial class CrossAssemblyModuleTests
 		await That(container.Resolve<ICrossAssemblyClock>()).Is<TestClock>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task OverriddenCrossAssemblyDefault_IsAbsentFromTheServiceCollection()
 	{
 		using OverrideContainer.Root container = new();
@@ -47,7 +47,7 @@ public partial class CrossAssemblyModuleTests
 		await That(clocks[0]).Is<TestClock>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task CrossAssemblyModuleFactory_ProducesTheServiceThroughTheModuleMethod()
 	{
 		using SupportContainer.Root container = new();
@@ -56,7 +56,7 @@ public partial class CrossAssemblyModuleTests
 		await That(container.Resolve<SupportGreeter>().Greeting).IsEqualTo("hello from the support module");
 	}
 
-	[Fact]
+	[Test]
 	public async Task CrossAssemblyModuleInstance_ExposesTheModulesPreBuiltMember()
 	{
 		using SupportContainer.Root container = new();

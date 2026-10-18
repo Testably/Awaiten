@@ -6,9 +6,9 @@ public partial class DiagnosticTests
 {
 	public class Awt103NotInstantiable
 	{
-		[Theory]
-		[InlineData("public interface Foo { }")]
-		[InlineData("public abstract class Foo { }")]
+		[Test]
+		[Arguments("public interface Foo { }")]
+		[Arguments("public abstract class Foo { }")]
 		public async Task ReportsForAnInterfaceOrAbstractImplementation(string implementationDeclaration)
 		{
 			GeneratorResult result = Generator.Run($$"""
@@ -28,7 +28,7 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).Contains("*AWT103*").AsWildcard();
 		}
 
-		[Fact]
+		[Test]
 		public async Task PointsAtTheFactoryExitRatherThanOnlyDemandingAConcreteType()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -49,7 +49,7 @@ public partial class DiagnosticTests
 				.Because("demanding a concrete type is wrong advice for a library factory whose implementation is internal, where the sanctioned answer is producing the instance through a member");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportAnInterfaceWhoseInstanceComesFromAFactory()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -73,7 +73,7 @@ public partial class DiagnosticTests
 				.Because("a factory produces the instance, so the type argument only names the service and instantiability is not required");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportAnInterfaceWhoseInstanceComesFromAMember()
 		{
 			GeneratorResult result = Generator.Run("""

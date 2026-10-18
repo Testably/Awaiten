@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt155CrossModuleDuplicate
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenTwoModulesStronglyRegisterTheSameServiceWithDifferentImplementations()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -38,7 +38,7 @@ public partial class DiagnosticTests
 				.Because("which module wins is decided only by [Import] order, invisible at either module");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenTwoModulesOpenGenericTemplatesCollideOnTheSameClosedService()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -76,7 +76,7 @@ public partial class DiagnosticTests
 				.Because("the closed registrations expanded from two modules' open templates collide exactly like two hand-written registrations - the winner is decided only by [Import] order");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenAnExplicitRegistrationBeatsAnotherModulesOpenGenericTemplate()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -114,7 +114,7 @@ public partial class DiagnosticTests
 				.Because("an explicit registration beating another module's expanded template is deterministic regardless of [Import] order, so the collision is not ambiguous");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenTheContainerOverridesAModule()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -142,7 +142,7 @@ public partial class DiagnosticTests
 				.Because("the container overriding a module is the intended override mechanism");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenBothModulesRegisterTheSameImplementation()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -173,7 +173,7 @@ public partial class DiagnosticTests
 				.Because("the same implementation coalesces into one instance; there is no ambiguity");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenTheLaterModulesRegistrationIsAnOverridableDefault()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -205,7 +205,7 @@ public partial class DiagnosticTests
 				.Because("an overridable default yields by design; being overridden is its purpose");
 		}
 
-		[Fact]
+		[Test]
 		public async Task KeyedCollisionsKeepReportingAwt117Instead()
 		{
 			GeneratorResult result = Generator.Run("""

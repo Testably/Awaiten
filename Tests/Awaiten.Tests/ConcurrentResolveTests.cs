@@ -14,7 +14,7 @@ namespace Awaiten.Tests;
 /// </summary>
 public partial class ConcurrentResolveTests
 {
-	[Fact]
+	[Test]
 	public async Task Singleton_ResolvedAsyncConcurrently_IsInitializedOnceAndDisposedOnce()
 	{
 		AsyncCountedService[] resolved = new AsyncCountedService[ThreadCount];
@@ -37,7 +37,7 @@ public partial class ConcurrentResolveTests
 			.Because("the concurrently-async-resolved singleton is tracked for disposal exactly once, so container teardown disposes it exactly once");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Singleton_ResolvedConcurrently_IsConstructedOnceAndDisposedOnce()
 	{
 		CountedService[] resolved = new CountedService[ThreadCount];
@@ -58,7 +58,7 @@ public partial class ConcurrentResolveTests
 			.Because("the concurrently-resolved singleton is tracked for disposal exactly once, so container teardown disposes it exactly once; had the racing resolutions double-tracked it, DisposeCount would exceed one");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ScopedService_ResolvedConcurrentlyFromOneScope_IsConstructedOnceAndDisposedOnce()
 	{
 		ScopedCountedService[] resolved = new ScopedCountedService[ThreadCount];
@@ -82,7 +82,7 @@ public partial class ConcurrentResolveTests
 			.Because("disposing the scope disposes its scoped instance exactly once");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ScopedService_ResolvedAsyncConcurrentlyFromOneScope_IsInitializedOnceAndDisposedOnce()
 	{
 		AsyncScopedCountedService[] resolved = new AsyncScopedCountedService[ThreadCount];
@@ -110,7 +110,7 @@ public partial class ConcurrentResolveTests
 			.Because("disposing the scope disposes its scoped instance exactly once");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ScopedService_ResolvedFromManyConcurrentScopes_IsOneInstancePerScopeAndDisposedOncePerScope()
 	{
 		IAwaitenScope[] scopes = new IAwaitenScope[ThreadCount];
@@ -144,7 +144,7 @@ public partial class ConcurrentResolveTests
 			.Because("disposing the container after its scopes were already torn down does not dispose their scoped instances a second time");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ScopedService_ResolvedAsyncFromManyConcurrentScopes_IsInitializedOncePerScopeAndDisposedOncePerScope()
 	{
 		IAwaitenScope[] scopes = new IAwaitenScope[ThreadCount];
@@ -176,7 +176,7 @@ public partial class ConcurrentResolveTests
 			.Because("disposing the container after its scopes were already torn down does not dispose their scoped instances a second time");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Singleton_ResolvedFromManyConcurrentScopes_IsSharedAndDisposedOnceByTheRoot()
 	{
 		IAwaitenScope[] scopes = new IAwaitenScope[ThreadCount];
@@ -207,7 +207,7 @@ public partial class ConcurrentResolveTests
 			.Because("the root owns the singleton and disposes it exactly once, never once per scope that resolved it");
 	}
 
-	[Fact]
+	[Test]
 	public async Task DifferentSingletons_ResolvedConcurrently_AreEachConstructedOnceAndDisposedOnce()
 	{
 		HeteroService[] captured;
@@ -248,7 +248,7 @@ public partial class ConcurrentResolveTests
 			.Because("every distinct singleton is tracked once and disposed exactly once on teardown; a race in the shared disposal list would drop or duplicate a disposal");
 	}
 
-	[Fact]
+	[Test]
 	public async Task DependencyGraph_ResolvedConcurrently_ConstructsEachNodeExactlyOnce()
 	{
 		GraphTop[] resolved = new GraphTop[ThreadCount];
@@ -265,7 +265,7 @@ public partial class ConcurrentResolveTests
 			.Because("the construction lock spans the whole transitive build, so each shared node in the graph is built exactly once under concurrency");
 	}
 
-	[Fact]
+	[Test]
 	public async Task DifferentClosedGenerics_ResolvedConcurrently_ConstructEachClosedTypeExactlyOnce()
 	{
 		ICache<Tag1>[] c1 = new ICache<Tag1>[ThreadCount];
@@ -293,7 +293,7 @@ public partial class ConcurrentResolveTests
 			.Because("each of the four distinct closed generics is cached and constructed exactly once, so the concurrent expansion of distinct closed types never duplicates one");
 	}
 
-	[Fact]
+	[Test]
 	public async Task KeyedSingletons_ResolvedConcurrently_EachKeyConstructedOnceAndDisposedOnce()
 	{
 		KeyedServiceBase capturedFast;
@@ -329,7 +329,7 @@ public partial class ConcurrentResolveTests
 			.Because("each keyed singleton is disposed exactly once on container teardown");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Transients_ResolvedConcurrentlyWithinOneScope_AreEachDisposedExactlyOnceWhenTheScopeCloses()
 	{
 		const int perThread = 50;
@@ -360,7 +360,7 @@ public partial class ConcurrentResolveTests
 
 	private const int ThreadCount = 64;
 
-	private static CancellationToken Ct => TestContext.Current.CancellationToken;
+	private static CancellationToken Ct => TestContext.Current!.Execution.CancellationToken;
 
 	// Releases all worker threads simultaneously so the resolutions genuinely race, then joins them.
 	private static async Task FanOut(Action<int> body)
@@ -692,7 +692,7 @@ public partial class ConcurrentResolveTests
 	public static partial class TransientScopeContainer;
 
 #if NET || NETSTANDARD2_1_OR_GREATER
-	[Fact]
+	[Test]
 	public async Task AsyncDisposableSingleton_ResolvedConcurrently_IsInitializedOnceAndAsyncDisposedOnce()
 	{
 		AsyncDisposableSingleton captured;

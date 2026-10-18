@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt188ScanInterfaceInaccessible
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenTheOnlyConventionInterfaceIsInaccessible()
 		{
 			GeneratorResult result = Generator.RunWithReferencedAssembly("""
@@ -33,7 +33,7 @@ public partial class DiagnosticTests
 				.Because("claiming the interface is not implemented would mislead; AWT188 names the real cause");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenSelfKeepsTheMatchRegistered()
 		{
 			GeneratorResult result = Generator.RunWithReferencedAssembly("""

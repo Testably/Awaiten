@@ -5,7 +5,7 @@ namespace Awaiten.Extensions.DependencyInjection.Tests;
 
 public sealed class AwaitenServiceCollectionExtensionsTests
 {
-	[Fact]
+	[Test]
 	public async Task AddGeneratedContainer_ShouldRegisterContainerAsSingleton()
 	{
 		ServiceCollection services = new();
@@ -18,7 +18,7 @@ public sealed class AwaitenServiceCollectionExtensionsTests
 		await That(provider.GetRequiredService<IAwaitenScope>()).IsSameAs(container);
 	}
 
-	[Fact]
+	[Test]
 	public async Task AddGeneratedContainer_WhenServicesIsNull_ShouldThrowArgumentNullException()
 	{
 		void Act()
@@ -29,7 +29,7 @@ public sealed class AwaitenServiceCollectionExtensionsTests
 		await That(Act).Throws<ArgumentNullException>().WithParamName("services");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AddGeneratedContainerExtensions_ShouldBeAStaticClass()
 	{
 		Type type = typeof(AwaitenServiceCollectionExtensions);

@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt182ScanNoMatchingInterface
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenAMatchingInterfaceScanMatchesATypeWithNoConventionInterface()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -31,7 +31,7 @@ public partial class DiagnosticTests
 				.Because("Mocha matched the scan but implements no interface named IMocha");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenTheSelfFlagIsAlsoSet()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -53,7 +53,7 @@ public partial class DiagnosticTests
 				.Because("the Self flag still registers the match as its own concrete type");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForAMarkerlessScan()
 		{
 			GeneratorResult result = Generator.Run("""

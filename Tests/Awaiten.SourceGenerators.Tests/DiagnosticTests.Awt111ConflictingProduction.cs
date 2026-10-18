@@ -4,7 +4,7 @@ public partial class DiagnosticTests
 {
 	public class Awt111ConflictingProduction
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenAnImplementationIsRegisteredWithDifferentProductionStrategies()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -27,7 +27,7 @@ public partial class DiagnosticTests
 				.Because("coalescing keeps the first production strategy, so the contradicting one must not be silently dropped");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenTheSameImplementationNamesDifferentFactoryMembers()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -51,7 +51,7 @@ public partial class DiagnosticTests
 				.Because("coalescing keeps the first factory, so naming a different one for the same implementation must not be silently dropped");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenTheSameImplementationUnderDifferentServicesNamesDifferentFactoryMembers()
 		{
 			GeneratorResult result = Generator.Run("""

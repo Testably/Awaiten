@@ -9,7 +9,7 @@ public partial class DiagnosticTests
 	// tests drive that analyzer.
 	public class Awt134BoundaryGuard
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsForARegistrationAttributeOnADomainClass()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenBoundaryAnalyzer>("""
@@ -29,7 +29,7 @@ public partial class DiagnosticTests
 				.Because("a registration attribute belongs on the [Container], not on a domain class in an assembly with no container");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsForAScanAttributeOnADomainClass()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenBoundaryAnalyzer>("""
@@ -49,7 +49,7 @@ public partial class DiagnosticTests
 				.Because("scanning is a container concern and does not belong on a domain class");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenTheAssemblyDeclaresAContainer()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenBoundaryAnalyzer>("""
@@ -70,7 +70,7 @@ public partial class DiagnosticTests
 				.Because("the guard is scoped to assemblies with no [Container]; a registration on the container is exactly right");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForAModule()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenBoundaryAnalyzer>("""
@@ -91,7 +91,7 @@ public partial class DiagnosticTests
 				.Because("a [Module] is composition code and may legitimately carry registrations in a library");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForTheConsumerSideEscapeHatches()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenBoundaryAnalyzer>("""

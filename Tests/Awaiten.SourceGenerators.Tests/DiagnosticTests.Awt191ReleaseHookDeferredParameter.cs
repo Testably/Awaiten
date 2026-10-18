@@ -13,7 +13,7 @@ public partial class DiagnosticTests
 	/// </summary>
 	public class Awt191ReleaseHookDeferredParameter
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsForAFuncReleaseHookParameter()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -38,7 +38,7 @@ public partial class DiagnosticTests
 				.Because("a Func<T> release capture holds a resolver delegate that is dead by the time the hook runs at teardown");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsForALazyReleaseHookParameter()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -63,7 +63,7 @@ public partial class DiagnosticTests
 				.Because("an unmaterialized Lazy<T> release capture defers resolution past the owner's teardown, like a Func<T>");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsForAFuncTaskReleaseHookParameter()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -89,7 +89,7 @@ public partial class DiagnosticTests
 				.Because("the async factory form defers resolution exactly like the synchronous Func<T>");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForAFuncActivationHookParameter()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -114,7 +114,7 @@ public partial class DiagnosticTests
 				.Because("an activation hook runs while the owner is alive, so its Func<T> parameter is invokable");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForADirectReleaseHookParameter()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -138,7 +138,7 @@ public partial class DiagnosticTests
 				.Because("a direct release dependency is resolved at construction and captured by value, which is the supported shape");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsADeferredModuleScanReleaseHookParameter()
 		{
 			GeneratorResult result = Generator.Run("""

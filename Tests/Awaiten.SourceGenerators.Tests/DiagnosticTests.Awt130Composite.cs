@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt130Composite
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsAwt130WhenTheCompositeTakesNoCollectionParameter()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -31,7 +31,7 @@ public partial class DiagnosticTests
 				.Because("a composite with no collection parameter of the composed service has nothing to fan out to");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsAwt130WhenTheCompositeCollectionIsOfADifferentService()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -57,7 +57,7 @@ public partial class DiagnosticTests
 				.Because("the collection parameter must be of the composed service for the composite to fan out over it");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForAWellFormedComposite()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -82,7 +82,7 @@ public partial class DiagnosticTests
 				.Because("a composite with a collection parameter of the composed service is well-formed");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportAwt130ForAnArrayParameter()
 		{
 			GeneratorResult result = Generator.Run("""

@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt202ModuleScanInAssembliesOf
 	{
-		[Fact]
+		[Test]
 		public async Task Awt202_ReportsWhenAModuleScanNamesAssemblies()
 		{
 			GeneratorResult result = Generator.Run("""

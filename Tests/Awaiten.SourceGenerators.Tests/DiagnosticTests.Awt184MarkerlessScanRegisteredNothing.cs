@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt184MarkerlessScanRegisteredNothing
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenAMarkerlessMatchingInterfaceScanRegistersNothing()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -29,7 +29,7 @@ public partial class DiagnosticTests
 				.Because("candidates matched the filter but none implements its I + name interface");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenAtLeastOneMatchRegisters()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -52,7 +52,7 @@ public partial class DiagnosticTests
 				.Because("FirstWidget registers under IFirstWidget, so the scan is not empty");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportStaleExclusionsWhenTheScanSawNoCandidate()
 		{
 			GeneratorResult result = Generator.Run("""

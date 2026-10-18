@@ -10,7 +10,7 @@ public sealed class AttributeTests
 
 	private sealed class Impl : IService;
 
-	[Fact]
+	[Test]
 	public async Task OpenGenericLifetimeAttributes_ExposeImplementationServiceAndKey()
 	{
 		await That(new SingletonAttribute(typeof(Impl)).Service).IsEqualTo(typeof(Impl));
@@ -21,7 +21,7 @@ public sealed class AttributeTests
 		await That(transient.Service).IsEqualTo(typeof(IService));
 	}
 
-	[Fact]
+	[Test]
 	public async Task SingletonAttribute_Generic_RoundTripsAllOptions()
 	{
 		SingletonAttribute<Impl, IService> attribute = new()
@@ -40,7 +40,7 @@ public sealed class AttributeTests
 		await That(attribute.Key).IsEqualTo("k");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ScopedAndTransientAttributes_Generic_RoundTripTheirOptions()
 	{
 		ScopedAttribute<Impl> scoped = new() { Factory = "S", Key = 1, Fallback = Fallback.Silent };
@@ -52,7 +52,7 @@ public sealed class AttributeTests
 		await That(transient.WhenInjectedInto).IsEqualTo(typeof(Impl));
 	}
 
-	[Fact]
+	[Test]
 	public async Task ScanAttribute_RoundTripsMarkerAndFilters()
 	{
 		ScanAttribute scan = new(typeof(IService))
@@ -72,7 +72,7 @@ public sealed class AttributeTests
 		await That(scan.Exclude).IsEqualTo(new[] { typeof(Impl) });
 	}
 
-	[Fact]
+	[Test]
 	public async Task ScanAttribute_Generic_RoundTripsFilters()
 	{
 		ScanAttribute<IService> scan = new()
@@ -87,7 +87,7 @@ public sealed class AttributeTests
 		await That(scan.Exclude).IsEqualTo(new[] { typeof(Impl) });
 	}
 
-	[Fact]
+	[Test]
 	public async Task CompositeAttributes_ExposeTheirTypesAndLifetime()
 	{
 		CompositeAttribute<Impl, IService> generic = new() { Lifetime = AwaitenLifetime.Singleton };
@@ -99,7 +99,7 @@ public sealed class AttributeTests
 		await That(open.Lifetime).IsEqualTo(AwaitenLifetime.Scoped);
 	}
 
-	[Fact]
+	[Test]
 	public async Task DecorateAttributes_ExposeTheirTypesAndOrder()
 	{
 		DecorateAttribute<Impl, IService> generic = new() { Order = 3 };
@@ -111,14 +111,14 @@ public sealed class AttributeTests
 		await That(open.Order).IsEqualTo(5);
 	}
 
-	[Fact]
+	[Test]
 	public async Task FromKeyAttribute_AcceptsStringAndObjectKeys()
 	{
 		await That(new FromKeyAttribute("utc").Key).IsEqualTo("utc");
 		await That(new FromKeyAttribute((object)AwaitenLifetime.Scoped).Key).IsEqualTo(AwaitenLifetime.Scoped);
 	}
 
-	[Fact]
+	[Test]
 	public async Task ImportAndInjectAttributes_RoundTrip()
 	{
 		await That(new ImportAttribute(typeof(Impl)).Module).IsEqualTo(typeof(Impl));
@@ -128,7 +128,7 @@ public sealed class AttributeTests
 		await That(inject.Optional).IsTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task ContainerAttribute_RoundTripsItsOptions()
 	{
 		ContainerAttribute attribute = new() { SyncResolveAfterInit = true, LifetimeSafety = LifetimeSafety.Loose };

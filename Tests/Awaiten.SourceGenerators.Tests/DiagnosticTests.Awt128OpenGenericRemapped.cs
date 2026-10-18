@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt128OpenGenericRemapped
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenTheImplementationReordersTheServiceTypeParameters()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -31,7 +31,7 @@ public partial class DiagnosticTests
 				.Because("the implementation does not expose the service with its type parameters in declaration order");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenTheTypeParametersMapInOrder()
 		{
 			GeneratorResult result = Generator.Run("""

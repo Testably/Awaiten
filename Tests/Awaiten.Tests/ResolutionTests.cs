@@ -6,7 +6,7 @@ namespace Awaiten.Tests;
 /// </summary>
 public partial class ResolutionTests
 {
-	[Fact]
+	[Test]
 	public async Task ConstructorDependencies_AreWiredFromTheGraph()
 	{
 		GraphContainer.Root container = new();
@@ -21,7 +21,7 @@ public partial class ResolutionTests
 			.Because("the singleton Middle is the same instance injected into the transient Top");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Resolve_ForAnUnregisteredType_Throws()
 	{
 		GraphContainer.Root container = new();
@@ -29,7 +29,7 @@ public partial class ResolutionTests
 		await That(() => container.Resolve<string>()).Throws<InvalidOperationException>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task TryResolve_ByServiceType_ReturnsTheRegisteredInstance()
 	{
 		GraphContainer.Root container = new();
@@ -38,7 +38,7 @@ public partial class ResolutionTests
 		await That(middle).IsSameAs(container.Resolve<IMiddle>());
 	}
 
-	[Fact]
+	[Test]
 	public async Task Resolve_ByRuntimeType_ReturnsTheRegisteredInstance()
 	{
 		GraphContainer.Root container = new();
@@ -49,7 +49,7 @@ public partial class ResolutionTests
 		await That(middle).IsSameAs(container.Resolve<IMiddle>());
 	}
 
-	[Fact]
+	[Test]
 	public async Task Singleton_ReturnsTheSameInstanceEachTime()
 	{
 		GraphContainer.Root container = new();
@@ -60,7 +60,7 @@ public partial class ResolutionTests
 		await That(first).IsSameAs(second);
 	}
 
-	[Fact]
+	[Test]
 	public async Task Singleton_ViaServiceType_ReturnsTheSameInstanceEachTime()
 	{
 		GraphContainer.Root container = new();
@@ -72,7 +72,7 @@ public partial class ResolutionTests
 		await That(first).Is<Middle>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Transient_ReturnsANewInstanceEachTime()
 	{
 		GraphContainer.Root container = new();
@@ -83,7 +83,7 @@ public partial class ResolutionTests
 		await That(first).IsNotSameAs(second);
 	}
 
-	[Fact]
+	[Test]
 	public async Task TryResolve_ForAnUnregisteredType_ReturnsFalse()
 	{
 		GraphContainer.Root container = new();

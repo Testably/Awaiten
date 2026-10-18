@@ -13,7 +13,7 @@ namespace Awaiten.Tests;
 /// </summary>
 public partial class ModuleScanHookTests
 {
-	[Fact]
+	[Test]
 	public async Task CrossAssembly_NonGenericInternalHook_ActivatesOnResolve_AndReleasesOnDispose()
 	{
 		HookLog log;
@@ -35,7 +35,7 @@ public partial class ModuleScanHookTests
 		await That(log.Entries).Contains("released:HookedGrinder");
 	}
 
-	[Fact]
+	[Test]
 	public async Task CrossAssembly_GenericInternalHook_ClosedAtModuleBuild_FiresWithAGraphDependency()
 	{
 		using HookedContainer.Root container = new();
@@ -48,7 +48,7 @@ public partial class ModuleScanHookTests
 		await That(log.Entries).Contains("wired:HookedWindow");
 	}
 
-	[Fact]
+	[Test]
 	public async Task SameCompilation_BindsTheModulesOwnInternalHookDirectly()
 	{
 		SameCompLog.Entries.Clear();

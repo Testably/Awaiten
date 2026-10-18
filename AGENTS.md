@@ -8,7 +8,7 @@ Correctness is a must. The other goals are strong defaults and win in this order
 
 ## Project constraints
 
-- Use the SDK pinned in `global.json` (10.0.300, `latestMinor`). Package versions live only in `Directory.Packages.props` (central package management); never put a version on a `PackageReference`.
+- Use the SDK pinned in `global.json` (10.0.300, `latestPatch`). Package versions live only in `Directory.Packages.props` (central package management); never put a version on a `PackageReference`.
 - `Source/Directory.Build.props` sets `TargetFrameworks` to `netstandard2.0;net8.0;net10.0`, `LangVersion` preview, nullable (annotations only on netstandard2.0) and `TreatWarningsAsErrors`. Test projects target `net10.0;net8.0;net48` unless they override it.
 - `Awaiten.SourceGenerators` targets only `netstandard2.0`, is not a package of its own and ships inside the `Awaiten` package under `analyzers/dotnet/cs`. Keep its models equatable (`EquatableArray<T>`) so incremental caching works.
 - No runtime reflection. The generated code and both libraries must stay trim-safe and native-AOT clean; `Samples/Awaiten.AotSample` publishes with `PublishAot` and warnings as errors to prove it. Do not add `MakeGenericType`, `Activator` or similar to any runtime path.
@@ -20,8 +20,9 @@ Correctness is a must. The other goals are strong defaults and win in this order
 
 ## Validation
 
+- The tests run on TUnit (Microsoft.Testing.Platform, selected in `global.json`): `dotnet test --project Tests/Awaiten.Tests`, filter with `--treenode-filter "/*/*/<class>/<test>"`. Tests run in parallel, also within a class; mark a class whose tests share static state with `[NotInParallel(nameof(...))]`.
 - Run the tests relevant to your change before pushing. Generator and diagnostic changes: `Tests/Awaiten.SourceGenerators.Tests`. Runtime behaviour: `Tests/Awaiten.Tests`. MS.DI bridge: `Tests/Awaiten.Extensions.DependencyInjection.Tests`.
-- `Tests/Awaiten.ExampleTests` holds the documented examples and the architecture test. CI does not run it (it is missing from `UnitTestProjects` in `Pipeline/Build.UnitTest.cs`), so run it locally when you touch examples or docs.
+- `Tests/Awaiten.ExampleTests` holds the documented examples and the architecture test; run it when you touch examples or docs.
 - Public API change: run `Tests/Awaiten.Api.Tests`, accept with `AWEXPECT_ACCEPT_SNAPSHOTS=all` (or the explicit `AcceptApiChanges` test) and commit the changed `*.awexpect-snapshot.txt` files. Never commit a pending snapshot.
 - Diagnostic tests assert by wildcard on the formatted output, for example `await That(result.Diagnostics).Contains("*AWT116*").AsWildcard();`, so a failure shows the actual diagnostics.
 - Code that targets net48 can use records and `init` (polyfilled through `IsExternalInit`), but there is no `System.Index`/`System.Range` polyfill, so avoid `^1`, ranges and list patterns there. Run the net48 leg (Windows only) when using a newer language feature.
@@ -43,5 +44,5 @@ Correctness is a must. The other goals are strong defaults and win in this order
 ## References
 
 - [Docs/agents/design-goals.md](Docs/agents/design-goals.md): the goals and code rules for every change, the checks before a commit and the goals of this repository.
-- [Docs/agents/workflows.md](Docs/agents/workflows.md): build, test, benchmark and docs commands, the Nuke pipeline targets and the CI workflows.
+- [Docs/agents/workflows.md](Docs/agents/workflows.md): build, test, benchmark and docs commands, the Fallout pipeline targets and the CI workflows.
 - [Docs/agents/project-structure.md](Docs/agents/project-structure.md): architecture, source locations and where to change what.

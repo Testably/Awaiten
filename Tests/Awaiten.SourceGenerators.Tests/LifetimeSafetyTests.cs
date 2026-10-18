@@ -27,7 +27,7 @@ public class LifetimeSafetyTests
 	                                              """;
 
 	// AWT118 is reported by AwaitenAnalyzer, so severity is asserted through the analyzer harness, not the generator.
-	[Fact]
+	[Test]
 	public async Task Strict_EscalatesTheRootAccumulatingFactoryToAnError()
 	{
 		string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>(string.Format(RootAccumulatingSource, string.Empty));
@@ -36,7 +36,7 @@ public class LifetimeSafetyTests
 			.Because("strict lifetime safety (the default) makes the root-accumulating Func a compile-time error");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Loose_ReportsTheRootAccumulatingFactoryAsAWarning()
 	{
 		string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>(
@@ -47,7 +47,7 @@ public class LifetimeSafetyTests
 		await That(diagnostics.Any(d => d.Contains("error") && d.Contains("AWT118"))).IsFalse();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Strict_TheRootAccumulatingFactoryError_CannotBeSuppressedInSource()
 	{
 		string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>("""
@@ -74,7 +74,7 @@ public class LifetimeSafetyTests
 			.Because("under strict lifetime safety AWT118 is reported through a NotConfigurable descriptor, so #pragma warning disable cannot silence it - the only opt-out is LifetimeSafety.Loose");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Loose_TheRootAccumulatingFactoryWarning_CanBeSuppressedInSource()
 	{
 		string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>("""
@@ -101,7 +101,7 @@ public class LifetimeSafetyTests
 			.Because("a loose AWT118 warning is reported by an analyzer, so #pragma warning disable suppresses it in source");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Strict_RootAccumulatingContainer_StillGeneratesCompilableCode()
 	{
 		// AWT118 is an analyzer error now, so the generator emits the real withholding container instead of a
@@ -113,7 +113,7 @@ public class LifetimeSafetyTests
 		await That(result.Sources.Keys.Any(k => k.Contains("MyContainer"))).IsTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Strict_WithholdsADisposableTransientFromByTypeResolution()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -146,7 +146,7 @@ public class LifetimeSafetyTests
 			.Because("the Root withholds the slot through its per-slot flag, while a child scope resolves it");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Strict_WithholdsThePlainFuncOverATransitivelyDisposableService_ButKeepsTheBareTypeResolvable()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -179,7 +179,7 @@ public class LifetimeSafetyTests
 			.Because("Func<Owned<Tool>> remains the leak-free factory that drains the transitive Spark with the handle");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Loose_KeepsADisposableTransientFullyResolvable()
 	{
 		GeneratorResult result = Generator.Run("""

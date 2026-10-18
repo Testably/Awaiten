@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt142ScanLifetimeConflict
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenTwoScansMatchTheSameTypeWithDifferentLifetimes()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -30,7 +30,7 @@ public partial class DiagnosticTests
 				.Because("two scans fixing different lifetimes for one implementation contradict each other");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenTheScansAgreeOnTheLifetime()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -54,7 +54,7 @@ public partial class DiagnosticTests
 				.Because("agreeing scans coalesce without contradiction");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenAScanYieldsToAnExplicitRegistration()
 		{
 			GeneratorResult result = Generator.Run("""

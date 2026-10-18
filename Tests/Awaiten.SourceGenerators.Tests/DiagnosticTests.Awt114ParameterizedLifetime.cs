@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt114ParameterizedLifetime
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenAParameterizedServiceIsRegisteredAsSingleton()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -30,7 +30,7 @@ public partial class DiagnosticTests
 				.Because("a parameterized service is built fresh per call, so a singleton lifetime cannot be honored");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenAParameterizedServiceIsRegisteredAsScoped()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -54,7 +54,7 @@ public partial class DiagnosticTests
 				.Because("a scoped lifetime cannot be honored for a per-call parameterized service either");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForATransientParameterizedService()
 		{
 			GeneratorResult result = Generator.Run("""

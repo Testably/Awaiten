@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt190AmbiguousLifecycleHook
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenTwoOverloadsBothAcceptTheInstance()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -31,7 +31,7 @@ public partial class DiagnosticTests
 				.Because("two accessible methods named Started accept the instance, so the container cannot choose one");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenOverloadsDifferOnlyInTheInstanceParameterType()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -54,7 +54,7 @@ public partial class DiagnosticTests
 				.Because("both the exact and the object overload accept the instance, so the release hook choice is order-dependent");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenOnlyOneOverloadAcceptsTheInstance()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -79,7 +79,7 @@ public partial class DiagnosticTests
 				.Because("the int overload does not accept the instance, so there is exactly one usable hook and no ambiguity");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenAGenericScanHookOverloadBindsBesideANonGenericOne()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -103,7 +103,7 @@ public partial class DiagnosticTests
 				.Because("the generic overload binds the single closing and the object overload also accepts the match, so the container cannot choose one");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenAnAmbiguousGenericScanHookOverloadSitsBesideANonGenericOne()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -129,7 +129,7 @@ public partial class DiagnosticTests
 				.Because("the collision is between overloads, not closings: settling the closings would still leave two usable overloads");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenTheSameNameServesDistinctRegistrationsOneMatchEach()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -153,7 +153,7 @@ public partial class DiagnosticTests
 				.Because("a single shared object hook is one match per registration, so neither registration is ambiguous");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsAnOverloadedModuleScanHook()
 		{
 			GeneratorResult result = Generator.Run("""

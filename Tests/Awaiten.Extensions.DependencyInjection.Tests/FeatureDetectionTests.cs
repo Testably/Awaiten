@@ -102,7 +102,7 @@ public sealed partial class FeatureDetectionTests
 		[Transient<TransientThing>]
 		public static partial class BasicContainer;
 
-		[Fact]
+		[Test]
 		public async Task ProbeIsOfferedAndAnswersRegistrations()
 		{
 			using BasicContainer.Root container = new();
@@ -119,7 +119,7 @@ public sealed partial class FeatureDetectionTests
 			await That(probe.IsService(typeof(Unregistered))).IsFalse();
 		}
 
-		[Fact]
+		[Test]
 		public async Task TheProvidersOwnServicesAreReported()
 		{
 			using BasicContainer.Root container = new();
@@ -132,7 +132,7 @@ public sealed partial class FeatureDetectionTests
 			await That(provider.IsService(typeof(IServiceProviderIsKeyedService))).IsTrue();
 		}
 
-		[Fact]
+		[Test]
 		public async Task AScopeOffersTheProbeToo()
 		{
 			using BasicContainer.Root container = new();
@@ -147,7 +147,7 @@ public sealed partial class FeatureDetectionTests
 			await That(probe.IsService(typeof(ScopedThing))).IsTrue();
 		}
 
-		[Fact]
+		[Test]
 		public async Task WithoutContainerMetadataTheProbeIsNotOffered()
 		{
 			using BasicContainer.Root container = new();
@@ -159,7 +159,7 @@ public sealed partial class FeatureDetectionTests
 			await That(provider.IsService(typeof(IThing))).IsFalse();
 		}
 
-		[Fact]
+		[Test]
 		public async Task ANullServiceTypeThrows()
 		{
 			using BasicContainer.Root container = new();
@@ -207,7 +207,7 @@ public sealed partial class FeatureDetectionTests
 		[Singleton<AsyncOnly>]
 		public static partial class SyncAfterInitContainer;
 
-		[Fact]
+		[Test]
 		public async Task AnAsyncOnlyRegistrationIsReportedUnderItsTaskProjection()
 		{
 			using AsyncOnlyContainer.Root container = new();
@@ -219,7 +219,7 @@ public sealed partial class FeatureDetectionTests
 			await That(provider.IsService(typeof(Task<Unregistered>))).IsFalse();
 		}
 
-		[Fact]
+		[Test]
 		public async Task AnAsyncOnlyRegistrationAgreesAcrossItsShapes()
 		{
 			Type[] shapes =
@@ -239,7 +239,7 @@ public sealed partial class FeatureDetectionTests
 			await That(ProbeAgreement.Disagreements(provider, shapes)).IsEqualTo(string.Empty);
 		}
 
-		[Fact]
+		[Test]
 		public async Task AKeyedRegistrationIsReportedUnderItsKey()
 		{
 			using KeyedContainer.Root container = new();
@@ -250,7 +250,7 @@ public sealed partial class FeatureDetectionTests
 			await That(provider.IsKeyedService(typeof(Unregistered), "beta")).IsFalse();
 		}
 
-		[Fact]
+		[Test]
 		public async Task ANullKeyMeansTheUnkeyedRegistration()
 		{
 			using KeyedContainer.Root container = new();
@@ -260,7 +260,7 @@ public sealed partial class FeatureDetectionTests
 			await That(provider.IsKeyedService(typeof(Unregistered), null)).IsFalse();
 		}
 
-		[Fact]
+		[Test]
 		public async Task AnyKeyIsDeclined()
 		{
 			using KeyedContainer.Root container = new();
@@ -271,7 +271,7 @@ public sealed partial class FeatureDetectionTests
 			await That(provider.GetKeyedService(typeof(IThing), KeyedService.AnyKey)).IsNull();
 		}
 
-		[Fact]
+		[Test]
 		public async Task AKeyOnlyRegistrationIsNotAnUnkeyedService()
 		{
 			using KeyOnlyContainer.Root container = new();
@@ -288,7 +288,7 @@ public sealed partial class FeatureDetectionTests
 		///     dictionary shapes are unkeyed-only, so under a key they must all report false, and a key that matches
 		///     nothing must report false for everything.
 		/// </summary>
-		[Fact]
+		[Test]
 		public async Task TheKeyedProbeAgreesAcrossTheShapesUnderAKey()
 		{
 			using KeyedContainer.Root container = new();
@@ -300,7 +300,7 @@ public sealed partial class FeatureDetectionTests
 				.Because("a collection shape is synthesized unkeyed only, and GetKeyedService declines it the same way");
 		}
 
-		[Fact]
+		[Test]
 		public async Task AKeyedAsyncOnlyRegistrationIsReportedUnderItsTaskProjectionAndKey()
 		{
 			Type[] shapes = [typeof(AsyncOnly), typeof(Task<AsyncOnly>), typeof(Task<Unregistered>),];
@@ -315,7 +315,7 @@ public sealed partial class FeatureDetectionTests
 				.Because("the keyed registration exists without a synchronous path, and the keyed GetKeyedService throws its guidance rather than a silent null, exactly as the unkeyed surface does");
 		}
 
-		[Fact]
+		[Test]
 		public async Task SyncResolveAfterInitMovesTheAnswerToTheBareType()
 		{
 			Type[] shapes =
@@ -328,7 +328,7 @@ public sealed partial class FeatureDetectionTests
 			];
 
 			using SyncAfterInitContainer.Root container = new();
-			await container.InitializeAsync(TestContext.Current.CancellationToken);
+			await container.InitializeAsync(TestContext.Current!.Execution.CancellationToken);
 			using AwaitenServiceProvider provider = new(container, ownsContainer: false);
 
 			await That(ProbeAgreement.Disagreements(provider, shapes)).IsEqualTo(string.Empty);
@@ -370,7 +370,7 @@ public sealed partial class FeatureDetectionTests
 		[Singleton<AsyncStream, IAsyncEnumerable<IThing>>]
 		public static partial class ExplicitAsyncStreamContainer;
 
-		[Fact]
+		[Test]
 		public async Task AllMembersSynchronous()
 		{
 			using SyncCollectionContainer.Root container = new();
@@ -379,7 +379,7 @@ public sealed partial class FeatureDetectionTests
 			await That(ProbeAgreement.Disagreements(provider, ThingShapes)).IsEqualTo(string.Empty);
 		}
 
-		[Fact]
+		[Test]
 		public async Task EveryShapeOverARegisteredElementTypeIsReported()
 		{
 			using SyncCollectionContainer.Root container = new();
@@ -398,7 +398,7 @@ public sealed partial class FeatureDetectionTests
 				.Because("the guarantee covers IEnumerable<T> only, so the other shapes over an unmentioned element type stay unreported");
 		}
 
-		[Fact]
+		[Test]
 		public async Task AnExplicitlyRegisteredShapeSuppressesItsSiblings()
 		{
 			using ExplicitShapeContainer.Root container = new();
@@ -411,7 +411,7 @@ public sealed partial class FeatureDetectionTests
 				.Because("registering one collection shape explicitly stops the container synthesizing the others");
 		}
 
-		[Fact]
+		[Test]
 		public async Task AnExplicitlyRegisteredAsyncOnlyStreamClaimsItsOwnShape()
 		{
 			using ExplicitAsyncStreamContainer.Root container = new();
@@ -422,7 +422,7 @@ public sealed partial class FeatureDetectionTests
 				.Because("the explicit registration takes the shape over from the synthesized view, and being async-only it exists without a synchronous path, so GetService throws its guidance");
 		}
 
-		[Fact]
+		[Test]
 		public async Task KeyedRegistrationsAloneSynthesizeNoCollection()
 		{
 			using KeyedOnlyContainer.Root container = new();
@@ -431,7 +431,7 @@ public sealed partial class FeatureDetectionTests
 			await That(ProbeAgreement.Disagreements(provider, ThingShapes)).IsEqualTo(string.Empty);
 		}
 
-		[Fact]
+		[Test]
 		public async Task KeyedRegistrationsAloneYieldAnEmptyUnkeyedCollection()
 		{
 			using KeyedOnlyContainer.Root container = new();
@@ -443,7 +443,7 @@ public sealed partial class FeatureDetectionTests
 			await That(provider.IsService(typeof(IEnumerable<IThing>))).IsTrue();
 		}
 
-		[Fact]
+		[Test]
 		public async Task AMemberThatNeedsAsyncInitialization()
 		{
 			using MixedCollectionContainer.Root container = new();
@@ -456,7 +456,7 @@ public sealed partial class FeatureDetectionTests
 				.Because("the awaited view over it does still resolve");
 		}
 
-		[Fact]
+		[Test]
 		public async Task RelationshipShapesOverARegisteredService()
 		{
 			Type[] shapes =
@@ -514,7 +514,7 @@ public sealed partial class FeatureDetectionTests
 		[Singleton<ThingMap, IReadOnlyDictionary<string, IThing>>(Key = "map")]
 		public static partial class KeyedExplicitDictionaryContainer;
 
-		[Fact]
+		[Test]
 		public async Task StringKeys()
 		{
 			using StringKeyedContainer.Root container = new();
@@ -526,7 +526,7 @@ public sealed partial class FeatureDetectionTests
 				.Because("a dictionary is emitted per key kind, so an assignable key type is not the same shape");
 		}
 
-		[Fact]
+		[Test]
 		public async Task EnumKeys()
 		{
 			using EnumKeyedContainer.Root container = new();
@@ -536,7 +536,7 @@ public sealed partial class FeatureDetectionTests
 			await That(provider.IsService(typeof(IReadOnlyDictionary<Speed, IThing>))).IsTrue();
 		}
 
-		[Fact]
+		[Test]
 		public async Task KeysOfMoreThanOneKindGetNoDictionary()
 		{
 			using MixedKeyKindContainer.Root container = new();
@@ -547,7 +547,7 @@ public sealed partial class FeatureDetectionTests
 				.Because("the container emits no dictionary when its keyed members do not share one key kind");
 		}
 
-		[Fact]
+		[Test]
 		public async Task AnAsyncMemberLeavesOnlyTheAwaitedView()
 		{
 			using AsyncMemberContainer.Root container = new();
@@ -560,7 +560,7 @@ public sealed partial class FeatureDetectionTests
 				.Because("the awaited view does not");
 		}
 
-		[Fact]
+		[Test]
 		public async Task AnUnkeyedExplicitDictionarySuppressesTheSynthesizedOne()
 		{
 			using ExplicitDictionaryContainer.Root container = new();
@@ -569,7 +569,7 @@ public sealed partial class FeatureDetectionTests
 			await That(ProbeAgreement.Disagreements(provider, ThingShapes)).IsEqualTo(string.Empty);
 		}
 
-		[Fact]
+		[Test]
 		public async Task AKeyedExplicitDictionarySuppressesNothing()
 		{
 			using KeyedExplicitDictionaryContainer.Root container = new();
@@ -589,7 +589,7 @@ public sealed partial class FeatureDetectionTests
 	/// </summary>
 	public sealed partial class WithheldReasons
 	{
-		[Fact]
+		[Test]
 		public async Task TellAnUnregisteredTypeFromAWithheldOne()
 		{
 			using Registrations.AsyncOnlyContainer.Root container = new();
@@ -602,7 +602,7 @@ public sealed partial class FeatureDetectionTests
 			await That(container.WithheldReason(typeof(Unregistered), null)).IsNull();
 		}
 
-		[Fact]
+		[Test]
 		public async Task NameTheFixRatherThanOnlyTheProblem()
 		{
 			using Registrations.AsyncOnlyContainer.Root container = new();
@@ -618,7 +618,7 @@ public sealed partial class FeatureDetectionTests
 		///     Pins the classification rather than the string: a reason exists for exactly those shapes whose
 		///     resolution is refused with guidance, and not for the ones refused as simply absent.
 		/// </summary>
-		[Fact]
+		[Test]
 		public async Task MarkExactlyTheShapesResolveRefusesWithGuidance()
 		{
 			using MixedCollectionContainer.Root container = new();
@@ -639,7 +639,7 @@ public sealed partial class FeatureDetectionTests
 				.Because("a shape the container withholds must carry the reason, and one it merely has no registration for must not, or an adapter cannot tell them apart");
 		}
 
-		[Fact]
+		[Test]
 		public async Task RepeatWhatResolveThrowsForAVariantClosing()
 		{
 			using GenericVariance.WithheldVarianceContainer.Root container = new();
@@ -653,7 +653,7 @@ public sealed partial class FeatureDetectionTests
 		///     The reason belongs to the root, so the generated <c>Scope</c> must not offer it: a child scope builds a
 		///     root-withheld disposable transient normally, and would report the root's refusal as its own.
 		/// </summary>
-		[Fact]
+		[Test]
 		public async Task AreOfferedByTheRootAlone()
 		{
 			await That(typeof(WithheldServices.WithheldContainer.Root).GetMethod("WithheldReason")).IsNotNull();
@@ -669,7 +669,7 @@ public sealed partial class FeatureDetectionTests
 				.Because("the same service is built by a scope, which is why the root's answer is not the scope's");
 		}
 
-		[Fact]
+		[Test]
 		public async Task AreAbsentForAContainerThatWithholdsNothing()
 		{
 			using AcceptedDivergences.SingleRegistrationContainer.Root container = new();
@@ -679,7 +679,7 @@ public sealed partial class FeatureDetectionTests
 			await That(container.WithheldReason(typeof(Unregistered), null)).IsNull();
 		}
 
-		[Fact]
+		[Test]
 		public async Task CoverTheKeyedSurfaceToo()
 		{
 			using Registrations.KeyedAsyncOnlyContainer.Root container = new();
@@ -728,7 +728,7 @@ public sealed partial class FeatureDetectionTests
 		[Transient<DisposableTransient>(Key = "x")]
 		public static partial class KeyedWithheldContainer;
 
-		[Fact]
+		[Test]
 		public async Task AreReportedAndNamedOnTheRoot()
 		{
 			using WithheldContainer.Root container = new();
@@ -743,7 +743,7 @@ public sealed partial class FeatureDetectionTests
 				.Because("resolution surfaces the container's guidance naming the fix, which is what MS.DI does for a scoping violation; a null would have let a host bind the parameter from somewhere else and fail far from the cause");
 		}
 
-		[Fact]
+		[Test]
 		public async Task AreReportedAndNamedOnTheRootUnderAKeyToo()
 		{
 			using KeyedWithheldContainer.Root container = new();
@@ -768,7 +768,7 @@ public sealed partial class FeatureDetectionTests
 				.Because("the keyed probe and the keyed resolution have to agree on a withheld slot exactly as the unkeyed pair do");
 		}
 
-		[Fact]
+		[Test]
 		public async Task AreResolvableInsideAScope()
 		{
 			using WithheldContainer.Root container = new();
@@ -781,7 +781,7 @@ public sealed partial class FeatureDetectionTests
 				.Because("inside a scope such a transient is bounded, so it is built as asked");
 		}
 
-		[Fact]
+		[Test]
 		public async Task AgreeAcrossTheirShapes()
 		{
 			Type[] shapes =
@@ -829,7 +829,7 @@ public sealed partial class FeatureDetectionTests
 		[Transient<DisposableHandler, IHandler<DerivedEvent>>]
 		public static partial class WithheldVarianceContainer;
 
-		[Fact]
+		[Test]
 		public async Task ACompatibleClosingIsReported()
 		{
 			using VarianceContainer.Root container = new();
@@ -844,7 +844,7 @@ public sealed partial class FeatureDetectionTests
 				.Because("the declared closure resolves directly");
 		}
 
-		[Fact]
+		[Test]
 		public async Task AWithheldCandidateKeepsItsGuidanceThroughAVariantClosing()
 		{
 			using WithheldVarianceContainer.Root container = new();
@@ -900,7 +900,7 @@ public sealed partial class FeatureDetectionTests
 		[Singleton<Alpha, IThing>]
 		public static partial class SingleRegistrationContainer;
 
-		[Fact]
+		[Test]
 		public async Task AnEnumerableOfAnUnmentionedValueElementTypeIsUnderReported()
 		{
 			using SingleRegistrationContainer.Root container = new();
@@ -916,7 +916,7 @@ public sealed partial class FeatureDetectionTests
 				.Because("the residue is an under-report on both sides at once, so the probe and resolution still agree; the reference-element case beside it is answered rather than under-reported");
 		}
 
-		[Fact]
+		[Test]
 		public async Task AnOpenGenericClosingNothingInTheGraphAsksForIsUnderReported()
 		{
 			using OpenGenericContainer.Root container = new();

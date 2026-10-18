@@ -11,11 +11,11 @@ public sealed class AwaitenRegistrationTests
 {
 	private interface IFoo;
 
-	[Fact]
+	[Test]
 	public async Task SyncConstructor_NullServiceType_Throws()
 		=> await That(() => _ = new AwaitenRegistration(null!, AwaitenLifetime.Singleton)).Throws<ArgumentNullException>();
 
-	[Fact]
+	[Test]
 	public async Task SyncConstructor_ExposesCoreMembers()
 	{
 		AwaitenRegistration registration = new(typeof(IFoo), AwaitenLifetime.Scoped, externallyOwned: true, key: "k");
@@ -29,7 +29,7 @@ public sealed class AwaitenRegistrationTests
 		await That(registration.AsyncTaskConverter).IsNull();
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncConstructor_ExposesTheProjectionMembers()
 	{
 		Func<Task<object>, object> converter = AwaitenTaskProjection.AsTask<IFoo>;
@@ -43,25 +43,25 @@ public sealed class AwaitenRegistrationTests
 		await That(registration.Key).IsEqualTo("k");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncConstructor_NullServiceType_Throws()
 		=> await That(() => _ = new AwaitenRegistration(
 				null!, AwaitenLifetime.Singleton, typeof(Task<IFoo>), AwaitenTaskProjection.AsTask<IFoo>))
 			.Throws<ArgumentNullException>();
 
-	[Fact]
+	[Test]
 	public async Task AsyncConstructor_NullTaskType_Throws()
 		=> await That(() => _ = new AwaitenRegistration(
 				typeof(IFoo), AwaitenLifetime.Singleton, null!, AwaitenTaskProjection.AsTask<IFoo>))
 			.Throws<ArgumentNullException>();
 
-	[Fact]
+	[Test]
 	public async Task AsyncConstructor_NullConverter_Throws()
 		=> await That(() => _ = new AwaitenRegistration(
 				typeof(IFoo), AwaitenLifetime.Singleton, typeof(Task<IFoo>), null!))
 			.Throws<ArgumentNullException>();
 
-	[Fact]
+	[Test]
 	public async Task Equals_TrueForSameIdentity()
 	{
 		AwaitenRegistration a = new(typeof(IFoo), AwaitenLifetime.Singleton, key: "k");
@@ -74,7 +74,7 @@ public sealed class AwaitenRegistrationTests
 		await That(a.GetHashCode()).IsEqualTo(b.GetHashCode());
 	}
 
-	[Fact]
+	[Test]
 	public async Task Equals_IgnoresTheDerivedAsyncProjectionMembers()
 	{
 		// Two async registrations that agree on identity are equal even though each carries its own converter
@@ -88,7 +88,7 @@ public sealed class AwaitenRegistrationTests
 		await That(a.GetHashCode()).IsEqualTo(b.GetHashCode());
 	}
 
-	[Fact]
+	[Test]
 	public async Task Equals_FalseForDifferingLifetime()
 	{
 		AwaitenRegistration a = new(typeof(IFoo), AwaitenLifetime.Singleton);
@@ -98,7 +98,7 @@ public sealed class AwaitenRegistrationTests
 		await That(a != b).IsTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Equals_FalseForDifferingAsyncness()
 	{
 		AwaitenRegistration sync = new(typeof(IFoo), AwaitenLifetime.Singleton);
@@ -108,7 +108,7 @@ public sealed class AwaitenRegistrationTests
 		await That(sync.Equals(async)).IsFalse();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Equals_FalseForDifferingOwnership()
 	{
 		AwaitenRegistration owned = new(typeof(IFoo), AwaitenLifetime.Singleton, externallyOwned: true);
@@ -117,7 +117,7 @@ public sealed class AwaitenRegistrationTests
 		await That(owned.Equals(constructed)).IsFalse();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Equals_FalseForDifferingKey()
 	{
 		AwaitenRegistration a = new(typeof(IFoo), AwaitenLifetime.Singleton, key: "a");
@@ -126,7 +126,7 @@ public sealed class AwaitenRegistrationTests
 		await That(a.Equals(b)).IsFalse();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Equals_Object_FalseForOtherType()
 	{
 		AwaitenRegistration registration = new(typeof(IFoo), AwaitenLifetime.Singleton);

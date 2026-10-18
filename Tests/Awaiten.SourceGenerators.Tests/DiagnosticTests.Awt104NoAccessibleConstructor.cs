@@ -4,7 +4,7 @@ public partial class DiagnosticTests
 {
 	public class Awt104NoAccessibleConstructor
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenTheOnlyConstructorIsPrivate()
 		{
 			GeneratorResult result = Generator.Run("""

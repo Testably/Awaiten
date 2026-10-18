@@ -11,7 +11,7 @@ namespace Awaiten.Tests;
 /// </summary>
 public partial class OpenGenericCompositeTests
 {
-	[Fact]
+	[Test]
 	public async Task OpenComposite_FrontsEachClosing_FanningToTheOtherMembers()
 	{
 		using OpenCompositeContainer.Root container = new();
@@ -24,7 +24,7 @@ public partial class OpenGenericCompositeTests
 		await That(customer.Describe()).IsEqualTo("Composite[A<Customer>,B<Customer>]");
 	}
 
-	[Fact]
+	[Test]
 	public async Task OpenComposite_IsExcludedFromItsOwnFanOut()
 	{
 		using OpenCompositeContainer.Root container = new();

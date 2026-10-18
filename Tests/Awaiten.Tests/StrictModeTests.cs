@@ -10,7 +10,7 @@ namespace Awaiten.Tests;
 /// </summary>
 public partial class StrictModeTests
 {
-	[Fact]
+	[Test]
 	public async Task Strict_ResolvingADisposableTransientByType_ThrowsGuidance()
 	{
 		using StrictContainer.Root container = new();
@@ -19,7 +19,7 @@ public partial class StrictModeTests
 			.Because("a disposable transient is withheld from by-type resolution under strict lifetime safety");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Strict_TryResolvingAWithheldDisposableTransient_ReturnsFalseRatherThanThrowing()
 	{
 		using StrictContainer.Root container = new();
@@ -31,7 +31,7 @@ public partial class StrictModeTests
 		await That(widget).IsNull();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Strict_TryResolvingTheWithheldPlainFunc_ReturnsFalseRatherThanThrowing()
 	{
 		using StrictContainer.Root container = new();
@@ -43,7 +43,7 @@ public partial class StrictModeTests
 		await That(factory is null).IsTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Strict_OwnedAndFuncOwned_RemainResolvable()
 	{
 		using StrictContainer.Root container = new();
@@ -60,7 +60,7 @@ public partial class StrictModeTests
 			.Because("each owned handle builds a fresh instance");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Strict_ResolvingAWithheldDisposableTransientFromAScope_Works()
 	{
 		using StrictContainer.Root container = new();
@@ -72,7 +72,7 @@ public partial class StrictModeTests
 			.Because("strict withholds the disposable transient on the container root, but a child scope can still resolve it by type - its lifetime is bounded by the scope, so there is no root accumulation");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Strict_ADisposableTransientResolvedFromAScope_IsDisposedWithTheScope()
 	{
 		using StrictContainer.Root container = new();
@@ -89,7 +89,7 @@ public partial class StrictModeTests
 			.Because("the scope tracks the transient it built and disposes it when the scope is disposed - the leak the root would suffer is bounded here");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Strict_ResolvingTheWithheldPlainFuncFromAScope_BuildsFreshInstancesBoundToTheScope()
 	{
 		using StrictContainer.Root container = new();
@@ -111,7 +111,7 @@ public partial class StrictModeTests
 		await That(second.Disposed).IsTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Strict_TheScopeBoundFunc_StillThrowsWhenResolvedFromTheRoot()
 	{
 		using StrictContainer.Root container = new();
@@ -120,7 +120,7 @@ public partial class StrictModeTests
 			.Because("the plain Func remains withheld on the root - only the scope path is opened up, so the leak stays impossible");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Strict_ResolvingTheWithheldParameterizedFuncFromAScope_BuildsFreshInstancesBoundToTheScope()
 	{
 		using StrictContainer.Root container = new();
@@ -144,7 +144,7 @@ public partial class StrictModeTests
 		await That(second.Disposed).IsTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Strict_TheScopeBoundParameterizedFunc_StillThrowsWhenResolvedFromTheRoot()
 	{
 		using StrictContainer.Root container = new();
@@ -153,7 +153,7 @@ public partial class StrictModeTests
 			.Because("the parameterized Func over a disposable service remains withheld on the root - only the scope path is opened up, so the leak stays impossible");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Strict_InjectingADisposableTransientDirectly_IsAllowed()
 	{
 		using StrictContainer.Root container = new();
@@ -165,7 +165,7 @@ public partial class StrictModeTests
 			.Because("constructor injection of a disposable transient is bounded and stays allowed");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Strict_ResolvingAReleaseHookedPooledTransientByType_ThrowsGuidance()
 	{
 		using PooledContainer.Root container = new();
@@ -174,7 +174,7 @@ public partial class StrictModeTests
 			.Because("a release-hooked transient is withheld like a disposable one: each resolve queues a release closure that retains the instance on the root, so a SuppressDisposal pooled transient accumulates there the same way");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Strict_ThePlainFuncOverAReleaseHookedPooledTransient_IsWithheldOnTheRoot()
 	{
 		using PooledContainer.Root container = new();
@@ -183,7 +183,7 @@ public partial class StrictModeTests
 			.Because("each call to a root-bound Func over a release-hooked transient queues another release closure on the root, accumulating for the container's lifetime");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Strict_AReleaseHookedPooledTransient_ResolvesThroughOwned_AndIsReleasedNotDisposed()
 	{
 		PooledContainer.Returned.Clear();
@@ -201,7 +201,7 @@ public partial class StrictModeTests
 			.Because("SuppressDisposal keeps the container from disposing the pooled instance it released");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Strict_ASuppressedDisposableTransientWithoutAReleaseHook_ResolvesOnTheRoot()
 	{
 		Loner loner;
@@ -217,7 +217,7 @@ public partial class StrictModeTests
 			.Because("the container never disposes a SuppressDisposal instance; its teardown belongs to the caller");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Loose_ResolvingADisposableTransientByType_Works()
 	{
 		using LooseContainer.Root container = new();
@@ -228,7 +228,7 @@ public partial class StrictModeTests
 			.Because("Loose lifetime safety keeps a disposable transient resolvable by type, like MS.DI");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Strict_SingletonHoldingLazyOfADisposableTransient_ForcingBuildsIt()
 	{
 		using LazyContainer.Root container = new();

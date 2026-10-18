@@ -6,11 +6,11 @@ namespace Awaiten.Tests;
 /// </summary>
 public sealed class AwaitenExternalDependencyTests
 {
-	[Fact]
+	[Test]
 	public async Task Constructor_NullServiceType_Throws()
 		=> await That(() => _ = new AwaitenExternalDependency(null!)).Throws<ArgumentNullException>();
 
-	[Fact]
+	[Test]
 	public async Task Constructor_ExposesServiceTypeAndKey()
 	{
 		AwaitenExternalDependency dependency = new(typeof(int), "utc");
@@ -19,7 +19,7 @@ public sealed class AwaitenExternalDependencyTests
 		await That(dependency.Key).IsEqualTo("utc");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Key_IsNullWhenOmitted()
 	{
 		AwaitenExternalDependency dependency = new(typeof(int));
@@ -27,7 +27,7 @@ public sealed class AwaitenExternalDependencyTests
 		await That(dependency.Key).IsNull();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Equals_TrueForSameServiceTypeAndKey()
 	{
 		AwaitenExternalDependency a = new(typeof(int), "utc");
@@ -40,7 +40,7 @@ public sealed class AwaitenExternalDependencyTests
 		await That(a.GetHashCode()).IsEqualTo(b.GetHashCode());
 	}
 
-	[Fact]
+	[Test]
 	public async Task Equals_TrueForTwoUnkeyedOfTheSameType()
 	{
 		AwaitenExternalDependency a = new(typeof(int));
@@ -51,7 +51,7 @@ public sealed class AwaitenExternalDependencyTests
 			.Because("a null key hashes consistently");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Equals_FalseForDifferentServiceType()
 	{
 		AwaitenExternalDependency a = new(typeof(int));
@@ -62,7 +62,7 @@ public sealed class AwaitenExternalDependencyTests
 		await That(a != b).IsTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Equals_FalseForDifferentKey()
 	{
 		AwaitenExternalDependency a = new(typeof(int), "utc");
@@ -72,7 +72,7 @@ public sealed class AwaitenExternalDependencyTests
 		await That(a != b).IsTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Equals_FalseWhenOneKeyIsNull()
 	{
 		AwaitenExternalDependency keyed = new(typeof(int), "utc");
@@ -81,7 +81,7 @@ public sealed class AwaitenExternalDependencyTests
 		await That(keyed.Equals(unkeyed)).IsFalse();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Equals_Object_FalseForOtherType()
 	{
 		AwaitenExternalDependency dependency = new(typeof(int));

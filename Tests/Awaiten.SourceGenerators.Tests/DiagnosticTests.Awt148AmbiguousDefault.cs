@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt148AmbiguousDefault
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenTwoDefaultsProvideTheSameServiceWithNoStrongOverride()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -38,7 +38,7 @@ public partial class DiagnosticTests
 				.Because("two overridable defaults provide IClock and neither is overridden by a strong registration");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenAStrongRegistrationOverridesTheDefaults()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -72,7 +72,7 @@ public partial class DiagnosticTests
 				.Because("a strong registration overrides both defaults, so which default would have won is moot");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForSilentFallbackCollisions()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -104,7 +104,7 @@ public partial class DiagnosticTests
 				.Because("Fallback.Silent opts out of the ambiguity warning: the first contributor simply wins");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenAWarnFallbackLosesToAnEarlierSilentFallback()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -141,7 +141,7 @@ public partial class DiagnosticTests
 				.Because("the losing default is dropped in full");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsOncePerLosingDefault_ForThreeCollidingDefaults()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -179,7 +179,7 @@ public partial class DiagnosticTests
 				.Because("each losing default is reported once; the first-declared default wins");
 		}
 
-		[Fact]
+		[Test]
 		public async Task Keyed_ReportsOnlyWhenTheDefaultsShareTheKey()
 		{
 			GeneratorResult result = Generator.Run("""

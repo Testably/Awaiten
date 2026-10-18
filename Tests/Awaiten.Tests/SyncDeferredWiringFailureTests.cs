@@ -11,7 +11,7 @@ namespace Awaiten.Tests;
 /// </summary>
 public partial class SyncDeferredWiringFailureTests
 {
-	[Fact]
+	[Test]
 	public async Task Singleton_DeferredMemberThrows_OwnerIsDisposedOnce()
 	{
 		using SingletonContainer.Root container = new();
@@ -23,7 +23,7 @@ public partial class SyncDeferredWiringFailureTests
 		await That(recorder.Disposed).IsEqualTo(1).Because("the owner must not leak when deferred wiring throws");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Singleton_FailedWiringIsRolledBack_RetryBuildsAFreshInstance()
 	{
 		using SingletonFlakyContainer.Root container = new();
@@ -41,7 +41,7 @@ public partial class SyncDeferredWiringFailureTests
 	// A disposable transient is withheld from by-type resolution off the Root in strict mode (steered to
 	// Owned<T>), so the transient test resolves from a child scope, where transient disposables are bounded
 	// by the scope.
-	[Fact]
+	[Test]
 	public async Task Transient_DeferredMemberThrows_OwnerIsDisposedOnce()
 	{
 		using TransientContainer.Root container = new();
@@ -57,7 +57,7 @@ public partial class SyncDeferredWiringFailureTests
 	// A peer built and registered in an earlier step of the same failed wiring episode is unpublished by the
 	// rollback but must not be disposed there: it stays tracked and is disposed exactly once at teardown, so
 	// the per-frame failure cleanup never disposes an already-registered instance twice.
-	[Fact]
+	[Test]
 	public async Task DeferredWiringThrows_AfterAPeerWasRegistered_PeerIsDisposedOnceAtTeardown()
 	{
 		using PeerContainer.Root container = new();

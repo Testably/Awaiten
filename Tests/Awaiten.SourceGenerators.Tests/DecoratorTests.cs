@@ -9,7 +9,7 @@ namespace Awaiten.SourceGenerators.Tests;
 /// </summary>
 public class DecoratorTests
 {
-	[Fact]
+	[Test]
 	public async Task Decorator_EmitsTheChainedDispatchOutermostFirst()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -53,7 +53,7 @@ public class DecoratorTests
 			.Because("the bare implementation is no longer publicly dispatched, only the decorator chain is");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Decorator_WrapsEachRegistrationOfAMultiplyRegisteredService()
 	{
 		GeneratorResult result = Generator.Run("""

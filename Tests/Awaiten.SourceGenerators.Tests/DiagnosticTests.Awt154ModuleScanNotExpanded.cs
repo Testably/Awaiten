@@ -4,7 +4,7 @@ public partial class DiagnosticTests
 {
 	public class Awt154ModuleScanNotExpanded
 	{
-		[Fact]
+		[Test]
 		public async Task Awt154_ReportsWhenTheModuleAssemblyWasBuiltWithoutTheGenerator()
 		{
 			GeneratorResult result = Generator.RunWithReferencedAssembly("""
@@ -39,7 +39,7 @@ public partial class DiagnosticTests
 				.Because("the module's metadata carries a [Scan] but no generated expansion marker, so the scan would silently contribute nothing; the module declaring another registration must not mask that");
 		}
 
-		[Fact]
+		[Test]
 		public async Task Awt154_ReportsForAScanOnlyModuleWithoutMisleadingAwt151()
 		{
 			GeneratorResult result = Generator.RunWithReferencedAssembly("""
@@ -72,7 +72,7 @@ public partial class DiagnosticTests
 				.Because("a module declaring a [Scan] is not an empty module; AWT154 names the real problem instead");
 		}
 
-		[Fact]
+		[Test]
 		public async Task NoAwt154WhenTheGeneratorExpandedAScanThatMatchedNothing()
 		{
 			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly("""

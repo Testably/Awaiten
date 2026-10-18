@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt102DependencyCycle
 	{
-		[Fact]
+		[Test]
 		public async Task IsBrokenByAFuncDependency()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -30,7 +30,7 @@ public partial class DiagnosticTests
 				.Because("the Func<B> defers resolution, so the A -> B -> A edge is not a hard cycle");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWithThePath()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -54,7 +54,7 @@ public partial class DiagnosticTests
 			await That(cycleDiagnostics).Contains("*->*").AsWildcard();
 		}
 
-		[Fact]
+		[Test]
 		public async Task IsClosedByABareOwnedDependency()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -77,7 +77,7 @@ public partial class DiagnosticTests
 				.Because("a bare Owned<T> resolves its target at construction time, so the A -> B -> A cycle overflows rather than being broken");
 		}
 
-		[Fact]
+		[Test]
 		public async Task IsClosedByABareTaskDependency()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -101,7 +101,7 @@ public partial class DiagnosticTests
 				.Because("a bare Task<T> over a synchronous target is Task.FromResult(resolver()), resolved eagerly, so the A -> B -> A cycle overflows");
 		}
 
-		[Fact]
+		[Test]
 		public async Task IsClosedByABareTaskDependencyEvenWhenTheTargetIsAsyncInitialized()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -134,7 +134,7 @@ public partial class DiagnosticTests
 				.Because("the async resolver constructs (and so resolves the bare Task<T>) in its synchronous prefix, before the memoized task is published, so an async target overflows the same way");
 		}
 
-		[Fact]
+		[Test]
 		public async Task IsBrokenByAFuncOfTaskDependency()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -164,7 +164,7 @@ public partial class DiagnosticTests
 				.Because("a Func<Task<B>> stores a closure and defers resolution, so the A -> B -> A edge is not a construction cycle");
 		}
 
-		[Fact]
+		[Test]
 		public async Task IsClosedByAKeyedDictionaryMember()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -189,7 +189,7 @@ public partial class DiagnosticTests
 				.Because("a keyed dictionary materializes its members eagerly during construction, so a member depending back on the consumer is a hard cycle");
 		}
 
-		[Fact]
+		[Test]
 		public async Task IsClosedByAnAwaitedKeyedDictionaryMember()
 		{
 			GeneratorResult result = Generator.Run("""

@@ -12,7 +12,7 @@ namespace Awaiten.Tests;
 /// </summary>
 public partial class CompositeTests
 {
-	[Fact]
+	[Test]
 	public async Task Resolve_ReturnsTheComposite_NotABareChannel()
 	{
 		using NotifierContainer.Root container = new();
@@ -22,7 +22,7 @@ public partial class CompositeTests
 		await That(notifier).Is<CompositeNotifier>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Composite_FansOutToEveryOtherRegistration_NotItself()
 	{
 		using NotifierContainer.Root container = new();
@@ -36,7 +36,7 @@ public partial class CompositeTests
 		await That(composite.Send("hi")).IsEqualTo("email:hi|sms:hi|push:hi");
 	}
 
-	[Fact]
+	[Test]
 	public async Task SeparateConsumer_RequestingTheCollection_GetsTheBareChannels_NotTheComposite()
 	{
 		using NotifierContainer.Root container = new();
@@ -49,7 +49,7 @@ public partial class CompositeTests
 		await That(channels.Any(c => c is CompositeNotifier)).IsFalse();
 	}
 
-	[Fact]
+	[Test]
 	public async Task InjectedConsumer_ReceivesTheComposite()
 	{
 		using ConsumerContainer.Root container = new();
@@ -60,7 +60,7 @@ public partial class CompositeTests
 		await That(order.Notify("ok")).IsEqualTo("email:ok|sms:ok");
 	}
 
-	[Fact]
+	[Test]
 	public async Task CompositeOverZeroMembers_FansOutToAnEmptyCollection()
 	{
 		using EmptyContainer.Root container = new();
@@ -71,7 +71,7 @@ public partial class CompositeTests
 		await That(composite.Send("x")).IsEqualTo(string.Empty);
 	}
 
-	[Fact]
+	[Test]
 	public async Task Composite_FrontsTheDecoratedMembers_WhenTheServiceIsAlsoDecorated()
 	{
 		using DecoratedMembersContainer.Root container = new();
@@ -83,7 +83,7 @@ public partial class CompositeTests
 			.Because("a composite fronts the decorated members");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Composite_DefaultsToTransient_FreshInstancePerResolve()
 	{
 		using NotifierContainer.Root container = new();
@@ -94,7 +94,7 @@ public partial class CompositeTests
 		await That(first).IsNotSameAs(second);
 	}
 
-	[Fact]
+	[Test]
 	public async Task Composite_HonorsAnExplicitSingletonLifetime()
 	{
 		using SingletonCompositeContainer.Root container = new();
@@ -105,7 +105,7 @@ public partial class CompositeTests
 		await That(first).IsSameAs(second);
 	}
 
-	[Fact]
+	[Test]
 	public async Task MultipleComposites_OverDifferentServices_EachFanOutOverItsOwnMembers()
 	{
 		using MultiServiceContainer.Root container = new();

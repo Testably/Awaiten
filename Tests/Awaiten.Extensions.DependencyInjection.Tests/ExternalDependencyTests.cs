@@ -60,7 +60,7 @@ public sealed partial class ExternalDependencyTests
 		}
 	}
 
-	[Fact]
+	[Test]
 	public async Task AwaitenService_ResolvesMsDiOwnedDependencyAcrossTheSeam()
 	{
 		ServiceCollection services = new();
@@ -73,7 +73,7 @@ public sealed partial class ExternalDependencyTests
 		await That(reporter.Report()).IsEqualTo("noon");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ImportServices_ResolvesUnannotatedDependencyFromHost()
 	{
 		ServiceCollection services = new();
@@ -86,7 +86,7 @@ public sealed partial class ExternalDependencyTests
 		await That(reporter.Report()).IsEqualTo("noon");
 	}
 
-	[Fact]
+	[Test]
 	public async Task MissingExternalRegistration_ThrowsWhenResolved()
 	{
 		ServiceCollection services = new();
@@ -96,7 +96,7 @@ public sealed partial class ExternalDependencyTests
 		await That(() => provider.GetRequiredService<TimeReporter>()).Throws<InvalidOperationException>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task StandaloneContainer_UsesExplicitlyWiredExternalResolver()
 	{
 		using ExternalContainer.Root container = new();
@@ -107,7 +107,7 @@ public sealed partial class ExternalDependencyTests
 		await That(reporter.Report()).IsEqualTo("noon");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Container_AdvertisesExternalDependencies()
 	{
 		using ExternalContainer.Root container = new();
@@ -116,7 +116,7 @@ public sealed partial class ExternalDependencyTests
 			.Contains(new AwaitenExternalDependency(typeof(IClock)));
 	}
 
-	[Fact]
+	[Test]
 	public async Task Container_AdvertisesTheKeyOfAKeyedExternalDependency()
 	{
 		using KeyedExternalContainer.Root container = new();
@@ -147,7 +147,7 @@ public sealed partial class ExternalDependencyTests
 		}
 	}
 
-	[Fact]
+	[Test]
 	public async Task ExternallySuppliedInstance_IsNotDisposedWithTheContainer()
 	{
 		DisposableClock clock = new();
@@ -162,7 +162,7 @@ public sealed partial class ExternalDependencyTests
 		await That(clock.Disposed).IsFalse();
 	}
 
-	[Fact]
+	[Test]
 	public async Task ChildScope_FallsBackToTheRootsExternalResolver()
 	{
 		using ScopedExternalContainer.Root container = new();
@@ -186,7 +186,7 @@ public sealed partial class ExternalDependencyTests
 	[Scoped<ScopedReporter>]
 	public static partial class ScopedExternalContainer;
 
-	[Fact]
+	[Test]
 	public async Task ScopedExternalDependency_ResolvesFromTheAlignedScope()
 	{
 		ServiceCollection services = new();
@@ -225,7 +225,7 @@ public sealed partial class ExternalDependencyTests
 	[Scoped<ReporterUser>]
 	public static partial class OwnedExternalContainer;
 
-	[Fact]
+	[Test]
 	public async Task OwnedResolution_UsesTheCreatingScopesExternalResolver()
 	{
 		ServiceCollection services = new();
@@ -255,7 +255,7 @@ public sealed partial class ExternalDependencyTests
 	[Singleton<KeyedReporter>]
 	public static partial class KeyedExternalContainer;
 
-	[Fact]
+	[Test]
 	public async Task KeyedExternalDependency_ResolvesTheKeyedHostService()
 	{
 		FixedClock utc = new();

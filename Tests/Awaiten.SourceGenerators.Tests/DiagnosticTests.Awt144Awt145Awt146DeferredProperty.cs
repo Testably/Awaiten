@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt144Awt145Awt146DeferredProperty
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsAwt144WhenDeferredPropertyIsInitOnly()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -33,7 +33,7 @@ public partial class DiagnosticTests
 				.Because("a deferred property is assigned after construction, so it needs a set accessor - an init-only accessor can only be assigned in an object initializer");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsAwt144WhenDeferredPropertyIsRequired()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -61,7 +61,7 @@ public partial class DiagnosticTests
 				.Because("a required member can only be satisfied inside an object initializer, which is exactly the construction-time path a deferred property must avoid - it deserves the targeted diagnostic, not CS9035 in generated code");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsAwt145WhenADeferredCycleIncludesATransient()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -85,7 +85,7 @@ public partial class DiagnosticTests
 				.Because("a deferred property breaks a cycle only when the owning instance is cached; a transient is rebuilt on each resolve, so the cycle would recurse forever");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsAwt145ForASelfReferentialTransientDeferredProperty()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -108,7 +108,7 @@ public partial class DiagnosticTests
 				.Because("a self-referential deferred property on a transient is a one-node cycle with nothing cached, so it cannot terminate");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ASelfReferentialSingletonDeferredProperty_DoesNotReportAwt145OrAwt146()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -131,7 +131,7 @@ public partial class DiagnosticTests
 				.Because("a self-referential deferred property on a cached singleton terminates and is supported");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsAwt145WhenADeferredCycleClosesThroughACollectionMember()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -157,7 +157,7 @@ public partial class DiagnosticTests
 				.Because("a deferred collection member is materialized eagerly, so a transient cycle closed through it recurses forever exactly like a direct member");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ASynchronousSingletonDeferredCycle_DoesNotReportAwt145OrAwt146()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -183,7 +183,7 @@ public partial class DiagnosticTests
 				.Because("a synchronous singleton (or scoped) deferred cycle is cached before it is wired, so it terminates and is supported");
 		}
 
-		[Fact]
+		[Test]
 		public async Task AMixedLifetimeDeferredCycle_WithOneCachedParticipant_DoesNotReportAwt145()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -212,7 +212,7 @@ public partial class DiagnosticTests
 				.Because("the mixed cycle is supported: no AWT102 (deferred edges are absent from the construction graph), AWT146 (nothing async) or AWT147 (no construction edge) either");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsAwt146WhenADeferredCycleIncludesAnAsyncService()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -249,7 +249,7 @@ public partial class DiagnosticTests
 				.Because("both participants are singletons, so the fault is the async one (AWT146), not the transient one (AWT145)");
 		}
 
-		[Fact]
+		[Test]
 		public async Task AnAsyncNonCyclicDeferredProperty_DoesNotReportAwt146()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -283,7 +283,7 @@ public partial class DiagnosticTests
 				.Because("a deferred member is only rejected when it closes a cycle through an async service, not for any async deferred member");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsAwt147WhenAMixedCycleStillTraversesAConstructorEdge()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -311,7 +311,7 @@ public partial class DiagnosticTests
 				.Because("the deferred edge is absent from the construction graph, so AWT102 does not fire - AWT147 is the diagnostic that catches this");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsAwt147ForAMixedCycleThroughAPlainInjectProperty_RegardlessOfLifetime()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -339,7 +339,7 @@ public partial class DiagnosticTests
 				.Because("the deferred edge keeps the cycle out of the construction graph, so AWT102 does not fire");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsAwt147WhenAMixedCycleTraversesAnEagerOwned()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -367,7 +367,7 @@ public partial class DiagnosticTests
 				.Because("the construction graph has only the Right -> Left edge (the deferred Left -> Right edge is absent), so it holds no cycle for AWT102");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsAwt147WhenAFaultyMixedCycleOverlapsASupportedDeferredCycle()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -404,7 +404,7 @@ public partial class DiagnosticTests
 				.Because("the construction graph holds only Beta -> Gamma, which is acyclic, so AWT102 stays silent - AWT147 is the diagnostic that must catch this");
 		}
 
-		[Fact]
+		[Test]
 		public async Task AConstructionEdgeFromATransient_WithACachedParticipant_IsSupported()
 		{
 			GeneratorResult result = Generator.Run("""

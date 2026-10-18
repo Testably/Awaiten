@@ -15,7 +15,7 @@ public partial class EnumKeyedTests
 		PayPal,
 	}
 
-	[Fact]
+	[Test]
 	public async Task FromKeyEnum_SelectsTheImplementationRegisteredUnderThatEnumConstant()
 	{
 		using GatewayContainer.Root container = new();
@@ -28,7 +28,7 @@ public partial class EnumKeyedTests
 			.Because("the [FromKey(PaymentProvider.PayPal)] parameter resolves the implementation keyed PayPal");
 	}
 
-	[Fact]
+	[Test]
 	public async Task EnumKeyAndEqualStringKey_AreDistinctKeys()
 	{
 		using MixedKeyContainer.Root container = new();
@@ -43,7 +43,7 @@ public partial class EnumKeyedTests
 			.Because("the string \"Stripe\" is a distinct key from the enum PaymentProvider.Stripe");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ResolveWithEnumKey_ThroughTheGenericConvenience_SelectsTheEnumKeyedRegistration()
 	{
 		using GatewayContainer.Root container = new();
@@ -57,7 +57,7 @@ public partial class EnumKeyedTests
 			.Because("TryResolve<T>(PaymentProvider.PayPal, out _) selects the enum-keyed registration");
 	}
 
-	[Fact]
+	[Test]
 	public async Task EnumKeyedDictionary_SynthesizesKeyedByTheEnumConstant()
 	{
 		using GatewayContainer.Root container = new();
@@ -72,7 +72,7 @@ public partial class EnumKeyedTests
 			.Because("the dictionary is keyed by the enum constant the registration used");
 	}
 
-	[Fact]
+	[Test]
 	public async Task EnumKeyedDictionary_InjectedIntoAConsumer_ResolvesEveryEnumKeyedRegistration()
 	{
 		using GatewayContainer.Root container = new();

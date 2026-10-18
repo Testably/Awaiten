@@ -46,7 +46,7 @@ public class SelfCompiledModuleScanTests
 	                                     public static partial class PluginModule { }
 	                                     """;
 
-	[Fact]
+	[Test]
 	public async Task ModuleSelfCompilesItsScanIntoAFactory()
 	{
 		(_, Microsoft.CodeAnalysis.GeneratorDriverRunResult run) =
@@ -66,7 +66,7 @@ public class SelfCompiledModuleScanTests
 			.Because("the factory returns the interface but constructs the internal implementation in the library, with verbatim-prefixed parameter names so keyword-named parameters stay legal");
 	}
 
-	[Fact]
+	[Test]
 	public async Task NullableConstructorParameterKeepsItsAnnotationOnTheFactory()
 	{
 		(_, Microsoft.CodeAnalysis.GeneratorDriverRunResult run) = Generator.RunGenerator("""
@@ -97,7 +97,7 @@ public class SelfCompiledModuleScanTests
 			.Because("the generated public factory must mirror the scanned constructor exactly, keeping the nullable annotation rather than widening the dependency to non-nullable");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ConsumerResolvesTheInternalImplementationThroughItsInterface()
 	{
 		GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(LibrarySource, """
@@ -126,7 +126,7 @@ public class SelfCompiledModuleScanTests
 			.Because("a [Scan] on a module is now supported, not rejected");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ConsumerOverridesTheGeneratedRegistration()
 	{
 		GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(LibrarySource, """
@@ -153,7 +153,7 @@ public class SelfCompiledModuleScanTests
 			.Because("the container's own registration wins the IRoaster slot");
 	}
 
-	[Fact]
+	[Test]
 	public async Task InternalDisposableImplementationIsDisposedThroughTheRuntimeCheck()
 	{
 		GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly("""
@@ -211,7 +211,7 @@ public class SelfCompiledModuleScanTests
 	                                          public static partial class PluginModule { }
 	                                          """;
 
-	[Fact]
+	[Test]
 	public async Task MultipleMatchesUnderOneInterfaceResolveAsACollection()
 	{
 		GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(PluginFamilySource, """
@@ -243,7 +243,7 @@ public class SelfCompiledModuleScanTests
 			.Because("the second match is a member of the IEnumerable<IPlugin> collection too, exactly as a container scan would collect them");
 	}
 
-	[Fact]
+	[Test]
 	public async Task MultipleMatchesUnderOneInterfaceDoNotConflict()
 	{
 		GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(PluginFamilySource, """
@@ -263,7 +263,7 @@ public class SelfCompiledModuleScanTests
 			.Because("self-compiled scan matches are collection-eligible, not conflicting single-service factories");
 	}
 
-	[Fact]
+	[Test]
 	public async Task TwoModulesWithSameNamedMatchesUnderOneInterfaceBothCollect()
 	{
 		GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly("""
@@ -319,7 +319,7 @@ public class SelfCompiledModuleScanTests
 			.Because("module B's match must not be deduped away by sharing module A's factory name, and the name hash keeps same-named matches distinct");
 	}
 
-	[Fact]
+	[Test]
 	public async Task SameCompilationModuleScanIsExpandedByTheContainer()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -357,7 +357,7 @@ public class SelfCompiledModuleScanTests
 			.Because("with no assembly boundary the container constructs the internal match directly, as if the [Scan] were its own");
 	}
 
-	[Fact]
+	[Test]
 	public async Task SameCompilationModuleScanReportsScanDiagnosticsOnce()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -380,7 +380,7 @@ public class SelfCompiledModuleScanTests
 			.Because("the module pipeline and the container both see the same [Scan], but only the module pipeline reports on it");
 	}
 
-	[Fact]
+	[Test]
 	public async Task KeywordNamedConstructorParameterCompilesAndResolves()
 	{
 		GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly("""
@@ -419,7 +419,7 @@ public class SelfCompiledModuleScanTests
 			.Because("a keyword-named constructor parameter must be emitted verbatim-prefixed, not break the module's build");
 	}
 
-	[Fact]
+	[Test]
 	public async Task OverlappingScansOnOneModuleEmitASingleFactoryPerMatch()
 	{
 		(_, Microsoft.CodeAnalysis.GeneratorDriverRunResult run) = Generator.RunGenerator("""
@@ -447,7 +447,7 @@ public class SelfCompiledModuleScanTests
 			.Because("the second scan matched the same type under the same exposure, which a container would dedup to one collection member, so only one factory is emitted");
 	}
 
-	[Fact]
+	[Test]
 	public async Task SkipUnconstructableMatchIsPrunedAtTheConsumer()
 	{
 		GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly("""
@@ -529,7 +529,7 @@ public class SelfCompiledModuleScanTests
 	                                              }
 	                                              """;
 
-	[Fact]
+	[Test]
 	public async Task ContainerScanOutranksACrossAssemblyModuleScanForTheSameService()
 	{
 		GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(RoasterProviderLibrarySource, ScanningConsumerSource);
@@ -540,7 +540,7 @@ public class SelfCompiledModuleScanTests
 			.Because("within the scan tier the container's own [Scan] match wins the IRoaster slot over an imported module's, the container winning ties like everywhere else");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ContainerScanOutranksASameCompilationModuleScanForTheSameService()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -579,7 +579,7 @@ public class SelfCompiledModuleScanTests
 			.Because("a same-compilation module's scan match ranks exactly like a cross-assembly one, below the container's own [Scan], so packaging the module differently never flips the winner");
 	}
 
-	[Fact]
+	[Test]
 	public async Task SameCompilationMatchWithoutAccessibleExposureIsSkippedLikeAcrossAssemblies()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -607,7 +607,7 @@ public class SelfCompiledModuleScanTests
 			.Because("the AWT196-warned match must actually be skipped, also by a same-compilation container, so the warning and the behavior agree and the module scan registers the same matches wherever the module is imported from");
 	}
 
-	[Fact]
+	[Test]
 	public async Task SameCompilationMatchConstructsThroughTheGreediestConstructor()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -638,7 +638,7 @@ public class SelfCompiledModuleScanTests
 			.Because("a same-compilation module-scan match builds through the greediest accessible constructor, the one the generated factory mirrors, instead of quietly falling back to a smaller one the local graph satisfies");
 	}
 
-	[Fact]
+	[Test]
 	public async Task CrossAssemblyMatchConstructsThroughTheGreediestConstructor()
 	{
 		GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly("""
@@ -674,7 +674,7 @@ public class SelfCompiledModuleScanTests
 			.Because("the generated factory mirrors the greediest accessible constructor, so the consumer sees the same missing dependency a same-compilation import reports");
 	}
 
-	[Fact]
+	[Test]
 	public async Task OverlappingScansWithDifferentLifetimesReportAwt142()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -713,7 +713,7 @@ public class SelfCompiledModuleScanTests
 	                                                         public static partial class PluginModule { }
 	                                                         """;
 
-	[Fact]
+	[Test]
 	public async Task PerMatchScanDiagnosticsLandInTheLibrarysBuildAndNotTheConsumers()
 	{
 		(_, Microsoft.CodeAnalysis.GeneratorDriverRunResult libraryRun) =

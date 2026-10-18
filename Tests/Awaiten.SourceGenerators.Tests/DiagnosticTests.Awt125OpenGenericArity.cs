@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt125OpenGenericArity
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenTheImplementationAndServiceHaveDifferentArity()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -29,7 +29,7 @@ public partial class DiagnosticTests
 				.Because("the open implementation's arity must match the service's, so a closed service can be re-mapped onto the implementation");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenTheArityMatches()
 		{
 			GeneratorResult result = Generator.Run("""

@@ -13,9 +13,9 @@ namespace Awaiten.Tests;
 /// </summary>
 public partial class PropertyInjectionTests
 {
-	private static CancellationToken Ct => TestContext.Current.CancellationToken;
+	private static CancellationToken Ct => TestContext.Current!.Execution.CancellationToken;
 
-	[Fact]
+	[Test]
 	public async Task InjectSettableProperty_IsFilled()
 	{
 		using InjectContainer.Root container = new();
@@ -25,7 +25,7 @@ public partial class PropertyInjectionTests
 		await That(logger.Bus).Is<Bus>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task PlainProperty_WithoutInject_IsNotFilled()
 	{
 		using InjectContainer.Root container = new();
@@ -36,7 +36,7 @@ public partial class PropertyInjectionTests
 			.Because("property injection is opt-in: a property without [Inject] is left to the caller");
 	}
 
-	[Fact]
+	[Test]
 	public async Task InheritedInjectProperty_OnABaseType_IsFilled()
 	{
 		using InheritedContainer.Root container = new();
@@ -47,7 +47,7 @@ public partial class PropertyInjectionTests
 			.Because("the base-type walk finds a plain inherited [Inject] property, so it is filled without re-annotating on the derived type ([Inject] stays Inherited = false; this is not attribute inheritance)");
 	}
 
-	[Fact]
+	[Test]
 	public async Task OverriddenProperty_WithoutInject_IsNotFilled()
 	{
 		using OverrideContainer.Root container = new();
@@ -58,7 +58,7 @@ public partial class PropertyInjectionTests
 			.Because("[Inject] is Inherited = false: an override that does not repeat [Inject] shadows the base declaration, so the most-derived one wins and injection is skipped - the override keeps full control to opt out");
 	}
 
-	[Fact]
+	[Test]
 	public async Task FromKeyProperty_SelectsTheKeyedRegistration()
 	{
 		using KeyedContainer.Root container = new();
@@ -69,7 +69,7 @@ public partial class PropertyInjectionTests
 		await That(consumer.Backup).Is<SlowChannel>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task RelationshipProperty_DefersResolution()
 	{
 		using RelationshipContainer.Root container = new();
@@ -80,7 +80,7 @@ public partial class PropertyInjectionTests
 			.Because("a Func<T> injected property defers to the target's resolver, just like a constructor parameter");
 	}
 
-	[Fact]
+	[Test]
 	public async Task CollectionProperty_ResolvesEveryRegistration()
 	{
 		using CollectionContainer.Root container = new();
@@ -91,7 +91,7 @@ public partial class PropertyInjectionTests
 			.IsEqualTo(new[] { typeof(Alpha), typeof(Beta), }).InAnyOrder();
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncInitializedProperty_IsAwaitedThroughTheAsyncSurface()
 	{
 		using AsyncContainer.Root container = new();
@@ -104,7 +104,7 @@ public partial class PropertyInjectionTests
 		await That(consumer.Connection!.Initialized).IsTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task DeferredProperty_BreaksAMutualSingletonCycle_AndWiresBothBackReferences()
 	{
 		using DeferredCycleContainer.Root container = new();
@@ -118,7 +118,7 @@ public partial class PropertyInjectionTests
 		await That(order.Invoice!.Order).IsSameAs(order);
 	}
 
-	[Fact]
+	[Test]
 	public async Task DeferredProperty_IsAssignedExactlyOnce_AndACacheHitDoesNotReassign()
 	{
 		using DeferredCycleContainer.Root container = new();
@@ -132,7 +132,7 @@ public partial class PropertyInjectionTests
 			.Because("the deferred assignment runs once inside the cache-miss block, so a cache hit never reassigns");
 	}
 
-	[Fact]
+	[Test]
 	public async Task DeferredProperty_InANonCyclicGraph_IsStillFilled()
 	{
 		using DeferredNonCyclicContainer.Root container = new();
@@ -142,7 +142,7 @@ public partial class PropertyInjectionTests
 		await That(reader.Bus).Is<Bus>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task DeferredProperty_OnAScopedCycle_ResolvesPerScope()
 	{
 		using ScopedDeferredCycleContainer.Root container = new();
@@ -155,7 +155,7 @@ public partial class PropertyInjectionTests
 		await That(right.Left).IsSameAs(left);
 	}
 
-	[Fact]
+	[Test]
 	public async Task DeferredProperty_ToAnAsyncTarget_MakesOwnerAsyncAndFillsAnInitializedInstance()
 	{
 		using DeferredAsyncTargetContainer.Root container = new();
@@ -341,7 +341,7 @@ public partial class PropertyInjectionTests
 	[Singleton<Reader>]
 	public static partial class DeferredNonCyclicContainer;
 
-	[Fact]
+	[Test]
 	public async Task DeferredProperty_OnAMixedSingletonTransientCycle_Terminates_AndWiresThroughTheCachedSingleton()
 	{
 		using MixedLifetimeCycleContainer.Root container = new();
@@ -389,7 +389,7 @@ public partial class PropertyInjectionTests
 	[Scoped<ScopedRight>]
 	public static partial class ScopedDeferredCycleContainer;
 
-	[Fact]
+	[Test]
 	public async Task DeferredProperty_SelfReferential_OnASingleton_WiresToItself()
 	{
 		using SelfReferentialContainer.Root container = new();
@@ -410,7 +410,7 @@ public partial class PropertyInjectionTests
 	[Singleton<Node>]
 	public static partial class SelfReferentialContainer;
 
-	[Fact]
+	[Test]
 	public async Task DeferredProperty_OnAThreeNodeSingletonCycle_WiresEveryBackReference()
 	{
 		using ThreeNodeCycleContainer.Root container = new();
@@ -450,7 +450,7 @@ public partial class PropertyInjectionTests
 	[Singleton<Ring3>]
 	public static partial class ThreeNodeCycleContainer;
 
-	[Fact]
+	[Test]
 	public async Task DeferredProperty_OverATransientConstructorBackEdge_TerminatesFromBothEntryPoints()
 	{
 		using CtorSpokeContainer.Root container = new();
@@ -487,7 +487,7 @@ public partial class PropertyInjectionTests
 	[Transient<CtorSpoke>]
 	public static partial class CtorSpokeContainer;
 
-	[Fact]
+	[Test]
 	public async Task DeferredProperty_WhenWiringThrows_TheCacheIsRolledBack_AndTheNextResolveRetries()
 	{
 		using FlakyContainer.Root container = new();
@@ -527,7 +527,7 @@ public partial class PropertyInjectionTests
 	[Transient<FlakyDep>]
 	public static partial class FlakyContainer;
 
-	[Fact]
+	[Test]
 	public async Task DeferredProperty_ADependencyFirstBuiltDuringWiring_IsDisposedAfterItsOwner()
 	{
 		DisposeOrder.Clear();
@@ -564,7 +564,7 @@ public partial class PropertyInjectionTests
 	[Singleton<DisposingDep>]
 	public static partial class DisposalOrderContainer;
 
-	[Fact]
+	[Test]
 	public async Task OptionalProperty_WithNoRegistration_IsLeftUnset()
 	{
 		using OptionalUnregisteredContainer.Root container = new();
@@ -575,7 +575,7 @@ public partial class PropertyInjectionTests
 			.Because("an [Inject(Optional = true)] property whose service type is not registered is left at its default rather than being a missing dependency");
 	}
 
-	[Fact]
+	[Test]
 	public async Task OptionalProperty_WithARegistration_IsFilled()
 	{
 		using OptionalRegisteredContainer.Root container = new();
@@ -603,7 +603,7 @@ public partial class PropertyInjectionTests
 	[Transient<OptionalConsumer>]
 	public static partial class OptionalRegisteredContainer;
 
-	[Fact]
+	[Test]
 	public async Task InjectProperty_OnAnOpenGenericImplementation_IsFilledOnTheClosedExpansion()
 	{
 		using OpenGenericInjectContainer.Root container = new();

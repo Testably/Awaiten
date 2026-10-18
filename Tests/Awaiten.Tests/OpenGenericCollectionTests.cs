@@ -13,7 +13,7 @@ namespace Awaiten.Tests;
 /// </summary>
 public partial class OpenGenericCollectionTests
 {
-	[Fact]
+	[Test]
 	public async Task Enumerable_YieldsEveryOpenRegistrationClosedAtTheArgument()
 	{
 		using HandlerContainer.Root container = new();
@@ -27,7 +27,7 @@ public partial class OpenGenericCollectionTests
 		await That(dispatcher.Handled[1]).IsEqualTo("Projection<OrderPlaced>");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Enumerable_IsPubliclyResolvable()
 	{
 		using HandlerContainer.Root container = new();
@@ -41,7 +41,7 @@ public partial class OpenGenericCollectionTests
 		await That(descriptions[1]).IsEqualTo("Projection<OrderPlaced>");
 	}
 
-	[Fact]
+	[Test]
 	public async Task DifferentClosedArgument_YieldsItsOwnClosedSet()
 	{
 		using HandlerContainer.Root container = new();
@@ -53,7 +53,7 @@ public partial class OpenGenericCollectionTests
 		await That(shipped[1].Describe()).IsEqualTo("Projection<OrderShipped>");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ReadOnlyListShape_MaterializesEveryMember()
 	{
 		using HandlerContainer.Root container = new();
@@ -65,7 +65,7 @@ public partial class OpenGenericCollectionTests
 		await That(dispatcher.Handlers[1].Describe()).IsEqualTo("Projection<OrderPlaced>");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ExplicitClosedMember_CoexistsWithOpenExpandedMembers()
 	{
 		using MixedContainer.Root container = new();
@@ -81,7 +81,7 @@ public partial class OpenGenericCollectionTests
 		await That(descriptions).Contains("Audit<OrderPlaced>");
 	}
 
-	[Fact]
+	[Test]
 	public async Task NoOpenRegistrationForElement_ResolvesToEmptyCollection()
 	{
 		using HandlerContainer.Root container = new();
@@ -93,7 +93,7 @@ public partial class OpenGenericCollectionTests
 		await That(notifiers).HasCount(0);
 	}
 
-	[Fact]
+	[Test]
 	public async Task SingletonMembers_AreSharedAcrossResolutions()
 	{
 		using HandlerContainer.Root container = new();
@@ -107,7 +107,7 @@ public partial class OpenGenericCollectionTests
 		await That(ReferenceEquals(first[1], second[1])).IsFalse();
 	}
 
-	[Fact]
+	[Test]
 	public async Task AwaitedSingleService_SeedsOpenGenericExpansion()
 	{
 		using HandlerContainer.Root container = new();
@@ -120,7 +120,7 @@ public partial class OpenGenericCollectionTests
 		await That(handler.Describe()).IsEqualTo("Audit<OrderPlaced>");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AwaitedCollection_YieldsEveryOpenRegistrationClosedAtTheArgument()
 	{
 		using HandlerContainer.Root container = new();

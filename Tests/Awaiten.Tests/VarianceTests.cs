@@ -11,7 +11,7 @@ namespace Awaiten.Tests;
 /// </summary>
 public partial class VarianceTests
 {
-	[Fact]
+	[Test]
 	public async Task Contravariance_RegisteredBaseHandlerSatisfiesDerivedRequest()
 	{
 		using ContravariantContainer.Root container = new();
@@ -23,7 +23,7 @@ public partial class VarianceTests
 		await That(consumer.Handler).Is<DomainEventHandler>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Covariance_RegisteredDerivedFactorySatisfiesBaseRequest()
 	{
 		using CovariantContainer.Root container = new();
@@ -35,7 +35,7 @@ public partial class VarianceTests
 		await That(consumer.Factory).Is<OrderPlacedFactory>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task ExactRegistration_WinsOverVarianceCompatibleOne()
 	{
 		using ExactWinsContainer.Root container = new();
@@ -46,7 +46,7 @@ public partial class VarianceTests
 		await That(consumer.Handler).Is<OrderPlacedHandler>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task InvariantInterface_DoesNotMatchADifferentClosure()
 	{
 		using InvariantContainer.Root container = new();
@@ -58,7 +58,7 @@ public partial class VarianceTests
 		await That(consumer.Store).Is<OrderPlacedStore>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Contravariance_CollectionUnionsVarianceCompatibleRegistrations()
 	{
 		using ContravariantCollectionContainer.Root container = new();
@@ -73,7 +73,7 @@ public partial class VarianceTests
 		await That(handlers[1]).Is<DomainEventHandler>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Contravariance_CollectionWithNoExactMemberYieldsTheVarianceMatch()
 	{
 		using ContravariantCollectionOnlyContainer.Root container = new();
@@ -87,7 +87,7 @@ public partial class VarianceTests
 		await That(handlers[0]).Is<DomainEventHandler>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Covariance_CollectionUnionsVarianceCompatibleRegistrations()
 	{
 		using CovariantCollectionContainer.Root container = new();
@@ -100,7 +100,7 @@ public partial class VarianceTests
 		await That(factories[0]).Is<OrderPlacedFactory>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Contravariance_AwaitedCollectionUnionsVarianceCompatibleRegistrations()
 	{
 		using AwaitedCollectionVarianceContainer.Root container = new();
@@ -116,7 +116,7 @@ public partial class VarianceTests
 		await That(handlers[1]).Is<DomainEventHandler>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task InvariantInterface_CollectionDoesNotPullInADifferentClosure()
 	{
 		using InvariantCollectionContainer.Root container = new();
@@ -129,7 +129,7 @@ public partial class VarianceTests
 		await That(stores[0]).Is<OrderPlacedStore>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task TopLevelDispatch_Contravariance_ResolvesVarianceCompatibleRegistration()
 	{
 		using ContravariantContainer.Root container = new();
@@ -141,7 +141,7 @@ public partial class VarianceTests
 		await That(handler).Is<DomainEventHandler>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task TopLevelDispatch_Covariance_ResolvesVarianceCompatibleRegistration()
 	{
 		using CovariantContainer.Root container = new();
@@ -151,7 +151,7 @@ public partial class VarianceTests
 		await That(factory).Is<OrderPlacedFactory>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task ImperativeResolve_Contravariance_ResolvesVarianceCompatibleRegistration()
 	{
 		using ImperativeContravariantContainer.Root container = new();
@@ -163,7 +163,7 @@ public partial class VarianceTests
 		await That(handler).Is<DomainEventHandler>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task ImperativeResolve_Covariance_ResolvesVarianceCompatibleRegistration()
 	{
 		using ImperativeCovariantContainer.Root container = new();
@@ -173,7 +173,7 @@ public partial class VarianceTests
 		await That(factory).Is<OrderPlacedFactory>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task ImperativeResolve_NearestCandidateWins()
 	{
 		using ImperativeNearestContainer.Root container = new();
@@ -185,7 +185,7 @@ public partial class VarianceTests
 		await That(handler).Is<DomainEventHandler>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task ImperativeResolve_RepeatedRequestsFollowTheMemoizedRoute()
 	{
 		using ImperativeNearestContainer.Root container = new();
@@ -199,7 +199,7 @@ public partial class VarianceTests
 		await That(second).Is<DomainEventHandler>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task ImperativeResolve_ScopedRegistration_ResolvesOnTheRequestingScope()
 	{
 		using ImperativeScopedContainer.Root container = new();
@@ -215,7 +215,7 @@ public partial class VarianceTests
 		await That(routed).IsNotSameAs(scope2.Resolve<IHandler<OrderPlaced>>());
 	}
 
-	[Fact]
+	[Test]
 	public async Task ImperativeResolve_ExactRegistrationWinsOverVariance()
 	{
 		using ExactWinsContainer.Root container = new();
@@ -226,7 +226,7 @@ public partial class VarianceTests
 		await That(handler).Is<OrderPlacedHandler>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task ImperativeResolve_KeyedRegistrationIsNeverACandidate()
 	{
 		using ImperativeKeyedContainer.Root container = new();
@@ -236,7 +236,7 @@ public partial class VarianceTests
 		await That(() => container.Resolve<IHandler<OrderPlaced>>()).Throws<InvalidOperationException>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task ImperativeResolve_ValueTypeClosureThrows()
 	{
 		using ImperativeNearestContainer.Root container = new();
@@ -246,7 +246,7 @@ public partial class VarianceTests
 		await That(() => container.Resolve<IHandler<int>>()).Throws<InvalidOperationException>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task ImperativeResolve_UnboundGenericThrows()
 	{
 		using ImperativeNearestContainer.Root container = new();
@@ -255,7 +255,7 @@ public partial class VarianceTests
 		await That(() => container.Resolve(typeof(IHandler<>))).Throws<InvalidOperationException>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task ImperativeResolve_InvariantInterfaceThrows()
 	{
 		using InvariantContainer.Root container = new();
@@ -265,7 +265,7 @@ public partial class VarianceTests
 		await That(() => container.Resolve<IStore<SpecialDomainEvent>>()).Throws<InvalidOperationException>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Contravariance_NearestCandidateWins()
 	{
 		using NearestContravariantContainer.Root container = new();
@@ -277,7 +277,7 @@ public partial class VarianceTests
 		await That(consumer.Handler).Is<DomainEventHandler>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Covariance_NearestCandidateWins()
 	{
 		using NearestCovariantContainer.Root container = new();
@@ -289,7 +289,7 @@ public partial class VarianceTests
 		await That(consumer.Factory).Is<SpecialDomainEventFactory>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Contravariance_NestedVariantArgumentMatches()
 	{
 		using NestedVarianceContainer.Root container = new();
@@ -301,7 +301,7 @@ public partial class VarianceTests
 		await That(consumer.Handler).Is<EnumerableEventHandler>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Covariance_InterfaceArgumentSatisfiesObjectRequest()
 	{
 		using ObjectRequestContainer.Root container = new();
@@ -313,7 +313,7 @@ public partial class VarianceTests
 		await That(consumer.Provider).Is<HandlerProvider>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Contravariance_FuncRelationshipResolvesVarianceCompatibleRegistration()
 	{
 		using FuncRelationshipContainer.Root container = new();

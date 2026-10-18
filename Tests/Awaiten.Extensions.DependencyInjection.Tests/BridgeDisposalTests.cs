@@ -54,7 +54,7 @@ public sealed partial class BridgeDisposalTests
 	[Scoped<InnerDependency>]
 	public static partial class NestedContainer;
 
-	[Fact]
+	[Test]
 	public async Task ProviderReplacement_MultiServiceSingleton_DisposedExactlyOnce()
 	{
 		MultiServiceContainer.Root container = new();
@@ -70,7 +70,7 @@ public sealed partial class BridgeDisposalTests
 		await That(first.DisposeCount).IsEqualTo(1);
 	}
 
-	[Fact]
+	[Test]
 	public async Task ProviderReplacement_NestedScopedDependency_DisposedWithScope()
 	{
 		using NestedContainer.Root container = new();
@@ -98,7 +98,7 @@ public sealed partial class BridgeDisposalTests
 	[Transient<DisposableTransient>]
 	public static partial class TransientContainer;
 
-	[Fact]
+	[Test]
 	public async Task Projection_DisposableTransient_ResolvesInScope_DisposedOnceWithScope()
 	{
 		ServiceCollection services = new();
@@ -119,7 +119,7 @@ public sealed partial class BridgeDisposalTests
 		await That(first.DisposeCount).IsEqualTo(1);
 	}
 
-	[Fact]
+	[Test]
 	public async Task Projection_DisposableTransient_FromRootProvider_SurfacesTheContainersGuidance()
 	{
 		ServiceCollection services = new();
@@ -157,7 +157,7 @@ public sealed partial class BridgeDisposalTests
 	[Scoped<AsyncDisposableScoped>]
 	public static partial class AsyncDisposalContainer;
 
-	[Fact]
+	[Test]
 	public async Task Projection_AsyncDisposableSingleton_DisposedOnceWithRootProvider()
 	{
 		ServiceCollection services = new();
@@ -173,7 +173,7 @@ public sealed partial class BridgeDisposalTests
 		await That(singleton.DisposeCount).IsEqualTo(1);
 	}
 
-	[Fact]
+	[Test]
 	public async Task Projection_AsyncDisposableScoped_DisposedOnceWithScope()
 	{
 		ServiceCollection services = new();
@@ -213,7 +213,7 @@ public sealed partial class BridgeDisposalTests
 	[Scoped<OrderedDependency>]
 	public static partial class OrderedDisposalContainer;
 
-	[Fact]
+	[Test]
 	public async Task Projection_AwaitedInstance_DisposedBeforeItsSyncRelayedDependency()
 	{
 		OrderedDependency.DisposeOrder.Clear();
@@ -249,7 +249,7 @@ public sealed partial class BridgeDisposalTests
 		internal static readonly ExternalProbe External = new();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Projection_ExternallyOwnedInstance_NotDisposedByProvider()
 	{
 		ServiceCollection services = new();
@@ -284,7 +284,7 @@ public sealed partial class BridgeDisposalTests
 	[Scoped<AsyncOnlyDisposable>]
 	public static partial class AsyncOnlyDisposalContainer;
 
-	[Fact]
+	[Test]
 	public async Task ProviderReplacement_AsyncOnlyDisposable_DisposedThroughAsyncScopeTeardown()
 	{
 		// The scoped AsyncOnlyDisposable only ever lives in the child scope, drained asynchronously below, so

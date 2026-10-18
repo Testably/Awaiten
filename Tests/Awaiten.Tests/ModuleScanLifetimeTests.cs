@@ -10,7 +10,7 @@ namespace Awaiten.Tests;
 /// </summary>
 public partial class ModuleScanLifetimeTests
 {
-	[Fact]
+	[Test]
 	public async Task SingletonMatch_IsOneInstancePerRoot()
 	{
 		using ScanLifetimeContainer.Root first = new();
@@ -24,7 +24,7 @@ public partial class ModuleScanLifetimeTests
 			.Because("the instance is owned by the root that built it, not cached in the library's module type");
 	}
 
-	[Fact]
+	[Test]
 	public async Task SingletonMatch_IsSharedByEveryScopeOfItsRoot()
 	{
 		using ScanLifetimeContainer.Root container = new();
@@ -34,7 +34,7 @@ public partial class ModuleScanLifetimeTests
 			.Because("a scan-declared singleton resolves from the root like any other, rather than being re-created per scope");
 	}
 
-	[Fact]
+	[Test]
 	public async Task TransientMatch_IsANewInstancePerResolve()
 	{
 		using ScanLifetimeContainer.Root container = new();

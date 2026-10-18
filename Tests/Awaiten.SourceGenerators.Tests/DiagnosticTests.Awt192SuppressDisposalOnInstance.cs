@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt192SuppressDisposalOnInstance
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenSuppressDisposalIsSetOnAPreBuiltInstance()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -28,7 +28,7 @@ public partial class DiagnosticTests
 				.Because("the container never disposes a pre-built instance, so suppressing that disposal is a no-op");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForAPreBuiltInstanceWithoutSuppressDisposal()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -50,7 +50,7 @@ public partial class DiagnosticTests
 				.Because("a pre-built instance without SuppressDisposal is valid");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForSuppressDisposalOnAConstructedRegistration()
 		{
 			GeneratorResult result = Generator.Run("""

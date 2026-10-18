@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt117DuplicateKey
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenTwoImplementationsShareOneServiceTypeAndKey()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -30,7 +30,7 @@ public partial class DiagnosticTests
 				.Because("two different implementations claim the same service type and key");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForTheSameServiceTypeUnderDifferentKeys()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -54,7 +54,7 @@ public partial class DiagnosticTests
 				.Because("several implementations may share one service type under different keys");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForOneImplementationReRegisteredUnderTheSameKey()
 		{
 			GeneratorResult result = Generator.Run("""

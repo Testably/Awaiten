@@ -4,7 +4,7 @@ namespace Awaiten.SourceGenerators.Tests;
 
 public class GeneralTests
 {
-	[Fact]
+	[Test]
 	public async Task Container_DispatchesThroughAStaticTableSharedWithTheScope()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -41,7 +41,7 @@ public class GeneralTests
 			.Because("the linear if-chain is no longer emitted");
 	}
 
-	[Fact]
+	[Test]
 	public async Task EmptyContainer_EmitsAPartialImplementationWithoutDiagnostics()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -64,7 +64,7 @@ public class GeneralTests
 		await That(source).Contains("public class Scope : global::Awaiten.IAwaitenScope");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ExplicitlyRegisteredRelationshipType_WinsTheDispatchSlotWithoutADuplicateKey()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -96,7 +96,7 @@ public class GeneralTests
 			.Because("the synthetic Lazy<Leaf> factory is dropped in favour of the explicit registration's resolver");
 	}
 
-	[Fact]
+	[Test]
 	public async Task FuncDependency_EmitsADeferredFactoryBoundToTheOwner()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -127,7 +127,7 @@ public class GeneralTests
 			.Because("its dispatch slot builds a fresh factory over the target's resolver");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Graph_EmitsThreadSafeSingletonCachingAndTransientConstruction()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -169,7 +169,7 @@ public class GeneralTests
 			.Because("its dispatch slot resolves the registered service");
 	}
 
-	[Fact]
+	[Test]
 	public async Task InternalConstructor_InTheSameAssembly_IsUsable()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -191,7 +191,7 @@ public class GeneralTests
 		await That(source).Contains("__s._foo = new global::MyCode.Foo();");
 	}
 
-	[Fact]
+	[Test]
 	public async Task LazyDependency_EmitsADeferredLazyBoundToTheOwner()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -222,7 +222,7 @@ public class GeneralTests
 			.Because("its dispatch slot builds a fresh lazy over the target's resolver");
 	}
 
-	[Fact]
+	[Test]
 	public async Task MultiServiceRegistration_CoalescesIntoASingleSharedInstance()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -255,7 +255,7 @@ public class GeneralTests
 			.Because("both service types dispatch to the one shared instance");
 	}
 
-	[Fact]
+	[Test]
 	public async Task NestedContainer_ReopensTheEnclosingTypesAsPartial()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -283,7 +283,7 @@ public class GeneralTests
 		await That(source).Contains("__s._service = new global::MyCode.Outer.Service();");
 	}
 
-	[Fact]
+	[Test]
 	public async Task SameSimpleName_InDifferentNamespaces_DoNotCollide()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -299,7 +299,7 @@ public class GeneralTests
 		await That(result.Sources).ContainsKey("Awaiten.B.MyContainer.g.cs");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ScopedRegistration_EmitsPerScopeStorageOnTheContainerAndTheScope()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -326,7 +326,7 @@ public class GeneralTests
 			.Because("the scope is the single resolver and is publicly accessible");
 	}
 
-	[Fact]
+	[Test]
 	public async Task FactoryRegistration_CallsTheContainerMethodInsteadOfAConstructor()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -353,7 +353,7 @@ public class GeneralTests
 			.Because("a factory registration is produced by its method, never constructed directly");
 	}
 
-	[Fact]
+	[Test]
 	public async Task FactoryReturningInterface_TracksDisposalByARuntimeCheckOnTheRealizedInstance()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -383,7 +383,7 @@ public class GeneralTests
 			.Because("the realized instance is reached through the runtime pattern, never an unchecked cast");
 	}
 
-	[Fact]
+	[Test]
 	public async Task FactoryReturningANonDisposableSealedType_EmitsNoDisposalTracking()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -412,7 +412,7 @@ public class GeneralTests
 			.Because("a provably non-disposable factory output is never added to the disposal list");
 	}
 
-	[Fact]
+	[Test]
 	public async Task FactoryRegistration_ResolvesTheMethodParametersFromTheGraph()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -440,7 +440,7 @@ public class GeneralTests
 			.Because("a static factory is in scope of the nested type directly and needs no container receiver");
 	}
 
-	[Fact]
+	[Test]
 	public async Task InstanceRegistration_ReturnsTheContainerMemberWithoutConstructingOrDisposing()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -473,7 +473,7 @@ public class GeneralTests
 			.Because("the registration metadata advertises the container's non-ownership, so a bridging host does not assume disposal either");
 	}
 
-	[Fact]
+	[Test]
 	public async Task RuntimeArguments_EmitAParameterizedResolverReachedOnlyThroughItsFuncFactory()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -512,7 +512,7 @@ public class GeneralTests
 			.Because("a parameterized service has no typed resolution fast path");
 	}
 
-	[Fact]
+	[Test]
 	public async Task OpenGeneric_ExpandsToTheClosedImplementationRequiredByAConsumer()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -540,7 +540,7 @@ public class GeneralTests
 		await That(source).Contains("typeof(global::MyCode.IRepository<global::MyCode.Order>)");
 	}
 
-	[Fact]
+	[Test]
 	public async Task OpenGeneric_ExpandsTransitivelyThroughAClosedGenericDependency()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -571,7 +571,7 @@ public class GeneralTests
 		await That(source).Contains("new global::MyCode.Handler<global::MyCode.Order>(");
 	}
 
-	[Fact]
+	[Test]
 	public async Task OpenGenericCollection_ExpandsEveryOpenRegistrationIntoTheClosedCollection()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -604,7 +604,7 @@ public class GeneralTests
 		await That(source).Contains("new global::MyCode.ProjectionHandler<global::MyCode.OrderPlaced>()");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Variance_RedirectsASingleServiceRequestToTheVarianceCompatibleRegistration()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -635,7 +635,7 @@ public class GeneralTests
 		await That(source).Contains("new __Bucket(typeof(global::MyCode.IHandler<global::MyCode.OrderPlaced>), static __s => ResolveDomainEventHandler(__s), false)");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Variance_UnionsVarianceCompatibleRegistrationsIntoAClosedGenericCollection()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -667,7 +667,7 @@ public class GeneralTests
 		await That(source).Contains("new global::MyCode.IHandler<global::MyCode.OrderPlaced>[] { ResolveOrderPlacedHandler(__s), ResolveDomainEventHandler(__s) }");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Variance_DoesNotRedirectThroughAnInvariantLazyOrTaskWrapper()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -697,7 +697,7 @@ public class GeneralTests
 		await That(result.Diagnostics).Contains("*AWT101*").AsWildcard();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Variance_ValueTypeArgumentIsNeverVarianceConvertible()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -721,7 +721,7 @@ public class GeneralTests
 		await That(result.Diagnostics).Contains("*AWT101*").AsWildcard();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Variance_EmitsTheRuntimeFallbackOnlyWhenAVariantCandidateExists()
 	{
 		GeneratorResult variant = Generator.Run("""
@@ -764,7 +764,7 @@ public class GeneralTests
 		await That(invariant.Sources["Awaiten.MyCode.MyContainer.g.cs"]).DoesNotContain("__TryResolveVariant");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Variance_WinsOverTheImportServicesFallThrough()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -795,7 +795,7 @@ public class GeneralTests
 		await That(source).DoesNotContain("__s.__ResolveExternal(typeof(global::MyCode.IHandler<global::MyCode.OrderPlaced>)");
 	}
 
-	[Fact]
+	[Test]
 	public async Task OpenGeneric_SeedsExpansionFromTheConstructorTheContainerActuallyUses()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -824,7 +824,7 @@ public class GeneralTests
 		await That(source).Contains("new global::MyCode.Repository<global::MyCode.Order>()");
 	}
 
-	[Fact]
+	[Test]
 	public async Task OpenGeneric_SelectsTheResolvableConstructorDependingOnAnExpandableOpenGeneric()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -863,7 +863,7 @@ public class GeneralTests
 		await That(source).Contains("new global::MyCode.Repository<global::MyCode.Order>()");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ImportServiceParameter_IsResolvedExternallyWithoutAwt101()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -892,7 +892,7 @@ public class GeneralTests
 		await That(source).Contains("typeof(global::MyCode.ILogger)");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ImportService_IsPerType_ADifferentUnregisteredDependencyStillReportsAwt101()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -920,7 +920,7 @@ public class GeneralTests
 			.Because("the declared external ILogger is routed to the provider, not reported missing");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ImportService_RoutesOnlyTheDirectDependency_ARelationshipOverTheExternalTypeStillReportsAwt101()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -948,7 +948,7 @@ public class GeneralTests
 			.Because("the external type is still referenced through the relationship, so it is not an unconsumed (dead) declaration");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ImportService_MultiConstructorDecorator_SelectsTheExternalAwareConstructorWithoutSpuriousAwt124()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -988,7 +988,7 @@ public class GeneralTests
 			.Because("the decorator's external side-dependency is routed to the provider");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ImportServices_RoutesUnresolvedDependenciesExternallyWithoutAwt101()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -1013,7 +1013,7 @@ public class GeneralTests
 		await That(source).Contains("(global::MyCode.ILogger)__s.__ResolveExternal(typeof(global::MyCode.ILogger), null)");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ImportServices_ExpandsOpenGenericsForTheImportSelectedConstructor()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -1056,7 +1056,7 @@ public class GeneralTests
 		await That(source).Contains("(global::MyCode.ILogger)__s.__ResolveExternal(typeof(global::MyCode.ILogger), null)");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ImportServiceWithFromKey_ForwardsTheKeyToTheExternalResolver()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -1081,7 +1081,7 @@ public class GeneralTests
 		await That(source).Contains("(global::MyCode.ILogger)__s.__ResolveExternal(typeof(global::MyCode.ILogger), \"audit\")");
 	}
 
-	[Fact]
+	[Test]
 	public async Task GeneratedResolvers_CarryLifetimeSpecificXmlDocSummaries()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -1121,7 +1121,7 @@ public class GeneralTests
 			.Because("the disposal surface is documented");
 	}
 
-	[Fact]
+	[Test]
 	public async Task KeyedDictionaryDependency_MaterializesAllKeyedRegistrationsAsADictionary()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -1153,7 +1153,7 @@ public class GeneralTests
 		await That(source).Contains("typeof(global::System.Collections.Generic.IReadOnlyDictionary<string, global::MyCode.IChannel>)");
 	}
 
-	[Fact]
+	[Test]
 	public async Task EmptyKeyedDictionary_MaterializesAnEmptyDictionaryWithoutAwt101()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -1179,7 +1179,7 @@ public class GeneralTests
 		await That(source).Contains("new global::MyCode.Host(new global::System.Collections.Generic.Dictionary<string, global::MyCode.IChannel> {  })");
 	}
 
-	[Fact]
+	[Test]
 	public async Task MismatchedKeyedDictionaryKeyKind_ReportsAwt159()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -1206,7 +1206,7 @@ public class GeneralTests
 		await That(result.Diagnostics).Contains("*AWT159*").AsWildcard();
 	}
 
-	[Fact]
+	[Test]
 	public async Task FromKeyEnum_WithNoMatchingRegistration_ReportsAwt101WithTheTypedKey()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -1234,7 +1234,7 @@ public class GeneralTests
 			.Because("the missing-dependency message renders the typed key faithfully");
 	}
 
-	[Fact]
+	[Test]
 	public async Task UnsupportedKeyedDictionaryKeyType_ReportsAwt159()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -1259,7 +1259,7 @@ public class GeneralTests
 		await That(result.Diagnostics).Contains("*AWT159*").AsWildcard();
 	}
 
-	[Fact]
+	[Test]
 	public async Task RegistrationKeyOfUnsupportedType_ReportsAwt170()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -1283,7 +1283,7 @@ public class GeneralTests
 			.Because("the diagnostic names the unsupported key type");
 	}
 
-	[Fact]
+	[Test]
 	public async Task FromKeyOfUnsupportedType_ReportsAwt170()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -1307,7 +1307,7 @@ public class GeneralTests
 		await That(result.Diagnostics).Contains("*AWT170*").AsWildcard();
 	}
 
-	[Fact]
+	[Test]
 	public async Task EnumKeyedDictionary_SynthesizesUnderTheEnumKeyType()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -1341,7 +1341,7 @@ public class GeneralTests
 			.Because("the member is keyed by the user-written enum constant, not an encoded string");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ExplicitlyRegisteredKeyedDictionary_WinsOverSynthesisOnInjection()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -1376,7 +1376,7 @@ public class GeneralTests
 			.Because("a registered dictionary suppresses the synthesized keyed dictionary, mirroring the collection SynthesisSuppressed gate");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ExplicitlyRegisteredKeyedDictionary_WinsOverSynthesisOnPropertyInjectionToo()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -1411,7 +1411,7 @@ public class GeneralTests
 			.Because("an explicitly registered dictionary service preempts the synthesized keyed dictionary on property injection");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ExplicitlyRegisteredNonStringKeyedDictionary_IsADirectDependencyWithoutAwt159()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -1441,7 +1441,7 @@ public class GeneralTests
 		await That(source).Contains("new global::MyCode.Router(Root.ResolvePortMap(__s.__root))");
 	}
 
-	[Fact]
+	[Test]
 	public async Task FromKeyOnASynthesizedKeyedDictionary_ReportsAwt160()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -1468,7 +1468,7 @@ public class GeneralTests
 			.Because("a string key is rendered as a quoted literal, reproducing the attribute syntax");
 	}
 
-	[Fact]
+	[Test]
 	public async Task FromKeyEnumOnASynthesizedKeyedDictionary_ReportsAwt160WithTheUnquotedEnumKey()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -1497,7 +1497,7 @@ public class GeneralTests
 			.Because("an enum key is rendered as an unquoted member access, not a quoted string");
 	}
 
-	[Fact]
+	[Test]
 	public async Task FromKeyOnAKeyedDictionary_ResolvesAnExplicitKeyedRegistrationOfTheDictionaryType()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -1527,7 +1527,7 @@ public class GeneralTests
 			.Because("a [FromKey] on a keyed dictionary selects an explicitly registered dictionary service under that key");
 	}
 
-	[Fact]
+	[Test]
 	public async Task SameImplementationRegisteredUnderTwoKeys_AppearsUnderBothDictionaryKeys()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -1556,7 +1556,7 @@ public class GeneralTests
 		await That(source).Contains("[\"fast\"] = Root.ResolveFast(__s.__root), [\"turbo\"] = Root.ResolveFast(__s.__root)");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AwaitedKeyedDictionary_AllSynchronousMembers_MaterializesACompletedTask()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -1589,7 +1589,7 @@ public class GeneralTests
 			.Because("an all-synchronous awaited keyed dictionary completes immediately over the materialized dictionary");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AwaitedKeyedDictionaryWithAnAsyncMember_AwaitsItInsideTheProducedTaskWithoutTaintingTheConsumer()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -1631,7 +1631,7 @@ public class GeneralTests
 			.Because("a consumer of an awaited keyed dictionary stays synchronously resolvable even when a member is async-tainted");
 	}
 
-	[Fact]
+	[Test]
 	public async Task EmptyAwaitedKeyedDictionary_MaterializesACompletedEmptyTaskWithoutAwt101()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -1659,7 +1659,7 @@ public class GeneralTests
 			.Because("an element type with no keyed registration materializes a completed empty awaited keyed dictionary");
 	}
 
-	[Fact]
+	[Test]
 	public async Task NonStringAwaitedKeyedDictionary_ReportsAwt159()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -1687,7 +1687,7 @@ public class GeneralTests
 			.Because("a non-string key type is rejected for the awaited keyed dictionary just as for the synchronous one");
 	}
 
-	[Fact]
+	[Test]
 	public async Task FromKeyOnASynthesizedAwaitedKeyedDictionary_ReportsAwt160()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -1714,7 +1714,7 @@ public class GeneralTests
 			.Because("a [FromKey] on a synthesized awaited keyed dictionary is rejected just as on the synchronous one");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ExplicitlyRegisteredAwaitedKeyedDictionary_WinsOverSynthesisOnInjection()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -1751,7 +1751,7 @@ public class GeneralTests
 			.Because("no awaited keyed dictionary is synthesized behind the registered shape");
 	}
 
-	[Fact]
+	[Test]
 	public async Task RegisteredSyncKeyedDictionary_SuppressesTheAwaitedViewOnInjection()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -1784,7 +1784,7 @@ public class GeneralTests
 			.Because("no awaited keyed dictionary is synthesized behind the registered synchronous one");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AwaitedKeyedDictionary_JoinsTheByTypeDispatch()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -1818,7 +1818,7 @@ public class GeneralTests
 			.Because("the awaited keyed dictionary joins the synchronous by-type dispatch even when a member is async-tainted");
 	}
 
-	[Fact]
+	[Test]
 	public async Task RegisteredSyncKeyedDictionary_SuppressesTheAwaitedByTypeDispatch()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -1848,7 +1848,7 @@ public class GeneralTests
 			.Because("a registered synchronous keyed dictionary suppresses the synthesized awaited view on the by-type dispatch too");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncTaintedRegisteredAwaitedKeyedDictionary_IsNotShadowedOnTheByTypeDispatch()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -1885,7 +1885,7 @@ public class GeneralTests
 			.Because("the async-tainted registration keeps its own async resolution path");
 	}
 
-	[Fact]
+	[Test]
 	public async Task NonStringAwaitedKeyedDictionary_OverARegisteredDictionary_ResolvesTheRegistration()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -1918,7 +1918,7 @@ public class GeneralTests
 			.Because("the awaited view hands back the registered dictionary behind a task");
 	}
 
-	[Fact]
+	[Test]
 	public async Task FromKeyAwaitedKeyedDictionary_OverAKeyRegisteredDictionary_ResolvesTheRegistration()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -1952,7 +1952,7 @@ public class GeneralTests
 	}
 
 
-	[Fact]
+	[Test]
 	public async Task RequestingTypeFactory_EmitsTheConsumerTypeofPerSite()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -1990,7 +1990,7 @@ public class GeneralTests
 		await That(source).Contains("ResolveILogger(__s, null)");
 	}
 
-	[Fact]
+	[Test]
 	public async Task RequestingTypeFactory_DeclaredSingleton_IsStillBuiltFreshPerCall()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -2023,7 +2023,7 @@ public class GeneralTests
 		await That(source).Contains("new global::MyCode.Alpha(ResolveILogger(__s, typeof(global::MyCode.Alpha)))");
 	}
 
-	[Fact]
+	[Test]
 	public async Task RequestingType_OnANonTypeParameter_ReportsAwt162()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -2046,7 +2046,7 @@ public class GeneralTests
 		await That(result.Diagnostics).Contains("*AWT162*").AsWildcard();
 	}
 
-	[Fact]
+	[Test]
 	public async Task RequestingType_WithAnArgParameter_ReportsAwt163()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -2071,7 +2071,7 @@ public class GeneralTests
 		await That(result.Diagnostics).Contains("*AWT163*").AsWildcard();
 	}
 
-	[Fact]
+	[Test]
 	public async Task RequestingType_WithABareOwned_ReportsAwt186()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -2100,7 +2100,7 @@ public class GeneralTests
 			.Because("the message names the factory-produced target, pointing at both ends of the relationship");
 	}
 
-	[Fact]
+	[Test]
 	public async Task RequestingType_WithAFuncOwned_ReportsAwt186()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -2126,7 +2126,7 @@ public class GeneralTests
 			.Because("a Func<Owned<T>> produces the owned handle per call, but the requesting-type factory has no owner scope to build it into");
 	}
 
-	[Fact]
+	[Test]
 	public async Task RequestingType_WithATaskOwned_ReportsAwt186()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -2153,7 +2153,7 @@ public class GeneralTests
 			.Because("a Task<Owned<T>> still produces the owned handle, which the requesting-type factory has no owner scope to build into");
 	}
 
-	[Fact]
+	[Test]
 	public async Task RequestingType_WithAFuncTaskOwned_ReportsAwt186()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -2180,7 +2180,7 @@ public class GeneralTests
 			.Because("a Func<Task<Owned<T>>> still produces the owned handle, which the requesting-type factory has no owner scope to build into");
 	}
 
-	[Fact]
+	[Test]
 	public async Task RequestingType_WithALazyTaskOwned_ReportsAwt121NotAwt186()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -2209,7 +2209,7 @@ public class GeneralTests
 			.Because("the Lazy<Task<Owned<T>>> form never reaches the owned emit AWT186 guards");
 	}
 
-	[Fact]
+	[Test]
 	public async Task RequestingType_WithABareLazyOwned_ReportsAwt121NotAwt186()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -2237,7 +2237,7 @@ public class GeneralTests
 			.Because("the bare Lazy<Owned<T>> form never reaches AWT186's owned emit, exactly like Lazy<Task<Owned<T>>>");
 	}
 
-	[Fact]
+	[Test]
 	public async Task RequestingType_WithAnInjectedOwnedMember_ReportsAwt186()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -2263,7 +2263,7 @@ public class GeneralTests
 			.Because("the detection pass walks injected [Inject] members like constructor parameters");
 	}
 
-	[Fact]
+	[Test]
 	public async Task RequestingType_WithAnOwnedLifecycleHookParameter_ReportsAwt186()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -2290,7 +2290,7 @@ public class GeneralTests
 			.Because("the detection pass walks lifecycle hook parameters like constructor parameters");
 	}
 
-	[Fact]
+	[Test]
 	public async Task RequestingType_WithFuncAndLazyRelationships_DoesNotReportAwt186()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -2317,7 +2317,7 @@ public class GeneralTests
 			.Because("the direct, Func<T> and Lazy<T> forms are the supported way to consume a requesting-type factory, so AWT186 (and every other diagnostic) stays silent");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncFactoryRequestingType_EmitsAnAwaitingResolverThatTakesTheRequestingType()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -2350,7 +2350,7 @@ public class GeneralTests
 		await That(source).Contains("ResolveILoggerAsync(__s, null, __ct)");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncTaintedRequestingType_ThroughAnAsyncDependency_Compiles()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -2384,7 +2384,7 @@ public class GeneralTests
 		await That(source).Contains("await ResolveILoggerAsync(__s, typeof(global::MyCode.Alpha), cancellationToken).ConfigureAwait(false)");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncRequestingType_UnderSyncResolveAfterInit_EmitsABlockingSyncResolverTakingTheRequestingType()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -2417,7 +2417,7 @@ public class GeneralTests
 		await That(source).Contains("new global::MyCode.Alpha(await ResolveILoggerAsync(__s, typeof(global::MyCode.Alpha), cancellationToken).ConfigureAwait(false))");
 	}
 
-	[Fact]
+	[Test]
 	public async Task LifecycleHooks_CallActivationAndQueueReleaseRunAheadOfDisposal()
 	{
 		GeneratorResult result = Generator.Run("""

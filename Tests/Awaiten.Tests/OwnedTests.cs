@@ -7,7 +7,7 @@ namespace Awaiten.Tests;
 /// </summary>
 public partial class OwnedTests
 {
-	[Fact]
+	[Test]
 	public async Task FuncOwned_BuildsAFreshDisposablePerCall_DisposedWithTheHandleNotTheContainer()
 	{
 		using OwnedContainer.Root container = new();
@@ -30,7 +30,7 @@ public partial class OwnedTests
 			.Because("each call to the factory builds a fresh instance");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Owned_IsNotTrackedByTheContainerRoot()
 	{
 		Widget leaked;
@@ -46,7 +46,7 @@ public partial class OwnedTests
 			.Because("an Owned widget the caller never disposed is not tracked by the container root, so disposing the container does not dispose it - the handle, not the root, owns it");
 	}
 
-	[Fact]
+	[Test]
 	public async Task OwnedSingleton_SharesTheRootInstanceAndDoesNotDisposeIt()
 	{
 		using OwnedContainer.Root container = new();
@@ -63,7 +63,7 @@ public partial class OwnedTests
 			.Because("disposing an Owned handle over a singleton does not dispose the shared singleton");
 	}
 
-	[Fact]
+	[Test]
 	public async Task FuncOwnedWithRuntimeArgument_FlowsTheArgumentAndIsDisposedWithTheHandle()
 	{
 		using OwnedContainer.Root container = new();
@@ -83,7 +83,7 @@ public partial class OwnedTests
 			.Because("a disposable parameterized service built through Func<…, Owned<T>> is released with its handle");
 	}
 
-	[Fact]
+	[Test]
 	public async Task BareOwned_InjectedDirectly_IsDisposedWhenTheOwnerDisposesIt()
 	{
 		using OwnedContainer.Root container = new();
@@ -99,7 +99,7 @@ public partial class OwnedTests
 			.Because("a bare Owned<T> dependency transfers disposal to whoever holds the handle");
 	}
 
-	[Fact]
+	[Test]
 	public async Task FuncOwned_OverANonDisposableThatBuildsADisposable_DrainsTheTransitiveDisposableWithTheHandle()
 	{
 		using OwnedContainer.Root container = new();
@@ -118,7 +118,7 @@ public partial class OwnedTests
 			.Because("Gizmo is not disposable, but its transient Bolt is built into the throwaway scope and released when the handle is disposed - the transitive disposable does not accumulate on the root");
 	}
 
-	[Fact]
+	[Test]
 	public async Task DefaultHandle_DisposeIsANoOp()
 	{
 		// A default(Owned<T>) has no backing scope; disposing it (or an already-disposed handle) must not throw.
@@ -128,7 +128,7 @@ public partial class OwnedTests
 	}
 
 #if NET
-	[Fact]
+	[Test]
 	public async Task DefaultHandle_DisposeAsyncIsANoOp()
 	{
 		Owned<Widget> handle = default;

@@ -4,7 +4,7 @@ public partial class DiagnosticTests
 {
 	public class Awt122AsyncCollection
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenACollectionMemberIsAsyncInitialized()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -34,7 +34,7 @@ public partial class DiagnosticTests
 				.Because("a synchronously materialized collection cannot await an async-initialized member");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForASynchronousCollection()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -61,7 +61,7 @@ public partial class DiagnosticTests
 				.Because("a collection whose members are all synchronous is materialized without any async initialization");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportUnderSyncResolveAfterInit()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -91,7 +91,7 @@ public partial class DiagnosticTests
 				.Because("SyncResolveAfterInit permits synchronous resolution of an async-tainted member after warm-up");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenTheAsyncMemberIsConsumedAsIAsyncEnumerable()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -121,7 +121,7 @@ public partial class DiagnosticTests
 				.Because("IAsyncEnumerable<T> awaits each member's initialization, so an async-tainted member is legal through that shape - AWT122 stays specific to the synchronous collection shapes");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenAKeyedDictionaryMemberIsAsyncInitialized()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -151,7 +151,7 @@ public partial class DiagnosticTests
 				.Because("a keyed dictionary is materialized synchronously just like a collection, so it cannot await an async-initialized keyed member");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForAnAwaitedKeyedDictionaryMember()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -181,7 +181,7 @@ public partial class DiagnosticTests
 				.Because("the awaited keyed dictionary awaits its async-initialized members behind the produced task, exactly as the awaited collection does");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenALifecycleHookCollectionParameterHasAnAsyncMember()
 		{
 			GeneratorResult result = Generator.Run("""

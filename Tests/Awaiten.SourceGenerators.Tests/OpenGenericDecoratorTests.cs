@@ -11,7 +11,7 @@ namespace Awaiten.SourceGenerators.Tests;
 /// </summary>
 public class OpenGenericDecoratorTests
 {
-	[Fact]
+	[Test]
 	public async Task OpenDecorator_SynthesizesAClosedDecoratorPerClosing()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -45,7 +45,7 @@ public class OpenGenericDecoratorTests
 			.Because("the Customer closing is wrapped by Logging<Customer>");
 	}
 
-	[Fact]
+	[Test]
 	public async Task OpenDecorator_NotUnbound_ReportsAwt127()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -70,7 +70,7 @@ public class OpenGenericDecoratorTests
 			.Because("the typeof form must receive an unbound generic decorator such as typeof(Logging<>)");
 	}
 
-	[Fact]
+	[Test]
 	public async Task OpenDecorator_ArityMismatch_ReportsAwt125()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -95,7 +95,7 @@ public class OpenGenericDecoratorTests
 			.Because("the open decorator's arity must match the service's");
 	}
 
-	[Fact]
+	[Test]
 	public async Task OpenDecorator_ClosingViolatesConstraints_WarnsAwt171()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -124,7 +124,7 @@ public class OpenGenericDecoratorTests
 			.Because("AWT126 is the registration error; an excluded decorator closing is the separate warning AWT171");
 	}
 
-	[Fact]
+	[Test]
 	public async Task OpenDecorator_WithNoClosingToDecorate_ReportsAwt123()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -149,7 +149,7 @@ public class OpenGenericDecoratorTests
 			.Because("the open decorator matches no closing of the service");
 	}
 
-	[Fact]
+	[Test]
 	public async Task OpenComposite_SynthesizesAClosedCompositePerClosing()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -184,7 +184,7 @@ public class OpenGenericDecoratorTests
 			.Because("the Order closing is fronted by CompositeHandler<Order>");
 	}
 
-	[Fact]
+	[Test]
 	public async Task OpenComposite_NotUnbound_ReportsAwt127()
 	{
 		GeneratorResult result = Generator.Run("""

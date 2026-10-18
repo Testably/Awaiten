@@ -7,7 +7,7 @@ namespace Awaiten.Tests;
 /// </summary>
 public partial class FactoryAndInstanceTests
 {
-	[Fact]
+	[Test]
 	public async Task Factory_ProducesTheServiceAndIsCachedAccordingToLifetime()
 	{
 		using FactoryContainer.Root container = new();
@@ -18,7 +18,7 @@ public partial class FactoryAndInstanceTests
 			.Because("the factory method produced the instance, which a constructor would not have marked");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Factory_ResolvesItsParametersFromTheGraph()
 	{
 		using FactoryContainer.Root container = new();
@@ -29,7 +29,7 @@ public partial class FactoryAndInstanceTests
 			.Because("the factory method's Settings parameter is resolved from the graph");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Factory_Scoped_IsCachedPerScopeAndReachedByName()
 	{
 		using FactoryContainer.Root container = new();
@@ -44,7 +44,7 @@ public partial class FactoryAndInstanceTests
 			.Because("the scope reached the static factory, which read the container's static state");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Instance_HandsBackThePreBuiltMemberAndDoesNotDisposeIt()
 	{
 		Probe probe;
@@ -59,7 +59,7 @@ public partial class FactoryAndInstanceTests
 			.Because("the container did not construct the probe, so it must not dispose it");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Instance_ResolvedFromAScope_ReturnsTheSameMember()
 	{
 		using InstanceContainer.Root container = new();
@@ -69,7 +69,7 @@ public partial class FactoryAndInstanceTests
 			.Because("a scope reaches the pre-built member through the root");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Instance_ResolvedFromADisposedContainer_Throws()
 	{
 		InstanceContainer.Root container = new();
@@ -79,7 +79,7 @@ public partial class FactoryAndInstanceTests
 			.Because("a disposed container rejects all resolution, including pre-built instances");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Instance_BehindAnInterfaceTypeArgument_HandsBackTheMember()
 	{
 		using InterfaceInstanceContainer.Root container = new();
@@ -88,7 +88,7 @@ public partial class FactoryAndInstanceTests
 			.Because("with an Instance member nothing is constructed, so the type argument may be the interface itself, naming only the service the member is resolved as");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Factory_RegisteredUnderSeveralServices_SharesOneInstance()
 	{
 		using SharedFactoryContainer.Root container = new();
@@ -97,7 +97,7 @@ public partial class FactoryAndInstanceTests
 			.Because("the same implementation behind two services with the same factory is coalesced into one instance");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Instance_RegisteredUnderSeveralServices_ExposesOneMember()
 	{
 		using SharedInstanceContainer.Root container = new();
@@ -108,7 +108,7 @@ public partial class FactoryAndInstanceTests
 			.Because("the same pre-built member is exposed as every service it is registered under");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Factory_Scoped_RegisteredUnderSeveralServices_SharesOnePerScope()
 	{
 		using SharedScopedFactoryContainer.Root container = new();
@@ -121,7 +121,7 @@ public partial class FactoryAndInstanceTests
 			.Because("each scope produces its own shared instance");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Factory_DisposableBehindANonDisposableInterface_IsDisposedWithTheContainer()
 	{
 		DisposableGadget gadget;
@@ -134,7 +134,7 @@ public partial class FactoryAndInstanceTests
 			.Because("disposability follows the factory's concrete return type, even when the service interface is not disposable");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Factory_SingletonReturningInterfaceButBuildingADisposable_IsDisposedWithTheContainer()
 	{
 		HiddenDisposable hidden;
@@ -147,7 +147,7 @@ public partial class FactoryAndInstanceTests
 			.Because("a singleton factory declared to return the non-disposable interface still builds a concrete IDisposable, which the container must dispose exactly once (not double-tracked by the runtime check)");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Factory_ScopedReturningInterfaceButBuildingADisposable_IsDisposedWithTheScope()
 	{
 		using HiddenDisposableContainer.Root container = new();
@@ -163,7 +163,7 @@ public partial class FactoryAndInstanceTests
 			.Because("a scoped factory declared to return the non-disposable interface still builds a concrete IDisposable, which the scope must dispose exactly once");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Factory_TransientReturningInterfaceButBuildingADisposable_IsDisposedWithTheContainer()
 	{
 		HiddenDisposable hidden;
@@ -176,7 +176,7 @@ public partial class FactoryAndInstanceTests
 			.Because("a transient factory declared to return the non-disposable interface still builds a concrete IDisposable, which the owner must dispose exactly once");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Factory_ReturnTypeAlreadyDisposable_IsStillDisposed_NoRegression()
 	{
 		PlainDisposable plain;
@@ -189,7 +189,7 @@ public partial class FactoryAndInstanceTests
 			.Because("a factory whose declared return type already implements IDisposable is tracked - and disposed exactly once - as before");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Factory_ReturningInterfaceButBuildingANonDisposable_IsNotRetained()
 	{
 		// A non-disposable factory output must resolve and dispose without throwing: the runtime

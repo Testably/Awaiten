@@ -13,7 +13,7 @@ namespace Awaiten.Tests;
 /// </summary>
 public partial class ConditionalTests
 {
-	[Fact]
+	[Test]
 	public async Task WhenInjectedInto_SelectsTheContextualImplementationForThatConsumerOnly()
 	{
 		using ConditionalContainer.Root container = new();
@@ -32,7 +32,7 @@ public partial class ConditionalTests
 			.Because("the sole public collection member is the unconditional DefaultClock, not the contextual TestClock");
 	}
 
-	[Fact]
+	[Test]
 	public async Task FromKey_TakesPrecedenceOverAContextualBinding()
 	{
 		using PrecedenceContainer.Root container = new();
@@ -45,7 +45,7 @@ public partial class ConditionalTests
 			.Because("the unkeyed parameter still picks up the WhenInjectedInto binding for this consumer");
 	}
 
-	[Fact]
+	[Test]
 	public async Task WhenInjectedInto_FillsAnInjectPropertyWithTheContextualImplementation()
 	{
 		using PropertyContainer.Root container = new();
@@ -54,7 +54,7 @@ public partial class ConditionalTests
 			.Because("an [Inject] property redirects to the contextual binding like a constructor parameter");
 	}
 
-	[Fact]
+	[Test]
 	public async Task WhenInjectedInto_WrapsTheContextualImplementationInTheServicesDecorator()
 	{
 		using DecoratedContainer.Root container = new();

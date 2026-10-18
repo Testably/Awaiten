@@ -7,7 +7,7 @@ namespace Awaiten.Tests;
 /// </summary>
 public partial class OpenGenericKeyedTests
 {
-	[Fact]
+	[Test]
 	public async Task FromKey_SelectsTheOpenRegistrationExpandedUnderThatKey()
 	{
 		using KeyedOpenGenericContainer.Root container = new();

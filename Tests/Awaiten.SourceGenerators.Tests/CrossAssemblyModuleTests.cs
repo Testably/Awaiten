@@ -23,7 +23,7 @@ public class CrossAssemblyModuleTests
 	                                            public static class InfrastructureModule { }
 	                                            """;
 
-	[Fact]
+	[Test]
 	public async Task CrossAssemblyModule_RegistrationsAreImported()
 	{
 		GeneratorResult result = Generator.RunWithReferencedAssembly(ModuleAssemblySource, """
@@ -48,7 +48,7 @@ public class CrossAssemblyModuleTests
 			.Because("a metadata module's Default fills the gap when the container does not override it");
 	}
 
-	[Fact]
+	[Test]
 	public async Task CrossAssemblyModule_DefaultIsOverriddenByTheContainer()
 	{
 		GeneratorResult result = Generator.RunWithReferencedAssembly(ModuleAssemblySource, """
@@ -76,7 +76,7 @@ public class CrossAssemblyModuleTests
 			.Because("the metadata module's overridden Default is dropped in full, exactly like a source module's");
 	}
 
-	[Fact]
+	[Test]
 	public async Task CrossAssemblyModule_DiagnosticsFallBackToTheImportLocation()
 	{
 		GeneratorResult result = Generator.RunWithReferencedAssembly(ModuleAssemblySource, """
@@ -106,7 +106,7 @@ public class CrossAssemblyModuleTests
 			.Because("the metadata registration's diagnostic falls back to the container's [Import] location");
 	}
 
-	[Fact]
+	[Test]
 	public async Task CrossAssemblyModule_FactoryMemberIsResolvedAndEmittedQualified()
 	{
 		GeneratorResult result = Generator.RunWithReferencedAssembly("""
@@ -143,7 +143,7 @@ public class CrossAssemblyModuleTests
 			.Because("a metadata module's factory resolves against the module and is emitted qualified");
 	}
 
-	[Fact]
+	[Test]
 	public async Task CrossAssemblyModule_InternalFactory_ReportsAwt108NamingTheModule()
 	{
 		GeneratorResult result = Generator.RunWithReferencedAssembly("""
@@ -178,7 +178,7 @@ public class CrossAssemblyModuleTests
 			.Because("an invisible cross-assembly internal member is indistinguishable from a missing one");
 	}
 
-	[Fact]
+	[Test]
 	public async Task CrossAssemblyModule_OpenGenericDiagnosticsFallBackToTheImportLocation()
 	{
 		GeneratorResult result = Generator.RunWithReferencedAssembly("""

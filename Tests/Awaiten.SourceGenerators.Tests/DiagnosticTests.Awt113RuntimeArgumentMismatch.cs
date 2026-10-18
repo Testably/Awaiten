@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt113RuntimeArgumentMismatch
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenTheFuncArgumentTypesDoNotMatchTheArgParameters()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -33,7 +33,7 @@ public partial class DiagnosticTests
 				.Because("the Func requests an int but the [Arg] parameter expects a string");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenAZeroArgumentFuncTargetsAParameterizedService()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -62,7 +62,7 @@ public partial class DiagnosticTests
 				.Because("an empty runtime-argument list reads as 'none' rather than an empty '()'");
 		}
 
-		[Fact]
+		[Test]
 		public async Task PointsTheDiagnosticAtTheOffendingFuncParameterNotTheRegistration()
 		{
 			const string source = """

@@ -16,7 +16,7 @@ public sealed partial class BridgeGuardTests
 	[Singleton<Widget>]
 	public static partial class GuardContainer;
 
-	[Fact]
+	[Test]
 	public async Task Factory_CreateBuilder_NullServices_Throws()
 	{
 		AwaitenServiceProviderFactory<GuardContainer.Root> factory = new();
@@ -24,7 +24,7 @@ public sealed partial class BridgeGuardTests
 		await That(() => factory.CreateBuilder(null!)).Throws<ArgumentNullException>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Factory_CreateServiceProvider_NullBuilder_Throws()
 	{
 		AwaitenServiceProviderFactory<GuardContainer.Root> factory = new();
@@ -33,7 +33,7 @@ public sealed partial class BridgeGuardTests
 		await That(() => factory.CreateServiceProvider(null!)).Throws<ArgumentNullException>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Factory_CreateServiceProvider_BeforeCreateBuilder_Throws()
 	{
 		AwaitenServiceProviderFactory<GuardContainer.Root> factory = new();
@@ -43,11 +43,11 @@ public sealed partial class BridgeGuardTests
 			.WithMessage("*CreateBuilder*CreateServiceProvider*").AsWildcard();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Provider_Constructor_NullContainer_Throws()
 		=> await That(() => _ = new AwaitenServiceProvider(null!)).Throws<ArgumentNullException>();
 
-	[Fact]
+	[Test]
 	public async Task Provider_GetService_NullServiceType_Throws()
 	{
 		await using AwaitenServiceProvider provider = new(new GuardContainer.Root());
@@ -55,7 +55,7 @@ public sealed partial class BridgeGuardTests
 		await That(() => provider.GetService(null!)).Throws<ArgumentNullException>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Provider_GetKeyedService_NullServiceType_Throws()
 	{
 		await using AwaitenServiceProvider provider = new(new GuardContainer.Root());
@@ -63,7 +63,7 @@ public sealed partial class BridgeGuardTests
 		await That(() => provider.GetKeyedService(null!, "k")).Throws<ArgumentNullException>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Provider_GetRequiredKeyedService_UnknownKey_Throws()
 	{
 		await using AwaitenServiceProvider provider = new(new GuardContainer.Root());
@@ -87,7 +87,7 @@ public sealed partial class BridgeGuardTests
 	[Singleton<AsyncOnlyDisposableSingleton>]
 	public static partial class AsyncOnlyProjectionContainer;
 
-	[Fact]
+	[Test]
 	public async Task Projection_SyncDisposeOfAsyncOnlyDisposable_ThrowsGuidance()
 	{
 		ServiceCollection services = new();

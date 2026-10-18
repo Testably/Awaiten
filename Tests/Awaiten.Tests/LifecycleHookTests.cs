@@ -13,9 +13,10 @@ namespace Awaiten.Tests;
 ///     are static methods that record into a static probe and the usable instance is <c>new …Root()</c>;
 ///     services and containers are nested types, so the enclosing class is <c>partial</c>.
 /// </summary>
+[NotInParallel(nameof(LifecycleHookTests))]
 public partial class LifecycleHookTests
 {
-	[Fact]
+	[Test]
 	public async Task OnActivated_RunsAfterConstruction_AndOnRelease_RunsOnDisposalInReverseOrder()
 	{
 		Probe.Log.Clear();
@@ -34,7 +35,7 @@ public partial class LifecycleHookTests
 		await That(Probe.Log.IndexOf("released:Beta") < Probe.Log.IndexOf("released:Alpha")).IsTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task OnRelease_RunsBeforeTheInstancesOwnDisposal()
 	{
 		Probe.Log.Clear();
@@ -47,7 +48,7 @@ public partial class LifecycleHookTests
 		await That(Probe.Log.IndexOf("released:Tracked") < Probe.Log.IndexOf("disposed:Tracked")).IsTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task SuppressDisposal_SkipsTheContainersDisposal_ButOnReleaseStillRuns()
 	{
 		Probe.Log.Clear();
@@ -62,7 +63,7 @@ public partial class LifecycleHookTests
 			.Because("SuppressDisposal tells the container not to dispose an instance it built");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Pooling_RentReturnsToPoolAndReusesTheInstance_WithoutDisposingIt()
 	{
 		Probe.Reset();
@@ -91,7 +92,7 @@ public partial class LifecycleHookTests
 	}
 
 #if NET || NETSTANDARD2_1_OR_GREATER
-	[Fact]
+	[Test]
 	public async Task SuppressDisposal_SkipsDisposeAsync_OnAnAsyncDisposableService()
 	{
 		Probe.Log.Clear();
@@ -105,7 +106,7 @@ public partial class LifecycleHookTests
 	}
 #endif
 
-	[Fact]
+	[Test]
 	public async Task TransientHooks_RunOncePerConstructedInstance()
 	{
 		Probe.Log.Clear();
@@ -122,7 +123,7 @@ public partial class LifecycleHookTests
 		await That(Probe.Log.Count(entry => entry == "released:Alpha")).IsEqualTo(2);
 	}
 
-	[Fact]
+	[Test]
 	public async Task ScopedReleaseHook_RunsWhenTheScopeIsDisposed_NotTheRoot()
 	{
 		Probe.Log.Clear();
@@ -137,7 +138,7 @@ public partial class LifecycleHookTests
 		await That(Probe.Log).Contains("released:Alpha");
 	}
 
-	[Fact]
+	[Test]
 	public async Task OnActivated_Throwing_UnpublishesTheSingleton_SoResolveRetries_AndReleasesOnlyTheActivatedInstance()
 	{
 		Probe.Reset();
@@ -163,7 +164,7 @@ public partial class LifecycleHookTests
 		await That(Probe.Log.Count(entry => entry == "disposed:Flaky")).IsEqualTo(2);
 	}
 
-	[Fact]
+	[Test]
 	public async Task TransientOnActivated_Throwing_DoesNotQueueARelease_ButTheConstructedInstanceIsStillDisposed()
 	{
 		Probe.Reset();
@@ -191,18 +192,18 @@ public partial class LifecycleHookTests
 		}
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncOnActivated_Throwing_RetriesAndReleasesOnlyTheActivatedInstance()
 	{
 		Probe.Reset();
 		using (ThrowingAsyncContainer.Root container = new())
 		{
 			// The first activation throws; the faulted task is evicted rather than caching a half-activated instance.
-			Func<Task> resolve = () => container.ResolveAsync<AsyncFlaky>(TestContext.Current.CancellationToken);
+			Func<Task> resolve = () => container.ResolveAsync<AsyncFlaky>(TestContext.Current!.Execution.CancellationToken);
 			await That(resolve).Throws<InvalidOperationException>();
 
 			// A later resolve rebuilds and activates successfully.
-			AsyncFlaky rebuilt = await container.ResolveAsync<AsyncFlaky>(TestContext.Current.CancellationToken);
+			AsyncFlaky rebuilt = await container.ResolveAsync<AsyncFlaky>(TestContext.Current!.Execution.CancellationToken);
 			await That(rebuilt).IsNotNull();
 			await That(Probe.Log).Contains("activated:AsyncFlaky");
 		}
@@ -211,13 +212,13 @@ public partial class LifecycleHookTests
 		await That(Probe.Log.Count(entry => entry == "released:AsyncFlaky")).IsEqualTo(1);
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncHooks_ActivationRunsBeforeAsyncInitialization_AndReleaseRunsOnDisposal()
 	{
 		Probe.Reset();
 		using (AsyncHookContainer.Root container = new())
 		{
-			await container.ResolveAsync<AsyncService>(TestContext.Current.CancellationToken);
+			await container.ResolveAsync<AsyncService>(TestContext.Current!.Execution.CancellationToken);
 
 			// OnActivated runs post-construction, before the instance drives its own asynchronous initialization.
 			await That(Probe.Log.IndexOf("activated:AsyncService") < Probe.Log.IndexOf("initialized:AsyncService")).IsTrue();
@@ -226,7 +227,7 @@ public partial class LifecycleHookTests
 		await That(Probe.Log).Contains("released:AsyncService");
 	}
 
-	[Fact]
+	[Test]
 	public async Task DeferredMemberHooks_ActivationRunsAfterWiring_AndReleaseRunsOnDisposal()
 	{
 		Probe.Reset();
@@ -244,7 +245,7 @@ public partial class LifecycleHookTests
 		await That(Probe.Log).Contains("released:Widget");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ConcurrentResolve_NeverObservesTheSingletonBeforeOnActivatedHasRun()
 	{
 		Probe.Reset();
@@ -253,7 +254,7 @@ public partial class LifecycleHookTests
 		const int workers = 16;
 		using Barrier gate = new(workers);
 		bool[] sawActivated = new bool[workers];
-		CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+		CancellationToken cancellationToken = TestContext.Current!.Execution.CancellationToken;
 
 		Task[] tasks = new Task[workers];
 		for (int i = 0; i < workers; i++)
@@ -284,7 +285,7 @@ public partial class LifecycleHookTests
 		await That(Probe.Log.Count(entry => entry == "activated:Slow")).IsEqualTo(1);
 	}
 
-	[Fact]
+	[Test]
 	public async Task OnActivated_ReceivesAGraphDependency()
 	{
 		Probe.Reset();
@@ -299,7 +300,7 @@ public partial class LifecycleHookTests
 			.Because("the activation hook's extra parameter resolves from the container graph");
 	}
 
-	[Fact]
+	[Test]
 	public async Task OnRelease_ReceivesAGraphDependency_ReturningToAPool()
 	{
 		Probe.Reset();
@@ -319,7 +320,7 @@ public partial class LifecycleHookTests
 			.Because("the release hook's extra parameter resolves from the container graph");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ReleaseHookDependency_OutlivesTheRelease_InReverseCreationOrder()
 	{
 		Probe.Reset();
@@ -336,7 +337,7 @@ public partial class LifecycleHookTests
 			.Because("a release hook's captured dependency must still be alive when the release runs");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncActivationHookDependency_IsInitializedWhenTheHookRuns()
 	{
 		Probe.Reset();
@@ -344,8 +345,8 @@ public partial class LifecycleHookTests
 
 		// The hook's Gauge parameter is async-initialized, so it taints AsyncMachine and forces the async path,
 		// which awaits the dependency's initialization inline in the hook call.
-		AsyncMachine machine = await container.ResolveAsync<AsyncMachine>(TestContext.Current.CancellationToken);
-		AsyncGauge gauge = await container.ResolveAsync<AsyncGauge>(TestContext.Current.CancellationToken);
+		AsyncMachine machine = await container.ResolveAsync<AsyncMachine>(TestContext.Current!.Execution.CancellationToken);
+		AsyncGauge gauge = await container.ResolveAsync<AsyncGauge>(TestContext.Current!.Execution.CancellationToken);
 
 		await That(machine.Gauge).IsSameAs(gauge)
 			.Because("the activation hook's extra parameter resolves from the graph on the async path too");
@@ -353,7 +354,7 @@ public partial class LifecycleHookTests
 			.Because("the async path awaits the hook dependency's initialization before invoking the hook");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncReleaseHookDependency_IsCapturedInitialized()
 	{
 		Probe.Reset();
@@ -361,7 +362,7 @@ public partial class LifecycleHookTests
 		{
 			// The release capture on the async-initialized AsyncGauge taints AsyncBuffer, so it resolves
 			// asynchronously; the capture is awaited at construction, before the release closure is queued.
-			await container.ResolveAsync<AsyncBuffer>(TestContext.Current.CancellationToken);
+			await container.ResolveAsync<AsyncBuffer>(TestContext.Current!.Execution.CancellationToken);
 			await That(Probe.Log).DoesNotContain("released-with-initialized-gauge");
 		}
 
@@ -369,7 +370,7 @@ public partial class LifecycleHookTests
 			.Because("the release hook received the dependency that was captured, already initialized, at construction");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ScopedReleaseHook_ReceivesAGraphDependency_WhenTheScopeIsDisposed()
 	{
 		Probe.Reset();

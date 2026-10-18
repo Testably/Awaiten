@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt194ModuleScanNotPartial
 	{
-		[Fact]
+		[Test]
 		public async Task Awt152_ReportsForANonStaticModuleWithAScanInTheModulesOwnBuild()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -28,7 +28,7 @@ public partial class DiagnosticTests
 				.Because("emitting a static partial for a non-static class would not compile");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenAModuleWithAScanIsNotPartial()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -49,7 +49,7 @@ public partial class DiagnosticTests
 				.Because("the module declares a [Scan] but is not partial, so the generated factories cannot be added");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenAContainingTypeIsNotPartial()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -75,7 +75,7 @@ public partial class DiagnosticTests
 				.Because("emitting into a non-partial containing type would not compile");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForAModuleNestedInAPartialType()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -101,7 +101,7 @@ public partial class DiagnosticTests
 				.Because("the nested module's scan is expanded normally");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForAPartialModuleWithAScan()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -122,7 +122,7 @@ public partial class DiagnosticTests
 				.Because("a partial module can receive the generated factories");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForAPlainModuleWithoutAScan()
 		{
 			GeneratorResult result = Generator.Run("""

@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt101MissingDependency
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsTheFullTypeForANestedRelationship()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -33,7 +33,7 @@ public partial class DiagnosticTests
 				.Because("diagnostics strip the global:: alias, including nested generic arguments");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenAConstructorParameterIsNotRegistered()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -54,7 +54,7 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).Contains("*AWT101*").AsWildcard();
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenAFromKeyParameterHasNoMatchingKeyedRegistration()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -80,7 +80,7 @@ public partial class DiagnosticTests
 				.Because("the missing dependency names the requested key");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenAFuncTargetIsNotRegistered()
 		{
 			GeneratorResult result = Generator.Run("""

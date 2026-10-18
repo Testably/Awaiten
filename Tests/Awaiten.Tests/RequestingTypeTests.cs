@@ -11,7 +11,7 @@ namespace Awaiten.Tests;
 /// </summary>
 public partial class RequestingTypeTests
 {
-	[Fact]
+	[Test]
 	public async Task RequestingType_IsFilledWithTheConsumerType()
 	{
 		using LoggerContainer.Root container = new();
@@ -21,7 +21,7 @@ public partial class RequestingTypeTests
 		await That(alpha.Logger.Category).IsEqualTo(typeof(Alpha).FullName);
 	}
 
-	[Fact]
+	[Test]
 	public async Task RequestingType_GivesEachConsumerItsOwnRequestingType()
 	{
 		using LoggerContainer.Root container = new();
@@ -35,7 +35,7 @@ public partial class RequestingTypeTests
 		await That(alpha.Logger.Category).IsNotEqualTo(beta.Logger.Category);
 	}
 
-	[Fact]
+	[Test]
 	public async Task RequestingType_FactoryStillResolvesItsOtherDependenciesFromTheGraph()
 	{
 		using LoggerContainer.Root container = new();
@@ -46,7 +46,7 @@ public partial class RequestingTypeTests
 		await That(alpha.Logger.Prefix).IsSameAs(container.Resolve<Prefix>());
 	}
 
-	[Fact]
+	[Test]
 	public async Task RequestingType_FilledForAnInjectedProperty()
 	{
 		using LoggerContainer.Root container = new();
@@ -56,7 +56,7 @@ public partial class RequestingTypeTests
 		await That(gamma.Logger!.Category).IsEqualTo(typeof(Gamma).FullName);
 	}
 
-	[Fact]
+	[Test]
 	public async Task RequestingType_AtTheTopLevelReceivesNull()
 	{
 		using LoggerContainer.Root container = new();
@@ -66,7 +66,7 @@ public partial class RequestingTypeTests
 		await That(logger.Category).IsEqualTo("<root>");
 	}
 
-	[Fact]
+	[Test]
 	public async Task RequestingType_ThroughAFuncReceivesTheConsumerType()
 	{
 		using LoggerContainer.Root container = new();
@@ -125,34 +125,34 @@ public partial class RequestingTypeTests
 		public Func<ILogger> LoggerFactory { get; }
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncTaintedRequestingType_IsFilledWithTheConsumerType()
 	{
 		using AsyncLoggerContainer.Root container = new();
 
-		Epsilon epsilon = await container.ResolveAsync<Epsilon>(TestContext.Current.CancellationToken);
+		Epsilon epsilon = await container.ResolveAsync<Epsilon>(TestContext.Current!.Execution.CancellationToken);
 
 		// The factory is async-tainted (it awaits its AsyncPrefix dependency), so it is built through the async
 		// resolver, which still embeds the consumer's typeof(…) per site.
 		await That(epsilon.Logger.Category).IsEqualTo(typeof(Epsilon).FullName);
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncTaintedRequestingType_AtTheTopLevelReceivesNull()
 	{
 		using AsyncLoggerContainer.Root container = new();
 
-		ILogger logger = await container.ResolveAsync<ILogger>(TestContext.Current.CancellationToken);
+		ILogger logger = await container.ResolveAsync<ILogger>(TestContext.Current!.Execution.CancellationToken);
 
 		await That(logger.Category).IsEqualTo("<root>");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncFactoryRequestingType_IsFilledWithTheConsumerType()
 	{
 		using AsyncFactoryContainer.Root container = new();
 
-		Epsilon epsilon = await container.ResolveAsync<Epsilon>(TestContext.Current.CancellationToken);
+		Epsilon epsilon = await container.ResolveAsync<Epsilon>(TestContext.Current!.Execution.CancellationToken);
 
 		// The factory itself is asynchronous (returns Task<Logger>); the requesting type still flows through.
 		await That(epsilon.Logger.Category).IsEqualTo(typeof(Epsilon).FullName);

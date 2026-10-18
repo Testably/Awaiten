@@ -19,11 +19,11 @@ public sealed class ServiceProviderExternalResolverTests
 		public object? GetService(Type serviceType) => null;
 	}
 
-	[Fact]
+	[Test]
 	public async Task Constructor_NullProvider_Throws()
 		=> await That(() => _ = new ServiceProviderExternalResolver(null!)).Throws<ArgumentNullException>();
 
-	[Fact]
+	[Test]
 	public async Task TryResolve_NullServiceType_Throws()
 	{
 		using ServiceProvider provider = new ServiceCollection().BuildServiceProvider();
@@ -32,7 +32,7 @@ public sealed class ServiceProviderExternalResolverTests
 		await That(() => resolver.TryResolve(null!, null, out _)).Throws<ArgumentNullException>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task TryResolve_Unkeyed_ReturnsRegisteredInstance()
 	{
 		SystemClock clock = new();
@@ -47,7 +47,7 @@ public sealed class ServiceProviderExternalResolverTests
 		await That(instance).IsSameAs(clock);
 	}
 
-	[Fact]
+	[Test]
 	public async Task TryResolve_Unkeyed_ReturnsFalseWhenMissing()
 	{
 		using ServiceProvider provider = new ServiceCollection().BuildServiceProvider();
@@ -59,7 +59,7 @@ public sealed class ServiceProviderExternalResolverTests
 		await That(instance).IsNull();
 	}
 
-	[Fact]
+	[Test]
 	public async Task TryResolve_Keyed_ReturnsKeyedInstance()
 	{
 		SystemClock utc = new();
@@ -74,7 +74,7 @@ public sealed class ServiceProviderExternalResolverTests
 		await That(instance).IsSameAs(utc);
 	}
 
-	[Fact]
+	[Test]
 	public async Task TryResolve_Keyed_WhenProviderHasNoKeyedSupport_ReturnsFalse()
 	{
 		ServiceProviderExternalResolver resolver = new(new NonKeyedProvider());

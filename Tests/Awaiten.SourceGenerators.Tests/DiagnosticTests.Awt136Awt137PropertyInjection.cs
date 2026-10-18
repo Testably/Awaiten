@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt136Awt137PropertyInjection
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsAwt136WhenInjectPropertyHasNoAccessibleSetter()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -33,7 +33,7 @@ public partial class DiagnosticTests
 				.Because("an [Inject] property must have a set or init accessor the container can assign through");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsAwt136WhenInjectPropertyHasProtectedSetter()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -62,7 +62,7 @@ public partial class DiagnosticTests
 				.Because("AWT136 must be reported instead of leaking a compile error into the generated container");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsAwt137WhenInjectPropertyIsMarkedArg()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -87,7 +87,7 @@ public partial class DiagnosticTests
 				.Because("runtime arguments are supplied only to constructor parameters, never to an injected property");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsAwt101WhenInjectPropertyHasNoRegistration()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -112,7 +112,7 @@ public partial class DiagnosticTests
 				.Because("an injected property needs a registration to satisfy it, exactly like a constructor parameter");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsAwt105WhenASingletonInjectsAScopedProperty()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -138,7 +138,7 @@ public partial class DiagnosticTests
 				.Because("an injected property is a captive-analysis edge exactly like a constructor parameter: a singleton capturing a scoped through it is still captive");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsAwt102WhenInjectedPropertiesFormACycle()
 		{
 			GeneratorResult result = Generator.Run("""

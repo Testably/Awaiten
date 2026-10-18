@@ -8,7 +8,7 @@ namespace Awaiten.Tests;
 /// </summary>
 public partial class KeyedTests
 {
-	[Fact]
+	[Test]
 	public async Task FromKey_SelectsTheImplementationRegisteredUnderThatKey()
 	{
 		using KeyedContainer.Root container = new();
@@ -21,7 +21,7 @@ public partial class KeyedTests
 			.Because("the [FromKey(\"slow\")] parameter resolves the implementation keyed 'slow'");
 	}
 
-	[Fact]
+	[Test]
 	public async Task KeyedRegistrations_ShareOneServiceTypeWithoutColliding()
 	{
 		using KeyedContainer.Root container = new();
@@ -32,7 +32,7 @@ public partial class KeyedTests
 			.Because("the two keys resolve to distinct implementations of the one service type");
 	}
 
-	[Fact]
+	[Test]
 	public async Task UnkeyedResolution_ReturnsTheUnkeyedRegistration()
 	{
 		using MixedContainer.Root container = new();
@@ -46,7 +46,7 @@ public partial class KeyedTests
 			.Because("the keyed consumer still selects the keyed implementation");
 	}
 
-	[Fact]
+	[Test]
 	public async Task FromKey_SelectsTheKeyedImplementationThroughFuncAndLazyRelationships()
 	{
 		using KeyedContainer.Root container = new();
@@ -59,7 +59,7 @@ public partial class KeyedTests
 			.Because("a [FromKey(\"slow\")] Lazy<IChannel> defers to the implementation keyed 'slow'");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ResolveWithKey_ReturnsTheImplementationRegisteredUnderThatKey()
 	{
 		using KeyedContainer.Root container = new();
@@ -70,7 +70,7 @@ public partial class KeyedTests
 			.Because("Resolve<T>(\"slow\") returns the registration keyed 'slow'");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ResolveWithKey_ForAnUnknownKey_Throws()
 	{
 		using KeyedContainer.Root container = new();
@@ -79,7 +79,7 @@ public partial class KeyedTests
 			.Because("no registration is keyed 'unknown'");
 	}
 
-	[Fact]
+	[Test]
 	public async Task TryResolveWithKey_ReportsHitAndMiss()
 	{
 		using KeyedContainer.Root container = new();
@@ -91,7 +91,7 @@ public partial class KeyedTests
 		await That(miss).IsNull();
 	}
 
-	[Fact]
+	[Test]
 	public async Task ResolveWithKey_AndUnkeyed_SelectTheirRespectiveRegistrations()
 	{
 		using MixedContainer.Root container = new();
@@ -104,18 +104,18 @@ public partial class KeyedTests
 		await That(keyed).Is<FastChannelClock>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task ResolveAsyncWithKey_ReturnsTheKeyedRegistration()
 	{
 		using KeyedContainer.Root container = new();
 
-		IChannel channel = await container.ResolveAsync<IChannel>("fast", TestContext.Current.CancellationToken);
+		IChannel channel = await container.ResolveAsync<IChannel>("fast", TestContext.Current!.Execution.CancellationToken);
 
 		await That(channel).Is<FastChannel>()
 			.Because("ResolveAsync<T>(\"fast\") returns the registration keyed 'fast' even when it needs no async init");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Singleton_CapturesKeyedNonSingletonDependency_ThroughFuncAndLazy()
 	{
 		using CapturingContainer.Root container = new();
@@ -207,7 +207,7 @@ public partial class KeyedTests
 	[Singleton<AsyncGauge, IGauge>(Key = "async")]
 	public static partial class AsyncKeyedContainer;
 
-	[Fact]
+	[Test]
 	public async Task KeyedResolve_OfAnAsyncTaintedService_FollowsTheStrictAsyncRules()
 	{
 		using AsyncKeyedContainer.Root container = new();
@@ -218,7 +218,7 @@ public partial class KeyedTests
 		await That(container.TryResolve<IGauge>("async", out IGauge? _)).IsFalse()
 			.Because("TryResolve stays non-throwing for an async-only keyed service");
 
-		IGauge gauge = await container.ResolveAsync<IGauge>("async", TestContext.Current.CancellationToken);
+		IGauge gauge = await container.ResolveAsync<IGauge>("async", TestContext.Current!.Execution.CancellationToken);
 		await That(gauge).Is<AsyncGauge>();
 		await That(((AsyncGauge)gauge).Initialized).IsTrue()
 			.Because("keyed ResolveAsync awaits the async initialization");
@@ -230,7 +230,7 @@ public partial class KeyedTests
 	[Singleton<DefaultClock, IClock>]
 	public static partial class UnkeyedContainer;
 
-	[Fact]
+	[Test]
 	public async Task KeyedResolve_OnADisposedScope_ThrowsObjectDisposed_LikeTheUnkeyedResolve()
 	{
 		KeyedContainer.Root container = new();
@@ -239,10 +239,10 @@ public partial class KeyedTests
 		// A keyed by-type resolution rejects a disposed scope exactly like the unkeyed Resolve(Type)/TryResolve(Type).
 		await That(() => container.Resolve<IChannel>("fast")).Throws<ObjectDisposedException>();
 		await That(() => container.TryResolve<IChannel>("fast", out IChannel? _)).Throws<ObjectDisposedException>();
-		await That(() => container.ResolveAsync<IChannel>("fast", TestContext.Current.CancellationToken)).Throws<ObjectDisposedException>();
+		await That(() => container.ResolveAsync<IChannel>("fast", TestContext.Current!.Execution.CancellationToken)).Throws<ObjectDisposedException>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task KeyedResolve_OnADisposedScope_WithNoKeyedRegistrations_StillThrowsObjectDisposed()
 	{
 		UnkeyedContainer.Root container = new();
@@ -281,7 +281,7 @@ public partial class KeyedTests
 	[Transient<TransientSlow, IWork>(Key = "slow")]
 	public static partial class CapturingContainer;
 
-	[Fact]
+	[Test]
 	public async Task FactoryMethod_WithFromKeyParameters_DisambiguatesTwoSameTypedDependenciesForACleanDomainType()
 	{
 		using FactoryFromKeyContainer.Root container = new();

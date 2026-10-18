@@ -4,7 +4,7 @@ public partial class DiagnosticTests
 {
 	public class Awt203ModuleScanHookParameterInaccessible
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsAnInaccessibleHookDependencyParameter()
 		{
 			GeneratorResult result = Generator.Run("""

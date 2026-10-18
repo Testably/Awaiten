@@ -10,7 +10,7 @@ public partial class DiagnosticTests
 	// AwaitenBoundaryAnalyzer, so these tests drive that analyzer.
 	public class Awt135ServiceLocator
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsForAResolverConstructorParameter()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenBoundaryAnalyzer>("""
@@ -28,7 +28,7 @@ public partial class DiagnosticTests
 				.Because("a service that takes IAwaitenResolver locates its dependencies at run time");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsForAScopeConstructorParameter()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenBoundaryAnalyzer>("""
@@ -46,7 +46,7 @@ public partial class DiagnosticTests
 				.Because("IAwaitenScope extends IAwaitenResolver, so injecting it is the same anti-pattern");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsForAResolverProperty()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenBoundaryAnalyzer>("""
@@ -64,7 +64,7 @@ public partial class DiagnosticTests
 				.Because("a resolver-typed property is a run-time location seam the container can populate");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsForAResolverParameterOnAStruct()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenBoundaryAnalyzer>("""
@@ -82,7 +82,7 @@ public partial class DiagnosticTests
 				.Because("a struct that injects the resolver is service location too; structs are analyzed, not just classes");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForAResolverField()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenBoundaryAnalyzer>("""
@@ -100,7 +100,7 @@ public partial class DiagnosticTests
 				.Because("Awaiten never populates a field, so a resolver-typed field is not an injection point; only constructor parameters and properties are reported");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForAPlainDependency()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenBoundaryAnalyzer>("""
@@ -121,7 +121,7 @@ public partial class DiagnosticTests
 				.Because("a normal abstraction dependency is exactly what dependency injection is for");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForTheTypedResolverFastPath()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenBoundaryAnalyzer>("""
@@ -141,7 +141,7 @@ public partial class DiagnosticTests
 				.Because("IAwaitenResolver<T> is a single-service seam (closer to Func<T>), not a service locator");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportTheGeneratedRootOrScope()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenBoundaryAnalyzer>("""
@@ -162,7 +162,7 @@ public partial class DiagnosticTests
 				.Because("the generated Root/Scope implement the resolver interfaces but are the composition root itself");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenSuppressedInSource()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenBoundaryAnalyzer>("""
@@ -182,7 +182,7 @@ public partial class DiagnosticTests
 				.Because("the diagnostic is suppressible, so a deliberate seam like the MS.DI bridge adapter can opt out");
 		}
 
-		[Fact]
+		[Test]
 		public async Task PointsAnAdapterAtSuppressionRatherThanAtInjectingTheDependency()
 		{
 			string[] diagnostics = await Analyzer.Run<AwaitenBoundaryAnalyzer>("""

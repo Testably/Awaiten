@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt185ScanExposesNothing
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenAsResolvesToNoFlag()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -28,7 +28,7 @@ public partial class DiagnosticTests
 				.Because("As & yields no flag, so the scan would register nothing");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenAsHasOnlyAnUnrecognizedBit()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -50,7 +50,7 @@ public partial class DiagnosticTests
 				.Because("an out-of-range value sets no Self/Marker/MatchingInterface bit, so nothing is exposed");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForTheDefaultSelfExposure()
 		{
 			GeneratorResult result = Generator.Run("""

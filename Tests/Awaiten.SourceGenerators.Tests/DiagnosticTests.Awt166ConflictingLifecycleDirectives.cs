@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt166ConflictingLifecycleDirectives
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenCoalescedRegistrationsNameDifferentOnActivatedHooks()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -32,7 +32,7 @@ public partial class DiagnosticTests
 				.Because("coalescing keeps the first OnActivated hook, so the second, different one must not be silently dropped");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenCoalescedRegistrationsNameDifferentOnReleaseHooks()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -58,7 +58,7 @@ public partial class DiagnosticTests
 				.Because("coalescing keeps the first OnRelease hook, so the second, different one must not be silently dropped");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenALaterRegistrationOptsIntoEagerTheWinnerDoesNot()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -82,7 +82,7 @@ public partial class DiagnosticTests
 				.Because("the first registration wins and is not eager, so the later Eager = true would be silently dropped");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenALaterRegistrationOptsIntoSuppressDisposalTheWinnerDoesNot()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -106,7 +106,7 @@ public partial class DiagnosticTests
 				.Because("the first registration wins and disposes the instance, so the later SuppressDisposal = true would be silently dropped");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenALaterRegistrationSetsAHookTheWinnerOmits()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -131,7 +131,7 @@ public partial class DiagnosticTests
 				.Because("the winning registration names no hook, so the later hook the coalesced instance will not run is a silent drop, not a permissible merge");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForIdenticalDirectivesAcrossServices()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -157,7 +157,7 @@ public partial class DiagnosticTests
 				.Because("registering one implementation under several services with the same directives drops nothing");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenALaterRegistrationOmitsADirectiveTheWinnerSets()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -182,7 +182,7 @@ public partial class DiagnosticTests
 				.Because("a registration that leaves a directive unset states no opinion and merges with the winner's directive rather than conflicting");
 		}
 
-		[Fact]
+		[Test]
 		public async Task PointsAtTheLosingRegistrationNotTheWinner()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -211,7 +211,7 @@ public partial class DiagnosticTests
 				.Because("not the winning registration, whose directive survives");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsEachContradictedDirectiveOfOneRegistrationIndependently()
 		{
 			GeneratorResult result = Generator.Run("""

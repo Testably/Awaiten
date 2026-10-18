@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt132Composite
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsAwt132WhenTwoCompositesOfDifferentTypesNameTheSameService()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -33,7 +33,7 @@ public partial class DiagnosticTests
 				.Because("a service can have at most one composite façade");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportAwt132WhenTheSameCompositeTypeIsNamedTwiceForOneService()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -59,7 +59,7 @@ public partial class DiagnosticTests
 				.Because("naming the same composite type twice for one service is idempotent, not a conflict");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportAwt132ForCompositesOverDifferentServices()
 		{
 			GeneratorResult result = Generator.Run("""

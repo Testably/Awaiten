@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt119Awt120SynchronousAsyncResolution
 	{
-		[Fact]
+		[Test]
 		public async Task Awt119_ReportsWhenAFuncTargetsAnAsyncInitializedService()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -36,7 +36,7 @@ public partial class DiagnosticTests
 				.Because("a synchronous Func over an async-initialized service resolves it without awaiting initialization");
 		}
 
-		[Fact]
+		[Test]
 		public async Task Awt119_ReportsForAnInjectedFuncMember()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -69,7 +69,7 @@ public partial class DiagnosticTests
 				.Because("an injected Func member over an async-initialized service is the same synchronous-resolution fault as a Func constructor parameter");
 		}
 
-		[Fact]
+		[Test]
 		public async Task Awt119_ReportsForADeferredFuncMember()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -102,7 +102,7 @@ public partial class DiagnosticTests
 				.Because("a deferred Func member over an async-initialized service escapes the taint fixpoint but still resolves synchronously, so it must be reported instead of failing to compile in generated code");
 		}
 
-		[Fact]
+		[Test]
 		public async Task Awt119_ReportsForALazyRelationship()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -132,7 +132,7 @@ public partial class DiagnosticTests
 				.Because("a synchronous Lazy over an async-initialized service resolves it without awaiting initialization");
 		}
 
-		[Fact]
+		[Test]
 		public async Task Awt119_ReportsForAnOwnedRelationship()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -161,7 +161,7 @@ public partial class DiagnosticTests
 				.Because("a synchronous Owned handle over an async-initialized service resolves it without awaiting initialization");
 		}
 
-		[Fact]
+		[Test]
 		public async Task Awt120_ReportsWithThePathWhenAFuncReachesAnAsyncServiceTransitively()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -193,7 +193,7 @@ public partial class DiagnosticTests
 				.Because("the diagnostic names the dependency path from the synchronously-resolved service to the async-initialized one");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReport_ForADirectDependencyOnAnAsyncService()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -224,7 +224,7 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).DoesNotContain("*AWT120*").AsWildcard();
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReport_WhenSyncResolveAfterInitIsSet()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -255,7 +255,7 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).DoesNotContain("*AWT120*").AsWildcard();
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsForASynchronousRelationshipLifecycleHookParameter()
 		{
 			GeneratorResult result = Generator.Run("""

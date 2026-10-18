@@ -7,7 +7,7 @@ namespace Awaiten.SourceGenerators.Tests;
 /// </summary>
 public class CollectionTests
 {
-	[Fact]
+	[Test]
 	public async Task CollectionDependency_MaterializesAllRegistrationsAsAnArray()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -50,7 +50,7 @@ public class CollectionTests
 			.Because("the single IPlugin resolution still dispatches to the winning registration");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ArrayParameter_IsAlsoRecognizedAsACollection()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -77,7 +77,7 @@ public class CollectionTests
 			.Because("an array parameter resolves to the collection of registrations, not a single registration");
 	}
 
-	[Fact]
+	[Test]
 	public async Task EmptyCollection_MaterializesAnEmptyArrayWithoutAwt101()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -104,7 +104,7 @@ public class CollectionTests
 			.Because("an element type with no registration materializes an empty array");
 	}
 
-	[Fact]
+	[Test]
 	public async Task KeyedRegistrations_AreNotCollectionMembers()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -134,7 +134,7 @@ public class CollectionTests
 			.Because("only the unkeyed registration is a collection member; the keyed one is reached only by [FromKey]");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ParameterizedService_IsNotACollectionMember()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -164,7 +164,7 @@ public class CollectionTests
 			.Because("a parameterized [Arg] service is reachable only through its Func<TArg…, T> factory, never a collection");
 	}
 
-	[Fact]
+	[Test]
 	public async Task CaptiveCollection_ReportsAwt105WhenASingletonHoldsScopedMembers()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -189,7 +189,7 @@ public class CollectionTests
 			.Because("a collection captures its members eagerly, so a singleton holding a collection of scoped services is a captive dependency");
 	}
 
-	[Fact]
+	[Test]
 	public async Task CollectionWithADisposableTransientMember_IsWithheldFromRootByTypeResolution()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -222,7 +222,7 @@ public class CollectionTests
 			.Because("the T[] collection dispatch is withheld from the Root too");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ExplicitlyRegisteredCollectionType_WinsOverSynthesisOnInjection()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -258,7 +258,7 @@ public class CollectionTests
 			.Because("registering one collection shape of IPlugin suppresses synthesis for every shape of IPlugin");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ExplicitCollectionRegistration_SuppressesSynthesisOfEverySiblingShape()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -289,7 +289,7 @@ public class CollectionTests
 			.Because("an unregistered sibling collection shape is a missing dependency once any shape of the element type is explicitly registered");
 	}
 
-	[Fact]
+	[Test]
 	public async Task MultidimensionalArrayParameter_IsNotACollection()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -312,7 +312,7 @@ public class CollectionTests
 			.Because("a multidimensional array (int[,]) is an ordinary direct dependency, so an unregistered one is AWT101 - not broken collection codegen");
 	}
 
-	[Fact]
+	[Test]
 	public async Task KeyedCollection_ResolvesOnlyTheMembersUnderThatKey()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -347,7 +347,7 @@ public class CollectionTests
 			.Because("the public unkeyed collection resolves only the unkeyed registration");
 	}
 
-	[Fact]
+	[Test]
 	public async Task CollectionOfNonDisposableMembers_IsNotWithheld()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -375,7 +375,7 @@ public class CollectionTests
 			.Because("a collection whose members are not build-on-demand disposables leaks nothing on the Root, so it stays resolvable there");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncEnumerableDependency_MaterializesMembersIntoTheAsyncArrayHelper()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -408,7 +408,7 @@ public class CollectionTests
 			.Because("the __AsyncArray<T> backing type is emitted when an async collection is injected");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncEnumerableWithAnAsyncMember_AwaitsItInsteadOfReportingAwt122()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -446,7 +446,7 @@ public class CollectionTests
 			.Because("the async-tainted member is awaited while materializing the collection, the synchronous member resolved directly");
 	}
 
-	[Fact]
+	[Test]
 	public async Task EmptyAsyncEnumerable_MaterializesAnEmptyAsyncArrayWithoutAwt101()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -473,7 +473,7 @@ public class CollectionTests
 			.Because("an element type with no registration materializes an empty async collection");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ExplicitlyRegisteredAsyncEnumerable_WinsOverSynthesisOnInjection()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -509,7 +509,7 @@ public class CollectionTests
 			.Because("an explicitly registered IAsyncEnumerable<T> wins over the synthesized async collection on injection");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ExplicitlyRegisteredSyncCollectionShape_SuppressesTheAsyncEnumerableViewOnInjectionToo()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -547,7 +547,7 @@ public class CollectionTests
 			.Because("the suppressed async view is not synthesized behind the opaque registration");
 	}
 
-	[Fact]
+	[Test]
 	public async Task SynchronousCollection_IsAlsoResolvableByTypeAsIAsyncEnumerable()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -577,7 +577,7 @@ public class CollectionTests
 			.Because("the IAsyncEnumerable<T> dispatch wraps the synchronously materialized members");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncCollection_IsResolvableByTypeAsIAsyncEnumerableThroughResolveAsync()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -614,7 +614,7 @@ public class CollectionTests
 			.Because("synchronous Resolve of the async collection shape throws guidance toward ResolveAsync");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ExplicitlyRegisteredAsyncEnumerable_ClaimsTheByTypeSlotOnBothSurfaces()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -656,7 +656,7 @@ public class CollectionTests
 			.Because("the synthesized view's guidance does not shadow a slot the registration owns");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncTaintedRegisteredAsyncEnumerable_IsNotShadowedByTheSynthesizedViewOnTheSyncDispatch()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -696,7 +696,7 @@ public class CollectionTests
 			.Because("synchronous Resolve throws the registered service's guidance, not the synthesized view's");
 	}
 
-	[Fact]
+	[Test]
 	public async Task PubliclyRequestedAsyncCollection_ThrowsGuidanceRatherThanBeingSilentlyUnresolvable()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -731,7 +731,7 @@ public class CollectionTests
 			.Because("an async-tainted member has no synchronous resolver, so no synchronous collection literal is emitted for it");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AwaitedCollection_AllSynchronousMembers_MaterializesACompletedTask()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -764,7 +764,7 @@ public class CollectionTests
 			.Because("an all-synchronous awaited collection is a completed task over the members in registration order");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AwaitedCollectionWithAnAsyncMember_AwaitsItInsideTheProducedTaskWithoutTaintingTheConsumer()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -807,7 +807,7 @@ public class CollectionTests
 			.Because("a consumer of an awaited collection stays synchronously resolvable even when a member is async-tainted");
 	}
 
-	[Fact]
+	[Test]
 	public async Task EmptyAwaitedCollection_MaterializesACompletedEmptyTaskWithoutAwt101()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -835,7 +835,7 @@ public class CollectionTests
 			.Because("an element type with no registration materializes a completed empty awaited collection");
 	}
 
-	[Fact]
+	[Test]
 	public async Task EmptyAwaitedCollection_InjectedIntoAProperty_IsNotAMissingDependency()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -869,7 +869,7 @@ public class CollectionTests
 			.Because("the member is filled with a completed empty awaited collection");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ValueTaskCollection_IsNotAnAwaitedCollection()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -897,7 +897,7 @@ public class CollectionTests
 			.Because("ValueTask<C> is not an awaited collection shape, matching the bare ValueTask<T> relationship decision");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ExplicitlyRegisteredSyncCollectionShape_SuppressesTheAwaitedViewOnInjectionToo()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -938,7 +938,7 @@ public class CollectionTests
 			.Because("the suppressed awaited view is not synthesized behind the opaque registration");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ExplicitlyRegisteredAwaitedShape_WinsOverSynthesisOnInjection()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -976,7 +976,7 @@ public class CollectionTests
 			.Because("no awaited collection is synthesized behind the registered shape");
 	}
 
-	[Fact]
+	[Test]
 	public async Task OpenGenericRegistrations_ExpandIntoAnAwaitedClosedCollection()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -1013,7 +1013,7 @@ public class CollectionTests
 			.Because("the second open registration is expanded at the closed argument");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AwaitedCollection_EveryTaskShape_JoinsTheByTypeDispatch()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -1047,7 +1047,7 @@ public class CollectionTests
 			.Because("the awaited array shape is publicly resolvable by type");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AwaitedCollectionWithAnAsyncMember_JoinsTheSynchronousByTypeDispatch()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -1085,7 +1085,7 @@ public class CollectionTests
 			.Because("the by-type awaited collection awaits its async member with the default token");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ExplicitlyRegisteredAwaitedShape_ClaimsOnlyItsOwnByTypeSlot()
 	{
 		GeneratorResult result = Generator.Run("""

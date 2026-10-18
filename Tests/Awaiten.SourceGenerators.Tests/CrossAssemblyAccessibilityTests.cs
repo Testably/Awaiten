@@ -9,7 +9,7 @@ namespace Awaiten.SourceGenerators.Tests;
 /// </summary>
 public class CrossAssemblyAccessibilityTests
 {
-	[Fact]
+	[Test]
 	public async Task InternalConstructorAcrossInternalsVisibleTo_IsSelected()
 	{
 		GeneratorResult result = Generator.RunWithReferencedAssembly("""
@@ -40,7 +40,7 @@ public class CrossAssemblyAccessibilityTests
 			.Because("the container constructs the scanned implementation through its internal constructor");
 	}
 
-	[Fact]
+	[Test]
 	public async Task InternalConstructorWithoutInternalsVisibleTo_ReportsAwt104()
 	{
 		GeneratorResult result = Generator.RunWithReferencedAssembly("""
@@ -64,7 +64,7 @@ public class CrossAssemblyAccessibilityTests
 			.Because("without the grant the container's assembly cannot call the internal constructor");
 	}
 
-	[Fact]
+	[Test]
 	public async Task InternalImplementationAcrossInternalsVisibleTo_IsScannedAndConstructed()
 	{
 		GeneratorResult result = Generator.RunWithReferencedAssembly("""
@@ -92,7 +92,7 @@ public class CrossAssemblyAccessibilityTests
 			.Because("an internal type the container can see is constructed like a public one");
 	}
 
-	[Fact]
+	[Test]
 	public async Task InternalSetterAcrossInternalsVisibleTo_IsInjected()
 	{
 		GeneratorResult result = Generator.RunWithReferencedAssembly("""
@@ -126,7 +126,7 @@ public class CrossAssemblyAccessibilityTests
 			.Because("the injected member is filled from the object initializer");
 	}
 
-	[Fact]
+	[Test]
 	public async Task InternalSetterWithoutInternalsVisibleTo_ReportsAwt136()
 	{
 		GeneratorResult result = Generator.RunWithReferencedAssembly("""
@@ -156,7 +156,7 @@ public class CrossAssemblyAccessibilityTests
 			.Because("without the grant the setter is out of the container's reach, so it must surface as AWT136 rather than an inaccessible-setter error in generated code");
 	}
 
-	[Fact]
+	[Test]
 	public async Task MultipleConstructors_ResolvableInternalOneSelectedAcrossInternalsVisibleTo()
 	{
 		GeneratorResult result = Generator.RunWithReferencedAssembly("""
@@ -188,7 +188,7 @@ public class CrossAssemblyAccessibilityTests
 			.Because("constructor selection prefers the resolvable parameterless overload over the greedy public one");
 	}
 
-	[Fact]
+	[Test]
 	public async Task MultipleConstructors_WithoutInternalsVisibleTo_FallsToPublicConstructorAndReportsAwt101()
 	{
 		GeneratorResult result = Generator.RunWithReferencedAssembly("""

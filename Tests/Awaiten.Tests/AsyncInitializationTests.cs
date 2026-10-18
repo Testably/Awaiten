@@ -10,11 +10,12 @@ namespace Awaiten.Tests;
 ///     default an async-tainted service is reachable only asynchronously; <c>SyncResolveAfterInit</c>
 ///     relaxes that.
 /// </summary>
+[NotInParallel(nameof(AsyncInitializationTests))]
 public partial class AsyncInitializationTests
 {
-	private static CancellationToken Ct => TestContext.Current.CancellationToken;
+	private static CancellationToken Ct => TestContext.Current!.Execution.CancellationToken;
 
-	[Fact]
+	[Test]
 	public async Task ResolveAsync_ConstructsAndInitializesTheService()
 	{
 		using AsyncContainer.Root container = new();
@@ -24,7 +25,7 @@ public partial class AsyncInitializationTests
 		await That(connection.Initialized).IsTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task ResolveAsync_InitializesASingletonExactlyOnceAndReturnsTheSameInstance()
 	{
 		using AsyncContainer.Root container = new();
@@ -36,7 +37,7 @@ public partial class AsyncInitializationTests
 		await That(first.InitializeCount).IsEqualTo(1);
 	}
 
-	[Fact]
+	[Test]
 	public async Task ResolveAsync_ByType_ResolvesThroughTheNeutralInterface()
 	{
 		using AsyncContainer.Root container = new();
@@ -52,7 +53,7 @@ public partial class AsyncInitializationTests
 		await That(connection).Is<Connection>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task ResolveAsync_OfANonAsyncService_CompletesAndReturnsIt()
 	{
 		using AsyncContainer.Root container = new();
@@ -63,7 +64,7 @@ public partial class AsyncInitializationTests
 		await That(plain).IsNotNull();
 	}
 
-	[Fact]
+	[Test]
 	public async Task ResolveAsync_OfATransient_BuildsAndInitializesAFreshInstanceEachCall()
 	{
 		using AsyncContainer.Root container = new();
@@ -76,7 +77,7 @@ public partial class AsyncInitializationTests
 		await That(second.Initialized).IsTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task InitializeAsync_WarmsEverySingletonInDependencyOrder()
 	{
 		using OrderedContainer.Root container = new();
@@ -91,7 +92,7 @@ public partial class AsyncInitializationTests
 		await That(repo.DatabaseWasReadyAtInit).IsTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task InitializeAsync_IsIdempotent()
 	{
 		using OrderedContainer.Root container = new();
@@ -103,7 +104,7 @@ public partial class AsyncInitializationTests
 		await That(db.InitializeCount).IsEqualTo(1);
 	}
 
-	[Fact]
+	[Test]
 	public async Task ResolveAsync_AwaitsDependencyInitializationBeforeConstructingTheDependent()
 	{
 		using OrderedContainer.Root container = new();
@@ -113,7 +114,7 @@ public partial class AsyncInitializationTests
 		await That(repo.DatabaseWasReadyAtInit).IsTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task CreateScopeAsync_WarmsScopedAsyncServices()
 	{
 		using AsyncContainer.Root container = new();
@@ -126,7 +127,7 @@ public partial class AsyncInitializationTests
 		await That(connection.Initialized).IsTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task CreateScopeAsync_GivesOneScopedInstancePerScope()
 	{
 		using AsyncContainer.Root container = new();
@@ -139,7 +140,7 @@ public partial class AsyncInitializationTests
 		await That(ReferenceEquals(a, b)).IsFalse();
 	}
 
-	[Fact]
+	[Test]
 	public async Task ResolveAsync_IsThreadSafe_InitializesOnceUnderConcurrency()
 	{
 		using AsyncContainer.Root container = new();
@@ -153,7 +154,7 @@ public partial class AsyncInitializationTests
 		await That(resolved[0].InitializeCount).IsEqualTo(1);
 	}
 
-	[Fact]
+	[Test]
 	public async Task SyncResolve_OfAnAsyncTaintedService_IsNotExposedThroughSyncResolution()
 	{
 		using AsyncContainer.Root container = new();
@@ -164,7 +165,7 @@ public partial class AsyncInitializationTests
 		await That(() => container.Resolve<Connection>()).Throws<InvalidOperationException>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task PragmaticMode_AllowsSyncResolutionOfAWarmedSingleton()
 	{
 		using PragmaticContainer.Root container = new();
@@ -180,7 +181,7 @@ public partial class AsyncInitializationTests
 		await That(sync.Initialized).IsTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task TransitivelyTaintedService_IsInitializedThroughItsAsyncDependency()
 	{
 		using OrderedContainer.Root container = new();
@@ -193,7 +194,7 @@ public partial class AsyncInitializationTests
 		await That(container.TryResolve(typeof(Consumer), out _)).IsFalse();
 	}
 
-	[Fact]
+	[Test]
 	public async Task SyncResolve_OfAnAsyncTaintedService_ThrowsGuidancePointingAtResolveAsync()
 	{
 		using AsyncContainer.Root container = new();
@@ -207,7 +208,7 @@ public partial class AsyncInitializationTests
 			.Because("an async-tainted service is registered but reachable only asynchronously");
 	}
 
-	[Fact]
+	[Test]
 	public async Task CreateScopeAsync_DisposesTheScope_WhenScopedInitializationThrows()
 	{
 		using FailingScopeContainer.Root container = new();
@@ -221,7 +222,7 @@ public partial class AsyncInitializationTests
 		await That(FailingScoped.Disposed).IsTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task PragmaticMode_SyncResolveBeforeWarmUp_StillReturnsAnInitializedSingleton()
 	{
 		using PragmaticContainer.Root container = new();
@@ -235,7 +236,7 @@ public partial class AsyncInitializationTests
 		await That(container.Resolve<Connection>()).IsSameAs(first);
 	}
 
-	[Fact]
+	[Test]
 	public async Task PragmaticMode_TryResolveOfAnAsyncTaintedService_ReturnsTrueWithAnInitializedInstance()
 	{
 		using PragmaticContainer.Root container = new();
@@ -250,7 +251,7 @@ public partial class AsyncInitializationTests
 		await That(((Connection)instance!).Initialized).IsTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task PragmaticMode_SyncResolveOfATransient_ReturnsAnInitializedInstance()
 	{
 		using PragmaticContainer.Root container = new();
@@ -261,7 +262,7 @@ public partial class AsyncInitializationTests
 		await That(worker.Initialized).IsTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task PragmaticMode_ConcurrentSyncAndAsyncResolution_ConstructsOneInitializedSingleton()
 	{
 		using PragmaticContainer.Root container = new();
@@ -279,7 +280,7 @@ public partial class AsyncInitializationTests
 		await That(resolved[0].InitializeCount).IsEqualTo(1);
 	}
 
-	[Fact]
+	[Test]
 	public async Task ResolveAsync_AfterAFailedInitialization_RetriesRatherThanCachingTheFailure()
 	{
 		using FlakyContainer.Root container = new();
@@ -295,7 +296,7 @@ public partial class AsyncInitializationTests
 		await That(FlakyConnection.Attempts).IsEqualTo(2);
 	}
 
-	[Fact]
+	[Test]
 	public async Task ResolveAsync_AfterACanceledInitialization_RetriesWithAFreshToken()
 	{
 		using SlowContainer.Root container = new();
@@ -314,7 +315,7 @@ public partial class AsyncInitializationTests
 		await That(second.Initialized).IsTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task Dispose_DisposesAnAsyncInitializedSingleton()
 	{
 		DisposableConnection.Reset();
@@ -328,7 +329,7 @@ public partial class AsyncInitializationTests
 		await That(DisposableConnection.DisposeCount).IsEqualTo(1);
 	}
 
-	[Fact]
+	[Test]
 	public async Task ResolveAsync_OfAFactoryHidingAnAsyncDisposable_InitializesAndDisposesItExactlyOnce()
 	{
 		// The factory is declared to return a non-async, non-disposable interface yet builds a concrete type
@@ -350,7 +351,7 @@ public partial class AsyncInitializationTests
 			.Because("a hidden async-disposable singleton is disposed exactly once on container teardown (not double-tracked by the async registration's runtime check)");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ResolveAsync_OfADisposableAsyncTransient_IsWithheldOnTheRoot()
 	{
 		using DisposableWorkerContainer.Root container = new();
@@ -364,7 +365,7 @@ public partial class AsyncInitializationTests
 			.Because("a disposable async transient accumulates on the root and is withheld from ResolveAsync there");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ResolveAsync_OfADisposableAsyncTransient_ResolvesFromAChildScopeAndIsDisposedWithIt()
 	{
 		using DisposableWorkerContainer.Root container = new();
@@ -382,7 +383,7 @@ public partial class AsyncInitializationTests
 		await That(worker.Disposed).IsTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task DisposedContainer_AsyncEntryPoints_ThrowSynchronouslyRatherThanReturningAFaultedTask()
 	{
 		AsyncContainer.Root container = new();
@@ -632,7 +633,7 @@ public partial class AsyncInitializationTests
 	[Transient<DisposableWorker>]
 	public static partial class DisposableWorkerContainer;
 
-	[Fact]
+	[Test]
 	public async Task AsyncFactory_Singleton_AwaitsTheFactoryAndReturnsTheBuiltInstance()
 	{
 		AsyncFactoryService.Reset();
@@ -644,7 +645,7 @@ public partial class AsyncInitializationTests
 		await That(AsyncFactoryService.BuildCount).IsEqualTo(1);
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncFactory_Singleton_IsBuiltExactlyOnceAndReturnsTheSameInstance()
 	{
 		AsyncFactoryService.Reset();
@@ -657,7 +658,7 @@ public partial class AsyncInitializationTests
 		await That(AsyncFactoryService.BuildCount).IsEqualTo(1);
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncFactory_Singleton_IsWithheldFromSynchronousResolution()
 	{
 		AsyncFactoryService.Reset();
@@ -669,7 +670,7 @@ public partial class AsyncInitializationTests
 			.Because("synchronous by-type resolution of an async-factory service is withheld in the strict default");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncFactory_Singleton_WarmedByInitializeAsync_IsSyncResolvableUnderSyncResolveAfterInit()
 	{
 		PragmaticAsyncFactoryService.Reset();
@@ -686,7 +687,7 @@ public partial class AsyncInitializationTests
 			.Because("warm-up and the two resolutions share the single memoized instance, so the factory ran once");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncFactory_Transient_BuildsAFreshInstanceEachCall_AndIsAsyncOnly()
 	{
 		using TransientAsyncFactoryContainer.Root container = new();
@@ -700,7 +701,7 @@ public partial class AsyncInitializationTests
 			.Because("an async-factory transient is async-only forever (never warmed by InitializeAsync, so the strict default has no synchronous path to it)");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncFactory_WhoseResultIsAsyncInitializable_AwaitsBothTheFactoryAndInitializeAsync()
 	{
 		using InitializingAsyncFactoryContainer.Root container = new();
@@ -713,7 +714,7 @@ public partial class AsyncInitializationTests
 			.Because("InitializeAsync runs exactly once after the factory completes - no double-initialization");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncFactory_MayAwaitInternalInitializationItself_WithoutImplementingIAsyncInitializable()
 	{
 		using SelfInitializingFactoryContainer.Root container = new();
@@ -724,7 +725,7 @@ public partial class AsyncInitializationTests
 			.Because("the factory body did its own async work; the container did not call InitializeAsync (the type is not IAsyncInitializable), yet the instance is fully initialized");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncFactory_DisposableHiddenBehindTheServiceInterface_IsDisposedOnContainerTeardown()
 	{
 		HiddenDisposableFactoryService hidden;
@@ -739,7 +740,7 @@ public partial class AsyncInitializationTests
 			.Because("the disposable produced behind Task<> and a non-disposable interface is tracked by the generated runtime is-IDisposable check on the awaited result, so container teardown disposes it exactly once");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncFactory_WithCancellationTokenParameter_ReceivesTheResolveTimeToken()
 	{
 		using TokenForwardingContainer.Root container = new();
@@ -885,7 +886,7 @@ public partial class AsyncInitializationTests
 			=> Task.FromResult(new TokenAwareService(cancellationToken));
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncRelationship_FuncOfTask_ResolvesAnInitializedServiceWithoutTaintingTheConsumer()
 	{
 		using RelationshipContainer.Root container = new();
@@ -898,7 +899,7 @@ public partial class AsyncInitializationTests
 		await That(connection.Initialized).IsTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncRelationship_TaskAndLazyDependencies_DeliverAnInitializedService()
 	{
 		using RelationshipContainer.Root container = new();
@@ -909,7 +910,7 @@ public partial class AsyncInitializationTests
 		await That((await pool.Deferred.Value).Initialized).IsTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncRelationship_ParameterizedFuncOfTask_ForwardsTheArgumentAndInitializes()
 	{
 		using ParameterizedAsyncContainer.Root container = new();
@@ -975,7 +976,7 @@ public partial class AsyncInitializationTests
 	[Singleton<RobotFactory>]
 	public static partial class ParameterizedAsyncContainer;
 
-	[Fact]
+	[Test]
 	public async Task AsyncOwned_FuncOfTaskOfOwned_ResolvesInitializesAndScopesDisposalPerHandle()
 	{
 		using AsyncOwnedContainer.Root container = new();
@@ -1001,7 +1002,7 @@ public partial class AsyncInitializationTests
 		await That(second.Value.Disposed).IsTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncOwned_ParameterizedFuncOfTaskOfOwned_ForwardsArgumentInitializesAndDisposes()
 	{
 		using ParameterizedAsyncOwnedContainer.Root container = new();
@@ -1080,7 +1081,7 @@ public partial class AsyncInitializationTests
 	public static partial class ParameterizedAsyncOwnedContainer;
 
 #if NET || NETSTANDARD2_1_OR_GREATER
-	[Fact]
+	[Test]
 	public async Task AsyncOwned_FuncOfTaskOfOwned_DisposeAsync_TearsDownAnAsyncDisposableService()
 	{
 		// The transient Valve only ever lives in the Owned<Valve> throwaway scope, drained through the handle's
@@ -1102,7 +1103,7 @@ public partial class AsyncInitializationTests
 			.Because("await using the async owned handle drains its child scope through DisposeAsync");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncDisposableSingleton_DisposedThroughTheContainerDisposeAsync()
 	{
 		Valve captured;
@@ -1116,7 +1117,7 @@ public partial class AsyncInitializationTests
 			.Because("disposing the container through DisposeAsync awaits the async-disposable instances it owns");
 	}
 
-	[Fact]
+	[Test]
 	public async Task AsyncDisposableSingleton_SyncDispose_Throws()
 	{
 		ValveSingletonContainer.Root container = new();

@@ -22,7 +22,9 @@ partial class Build
 				.EnableNoBuild()
 				.SetResultsDirectory(TestResultsDirectory)
 				.CombineWith(cc => cc
-					.SetProjectFile(project)
-					.AddLoggers($"trx;LogFileName={project.Name}.trx")), completeOnFailure: true);
+					.SetProcessAdditionalArguments(
+						$"--project \"{project.Path}\"",
+						"--report-trx",
+						$"--report-trx-filename {project.Name}.trx")), completeOnFailure: true);
 		});
 }

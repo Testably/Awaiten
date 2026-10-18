@@ -4,7 +4,7 @@ public partial class DiagnosticTests
 {
 	public class Awt110ConflictingProductionDirectives
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenAnAttributeSetsBothFactoryAndInstance()
 		{
 			GeneratorResult result = Generator.Run("""

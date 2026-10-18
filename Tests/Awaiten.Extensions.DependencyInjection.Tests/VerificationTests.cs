@@ -48,7 +48,7 @@ public sealed partial class VerificationTests
 	[Singleton<AsyncConsumer>]
 	public static partial class AsyncImportingContainer;
 
-	[Fact]
+	[Test]
 	public async Task VerifyAgainst_AnAwaitenProvider_AcceptsWhatThatProviderResolves()
 	{
 		// One container's imports satisfied by another container through the provider seam. The provider's own
@@ -63,7 +63,7 @@ public sealed partial class VerificationTests
 		await That(() => ((IAwaitenContainerMetadata)importing).VerifyAgainst(provider)).DoesNotThrow();
 	}
 
-	[Fact]
+	[Test]
 	public async Task VerifyAgainst_AnAwaitenProviderThatWithholdsTheImport_SurfacesThatProvidersGuidance()
 	{
 		using AsyncProvidingContainer.Root providing = new();
@@ -81,7 +81,7 @@ public sealed partial class VerificationTests
 			.Because("the providing container names why it withholds the import, and that reaches the consumer instead of the importing container's generic 'external dependency unavailable'");
 	}
 
-	[Fact]
+	[Test]
 	public async Task VerifyAgainst_AnAwaitenProvider_StillReportsWhatIsGenuinelyMissing()
 	{
 		using ConformanceOnlyContainer.Root providing = new();
@@ -116,7 +116,7 @@ public sealed partial class VerificationTests
 		}
 	}
 
-	[Fact]
+	[Test]
 	public async Task VerifyAgainst_AProviderThatUnderReports_FallsBackToResolution()
 	{
 		using ImportingContainer.Root importing = new();
@@ -126,7 +126,7 @@ public sealed partial class VerificationTests
 			.Because("only a positive from the probe is final; a negative has to fall through to resolution, or verification reports an import the provider would have satisfied");
 	}
 
-	[Fact]
+	[Test]
 	public async Task VerifyAwaitenContainers_PassesWhenExternalDependencyIsRegistered()
 	{
 		ServiceCollection services = new();
@@ -137,7 +137,7 @@ public sealed partial class VerificationTests
 		await That(() => provider.VerifyAwaitenContainers()).DoesNotThrow();
 	}
 
-	[Fact]
+	[Test]
 	public async Task VerifyAwaitenContainers_ThrowsWhenExternalDependencyIsMissing()
 	{
 		ServiceCollection services = new();
@@ -148,7 +148,7 @@ public sealed partial class VerificationTests
 			.WithMessage("*IClock*").AsWildcard();
 	}
 
-	[Fact]
+	[Test]
 	public async Task VerifyAwaitenContainers_PassesWhenScopedExternalDependencyIsRegistered()
 	{
 		// A scoped external dependency is a registration like any other; the check runs against the root
@@ -161,7 +161,7 @@ public sealed partial class VerificationTests
 		await That(() => provider.VerifyAwaitenContainers()).DoesNotThrow();
 	}
 
-	[Fact]
+	[Test]
 	public async Task VerifyAwaitenContainers_PassesWhenKeyedExternalDependencyIsRegisteredUnderItsKey()
 	{
 		// Regression: a [FromKey] dependency resolves the keyed registration, so verification must probe the
@@ -174,7 +174,7 @@ public sealed partial class VerificationTests
 		await That(() => provider.VerifyAwaitenContainers()).DoesNotThrow();
 	}
 
-	[Fact]
+	[Test]
 	public async Task VerifyAwaitenContainers_ThrowsWhenKeyedExternalDependencyIsRegisteredUnderTheWrongKey()
 	{
 		// An unkeyed registration and a differently-keyed one both leave the requested "utc" key unsatisfied.
@@ -189,7 +189,7 @@ public sealed partial class VerificationTests
 			.WithMessage("*IClock (key: utc)*").AsWildcard();
 	}
 
-	[Fact]
+	[Test]
 	public async Task VerifyAgainst_ThrowsListingTheMissingDependency()
 	{
 		ServiceCollection services = new();
@@ -205,7 +205,7 @@ public sealed partial class VerificationTests
 			.AsWildcard();
 	}
 
-	[Fact]
+	[Test]
 	public async Task VerifyAgainst_ListsTheKeyOfAMissingKeyedDependency()
 	{
 		ServiceCollection services = new();
@@ -217,7 +217,7 @@ public sealed partial class VerificationTests
 			.WithMessage("*IClock (key: utc)*").AsWildcard();
 	}
 
-	[Fact]
+	[Test]
 	public async Task VerifyAgainst_NullContainer_Throws()
 	{
 		using ServiceProvider provider = new ServiceCollection().BuildServiceProvider();
@@ -226,7 +226,7 @@ public sealed partial class VerificationTests
 			.Throws<ArgumentNullException>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task VerifyAgainst_NullProvider_Throws()
 	{
 		using ExternalDependencyTests.ExternalContainer.Root container = new();
@@ -235,7 +235,7 @@ public sealed partial class VerificationTests
 			.Throws<ArgumentNullException>();
 	}
 
-	[Fact]
+	[Test]
 	public async Task VerifyAwaitenContainers_NullProvider_Throws()
 		=> await That(() => ((IServiceProvider)null!).VerifyAwaitenContainers()).Throws<ArgumentNullException>();
 
@@ -267,7 +267,7 @@ public sealed partial class VerificationTests
 			=> _resolve(serviceType, serviceKey) ?? throw new InvalidOperationException();
 	}
 
-	[Fact]
+	[Test]
 	public async Task VerifyAgainst_ProviderWithoutProbe_FallsBackToResolution()
 	{
 		ProbelessProvider provider = new(_ => new ExternalDependencyTests.FixedClock());
@@ -276,7 +276,7 @@ public sealed partial class VerificationTests
 		await That(() => ((IAwaitenContainerMetadata)container).VerifyAgainst(provider)).DoesNotThrow();
 	}
 
-	[Fact]
+	[Test]
 	public async Task VerifyAgainst_ProviderWithoutProbe_MissingDependency_Throws()
 	{
 		ProbelessProvider provider = new(_ => null);
@@ -287,7 +287,7 @@ public sealed partial class VerificationTests
 			.WithMessage("*IClock*").AsWildcard();
 	}
 
-	[Fact]
+	[Test]
 	public async Task VerifyAgainst_ScopeRestrictedResolution_TreatedAsRegistered()
 	{
 		// A provider whose resolution throws InvalidOperationException (a scope-restricted service resolved from
@@ -298,7 +298,7 @@ public sealed partial class VerificationTests
 		await That(() => ((IAwaitenContainerMetadata)container).VerifyAgainst(provider)).DoesNotThrow();
 	}
 
-	[Fact]
+	[Test]
 	public async Task VerifyAgainst_KeyedProviderWithoutProbe_FallsBackToKeyedResolution()
 	{
 		ProbelessKeyedProvider provider = new((serviceType, key) =>

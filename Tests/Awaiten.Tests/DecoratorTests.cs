@@ -14,9 +14,9 @@ namespace Awaiten.Tests;
 /// </summary>
 public partial class DecoratorTests
 {
-	private static CancellationToken Ct => TestContext.Current.CancellationToken;
+	private static CancellationToken Ct => TestContext.Current!.Execution.CancellationToken;
 
-	[Fact]
+	[Test]
 	public async Task SingleDecorator_WrapsTheRegisteredImplementation()
 	{
 		using SingleContainer.Root container = new();
@@ -27,7 +27,7 @@ public partial class DecoratorTests
 		await That(service.Describe()).IsEqualTo("Logging(Real)");
 	}
 
-	[Fact]
+	[Test]
 	public async Task MultipleDecorators_ChainInDeclarationOrderOutermostLast()
 	{
 		using MultiContainer.Root container = new();
@@ -38,7 +38,7 @@ public partial class DecoratorTests
 		await That(service.Describe()).IsEqualTo("D2(D1(Real))");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Decorator_ResolvesItsOtherDependenciesFromTheGraph()
 	{
 		using ExtraDepsContainer.Root container = new();
@@ -48,7 +48,7 @@ public partial class DecoratorTests
 		await That(service.Describe()).IsEqualTo("Audited(Real, by clock)");
 	}
 
-	[Fact]
+	[Test]
 	public async Task DecoratedService_InjectedIntoAnotherConsumer_ReceivesTheOutermostDecorator()
 	{
 		using ConsumerContainer.Root container = new();
@@ -59,7 +59,7 @@ public partial class DecoratorTests
 		await That(consumer.Service.Describe()).IsEqualTo("Logging(Real)");
 	}
 
-	[Fact]
+	[Test]
 	public async Task DecoratedService_AsCollection_YieldsOneDecoratedChainForASingleBaseImpl()
 	{
 		using SingleContainer.Root container = new();
@@ -72,7 +72,7 @@ public partial class DecoratorTests
 		await That(services[0].Describe()).IsEqualTo("Logging(Real)");
 	}
 
-	[Fact]
+	[Test]
 	public async Task DecoratedService_AsCollection_WrapsEachBaseImplForMultipleRegistrations()
 	{
 		using MultiImplContainer.Root container = new();
@@ -86,7 +86,7 @@ public partial class DecoratorTests
 		await That(container.Resolve<IEnumerable<IService>>().All(s => s is LoggingDecorator)).IsTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task MultipleRegistrations_SingleDispatch_ReturnsTheDecoratedFirstWins()
 	{
 		using MultiImplContainer.Root container = new();
@@ -97,7 +97,7 @@ public partial class DecoratorTests
 		await That(service.Describe()).IsEqualTo("Logging(Real1)");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Decorator_InheritsTheDecoratedRegistrationsSingletonLifetime()
 	{
 		using SingletonLifetimeContainer.Root container = new();
@@ -108,7 +108,7 @@ public partial class DecoratorTests
 		await That(first).IsSameAs(second);
 	}
 
-	[Fact]
+	[Test]
 	public async Task Decorator_InheritsTheDecoratedRegistrationsTransientLifetime()
 	{
 		using TransientLifetimeContainer.Root container = new();
@@ -119,7 +119,7 @@ public partial class DecoratorTests
 		await That(ReferenceEquals(first, second)).IsFalse();
 	}
 
-	[Fact]
+	[Test]
 	public async Task ExplicitOrder_PositionsTheDecoratorRatherThanDeclarationOrder()
 	{
 		using ExplicitOrderContainer.Root container = new();
@@ -130,7 +130,7 @@ public partial class DecoratorTests
 		await That(service.Describe()).IsEqualTo("D2(D1(Real))");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Decorator_WithInnerParameterTypedAsABaseOfTheService_ResolvesThroughTheChain()
 	{
 		using BaseTypedInnerContainer.Root container = new();
@@ -143,7 +143,7 @@ public partial class DecoratorTests
 		await That(service.Describe()).IsEqualTo("Base(Real)");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Decorator_InheritsTheDecoratedRegistrationsScopedLifetime()
 	{
 		using ScopedLifetimeContainer.Root container = new();
@@ -159,7 +159,7 @@ public partial class DecoratorTests
 		await That(a).IsNotSameAs(c).Because("each scope builds its own decorated instance");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Decorator_OfAnAsyncInitializableService_InitializesTheInnerThenWrapsItAsync()
 	{
 		using AsyncInnerContainer.Root container = new();
@@ -176,7 +176,7 @@ public partial class DecoratorTests
 			.Because("the async-initializable inner is initialized before the decorator wraps it");
 	}
 
-	[Fact]
+	[Test]
 	public async Task Dispose_DisposesBothTheDecoratorAndItsInner_OutermostFirst()
 	{
 		DisposalLog log;

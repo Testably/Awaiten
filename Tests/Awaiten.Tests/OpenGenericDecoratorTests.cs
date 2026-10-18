@@ -12,7 +12,7 @@ namespace Awaiten.Tests;
 /// </summary>
 public partial class OpenGenericDecoratorTests
 {
-	[Fact]
+	[Test]
 	public async Task OpenDecorator_WrapsEachClosingOfTheService()
 	{
 		using OpenDecoratorContainer.Root container = new();
@@ -25,7 +25,7 @@ public partial class OpenGenericDecoratorTests
 		await That(customer.Describe()).IsEqualTo("Log(Handler<Customer>)");
 	}
 
-	[Fact]
+	[Test]
 	public async Task OpenDecorator_InjectedIntoAConsumer_ReceivesTheDecorator()
 	{
 		using OpenDecoratorContainer.Root container = new();
@@ -35,7 +35,7 @@ public partial class OpenGenericDecoratorTests
 		await That(consumer.Handler.Describe()).IsEqualTo("Log(Handler<Order>)");
 	}
 
-	[Fact]
+	[Test]
 	public async Task OpenAndClosedDecorators_InterleaveByOrderThenDeclaration()
 	{
 		using InterleavedContainer.Root container = new();
@@ -48,7 +48,7 @@ public partial class OpenGenericDecoratorTests
 		await That(container.Resolve<IHandler<Customer>>().Describe()).IsEqualTo("Log(Handler<Customer>)");
 	}
 
-	[Fact]
+	[Test]
 	public async Task DecoratedOpenGeneric_AsCollection_YieldsTheDecoratedChain()
 	{
 		using OpenDecoratorContainer.Root container = new();

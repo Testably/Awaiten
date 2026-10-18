@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt164InvalidLifecycleHook
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenTheHookMethodHasTheWrongParameterType()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -28,7 +28,7 @@ public partial class DiagnosticTests
 				.Because("the named method does not accept the registered implementation type");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenNoMethodOfThatNameExists()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -49,7 +49,7 @@ public partial class DiagnosticTests
 				.Because("no container method carries the named release hook");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenTheHookMethodReturnsAValue()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -71,7 +71,7 @@ public partial class DiagnosticTests
 				.Because("a lifecycle hook must be a void method");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenTheFirstParameterDoesNotAcceptTheImplementation_EvenWithALaterParameterThatWould()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -95,7 +95,7 @@ public partial class DiagnosticTests
 				.Because("the hook's first parameter is the instance, so it must accept the implementation type");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForAHookTakingTheInstancePlusGraphParameters()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -121,7 +121,7 @@ public partial class DiagnosticTests
 				.Because("the instance parameter is first and the extra Settings parameter is registered on the graph");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsAwt101ForAnUnregisteredHookParameter()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -144,7 +144,7 @@ public partial class DiagnosticTests
 				.Because("a lifecycle hook parameter after the instance is a graph dependency that must be registered");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForAVoidMethodAcceptingTheImplementation()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -167,7 +167,7 @@ public partial class DiagnosticTests
 				.Because("a void method accepting the implementation (or a base type) is a usable hook");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsForAScanHookThatNamesNoMethod()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -189,7 +189,7 @@ public partial class DiagnosticTests
 				.Because("a scan's OnActivated is resolved against the container like any other hook");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForAScanHookAcceptingTheMarker()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -214,7 +214,7 @@ public partial class DiagnosticTests
 				.Because("a hook typed as the scanned marker accepts every match");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsForAGenericScanHookWhoseConstraintRejectsTheClosing()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -239,7 +239,7 @@ public partial class DiagnosticTests
 				.Because("the violation is caught before construction rather than surfacing as a compiler error inside the generated source");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForAGenericScanHookConstraintContainingAnArrayOfTheTypeParameter()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -271,7 +271,7 @@ public partial class DiagnosticTests
 				.Because("the closing binds cleanly, so the hook is constructed as Wire<Rows> without any diagnostic");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsForAGenericScanHookClosingAtAnInaccessibleTypeArgument()
 		{
 			GeneratorResult result = Generator.RunWithReferencedAssembly("""
@@ -300,7 +300,7 @@ public partial class DiagnosticTests
 				.Because("the inaccessible closing is rejected before construction rather than leaking CS0122 into the generated source");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsForAGenericScanHookConstraintSatisfiedOnlyByAUserDefinedConversion()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -330,7 +330,7 @@ public partial class DiagnosticTests
 				.Because("the violation is caught before construction rather than leaking CS0311 into the generated source");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForAGenericScanHookConstraintNamingANestedTypeOfTheTypeParameter()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -360,7 +360,7 @@ public partial class DiagnosticTests
 				.Because("the closing binds cleanly, so the hook is constructed as Wire<Model> without any diagnostic");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsAPrivateModuleScanHook()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -384,7 +384,7 @@ public partial class DiagnosticTests
 				.Because("a private module hook is not usable: the wrapper could call it, but a same-compilation container binding it directly could not, so it is rejected in both to stay consistent");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenAModuleScanHookNamesNoUsableMethod()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -405,7 +405,7 @@ public partial class DiagnosticTests
 				.Because("the module has no usable static void method 'Missing' accepting the match");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsAModuleScanHookWithAByRefParameter()
 		{
 			GeneratorResult result = Generator.Run("""

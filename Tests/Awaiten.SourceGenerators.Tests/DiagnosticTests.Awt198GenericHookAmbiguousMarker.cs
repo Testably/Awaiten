@@ -6,7 +6,7 @@ public partial class DiagnosticTests
 {
 	public class Awt198GenericHookAmbiguousMarker
 	{
-		[Fact]
+		[Test]
 		public async Task ReportsWhenAMatchClosesTheMarkerMoreThanOnce()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -29,7 +29,7 @@ public partial class DiagnosticTests
 				.Because("DualView closes IView<> at both int and string, so a generic hook's type argument is ambiguous");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForASingleClosedForm()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -57,7 +57,7 @@ public partial class DiagnosticTests
 				.Because("the generic hook binds its type argument from the single closed marker form and is usable");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportForANonGenericHookOnAMatchClosingTheMarkerMoreThanOnce()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -82,7 +82,7 @@ public partial class DiagnosticTests
 				.Because("the non-generic hook accepts every match as object and is a usable hook");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsWhenTwoOpenMarkersBindOneGenericHookToDifferentClosings()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -107,7 +107,7 @@ public partial class DiagnosticTests
 				.Because("two open-generic scans bind the same generic hook to different closings of Dual, so its type argument is ambiguous rather than silently the first-seen one");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenTwoMarkersConstructTheIdenticalMethod()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -134,7 +134,7 @@ public partial class DiagnosticTests
 				.Because("the single constructed dispatch is emitted");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenNoHookIsNamed()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -156,7 +156,7 @@ public partial class DiagnosticTests
 				.Because("a match closing the marker several times is ordinary without a hook to bind a type argument for");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenTwoScansHookDifferentSlots()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -182,7 +182,7 @@ public partial class DiagnosticTests
 				.Because("each hook binds through its own scan's marker: Wire sees only IView<int>, so nothing is ambiguous and both hooks apply");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsTheAmbiguousClosedFormsInTheMessage()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -205,7 +205,7 @@ public partial class DiagnosticTests
 				.Because("the message names the hook and every closed form it could bind, which is what makes the ambiguity actionable");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenAConstraintLeavesASingleBindableForm()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -229,7 +229,7 @@ public partial class DiagnosticTests
 				.Because("the class constraint rules out the int closing, so only IView<Payments> can bind the hook and nothing is ambiguous");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotReportWhenAccessibilityLeavesASingleBindableForm()
 		{
 			GeneratorResult result = Generator.RunWithReferencedAssembly("""
@@ -259,7 +259,7 @@ public partial class DiagnosticTests
 				.Because("the single accessible closing is the one dispatched");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsAwt164WhenTheGenericHookAritiesNeverMatchTheMarker()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -284,7 +284,7 @@ public partial class DiagnosticTests
 				.Because("ambiguity only applies to a hook that could actually bind more than one closed form");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsAModuleScanGenericHookThatCouldBindTwoClosedMarkerForms()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -311,7 +311,7 @@ public partial class DiagnosticTests
 				.Because("the generic module hook could bind the match through IView<IVmA> or IView<IVmB>, so its type arguments are ambiguous");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotRewireAFailedModuleScanHookFromALaterScansNarrowerMarkers()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -343,7 +343,7 @@ public partial class DiagnosticTests
 				.Because("the second scan restates the failed hook over its own single closed form; resolving with only that narrower set would wire the hook to a scan-order-dependent closing beside the reported ambiguity, so the slot has to stay failed over the union");
 		}
 
-		[Fact]
+		[Test]
 		public async Task DoesNotRewireAModuleScanHookWipedByAWideningRestatementFromAThirdScansMarkers()
 		{
 			GeneratorResult result = Generator.Run("""
@@ -375,7 +375,7 @@ public partial class DiagnosticTests
 				.Because("the first scan's successfully wired hook is dropped when the widened union turns ambiguous, and the third scan's restatement must not re-wire it from its own single closed form");
 		}
 
-		[Fact]
+		[Test]
 		public async Task ReportsAFreshAmbiguityAfterAFailedModuleScanHookWasRewiredByALaterScan()
 		{
 			GeneratorResult result = Generator.Run("""

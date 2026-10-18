@@ -7,7 +7,7 @@ namespace Awaiten.SourceGenerators.Tests;
 /// </summary>
 public class KeyedRegistrationTests
 {
-	[Fact]
+	[Test]
 	public async Task FromKeyParameter_DispatchesToTheMatchingImplementationsResolver()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -36,7 +36,7 @@ public class KeyedRegistrationTests
 			.Because("the keyed dependency is wired to the implementation registered under its key");
 	}
 
-	[Fact]
+	[Test]
 	public async Task KeyedServices_AreReachableThroughTheKeyedDispatchButNotTheUnkeyedOneOrTheTypedResolver()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -80,7 +80,7 @@ public class KeyedRegistrationTests
 			.Because("a keyed service gets no typed resolution fast path");
 	}
 
-	[Fact]
+	[Test]
 	public async Task SyntheticDecoratorKeys_AreNeverExposedThroughTheKeyedDispatchOrMetadata()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -115,7 +115,7 @@ public class KeyedRegistrationTests
 			.Because("a synthetic contextual key is never emitted as a resolvable key or advertised registration");
 	}
 
-	[Fact]
+	[Test]
 	public async Task FromKeyParameter_SelectsTheKeyedRegistrationThroughFuncAndLazyRelationships()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -150,7 +150,7 @@ public class KeyedRegistrationTests
 			.Because("a [FromKey] Lazy<T> defers to the implementation registered under its key");
 	}
 
-	[Fact]
+	[Test]
 	public async Task UnkeyedRegistration_CoexistsWithKeyedOnesOfTheSameServiceType()
 	{
 		GeneratorResult result = Generator.Run("""
