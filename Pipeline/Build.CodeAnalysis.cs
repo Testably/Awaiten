@@ -19,7 +19,7 @@ partial class Build
 				.SetOrganization("testably")
 				.SetProjectKey("Testably_Awaiten")
 				.AddVSTestReports(TestResultsDirectory / "*.trx")
-				.AddOpenCoverPaths(TestResultsDirectory / "reports" / "OpenCover.xml")
+				.AddGenericCoveragePaths(TestResultsDirectory / "reports" / "SonarQube.xml")
 				.SetCoverageExclusions("Benchmarks/**,Samples/**")
 				.SetPullRequestOrBranchName(GitHubActions, GitVersion)
 				.SetVersion(GitVersion.SemVer)
