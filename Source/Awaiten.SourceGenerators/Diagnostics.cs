@@ -83,7 +83,7 @@ internal static class Diagnostics
 	public static readonly DiagnosticDescriptor FactoryHidesAsyncInitialization = new(
 		"AWT106",
 		"Factory hides asynchronous initialization behind its declared return type",
-		"factory '{0}' constructs '{1}', which is async-initialized, but declares return type '{2}'; the container cannot see that it needs initialization, so its InitializeAsync never runs. Return '{1}', or make the factory 'async Task<{2}>' and handle initialization inside it.",
+		"The factory '{0}' constructs '{1}', which is async-initialized, but declares return type '{2}'; the container cannot see that it needs initialization, so its InitializeAsync never runs. Return '{1}', or make the factory 'async Task<{2}>' and handle initialization inside it.",
 		"Awaiten",
 		DiagnosticSeverity.Warning,
 		isEnabledByDefault: true);
@@ -1205,7 +1205,7 @@ internal static class Diagnostics
 	public static readonly DiagnosticDescriptor InjectPropertyAlsoInjectAttribute = new(
 		"AWT181",
 		"[InjectProperty] duplicates an [Inject] property",
-		"the property '{0}' on '{1}' carries [Inject] and also has an [InjectProperty] entry; the [Inject] member wins, so the entry's Optional/Deferred/Key are ignored - remove one",
+		"The property '{0}' on '{1}' carries [Inject] and also has an [InjectProperty] entry; the [Inject] member wins, so the entry's Optional/Deferred/Key are ignored - remove one",
 		"Awaiten",
 		DiagnosticSeverity.Warning,
 		isEnabledByDefault: true);
@@ -1330,7 +1330,7 @@ internal static class Diagnostics
 	public static readonly DiagnosticDescriptor HookParameterIsArg = new(
 		"AWT189",
 		"Lifecycle hook parameter cannot be a runtime argument",
-		"the parameter '{0}' of the lifecycle hook for '{1}' is marked [Arg], but a hook's parameters are resolved from the graph; runtime arguments are supplied only through a Func<…> factory to constructor parameters, never to a lifecycle hook",
+		"The parameter '{0}' of the lifecycle hook for '{1}' is marked [Arg], but a hook's parameters are resolved from the graph; runtime arguments are supplied only through a Func<…> factory to constructor parameters, never to a lifecycle hook",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
@@ -1362,7 +1362,7 @@ internal static class Diagnostics
 	public static readonly DiagnosticDescriptor ReleaseHookDeferredParameter = new(
 		"AWT191",
 		"Release hook parameter cannot defer resolution",
-		"the parameter '{0}' of the OnRelease lifecycle hook for '{1}' defers resolution behind a Func/Lazy, but a release hook runs during its owner's teardown, when the container no longer resolves; take the dependency directly, so it is captured at construction",
+		"The parameter '{0}' of the OnRelease lifecycle hook for '{1}' defers resolution behind a Func/Lazy, but a release hook runs during its owner's teardown, when the container no longer resolves; take the dependency directly, so it is captured at construction",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
@@ -1410,7 +1410,7 @@ internal static class Diagnostics
 	public static readonly DiagnosticDescriptor NonPartialModuleScan = new(
 		"AWT194",
 		"Module with a scan is not partial",
-		"the module '{0}' declares a [Scan] but is not partial (or is nested in a type that is not), so its scan cannot be self-compiled; add the partial modifier to the module class and every type containing it",
+		"The module '{0}' declares a [Scan] but is not partial (or is nested in a type that is not), so its scan cannot be self-compiled; add the partial modifier to the module class and every type containing it",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
@@ -1486,7 +1486,7 @@ internal static class Diagnostics
 	public static readonly DiagnosticDescriptor GenericModuleScan = new(
 		"AWT201",
 		"Module with a scan is generic",
-		"the module '{0}' declares a [Scan] but is generic (or nested in a generic type), so no closed module exists for a consumer to import; move the [Scan] onto a non-generic module",
+		"The module '{0}' declares a [Scan] but is generic (or nested in a generic type), so no closed module exists for a consumer to import; move the [Scan] onto a non-generic module",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
@@ -1501,7 +1501,7 @@ internal static class Diagnostics
 	public static readonly DiagnosticDescriptor ModuleScanForeignAssemblies = new(
 		"AWT202",
 		"Module scan names other assemblies",
-		"the module '{0}' declares a [Scan] with InAssembliesOf, but a self-compiled scan sweeps only the module's own assembly (another assembly's internal types stay invisible to it, and its public types a container [Scan] already covers); remove InAssembliesOf or move the [Scan] onto the container",
+		"The module '{0}' declares a [Scan] with InAssembliesOf, but a self-compiled scan sweeps only the module's own assembly (another assembly's internal types stay invisible to it, and its public types a container [Scan] already covers); remove InAssembliesOf or move the [Scan] onto the container",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
