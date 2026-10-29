@@ -17,11 +17,11 @@ Product code is in `Source/`, tests in `Tests/`, benchmarks in `Benchmarks/`, ru
 3. The result is an equatable `ContainerModel` (`Entities/`, using `Internals/EquatableArray.cs`) that carries the diagnostics as `DiagnosticInfo`. Roslyn symbols and live locations must not reach this model, or incremental caching breaks.
 4. `Sources/` emits the code: a `Scope` with the resolution logic and a sealed `Root` that owns the singletons (`Sources.cs`, `.Construction.cs`, `.Dispatch.cs`, `.Disposal.cs`, `.Keyed.cs`, `.Resolvers.cs`, `.Guidance.cs`, `.Names.cs`). `Sources.Module.cs` emits the self-compiled factories and `[GeneratedScanRegistration]` attributes of a module scan.
 
-Containers and modules must be `static partial` classes; a non-static one is a diagnostic (AWT116, AWT152). Errors still emit a container shell (`model.HasErrors`) so the user's code keeps compiling around it.
+Containers and modules must be `static partial` classes; a non-static one is a diagnostic (AWT116, AWT152). Errors still emit a container shell (`model.HasErrors`) so the user's code keeps compiling around it. Runtime error texts the generated code throws are built in `Sources.Guidance.cs`; reuse them so `Resolve` and `WithheldReason` give the same answer.
 
 ## Diagnostics
 
-- Descriptors: `Source/Awaiten.SourceGenerators/Diagnostics.cs`, category `Awaiten`, ids `AWT101` upward.
+- Descriptors: `Source/Awaiten.SourceGenerators/Diagnostics.cs`, category `Awaiten`, ids `AWT101` upward. A message states the cause and the remedy. One id may have a descriptor per severity when a container option decides it (`AWT118` under strict and loose lifetime safety).
 - Release tracking: `AnalyzerReleases.Unshipped.md` lists every rule so far (`AnalyzerReleases.Shipped.md` is still empty). Add a row with id, severity and a one-line note for each new descriptor.
 - Tests: `Tests/Awaiten.SourceGenerators.Tests/DiagnosticTests.AwtNNN<Name>.cs`, typically a nested class per id inside the partial `DiagnosticTests`, with cases that report and cases that must not.
 - Docs: a `### AWTnnn` section with a triggering example in `Docs/pages/09-diagnostics.md`.
