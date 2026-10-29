@@ -9,7 +9,7 @@
 
 	<PropertyGroup>
 		<OutputType>exe</OutputType>
-		<LangVersion>preview</LangVersion>
+		<LangVersion>latest</LangVersion>
 		<ImplicitUsings>disable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 		<IsPackable>false</IsPackable>
