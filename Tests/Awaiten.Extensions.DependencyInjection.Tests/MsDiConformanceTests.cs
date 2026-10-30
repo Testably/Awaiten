@@ -50,6 +50,22 @@ public sealed partial class MsDiConformanceTests
 	public sealed class Lifetimes
 	{
 		[Test]
+		public async Task EachLifetimeHasTheNumericValueOfTheMatchingServiceLifetime()
+		{
+			foreach (Lifetime lifetime in (Lifetime[])Enum.GetValues(typeof(Lifetime)))
+			{
+				ServiceLifetime serviceLifetime =
+					(ServiceLifetime)Enum.Parse(typeof(ServiceLifetime), lifetime.ToString());
+
+				await That((int)lifetime).IsEqualTo((int)serviceLifetime)
+					.Because($"a host may convert {lifetime} to ServiceLifetime by cast, which is only safe while the values agree");
+			}
+
+			await That(Enum.GetValues(typeof(Lifetime)).Length).IsEqualTo(Enum.GetValues(typeof(ServiceLifetime)).Length)
+				.Because("every ServiceLifetime has an Awaiten counterpart and vice versa");
+		}
+
+		[Test]
 		public async Task ANestedScopeIsIndependentOfItsParent()
 		{
 			using ConformanceContainer.Root container = new();

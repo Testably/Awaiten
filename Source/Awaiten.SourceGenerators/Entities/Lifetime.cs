@@ -10,6 +10,6 @@ namespace Awaiten.SourceGenerators.Entities;
 internal enum Lifetime
 {
 	Singleton = 0,
-	Transient = 1,
-	Scoped = 2,
+	Scoped = 1,
+	Transient = 2,
 }
