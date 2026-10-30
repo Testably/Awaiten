@@ -93,6 +93,8 @@ By default a property whose service is unregistered is a missing dependency ([AW
 [InjectProperty<Barista>(nameof(Barista.Metrics), Optional = true)]
 ```
 
+A service an [open generic](../registration/open-generics) registration can provide counts as registered: a property of type `IRepository<Order>` closes `[Singleton(typeof(Repository<>), typeof(IRepository<>))]` exactly like a constructor parameter would, so it is filled even when it is `Optional`.
+
 *Note: a bad name, a read-only member, or a field is [AWT177](../diagnostics#awt177) (for an open-generic target, checked once on the generic definition); an unreachable setter is [AWT136](../diagnostics#awt136); a duplicate entry for one property is [AWT179](../diagnostics#awt179); and a `Factory`/`Instance`-produced type, built whole by its source with nothing for the container to fill, is [AWT178](../diagnostics#awt178).*
 
 A property without an entry is left alone. Injection stays opt-in, one property at a time, and if a property carries both `[Inject]` and an `[InjectProperty<T>]` entry the `[Inject]` member wins and the redundant entry is flagged ([AWT181](../diagnostics#awt181)).

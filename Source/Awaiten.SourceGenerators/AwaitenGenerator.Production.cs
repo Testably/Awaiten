@@ -364,10 +364,17 @@ partial class AwaitenGenerator
 			return (null, default);
 		}
 
-		(List<IMethodSymbol> matches, List<IReadOnlyList<INamedTypeSymbol>> ambiguousMethods) =
-			CollectHookOverloads(info, hookName, release, context);
-
+		// The hook's own origin (the registration that named it), not the implementation's winning Origin: two
+		// scan registrations with different origins can fill the two slots, and each name binds only on its owner.
 		INamedTypeSymbol? origin = release ? info.OnReleaseOrigin : info.OnActivatedOrigin;
+		(List<IMethodSymbol> matches, List<IReadOnlyList<INamedTypeSymbol>> ambiguousMethods) = CollectHookOverloads(
+			info.Symbol,
+			hookName,
+			origin,
+			release ? info.OnReleaseMarkers : info.OnActivatedMarkers,
+			context.ContainerSymbol,
+			context.Compilation);
+
 		if (matches.Count == 1 && ambiguousMethods.Count == 0)
 		{
 			return (QualifiedHook(origin, hookName, matches[0]), ClassifyHookParameters(matches[0], info, release, context));
@@ -409,22 +416,16 @@ partial class AwaitenGenerator
 	///     to a single closed marker form), and separately the closed-form sets of any generic overload that several
 	///     forms could bind, which stay usable (an AWT190 collision when a sibling also matches) yet cannot be
 	///     dispatched (AWT198 when they are the only candidate). The forms of each ambiguous overload are kept so the
-	///     AWT198 message can name them.
+	///     AWT198 message can name them. Open generic expansion uses it too, so it seeds from the hook that is dispatched.
 	/// </summary>
 	private static (List<IMethodSymbol> Matches, List<IReadOnlyList<INamedTypeSymbol>> AmbiguousMethods) CollectHookOverloads(
-		ImplInfo info,
+		INamedTypeSymbol implementation,
 		string hookName,
-		bool release,
-		BuildContext context)
+		INamedTypeSymbol? origin,
+		IReadOnlyList<INamedTypeSymbol> closedMarkers,
+		INamedTypeSymbol containerSymbol,
+		Compilation compilation)
 	{
-		INamedTypeSymbol containerSymbol = context.ContainerSymbol;
-		Compilation compilation = context.Compilation;
-		IReadOnlyList<INamedTypeSymbol> closedMarkers = release ? info.OnReleaseMarkers : info.OnActivatedMarkers;
-
-		// The hook's own origin (the registration that named it), not the implementation's winning Origin: two
-		// scan registrations with different origins can fill the two slots, and each name binds only on its owner.
-		INamedTypeSymbol? origin = release ? info.OnReleaseOrigin : info.OnActivatedOrigin;
-
 		List<IMethodSymbol> matches = new();
 		List<IReadOnlyList<INamedTypeSymbol>> ambiguousMethods = new();
 		foreach (ISymbol member in AccessibleMembers(origin ?? containerSymbol, hookName, compilation))
@@ -441,7 +442,7 @@ partial class AwaitenGenerator
 			// whenever its first parameter accepts the instance.
 			if (method.Arity == 0)
 			{
-				if (compilation.HasImplicitConversion(info.Symbol, method.Parameters[0].Type))
+				if (compilation.HasImplicitConversion(implementation, method.Parameters[0].Type))
 				{
 					matches.Add(method);
 				}
@@ -454,7 +455,7 @@ partial class AwaitenGenerator
 			// leaves the type arguments ambiguous (AWT198, with the forms recorded for the message) yet still a
 			// usable overload, so it counts toward AWT190 when a sibling also matches; none means the method is
 			// not a usable hook and falls through to AWT164 with any other shape mismatch.
-			List<(INamedTypeSymbol Form, IMethodSymbol Constructed)> bindable = BindableHookConstructions(method, closedMarkers, info.Symbol, containerSymbol, compilation);
+			List<(INamedTypeSymbol Form, IMethodSymbol Constructed)> bindable = BindableHookConstructions(method, closedMarkers, implementation, containerSymbol, compilation);
 			if (bindable.Count == 1)
 			{
 				matches.Add(bindable[0].Constructed);
