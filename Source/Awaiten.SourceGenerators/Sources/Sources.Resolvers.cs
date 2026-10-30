@@ -754,8 +754,12 @@ internal static partial class Sources
 	///     Emits <c>CreateScopeAsync</c> on the base <c>Scope</c> (inherited by the <c>Root</c>): it opens a
 	///     child scope and warms its async-initialized scoped services before handing it back. If warm-up
 	///     throws, the scope is disposed (draining whatever was built before the failure) rather than leaked.
+	///     When <paramref name="asyncDisposal" /> is set the scope is disposed through <c>DisposeAsync</c>, because
+	///     the synchronous drain throws for an <c>IAsyncDisposable</c>-only instance and would replace the original
+	///     failure. The original is rethrown unchanged; only if the disposal throws too are both surfaced in an
+	///     <c>AggregateException</c>, the original first.
 	/// </summary>
-	private static void EmitCreateScopeAsync(StringBuilder builder, int depth)
+	private static void EmitCreateScopeAsync(StringBuilder builder, int depth, bool asyncDisposal)
 	{
 		const string task = "global::System.Threading.Tasks.Task";
 
@@ -779,13 +783,32 @@ internal static partial class Sources
 		Indent(builder, depth + 2).AppendLine("{");
 		Indent(builder, depth + 3).AppendLine("await __scope.__WarmAsync(cancellationToken).ConfigureAwait(false);");
 		Indent(builder, depth + 2).AppendLine("}");
-		Indent(builder, depth + 2).AppendLine("catch");
-		Indent(builder, depth + 2).AppendLine("{");
 		// Initialization failed (or was canceled) partway through: dispose the scope so the instances it
 		// already built and tracked are torn down rather than leaked, then surface the original failure.
-		Indent(builder, depth + 3).AppendLine("__scope.Dispose();");
-		Indent(builder, depth + 3).AppendLine("throw;");
-		Indent(builder, depth + 2).AppendLine("}");
+		if (asyncDisposal)
+		{
+			Indent(builder, depth + 2).AppendLine("catch (global::System.Exception __failure)");
+			Indent(builder, depth + 2).AppendLine("{");
+			Indent(builder, depth + 3).AppendLine("try");
+			Indent(builder, depth + 3).AppendLine("{");
+			Indent(builder, depth + 4).AppendLine("await __scope.DisposeAsync().ConfigureAwait(false);");
+			Indent(builder, depth + 3).AppendLine("}");
+			Indent(builder, depth + 3).AppendLine("catch (global::System.Exception __disposalFailure)");
+			Indent(builder, depth + 3).AppendLine("{");
+			Indent(builder, depth + 4).AppendLine("throw new global::System.AggregateException(__failure, __disposalFailure);");
+			Indent(builder, depth + 3).AppendLine("}");
+			builder.AppendLine();
+			Indent(builder, depth + 3).AppendLine("throw;");
+			Indent(builder, depth + 2).AppendLine("}");
+		}
+		else
+		{
+			Indent(builder, depth + 2).AppendLine("catch");
+			Indent(builder, depth + 2).AppendLine("{");
+			Indent(builder, depth + 3).AppendLine("__scope.Dispose();");
+			Indent(builder, depth + 3).AppendLine("throw;");
+			Indent(builder, depth + 2).AppendLine("}");
+		}
 		builder.AppendLine();
 		Indent(builder, depth + 2).AppendLine("return __scope;");
 		Indent(builder, depth + 1).AppendLine("}");

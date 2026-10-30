@@ -1167,5 +1167,129 @@ public partial class AsyncInitializationTests
 	[Container]
 	[Singleton<Valve>]
 	public static partial class ValveSingletonContainer;
+
+	[Test]
+	public async Task CreateScopeAsync_WhenWarmUpThrows_DisposesAsyncDisposablesAndRethrowsTheOriginal()
+	{
+		await using FailingWarmUpContainer.Root container = new();
+		WarmUpRecorder recorder = container.Resolve<WarmUpRecorder>();
+
+		InvalidOperationException thrown = await That(() => container.CreateScopeAsync(Ct))
+			.Throws<InvalidOperationException>();
+
+		await That(thrown).IsSameAs(recorder.InitFailure)
+			.Because("disposing the half-warmed scope must not replace the failure that aborted the warm-up");
+		await That(recorder.DisposedAsync).IsEqualTo(1)
+			.Because("the already initialized IAsyncDisposable-only scoped service is torn down through DisposeAsync");
+	}
+
+	[Test]
+	public async Task CreateScopeAsync_WhenWarmUpIsCanceled_DisposesAsyncDisposablesAndRethrowsTheCancellation()
+	{
+		await using CanceledWarmUpContainer.Root container = new();
+		WarmUpRecorder recorder = container.Resolve<WarmUpRecorder>();
+		using CancellationTokenSource cts = new();
+
+		Task<IAwaitenScope> createScope = container.CreateScopeAsync(cts.Token);
+		cts.Cancel();
+
+		OperationCanceledException thrown = await That(() => createScope)
+			.Throws<OperationCanceledException>();
+
+		await That(thrown).IsSameAs(recorder.InitFailure)
+			.Because("a canceled warm-up surfaces its OperationCanceledException unchanged");
+		await That(recorder.DisposedAsync).IsEqualTo(1)
+			.Because("the already initialized IAsyncDisposable-only scoped service is torn down through DisposeAsync");
+	}
+
+	[Test]
+	public async Task CreateScopeAsync_WhenWarmUpAndDisposalThrow_ThrowsBothWithTheOriginalFirst()
+	{
+		await using FailingWarmUpAndDisposalContainer.Root container = new();
+		WarmUpRecorder recorder = container.Resolve<WarmUpRecorder>();
+
+		AggregateException thrown = await That(() => container.CreateScopeAsync(Ct))
+			.Throws<AggregateException>();
+
+		await That(thrown.InnerExceptions.Count).IsEqualTo(2);
+		await That(thrown.InnerExceptions[0]).IsSameAs(recorder.InitFailure)
+			.Because("the failure that aborted the warm-up comes first");
+		await That(thrown.InnerExceptions[1]).IsSameAs(recorder.DisposalFailure)
+			.Because("a failure while disposing the half-warmed scope is reported alongside the original, not swallowed");
+	}
+
+	public sealed class WarmUpRecorder
+	{
+		public int DisposedAsync { get; set; }
+
+		public Exception? InitFailure { get; set; }
+
+		public Exception? DisposalFailure { get; set; }
+	}
+
+	public sealed class WarmedAsyncDisposable(WarmUpRecorder recorder) : IAsyncInitializable, IAsyncDisposable
+	{
+		public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+		public ValueTask DisposeAsync()
+		{
+			recorder.DisposedAsync++;
+			return default;
+		}
+	}
+
+	public sealed class WarmedThrowingAsyncDisposable(WarmUpRecorder recorder) : IAsyncInitializable, IAsyncDisposable
+	{
+		public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+		public ValueTask DisposeAsync()
+		{
+			recorder.DisposalFailure = new InvalidOperationException("dispose-boom");
+			throw recorder.DisposalFailure;
+		}
+	}
+
+	public sealed class FailingWarmUp(WarmUpRecorder recorder) : IAsyncInitializable
+	{
+		public Task InitializeAsync(CancellationToken cancellationToken)
+		{
+			recorder.InitFailure = new InvalidOperationException("init-boom");
+			throw recorder.InitFailure;
+		}
+	}
+
+	public sealed class CanceledWarmUp(WarmUpRecorder recorder) : IAsyncInitializable
+	{
+		public async Task InitializeAsync(CancellationToken cancellationToken)
+		{
+			try
+			{
+				await Task.Delay(Timeout.Infinite, cancellationToken).ConfigureAwait(false);
+			}
+			catch (OperationCanceledException exception)
+			{
+				recorder.InitFailure = exception;
+				throw;
+			}
+		}
+	}
+
+	[Container]
+	[Singleton<WarmUpRecorder>]
+	[Scoped<WarmedAsyncDisposable>]
+	[Scoped<FailingWarmUp>]
+	public static partial class FailingWarmUpContainer;
+
+	[Container]
+	[Singleton<WarmUpRecorder>]
+	[Scoped<WarmedAsyncDisposable>]
+	[Scoped<CanceledWarmUp>]
+	public static partial class CanceledWarmUpContainer;
+
+	[Container]
+	[Singleton<WarmUpRecorder>]
+	[Scoped<WarmedThrowingAsyncDisposable>]
+	[Scoped<FailingWarmUp>]
+	public static partial class FailingWarmUpAndDisposalContainer;
 #endif
 }
