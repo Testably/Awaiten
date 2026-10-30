@@ -512,7 +512,7 @@ internal static class Diagnostics
 
 	/// <summary>
 	///     A resolver seam (<c>IAwaitenResolver</c>, <c>IAwaitenAsyncResolver</c>, <c>IAwaitenScope</c>,
-	///     <c>IAwaitenRoot</c>, or <c>IAwaitenContainerMetadata</c>) is injected into a type that is not a
+	///     or <c>IAwaitenRoot</c>) is injected into a type that is not a
 	///     <c>[Container]</c> composition root (nor a <c>[Module]</c>), as a constructor parameter or property (the
 	///     container never populates a field, so a resolver-typed field is not reported). Resolving from the
 	///     container at run time is the Service Locator anti-pattern: it hides a type's
@@ -1574,5 +1574,20 @@ internal static class Diagnostics
 		"'{0}' matched the module scan, but its {1} hook parameter '{2}' is marked {3}, which the generated hook wrapper cannot mirror and would silently drop; remove the attribute, resolve the dependency plainly, or drop the hook",
 		"Awaiten",
 		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     User code constructs an <c>Owned&lt;T&gt;</c> disposal handle with <c>new</c>. The handle disposes the scope
+	///     it is given, so a hand-built one over the container root disposes the root, and one over any other scope
+	///     ends that scope's lifetime behind its owner's back. Only the container creates the handle, over the
+	///     throwaway scope it built the value in. Reported by <see cref="AwaitenBoundaryAnalyzer" />, which skips
+	///     generated code, so a deliberate construction (a test double, for example) can be suppressed in source.
+	/// </summary>
+	public static readonly DiagnosticDescriptor OwnedConstructedByHand = new(
+		"AWT205",
+		"Owned<T> is constructed by hand",
+		"{0} is created by the container; resolve {0} or inject Func<{0}> instead. A handle built by hand disposes whatever scope it is given, the container root included.",
+		"Awaiten",
+		DiagnosticSeverity.Warning,
 		isEnabledByDefault: true);
 }

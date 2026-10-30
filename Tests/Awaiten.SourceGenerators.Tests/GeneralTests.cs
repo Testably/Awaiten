@@ -888,7 +888,7 @@ public class GeneralTests
 		await That(source).Contains("protected object __ResolveExternal(global::System.Type serviceType, object? serviceKey)");
 		await That(source).Contains("new global::MyCode.Service((global::MyCode.ILogger)__s.__ResolveExternal(typeof(global::MyCode.ILogger), null))");
 		// The external dependency is advertised in the container metadata.
-		await That(source).Contains("global::Awaiten.IAwaitenContainerMetadata.ExternalDependencies");
+		await That(source).Contains("global::Awaiten.IAwaitenRoot.ExternalDependencies");
 		await That(source).Contains("typeof(global::MyCode.ILogger)");
 	}
 

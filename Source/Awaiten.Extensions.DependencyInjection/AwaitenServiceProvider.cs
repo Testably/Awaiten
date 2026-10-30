@@ -12,7 +12,7 @@ namespace Awaiten.Extensions.DependencyInjection;
 ///     create <see cref="IServiceScope">scopes</see>). <see cref="GetService" /> maps to the container's
 ///     <see cref="IAwaitenResolver.TryResolve(Type, out object)" />, returning <see langword="null" /> for an unregistered
 ///     service as <see cref="IServiceProvider" /> requires. A service that requires asynchronous resolution
-///     (advertised through <see cref="IAwaitenContainerMetadata" />) is served as a <c>Task&lt;T&gt;</c>
+///     (advertised through <see cref="IAwaitenRoot.Registrations" />) is served as a <c>Task&lt;T&gt;</c>
 ///     (request <c>Task&lt;TService&gt;</c> and await it), mirroring the collection projection. An
 ///     <c>IEnumerable&lt;T&gt;</c> the container has no unkeyed registration for resolves to an empty sequence for
 ///     a reference element type, as MS.DI guarantees for every element type. A service the container withholds
@@ -43,11 +43,10 @@ public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScop
 	private readonly bool _ownsContainer;
 
 	/// <summary>
-	///     The container's registration metadata (implemented by the generated Root), flowed into scope providers
-	///     so async services stay resolvable as <c>Task&lt;T&gt;</c> from scopes too. Null when the scope offers no
-	///     metadata.
+	///     The container root, whose registration metadata and resolvability flow into scope providers so async
+	///     services stay resolvable as <c>Task&lt;T&gt;</c> from scopes too. Null when the adapted scope is not a root.
 	/// </summary>
-	private readonly IAwaitenContainerMetadata? _metadata;
+	private readonly IAwaitenRoot? _metadata;
 
 	/// <summary>Adapts the given container to <see cref="IServiceProvider" />.</summary>
 	/// <param name="container">The Awaiten container to adapt.</param>
@@ -59,10 +58,10 @@ public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScop
 	{
 		_container = container ?? throw new ArgumentNullException(nameof(container));
 		_ownsContainer = ownsContainer;
-		_metadata = container as IAwaitenContainerMetadata;
+		_metadata = container as IAwaitenRoot;
 	}
 
-	private AwaitenServiceProvider(IAwaitenScope scope, IAwaitenContainerMetadata? metadata)
+	private AwaitenServiceProvider(IAwaitenScope scope, IAwaitenRoot? metadata)
 	{
 		_container = scope;
 		_ownsContainer = true;
@@ -107,20 +106,12 @@ public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScop
 			}
 		}
 
-		// The container has this service but declined to build it here: a disposable transient asked on the root
-		// under the strict lifetime default, whose every resolution would accumulate there for the container's
-		// lifetime. Resolve turns that into the guidance naming the fix, without constructing anything, which is
-		// what MS.DI does for a scoping violation too. Returning null would instead let a host bind the parameter
-		// from somewhere else and fail far from the cause.
-		if (_metadata is not null && _metadata.IsResolvable(serviceType, null))
-		{
-			return _container.Resolve(serviceType);
-		}
-
-		// The container has the service and withholds it from the synchronous path, typically because it needs
-		// asynchronous initialization. It knows exactly why and what to change, so throwing that beats returning a
-		// null the caller would report as "no such service", naming the symptom instead of the cause.
-		if (_metadata?.WithheldReason(serviceType, null) is { } reason)
+		// The container has the service but withholds it here: it needs asynchronous initialization, or it is a
+		// disposable transient asked on the root under the strict lifetime default, whose every resolution would
+		// accumulate there for the container's lifetime. The container knows exactly why and what to change, so
+		// throwing that, without constructing anything, beats returning a null the caller would report as "no such
+		// service", or would bind from somewhere else and fail far from the cause.
+		if (_metadata?.GetResolvability(serviceType, null).Reason is { } reason)
 		{
 			throw new InvalidOperationException(reason);
 		}
@@ -186,15 +177,9 @@ public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScop
 			}
 		}
 
-		// The container has this keyed service but declined to build it here (a root-withheld disposable
-		// transient, exactly as in GetService): Resolve surfaces the guidance naming the fix instead of a
-		// silent null the probe's answer would contradict.
-		if (_metadata is not null && _metadata.IsResolvable(serviceType, serviceKey))
-		{
-			return _container.Resolve(serviceType, serviceKey);
-		}
-
-		if (_metadata?.WithheldReason(serviceType, serviceKey) is { } reason)
+		// The container has this keyed service but withholds it here, exactly as in GetService: its reason names the
+		// fix instead of a silent null the probe's answer would contradict.
+		if (_metadata?.GetResolvability(serviceType, serviceKey).Reason is { } reason)
 		{
 			throw new InvalidOperationException(reason);
 		}
@@ -218,7 +203,7 @@ public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScop
 
 	/// <inheritdoc />
 	/// <remarks>
-	///     Answered from <see cref="IAwaitenContainerMetadata.IsResolvable" />, so it covers every shape the
+	///     Answered from <see cref="IAwaitenRoot.GetResolvability" />, so it covers every shape the
 	///     container dispatches rather than a re-derivation of the generator's synthesis rules: a registration, the
 	///     relationship shapes over it, the synthesized collections and keyed dictionaries, the awaited views over
 	///     those, and a variance-compatible closing. Shapes the container does not dispatch are reported when
@@ -237,13 +222,10 @@ public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScop
 			throw new ArgumentNullException(nameof(serviceType));
 		}
 
-		// A withheld service exists, which is what this answers, and GetService throws its guidance rather than
-		// returning null, so reporting it keeps the probe and resolution in step. The empty-sequence answer is
-		// unkeyed only, matching GetService: MS.DI's keyed surface has no equivalent guarantee, and
-		// IsResolvableShape is shared with the keyed probe.
+		// The empty-sequence answer is unkeyed only, matching GetService: MS.DI's keyed surface has no equivalent
+		// guarantee, and IsResolvableShape is shared with the keyed probe.
 		return IsProviderService(serviceType)
 		       || IsResolvableShape(serviceType, null)
-		       || _metadata?.WithheldReason(serviceType, null) is not null
 		       || EmptyEnumerableElement(serviceType) is not null;
 	}
 
@@ -268,9 +250,7 @@ public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScop
 			return IsService(serviceType);
 		}
 
-		return !ReferenceEquals(serviceKey, KeyedService.AnyKey)
-		       && (IsResolvableShape(serviceType, serviceKey)
-		           || _metadata?.WithheldReason(serviceType, serviceKey) is not null);
+		return !ReferenceEquals(serviceKey, KeyedService.AnyKey) && IsResolvableShape(serviceType, serviceKey);
 	}
 
 	/// <inheritdoc />
@@ -327,9 +307,10 @@ public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScop
 		           || serviceType == typeof(IServiceProviderIsKeyedService)));
 
 	/// <summary>
-	///     Whether the container can resolve <paramref name="serviceType" /> under <paramref name="key" />, or the
-	///     bridge can serve it as the <c>Task&lt;T&gt;</c> projection of an async-only registration. Those are the
-	///     two paths <see cref="GetService" /> and <see cref="GetKeyedService" /> take, in the same order.
+	///     Whether the container has <paramref name="serviceType" /> under <paramref name="key" />, or the bridge can
+	///     serve it as the <c>Task&lt;T&gt;</c> projection of an async-only registration. A service the container
+	///     withholds exists, and <see cref="GetService" /> and <see cref="GetKeyedService" /> throw its reason rather
+	///     than returning <see langword="null" />, so reporting it keeps the probe and resolution in step.
 	/// </summary>
 	private bool IsResolvableShape(Type serviceType, object? key)
 	{
@@ -338,7 +319,7 @@ public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScop
 			return false;
 		}
 
-		if (_metadata.IsResolvable(serviceType, key))
+		if (_metadata.GetResolvability(serviceType, key).Status != AwaitenResolvabilityStatus.NotRegistered)
 		{
 			return true;
 		}

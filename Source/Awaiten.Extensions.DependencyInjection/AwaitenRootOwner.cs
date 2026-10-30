@@ -11,7 +11,7 @@ namespace Awaiten.Extensions.DependencyInjection;
 ///     instances MS.DI disposes itself.
 /// </summary>
 internal sealed class AwaitenRootOwner<TRoot> : IDisposable, IAsyncDisposable
-	where TRoot : class, IAwaitenContainerMetadata
+	where TRoot : class, IAwaitenRoot
 {
 	public AwaitenRootOwner(TRoot root) => Root = root;
 

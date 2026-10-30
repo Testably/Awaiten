@@ -24,7 +24,7 @@ public sealed partial class BridgeDisposalTests
 	}
 
 	private static ServiceProvider Build<TRoot>(BridgePath path)
-		where TRoot : class, IAwaitenContainerMetadata, new()
+		where TRoot : class, IAwaitenRoot, new()
 	{
 		ServiceCollection services = new();
 		if (path == BridgePath.Projection)
@@ -116,7 +116,7 @@ public sealed partial class BridgeDisposalTests
 	public async Task HostFactory_RootWarmedDirectly_DisposedWithProvider()
 	{
 		ServiceProvider provider = Build<WarmedContainer.Root>(BridgePath.HostFactory);
-		IAwaitenContainerMetadata root = provider.GetRequiredService<IAwaitenContainerMetadata>();
+		IAwaitenRoot root = provider.GetRequiredService<IAwaitenRoot>();
 		await root.InitializeAsync(TestContext.Current!.Execution.CancellationToken);
 		WarmedResource resource = (WarmedResource)await root.ResolveAsync(typeof(WarmedResource));
 

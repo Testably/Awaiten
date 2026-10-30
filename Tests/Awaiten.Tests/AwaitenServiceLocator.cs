@@ -15,7 +15,7 @@ public interface IServiceLocator
 /// </summary>
 [SuppressMessage("Awaiten", "AWT135:Service locator: a resolver interface is injected into a service",
 	Justification = "This is a custom bridge adapter: holding the scope is the adaptation itself, not a hidden run-time dependency.")]
-public sealed class AwaitenServiceLocator(IAwaitenContainerMetadata container, IAwaitenScope scope) : IServiceLocator
+public sealed class AwaitenServiceLocator(IAwaitenRoot container, IAwaitenScope scope) : IServiceLocator
 {
 	public object? Resolve(Type? type)
 	{
@@ -30,7 +30,7 @@ public sealed class AwaitenServiceLocator(IAwaitenContainerMetadata container, I
 		}
 
 		// Reported as absent, the framework would bind it from elsewhere and fail far from the cause.
-		if (container.WithheldReason(type, null) is { } reason)
+		if (container.GetResolvability(type, null).Reason is { } reason)
 		{
 			throw new InvalidOperationException(reason);
 		}
@@ -54,6 +54,9 @@ public sealed class AwaitenServiceLocator(IAwaitenContainerMetadata container, I
 		}
 
 		Type elementType = type.GenericTypeArguments[0];
-		return elementType.IsValueType || container.IsResolvable(elementType, null) ? null : elementType;
+		return elementType.IsValueType
+		       || container.GetResolvability(elementType, null).Status != AwaitenResolvabilityStatus.NotRegistered
+			? null
+			: elementType;
 	}
 }

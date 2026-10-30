@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Threading.Tasks;
 
@@ -24,6 +25,7 @@ public readonly struct Owned<T> :
 	/// <summary>Wraps <paramref name="value" /> resolved from <paramref name="scope" />. Called by generated container code.</summary>
 	/// <param name="scope">The scope that owns <paramref name="value" /> and is disposed with this handle.</param>
 	/// <param name="value">The resolved service instance.</param>
+	[EditorBrowsable(EditorBrowsableState.Never)]
 	public Owned(IAwaitenScope scope, T value)
 	{
 		_scope = scope;

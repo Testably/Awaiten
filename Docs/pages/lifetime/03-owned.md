@@ -64,6 +64,8 @@ public sealed class Plant(Func<Task<Owned<Valve>>> valves)
 
 *Note: an `Owned<T>` handle cannot be requested through a `Lazy<Owned<T>>` ([AWT121](../diagnostics#awt121)), since that would hide who owns the disposal.*
 
+*Note: only the container creates `Owned<T>`. A handle built with `new` disposes whatever scope it is given, the root included, so constructing one in your code is the warning [AWT205](../diagnostics#awt205).*
+
 ## Where to go next
 
 - [Lifetime safety](./lifetime-safety) for why disposable transients are withheld from the root.

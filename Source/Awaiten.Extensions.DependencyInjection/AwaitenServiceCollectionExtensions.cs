@@ -38,18 +38,18 @@ public static class AwaitenServiceCollectionExtensions
 	///         Under the strict default (<c>LifetimeSafety.Strict</c>), a disposable transient resolved from the
 	///         root provider rather than a scope throws the container's guidance. Resolve it from a scope, or use
 	///         <c>LifetimeSafety.Loose</c>. Warm a <c>SyncResolveAfterInit</c> container at startup (resolve
-	///         <see cref="IAwaitenContainerMetadata" /> and await <c>InitializeAsync</c>) before its
+	///         <see cref="IAwaitenRoot" /> and await <c>InitializeAsync</c>) before its
 	///         async-initialized services are first resolved, otherwise the first resolution blocks synchronously.
-	///         External dependencies are wired to the host's provider on first bridged resolution, which a metadata
+	///         External dependencies are wired to the host's provider on first bridged resolution, which a direct
 	///         warm-up bypasses, so when warming such a container first set <c>ExternalResolver</c> on the resolved
-	///         metadata (for example a <see cref="ServiceProviderExternalResolver" /> over the provider). Do not
+	///         root (for example a <see cref="ServiceProviderExternalResolver" /> over the provider). Do not
 	///         dispose a scope or the provider while a resolved <c>Task&lt;T&gt;</c> is still in flight: MS.DI
 	///         disposes the captured <c>Task</c>, whose <c>Dispose</c> throws for an incomplete task.
 	///     </para>
 	/// </remarks>
 	/// <typeparam name="TRoot">The generated Awaiten container root type.</typeparam>
 	public static IServiceCollection AddGeneratedContainer<TRoot>(this IServiceCollection services)
-		where TRoot : class, IAwaitenContainerMetadata, new()
+		where TRoot : class, IAwaitenRoot, new()
 	{
 		if (services is null)
 		{
@@ -64,7 +64,7 @@ public static class AwaitenServiceCollectionExtensions
 	///     handed to the host's ConfigureContainer callbacks instead of a fresh one.
 	/// </summary>
 	internal static IServiceCollection AddGeneratedContainer<TRoot>(IServiceCollection services, TRoot root)
-		where TRoot : class, IAwaitenContainerMetadata, new()
+		where TRoot : class, IAwaitenRoot, new()
 	{
 		// Expose the root under its own type and the two container-facing interfaces so a host can reach it, e.g.
 		// to warm a SyncResolveAfterInit container. Registered as a pre-built instance (a constant), which MS.DI
@@ -72,7 +72,7 @@ public static class AwaitenServiceCollectionExtensions
 		// position that precedes everything the root builds.
 		services.AddSingleton(root);
 		services.AddSingleton<IAwaitenScope>(root);
-		services.AddSingleton<IAwaitenContainerMetadata>(root);
+		services.AddSingleton<IAwaitenRoot>(root);
 		services.AddSingleton(_ => new AwaitenRootOwner<TRoot>(root));
 		services.TryAddSingleton(sp => new AwaitenRootProviderProbe(sp));
 
@@ -106,7 +106,7 @@ public static class AwaitenServiceCollectionExtensions
 	///     <see cref="IKeyedServiceProvider" />; an unkeyed one is projected as an ordinary descriptor.
 	/// </summary>
 	private static void ProjectRegistration<TRoot>(IServiceCollection services, TRoot root, AwaitenRegistration registration, bool hasExternal)
-		where TRoot : class, IAwaitenContainerMetadata, new()
+		where TRoot : class, IAwaitenRoot, new()
 	{
 		Type serviceType = registration.ServiceType;
 		Lifetime lifetime = registration.Lifetime;
@@ -179,7 +179,7 @@ public static class AwaitenServiceCollectionExtensions
 	///     through its holder, so MS.DI captures the one that disposes the instance before the instance itself.
 	/// </summary>
 	private static IAwaitenScope ScopeFor<TRoot>(IServiceProvider provider, Lifetime lifetime)
-		where TRoot : class, IAwaitenContainerMetadata, new()
+		where TRoot : class, IAwaitenRoot, new()
 		=> lifetime == Lifetime.Singleton || (lifetime == Lifetime.Transient && IsRootProvider(provider))
 			? provider.GetRequiredService<AwaitenRootOwner<TRoot>>().Root
 			: provider.GetRequiredService<AwaitenScopeHolder<TRoot>>().Scope;
@@ -199,7 +199,7 @@ public static class AwaitenServiceCollectionExtensions
 	///     on the internal probe singleton so concurrent first resolutions wire it exactly once.
 	/// </summary>
 	private static void EnsureExternalWired<TRoot>(IServiceProvider provider, TRoot root, bool hasExternal)
-		where TRoot : class, IAwaitenContainerMetadata, new()
+		where TRoot : class, IAwaitenRoot, new()
 	{
 		if (!hasExternal || root.ExternalResolver is not null)
 		{

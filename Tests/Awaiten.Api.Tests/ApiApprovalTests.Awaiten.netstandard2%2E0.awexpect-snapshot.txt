@@ -20,7 +20,9 @@ namespace Awaiten
     }
     public readonly struct AwaitenRegistration : System.IEquatable<Awaiten.AwaitenRegistration>
     {
+        [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
         public AwaitenRegistration(System.Type serviceType, Awaiten.Lifetime lifetime, System.Type asyncTaskType, System.Func<System.Threading.Tasks.Task<object>, object> asyncTaskConverter, object? key = null) { }
+        [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
         public AwaitenRegistration(System.Type serviceType, Awaiten.Lifetime lifetime, bool externallyOwned = false, object? key = null) { }
         public System.Func<System.Threading.Tasks.Task<object>, object>? AsyncTaskConverter { get; }
         public System.Type? AsyncTaskType { get; }
@@ -34,6 +36,25 @@ namespace Awaiten
         public override int GetHashCode() { }
         public static bool operator ==(Awaiten.AwaitenRegistration left, Awaiten.AwaitenRegistration right) { }
         public static bool operator !=(Awaiten.AwaitenRegistration left, Awaiten.AwaitenRegistration right) { }
+    }
+    public readonly struct AwaitenResolvability : System.IEquatable<Awaiten.AwaitenResolvability>
+    {
+        [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
+        public AwaitenResolvability(Awaiten.AwaitenResolvabilityStatus status, string? reason) { }
+        public string? Reason { get; }
+        public Awaiten.AwaitenResolvabilityStatus Status { get; }
+        public bool Equals(Awaiten.AwaitenResolvability other) { }
+        public override bool Equals(object? obj) { }
+        public override int GetHashCode() { }
+        public static bool operator ==(Awaiten.AwaitenResolvability left, Awaiten.AwaitenResolvability right) { }
+        public static bool operator !=(Awaiten.AwaitenResolvability left, Awaiten.AwaitenResolvability right) { }
+    }
+    public enum AwaitenResolvabilityStatus
+    {
+        NotRegistered = 0,
+        Resolvable = 1,
+        AsyncOnly = 2,
+        WithheldOnRoot = 3,
     }
     public static class AwaitenResolverExtensions
     {
@@ -50,6 +71,7 @@ namespace Awaiten
             public bool TryResolve<T>(object key, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out T? instance) { }
         }
     }
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
     public static class AwaitenTaskProjection
     {
         public static System.Threading.Tasks.Task<T> AsTask<T>(System.Threading.Tasks.Task<object> resolution) { }
@@ -128,13 +150,6 @@ namespace Awaiten
         System.Threading.Tasks.Task<object> ResolveAsync(System.Type serviceType, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
         System.Threading.Tasks.Task<object> ResolveAsync(System.Type serviceType, object? key, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
     }
-    public interface IAwaitenContainerMetadata : Awaiten.IAwaitenAsyncResolver, Awaiten.IAwaitenExternalResolverHost, Awaiten.IAwaitenResolver, Awaiten.IAwaitenRoot, Awaiten.IAwaitenScope, System.IDisposable
-    {
-        System.Collections.Generic.IReadOnlyList<Awaiten.AwaitenExternalDependency> ExternalDependencies { get; }
-        System.Collections.Generic.IReadOnlyList<Awaiten.AwaitenRegistration> Registrations { get; }
-        bool IsResolvable(System.Type serviceType, object? key);
-        string? WithheldReason(System.Type serviceType, object? key);
-    }
     public interface IAwaitenExternalResolverHost
     {
         Awaiten.IExternalResolver? ExternalResolver { get; set; }
@@ -146,12 +161,16 @@ namespace Awaiten
         bool TryResolve(System.Type serviceType, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? instance);
         bool TryResolve(System.Type serviceType, object? key, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? instance);
     }
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
     public interface IAwaitenResolver<T>
     {
         T Resolve();
     }
-    public interface IAwaitenRoot : Awaiten.IAwaitenAsyncResolver, Awaiten.IAwaitenResolver, Awaiten.IAwaitenScope, System.IDisposable
+    public interface IAwaitenRoot : Awaiten.IAwaitenAsyncResolver, Awaiten.IAwaitenExternalResolverHost, Awaiten.IAwaitenResolver, Awaiten.IAwaitenScope, System.IDisposable
     {
+        System.Collections.Generic.IReadOnlyList<Awaiten.AwaitenExternalDependency> ExternalDependencies { get; }
+        System.Collections.Generic.IReadOnlyList<Awaiten.AwaitenRegistration> Registrations { get; }
+        Awaiten.AwaitenResolvability GetResolvability(System.Type serviceType, object? key);
         System.Threading.Tasks.Task InitializeAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
     }
     public interface IAwaitenScope : Awaiten.IAwaitenAsyncResolver, Awaiten.IAwaitenResolver, System.IDisposable
@@ -213,6 +232,7 @@ namespace Awaiten
     }
     public readonly struct Owned<T> : System.IDisposable
     {
+        [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
         public Owned(Awaiten.IAwaitenScope scope, T value) { }
         public T Value { get; }
         public void Dispose() { }

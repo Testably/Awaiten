@@ -144,7 +144,7 @@ public partial class ExternalServiceTests
 	{
 		using ExternalContainer.Root container = new();
 
-		await That(((IAwaitenContainerMetadata)container).ExternalDependencies)
+		await That(((IAwaitenRoot)container).ExternalDependencies)
 			.Contains(new AwaitenExternalDependency(typeof(IClock)))
 			.Because("an unkeyed [ImportService<IClock>] consumer advertises the external dependency")
 			.And.Contains(new AwaitenExternalDependency(typeof(IClock), "utc"))
@@ -168,7 +168,7 @@ public partial class ExternalServiceTests
 	{
 		using HookExternalContainer.Root container = new();
 
-		await That(((IAwaitenContainerMetadata)container).ExternalDependencies)
+		await That(((IAwaitenRoot)container).ExternalDependencies)
 			.Contains(new AwaitenExternalDependency(typeof(IClock)))
 			.Because("an [ImportService<T>] reached only through a lifecycle hook parameter is still advertised and driven onto the external surface");
 	}

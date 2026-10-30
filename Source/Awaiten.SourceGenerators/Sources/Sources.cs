@@ -87,8 +87,8 @@ internal static partial class Sources
 		// root; the sealed Root owns the singletons and is the usable instance (new MyContainer.Root()). Buffering
 		// the Scope keeps the Root first in the file while still reading what only the Scope's emit can decide.
 		StringBuilder scope = new();
-		bool hasWithheldReasons = EmitScopeBaseClass(scope, depth, context, model.Strict, model.SyncResolveAfterInit, model.VarianceCandidates.AsArray());
-		EmitRootClass(builder, depth, context, model.SyncResolveAfterInit, hasWithheldReasons);
+		bool hasResolvabilityProbe = EmitScopeBaseClass(scope, depth, context, model.Strict, model.SyncResolveAfterInit, model.VarianceCandidates.AsArray());
+		EmitRootClass(builder, depth, context, model.SyncResolveAfterInit, hasResolvabilityProbe);
 		builder.AppendLine();
 		builder.Append(scope);
 
@@ -116,8 +116,8 @@ internal static partial class Sources
 	/// <summary>
 	///     Emits the base <c>Scope</c>: the home of resolution logic. It caches scoped instances, constructs
 	///     transients, and resolves singletons through virtual delegators the <c>Root</c> overrides. Child scopes
-	///     are instances of this type. Returns whether it emitted a <c>__WithheldReason</c> lookup with anything to
-	///     find, which is what the Root's <c>WithheldReason</c> reports over.
+	///     are instances of this type. Returns whether it emitted the <c>__GetResolvability</c> probe the Root's
+	///     <c>GetResolvability</c> reports over.
 	/// </summary>
 	private static bool EmitScopeBaseClass(StringBuilder builder, int depth, EmitContext context, bool strict, bool syncResolveAfterInit, string[] varianceCandidates)
 	{
@@ -242,14 +242,7 @@ internal static partial class Sources
 		// helper with the async dispatch above.
 		bool hasKeyedEntries = EmitKeyedResolutionApi(regions, body, context, strict, syncResolveAfterInit, asObjectEmitted);
 		// The resolvability probe reads the dispatch tables both surfaces just emitted, so it comes after both.
-		EmitResolvabilityApi(regions, body, dispatch, hasKeyedEntries);
-		// Gated on a table that can answer: without this a container withholding nothing carries a lookup whose
-		// every path returns null.
-		bool hasWithheldReasons = dispatch.HasWithheld || hasKeyedEntries;
-		if (hasWithheldReasons)
-		{
-			EmitWithheldReasonApi(regions, body, dispatch, hasKeyedEntries);
-		}
+		bool hasResolvabilityProbe = EmitResolvabilityApi(regions, body, dispatch, hasKeyedEntries);
 
 		Separate(members);
 		EmitCreateScopeAsync(members, body, asyncDisposal);
@@ -313,7 +306,7 @@ internal static partial class Sources
 			new MemberSection("Helpers", helpers));
 
 		Indent(builder, depth).AppendLine("}");
-		return hasWithheldReasons;
+		return hasResolvabilityProbe;
 	}
 
 	/// <summary>
@@ -437,17 +430,17 @@ internal static partial class Sources
 	///     instance (<c>new MyContainer.Root()</c>). It overrides the base's virtual singleton delegators, so a
 	///     child scope delegating through <c>__root</c> lands here.
 	/// </summary>
-	private static void EmitRootClass(StringBuilder builder, int depth, EmitContext context, bool syncResolveAfterInit, bool hasWithheldReasons)
+	private static void EmitRootClass(StringBuilder builder, int depth, EmitContext context, bool syncResolveAfterInit, bool hasResolvabilityProbe)
 	{
 		InstanceModel[] instances = context.Instances;
 		Names names = context.Names;
 
-		// The Root is the composition root (IAwaitenContainerMetadata, which is an IAwaitenRoot): it adds
-		// InitializeAsync to warm the singletons and advertises its registrations for the MS.DI bridge. A
-		// child scope is only an IAwaitenScope; it is warmed when created (CreateScopeAsync), never explicitly.
+		// The Root is the composition root (IAwaitenRoot): it adds InitializeAsync to warm the singletons and
+		// advertises its registrations and resolvability for the MS.DI bridge. A child scope is only an
+		// IAwaitenScope; it is warmed when created (CreateScopeAsync), never explicitly.
 		AppendXmlSummary(builder, depth,
 			"The container root: owns the singleton instances and serves as the default scope.");
-		Indent(builder, depth).AppendLine("public sealed class Root : Scope, global::Awaiten.IAwaitenContainerMetadata");
+		Indent(builder, depth).AppendLine("public sealed class Root : Scope, global::Awaiten.IAwaitenRoot");
 		Indent(builder, depth).AppendLine("{");
 		int body = depth + 1;
 
@@ -462,7 +455,7 @@ internal static partial class Sources
 		// and __externalDependencies when the container has external dependencies).
 		EmitCacheFields(fields, body, instances, names, Lifetime.Singleton);
 
-		// Members region (no #region wrapper): the constructor and the IAwaitenContainerMetadata surface
+		// Members region (no #region wrapper): the constructor and the IAwaitenRoot surface
 		// (InitializeAsync plus the advertised registration lists).
 		AppendXmlSummary(members, body,
 			"Creates the container root: the usable container instance and its default scope.");
@@ -482,14 +475,14 @@ internal static partial class Sources
 		// Scope warms only its async scoped services).
 		Separate(members);
 		EmitRootInitializeAsync(members, body, instances, names);
-		// The registration metadata array (fields region) and its IAwaitenContainerMetadata.Registrations getter
+		// The registration metadata array (fields region) and its IAwaitenRoot.Registrations getter
 		// (members region, beside InitializeAsync).
 		EmitRegistrations(fields, members, body, instances, syncResolveAfterInit);
 		// The external-dependency metadata: the advertised list (fields region when non-empty) and its getter
 		// (members region); the getter returns an empty array when the container has no external dependencies.
 		EmitExternalMetadata(fields, members, body, instances);
 		Separate(members);
-		EmitWithheldReasonMember(members, body, hasWithheldReasons);
+		EmitResolvabilityMember(members, body, hasResolvabilityProbe);
 
 		// Resolvers region: the per-singleton static resolvers overriding the base Scope's delegators.
 		for (int i = 0; i < instances.Length; i++)
@@ -628,8 +621,8 @@ internal static partial class Sources
 			$"\"Awaiten: container '{typeName}' has registration errors; see the build diagnostics (AWT1xx).\"";
 		// The container has registration errors, so emit a throwing Root that still satisfies the shape
 		// consumers depend on, keeping the build focused on the actionable AWT diagnostics rather than cascading
-		// "type not found" errors. It implements IAwaitenContainerMetadata.
-		Indent(builder, depth).AppendLine("public sealed class Root : global::Awaiten.IAwaitenContainerMetadata");
+		// "type not found" errors. It implements IAwaitenRoot.
+		Indent(builder, depth).AppendLine("public sealed class Root : global::Awaiten.IAwaitenRoot");
 		Indent(builder, depth).AppendLine("{");
 		Indent(builder, depth + 1).AppendLine("public Root()");
 		Indent(builder, depth + 1).AppendLine("{");
@@ -687,13 +680,11 @@ internal static partial class Sources
 		}
 
 		builder.AppendLine();
-		Indent(builder, depth + 1).AppendLine("global::System.Collections.Generic.IReadOnlyList<global::Awaiten.AwaitenRegistration> global::Awaiten.IAwaitenContainerMetadata.Registrations => global::System.Array.Empty<global::Awaiten.AwaitenRegistration>();");
+		Indent(builder, depth + 1).AppendLine("global::System.Collections.Generic.IReadOnlyList<global::Awaiten.AwaitenRegistration> global::Awaiten.IAwaitenRoot.Registrations => global::System.Array.Empty<global::Awaiten.AwaitenRegistration>();");
 		builder.AppendLine();
-		Indent(builder, depth + 1).AppendLine("global::System.Collections.Generic.IReadOnlyList<global::Awaiten.AwaitenExternalDependency> global::Awaiten.IAwaitenContainerMetadata.ExternalDependencies => global::System.Array.Empty<global::Awaiten.AwaitenExternalDependency>();");
+		Indent(builder, depth + 1).AppendLine("global::System.Collections.Generic.IReadOnlyList<global::Awaiten.AwaitenExternalDependency> global::Awaiten.IAwaitenRoot.ExternalDependencies => global::System.Array.Empty<global::Awaiten.AwaitenExternalDependency>();");
 		builder.AppendLine();
-		Indent(builder, depth + 1).AppendLine("public bool IsResolvable(global::System.Type serviceType, object? key) => false;");
-		builder.AppendLine();
-		Indent(builder, depth + 1).AppendLine("public string? WithheldReason(global::System.Type serviceType, object? key) => null;");
+		Indent(builder, depth + 1).AppendLine("public global::Awaiten.AwaitenResolvability GetResolvability(global::System.Type serviceType, object? key) => default;");
 		builder.AppendLine();
 		Indent(builder, depth + 1).AppendLine("global::Awaiten.IExternalResolver? global::Awaiten.IAwaitenExternalResolverHost.ExternalResolver { get; set; }");
 

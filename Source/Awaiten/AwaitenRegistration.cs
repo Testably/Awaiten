@@ -1,11 +1,12 @@
 using System;
+using System.ComponentModel;
 using System.Threading.Tasks;
 
 namespace Awaiten;
 
 /// <summary>
 ///     A single public registration advertised by a generated container through
-///     <see cref="IAwaitenContainerMetadata" />: the service type, its lifetime, and whether it requires
+///     <see cref="IAwaitenRoot.Registrations" />: the service type, its lifetime, and whether it requires
 ///     asynchronous resolution. The <c>Awaiten.Extensions.DependencyInjection</c> companion projects these into a
 ///     Microsoft.Extensions.DependencyInjection service collection so a host can resolve Awaiten-owned services.
 /// </summary>
@@ -23,6 +24,7 @@ public readonly struct AwaitenRegistration : IEquatable<AwaitenRegistration>
 	/// <param name="externallyOwned">Whether the instance is a pre-built member the container exposes but does not own.</param>
 	/// <param name="key">The user-declared <c>[Key]</c> of a keyed registration, or <see langword="null" /> when unkeyed.</param>
 	/// <exception cref="ArgumentNullException"><paramref name="serviceType" /> is <see langword="null" />.</exception>
+	[EditorBrowsable(EditorBrowsableState.Never)]
 	public AwaitenRegistration(Type serviceType, Lifetime lifetime, bool externallyOwned = false, object? key = null)
 	{
 		ServiceType = serviceType ?? throw new ArgumentNullException(nameof(serviceType));
@@ -48,6 +50,7 @@ public readonly struct AwaitenRegistration : IEquatable<AwaitenRegistration>
 	/// </param>
 	/// <param name="key">The user-declared <c>[Key]</c> of a keyed registration, or <see langword="null" /> when unkeyed.</param>
 	/// <exception cref="ArgumentNullException">Any non-<paramref name="key" /> argument is <see langword="null" />.</exception>
+	[EditorBrowsable(EditorBrowsableState.Never)]
 	public AwaitenRegistration(Type serviceType, Lifetime lifetime, Type asyncTaskType, Func<Task<object>, object> asyncTaskConverter, object? key = null)
 	{
 		ServiceType = serviceType ?? throw new ArgumentNullException(nameof(serviceType));

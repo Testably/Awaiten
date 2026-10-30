@@ -60,7 +60,7 @@ public sealed partial class VerificationTests
 
 		await That(provider.GetService(typeof(IHandler<IEvent>))).IsNotNull()
 			.Because("the providing container satisfies the variant closing through its variance fallback");
-		await That(() => ((IAwaitenContainerMetadata)importing).VerifyAgainst(provider)).DoesNotThrow();
+		await That(() => ((IAwaitenRoot)importing).VerifyAgainst(provider)).DoesNotThrow();
 	}
 
 	[Test]
@@ -70,7 +70,7 @@ public sealed partial class VerificationTests
 		using AwaitenServiceProvider provider = new(providing, ownsContainer: false);
 		using AsyncImportingContainer.Root importing = new();
 
-		await That(() => ((IAwaitenContainerMetadata)importing).VerifyAgainst(provider))
+		await That(() => ((IAwaitenRoot)importing).VerifyAgainst(provider))
 			.DoesNotThrow()
 			.Because("the import exists on the providing side, so verification passes rather than reporting it missing; reaching it synchronously is the consumer's problem");
 
@@ -88,7 +88,7 @@ public sealed partial class VerificationTests
 		using AwaitenServiceProvider provider = new(providing, ownsContainer: false);
 		using ImportingContainer.Root importing = new();
 
-		await That(() => ((IAwaitenContainerMetadata)importing).VerifyAgainst(provider))
+		await That(() => ((IAwaitenRoot)importing).VerifyAgainst(provider))
 			.Throws<InvalidOperationException>().WithMessage("*IHandler*").AsWildcard();
 	}
 
@@ -121,7 +121,7 @@ public sealed partial class VerificationTests
 	{
 		using ImportingContainer.Root importing = new();
 
-		await That(() => ((IAwaitenContainerMetadata)importing).VerifyAgainst(new UnderReportingProvider()))
+		await That(() => ((IAwaitenRoot)importing).VerifyAgainst(new UnderReportingProvider()))
 			.DoesNotThrow()
 			.Because("only a positive from the probe is final; a negative has to fall through to resolution, or verification reports an import the provider would have satisfied");
 	}
@@ -196,7 +196,7 @@ public sealed partial class VerificationTests
 		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
 		using ExternalDependencyTests.ExternalContainer.Root container = new();
 
-		await That(() => ((IAwaitenContainerMetadata)container).VerifyAgainst(provider))
+		await That(() => ((IAwaitenRoot)container).VerifyAgainst(provider))
 			.Throws<InvalidOperationException>()
 			.WithMessage(
 				"Awaiten: the container's external dependencies are not registered in the provider: "
@@ -212,7 +212,7 @@ public sealed partial class VerificationTests
 		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
 		using ExternalDependencyTests.KeyedExternalContainer.Root container = new();
 
-		await That(() => ((IAwaitenContainerMetadata)container).VerifyAgainst(provider))
+		await That(() => ((IAwaitenRoot)container).VerifyAgainst(provider))
 			.Throws<InvalidOperationException>()
 			.WithMessage("*IClock (key: utc)*").AsWildcard();
 	}
@@ -222,7 +222,7 @@ public sealed partial class VerificationTests
 	{
 		using ServiceProvider provider = new ServiceCollection().BuildServiceProvider();
 
-		await That(() => ((IAwaitenContainerMetadata)null!).VerifyAgainst(provider))
+		await That(() => ((IAwaitenRoot)null!).VerifyAgainst(provider))
 			.Throws<ArgumentNullException>();
 	}
 
@@ -231,7 +231,7 @@ public sealed partial class VerificationTests
 	{
 		using ExternalDependencyTests.ExternalContainer.Root container = new();
 
-		await That(() => ((IAwaitenContainerMetadata)container).VerifyAgainst(null!))
+		await That(() => ((IAwaitenRoot)container).VerifyAgainst(null!))
 			.Throws<ArgumentNullException>();
 	}
 
@@ -273,7 +273,7 @@ public sealed partial class VerificationTests
 		ProbelessProvider provider = new(_ => new ExternalDependencyTests.FixedClock());
 		using ExternalDependencyTests.ExternalContainer.Root container = new();
 
-		await That(() => ((IAwaitenContainerMetadata)container).VerifyAgainst(provider)).DoesNotThrow();
+		await That(() => ((IAwaitenRoot)container).VerifyAgainst(provider)).DoesNotThrow();
 	}
 
 	[Test]
@@ -282,7 +282,7 @@ public sealed partial class VerificationTests
 		ProbelessProvider provider = new(_ => null);
 		using ExternalDependencyTests.ExternalContainer.Root container = new();
 
-		await That(() => ((IAwaitenContainerMetadata)container).VerifyAgainst(provider))
+		await That(() => ((IAwaitenRoot)container).VerifyAgainst(provider))
 			.Throws<InvalidOperationException>()
 			.WithMessage("*IClock*").AsWildcard();
 	}
@@ -295,7 +295,7 @@ public sealed partial class VerificationTests
 		ProbelessProvider provider = new(_ => throw new InvalidOperationException("scope-restricted"));
 		using ExternalDependencyTests.ExternalContainer.Root container = new();
 
-		await That(() => ((IAwaitenContainerMetadata)container).VerifyAgainst(provider)).DoesNotThrow();
+		await That(() => ((IAwaitenRoot)container).VerifyAgainst(provider)).DoesNotThrow();
 	}
 
 	[Test]
@@ -307,6 +307,6 @@ public sealed partial class VerificationTests
 				: null);
 		using ExternalDependencyTests.KeyedExternalContainer.Root container = new();
 
-		await That(() => ((IAwaitenContainerMetadata)container).VerifyAgainst(provider)).DoesNotThrow();
+		await That(() => ((IAwaitenRoot)container).VerifyAgainst(provider)).DoesNotThrow();
 	}
 }

@@ -137,7 +137,7 @@ public partial class AdapterConventionTests
 
 			await That(container.TryResolve(typeof(IEnumerable<IHandler>), out _)).IsFalse()
 				.Because("an explicitly registered collection shape suppresses the synthesized siblings, so this shape is genuinely unresolvable");
-			await That(container.WithheldReason(typeof(IEnumerable<IHandler>), null)).IsNull()
+			await That(container.GetResolvability(typeof(IEnumerable<IHandler>), null).Reason).IsNull()
 				.Because("the container is not withholding it either, which is what leaves the empty-collection answer as the only guard");
 
 			await That(locator.Resolve(typeof(IEnumerable<IHandler>))).IsNull()
