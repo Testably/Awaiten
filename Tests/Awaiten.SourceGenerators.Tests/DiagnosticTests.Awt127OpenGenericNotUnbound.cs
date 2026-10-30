@@ -7,7 +7,7 @@ public partial class DiagnosticTests
 	public class Awt127OpenGenericNotUnbound
 	{
 		[Test]
-		public async Task ReportsWhenTheTypeofArgumentIsAClosedGeneric()
+		public async Task ReportsWhenAnOpenImplementationNamesAClosedService()
 		{
 			GeneratorResult result = Generator.Run("""
 			                                       using Awaiten;
@@ -18,35 +18,60 @@ public partial class DiagnosticTests
 			                                       public sealed class Repository<T> : IRepository<T> { }
 
 			                                       [Container]
-			                                       [Transient(typeof(Repository<int>), typeof(IRepository<int>))]
+			                                       [Transient(typeof(Repository<>), typeof(IRepository<int>))]
 			                                       public static partial class MyContainer
 			                                       {
 			                                       }
 			                                       """);
 
 			await That(result.Diagnostics).Contains("*AWT127*").AsWildcard()
-				.Because("a closed generic in the typeof-ctor form would silently drop its type arguments; the generic attribute form registers closed types");
+				.Because("an open implementation can only be mapped onto an unbound service");
 		}
 
 		[Test]
-		public async Task ReportsWhenTheTypeofArgumentIsNonGeneric()
+		public async Task ReportsWhenAClosedImplementationNamesAnOpenService()
 		{
 			GeneratorResult result = Generator.Run("""
 			                                       using Awaiten;
 
 			                                       namespace MyCode;
 
-			                                       public sealed class Widget { }
+			                                       public interface IRepository<T> { }
+			                                       public sealed class Repository<T> : IRepository<T> { }
 
 			                                       [Container]
-			                                       [Transient(typeof(Widget))]
+			                                       [Transient(typeof(Repository<int>), typeof(IRepository<>))]
 			                                       public static partial class MyContainer
 			                                       {
 			                                       }
 			                                       """);
 
 			await That(result.Diagnostics).Contains("*AWT127*").AsWildcard()
-				.Because("a non-generic type matches no closed service through the open generic path; the generic attribute form registers it");
+				.Because("an open service needs an unbound implementation to close per closing");
+		}
+
+		[Test]
+		public async Task DoesNotReportForAClosedPair()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IRepository<T> { }
+			                                       public sealed class Repository<T> : IRepository<T> { }
+			                                       public sealed class Widget { }
+
+			                                       [Container]
+			                                       [Transient(typeof(Repository<int>), typeof(IRepository<int>))]
+			                                       [Transient(typeof(Widget))]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).DoesNotContain("*AWT127*").AsWildcard()
+				.Because("a closed or non-generic typeof pair registers like the generic attribute form");
 		}
 
 		[Test]

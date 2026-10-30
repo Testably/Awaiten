@@ -191,7 +191,10 @@ partial class AwaitenGenerator
 					OnActivatedOrigin = reg.OnActivated is null ? null : reg.Origin,
 					OnReleaseOrigin = reg.OnRelease is null ? null : reg.Origin,
 					SuppressDisposal = reg.SuppressDisposal,
+					GenericFactory = reg.GenericFactory,
 				};
+				info.OnActivatedMarkers.AddRange(reg.OnActivatedMarkers ?? []);
+				info.OnReleaseMarkers.AddRange(reg.OnReleaseMarkers ?? []);
 				implInfos.Add(reg.ImplementationType, info);
 				implOrder.Add(info);
 			}
@@ -456,13 +459,15 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     The single encoding of coalescing precedence: explicit strong registrations first, then overridable
-	///     defaults (<c>Fallback.Warn</c>/<c>Fallback.Silent</c>), then open-generic-synthesized registrations, then scan matches.
-	///     Consumed by the coalescing loop and the open generic expansion seed, which must agree on who wins.
+	///     defaults (<c>Fallback.Warn</c>/<c>Fallback.Silent</c>), then open-generic-synthesized registrations, then
+	///     the closings of open generic overridable defaults, then scan matches. Consumed by the coalescing loop and
+	///     the open generic expansion seed, which must agree on who wins.
 	/// </summary>
 	private static int PrecedenceRank(RawRegistration registration)
 		=> registration switch
 		{
-			{ IsScan: true, } => 3,
+			{ IsScan: true, } => 4,
+			{ IsSynthesized: true, Weak: true, } => 3,
 			{ IsSynthesized: true, } => 2,
 			{ Weak: true, } => 1,
 			_ => 0,
@@ -475,7 +480,7 @@ partial class AwaitenGenerator
 	/// </summary>
 	private static IEnumerable<(RawRegistration Registration, int Index)> InPrecedenceOrder(List<RawRegistration> raw)
 	{
-		for (int rank = 0; rank <= 3; rank++)
+		for (int rank = 0; rank <= 4; rank++)
 		{
 			for (int index = 0; index < raw.Count; index++)
 			{

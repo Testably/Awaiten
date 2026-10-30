@@ -284,9 +284,15 @@ namespace Awaiten
     {
         public ScopedAttribute(System.Type implementation) { }
         public ScopedAttribute(System.Type implementation, System.Type service) { }
+        public string? Factory { get; set; }
+        public Awaiten.Fallback Fallback { get; set; }
         public System.Type Implementation { get; }
         public object? Key { get; set; }
+        public string? OnActivated { get; set; }
+        public string? OnRelease { get; set; }
         public System.Type Service { get; }
+        public bool SuppressDisposal { get; set; }
+        public System.Type? WhenInjectedInto { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
     public sealed class ScopedAttribute<TImplementation> : System.Attribute where TImplementation : class
@@ -317,9 +323,17 @@ namespace Awaiten
     {
         public SingletonAttribute(System.Type implementation) { }
         public SingletonAttribute(System.Type implementation, System.Type service) { }
+        public bool Eager { get; set; }
+        public string? Factory { get; set; }
+        public Awaiten.Fallback Fallback { get; set; }
         public System.Type Implementation { get; }
+        public string? Instance { get; set; }
         public object? Key { get; set; }
+        public string? OnActivated { get; set; }
+        public string? OnRelease { get; set; }
         public System.Type Service { get; }
+        public bool SuppressDisposal { get; set; }
+        public System.Type? WhenInjectedInto { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
     public sealed class SingletonAttribute<TImplementation> : System.Attribute where TImplementation : class
@@ -354,9 +368,15 @@ namespace Awaiten
     {
         public TransientAttribute(System.Type implementation) { }
         public TransientAttribute(System.Type implementation, System.Type service) { }
+        public string? Factory { get; set; }
+        public Awaiten.Fallback Fallback { get; set; }
         public System.Type Implementation { get; }
         public object? Key { get; set; }
+        public string? OnActivated { get; set; }
+        public string? OnRelease { get; set; }
         public System.Type Service { get; }
+        public bool SuppressDisposal { get; set; }
+        public System.Type? WhenInjectedInto { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
     public sealed class TransientAttribute<TImplementation> : System.Attribute where TImplementation : class

@@ -41,6 +41,19 @@ public static class InfrastructureModule;
 public static partial class CoffeeShop;
 ```
 
+An [open generic](./open-generics#overridable-defaults) default works the same way, per closing. The container can replace a single closing with a closed registration, or every closing with its own open registration:
+
+```csharp
+[Module]
+[Singleton(typeof(MemoryCache<>), typeof(ICache<>), Fallback = Fallback.Warn)]
+public static class CachingModule;
+
+[Container]
+[Import(typeof(CachingModule))]
+[Singleton<OrderCache, ICache<Order>>]   // ICache<Order> is OrderCache, every other closing MemoryCache<T>
+public static partial class CoffeeShop;
+```
+
 ## Factories and instances in modules
 
 A module can use `Factory` and `Instance` too. Awaiten calls the members qualified by the module type, so this works across assemblies.

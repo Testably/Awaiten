@@ -17,6 +17,8 @@ namespace Awaiten.SourceGenerators;
 ///     <c>GreedyConstructor</c> marks a same-compilation module-scan match, constructed through the greediest
 ///     accessible constructor (the one a cross-assembly module's generated factory mirrors) rather than the
 ///     registered-services-aware pick, so the match constructs identically wherever the module is imported from.
+///     <c>GenericFactory</c> marks a closing of an open generic <c>typeof</c> registration whose <c>Factory</c> is a
+///     generic method, closed with the implementation's type arguments when it is resolved.
 /// </summary>
 /// <remarks>
 ///     <see cref="Location" /> is the live Roslyn location (with its syntax tree), not an equatable
@@ -47,7 +49,8 @@ internal sealed record RawRegistration(
 	string? WhenInjectedInto = null,
 	bool GreedyConstructor = false,
 	IReadOnlyList<INamedTypeSymbol>? OnActivatedMarkers = null,
-	IReadOnlyList<INamedTypeSymbol>? OnReleaseMarkers = null);
+	IReadOnlyList<INamedTypeSymbol>? OnReleaseMarkers = null,
+	bool GenericFactory = false);
 
 /// <summary>
 ///     An imported module: its symbol and the location of the container's <c>[Import]</c> attribute that
@@ -203,9 +206,10 @@ partial class AwaitenGenerator
 		///     one's set. Exactly one bindable closing (say <c>MainWindow : IView&lt;IMainViewModel&gt;</c> carries
 		///     <c>IView&lt;IMainViewModel&gt;</c>) dispatches a generic hook as <c>WireView&lt;IMainViewModel&gt;</c>;
 		///     more than one leaves its type arguments ambiguous (AWT198), decided in <c>ResolveHook</c> where the
-		///     hook's arity and constraints are known. Empty when no scan hook bound a marker (a closed or markerless
-		///     scan, a non-scan, or a scan with no hook), so a generic hook has nothing to bind and is unusable while
-		///     a non-generic hook is unaffected.
+		///     hook's arity and constraints are known. A closing of an open generic <c>typeof</c> registration with a
+		///     hook contributes its closed service the same way. Empty otherwise (a closed or markerless scan, a closed
+		///     registration, or no hook), so a generic hook has nothing to bind and is unusable while a non-generic
+		///     hook is unaffected.
 		/// </summary>
 		public List<INamedTypeSymbol> OnActivatedMarkers { get; } = new();
 
@@ -219,6 +223,12 @@ partial class AwaitenGenerator
 		///     owner outside the container. Set from the first registration like the implementation's other options.
 		/// </summary>
 		public bool SuppressDisposal { get; init; }
+
+		/// <summary>
+		///     Whether <see cref="ProductionMember" /> names a generic factory of an open generic <c>typeof</c>
+		///     registration, closed with <see cref="Symbol" />'s type arguments (see <c>ResolveFactory</c>).
+		/// </summary>
+		public bool GenericFactory { get; init; }
 
 		public List<ServiceKey> Services { get; }
 

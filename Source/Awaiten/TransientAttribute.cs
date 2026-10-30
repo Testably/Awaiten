@@ -7,43 +7,92 @@ namespace Awaiten;
 #pragma warning disable S2326
 
 /// <summary>
-///     Registers an open generic implementation as transient. Resolving a closed service such as
-///     <c>IRepository&lt;Order&gt;</c> constructs a fresh <c>Repository&lt;Order&gt;</c> on every request.
-///     Uses <see cref="Type" /> arguments because an unbound generic like <c>typeof(Repository&lt;&gt;)</c>
-///     cannot be a type argument.
+///     Registers an implementation as transient through <see cref="Type" /> arguments. With an unbound generic
+///     like <c>typeof(Repository&lt;&gt;)</c>, which cannot be a type argument, resolving a closed service such as
+///     <c>IRepository&lt;Order&gt;</c> constructs a fresh <c>Repository&lt;Order&gt;</c> on every request. With
+///     closed types it registers exactly like <see cref="TransientAttribute{TImplementation, TService}" />.
 /// </summary>
+/// <remarks>
+///     On an open generic, <see cref="Factory" /> names a generic method with the service's type parameters,
+///     closed per closing.
+/// </remarks>
 /// <example><c>[Transient(typeof(Repository&lt;&gt;), typeof(IRepository&lt;&gt;))]</c></example>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
 public sealed class TransientAttribute : Attribute
 {
-	/// <summary>Registers the open generic <paramref name="implementation" /> as itself.</summary>
-	/// <param name="implementation">The open generic concrete type, e.g. <c>typeof(Repository&lt;&gt;)</c>.</param>
+	/// <summary>Registers <paramref name="implementation" /> as itself.</summary>
+	/// <param name="implementation">The implementation type, e.g. <c>typeof(Repository&lt;&gt;)</c>.</param>
 	public TransientAttribute(Type implementation)
 	{
 		Implementation = implementation;
 		Service = implementation;
 	}
 
-	/// <summary>Registers the open generic <paramref name="implementation" /> under the open generic <paramref name="service" />.</summary>
-	/// <param name="implementation">The open generic concrete type, e.g. <c>typeof(Repository&lt;&gt;)</c>.</param>
-	/// <param name="service">The open generic service type, e.g. <c>typeof(IRepository&lt;&gt;)</c>.</param>
+	/// <summary>Registers <paramref name="implementation" /> under <paramref name="service" />.</summary>
+	/// <param name="implementation">The implementation type, e.g. <c>typeof(Repository&lt;&gt;)</c>.</param>
+	/// <param name="service">The service type, e.g. <c>typeof(IRepository&lt;&gt;)</c>.</param>
 	public TransientAttribute(Type implementation, Type service)
 	{
 		Implementation = implementation;
 		Service = service;
 	}
 
-	/// <summary>The open generic concrete type to construct.</summary>
+	/// <summary>The implementation type to construct, open generic or closed.</summary>
 	public Type Implementation { get; }
 
-	/// <summary>The open generic service type under which closed instances are resolved.</summary>
+	/// <summary>The service type under which instances are resolved, open generic or closed.</summary>
 	public Type Service { get; }
+
+	/// <summary>
+	///     Name of a container method that produces the instance instead of a constructor, with its parameters
+	///     resolved from the graph. It runs anew on every request. For an open generic it is a generic method with
+	///     exactly the service's type parameters, in declaration order, closed per closing, such as
+	///     <c>static IRepository&lt;T&gt; Create&lt;T&gt;()</c>.
+	/// </summary>
+	public string? Factory { get; set; }
 
 	/// <summary>
 	///     Optional resolution key. Several implementations can share a service type under different keys.
 	///     The key flows onto every closed implementation expanded from this registration.
 	/// </summary>
 	public object? Key { get; set; }
+
+	/// <summary>
+	///     Restricts this registration to the constructor parameters and [Inject] properties of the given consumer
+	///     type: the service resolves to this implementation only when injected into <see cref="WhenInjectedInto" />,
+	///     and to the unconditional registration everywhere else (contextual binding).
+	/// </summary>
+	public Type? WhenInjectedInto { get; set; }
+
+	/// <summary>
+	///     Marks this as an overridable default, usually declared in a module: it applies only when nothing else
+	///     registers the same service, so a container or another module can replace it. For an open generic this
+	///     holds per closing. <c>Fallback.Warn</c> reports AWT148 if another overridable default competes with
+	///     nothing stronger to resolve it; <c>Fallback.Silent</c> defers without a warning. Defaults to
+	///     <c>Fallback.None</c>, a normal registration.
+	/// </summary>
+	public Fallback Fallback { get; set; }
+
+	/// <summary>
+	///     The name of a <c>static void</c> method on the container accepting the implementation, invoked once the
+	///     instance has been constructed. For an open generic the method may be generic over the service's type
+	///     arguments.
+	/// </summary>
+	public string? OnActivated { get; set; }
+
+	/// <summary>
+	///     The name of a <c>static void</c> method on the container accepting the implementation, invoked when the
+	///     owning container or scope is disposed, before the instance's own disposal. For an open generic the
+	///     method may be generic over the service's type arguments.
+	/// </summary>
+	public string? OnRelease { get; set; }
+
+	/// <summary>
+	///     Suppresses the container's built-in disposal of this instance; releasing it becomes your
+	///     responsibility, typically through an <see cref="OnRelease" /> hook. Defaults to
+	///     <see langword="false" />.
+	/// </summary>
+	public bool SuppressDisposal { get; set; }
 }
 
 /// <summary>
