@@ -211,7 +211,7 @@ public partial class TypeofRegistrationTests
 	{
 		public static readonly Settings SharedSettings = new();
 
-		private static IClock CreateClock() => new FactoryClock();
+		private static FactoryClock CreateClock() => new();
 
 		private static void Opened(ISession session, Log log) => log.Entries.Add("opened:" + session.GetType().Name);
 
@@ -299,7 +299,7 @@ public partial class TypeofRegistrationTests
 	[Transient<App>]
 	public static partial class OpenContainer
 	{
-		private static IStore<T> CreateStore<T>(IValidator<T> validator) => new Store<T>(validator);
+		private static Store<T> CreateStore<T>(IValidator<T> validator) => new(validator);
 
 		private static Task<IFeed<T>> CreateFeedAsync<T>() => Task.FromResult<IFeed<T>>(new Feed<T>());
 
