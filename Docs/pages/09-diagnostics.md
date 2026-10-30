@@ -1703,6 +1703,26 @@ public sealed class Router([FromKey("Oat")] IReadOnlyDictionary<string, IMilk> m
 public static partial class CoffeeShop;
 ```
 
+### AWT213
+
+:::danger[Error]
+A runtime-type dispatch dictionary (`IReadOnlyDictionary<Type, Func<TBase>>`) cannot be built: its value is not `Func<TBase>` over a non-generic interface, it carries a `[FromKey]`, a closing that implements `TBase` has more than one type argument, or the closings come from more than one generic interface, so a type argument does not identify one entry. See [Dispatch by runtime type](./resolution/keyed-dictionaries#dispatch-by-runtime-type).
+:::
+
+```csharp
+public interface IOrderHandler;
+public interface IOrderHandler<T> : IOrderHandler;
+public interface IRefundHandler<T> : IOrderHandler;   // a second family under the same base
+
+public sealed class Counter(IReadOnlyDictionary<Type, Func<IOrderHandler>> handlers);   // typeof(OrderPlaced) is ambiguous
+
+[Container]
+[Singleton<OrderPlacedHandler, IOrderHandler<OrderPlaced>>]
+[Singleton<OrderPlacedRefund, IRefundHandler<OrderPlaced>>]
+[Singleton<Counter>]
+public static partial class CoffeeShop;
+```
+
 ## Contextual binding
 
 ### AWT167
@@ -1820,6 +1840,8 @@ public sealed class Barista(IAwaitenResolver resolver)   // locates dependencies
     public Cup Serve() => resolver.Resolve<Cup>();
 }
 ```
+
+Dispatching by a type known only at run time, like a mediator looking up the handler for `message.GetType()`, needs no resolver either: inject a [dispatch dictionary](./resolution/keyed-dictionaries#dispatch-by-runtime-type).
 
 One kind of type is meant to hold a resolver: an adapter that bridges the container to a host's own dependency-injection surface, where holding it *is* the adaptation rather than a hidden run-time dependency. `AwaitenServiceProvider` is one, and anything you write against a framework's own registrar is another. This is an analyzer diagnostic, so suppress it in source, with the justification saying which adapter it is.
 

@@ -29,6 +29,9 @@ public static class Program
 		Warmup warmup = await scope.ServiceProvider.GetRequiredService<Task<Warmup>>();
 		Console.WriteLine($"warmup ready: {warmup.Ready}");
 
+		string reply = scope.ServiceProvider.GetRequiredService<Mediator>().Send(new Ping());
+		Console.WriteLine($"dispatched by runtime type: {reply}");
+
 		// The provider-replacement path's empty-collection answer, and the one place the bridge constructs a type
 		// at run time: the T[] backing IEnumerable<T> for an element type the container never saw. Native AOT
 		// generates that array type on demand for a reference element type, which is why the bridge suppresses the
@@ -41,6 +44,6 @@ public static class Program
 		bool emptySequence = unmentioned is not null && !unmentioned.Any();
 		Console.WriteLine($"empty sequence for an unmentioned element type: {emptySequence}");
 
-		return rendered == "Awaiten on AOT @ 2026-06-24" && warmup.Ready && emptySequence ? 0 : 1;
+		return rendered == "Awaiten on AOT @ 2026-06-24" && warmup.Ready && reply == "pong" && emptySequence ? 0 : 1;
 	}
 }

@@ -88,7 +88,7 @@ public sealed class Barista(IAwaitenResolver resolver)
 
 This looks like DI, but it is the opposite. Seemann's [*Service Locator is an Anti-Pattern*](https://blog.ploeh.dk/2010/02/03/ServiceLocatorisanAnti-Pattern/) is the classic write-up. `Barista`'s real dependencies no longer show in its constructor, so you cannot tell what it needs without reading its body, and Awaiten cannot check the graph it hides.
 
-**Rule: never inject `IAwaitenResolver`, `IAwaitenScope`, or `IAwaitenRoot` into a service.** They are seams for the composition root, not for the classes it composes. Awaiten flags this one for you: holding a resolver in anything but the `[Container]` is the suppressible warning [AWT135](./diagnostics#awt135). Take the dependency you actually need through the constructor and let the container supply it.
+**Rule: never inject `IAwaitenResolver`, `IAwaitenScope`, or `IAwaitenRoot` into a service.** They are seams for the composition root, not for the classes it composes. Awaiten flags this one for you: holding a resolver in anything but the `[Container]` is the suppressible warning [AWT135](./diagnostics#awt135). Take the dependency you actually need through the constructor and let the container supply it. When the type you need is only known at run time, like the handler for a message arriving as `object`, take a [dispatch dictionary](./resolution/keyed-dictionaries#dispatch-by-runtime-type) instead of a resolver.
 
 ### Ambient Context
 

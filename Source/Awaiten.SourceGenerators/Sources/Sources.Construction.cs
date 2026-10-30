@@ -86,6 +86,18 @@ internal static partial class Sources
 	}
 
 	/// <summary>
+	///     A <c>new Dictionary&lt;Type, Func&lt;TBase&gt;&gt; { [typeof(T)] = new Func&lt;IHandler&lt;T&gt;&gt;(…), … }</c>
+	///     expression for a runtime-type dispatch dictionary. Each value is the exact <c>Func</c> a parameter of the
+	///     closed service would get, converted to <c>Func&lt;TBase&gt;</c> by delegate covariance.
+	/// </summary>
+	private static string TypeDispatchLiteral(ParameterModel dependency, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, string requestingType)
+	{
+		string items = string.Join(", ", dependency.DispatchMembers.AsArray().Select(member =>
+			$"[typeof({member.KeyType})] = {ResolveExpression(new ParameterModel(member.Service, DependencyKind.Func), instances, names, serviceToIndex, requestingType)}"));
+		return $"new global::System.Collections.Generic.Dictionary<global::System.Type, global::System.Func<{dependency.ServiceType}>> {{ {items} }}";
+	}
+
+	/// <summary>
 	///     A <c>new __AsyncArray&lt;T&gt;(new T[] { … })</c> expression producing an <c>IAsyncEnumerable&lt;T&gt;</c>
 	///     over every registration of the collection's (element type, key). When <paramref name="asynchronous" />
 	///     is set each async-tainted member is awaited through its async resolver; the array is then wrapped in the
@@ -278,6 +290,11 @@ internal static partial class Sources
 		if (dependency.Kind == DependencyKind.AwaitedKeyedCollection)
 		{
 			return AwaitedKeyedCollectionExpression(dependency.ServiceType, dependency.KeyType!, names, instances, asynchronous);
+		}
+
+		if (dependency.Kind == DependencyKind.TypeDispatch)
+		{
+			return TypeDispatchLiteral(dependency, instances, names, serviceToIndex, requestingType);
 		}
 
 		if (asynchronous && dependency.Kind == DependencyKind.Direct
