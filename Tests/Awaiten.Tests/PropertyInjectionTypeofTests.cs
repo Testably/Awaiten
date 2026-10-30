@@ -278,6 +278,20 @@ public partial class PropertyInjectionTypeofTests
 		}
 
 		[Test]
+		public async Task ClosedEntry_SpecialisesItsClosing_AndTheOpenEntryFillsTheOthers()
+		{
+			using SpecialisedContainer.Root container = new();
+
+			Consumer<Order> orders = container.Resolve<Consumer<Order>>();
+			Consumer<Customer> customers = container.Resolve<Consumer<Customer>>();
+
+			await That(orders.Channel).Is<FastChannel>()
+				.Because("the closed entry wins over the open one on its closing and selects its own Key");
+			await That(customers.Channel).Is<SlowChannel>()
+				.Because("the open entry still fills every other closing with its Key");
+		}
+
+		[Test]
 		public async Task OpenTarget_OptionalEntry_WithNoRegistration_IsLeftAtItsDefault()
 		{
 			using OptionalContainer.Root container = new();
@@ -330,6 +344,15 @@ public partial class PropertyInjectionTypeofTests
 		[Singleton<Consumer<Customer>>]
 		[InjectProperty(typeof(Consumer<>), nameof(Consumer<object>.Channel), Key = "slow")]
 		public static partial class KeyedContainer;
+
+		[Container]
+		[Singleton<FastChannel, IChannel>(Key = "fast")]
+		[Singleton<SlowChannel, IChannel>(Key = "slow")]
+		[Singleton<Consumer<Order>>]
+		[Singleton<Consumer<Customer>>]
+		[InjectProperty(typeof(Consumer<>), nameof(Consumer<object>.Channel), Key = "slow")]
+		[InjectProperty<Consumer<Order>>(nameof(Consumer<object>.Channel), Key = "fast")]
+		public static partial class SpecialisedContainer;
 
 		[Container]
 		[Singleton<Consumer<Order>>]

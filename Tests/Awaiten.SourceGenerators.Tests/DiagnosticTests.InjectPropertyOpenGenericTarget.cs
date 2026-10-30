@@ -219,7 +219,7 @@ public partial class DiagnosticTests
 		}
 
 		[Test]
-		public async Task ReportsAwt179ForTwoOpenEntriesNamingTheSameProperty()
+		public async Task TwoOpenEntriesNamingTheSameProperty_LeaveAwt179ToTheAnalyzer()
 		{
 			GeneratorResult result = Generator.Run("""
 			                                       using Awaiten;
@@ -242,12 +242,12 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics).Contains("*warning AWT179*Repository<T>*").AsWildcard()
-				.Because("two open entries for the same property of one definition are duplicates, like two generic entries for one type");
+			await That(result.Diagnostics).DoesNotContain("*AWT179*").AsWildcard()
+				.Because("AwaitenAnalyzer reports the duplicate open entry, so the generator must not report it a second time");
 		}
 
 		[Test]
-		public async Task ClosedEntry_WinsOverAnOpenEntryForTheSameClosing_AndReportsAwt179AtTheOpenEntry()
+		public async Task ClosedEntry_WinsOverAnOpenEntryForTheSameClosing()
 		{
 			const string source = """
 			                      using Awaiten;
@@ -272,11 +272,8 @@ public partial class DiagnosticTests
 			(_, GeneratorDriverRunResult run) = Generator.RunGenerator(source, [], []);
 
 			Diagnostic[] diagnostics = run.Diagnostics.Where(d => d.Id.StartsWith("AWT", StringComparison.Ordinal)).ToArray();
-			await That(diagnostics.Select(d => d.Id)).IsEqualTo(["AWT179",])
-				.Because("the closed Optional entry wins on Consumer<int>, so the unregistered IChannel is no AWT101, and the ignored open entry is reported as a duplicate");
-			int line = diagnostics[0].Location.GetLineSpan().StartLinePosition.Line;
-			await That(source.Split('\n')[line]).Contains("typeof(Consumer<>)")
-				.Because("the warning points at the open entry, the one that is ignored for this closing");
+			await That(diagnostics).IsEmpty()
+				.Because("the closed Optional entry wins on Consumer<int>, so the unregistered IChannel is no AWT101, and as a deliberate specialisation it is no AWT179 either");
 		}
 
 		[Test]

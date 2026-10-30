@@ -122,7 +122,7 @@ public partial class DiagnosticTests
 		}
 
 		[Test]
-		public async Task ReportsAwt179WhenTwoInjectPropertyEntriesNameTheSameProperty()
+		public async Task LeavesAwt179ToTheAnalyzer()
 		{
 			GeneratorResult result = Generator.Run("""
 			                                       using Awaiten;
@@ -145,9 +145,8 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			// AWT179 is a warning, not an error: the graph is well-defined (the first entry wins).
-			await That(result.Diagnostics).Contains("*warning AWT179*").AsWildcard()
-				.Because("a property is injected once, so a duplicate [InjectProperty] entry is a suppressible warning");
+			await That(result.Diagnostics).DoesNotContain("*AWT179*").AsWildcard()
+				.Because("AwaitenAnalyzer reports the duplicate, so the generator must not report it a second time where it cannot be suppressed in source");
 		}
 
 		[Test]

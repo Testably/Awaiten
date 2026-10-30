@@ -200,8 +200,10 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     Appends the open-generic entries for a closing to its closed entries. A closed entry is the more specific
-	///     declaration, so an open entry for a property a closed entry already names is ignored for this closing and
-	///     reported as <see cref="Diagnostics.DuplicateInjectProperty">AWT179</see> at the open entry.
+	///     declaration, so an open entry for a property a closed entry already names is ignored for this closing. A
+	///     closed entry that changes <c>Key</c>, <c>Optional</c> or <c>Deferred</c> specialises the closing on purpose;
+	///     one that changes nothing is redundant and is reported as
+	///     <see cref="Diagnostics.DuplicateInjectProperty">AWT179</see> at the open entry.
 	/// </summary>
 	private static List<InjectPropertyEntry> MergeOpenInjectProperties(
 		ImplInfo info,
@@ -212,12 +214,16 @@ partial class AwaitenGenerator
 		List<InjectPropertyEntry> merged = new(closedEntries);
 		foreach (InjectPropertyEntry entry in openEntries)
 		{
-			if (closedEntries.Any(closed => closed.PropertyName == entry.PropertyName))
+			if (closedEntries.FirstOrDefault(closed => closed.PropertyName == entry.PropertyName) is { } closed)
 			{
-				diagnostics.Add(new DiagnosticInfo(
-					Diagnostics.DuplicateInjectProperty,
-					entry.Location ?? info.Location,
-					new EquatableArray<string>([entry.PropertyName, DisplayInstance(info.ImplementationType),])));
+				if (closed.Optional == entry.Optional && closed.Deferred == entry.Deferred && closed.Key == entry.Key)
+				{
+					diagnostics.Add(new DiagnosticInfo(
+						Diagnostics.DuplicateInjectProperty,
+						entry.Location ?? info.Location,
+						new EquatableArray<string>([entry.PropertyName, DisplayInstance(info.ImplementationType),])));
+				}
+
 				continue;
 			}
 

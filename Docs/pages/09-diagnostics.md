@@ -1089,7 +1089,7 @@ public static partial class CoffeeShop
 ### AWT179
 
 :::warning[Warning]
-Two `[InjectProperty<T>]` entries name the same property of the same implementation. The property is filled once; the duplicate is ignored. A closed entry and an open-generic `typeof` entry that meet on one closing count too: the closed entry wins, and the open entry is ignored for that closing.
+Two `[InjectProperty]` entries name the same property of the same implementation, both closed or both open-generic. The property is filled once; the duplicate is ignored. A closed entry and an open-generic `typeof` entry that meet on one closing are reported only when the closed entry repeats the open entry's `Key`, `Optional` and `Deferred`: the closed entry wins on its closing either way, so one that changes an option is a deliberate [specialisation of that closing](./resolution/property-injection#open-generics-with-the-typeof-form) and is not reported. This is an analyzer diagnostic, so a deliberate duplicate can be suppressed in source with `#pragma warning disable AWT179` or `[SuppressMessage]`.
 :::
 
 ```csharp expect=AWT179
