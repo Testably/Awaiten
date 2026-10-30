@@ -219,7 +219,11 @@ public partial class DisposalFailureTests
 	{
 		public Recorder Recorder { get; } = recorder;
 
-		public void Dispose() => Recorder.Log.Add("disposed:" + GetType().Name);
+		public void Dispose()
+		{
+			Recorder.Log.Add("disposed:" + GetType().Name);
+			GC.SuppressFinalize(this);
+		}
 	}
 
 	public sealed class First(Recorder recorder) : Part(recorder);
@@ -236,11 +240,17 @@ public partial class DisposalFailureTests
 #endif
 	{
 		public void Dispose()
-			=> throw recorder.Fail("failed:" + GetType().Name, new InvalidOperationException(GetType().Name + " failed"));
+		{
+			GC.SuppressFinalize(this);
+			throw recorder.Fail("failed:" + GetType().Name, new InvalidOperationException(GetType().Name + " failed"));
+		}
 
 #if NET || NETSTANDARD2_1_OR_GREATER
 		public ValueTask DisposeAsync()
-			=> throw recorder.Fail("failedAsync:" + GetType().Name, new InvalidOperationException(GetType().Name + " failed"));
+		{
+			GC.SuppressFinalize(this);
+			throw recorder.Fail("failedAsync:" + GetType().Name, new InvalidOperationException(GetType().Name + " failed"));
+		}
 #endif
 	}
 
