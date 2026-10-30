@@ -114,7 +114,7 @@ public sealed partial class PrebuiltRootTests
 	public async Task AddAwaitenContainer_PrebuiltRoot_IsProjectedAsIs()
 	{
 		using OwnershipContainer.Root root = new();
-		OuterService fromRoot = (OuterService)root.Resolve(typeof(OuterService));
+		OuterService fromRoot = root.Resolve<OuterService>();
 		ServiceCollection services = new();
 		services.AddAwaitenContainer(root);
 		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
