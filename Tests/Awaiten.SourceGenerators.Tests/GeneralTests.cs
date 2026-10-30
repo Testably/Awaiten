@@ -1147,7 +1147,7 @@ public class GeneralTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		// The keyed dictionary materializes inline, keyed by each member's [Key] in registration order, each calling its static resolver over the current owner.
+		// The keyed dictionary materializes inline, keyed by each member's Key in registration order, each calling its static resolver over the current owner.
 		await That(source).Contains("new global::MyCode.Router(new global::System.Collections.Generic.Dictionary<string, global::MyCode.IChannel> { [\"fast\"] = Root.ResolveFast(__s.__root), [\"slow\"] = Root.ResolveSlow(__s.__root) })");
 		// IReadOnlyDictionary<string, T> is also publicly resolvable by type.
 		await That(source).Contains("typeof(global::System.Collections.Generic.IReadOnlyDictionary<string, global::MyCode.IChannel>)");
@@ -1277,7 +1277,7 @@ public class GeneralTests
 			}
 			""");
 
-		// int is not a supported key type for a [Key], so it is rejected rather than silently registered unkeyed.
+		// int is not a supported key type for a registration Key, so it is rejected rather than silently registered unkeyed.
 		await That(result.Diagnostics).Contains("*AWT170*").AsWildcard();
 		await That(result.Diagnostics).Contains("*int*").AsWildcard()
 			.Because("the diagnostic names the unsupported key type");

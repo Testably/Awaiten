@@ -10,7 +10,7 @@ internal static partial class Sources
 	///     <c>Resolve(Type, object?)</c> / <c>TryResolve(Type, object?, out object?)</c> / <c>ResolveAsync(Type,
 	///     object?, CancellationToken)</c> overloads. A <see langword="null" /> key delegates to the unkeyed
 	///     overload, so a keyed call is a strict superset. A non-null key dispatches through a static
-	///     <c>__keyed</c> table keyed by <c>(Type, key)</c>, populated only from user-declared <c>[Key]</c>s
+	///     <c>__keyed</c> table keyed by <c>(Type, key)</c>, populated only from user-declared keys
 	///     (<see cref="AwaitenGenerator.IsUserKey" />): the synthetic decorator/contextual keys stay internal and
 	///     unreachable. Async-taint and strict lifetime-safety withholding follow the same rules as the unkeyed
 	///     dispatch, with the same guidance messages. Returns whether the <c>__keyed</c> table was emitted, so the
@@ -136,7 +136,7 @@ internal static partial class Sources
 	}
 
 	/// <summary>
-	///     The keyed dispatch cases: each user-declared <c>(service type, [Key])</c> mapped to the winning
+	///     The keyed dispatch cases: each user-declared <c>(service type, Key)</c> mapped to the winning
 	///     registration's resolver, matching what <c>[FromKey]</c> injection resolves. A parameterized service or a
 	///     requesting-type factory has no bare (key-only) resolution (it is reached only through a <c>Func&lt;…&gt;</c>
 	///     relationship) and is skipped. Each entry carries its synchronous resolver (null when async-only in the
@@ -152,7 +152,7 @@ internal static partial class Sources
 		{
 			foreach (ServiceKey serviceKey in owner.Services.AsArray())
 			{
-				// Only user-declared [Key]s are reachable; the synthetic decorator/contextual keys stay internal.
+				// Only user-declared keys are reachable; the synthetic decorator/contextual keys stay internal.
 				if (!AwaitenGenerator.IsUserKey(serviceKey.Key) || !seen.Add(serviceKey))
 				{
 					continue;
@@ -169,7 +169,7 @@ internal static partial class Sources
 	}
 
 	/// <summary>
-	///     The keyed dispatch case for one user-declared <c>(service, [Key])</c>, or <see langword="null" /> when the
+	///     The keyed dispatch case for one user-declared <c>(service, Key)</c>, or <see langword="null" /> when the
 	///     winning registration has no bare (key-only) resolution (a parameterized service or a requesting-type
 	///     factory, reachable only through its <c>Func&lt;…&gt;</c> relationship).
 	/// </summary>
@@ -260,7 +260,7 @@ internal static partial class Sources
 		const string asyncFunc = "global::System.Func<Scope, global::System.Threading.CancellationToken, global::System.Threading.Tasks.Task<object>>";
 
 		Separate(fields);
-		AppendXmlSummary(fields, depth, "The keyed by-type dispatch table: each user-declared <c>[Key]</c> mapped to its resolver.");
+		AppendXmlSummary(fields, depth, "The keyed by-type dispatch table: each user-declared <c>Key</c> mapped to its resolver.");
 		Indent(fields, depth).AppendLine(
 			"private static readonly global::System.Collections.Generic.Dictionary<__KeyedKey, __KeyedEntry> __keyed = new global::System.Collections.Generic.Dictionary<__KeyedKey, __KeyedEntry>");
 		Indent(fields, depth).AppendLine("{");
@@ -277,7 +277,7 @@ internal static partial class Sources
 		Indent(fields, depth).AppendLine("};");
 
 		Separate(helpers);
-		AppendXmlSummary(helpers, depth, "The composite key of the keyed dispatch table: a service type paired with a user-declared <c>[Key]</c>.");
+		AppendXmlSummary(helpers, depth, "The composite key of the keyed dispatch table: a service type paired with a user-declared <c>Key</c>.");
 		Indent(helpers, depth).AppendLine("private readonly struct __KeyedKey : global::System.IEquatable<__KeyedKey>");
 		Indent(helpers, depth).AppendLine("{");
 		Indent(helpers, depth + 1).AppendLine("public readonly global::System.Type Type;");

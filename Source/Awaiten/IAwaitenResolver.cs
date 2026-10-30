@@ -20,8 +20,8 @@ public interface IAwaitenResolver
 	/// <summary>
 	///     Resolves the service registered for <paramref name="serviceType" /> under <paramref name="key" />,
 	///     throwing if it is not registered. A <see langword="null" /> <paramref name="key" /> resolves the unkeyed
-	///     registration, exactly like <see cref="Resolve(Type)" />. Only user-declared <c>[Key]</c>s are reachable;
-	///     the container's internal synthetic keys are not.
+	///     registration, exactly like <see cref="Resolve(Type)" />. Only keys declared through a
+	///     registration's <c>Key</c> property are reachable; the container's internal synthetic keys are not.
 	/// </summary>
 	object Resolve(Type serviceType, object? key);
 
@@ -39,7 +39,8 @@ public interface IAwaitenResolver
 	///     Attempts to resolve the service registered for <paramref name="serviceType" /> under
 	///     <paramref name="key" />, reporting whether it could be resolved synchronously. A <see langword="null" />
 	///     <paramref name="key" /> probes the unkeyed registration, exactly like <see cref="TryResolve(Type, out object)" />.
-	///     Only user-declared <c>[Key]</c>s are reachable; the container's internal synthetic keys are not.
+	///     Only keys declared through a registration's <c>Key</c> property are reachable; the container's internal
+	///     synthetic keys are not.
 	/// </summary>
 	bool TryResolve(Type serviceType, object? key, [NotNullWhen(true)] out object? instance);
 }

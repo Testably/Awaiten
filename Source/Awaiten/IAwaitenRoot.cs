@@ -24,7 +24,7 @@ public interface IAwaitenRoot : IAwaitenScope, IAwaitenExternalResolverHost
 {
 	/// <summary>
 	///     The public service registrations the container can resolve, with their lifetimes. Both unkeyed
-	///     registrations and user-keyed ones (each carrying its <c>[Key]</c>) are advertised; the container's
+	///     registrations and keyed ones (each carrying its <c>Key</c> value) are advertised; the container's
 	///     internal synthetic keys are not. The implementations of one service type coalesce into a single entry,
 	///     the winning registration's, so this advertises what resolves rather than how many members back it.
 	/// </summary>

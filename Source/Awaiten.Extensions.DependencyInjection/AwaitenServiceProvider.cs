@@ -159,7 +159,7 @@ public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScop
 			return GetService(serviceType);
 		}
 
-		// Awaiten resolves an exact user-declared [Key]; it has no wildcard-key registration, so AnyKey matches
+		// Awaiten resolves an exact registration Key; it has no wildcard-key registration, so AnyKey matches
 		// nothing and is declined rather than resolving an arbitrary keyed instance.
 		if (ReferenceEquals(serviceKey, KeyedService.AnyKey))
 		{

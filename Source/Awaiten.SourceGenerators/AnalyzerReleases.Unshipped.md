@@ -70,7 +70,7 @@
  AWT167  | Awaiten   | Warning  | A WhenInjectedInto contextual binding never applies because the named consumer has no unkeyed direct constructor parameter to redirect
  AWT168  | Awaiten   | Error    | A registration sets both WhenInjectedInto and Key, which claim the same resolution slot, so the Key is silently dropped
  AWT169  | Awaiten   | Error    | Two implementations set WhenInjectedInto for the same service and consumer, so the contextual resolution would be ambiguous
- AWT170  | Awaiten   | Error    | A [Key] or [FromKey] uses a constant whose type is not a supported key type (string, enum, or typeof)
+ AWT170  | Awaiten   | Error    | A Key property or [FromKey] uses a constant whose type is not a supported key type (string, enum, or typeof)
  AWT171  | Awaiten   | Warning  | A closing of an open generic [Decorate]/[Composite] violates the decorator's or composite's constraints and is skipped
  AWT172  | Awaiten   | Warning  | A [Scan]'s name, namespace or exclude filters removed every marker-assignable match, so the scan registers nothing
  AWT173  | Awaiten   | Warning  | A [Scan] exclusion (an Exclude type or a !-prefixed name/namespace pattern) matched no candidate and is likely stale

@@ -55,8 +55,8 @@ partial class AwaitenGenerator
 		Dictionary<ServiceKey, List<string>> serviceMembers = new();
 		List<ServiceKey> serviceMemberOrder = new();
 
-		// Keyed-collection membership: every real keyed registration of a service ([Key] and implementation),
-		// grouped by service (value) type in registration order. Only real [Key] registrations join here; a decorated
+		// Keyed-collection membership: every real keyed registration of a service (Key and implementation),
+		// grouped by service (value) type in registration order. Only real keyed registrations join here; a decorated
 		// key later points its entry at the outermost decorator, never at an inner chain link.
 		Dictionary<string, List<KeyedMember>> keyedMembers = new(StringComparer.Ordinal);
 		List<string> keyedMemberOrder = new();
@@ -152,7 +152,7 @@ partial class AwaitenGenerator
 			AddCollectionMember(serviceMembers, serviceMemberOrder, serviceKey, registration.ImplementationType);
 			MergeScanHooks(EnsureImpl(implInfos, implOrder, registration), registration, reportedHookConflicts, diagnostics);
 
-			// A keyed registration is also a member of its service's keyed collection, indexed by its [Key].
+			// A keyed registration is also a member of its service's keyed collection, indexed by its Key.
 			AddKeyedMember(keyedMembers, keyedMemberOrder, registration, alreadyChosen);
 
 			if (alreadyChosen)
@@ -667,7 +667,7 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     Records a keyed registration as a member of its service's keyed collection ([Key] and implementation),
+	///     Records a keyed registration as a member of its service's keyed collection (Key and implementation),
 	///     grouped by service (value) type in registration order. An unkeyed registration contributes nothing, and the
 	///     first registration per (service, key) wins (a genuine duplicate is the caller's AWT117).
 	/// </summary>

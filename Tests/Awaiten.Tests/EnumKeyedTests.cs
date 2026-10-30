@@ -48,7 +48,7 @@ public partial class EnumKeyedTests
 	{
 		using GatewayContainer.Root container = new();
 
-		// The generic convenience takes an object key, so a non-string [Key] (here an enum) is reachable without
+		// The generic convenience takes an object key, so a non-string Key (here an enum) is reachable without
 		// dropping to the non-generic Resolve(Type, object) and casting.
 		await That(container.Resolve<IGateway>(PaymentProvider.Stripe)).Is<StripeGateway>()
 			.Because("Resolve<T>(PaymentProvider.Stripe) selects the enum-keyed registration");
