@@ -28,19 +28,4 @@ public interface IAwaitenScope : IAwaitenAsyncResolver, IAsyncDisposable, IDispo
 	///     disposed rather than leaked.
 	/// </summary>
 	Task<IAwaitenScope> CreateScopeAsync(CancellationToken cancellationToken = default);
-
-#if NET || NETSTANDARD2_1_OR_GREATER
-	/// <summary>
-	///     Falls back to the synchronous <see cref="IDisposable.Dispose" />. A generated scope replaces this with an
-	///     asynchronous drain; the fallback serves hand-written implementations, which own no
-	///     <see cref="IAsyncDisposable" />-only instances. The netstandard2.0 asset cannot carry a default
-	///     implementation, so a hand-written scope there implements <c>DisposeAsync</c> itself.
-	/// </summary>
-	ValueTask IAsyncDisposable.DisposeAsync()
-	{
-		Dispose();
-		GC.SuppressFinalize(this);
-		return default;
-	}
-#endif
 }

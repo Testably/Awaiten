@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 
 namespace Awaiten.Tests;
@@ -56,23 +55,6 @@ public partial class AsyncDisposableScopeTests
 		}
 	}
 
-#if NET
-	// Only .NET carries the default DisposeAsync on IAwaitenScope; a netstandard2.0 implementation must write its own.
-	[Test]
-	public async Task AwaitUsing_AHandWrittenScopeWithoutDisposeAsync_FallsBackToDispose()
-	{
-		HandWrittenScope handWritten = new();
-
-		await using (IAwaitenScope scope = handWritten)
-		{
-			await That(scope.CreateScope()).IsSameAs(handWritten);
-		}
-
-		await That(handWritten.DisposeCount).IsEqualTo(1)
-			.Because("a scope that implements no DisposeAsync of its own is disposed asynchronously through the interface's synchronous fallback");
-	}
-#endif
-
 	public sealed class Rinse : IAsyncDisposable
 	{
 		public bool DisposedAsync { get; private set; }
@@ -87,40 +69,4 @@ public partial class AsyncDisposableScopeTests
 	[Container]
 	[Scoped<Rinse>]
 	public static partial class AsyncOnlyContainer;
-
-#if NET
-	private sealed class HandWrittenScope : IAwaitenScope
-	{
-		public int DisposeCount { get; private set; }
-
-		public object Resolve(Type serviceType) => throw new NotSupportedException();
-
-		public object Resolve(Type serviceType, object? key) => throw new NotSupportedException();
-
-		public bool TryResolve(Type serviceType, [NotNullWhen(true)] out object? instance)
-		{
-			instance = null;
-			return false;
-		}
-
-		public bool TryResolve(Type serviceType, object? key, [NotNullWhen(true)] out object? instance)
-		{
-			instance = null;
-			return false;
-		}
-
-		public Task<object> ResolveAsync(Type serviceType, CancellationToken cancellationToken = default)
-			=> throw new NotSupportedException();
-
-		public Task<object> ResolveAsync(Type serviceType, object? key, CancellationToken cancellationToken = default)
-			=> throw new NotSupportedException();
-
-		public IAwaitenScope CreateScope() => this;
-
-		public Task<IAwaitenScope> CreateScopeAsync(CancellationToken cancellationToken = default)
-			=> Task.FromResult<IAwaitenScope>(this);
-
-		public void Dispose() => DisposeCount++;
-	}
-#endif
 }
