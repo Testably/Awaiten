@@ -161,7 +161,7 @@ namespace Awaiten
     }
     public interface IExternalResolver
     {
-        bool TryResolve(System.Type serviceType, object? serviceKey, out object? instance);
+        bool TryResolve(System.Type serviceType, object? key, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? instance);
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
     public sealed class ImportAttribute : System.Attribute

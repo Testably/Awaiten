@@ -174,6 +174,14 @@ internal static partial class Sources
 	}
 
 	/// <summary>
+	///     The guidance message (a quoted string literal) thrown by the set-once <c>ExternalResolver</c> setter when
+	///     a scope that already has a resolver is given a different one: replacing it would let one container mix
+	///     instances from two providers.
+	/// </summary>
+	private const string ExternalResolverAlreadySetMessage =
+		"\"Awaiten: this scope already has an ExternalResolver, and replacing it would mix instances from two providers in one container; pass the resolver to the Root constructor (new Root(resolver)), or set ExternalResolver only once, before the first resolution.\"";
+
+	/// <summary>
 	///     The root-withheld entries (dispatchable, but carrying guidance). Their types and messages populate the
 	///     <c>__withheld</c> table that Resolve throws from on the Root, while the parallel <c>__rootWithheld</c>
 	///     mask (keyed by dispatch case) is what TryResolve consults to return false for them on the Root only.

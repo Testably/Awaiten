@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Threading;
 
@@ -795,8 +796,7 @@ public partial class ComprehensiveContainerExample
 	[Test]
 	public async Task ExternalDependency_ResolvesThroughTheWiredResolver()
 	{
-		using CoffeeShop.Root shop = new();
-		((IAwaitenExternalResolverHost)shop).ExternalResolver = new GatewayResolver();
+		using CoffeeShop.Root shop = new(new GatewayResolver());
 
 		await That(shop.Resolve<Register>().Gateway.Provider).IsEqualTo("stripe")
 			.Because("an [ImportService<T>] dependency is satisfied by the wired external resolver");
@@ -845,7 +845,7 @@ public partial class ComprehensiveContainerExample
 
 	private sealed class GatewayResolver : IExternalResolver
 	{
-		public bool TryResolve(Type serviceType, object? serviceKey, out object? instance)
+		public bool TryResolve(Type serviceType, object? key, [NotNullWhen(true)] out object? instance)
 		{
 			if (serviceType == typeof(IPaymentGateway))
 			{

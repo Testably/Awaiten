@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Awaiten.Extensions.DependencyInjection;
@@ -17,7 +18,7 @@ public sealed class ServiceProviderExternalResolver : IExternalResolver
 		=> _provider = provider ?? throw new ArgumentNullException(nameof(provider));
 
 	/// <inheritdoc />
-	public bool TryResolve(Type serviceType, object? serviceKey, out object? instance)
+	public bool TryResolve(Type serviceType, object? key, [NotNullWhen(true)] out object? instance)
 	{
 		if (serviceType is null)
 		{
@@ -27,9 +28,9 @@ public sealed class ServiceProviderExternalResolver : IExternalResolver
 		// A keyed [FromKey] dependency resolves through the provider's keyed surface, an unkeyed one through the
 		// ordinary one. A provider without keyed support simply yields no instance, which surfaces as the
 		// container's clear "not available" message.
-		instance = serviceKey is null
+		instance = key is null
 			? _provider.GetService(serviceType)
-			: (_provider as IKeyedServiceProvider)?.GetKeyedService(serviceType, serviceKey);
+			: (_provider as IKeyedServiceProvider)?.GetKeyedService(serviceType, key);
 		return instance is not null;
 	}
 }

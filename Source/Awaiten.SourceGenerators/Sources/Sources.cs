@@ -199,11 +199,13 @@ internal static partial class Sources
 		Indent(fields, body).AppendLine("private global::Awaiten.IExternalResolver? __externalResolver;");
 
 		// Members region: constructors, public surface and non-typed explicit interface implementations. The root
-		// is its own __root (the parameterless ctor is only reached through Root's base call); child scopes get the
-		// shared root. The child ctor is private so a scope is only created through CreateScope().
-		Indent(members, body).AppendLine("private protected Scope()");
+		// is its own __root (the root ctor is only reached through Root's base call, which sets the resolver before
+		// eager activation can need it); child scopes get the shared root. The child ctor is private so a scope is
+		// only created through CreateScope().
+		Indent(members, body).AppendLine("private protected Scope(global::Awaiten.IExternalResolver? externalResolver)");
 		Indent(members, body).AppendLine("{");
 		Indent(members, body + 1).AppendLine("__root = (Root)this;");
+		Indent(members, body + 1).AppendLine("__externalResolver = externalResolver;");
 		Indent(members, body).AppendLine("}");
 		Separate(members);
 		Indent(members, body).AppendLine("private Scope(Root root)");
@@ -212,10 +214,19 @@ internal static partial class Sources
 		Indent(members, body).AppendLine("}");
 
 		Separate(members);
+		// Set-once: replacing a resolver would let one scope mix instances from two providers. Setting the same
+		// instance again stays a no-op, so a host's idempotent ??= wiring keeps working.
 		Indent(members, body).AppendLine("global::Awaiten.IExternalResolver? global::Awaiten.IAwaitenExternalResolverHost.ExternalResolver");
 		Indent(members, body).AppendLine("{");
 		Indent(members, body + 1).AppendLine("get => __externalResolver;");
-		Indent(members, body + 1).AppendLine("set => __externalResolver = value;");
+		Indent(members, body + 1).AppendLine("set");
+		Indent(members, body + 1).AppendLine("{");
+		Indent(members, body + 2).AppendLine("global::Awaiten.IExternalResolver? current = global::System.Threading.Interlocked.CompareExchange(ref __externalResolver, value, null);");
+		Indent(members, body + 2).AppendLine("if (current != null && current != value)");
+		Indent(members, body + 2).AppendLine("{");
+		Indent(members, body + 3).Append("throw new global::System.InvalidOperationException(").Append(ExternalResolverAlreadySetMessage).AppendLine(");");
+		Indent(members, body + 2).AppendLine("}");
+		Indent(members, body + 1).AppendLine("}");
 		Indent(members, body).AppendLine("}");
 
 		ApiRegions regions = new(members, fields, helpers);
@@ -455,7 +466,15 @@ internal static partial class Sources
 		// (InitializeAsync plus the advertised registration lists).
 		AppendXmlSummary(members, body,
 			"Creates the container root: the usable container instance and its default scope.");
-		Indent(members, body).AppendLine("public Root() : base()");
+		Indent(members, body).AppendLine("public Root() : this(null)");
+		Indent(members, body).AppendLine("{");
+		Indent(members, body).AppendLine("}");
+		Separate(members);
+		AppendXmlSummary(members, body,
+			"Creates the container root with the external resolver its <c>[ImportService&lt;T&gt;]</c> /",
+			"<c>[ImportServices]</c> dependencies resolve through, fixed before anything is resolved.");
+		Indent(members, body).AppendLine("/// <param name=\"externalResolver\">The external resolver, or <see langword=\"null\" /> to leave it unset.</param>");
+		Indent(members, body).AppendLine("public Root(global::Awaiten.IExternalResolver? externalResolver) : base(externalResolver)");
 		Indent(members, body).AppendLine("{");
 		EmitEagerActivation(members, body + 1, instances, names);
 		Indent(members, body).AppendLine("}");
@@ -612,6 +631,14 @@ internal static partial class Sources
 		// "type not found" errors. It implements IAwaitenContainerMetadata.
 		Indent(builder, depth).AppendLine("public sealed class Root : global::Awaiten.IAwaitenContainerMetadata");
 		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).AppendLine("public Root()");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 1).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("public Root(global::Awaiten.IExternalResolver? externalResolver)");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 1).AppendLine("}");
+		builder.AppendLine();
 		Indent(builder, depth + 1).Append(
 				"public object Resolve(global::System.Type serviceType) => throw new global::System.InvalidOperationException(")
 			.Append(message).AppendLine(");");

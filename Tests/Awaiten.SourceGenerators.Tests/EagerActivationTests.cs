@@ -28,7 +28,7 @@ public class EagerActivationTests
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		await That(source).Contains("public Root() : base()");
+		await That(source).Contains("public Root(global::Awaiten.IExternalResolver? externalResolver) : base(externalResolver)");
 		await That(source).Contains("ResolveWarm(this);")
 			.Because("the eager singleton is constructed in the root constructor through its cached resolver");
 	}

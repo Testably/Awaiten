@@ -65,10 +65,15 @@ public static class AwaitenInitializationServiceCollectionExtensions
 			// The bridged registrations wire the external resolver lazily on first resolution, but warming
 			// resolves the root itself (a pre-built singleton, not a factory), which bypasses that wiring. The
 			// provider injected into this singleton hosted service is the root provider, the right scope for
-			// singleton external resolution, so wire it here unless a resolver was set explicitly.
+			// singleton external resolution, so wire it here unless a resolver was set explicitly. The resolver is
+			// set-once, so this takes the bridge's wiring lock (the probe, when bridged) to not race a concurrent
+			// first bridged resolution into setting a second one.
 			if (_container.ExternalDependencies.Count > 0 && _container.ExternalResolver is null)
 			{
-				_container.ExternalResolver = new ServiceProviderExternalResolver(_provider);
+				lock (_provider.GetService(typeof(AwaitenRootProviderProbe)) ?? _container)
+				{
+					_container.ExternalResolver ??= new ServiceProviderExternalResolver(_provider);
+				}
 			}
 
 			// Warming builds singletons on the root, so the root provider must own the root even if nothing is

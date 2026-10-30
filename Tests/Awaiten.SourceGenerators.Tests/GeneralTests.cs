@@ -2454,4 +2454,34 @@ public class GeneralTests
 		await That(activationAt >= 0 && publishAt > activationAt).IsTrue()
 			.Because("the cache field must be published only after activation completes");
 	}
+
+	[Test]
+	public async Task ContainerWithErrors_KeepsBothRootConstructors()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class Dep { }
+		                                       public sealed class Service { public Service(Dep dep) { } }
+
+		                                       [Container]
+		                                       [Transient<Service>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+
+		                                       public static class Consumer
+		                                       {
+		                                           public static object Plain() => new MyContainer.Root();
+		                                           public static object WithResolver(IExternalResolver resolver) => new MyContainer.Root(resolver);
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).Contains("*AWT101*").AsWildcard()
+			.Because("the missing dependency is the actionable diagnostic");
+		await That(result.Diagnostics).DoesNotContain("*CS1729*").AsWildcard()
+			.Because("the error shell keeps both Root constructors, so consumer code does not cascade into compile errors");
+	}
 }
