@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Awaiten.Tests;
 
@@ -66,6 +67,20 @@ public partial class ExternalServiceTests
 		private static void ApplyClock(HookReporter reporter, IClock clock) => reporter.Clock = clock;
 	}
 
+	[Container]
+	[ImportService<IClock>]
+	[Singleton<Reporter>(Eager = true)]
+	public static partial class EagerExternalContainer;
+
+	private sealed class SingleClockResolver(IClock clock) : IExternalResolver
+	{
+		public bool TryResolve(Type serviceType, object? key, [NotNullWhen(true)] out object? instance)
+		{
+			instance = serviceType == typeof(IClock) ? clock : null;
+			return instance is not null;
+		}
+	}
+
 	private sealed class ClockResolver : IExternalResolver
 	{
 		private readonly Dictionary<object, IClock> _keyed = new()
@@ -75,11 +90,11 @@ public partial class ExternalServiceTests
 
 		private readonly IClock _unkeyed = new FixedClock();
 
-		public bool TryResolve(Type serviceType, object? serviceKey, out object? instance)
+		public bool TryResolve(Type serviceType, object? key, [NotNullWhen(true)] out object? instance)
 		{
 			if (serviceType == typeof(IClock))
 			{
-				instance = serviceKey is null ? _unkeyed : _keyed[serviceKey];
+				instance = key is null ? _unkeyed : _keyed[key];
 				return true;
 			}
 
@@ -156,5 +171,80 @@ public partial class ExternalServiceTests
 		await That(((IAwaitenContainerMetadata)container).ExternalDependencies)
 			.Contains(new AwaitenExternalDependency(typeof(IClock)))
 			.Because("an [ImportService<T>] reached only through a lifecycle hook parameter is still advertised and driven onto the external surface");
+	}
+
+	public sealed class ResolverWiring
+	{
+		[Test]
+		public async Task RootConstructor_ResolvesThroughTheGivenResolver()
+		{
+			using ExternalContainer.Root container = new(new ClockResolver());
+
+			await That(container.Resolve<Reporter>().Clock).Is<FixedClock>()
+				.Because("the resolver passed to the Root constructor serves the [ImportService<T>] dependency without a cast");
+		}
+
+		[Test]
+		public async Task RootConstructor_WiresTheResolverBeforeEagerActivation()
+		{
+			FixedClock clock = new();
+
+			using EagerExternalContainer.Root container = new(new SingleClockResolver(clock));
+
+			await That(container.Resolve<Reporter>().Clock).IsSameAs(clock)
+				.Because("an eager singleton is built in the Root constructor, so its external dependency needs the resolver already in place");
+		}
+
+		[Test]
+		public async Task Setter_SameResolverAgain_IsANoOp()
+		{
+			ClockResolver resolver = new();
+			using ExternalContainer.Root container = new(resolver);
+			IAwaitenExternalResolverHost host = container;
+
+			await That(() => host.ExternalResolver = resolver).DoesNotThrow()
+				.Because("setting the resolver the scope already holds cannot mix providers, which keeps a host's idempotent wiring working");
+			await That(host.ExternalResolver).IsSameAs(resolver);
+		}
+
+		[Test]
+		public async Task Setter_DifferentResolverOnceSet_Throws()
+		{
+			ClockResolver resolver = new();
+			using ExternalContainer.Root container = new(resolver);
+			IAwaitenExternalResolverHost host = container;
+
+			await That(() => host.ExternalResolver = new ClockResolver()).Throws<InvalidOperationException>()
+				.WithMessage("*already has an ExternalResolver*two providers*Root constructor*").AsWildcard()
+				.Because("replacing the resolver would let one container mix instances from two providers, and the message names the cause and the remedy");
+			await That(host.ExternalResolver).IsSameAs(resolver)
+				.Because("the rejected resolver must not replace the one already set");
+		}
+
+		[Test]
+		public async Task Setter_NullOnceSet_Throws()
+		{
+			using ExternalContainer.Root container = new(new ClockResolver());
+			IAwaitenExternalResolverHost host = container;
+
+			await That(() => host.ExternalResolver = null).Throws<InvalidOperationException>()
+				.Because("clearing the resolver is a replacement too: a later one would mix providers just the same");
+		}
+
+		[Test]
+		public async Task ChildScope_SetsItsOwnResolverOnce()
+		{
+			UtcClock scopeClock = new();
+			using ExternalContainer.Root container = new(new ClockResolver());
+			using ExternalContainer.Scope scope = container.CreateScope();
+			IAwaitenExternalResolverHost host = scope;
+
+			host.ExternalResolver = new SingleClockResolver(scopeClock);
+
+			await That(scope.Resolve<Reporter>().Clock).IsSameAs(scopeClock)
+				.Because("each scope holds its own set-once resolver, which a host wires to the provider aligned with that scope");
+			await That(() => host.ExternalResolver = new ClockResolver()).Throws<InvalidOperationException>()
+				.Because("the child scope's resolver is set-once just like the root's");
+		}
 	}
 }

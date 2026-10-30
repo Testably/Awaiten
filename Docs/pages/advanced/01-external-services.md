@@ -56,12 +56,12 @@ Awaiten does not create the external provider. It asks an *external resolver* fo
 
 Under the [MS.DI bridge](../msdi-bridge) this is automatic. `AddGeneratedContainer` and the startup initialization wire the container to the host's `IServiceProvider`, so `[ImportService<T>]` and `[ImportServices]` dependencies resolve from the host with nothing extra to do.
 
-Standing alone, you set it yourself. Implement `IExternalResolver` and assign it through `IAwaitenExternalResolverHost` before the first resolve.
+Standing alone, you set it yourself. Implement `IExternalResolver` and pass it to the generated `Root` constructor, so it is in place before anything resolves, eager singletons included.
 
 ```csharp
 public sealed class HostResolver : IExternalResolver
 {
-    public bool TryResolve(Type serviceType, object? key, out object? instance)
+    public bool TryResolve(Type serviceType, object? key, [NotNullWhen(true)] out object? instance)
     {
         if (serviceType == typeof(IPaymentGateway))
         {
@@ -74,13 +74,14 @@ public sealed class HostResolver : IExternalResolver
     }
 }
 
-using var shop = new CoffeeShop.Root();
-((IAwaitenExternalResolverHost)shop).ExternalResolver = new HostResolver();
+using var shop = new CoffeeShop.Root(new HostResolver());
 
 var register = shop.Resolve<Register>();   // its IPaymentGateway comes from HostResolver
 ```
 
-The `key` argument carries the `[FromKey]` value for a keyed external dependency. A child scope, and the throwaway scope behind an `Owned<T>`, inherit the resolver from the scope that created them, so setting it once on the root is enough.
+The `key` argument carries the `[FromKey]` value for a keyed external dependency. A child scope, and the throwaway scope behind an `Owned<T>`, inherit the resolver from the scope that created them, so passing it once to the root is enough.
+
+A scope's resolver is set once. Hosts that wire a resolver later, as the MS.DI bridge does for each scope, set it through `IAwaitenExternalResolverHost.ExternalResolver`. Setting the resolver a scope already holds again does nothing; setting a different one throws an `InvalidOperationException`, because the scope would then mix instances from two providers.
 
 ## Verifying the wiring
 

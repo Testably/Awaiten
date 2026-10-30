@@ -1263,7 +1263,7 @@ internal static partial class Sources
 		// Name the [FromKey] key in the message when there is one, so a keyed miss is not mistaken for a
 		// missing unkeyed registration.
 		Indent(builder, depth + 1).AppendLine(
-			"throw new global::System.InvalidOperationException($\"Awaiten: the external dependency '{serviceType}'{(serviceKey == null ? \"\" : $\" (key: {serviceKey})\")} is not available; register it in the host provider or set ExternalResolver.\");");
+			"throw new global::System.InvalidOperationException($\"Awaiten: the external dependency '{serviceType}'{(serviceKey == null ? \"\" : $\" (key: {serviceKey})\")} is not available; register it in the host provider, or pass an IExternalResolver that provides it to the Root constructor.\");");
 		Indent(builder, depth).AppendLine("}");
 	}
 

@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Awaiten.Extensions.DependencyInjection.Tests;
@@ -47,7 +48,7 @@ public sealed partial class ExternalDependencyTests
 
 	private sealed class ClockResolver : IExternalResolver
 	{
-		public bool TryResolve(Type serviceType, object? serviceKey, out object? instance)
+		public bool TryResolve(Type serviceType, object? key, [NotNullWhen(true)] out object? instance)
 		{
 			if (serviceType == typeof(IClock))
 			{
@@ -140,7 +141,7 @@ public sealed partial class ExternalDependencyTests
 
 		public FixedResolver(IClock clock) => _clock = clock;
 
-		public bool TryResolve(Type serviceType, object? serviceKey, out object? instance)
+		public bool TryResolve(Type serviceType, object? key, [NotNullWhen(true)] out object? instance)
 		{
 			instance = serviceType == typeof(IClock) ? _clock : null;
 			return instance is not null;
