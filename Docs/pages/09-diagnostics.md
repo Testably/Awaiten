@@ -1786,7 +1786,7 @@ public static partial class CoffeeShop;
 ### AWT170
 
 :::danger[Error]
-A `[Key]` or `[FromKey]` uses a constant whose type is not a supported key type. A resolution key must be a `string`, an `enum` value, or a `typeof(...)`.
+A `Key` property or `[FromKey]` uses a constant whose type is not a supported key type. A resolution key must be a `string`, an `enum` value, or a `typeof(...)`.
 :::
 
 ```csharp expect=AWT170,AWT101

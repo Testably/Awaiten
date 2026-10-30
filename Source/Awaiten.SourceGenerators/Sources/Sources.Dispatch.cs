@@ -255,7 +255,7 @@ internal static partial class Sources
 	///     public (unkeyed) registrations with their lifetimes, which the
 	///     <c>Awaiten.Extensions.DependencyInjection</c> companion projects into a service collection. Parameterized
 	///     services are omitted (not resolvable by service type alone); a user-keyed registration is advertised with
-	///     its <c>[Key]</c>, while the synthetic decorator/contextual keys stay internal. An async-tainted service is
+	///     its <c>Key</c>, while the synthetic decorator/contextual keys stay internal. An async-tainted service is
 	///     flagged <c>requiresAsync</c> so the bridge projects it as a <c>Task&lt;T&gt;</c>, unless
 	///     <paramref name="syncResolveAfterInit" /> makes it synchronously resolvable after warm-up.
 	/// </summary>
@@ -279,7 +279,7 @@ internal static partial class Sources
 			bool requiresAsync = instance.IsAsyncTainted && !syncResolveAfterInit;
 			bool externallyOwned = instance.Production == ProductionKind.Instance;
 			// The synthetic decorator/contextual keys are internal wiring, never advertised. Unkeyed and
-			// user-keyed registrations are both advertised, the latter carrying its user-declared [Key].
+			// user-keyed registrations are both advertised, the latter carrying its user-declared Key.
 			foreach (ServiceKey service in instance.Services.AsArray()
 				         .Where(service => service.Key is null || AwaitenGenerator.IsUserKey(service.Key)))
 			{
@@ -295,7 +295,7 @@ internal static partial class Sources
 	/// <summary>
 	///     Emits one <c>AwaitenRegistration</c> initializer: the service type and lifetime, then the async <c>Task&lt;T&gt;</c>
 	///     projection (for an async-tainted registration) or the <c>externallyOwned</c> flag, and finally the
-	///     user-declared <c>[Key]</c> for a keyed registration.
+	///     user-declared <c>Key</c> for a keyed registration.
 	/// </summary>
 	private static void EmitRegistrationEntry(StringBuilder builder, int depth, ServiceKey service, InstanceModel instance, bool requiresAsync, bool externallyOwned)
 	{
@@ -313,7 +313,7 @@ internal static partial class Sources
 			builder.Append(", externallyOwned: true");
 		}
 
-		// A user-keyed registration advertises its [Key] as the last (named) argument on whichever ctor.
+		// A user-keyed registration advertises its Key as the last (named) argument on whichever ctor.
 		if (service.Key is not null)
 		{
 			builder.Append(", key: ").Append(AwaitenGenerator.KeyLiteral(service.Key));

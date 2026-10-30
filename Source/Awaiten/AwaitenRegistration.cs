@@ -22,7 +22,7 @@ public readonly struct AwaitenRegistration : IEquatable<AwaitenRegistration>
 	/// <param name="serviceType">The service type that can be resolved.</param>
 	/// <param name="lifetime">The lifetime under which the container owns the service.</param>
 	/// <param name="externallyOwned">Whether the instance is a pre-built member the container exposes but does not own.</param>
-	/// <param name="key">The user-declared <c>[Key]</c> of a keyed registration, or <see langword="null" /> when unkeyed.</param>
+	/// <param name="key">The key a keyed registration declares through its <c>Key</c> property, or <see langword="null" /> when unkeyed.</param>
 	/// <exception cref="ArgumentNullException"><paramref name="serviceType" /> is <see langword="null" />.</exception>
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	public AwaitenRegistration(Type serviceType, Lifetime lifetime, bool externallyOwned = false, object? key = null)
@@ -48,7 +48,7 @@ public readonly struct AwaitenRegistration : IEquatable<AwaitenRegistration>
 	///     A delegate bound to the closed <see cref="AwaitenTaskProjection.AsTask{T}" /> that adapts the container's
 	///     <c>Task&lt;object&gt;</c> resolution to the <c>Task&lt;TService&gt;</c> the host asks for.
 	/// </param>
-	/// <param name="key">The user-declared <c>[Key]</c> of a keyed registration, or <see langword="null" /> when unkeyed.</param>
+	/// <param name="key">The key a keyed registration declares through its <c>Key</c> property, or <see langword="null" /> when unkeyed.</param>
 	/// <exception cref="ArgumentNullException">Any non-<paramref name="key" /> argument is <see langword="null" />.</exception>
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	public AwaitenRegistration(Type serviceType, Lifetime lifetime, Type asyncTaskType, Func<Task<object>, object> asyncTaskConverter, object? key = null)
@@ -69,8 +69,9 @@ public readonly struct AwaitenRegistration : IEquatable<AwaitenRegistration>
 	public Lifetime Lifetime { get; }
 
 	/// <summary>
-	///     The user-declared <c>[Key]</c> of a keyed registration, or <see langword="null" /> when the registration
-	///     is unkeyed. The container's internal synthetic keys (decorator/contextual wiring) are never advertised.
+	///     The key a keyed registration declares through its <c>Key</c> property (the one a consumer selects with
+	///     <see cref="FromKeyAttribute" />), or <see langword="null" /> when the registration is unkeyed. The
+	///     container's internal synthetic keys (decorator/contextual wiring) are never advertised.
 	/// </summary>
 	public object? Key { get; }
 
@@ -85,6 +86,11 @@ public readonly struct AwaitenRegistration : IEquatable<AwaitenRegistration>
 	///     Whether the instance is a pre-built member of the container (registered with <c>Instance</c>) that the
 	///     container exposes but does not own. A host projecting the registration must not assume ownership of its disposal.
 	/// </summary>
+	/// <remarks>
+	///     A registration declared with <c>SuppressDisposal = true</c> reports <see langword="false" />: the container
+	///     builds that instance and only skips its disposal. A decorated <c>Instance</c> is advertised as its
+	///     container-built decorator, so it reports <see langword="false" /> too.
+	/// </remarks>
 	public bool ExternallyOwned { get; }
 
 	/// <summary>

@@ -11,7 +11,7 @@ namespace Awaiten.SourceGenerators;
 
 partial class AwaitenGenerator
 {
-	// A resolution key is a compile-time constant carried on [Key]/[FromKey]. It is stored internally as a
+	// A resolution key is a compile-time constant carried on a Key property or [FromKey]. It is stored internally as a
 	// canonical, kind-prefixed string so that constants of different kinds never unify: the enum PaymentProvider.A,
 	// the string "A" and a typeof(A) encode distinctly. The prefixes also fence user keys off from the synthetic
 	// resolution keys (__ctx:/__dec:), which is what makes their "unlikely to collide" guard an actual guarantee.
@@ -22,7 +22,7 @@ partial class AwaitenGenerator
 	private const string TypeKeyPrefix = "type|";
 
 	/// <summary>
-	///     Encodes a <c>[Key]</c>/<c>[FromKey]</c> constant into its canonical internal key, or <see langword="null" />
+	///     Encodes a <c>Key</c>/<c>[FromKey]</c> constant into its canonical internal key, or <see langword="null" />
 	///     when the argument is absent, null, or an unsupported constant kind (a numeric/char/bool constant is treated
 	///     as no key, exactly as a non-string key was before typed keys were supported). Strings, enum values and
 	///     <c>typeof(...)</c> are supported.

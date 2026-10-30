@@ -564,7 +564,7 @@ partial class AwaitenGenerator
 		}
 
 		// A keyed collection (IReadOnlyDictionary<TKey, T>) resolves every keyed registration of its value type T,
-		// keyed by each registration's [Key]. Recognized before the plain collection shapes (both live in
+		// keyed by each registration's Key. Recognized before the plain collection shapes (both live in
 		// System.Collections.Generic). The [FromKey] key is carried only for suppression; a [FromKey] that survives
 		// is AWT160. The requested key type is stored so the dictionary is synthesized under it (string or enum),
 		// including the empty index; a key type that is neither, or that mismatches the registrations, is AWT159

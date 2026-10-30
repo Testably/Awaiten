@@ -74,7 +74,7 @@ internal static partial class Sources
 
 	/// <summary>
 	///     A <c>new Dictionary&lt;TKey, TService&gt; { [key] = ResolveA(__s), … }</c> expression: every keyed
-	///     registration of the service, keyed by its <c>[Key]</c> literal in registration order, satisfying the
+	///     registration of the service, keyed by its <c>Key</c> literal in registration order, satisfying the
 	///     requested <c>IReadOnlyDictionary&lt;TKey, TService&gt;</c> (<paramref name="keyType" /> is <c>string</c> or an
 	///     enum). Each member calls its static resolver over the current owner <c>__s</c>, like <see cref="CollectionLiteral" />.
 	/// </summary>

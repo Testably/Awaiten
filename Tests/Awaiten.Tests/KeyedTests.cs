@@ -224,8 +224,8 @@ public partial class KeyedTests
 			.Because("keyed ResolveAsync awaits the async initialization");
 	}
 
-	// A container that declares no [Key], so its keyed dispatch has no entries: the disposed-scope guard must still
-	// run for a keyed request.
+	// A container that declares no keyed registration, so its keyed dispatch has no entries: the disposed-scope
+	// guard must still run for a keyed request.
 	[Container]
 	[Singleton<DefaultClock, IClock>]
 	public static partial class UnkeyedContainer;
@@ -248,8 +248,8 @@ public partial class KeyedTests
 		UnkeyedContainer.Root container = new();
 		container.Dispose();
 
-		// Even a container that declares no [Key] guards a disposed scope for a keyed request, uniform with the
-		// unkeyed dispatch, rather than reporting a plain "no registration".
+		// Even a container that declares no keyed registration guards a disposed scope for a keyed request, uniform
+		// with the unkeyed dispatch, rather than reporting a plain "no registration".
 		await That(() => container.Resolve<IClock>("missing")).Throws<ObjectDisposedException>();
 		await That(() => container.TryResolve<IClock>("missing", out IClock? _)).Throws<ObjectDisposedException>();
 	}

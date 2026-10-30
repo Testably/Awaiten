@@ -5,7 +5,7 @@ namespace Awaiten.Tests;
 /// <summary>
 ///     Runtime behavior of keyed-dictionary injection: a constructor parameter or injected <c>[Inject]</c>
 ///     property typed <c>IReadOnlyDictionary&lt;string, TService&gt;</c> resolves to every <em>keyed</em>
-///     registration of that service, keyed by each registration's <c>[Key]</c>, each respecting its own
+///     registration of that service, keyed by each registration's <c>Key</c>, each respecting its own
 ///     lifetime. The dictionary is always satisfiable (an empty index yields an empty dictionary) and is also
 ///     publicly resolvable by type.
 /// </summary>

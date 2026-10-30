@@ -72,7 +72,7 @@ internal enum DependencyKind
 
 	/// <summary>
 	///     A keyed-collection dependency (<c>IReadOnlyDictionary&lt;string, T&gt;</c>): resolves every keyed
-	///     registration of <c>T</c> into a dictionary keyed by each <c>[Key]</c>, in registration order. Captures
+	///     registration of <c>T</c> into a dictionary keyed by each <c>Key</c>, in registration order. Captures
 	///     its members like <see cref="Enumerable" /> (a synchronous dictionary over an async member trips AWT122).
 	///     An empty index yields an empty dictionary. An explicitly registered dictionary of the exact type preempts
 	///     synthesis (rewritten to <see cref="Direct" />). Synthesis supports <c>string</c> keys only: a non-string

@@ -1030,7 +1030,7 @@ internal static class Diagnostics
 		isEnabledByDefault: true);
 
 	/// <summary>
-	///     A <c>[Key]</c> or <c>[FromKey]</c> uses a constant whose type is not a supported key type. A resolution key
+	///     A <c>Key</c> property or <c>[FromKey]</c> uses a constant whose type is not a supported key type. A resolution key
 	///     must be a <c>string</c>, an <c>enum</c> value, or a <c>typeof(...)</c>; a numeric, <c>char</c> or
 	///     <c>bool</c> constant is rejected rather than silently treated as no key.
 	/// </summary>
