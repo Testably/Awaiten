@@ -55,8 +55,9 @@ internal static partial class Sources
 	}
 
 	/// <summary>
-	///     Appends <c>, global::Awaiten.IAwaitenResolver&lt;S&gt;</c> for each registered service type to a
-	///     just-written base list, so the scope (and its root) exposes a typed resolution fast path.
+	///     Appends <c>, global::Awaiten.IAwaitenResolver&lt;S&gt;</c> and <c>, global::Awaiten.IAwaitenAsyncResolver&lt;S&gt;</c>
+	///     for each registered service type to a just-written base list, so the scope (and its root) exposes a typed
+	///     resolution fast path.
 	/// </summary>
 	private static void EmitGenericResolverBases(StringBuilder builder, InstanceModel[] instances, bool strict, bool syncResolveAfterInit)
 	{
@@ -64,6 +65,139 @@ internal static partial class Sources
 		{
 			builder.Append(", global::Awaiten.IAwaitenResolver<").Append(service).Append('>');
 		}
+
+		foreach ((string service, int _) in TypedAsyncServices(instances, strict))
+		{
+			builder.Append(", global::Awaiten.IAwaitenAsyncResolver<").Append(service).Append('>');
+		}
+	}
+
+	/// <summary>
+	///     The service types of the typed async fast path: those of <see cref="UniqueServices" />, plus the
+	///     async-tainted ones the strict default withholds from synchronous resolution. The position in this
+	///     sequence names a singleton's <c>__typedTask</c> field on the Root.
+	/// </summary>
+	private static IEnumerable<(string Service, int Index)> TypedAsyncServices(InstanceModel[] instances, bool strict)
+		=> UniqueServices(instances, strict, syncResolveAfterInit: true);
+
+	/// <summary>
+	///     Emits the Root's <c>__typedTask</c> field for each singleton of the typed async fast path: the completed
+	///     <c>Task&lt;S&gt;</c> that <c>IAwaitenAsyncResolver&lt;S&gt;.ResolveAsync</c> hands out again once the
+	///     singleton is available.
+	/// </summary>
+	private static void EmitTypedTaskFields(StringBuilder builder, int depth, InstanceModel[] instances, bool strict)
+	{
+		bool separated = false;
+		int position = -1;
+		foreach ((string service, int index) in TypedAsyncServices(instances, strict))
+		{
+			position++;
+			if (IsRootOwned(instances[index]))
+			{
+				if (!separated)
+				{
+					Separate(builder);
+					separated = true;
+				}
+
+				Indent(builder, depth).Append("internal volatile global::System.Threading.Tasks.Task<").Append(service)
+					.Append(">? __typedTask").Append(position).AppendLine(";");
+			}
+		}
+	}
+
+	/// <summary>
+	///     Emits the explicit <c>IAwaitenAsyncResolver&lt;S&gt;.ResolveAsync</c> implementation for each service of
+	///     the typed async fast path. A singleton caches its successfully completed task on the Root, so a warmed or
+	///     synchronous singleton is handed out without allocating; a faulted, canceled or pending task is never
+	///     cached. A scoped or transient service returns its async resolver's task, or a completed one around its
+	///     synchronous resolver.
+	/// </summary>
+	/// <returns>Whether an implementation calls the <c>__AsTask</c> helper (see <see cref="EmitAsTaskHelper" />).</returns>
+	private static bool EmitTypedAsyncResolverImpls(StringBuilder builder, int depth, InstanceModel[] instances, Names names, bool strict)
+	{
+		const string task = "global::System.Threading.Tasks.Task";
+		bool usesAsTask = false;
+		int position = -1;
+		foreach ((string service, int index) in TypedAsyncServices(instances, strict))
+		{
+			position++;
+			InstanceModel instance = instances[index];
+			bool rootOwned = IsRootOwned(instance);
+			string owner = rootOwned ? "__root" : "this";
+			string resolver = rootOwned ? "Root." : string.Empty;
+			string resolution;
+			if (instance.IsAsyncTainted)
+			{
+				usesAsTask = true;
+				resolution = $"__AsTask<{instance.ConstructedType}, {service}>({resolver}{names.AsyncResolver(index)}({owner}, cancellationToken))";
+			}
+			else
+			{
+				resolution = $"{task}.FromResult<{service}>({resolver}{names.Resolver(index)}({owner}))";
+			}
+
+			Separate(builder);
+			Indent(builder, depth).Append(task).Append('<').Append(service).Append("> global::Awaiten.IAwaitenAsyncResolver<")
+				.Append(service).AppendLine(">.ResolveAsync(global::System.Threading.CancellationToken cancellationToken)");
+			Indent(builder, depth).AppendLine("{");
+			// Guard synchronously, like the Type-based ResolveAsync, before an async resolver could fault its task.
+			EmitDisposedGuard(builder, depth + 1);
+			if (!rootOwned)
+			{
+				Indent(builder, depth + 1).Append("return ").Append(resolution).AppendLine(";");
+				Indent(builder, depth).AppendLine("}");
+				continue;
+			}
+
+			// The singleton resolvers guard the root, which a cache hit skips, so a child scope guards it here.
+			EmitDisposedGuard(builder, depth + 1, "__root.");
+			Indent(builder, depth + 1).Append(task).Append('<').Append(service).Append(">? __cached = __root.__typedTask").Append(position).AppendLine(";");
+			Indent(builder, depth + 1).AppendLine("if (__cached is not null)");
+			Indent(builder, depth + 1).AppendLine("{");
+			Indent(builder, depth + 2).AppendLine("return __cached;");
+			Indent(builder, depth + 1).AppendLine("}");
+			builder.AppendLine();
+			Indent(builder, depth + 1).Append(task).Append('<').Append(service).Append("> __task = ").Append(resolution).AppendLine(";");
+			Indent(builder, depth + 1).AppendLine("if (__task.Status == global::System.Threading.Tasks.TaskStatus.RanToCompletion)");
+			Indent(builder, depth + 1).AppendLine("{");
+			Indent(builder, depth + 2).Append("__root.__typedTask").Append(position).AppendLine(" = __task;");
+			Indent(builder, depth + 1).AppendLine("}");
+			builder.AppendLine();
+			Indent(builder, depth + 1).AppendLine("return __task;");
+			Indent(builder, depth).AppendLine("}");
+		}
+
+		return usesAsTask;
+	}
+
+	/// <summary>
+	///     Emits the <c>__AsTask</c> helper that converts an async resolver's task to the task of a service type it
+	///     implements: the same task when the types match, a completed task when it has completed successfully, and an
+	///     awaiting conversion otherwise, so a fault or cancellation surfaces on await like on the Type-based path.
+	/// </summary>
+	private static void EmitAsTaskHelper(StringBuilder helpers, int depth)
+	{
+		const string task = "global::System.Threading.Tasks.Task";
+		Separate(helpers);
+		Indent(helpers, depth).Append("private static ").Append(task).Append("<TService> __AsTask<TInstance, TService>(").Append(task)
+			.AppendLine("<TInstance> __task) where TInstance : TService");
+		Indent(helpers, depth).AppendLine("{");
+		Indent(helpers, depth + 1).Append("if (__task is ").Append(task).AppendLine("<TService> __same)");
+		Indent(helpers, depth + 1).AppendLine("{");
+		Indent(helpers, depth + 2).AppendLine("return __same;");
+		Indent(helpers, depth + 1).AppendLine("}");
+		helpers.AppendLine();
+		Indent(helpers, depth + 1).AppendLine("if (__task.Status == global::System.Threading.Tasks.TaskStatus.RanToCompletion)");
+		Indent(helpers, depth + 1).AppendLine("{");
+		Indent(helpers, depth + 2).Append("return ").Append(task).AppendLine(".FromResult<TService>(__task.Result);");
+		Indent(helpers, depth + 1).AppendLine("}");
+		helpers.AppendLine();
+		Indent(helpers, depth + 1).AppendLine("return __Await(__task);");
+		helpers.AppendLine();
+		Indent(helpers, depth + 1).Append("static async ").Append(task).Append("<TService> __Await(").Append(task)
+			.AppendLine("<TInstance> __pending) => await __pending.ConfigureAwait(false);");
+		Indent(helpers, depth).AppendLine("}");
 	}
 
 	/// <summary>

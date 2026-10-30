@@ -30,7 +30,7 @@ To accept an intentional change, run the tests with the environment variable `AW
 
 ## Benchmarks
 
-`Benchmarks/Awaiten.Benchmarks` (BenchmarkDotNet, net10.0) compares Awaiten with Microsoft.Extensions.DependencyInjection, Autofac, DryIoc, SimpleInjector, Jab and Pure.DI. The classes are `ResolveBenchmarks`, `BuildBenchmarks` and `RealisticResolveBenchmarks`.
+`Benchmarks/Awaiten.Benchmarks` (BenchmarkDotNet, net10.0) compares Awaiten with Microsoft.Extensions.DependencyInjection, Autofac, DryIoc, SimpleInjector, Jab and Pure.DI. The classes are `ResolveBenchmarks`, `BuildBenchmarks` and `RealisticResolveBenchmarks`. `ResolveAsyncBenchmarks` measures Awaiten's `ResolveAsync<T>` per lifetime on its own and is not part of the CI benchmark matrix.
 
 - Through the pipeline: `./build.ps1 Benchmarks --benchmark-filter "*BuildBenchmarks*"` (results in `Artifacts/Benchmarks`).
 - Directly: `dotnet run -c Release --project Benchmarks/Awaiten.Benchmarks -- --filter "*RealisticResolveBenchmarks*"`.

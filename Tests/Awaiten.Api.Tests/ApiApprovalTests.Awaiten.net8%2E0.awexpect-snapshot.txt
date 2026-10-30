@@ -156,6 +156,11 @@ namespace Awaiten
         System.Threading.Tasks.Task<object> ResolveAsync(System.Type serviceType, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
         System.Threading.Tasks.Task<object> ResolveAsync(System.Type serviceType, object? key, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
     }
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
+    public interface IAwaitenAsyncResolver<T>
+    {
+        System.Threading.Tasks.Task<T> ResolveAsync(System.Threading.CancellationToken cancellationToken);
+    }
     public interface IAwaitenExternalResolverHost
     {
         Awaiten.IExternalResolver? ExternalResolver { get; set; }

@@ -88,7 +88,7 @@ internal static partial class Sources
 		// the Scope keeps the Root first in the file while still reading what only the Scope's emit can decide.
 		StringBuilder scope = new();
 		bool hasResolvabilityProbe = EmitScopeBaseClass(scope, depth, context, model.Strict, model.SyncResolveAfterInit, model.VarianceCandidates.AsArray());
-		EmitRootClass(builder, depth, context, model.SyncResolveAfterInit, hasResolvabilityProbe);
+		EmitRootClass(builder, depth, context, model.Strict, model.SyncResolveAfterInit, hasResolvabilityProbe);
 		builder.AppendLine();
 		builder.Append(scope);
 
@@ -262,8 +262,13 @@ internal static partial class Sources
 			EmitDisposeAsync(members, body, hasReleases);
 		}
 
-		// Typed-resolver region: the explicit IAwaitenResolver<T>.Resolve() fast path for each registered service.
+		// Typed-resolver region: the explicit IAwaitenResolver<T>.Resolve() and IAwaitenAsyncResolver<T>.ResolveAsync() fast
+		// paths for each registered service.
 		EmitGenericResolverImpls(typed, body, instances, names, strict, syncResolveAfterInit);
+		if (EmitTypedAsyncResolverImpls(typed, body, instances, names, strict))
+		{
+			EmitAsTaskHelper(helpers, body);
+		}
 
 		// Resolvers region: the per-type internal static resolvers, plus one async by-type resolver per async
 		// collection (whose IAsyncEnumerable<T> shape ResolveAsync serves through the async dispatch arm).
@@ -301,7 +306,7 @@ internal static partial class Sources
 		EmitSections(builder, body,
 			new MemberSection("Fields", fields),
 			new MemberSection(null, members),
-			new MemberSection("Explicit IAwaitenResolver<T> implementations", typed),
+			new MemberSection("Explicit typed resolver implementations", typed),
 			new MemberSection("Resolvers", resolvers),
 			new MemberSection("Helpers", helpers));
 
@@ -430,7 +435,7 @@ internal static partial class Sources
 	///     instance (<c>new MyContainer.Root()</c>). It overrides the base's virtual singleton delegators, so a
 	///     child scope delegating through <c>__root</c> lands here.
 	/// </summary>
-	private static void EmitRootClass(StringBuilder builder, int depth, EmitContext context, bool syncResolveAfterInit, bool hasResolvabilityProbe)
+	private static void EmitRootClass(StringBuilder builder, int depth, EmitContext context, bool strict, bool syncResolveAfterInit, bool hasResolvabilityProbe)
 	{
 		InstanceModel[] instances = context.Instances;
 		Names names = context.Names;
@@ -454,6 +459,7 @@ internal static partial class Sources
 		// Fields region: the singleton cache fields followed by the compile-time metadata arrays (__registrations,
 		// and __externalDependencies when the container has external dependencies).
 		EmitCacheFields(fields, body, instances, names, Lifetime.Singleton);
+		EmitTypedTaskFields(fields, body, instances, strict);
 
 		// Members region (no #region wrapper): the constructor and the IAwaitenRoot surface
 		// (InitializeAsync plus the advertised registration lists).
