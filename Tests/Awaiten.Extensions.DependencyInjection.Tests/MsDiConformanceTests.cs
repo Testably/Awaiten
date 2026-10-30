@@ -52,18 +52,25 @@ public sealed partial class MsDiConformanceTests
 		[Test]
 		public async Task EachLifetimeHasTheNumericValueOfTheMatchingServiceLifetime()
 		{
-			foreach (Lifetime lifetime in (Lifetime[])Enum.GetValues(typeof(Lifetime)))
+			foreach (Lifetime lifetime in GetValues<Lifetime>())
 			{
-				ServiceLifetime serviceLifetime =
-					(ServiceLifetime)Enum.Parse(typeof(ServiceLifetime), lifetime.ToString());
-
+				await That(Enum.TryParse(lifetime.ToString(), out ServiceLifetime serviceLifetime)).IsTrue()
+					.Because($"ServiceLifetime has a member named {lifetime}");
 				await That((int)lifetime).IsEqualTo((int)serviceLifetime)
 					.Because($"a host may convert {lifetime} to ServiceLifetime by cast, which is only safe while the values agree");
 			}
 
-			await That(Enum.GetValues(typeof(Lifetime)).Length).IsEqualTo(Enum.GetValues(typeof(ServiceLifetime)).Length)
+			await That(GetValues<Lifetime>().Length).IsEqualTo(GetValues<ServiceLifetime>().Length)
 				.Because("every ServiceLifetime has an Awaiten counterpart and vice versa");
 		}
+
+		private static TEnum[] GetValues<TEnum>()
+			where TEnum : struct, Enum
+#if NET
+			=> Enum.GetValues<TEnum>();
+#else
+			=> (TEnum[])Enum.GetValues(typeof(TEnum));
+#endif
 
 		[Test]
 		public async Task ANestedScopeIsIndependentOfItsParent()
