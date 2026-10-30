@@ -1,7 +1,9 @@
 namespace Awaiten.Tests.Support;
 
 /// <summary>A generic host-owned service that the module below imports as an open generic definition.</summary>
+#pragma warning disable S2326 // T only names the closing, like ILogger<TCategoryName>; the tests import the open definition and assert each closing is routed.
 public interface ISupportLog<T>
+#pragma warning restore S2326
 {
 	/// <summary>The key the external resolver received, asserted on to prove the closing was routed.</summary>
 	object? Key { get; }
