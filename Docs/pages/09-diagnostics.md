@@ -622,6 +622,25 @@ public static partial class CoffeeShop
 }
 ```
 
+### AWT214
+
+:::danger[Error]
+A container is projected into Microsoft.Extensions.DependencyInjection with `AddAwaitenContainer<TRoot>()` or `new AwaitenServiceProviderFactory<TRoot>()`, but it builds a possibly disposable service with `SuppressDisposal = true`. MS.DI disposes every disposable instance a projected registration hands out, so the suppression cannot hold, and the projection throws at startup. Remove `SuppressDisposal`, register a pre-built `Instance` you own, or resolve the service from the container directly through an [`AwaitenServiceProvider`](./msdi-bridge#or-let-awaiten-own-everything) instead of projecting the container. The analyzer sees a projection that names the container's `Root` in the container's own project; elsewhere the startup check still applies.
+:::
+
+```csharp expect=AWT214
+using Awaiten.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
+
+public sealed class Grinder : IDisposable { public void Dispose() { } }
+
+[Container]
+[Singleton<Grinder>(SuppressDisposal = true)]
+public static partial class CoffeeShop;
+
+new ServiceCollection().AddAwaitenContainer<CoffeeShop.Root>();   // MS.DI would dispose Grinder anyway
+```
+
 ## Decorators and composites
 
 ### AWT123

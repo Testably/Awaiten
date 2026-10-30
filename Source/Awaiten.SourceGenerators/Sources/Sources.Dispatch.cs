@@ -278,12 +278,13 @@ internal static partial class Sources
 
 			bool requiresAsync = instance.IsAsyncTainted && !syncAfterInit;
 			bool externallyOwned = instance.Production == ProductionKind.Instance;
+			bool disposalSuppressed = AdvertisesSuppressedDisposal(instance, syncAfterInit);
 			// The synthetic decorator/contextual keys are internal wiring, never advertised. Unkeyed and
 			// user-keyed registrations are both advertised, the latter carrying its user-declared Key.
 			foreach (ServiceKey service in instance.Services.AsArray()
 				         .Where(service => service.Key is null || AwaitenGenerator.IsUserKey(service.Key)))
 			{
-				EmitRegistrationEntry(builder, depth + 1, service, instance, requiresAsync, externallyOwned);
+				EmitRegistrationEntry(builder, depth + 1, service, instance, requiresAsync, externallyOwned, disposalSuppressed);
 			}
 		}
 
@@ -297,7 +298,7 @@ internal static partial class Sources
 	///     projection (for an async-tainted registration) or the <c>externallyOwned</c> flag, and finally the
 	///     user-declared <c>Key</c> for a keyed registration.
 	/// </summary>
-	private static void EmitRegistrationEntry(StringBuilder builder, int depth, ServiceKey service, InstanceModel instance, bool requiresAsync, bool externallyOwned)
+	private static void EmitRegistrationEntry(StringBuilder builder, int depth, ServiceKey service, InstanceModel instance, bool requiresAsync, bool externallyOwned, bool disposalSuppressed)
 	{
 		Indent(builder, depth).Append("new global::Awaiten.AwaitenRegistration(typeof(").Append(service.Service)
 			.Append("), ").Append(PublicLifetimeOf(instance.Lifetime));
@@ -307,6 +308,15 @@ internal static partial class Sources
 			// constructs Task<TService> or the Task<object>->Task<T> converter reflectively.
 			builder.Append(", typeof(global::System.Threading.Tasks.Task<").Append(service.Service).Append(">), ")
 				.Append("__t => global::Awaiten.AwaitenTaskProjection.AsTask<").Append(service.Service).Append(">(__t)");
+		}
+		else if (disposalSuppressed)
+		{
+			// The full ctor has no defaults, so an unkeyed registration spells out its null key.
+			builder.Append(", externallyOwned: false, disposalSuppressed: true");
+			if (service.Key is null)
+			{
+				builder.Append(", key: null");
+			}
 		}
 		else if (externallyOwned)
 		{
@@ -321,6 +331,19 @@ internal static partial class Sources
 
 		builder.AppendLine("),");
 	}
+
+	/// <summary>
+	///     Whether the advertised registration of <paramref name="instance" /> is projected synchronously although the
+	///     container builds a possibly disposable instance and suppresses its disposal (<c>SuppressDisposal</c>). A
+	///     host must not dispose such an instance either; the MS.DI projection cannot honour that, so the bridge
+	///     rejects it at startup and <c>AwaitenAnalyzer</c> reports AWT214 at the projection site. An async
+	///     registration is projected as a <c>Task&lt;T&gt;</c>, which leaves the instance with the container.
+	/// </summary>
+	internal static bool AdvertisesSuppressedDisposal(InstanceModel instance, bool syncAfterInit)
+		=> instance.SuppressDisposal
+		   && instance.Production != ProductionKind.Instance
+		   && !(instance.IsAsyncTainted && !syncAfterInit)
+		   && (instance.IsDisposable || instance.IsAsyncDisposable || instance.RuntimeDisposalCheck);
 
 	/// <summary>
 	///     Emits the Root's advertised <c>ExternalDependencies</c> list (the distinct <c>[ImportService&lt;T&gt;]</c> /

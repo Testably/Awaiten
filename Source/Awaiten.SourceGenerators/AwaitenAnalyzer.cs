@@ -25,7 +25,9 @@ namespace Awaiten.SourceGenerators;
 ///     that implements <c>IAsyncDisposable</c> but not <c>IDisposable</c> (a disposal only <c>DisposeAsync</c> /
 ///     <c>await using</c> can carry out) that the disposed owner could actually track: a root-owned
 ///     instance (a singleton or pre-built instance) always lives on the <c>Root</c>, so it never faults a
-///     child <c>Scope</c>'s disposal.
+///     child <c>Scope</c>'s disposal. Also reports <see cref="Diagnostics.SuppressedDisposalProjected">AWT214</see>
+///     where a container that suppresses the disposal of a possibly disposable service is projected into
+///     Microsoft.Extensions.DependencyInjection, which would dispose it anyway.
 /// </summary>
 /// <remarks>
 ///     AWT118 is an analyzer (rather than a generator) diagnostic so that, under loose lifetime safety where
@@ -43,9 +45,13 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 {
 	private const string ContainerAttributeName = "Awaiten.ContainerAttribute";
 
+	// The analyzer ships without a reference to the MS.DI bridge, so its entry points are matched by name.
+	private const string BridgeNamespace = "Awaiten.Extensions.DependencyInjection";
+
 	/// <inheritdoc />
 	public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
-		ImmutableArray.Create(Diagnostics.RootAccumulatingFactory, Diagnostics.RootAccumulatingFactoryStrict, Diagnostics.AsyncOnlyDisposal);
+		ImmutableArray.Create(Diagnostics.RootAccumulatingFactory, Diagnostics.RootAccumulatingFactoryStrict, Diagnostics.AsyncOnlyDisposal,
+			Diagnostics.SuppressedDisposalProjected);
 
 	/// <inheritdoc />
 	public override void Initialize(AnalysisContext context)
@@ -70,6 +76,10 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 				ctx => Analyze(
 					(INamedTypeSymbol)ctx.Symbol, containerAttribute, start.Compilation, graphByContainer, ctx.ReportDiagnostic, ctx.CancellationToken),
 				SymbolKind.NamedType);
+
+			start.RegisterOperationAction(
+				ctx => AnalyzeProjection(ctx, containerAttribute, start.Compilation, graphByContainer),
+				OperationKind.Invocation, OperationKind.ObjectCreation);
 
 			// AWT156 fires at each synchronous disposal site of a generated Root/Scope. A generated Root/Scope
 			// is recognized by shape and name: a type named Root or Scope, implementing IAwaitenScope, nested in
@@ -432,6 +442,55 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 			}
 		}
 	}
+
+	// AWT214: AddAwaitenContainer<TRoot>(...) or new AwaitenServiceProviderFactory<TRoot>(...) for the generated Root of
+	// a container in this compilation that suppresses the disposal of a possibly disposable, synchronously projected
+	// service. A site that does not name the Root (a generic helper) or a container from another assembly stays
+	// invisible, like AWT156; the bridge's startup throw remains the backstop there.
+	private static void AnalyzeProjection(
+		OperationAnalysisContext context,
+		INamedTypeSymbol containerAttribute,
+		Compilation compilation,
+		ConcurrentDictionary<INamedTypeSymbol, Lazy<GraphModel>> graphByContainer)
+	{
+		ITypeSymbol? rootType = context.Operation switch
+		{
+			IInvocationOperation { TargetMethod: { Name: "AddAwaitenContainer", TypeArguments.Length: 1, } method, }
+				when IsBridgeType(method.ContainingType, "AwaitenServiceCollectionExtensions") => method.TypeArguments[0],
+			IObjectCreationOperation { Type: INamedTypeSymbol { Name: "AwaitenServiceProviderFactory", TypeArguments.Length: 1, } factory, }
+				when IsBridgeType(factory, "AwaitenServiceProviderFactory") => factory.TypeArguments[0],
+			_ => null,
+		};
+		if (rootType is not INamedTypeSymbol { Name: "Root", ContainingType: { } container, }
+		    || !container.GetAttributes().Any(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass, containerAttribute))
+		    || !SymbolEqualityComparer.Default.Equals(container.ContainingAssembly, compilation.Assembly))
+		{
+			return;
+		}
+
+		GraphModel graph = CachedGraph(graphByContainer, container, compilation, context.CancellationToken);
+		bool syncAfterInit = AwaitenGenerator.ReadSyncAfterInit(container);
+		string[] suppressed = graph.Instances
+			.Where(instance => !instance.IsParameterized
+			                   && Sources.AdvertisesSuppressedDisposal(instance, syncAfterInit)
+			                   && instance.Services.AsArray().Any(service => service.Key is null || AwaitenGenerator.IsUserKey(service.Key)))
+			.Select(instance => AwaitenGenerator.DisplayInstance(instance.ImplementationType))
+			.Distinct(StringComparer.Ordinal)
+			.ToArray();
+		if (suppressed.Length == 0)
+		{
+			return;
+		}
+
+		context.ReportDiagnostic(Diagnostic.Create(
+			Diagnostics.SuppressedDisposalProjected,
+			context.Operation.Syntax.GetLocation(),
+			rootType.ToDisplayString(),
+			string.Join("', '", suppressed)));
+	}
+
+	private static bool IsBridgeType(INamedTypeSymbol type, string name)
+		=> type.Name == name && type.ContainingNamespace.ToDisplayString() == BridgeNamespace;
 
 	private static bool IsRootOwned(InstanceModel instance)
 		=> instance.Lifetime == Lifetime.Singleton || instance.Production == ProductionKind.Instance;

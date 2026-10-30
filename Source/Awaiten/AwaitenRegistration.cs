@@ -26,11 +26,25 @@ public readonly struct AwaitenRegistration : IEquatable<AwaitenRegistration>
 	/// <exception cref="ArgumentNullException"><paramref name="serviceType" /> is <see langword="null" />.</exception>
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	public AwaitenRegistration(Type serviceType, Lifetime lifetime, bool externallyOwned = false, object? key = null)
+		: this(serviceType, lifetime, externallyOwned, key, disposalSuppressed: false)
+	{
+	}
+
+	/// <summary>Builds a synchronous registration that can also mark <see cref="DisposalSuppressed" />.</summary>
+	/// <param name="serviceType">The service type that can be resolved.</param>
+	/// <param name="lifetime">The lifetime under which the container owns the service.</param>
+	/// <param name="externallyOwned">Whether the instance is a pre-built member the container exposes but does not own.</param>
+	/// <param name="key">The key a keyed registration declares through its <c>Key</c> property, or <see langword="null" /> when unkeyed.</param>
+	/// <param name="disposalSuppressed">Whether the container builds a possibly disposable instance but never disposes it.</param>
+	/// <exception cref="ArgumentNullException"><paramref name="serviceType" /> is <see langword="null" />.</exception>
+	[EditorBrowsable(EditorBrowsableState.Never)]
+	public AwaitenRegistration(Type serviceType, Lifetime lifetime, bool externallyOwned, object? key, bool disposalSuppressed)
 	{
 		ServiceType = serviceType ?? throw new ArgumentNullException(nameof(serviceType));
 		Lifetime = lifetime;
 		RequiresAsync = false;
 		ExternallyOwned = externallyOwned;
+		DisposalSuppressed = disposalSuppressed;
 		AsyncTaskType = null;
 		AsyncTaskConverter = null;
 		Key = key;
@@ -57,6 +71,7 @@ public readonly struct AwaitenRegistration : IEquatable<AwaitenRegistration>
 		Lifetime = lifetime;
 		RequiresAsync = true;
 		ExternallyOwned = false;
+		DisposalSuppressed = false;
 		AsyncTaskType = asyncTaskType ?? throw new ArgumentNullException(nameof(asyncTaskType));
 		AsyncTaskConverter = asyncTaskConverter ?? throw new ArgumentNullException(nameof(asyncTaskConverter));
 		Key = key;
@@ -94,6 +109,14 @@ public readonly struct AwaitenRegistration : IEquatable<AwaitenRegistration>
 	public bool ExternallyOwned { get; }
 
 	/// <summary>
+	///     Whether the container builds this instance, which is or may be disposable, but never disposes it, because the
+	///     registration sets <c>SuppressDisposal = true</c>. A host projecting the registration must not dispose it either.
+	///     An asynchronous registration (<see cref="RequiresAsync" />) never reports it: a host only receives its
+	///     <c>Task&lt;T&gt;</c>, and the instance stays with the container.
+	/// </summary>
+	public bool DisposalSuppressed { get; }
+
+	/// <summary>
 	///     For an asynchronous registration, the <c>typeof(Task&lt;TService&gt;)</c> the bridge registers it under,
 	///     or <see langword="null" /> otherwise. Derived from <see cref="ServiceType" />, so it takes no part in value equality.
 	/// </summary>
@@ -111,7 +134,7 @@ public readonly struct AwaitenRegistration : IEquatable<AwaitenRegistration>
 	/// <inheritdoc />
 	public bool Equals(AwaitenRegistration other)
 		=> ServiceType == other.ServiceType && Lifetime == other.Lifetime && RequiresAsync == other.RequiresAsync
-		   && ExternallyOwned == other.ExternallyOwned && Equals(Key, other.Key);
+		   && ExternallyOwned == other.ExternallyOwned && DisposalSuppressed == other.DisposalSuppressed && Equals(Key, other.Key);
 
 	/// <inheritdoc />
 	public override bool Equals(object? obj) => obj is AwaitenRegistration other && Equals(other);
@@ -124,6 +147,6 @@ public readonly struct AwaitenRegistration : IEquatable<AwaitenRegistration>
 
 	/// <inheritdoc />
 	public override int GetHashCode()
-		=> unchecked(((((((ServiceType.GetHashCode() * 397) ^ (int)Lifetime) * 397 ^ (RequiresAsync ? 1 : 0)) * 397
-		               ^ (ExternallyOwned ? 1 : 0)) * 397) ^ (Key?.GetHashCode() ?? 0)));
+		=> unchecked(((((((((ServiceType.GetHashCode() * 397) ^ (int)Lifetime) * 397 ^ (RequiresAsync ? 1 : 0)) * 397
+		                 ^ (ExternallyOwned ? 1 : 0)) * 397) ^ (DisposalSuppressed ? 1 : 0)) * 397) ^ (Key?.GetHashCode() ?? 0)));
 }

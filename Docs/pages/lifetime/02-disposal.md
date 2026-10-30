@@ -54,6 +54,8 @@ public static partial class CoffeeShop
 
 An `OnRelease` hook counts like disposal for [strict lifetime safety](./lifetime-safety): each construction queues the release on the owner, so a release-hooked transient like `Cup` above is withheld from by-type resolution on the container root just as a disposable one is — on the root, every rented cup would be held until the container itself is disposed, and none would return to the pool before then. Rent through [`Owned<T>`](./owned) or from a child scope and the return-to-pool runs when the handle or scope is disposed. A `SuppressDisposal` service *without* a release hook tracks nothing at all, so it stays resolvable everywhere.
 
+Projected into Microsoft.Extensions.DependencyInjection, a disposable `SuppressDisposal` service would be disposed by MS.DI anyway, so the [bridge](../msdi-bridge#disposal) rejects it at startup ([AWT214](../diagnostics#awt214)).
+
 ## Async disposal
 
 Dispose with `await using` and Awaiten awaits `DisposeAsync` on every async-disposable instance it owns.
