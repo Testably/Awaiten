@@ -97,6 +97,7 @@ public readonly struct AwaitenRegistration : IEquatable<AwaitenRegistration>
 	///     For an asynchronous registration, the <c>typeof(Task&lt;TService&gt;)</c> the bridge registers it under,
 	///     or <see langword="null" /> otherwise. Derived from <see cref="ServiceType" />, so it takes no part in value equality.
 	/// </summary>
+	[EditorBrowsable(EditorBrowsableState.Never)]
 	public Type? AsyncTaskType { get; }
 
 	/// <summary>
@@ -104,6 +105,7 @@ public readonly struct AwaitenRegistration : IEquatable<AwaitenRegistration>
 	///     that adapts the container's <c>Task&lt;object&gt;</c> resolution to a <c>Task&lt;TService&gt;</c>, or
 	///     <see langword="null" /> otherwise. Derived from <see cref="ServiceType" />, so it takes no part in value equality.
 	/// </summary>
+	[EditorBrowsable(EditorBrowsableState.Never)]
 	public Func<Task<object>, object>? AsyncTaskConverter { get; }
 
 	/// <inheritdoc />
