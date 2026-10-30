@@ -27,6 +27,9 @@ partial class AwaitenGenerator
 	///     The base interface <c>TBase</c> of a well-formed dispatch value <c>Func&lt;TBase&gt;</c>, or
 	///     <see langword="null" /> when the value is anything else (including <c>Func&lt;Task&lt;TBase&gt;&gt;</c>).
 	/// </summary>
+	private static string DispatchBaseDisplay(ITypeSymbol valueType)
+		=> (DispatchBase(valueType) ?? valueType).ToDisplayString(FullyQualified);
+
 	private static INamedTypeSymbol? DispatchBase(ITypeSymbol valueType)
 		=> valueType is INamedTypeSymbol { Name: "Func", TypeArguments.Length: 1, } func
 		   && func.ContainingNamespace?.ToDisplayString() == "System"
@@ -40,7 +43,7 @@ partial class AwaitenGenerator
 	///     generic registration, which exists only because something else named it) whose service still resolves after
 	///     coalescing. Deduped by service type, in registration order.
 	/// </summary>
-	private static List<(string ServiceType, INamedTypeSymbol Symbol)> DispatchCandidates(
+	private static List<(string ServiceType, INamedTypeSymbol Symbol)> CollectDispatchCandidates(
 		List<RawRegistration> raw,
 		Dictionary<ServiceKey, string> serviceToImpl)
 	{

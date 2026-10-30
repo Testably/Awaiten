@@ -560,8 +560,7 @@ partial class AwaitenGenerator
 		// shares its shape. Its entries and its AWT213 checks come later from ResolveTypeDispatch.
 		if (TryGetTypeDispatch(type, out ITypeSymbol? dispatchValue))
 		{
-			string dispatchBase = DispatchBase(dispatchValue!)?.ToDisplayString(FullyQualified) ?? dispatchValue!.ToDisplayString(FullyQualified);
-			return new ParameterModel(dispatchBase, DependencyKind.TypeDispatch, Key: key, Location: location);
+			return new ParameterModel(DispatchBaseDisplay(dispatchValue!), DependencyKind.TypeDispatch, Key: key, Location: location);
 		}
 
 		// A keyed collection (IReadOnlyDictionary<TKey, T>) resolves every keyed registration of its value type T,

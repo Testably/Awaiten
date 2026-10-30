@@ -252,11 +252,17 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 			// handle that cannot await initialization, AWT119), so it is redirected to the async owned form
 			// Func<…, Task<Owned<T>>>, which async-resolves each instance into a throwaway scope. A dispatch
 			// dictionary has no Owned form, so its holder is bounded to a scope instead.
-			string remedy = dispatch
-				? $"register '{AwaitenGenerator.Display(holder.ImplementationType)}' as Scoped so each scope disposes what its dispatch dictionary builds"
-				: parameter.Kind == DependencyKind.FuncTask
+			string remedy;
+			if (dispatch)
+			{
+				remedy = $"register '{AwaitenGenerator.Display(holder.ImplementationType)}' as Scoped so each scope disposes what its dispatch dictionary builds";
+			}
+			else
+			{
+				remedy = parameter.Kind == DependencyKind.FuncTask
 					? $"resolve it as Func<…, Task<Owned<{service}>>> for per-use disposal"
 					: $"resolve it as Func<…, Owned<{service}>> for per-use disposal";
+			}
 
 			diagnostics.Add(new DiagnosticInfo(
 				descriptor,

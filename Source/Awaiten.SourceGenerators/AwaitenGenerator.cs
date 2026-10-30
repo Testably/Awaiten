@@ -448,7 +448,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		// BuildInstance fills them wherever that implementation is constructed (including [Scan]-registered types).
 		Dictionary<string, List<InjectPropertyEntry>> injectProperties = CollectInjectProperties(containerSymbol, diagnostics);
 
-		BuildContext buildContext = new(containerSymbol, compilation, serviceToImpl, decoratorInner, compositeCollections, wellKnown, constraintRejected, external, variance, consumedConditionals, injectProperties, DispatchCandidates(raw, serviceToImpl), diagnostics);
+		BuildContext buildContext = new(containerSymbol, compilation, serviceToImpl, decoratorInner, compositeCollections, wellKnown, constraintRejected, external, variance, consumedConditionals, injectProperties, CollectDispatchCandidates(raw, serviceToImpl), diagnostics);
 
 		// Validate each implementation, select its constructor and build the instance.
 		foreach (ImplInfo info in implOrder)

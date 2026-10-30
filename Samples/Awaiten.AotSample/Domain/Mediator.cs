@@ -8,13 +8,18 @@ public interface IMessageHandler
 	string Handle(object message);
 }
 
-public interface IMessageHandler<T> : IMessageHandler;
+public interface IMessageHandler<T> : IMessageHandler
+{
+	string Handle(T message);
+
+	string IMessageHandler.Handle(object message) => Handle((T)message);
+}
 
 public sealed class Ping;
 
 public sealed class PingHandler : IMessageHandler<Ping>
 {
-	public string Handle(object message) => "pong";
+	public string Handle(Ping message) => "pong";
 }
 
 /// <summary>
