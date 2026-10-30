@@ -1,22 +1,202 @@
 using System.Collections.Generic;
 using System.Threading;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 namespace Awaiten.Extensions.DependencyInjection.Tests;
 
 /// <summary>
 ///     Disposal behaviour of the bridge. On the provider-replacement path
 ///     (<see cref="AwaitenServiceProvider" />) the Awaiten container is the single owner: every instance,
-///     and everything built for it, is disposed exactly once. These pin the two cases the collection
-///     projection (<see cref="AwaitenServiceCollectionExtensions.AddGeneratedContainer{TRoot}" />) does not
-///     guarantee: an implementation exposed under several service types, and a disposable reached only as a
-///     nested dependency. For the projection, the tests pin its ownership rules: disposable transients are
-///     bounded by the MS.DI scope they resolve in, instances awaited through the <c>Task&lt;T&gt;</c>
-///     projection are disposed with their scope (or the root provider), and a pre-built <c>Instance</c>
-///     member stays user-owned.
+///     and everything built for it, is disposed exactly once. On the collection projection
+///     (<see cref="AwaitenServiceCollectionExtensions.AddGeneratedContainer{TRoot}" />) and the host factory
+///     (<see cref="AwaitenServiceProviderFactory{TRoot}" />) Awaiten still disposes everything it built exactly
+///     once, nested dependencies included, with the MS.DI scope or root provider that owns it. MS.DI
+///     additionally disposes each instance a projected factory handed out, once per descriptor, which these
+///     tests pin as deliberate. A pre-built <c>Instance</c> member stays user-owned.
 /// </summary>
 public sealed partial class BridgeDisposalTests
 {
+	public enum BridgePath
+	{
+		Projection,
+		HostFactory,
+	}
+
+	private static ServiceProvider Build<TRoot>(BridgePath path)
+		where TRoot : class, IAwaitenContainerMetadata, new()
+	{
+		ServiceCollection services = new();
+		if (path == BridgePath.Projection)
+		{
+			services.AddGeneratedContainer<TRoot>();
+			return services.BuildServiceProvider(validateScopes: true);
+		}
+
+		AwaitenServiceProviderFactory<TRoot> factory = new();
+		return (ServiceProvider)factory.CreateServiceProvider(factory.CreateBuilder(services));
+	}
+
+	[Container]
+	[Singleton<OuterService>]
+	[Singleton<InnerDependency>]
+	public static partial class NestedSingletonContainer;
+
+	[Test]
+	[Arguments(BridgePath.Projection)]
+	[Arguments(BridgePath.HostFactory)]
+	public async Task Bridged_NestedScopedDependency_DisposedOnceWithMsDiScope(BridgePath path)
+	{
+		using ServiceProvider provider = Build<NestedContainer.Root>(path);
+
+		InnerDependency inner;
+		using (IServiceScope scope = provider.CreateScope())
+		{
+			inner = scope.ServiceProvider.GetRequiredService<OuterService>().Inner;
+			await That(inner.DisposeCount).IsEqualTo(0);
+		}
+
+		await That(inner.DisposeCount).IsEqualTo(1)
+			.Because("the Awaiten scope aligned to the MS.DI scope owns the nested dependency MS.DI never saw");
+	}
+
+	[Test]
+	[Arguments(BridgePath.Projection)]
+	[Arguments(BridgePath.HostFactory)]
+	public async Task Bridged_NestedSingletonDependency_DisposedOnceWithRootProvider(BridgePath path)
+	{
+		ServiceProvider provider = Build<NestedSingletonContainer.Root>(path);
+
+		InnerDependency inner = provider.GetRequiredService<OuterService>().Inner;
+		using (IServiceScope scope = provider.CreateScope())
+		{
+			_ = scope.ServiceProvider.GetRequiredService<OuterService>();
+		}
+
+		await That(inner.DisposeCount).IsEqualTo(0)
+			.Because("disposing an MS.DI scope leaves the singletons of the root alive");
+
+		provider.Dispose();
+
+		await That(inner.DisposeCount).IsEqualTo(1)
+			.Because("the root provider owns the container root, which disposes the nested singleton");
+	}
+
+	[Test]
+	[Arguments(BridgePath.Projection)]
+	[Arguments(BridgePath.HostFactory)]
+	public async Task Bridged_MultiServiceSingleton_DisposedOnceByAwaitenAndOncePerDescriptorByMsDi(BridgePath path)
+	{
+		ServiceProvider provider = Build<MultiServiceContainer.Root>(path);
+
+		MultiService first = (MultiService)provider.GetRequiredService<IFirst>();
+		MultiService second = (MultiService)provider.GetRequiredService<ISecond>();
+		await That(first).IsSameAs(second);
+
+		provider.Dispose();
+
+		await That(first.DisposeCount).IsEqualTo(3)
+			.Because("MS.DI disposes what each of the two factory descriptors returned, as it does for a plain factory relay, and the container root disposes its one instance once more");
+	}
+
+	public sealed class WarmedResource : IAsyncInitializable, IDisposable
+	{
+		public int DisposeCount { get; private set; }
+
+		public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+		public void Dispose() => DisposeCount++;
+	}
+
+	[Container]
+	[Singleton<WarmedResource>]
+	public static partial class WarmedContainer;
+
+	[Test]
+	public async Task HostFactory_RootWarmedDirectly_DisposedWithProvider()
+	{
+		ServiceProvider provider = Build<WarmedContainer.Root>(BridgePath.HostFactory);
+		IAwaitenContainerMetadata root = provider.GetRequiredService<IAwaitenContainerMetadata>();
+		await root.InitializeAsync(TestContext.Current!.Execution.CancellationToken);
+		WarmedResource resource = (WarmedResource)await root.ResolveAsync(typeof(WarmedResource));
+
+		provider.Dispose();
+
+		await That(resource.DisposeCount).IsEqualTo(1)
+			.Because("the host factory's provider owns the root even when only the root itself was used");
+	}
+
+	[Test]
+	public async Task Initialization_WarmedSingleton_DisposedWithHost()
+	{
+		IHost host = new HostBuilder()
+			.ConfigureServices(services =>
+			{
+				services.AddGeneratedContainer<WarmedContainer.Root>();
+				services.AddAwaitenInitialization<WarmedContainer.Root>();
+			})
+			.Build();
+		await host.StartAsync(TestContext.Current!.Execution.CancellationToken);
+		WarmedResource resource = (WarmedResource)await host.Services.GetRequiredService<WarmedContainer.Root>()
+			.ResolveAsync(typeof(WarmedResource));
+		await host.StopAsync(TestContext.Current!.Execution.CancellationToken);
+
+		host.Dispose();
+
+		await That(resource.DisposeCount).IsEqualTo(1)
+			.Because("the warm-up built the singleton on the root, so the root provider must own the root although nothing was resolved through a bridged registration");
+	}
+
+#if NET
+	public sealed class AsyncOnlyConsumer
+	{
+		public AsyncOnlyConsumer(AsyncOnlyDisposable dependency) => Dependency = dependency;
+
+		public AsyncOnlyDisposable Dependency { get; }
+	}
+
+	[Container]
+	[Scoped<AsyncOnlyConsumer>]
+	[Scoped<AsyncOnlyDisposable>]
+	public static partial class NestedAsyncOnlyScopedContainer;
+
+	[Container]
+	[Singleton<AsyncOnlyConsumer>]
+	[Singleton<AsyncOnlyDisposable>]
+	public static partial class NestedAsyncOnlySingletonContainer;
+
+	[Test]
+	[Arguments(BridgePath.Projection)]
+	[Arguments(BridgePath.HostFactory)]
+	public async Task Bridged_NestedAsyncOnlyScopedDependency_DisposedOnceWithAsyncScopeTeardown(BridgePath path)
+	{
+		await using ServiceProvider provider = Build<NestedAsyncOnlyScopedContainer.Root>(path);
+
+		AsyncServiceScope scope = provider.CreateAsyncScope();
+		AsyncOnlyDisposable dependency = scope.ServiceProvider.GetRequiredService<AsyncOnlyConsumer>().Dependency;
+
+		await scope.DisposeAsync();
+
+		await That(dependency.DisposeCount).IsEqualTo(1)
+			.Because("an asynchronous MS.DI scope teardown drains the aligned Awaiten scope asynchronously");
+	}
+
+	[Test]
+	[Arguments(BridgePath.Projection)]
+	[Arguments(BridgePath.HostFactory)]
+	public async Task Bridged_NestedAsyncOnlySingletonDependency_DisposedOnceWithAsyncProviderTeardown(BridgePath path)
+	{
+		ServiceProvider provider = Build<NestedAsyncOnlySingletonContainer.Root>(path);
+
+		AsyncOnlyDisposable dependency = provider.GetRequiredService<AsyncOnlyConsumer>().Dependency;
+
+		await provider.DisposeAsync();
+
+		await That(dependency.DisposeCount).IsEqualTo(1)
+			.Because("an asynchronous root provider teardown drains the container root asynchronously");
+	}
+#endif
+
 	public interface IFirst;
 
 	public interface ISecond;
@@ -99,7 +279,7 @@ public sealed partial class BridgeDisposalTests
 	public static partial class TransientContainer;
 
 	[Test]
-	public async Task Projection_DisposableTransient_ResolvesInScope_DisposedOnceWithScope()
+	public async Task Projection_DisposableTransient_ResolvesInScope_DisposedWithScope()
 	{
 		ServiceCollection services = new();
 		services.AddGeneratedContainer<TransientContainer.Root>();
@@ -116,7 +296,8 @@ public sealed partial class BridgeDisposalTests
 			await That(first.DisposeCount).IsEqualTo(0);
 		}
 
-		await That(first.DisposeCount).IsEqualTo(1);
+		await That(first.DisposeCount).IsEqualTo(2)
+			.Because("MS.DI disposes the instance its factory handed out, and the aligned Awaiten scope disposes what it built once more");
 	}
 
 	[Test]
@@ -164,13 +345,13 @@ public sealed partial class BridgeDisposalTests
 		services.AddGeneratedContainer<AsyncDisposalContainer.Root>();
 		ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
 
-		// MS.DI captures only the Task<T> wrapper, so the bridge owns the awaited instance's disposal.
 		AsyncDisposableSingleton singleton = await provider.GetRequiredService<Task<AsyncDisposableSingleton>>();
 		await That(singleton.DisposeCount).IsEqualTo(0);
 
 		await provider.DisposeAsync();
 
-		await That(singleton.DisposeCount).IsEqualTo(1);
+		await That(singleton.DisposeCount).IsEqualTo(1)
+			.Because("MS.DI captures only the Task<T> wrapper, so the container root alone disposes the awaited instance");
 	}
 
 	[Test]
@@ -214,7 +395,7 @@ public sealed partial class BridgeDisposalTests
 	public static partial class OrderedDisposalContainer;
 
 	[Test]
-	public async Task Projection_AwaitedInstance_DisposedBeforeItsSyncRelayedDependency()
+	public async Task Projection_AwaitedInstance_DisposedByItsScopeBeforeItsDependency()
 	{
 		OrderedDependency.DisposeOrder.Clear();
 		ServiceCollection services = new();
@@ -223,15 +404,16 @@ public sealed partial class BridgeDisposalTests
 
 		using (IServiceScope scope = provider.CreateScope())
 		{
-			// The dependency is captured by MS.DI first; the awaited instance's disposal slot is captured
-			// at the Task<T> resolution, so reverse-order teardown disposes the dependent first.
 			scope.ServiceProvider.GetRequiredService<OrderedDependency>();
 			await scope.ServiceProvider.GetRequiredService<Task<OrderedAsyncService>>();
 		}
 
-		await That(OrderedDependency.DisposeOrder.Count).IsEqualTo(2);
-		await That(OrderedDependency.DisposeOrder[0]).IsEqualTo(nameof(OrderedAsyncService));
-		await That(OrderedDependency.DisposeOrder[1]).IsEqualTo(nameof(OrderedDependency));
+		await That(OrderedDependency.DisposeOrder).IsEqualTo([
+				nameof(OrderedDependency),
+				nameof(OrderedAsyncService),
+				nameof(OrderedDependency),
+			])
+			.Because("MS.DI first disposes the dependency its factory handed out, then the aligned Awaiten scope disposes everything it built in reverse creation order, the awaited dependent before its dependency");
 	}
 
 	public sealed class ExternalProbe : IDisposable

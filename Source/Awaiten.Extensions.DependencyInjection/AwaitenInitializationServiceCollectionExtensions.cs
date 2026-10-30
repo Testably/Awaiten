@@ -71,6 +71,9 @@ public static class AwaitenInitializationServiceCollectionExtensions
 				_container.ExternalResolver = new ServiceProviderExternalResolver(_provider);
 			}
 
+			// Warming builds singletons on the root, so the root provider must own the root even if nothing is
+			// resolved through a bridged registration afterwards. Absent when the container was not bridged.
+			_provider.GetService(typeof(AwaitenRootOwner<TContainer>));
 			return _container.InitializeAsync(cancellationToken);
 		}
 

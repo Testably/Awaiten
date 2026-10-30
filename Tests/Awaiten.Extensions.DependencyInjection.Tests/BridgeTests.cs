@@ -117,7 +117,7 @@ public sealed partial class BridgeTests
 	}
 
 	[Test]
-	public async Task AddGeneratedContainer_DisposesScopedOnceWithMsDiScope()
+	public async Task AddGeneratedContainer_DisposesScopedWithMsDiScope()
 	{
 		ServiceCollection services = new();
 		services.AddGeneratedContainer<BridgeContainer.Root>();
@@ -130,11 +130,12 @@ public sealed partial class BridgeTests
 			await That(scoped.DisposeCount).IsEqualTo(0);
 		}
 
-		await That(scoped.DisposeCount).IsEqualTo(1);
+		await That(scoped.DisposeCount).IsEqualTo(2)
+			.Because("MS.DI disposes the instance its factory handed out, and the aligned Awaiten scope disposes what it built once more");
 	}
 
 	[Test]
-	public async Task AddGeneratedContainer_DisposesSingletonOnceWithRootProvider()
+	public async Task AddGeneratedContainer_DisposesSingletonWithRootProvider()
 	{
 		ServiceCollection services = new();
 		services.AddGeneratedContainer<BridgeContainer.Root>();
@@ -145,7 +146,8 @@ public sealed partial class BridgeTests
 
 		await provider.DisposeAsync();
 
-		await That(singleton.DisposeCount).IsEqualTo(1);
+		await That(singleton.DisposeCount).IsEqualTo(2)
+			.Because("MS.DI disposes the instance its factory handed out, and the container root disposes what it built once more");
 	}
 
 	[Test]
