@@ -54,7 +54,7 @@ public static partial class CoffeeShop;
 
 Awaiten does not create the external provider. It asks an *external resolver* for these dependencies, and you supply that resolver once, up front.
 
-Under the [MS.DI bridge](../msdi-bridge) this is automatic. `AddGeneratedContainer` and the startup initialization wire the container to the host's `IServiceProvider`, so `[ImportService<T>]` and `[ImportServices]` dependencies resolve from the host with nothing extra to do.
+Under the [MS.DI bridge](../msdi-bridge) this is automatic. `AddAwaitenContainer` and the startup initialization wire the container to the host's `IServiceProvider`, so `[ImportService<T>]` and `[ImportServices]` dependencies resolve from the host with nothing extra to do.
 
 Standing alone, you set it yourself. Implement `IExternalResolver` and pass it to the generated `Root` constructor, so it is in place before anything resolves, eager singletons included.
 

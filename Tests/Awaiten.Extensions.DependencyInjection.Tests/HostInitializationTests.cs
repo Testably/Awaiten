@@ -26,13 +26,12 @@ public sealed partial class HostInitializationTests
 	public static partial class HostContainer;
 
 	[Test]
-	public async Task AddAwaitenInitialization_WarmsAsyncSingletonsOnStartup()
+	public async Task WithInitialization_WarmsAsyncSingletonsOnStartup()
 	{
 		using IHost host = new HostBuilder()
 			.ConfigureServices(services =>
 			{
-				services.AddGeneratedContainer<HostContainer.Root>();
-				services.AddAwaitenInitialization<HostContainer.Root>();
+				services.AddAwaitenContainer<HostContainer.Root>().WithInitialization();
 			})
 			.Build();
 
@@ -84,14 +83,13 @@ public sealed partial class HostInitializationTests
 	public static partial class ExternalHostContainer;
 
 	[Test]
-	public async Task AddAwaitenInitialization_WithExternalDependency_WiresResolverBeforeWarming()
+	public async Task WithInitialization_WithExternalDependency_WiresResolverBeforeWarming()
 	{
 		using IHost host = new HostBuilder()
 			.ConfigureServices(services =>
 			{
 				services.AddSingleton<IClock>(new FixedClock());
-				services.AddGeneratedContainer<ExternalHostContainer.Root>();
-				services.AddAwaitenInitialization<ExternalHostContainer.Root>();
+				services.AddAwaitenContainer<ExternalHostContainer.Root>().WithInitialization();
 			})
 			.Build();
 
@@ -115,24 +113,47 @@ public sealed partial class HostInitializationTests
 	public static partial class DoubleContainer;
 
 	[Test]
-	public async Task AddAwaitenInitialization_CalledTwice_RegistersHostedServiceOnce()
+	public async Task WithInitialization_CalledTwice_RegistersHostedServiceOnce()
 	{
 		ServiceCollection services = new();
-		services.AddGeneratedContainer<DoubleContainer.Root>();
-		services.AddAwaitenInitialization<DoubleContainer.Root>();
-		services.AddAwaitenInitialization<DoubleContainer.Root>();
+		services.AddAwaitenContainer<DoubleContainer.Root>()
+			.WithInitialization()
+			.WithInitialization();
 
-		// TryAddEnumerable dedupes on (IHostedService, implementation type), so the second call is a no-op.
-		// A bare service collection holds no other hosted services.
 		int hostedServices = services.Count(descriptor => descriptor.ServiceType == typeof(IHostedService));
-		await That(hostedServices).IsEqualTo(1);
+		await That(hostedServices).IsEqualTo(1)
+			.Because("TryAddEnumerable dedupes on the implementation type, and a bare service collection holds no other hosted services");
 	}
 
-	[Test]
-	public async Task AddAwaitenInitialization_WhenServicesIsNull_ShouldThrowArgumentNullException()
+	public sealed class FactoryAsyncResource : IAsyncInitializable
 	{
-		void Act() => AwaitenInitializationServiceCollectionExtensions.AddAwaitenInitialization<HostContainer.Root>(null!);
+		internal static int InitializeCount;
 
-		await That(Act).Throws<ArgumentNullException>().WithParamName("services");
+		public Task InitializeAsync(CancellationToken cancellationToken)
+		{
+			Interlocked.Increment(ref InitializeCount);
+			return Task.CompletedTask;
+		}
+	}
+
+	[Container(SyncResolveAfterInit = true)]
+	[Singleton<FactoryAsyncResource>]
+	public static partial class FactoryContainer;
+
+	[Test]
+	public async Task HostFactory_ConfigureWithInitialization_WarmsAsyncSingletonsOnStartup()
+	{
+		using IHost host = new HostBuilder()
+			.UseServiceProviderFactory(new AwaitenServiceProviderFactory<FactoryContainer.Root>(c => c.WithInitialization()))
+			.Build();
+
+		await That(FactoryAsyncResource.InitializeCount).IsEqualTo(0);
+
+		await host.StartAsync(TestContext.Current!.Execution.CancellationToken);
+
+		await That(FactoryAsyncResource.InitializeCount).IsEqualTo(1)
+			.Because("the factory's configure callback registered the startup warm-up");
+
+		await host.StopAsync(TestContext.Current!.Execution.CancellationToken);
 	}
 }

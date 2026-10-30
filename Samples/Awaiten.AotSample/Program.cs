@@ -14,7 +14,7 @@ public static class Program
 	{
 		ServiceCollection services = new();
 		services.AddSingleton<Banner>();
-		services.AddGeneratedContainer<SampleContainer.Root>();
+		services.AddAwaitenContainer<SampleContainer.Root>();
 
 		using ServiceProvider provider = services.BuildServiceProvider(true);
 		provider.VerifyAwaitenContainers();

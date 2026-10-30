@@ -9,19 +9,25 @@ using Microsoft.Extensions.Hosting;
 namespace Awaiten.Extensions.DependencyInjection;
 
 /// <summary>
-///     Registers a hosted service that initializes a generated Awaiten container on application startup,
-///     warming its async-initialized singletons in dependency order (see <see cref="IAsyncInitializable" />)
-///     before the host begins serving.
+///     Configures how the generated Awaiten container root <typeparamref name="TRoot" /> is hosted, returned by
+///     <see cref="AwaitenServiceCollectionExtensions.AddAwaitenContainer{TRoot}(IServiceCollection)" /> and handed
+///     to the configure callback of <see cref="AwaitenServiceProviderFactory{TRoot}" />.
 /// </summary>
-public static class AwaitenInitializationServiceCollectionExtensions
+/// <typeparam name="TRoot">The generated Awaiten container root type.</typeparam>
+public sealed class AwaitenContainerBuilder<TRoot>
+	where TRoot : class, IAwaitenRoot
 {
+	internal AwaitenContainerBuilder(IServiceCollection services) => Services = services;
+
+	/// <summary>The service collection the container is registered in, for chaining further registrations.</summary>
+	public IServiceCollection Services { get; }
+
 	/// <summary>
-	///     Adds an <see cref="IHostedService" /> that calls <c>InitializeAsync</c> on the
-	///     <typeparamref name="TContainer" /> registered with
-	///     <see cref="AwaitenServiceCollectionExtensions.AddGeneratedContainer{TRoot}(IServiceCollection)" />,
-	///     honoring the host's startup <see cref="CancellationToken" />. Register the container first; a
-	///     container that hosts async-initialized services through MS.DI should also opt into
-	///     <c>SyncResolveAfterInit</c> so the warmed services can then be resolved synchronously.
+	///     Adds an <see cref="IHostedService" /> that calls <c>InitializeAsync</c> on the container root on host
+	///     startup, warming its async-initialized singletons in dependency order (see
+	///     <see cref="IAsyncInitializable" />) before the host begins serving, and honoring the host's startup
+	///     <see cref="CancellationToken" />. A container that hosts async-initialized services through MS.DI should
+	///     also opt into <c>SyncResolveAfterInit</c> so the warmed services can then be resolved synchronously.
 	/// </summary>
 	/// <remarks>
 	///     The warm-up resolves the container root directly rather than through a bridged registration, which
@@ -29,32 +35,24 @@ public static class AwaitenInitializationServiceCollectionExtensions
 	///     normally wired to the host's provider. So when the container has external dependencies and its
 	///     <see cref="IAwaitenExternalResolverHost.ExternalResolver" /> was not wired explicitly, the hosted service
 	///     wires it to the host's (root) provider before warming, so an async-initialized singleton that draws
-	///     on an external service can be constructed during startup. Registering the same container's
-	///     initialization more than once is a no-op.
+	///     on an external service can be constructed during startup. Calling this more than once is a no-op.
 	/// </remarks>
-	/// <typeparam name="TContainer">The generated Awaiten container root type.</typeparam>
-	public static IServiceCollection AddAwaitenInitialization<TContainer>(this IServiceCollection services)
-		where TContainer : class, IAwaitenRoot
+	/// <returns>This builder, for chaining.</returns>
+	public AwaitenContainerBuilder<TRoot> WithInitialization()
 	{
-		if (services is null)
-		{
-			throw new ArgumentNullException(nameof(services));
-		}
-
-		services.TryAddEnumerable(
-			ServiceDescriptor.Singleton<IHostedService, AwaitenInitializationHostedService<TContainer>>());
-		return services;
+		Services.TryAddEnumerable(
+			ServiceDescriptor.Singleton<IHostedService, AwaitenInitializationHostedService>());
+		return this;
 	}
 
-	private sealed class AwaitenInitializationHostedService<TContainer> : IHostedService
-		where TContainer : class, IAwaitenRoot
+	private sealed class AwaitenInitializationHostedService : IHostedService
 	{
-		private readonly TContainer _container;
+		private readonly TRoot _container;
 		private readonly IServiceProvider _provider;
 
 		[SuppressMessage("Major Code Smell", "S1144:Unused private types or members should be removed",
 			Justification = "Instantiated by the dependency-injection container via reflection.")]
-		public AwaitenInitializationHostedService(TContainer container, IServiceProvider provider)
+		public AwaitenInitializationHostedService(TRoot container, IServiceProvider provider)
 		{
 			_container = container;
 			_provider = provider;
@@ -66,19 +64,19 @@ public static class AwaitenInitializationServiceCollectionExtensions
 			// resolves the root itself (a pre-built singleton, not a factory), which bypasses that wiring. The
 			// provider injected into this singleton hosted service is the root provider, the right scope for
 			// singleton external resolution, so wire it here unless a resolver was set explicitly. The resolver is
-			// set-once, so this takes the bridge's wiring lock (the probe, when bridged) to not race a concurrent
-			// first bridged resolution into setting a second one.
+			// set-once, so this takes the bridge's wiring lock (the probe) to not race a concurrent first bridged
+			// resolution into setting a second one.
 			if (_container.ExternalDependencies.Count > 0 && _container.ExternalResolver is null)
 			{
-				lock (_provider.GetService(typeof(AwaitenRootProviderProbe)) ?? _container)
+				lock (_provider.GetRequiredService<AwaitenRootProviderProbe>())
 				{
 					_container.ExternalResolver ??= new ServiceProviderExternalResolver(_provider);
 				}
 			}
 
 			// Warming builds singletons on the root, so the root provider must own the root even if nothing is
-			// resolved through a bridged registration afterwards. Absent when the container was not bridged.
-			_provider.GetService(typeof(AwaitenRootOwner<TContainer>));
+			// resolved through a bridged registration afterwards.
+			_provider.GetRequiredService<AwaitenRootOwner<TRoot>>();
 			return _container.InitializeAsync(cancellationToken);
 		}
 

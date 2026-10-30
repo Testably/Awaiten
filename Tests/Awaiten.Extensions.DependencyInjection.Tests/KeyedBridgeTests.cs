@@ -39,10 +39,10 @@ public sealed partial class KeyedBridgeTests
 	public static partial class KeyedContainer;
 
 	[Test]
-	public async Task AddGeneratedContainer_ProjectsKeyedRegistrations_ForGetKeyedService()
+	public async Task AddAwaitenContainer_ProjectsKeyedRegistrations_ForGetKeyedService()
 	{
 		ServiceCollection services = new();
-		services.AddGeneratedContainer<KeyedContainer.Root>();
+		services.AddAwaitenContainer<KeyedContainer.Root>();
 		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
 
 		await That(provider.GetRequiredKeyedService<IChannel>("fast")).Is<FastChannel>();
@@ -52,10 +52,10 @@ public sealed partial class KeyedBridgeTests
 	}
 
 	[Test]
-	public async Task AddGeneratedContainer_KeyedRegistration_FlowsIntoFromKeyedServicesConsumer()
+	public async Task AddAwaitenContainer_KeyedRegistration_FlowsIntoFromKeyedServicesConsumer()
 	{
 		ServiceCollection services = new();
-		services.AddGeneratedContainer<KeyedContainer.Root>();
+		services.AddAwaitenContainer<KeyedContainer.Root>();
 		services.AddSingleton<Router>();
 		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
 
@@ -68,10 +68,10 @@ public sealed partial class KeyedBridgeTests
 	}
 
 	[Test]
-	public async Task AddGeneratedContainer_UnknownKey_ReturnsNull()
+	public async Task AddAwaitenContainer_UnknownKey_ReturnsNull()
 	{
 		ServiceCollection services = new();
-		services.AddGeneratedContainer<KeyedContainer.Root>();
+		services.AddAwaitenContainer<KeyedContainer.Root>();
 		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
 
 		await That(provider.GetKeyedService<IChannel>("unknown")).IsNull();

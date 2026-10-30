@@ -11,11 +11,10 @@ using CoffeeShop = Awaiten.WebSample.CoffeeShop;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
-// The whole integration, in two lines. The factory projects the generated container into the host's service
-// collection, so framework registrations and Awaiten-owned services resolve side by side; the initialization
-// hosted service warms the async-initialized singletons before the host starts serving.
-builder.Host.UseServiceProviderFactory(new AwaitenServiceProviderFactory<CoffeeShop.Root>());
-builder.Services.AddAwaitenInitialization<CoffeeShop.Root>();
+// The whole integration, in one line. The factory projects the generated container into the host's service
+// collection, so framework registrations and Awaiten-owned services resolve side by side; WithInitialization
+// warms the async-initialized singletons before the host starts serving.
+builder.Host.UseServiceProviderFactory(new AwaitenServiceProviderFactory<CoffeeShop.Root>(c => c.WithInitialization()));
 
 bool smoke = args.Contains("--smoke");
 if (smoke)

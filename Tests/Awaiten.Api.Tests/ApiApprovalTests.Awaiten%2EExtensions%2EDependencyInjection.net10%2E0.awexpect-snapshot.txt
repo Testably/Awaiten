@@ -2,13 +2,15 @@
 [assembly: System.Runtime.Versioning.TargetFramework(".NETCoreApp,Version=v10.0", FrameworkDisplayName = ".NET 10.0")]
 namespace Awaiten.Extensions.DependencyInjection
 {
-    public static class AwaitenInitializationServiceCollectionExtensions
+    public sealed class AwaitenContainerBuilder<TRoot> where TRoot : class, Awaiten.IAwaitenRoot
     {
-        public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddAwaitenInitialization<TContainer>(this Microsoft.Extensions.DependencyInjection.IServiceCollection services) where TContainer : class, Awaiten.IAwaitenRoot { }
+        public Microsoft.Extensions.DependencyInjection.IServiceCollection Services { get; }
+        public Awaiten.Extensions.DependencyInjection.AwaitenContainerBuilder<TRoot> WithInitialization() { }
     }
     public static class AwaitenServiceCollectionExtensions
     {
-        public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddGeneratedContainer<TRoot>(this Microsoft.Extensions.DependencyInjection.IServiceCollection services) where TRoot : class, Awaiten.IAwaitenRoot, new() { }
+        public static Awaiten.Extensions.DependencyInjection.AwaitenContainerBuilder<TRoot> AddAwaitenContainer<TRoot>(this Microsoft.Extensions.DependencyInjection.IServiceCollection services) where TRoot : class, Awaiten.IAwaitenRoot, new() { }
+        public static Awaiten.Extensions.DependencyInjection.AwaitenContainerBuilder<TRoot> AddAwaitenContainer<TRoot>(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, TRoot root) where TRoot : class, Awaiten.IAwaitenRoot { }
     }
     public sealed class AwaitenServiceProvider : Microsoft.Extensions.DependencyInjection.IKeyedServiceProvider, Microsoft.Extensions.DependencyInjection.IServiceProviderIsKeyedService, Microsoft.Extensions.DependencyInjection.IServiceProviderIsService, Microsoft.Extensions.DependencyInjection.IServiceScopeFactory, System.IAsyncDisposable, System.IDisposable, System.IServiceProvider
     {
@@ -24,7 +26,7 @@ namespace Awaiten.Extensions.DependencyInjection
     }
     public sealed class AwaitenServiceProviderFactory<TRoot> : Microsoft.Extensions.DependencyInjection.IServiceProviderFactory<TRoot> where TRoot : class, Awaiten.IAwaitenRoot, new()
     {
-        public AwaitenServiceProviderFactory() { }
+        public AwaitenServiceProviderFactory(System.Action<Awaiten.Extensions.DependencyInjection.AwaitenContainerBuilder<TRoot>>? configure = null) { }
         public TRoot CreateBuilder(Microsoft.Extensions.DependencyInjection.IServiceCollection services) { }
         public System.IServiceProvider CreateServiceProvider(TRoot containerBuilder) { }
     }

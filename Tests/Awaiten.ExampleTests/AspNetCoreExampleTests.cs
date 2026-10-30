@@ -99,13 +99,13 @@ public partial class AspNetCoreExampleTests
 
 	/// <summary>
 	///     Standalone use case: project the container into a plain <see cref="IServiceCollection" /> with
-	///     <c>AddGeneratedContainer</c>. Awaiten lifetimes map to the matching <c>ServiceLifetime</c>.
+	///     <c>AddAwaitenContainer</c>. Awaiten lifetimes map to the matching <c>ServiceLifetime</c>.
 	/// </summary>
 	[Test]
 	public async Task Collection_ProjectsServicesWithTheirLifetimes()
 	{
 		ServiceCollection services = new();
-		services.AddGeneratedContainer<WebContainer.Root>();
+		services.AddAwaitenContainer<WebContainer.Root>();
 		await using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
 
 		await That(provider.GetRequiredService<IGreeter>().Greet("Ada")).IsEqualTo("Hello, Ada!");

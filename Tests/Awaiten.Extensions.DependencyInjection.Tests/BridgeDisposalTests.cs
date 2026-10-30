@@ -9,7 +9,7 @@ namespace Awaiten.Extensions.DependencyInjection.Tests;
 ///     Disposal behaviour of the bridge. On the provider-replacement path
 ///     (<see cref="AwaitenServiceProvider" />) the Awaiten container is the single owner: every instance,
 ///     and everything built for it, is disposed exactly once. On the collection projection
-///     (<see cref="AwaitenServiceCollectionExtensions.AddGeneratedContainer{TRoot}" />) and the host factory
+///     (<see cref="AwaitenServiceCollectionExtensions.AddAwaitenContainer{TRoot}(IServiceCollection)" />) and the host factory
 ///     (<see cref="AwaitenServiceProviderFactory{TRoot}" />) Awaiten still disposes everything it built exactly
 ///     once, nested dependencies included, with the MS.DI scope or root provider that owns it. MS.DI
 ///     additionally disposes each instance a projected factory handed out, once per descriptor, which these
@@ -29,7 +29,7 @@ public sealed partial class BridgeDisposalTests
 		ServiceCollection services = new();
 		if (path == BridgePath.Projection)
 		{
-			services.AddGeneratedContainer<TRoot>();
+			services.AddAwaitenContainer<TRoot>();
 			return services.BuildServiceProvider(validateScopes: true);
 		}
 
@@ -132,8 +132,7 @@ public sealed partial class BridgeDisposalTests
 		IHost host = new HostBuilder()
 			.ConfigureServices(services =>
 			{
-				services.AddGeneratedContainer<WarmedContainer.Root>();
-				services.AddAwaitenInitialization<WarmedContainer.Root>();
+				services.AddAwaitenContainer<WarmedContainer.Root>().WithInitialization();
 			})
 			.Build();
 		await host.StartAsync(TestContext.Current!.Execution.CancellationToken);
@@ -282,7 +281,7 @@ public sealed partial class BridgeDisposalTests
 	public async Task Projection_DisposableTransient_ResolvesInScope_DisposedWithScope()
 	{
 		ServiceCollection services = new();
-		services.AddGeneratedContainer<TransientContainer.Root>();
+		services.AddAwaitenContainer<TransientContainer.Root>();
 		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
 
 		DisposableTransient first;
@@ -304,7 +303,7 @@ public sealed partial class BridgeDisposalTests
 	public async Task Projection_DisposableTransient_FromRootProvider_SurfacesTheContainersGuidance()
 	{
 		ServiceCollection services = new();
-		services.AddGeneratedContainer<TransientContainer.Root>();
+		services.AddAwaitenContainer<TransientContainer.Root>();
 		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
 
 		// Resolved from the root provider, the transient resolves on the container root, where the strict
@@ -342,7 +341,7 @@ public sealed partial class BridgeDisposalTests
 	public async Task Projection_AsyncDisposableSingleton_DisposedOnceWithRootProvider()
 	{
 		ServiceCollection services = new();
-		services.AddGeneratedContainer<AsyncDisposalContainer.Root>();
+		services.AddAwaitenContainer<AsyncDisposalContainer.Root>();
 		ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
 
 		AsyncDisposableSingleton singleton = await provider.GetRequiredService<Task<AsyncDisposableSingleton>>();
@@ -358,7 +357,7 @@ public sealed partial class BridgeDisposalTests
 	public async Task Projection_AsyncDisposableScoped_DisposedOnceWithScope()
 	{
 		ServiceCollection services = new();
-		services.AddGeneratedContainer<AsyncDisposalContainer.Root>();
+		services.AddAwaitenContainer<AsyncDisposalContainer.Root>();
 		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
 
 		AsyncDisposableScoped scoped;
@@ -399,7 +398,7 @@ public sealed partial class BridgeDisposalTests
 	{
 		OrderedDependency.DisposeOrder.Clear();
 		ServiceCollection services = new();
-		services.AddGeneratedContainer<OrderedDisposalContainer.Root>();
+		services.AddAwaitenContainer<OrderedDisposalContainer.Root>();
 		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
 
 		using (IServiceScope scope = provider.CreateScope())
@@ -435,7 +434,7 @@ public sealed partial class BridgeDisposalTests
 	public async Task Projection_ExternallyOwnedInstance_NotDisposedByProvider()
 	{
 		ServiceCollection services = new();
-		services.AddGeneratedContainer<ExternalInstanceContainer.Root>();
+		services.AddAwaitenContainer<ExternalInstanceContainer.Root>();
 		ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
 
 		ExternalProbe resolved = provider.GetRequiredService<ExternalProbe>();

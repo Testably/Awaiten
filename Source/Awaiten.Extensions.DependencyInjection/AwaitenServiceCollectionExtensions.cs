@@ -23,7 +23,7 @@ public static class AwaitenServiceCollectionExtensions
 	///         provider resolves from the container root. Awaiten disposes everything it built exactly once, nested
 	///         dependencies and instances awaited through the <c>Task&lt;T&gt;</c> projection included: the aligned
 	///         Awaiten scope with its MS.DI scope, and the container root with the root provider once the bridge
-	///         has used it. A pre-built <c>Instance</c> member stays user-owned and is relayed without being
+	///         has used it, unless the caller passed the root in. A pre-built <c>Instance</c> member stays user-owned and is relayed without being
 	///         captured for disposal.
 	///     </para>
 	///     <para>
@@ -37,18 +37,17 @@ public static class AwaitenServiceCollectionExtensions
 	///     <para>
 	///         Under the strict default (<c>LifetimeSafety.Strict</c>), a disposable transient resolved from the
 	///         root provider rather than a scope throws the container's guidance. Resolve it from a scope, or use
-	///         <c>LifetimeSafety.Loose</c>. Warm a <c>SyncResolveAfterInit</c> container at startup (resolve
-	///         <see cref="IAwaitenRoot" /> and await <c>InitializeAsync</c>) before its
-	///         async-initialized services are first resolved, otherwise the first resolution blocks synchronously.
-	///         External dependencies are wired to the host's provider on first bridged resolution, which a direct
-	///         warm-up bypasses, so when warming such a container first set <c>ExternalResolver</c> on the resolved
-	///         root (for example a <see cref="ServiceProviderExternalResolver" /> over the provider). Do not
+	///         <c>LifetimeSafety.Loose</c>. Warm a <c>SyncResolveAfterInit</c> container at startup with
+	///         <see cref="AwaitenContainerBuilder{TRoot}.WithInitialization" /> before its async-initialized services
+	///         are first resolved, otherwise the first resolution blocks synchronously. Do not
 	///         dispose a scope or the provider while a resolved <c>Task&lt;T&gt;</c> is still in flight: MS.DI
 	///         disposes the captured <c>Task</c>, whose <c>Dispose</c> throws for an incomplete task.
 	///     </para>
 	/// </remarks>
 	/// <typeparam name="TRoot">The generated Awaiten container root type.</typeparam>
-	public static IServiceCollection AddGeneratedContainer<TRoot>(this IServiceCollection services)
+	/// <returns>A builder to configure the container's hosting further, for example its startup initialization.</returns>
+	/// <exception cref="ArgumentNullException"><paramref name="services" /> is <see langword="null" />.</exception>
+	public static AwaitenContainerBuilder<TRoot> AddAwaitenContainer<TRoot>(this IServiceCollection services)
 		where TRoot : class, IAwaitenRoot, new()
 	{
 		if (services is null)
@@ -56,24 +55,59 @@ public static class AwaitenServiceCollectionExtensions
 			throw new ArgumentNullException(nameof(services));
 		}
 
-		return AddGeneratedContainer(services, new TRoot());
+		return AddAwaitenContainer(services, new TRoot(), ownsRoot: true);
 	}
 
 	/// <summary>
-	///     Takes an existing root so <see cref="AwaitenServiceProviderFactory{TRoot}" /> can project the root it
-	///     handed to the host's ConfigureContainer callbacks instead of a fresh one.
+	///     Projects the registrations of the pre-built Awaiten container <paramref name="root" /> into the
+	///     <paramref name="services" /> collection, exactly as
+	///     <see cref="AddAwaitenContainer{TRoot}(IServiceCollection)" /> does with a root it creates. Use it to
+	///     configure the root before handing it to the host, for example to construct it with an external resolver.
 	/// </summary>
-	internal static IServiceCollection AddGeneratedContainer<TRoot>(IServiceCollection services, TRoot root)
-		where TRoot : class, IAwaitenRoot, new()
+	/// <remarks>
+	///     Following the MS.DI convention for registered instances, <paramref name="root" /> stays owned by the
+	///     caller: the provider disposes the scopes and instances it reaches through the bridge, but never the root
+	///     itself. Dispose the root after the provider.
+	/// </remarks>
+	/// <param name="services">The service collection to register the container in.</param>
+	/// <param name="root">The container root to project, owned by the caller.</param>
+	/// <typeparam name="TRoot">The generated Awaiten container root type.</typeparam>
+	/// <returns>A builder to configure the container's hosting further, for example its startup initialization.</returns>
+	/// <exception cref="ArgumentNullException">
+	///     <paramref name="services" /> or <paramref name="root" /> is <see langword="null" />.
+	/// </exception>
+	public static AwaitenContainerBuilder<TRoot> AddAwaitenContainer<TRoot>(this IServiceCollection services, TRoot root)
+		where TRoot : class, IAwaitenRoot
+	{
+		if (services is null)
+		{
+			throw new ArgumentNullException(nameof(services));
+		}
+
+		if (root is null)
+		{
+			throw new ArgumentNullException(nameof(root));
+		}
+
+		return AddAwaitenContainer(services, root, ownsRoot: false);
+	}
+
+	/// <summary>
+	///     Projects <paramref name="root" />, and makes the root provider dispose it when
+	///     <paramref name="ownsRoot" /> is set: the bridge or <see cref="AwaitenServiceProviderFactory{TRoot}" />
+	///     created it, so nobody else can.
+	/// </summary>
+	internal static AwaitenContainerBuilder<TRoot> AddAwaitenContainer<TRoot>(IServiceCollection services, TRoot root, bool ownsRoot)
+		where TRoot : class, IAwaitenRoot
 	{
 		// Expose the root under its own type and the two container-facing interfaces so a host can reach it, e.g.
 		// to warm a SyncResolveAfterInit container. Registered as a pre-built instance (a constant), which MS.DI
-		// never captures for disposal: the factory-registered owner disposes the root instead, at a capture
+		// never captures for disposal: the factory-registered owner disposes a root the bridge owns instead, at a capture
 		// position that precedes everything the root builds.
 		services.AddSingleton(root);
 		services.AddSingleton<IAwaitenScope>(root);
 		services.AddSingleton<IAwaitenRoot>(root);
-		services.AddSingleton(_ => new AwaitenRootOwner<TRoot>(root));
+		services.AddSingleton(_ => new AwaitenRootOwner<TRoot>(root, ownsRoot));
 		services.TryAddSingleton(sp => new AwaitenRootProviderProbe(sp));
 
 		// If the container draws on external (host-owned) services, wire its external resolvers to the host's
@@ -97,7 +131,7 @@ public static class AwaitenServiceCollectionExtensions
 			ProjectRegistration(services, root, registration, hasExternal);
 		}
 
-		return services;
+		return new AwaitenContainerBuilder<TRoot>(services);
 	}
 
 	/// <summary>
@@ -106,7 +140,7 @@ public static class AwaitenServiceCollectionExtensions
 	///     <see cref="IKeyedServiceProvider" />; an unkeyed one is projected as an ordinary descriptor.
 	/// </summary>
 	private static void ProjectRegistration<TRoot>(IServiceCollection services, TRoot root, AwaitenRegistration registration, bool hasExternal)
-		where TRoot : class, IAwaitenRoot, new()
+		where TRoot : class, IAwaitenRoot
 	{
 		Type serviceType = registration.ServiceType;
 		Lifetime lifetime = registration.Lifetime;
@@ -179,7 +213,7 @@ public static class AwaitenServiceCollectionExtensions
 	///     through its holder, so MS.DI captures the one that disposes the instance before the instance itself.
 	/// </summary>
 	private static IAwaitenScope ScopeFor<TRoot>(IServiceProvider provider, Lifetime lifetime)
-		where TRoot : class, IAwaitenRoot, new()
+		where TRoot : class, IAwaitenRoot
 		=> lifetime == Lifetime.Singleton || (lifetime == Lifetime.Transient && IsRootProvider(provider))
 			? provider.GetRequiredService<AwaitenRootOwner<TRoot>>().Root
 			: provider.GetRequiredService<AwaitenScopeHolder<TRoot>>().Scope;
@@ -199,7 +233,7 @@ public static class AwaitenServiceCollectionExtensions
 	///     on the internal probe singleton so concurrent first resolutions wire it exactly once.
 	/// </summary>
 	private static void EnsureExternalWired<TRoot>(IServiceProvider provider, TRoot root, bool hasExternal)
-		where TRoot : class, IAwaitenRoot, new()
+		where TRoot : class, IAwaitenRoot
 	{
 		if (!hasExternal || root.ExternalResolver is not null)
 		{

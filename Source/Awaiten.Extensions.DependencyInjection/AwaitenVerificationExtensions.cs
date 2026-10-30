@@ -48,7 +48,7 @@ public static class AwaitenVerificationExtensions
 
 	/// <summary>
 	///     Verifies every generated container registered in <paramref name="provider" /> (through
-	///     <see cref="AwaitenServiceCollectionExtensions.AddGeneratedContainer{TRoot}(Microsoft.Extensions.DependencyInjection.IServiceCollection)" />) against it,
+	///     <see cref="AwaitenServiceCollectionExtensions.AddAwaitenContainer{TRoot}(Microsoft.Extensions.DependencyInjection.IServiceCollection)" />) against it,
 	///     throwing when any container's external dependencies are unsatisfied. Returns the provider so it
 	///     can be chained at startup.
 	/// </summary>

@@ -6,11 +6,11 @@ namespace Awaiten.Extensions.DependencyInjection.Tests;
 public sealed class AwaitenServiceCollectionExtensionsTests
 {
 	[Test]
-	public async Task AddGeneratedContainer_ShouldRegisterContainerAsSingleton()
+	public async Task AddAwaitenContainer_ShouldRegisterContainerAsSingleton()
 	{
 		ServiceCollection services = new();
 
-		services.AddGeneratedContainer<DummyContainer>();
+		services.AddAwaitenContainer<DummyContainer>();
 
 		ServiceProvider provider = services.BuildServiceProvider();
 		IAwaitenScope container = provider.GetRequiredService<IAwaitenScope>();
@@ -19,18 +19,50 @@ public sealed class AwaitenServiceCollectionExtensionsTests
 	}
 
 	[Test]
-	public async Task AddGeneratedContainer_WhenServicesIsNull_ShouldThrowArgumentNullException()
+	public async Task AddAwaitenContainer_WhenServicesIsNull_ShouldThrowArgumentNullException()
 	{
 		void Act()
 		{
-			AwaitenServiceCollectionExtensions.AddGeneratedContainer<DummyContainer>(null!);
+			AwaitenServiceCollectionExtensions.AddAwaitenContainer<DummyContainer>(null!);
 		}
 
 		await That(Act).Throws<ArgumentNullException>().WithParamName("services");
 	}
 
 	[Test]
-	public async Task AddGeneratedContainerExtensions_ShouldBeAStaticClass()
+	public async Task AddAwaitenContainer_WithRoot_WhenServicesIsNull_ShouldThrowArgumentNullException()
+	{
+		void Act()
+		{
+			AwaitenServiceCollectionExtensions.AddAwaitenContainer(null!, new DummyContainer());
+		}
+
+		await That(Act).Throws<ArgumentNullException>().WithParamName("services");
+	}
+
+	[Test]
+	public async Task AddAwaitenContainer_WithRoot_WhenRootIsNull_ShouldThrowArgumentNullException()
+	{
+		void Act()
+		{
+			new ServiceCollection().AddAwaitenContainer<DummyContainer>(null!);
+		}
+
+		await That(Act).Throws<ArgumentNullException>().WithParamName("root");
+	}
+
+	[Test]
+	public async Task AddAwaitenContainer_ShouldReturnBuilderOverSameServices()
+	{
+		ServiceCollection services = new();
+
+		AwaitenContainerBuilder<DummyContainer> builder = services.AddAwaitenContainer<DummyContainer>();
+
+		await That(builder.Services).IsSameAs(services);
+	}
+
+	[Test]
+	public async Task AddAwaitenContainerExtensions_ShouldBeAStaticClass()
 	{
 		Type type = typeof(AwaitenServiceCollectionExtensions);
 

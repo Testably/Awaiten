@@ -64,10 +64,10 @@ public sealed partial class BridgeTests
 	public static partial class SecondContainer;
 
 	[Test]
-	public async Task AddGeneratedContainer_ResolvesSingletonThroughMsDi()
+	public async Task AddAwaitenContainer_ResolvesSingletonThroughMsDi()
 	{
 		ServiceCollection services = new();
-		services.AddGeneratedContainer<BridgeContainer.Root>();
+		services.AddAwaitenContainer<BridgeContainer.Root>();
 		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
 
 		IService first = provider.GetRequiredService<IService>();
@@ -78,10 +78,10 @@ public sealed partial class BridgeTests
 	}
 
 	[Test]
-	public async Task AddGeneratedContainer_AlignsScopedToMsDiScope()
+	public async Task AddAwaitenContainer_AlignsScopedToMsDiScope()
 	{
 		ServiceCollection services = new();
-		services.AddGeneratedContainer<BridgeContainer.Root>();
+		services.AddAwaitenContainer<BridgeContainer.Root>();
 		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
 
 		ScopedService outer1;
@@ -103,10 +103,10 @@ public sealed partial class BridgeTests
 	}
 
 	[Test]
-	public async Task AddGeneratedContainer_TransientIsFreshEachResolve()
+	public async Task AddAwaitenContainer_TransientIsFreshEachResolve()
 	{
 		ServiceCollection services = new();
-		services.AddGeneratedContainer<BridgeContainer.Root>();
+		services.AddAwaitenContainer<BridgeContainer.Root>();
 		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
 		using IServiceScope scope = provider.CreateScope();
 
@@ -117,10 +117,10 @@ public sealed partial class BridgeTests
 	}
 
 	[Test]
-	public async Task AddGeneratedContainer_DisposesScopedWithMsDiScope()
+	public async Task AddAwaitenContainer_DisposesScopedWithMsDiScope()
 	{
 		ServiceCollection services = new();
-		services.AddGeneratedContainer<BridgeContainer.Root>();
+		services.AddAwaitenContainer<BridgeContainer.Root>();
 		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
 
 		DisposableScoped scoped;
@@ -135,10 +135,10 @@ public sealed partial class BridgeTests
 	}
 
 	[Test]
-	public async Task AddGeneratedContainer_DisposesSingletonWithRootProvider()
+	public async Task AddAwaitenContainer_DisposesSingletonWithRootProvider()
 	{
 		ServiceCollection services = new();
-		services.AddGeneratedContainer<BridgeContainer.Root>();
+		services.AddAwaitenContainer<BridgeContainer.Root>();
 		ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
 
 		DisposableSingleton singleton = provider.GetRequiredService<DisposableSingleton>();
@@ -203,10 +203,10 @@ public sealed partial class BridgeTests
 	}
 
 	[Test]
-	public async Task AddGeneratedContainer_ResolvesTransientFromRootProvider()
+	public async Task AddAwaitenContainer_ResolvesTransientFromRootProvider()
 	{
 		ServiceCollection services = new();
-		services.AddGeneratedContainer<BridgeContainer.Root>();
+		services.AddAwaitenContainer<BridgeContainer.Root>();
 		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
 
 		// Resolved directly from the root provider (not a scope), and fresh each time.
@@ -217,10 +217,10 @@ public sealed partial class BridgeTests
 	}
 
 	[Test]
-	public async Task AddGeneratedContainer_ProjectsAsyncServiceAsTask()
+	public async Task AddAwaitenContainer_ProjectsAsyncServiceAsTask()
 	{
 		ServiceCollection services = new();
-		services.AddGeneratedContainer<BridgeContainer.Root>();
+		services.AddAwaitenContainer<BridgeContainer.Root>();
 		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
 
 		// An async-initialized service has no synchronous path, so the bare type is not registered...
@@ -271,10 +271,10 @@ public sealed partial class BridgeTests
 	}
 
 	[Test]
-	public async Task AddGeneratedContainer_TransientSharesScopedDependenciesWithItsScope()
+	public async Task AddAwaitenContainer_TransientSharesScopedDependenciesWithItsScope()
 	{
 		ServiceCollection services = new();
-		services.AddGeneratedContainer<BridgeContainer.Root>();
+		services.AddAwaitenContainer<BridgeContainer.Root>();
 		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
 		using IServiceScope scope = provider.CreateScope();
 
@@ -286,11 +286,11 @@ public sealed partial class BridgeTests
 	}
 
 	[Test]
-	public async Task AddGeneratedContainer_TwoContainers_KeepSeparateScopeAlignment()
+	public async Task AddAwaitenContainer_TwoContainers_KeepSeparateScopeAlignment()
 	{
 		ServiceCollection services = new();
-		services.AddGeneratedContainer<BridgeContainer.Root>();
-		services.AddGeneratedContainer<SecondContainer.Root>();
+		services.AddAwaitenContainer<BridgeContainer.Root>();
+		services.AddAwaitenContainer<SecondContainer.Root>();
 		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
 		using IServiceScope scope = provider.CreateScope();
 

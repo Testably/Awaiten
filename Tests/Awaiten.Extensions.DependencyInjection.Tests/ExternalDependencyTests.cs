@@ -66,7 +66,7 @@ public sealed partial class ExternalDependencyTests
 	{
 		ServiceCollection services = new();
 		services.AddSingleton<IClock>(new FixedClock());
-		services.AddGeneratedContainer<ExternalContainer.Root>();
+		services.AddAwaitenContainer<ExternalContainer.Root>();
 		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
 
 		TimeReporter reporter = provider.GetRequiredService<TimeReporter>();
@@ -79,7 +79,7 @@ public sealed partial class ExternalDependencyTests
 	{
 		ServiceCollection services = new();
 		services.AddSingleton<IClock>(new FixedClock());
-		services.AddGeneratedContainer<ImportingContainer.Root>();
+		services.AddAwaitenContainer<ImportingContainer.Root>();
 		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
 
 		ImplicitReporter reporter = provider.GetRequiredService<ImplicitReporter>();
@@ -91,7 +91,7 @@ public sealed partial class ExternalDependencyTests
 	public async Task MissingExternalRegistration_ThrowsWhenResolved()
 	{
 		ServiceCollection services = new();
-		services.AddGeneratedContainer<ExternalContainer.Root>();
+		services.AddAwaitenContainer<ExternalContainer.Root>();
 		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
 
 		await That(() => provider.GetRequiredService<TimeReporter>()).Throws<InvalidOperationException>();
@@ -192,7 +192,7 @@ public sealed partial class ExternalDependencyTests
 	{
 		ServiceCollection services = new();
 		services.AddScoped<IClock>(_ => new FixedClock());
-		services.AddGeneratedContainer<ScopedExternalContainer.Root>();
+		services.AddAwaitenContainer<ScopedExternalContainer.Root>();
 		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
 
 		using IServiceScope scope1 = provider.CreateScope();
@@ -231,7 +231,7 @@ public sealed partial class ExternalDependencyTests
 	{
 		ServiceCollection services = new();
 		services.AddScoped<IClock>(_ => new FixedClock());
-		services.AddGeneratedContainer<OwnedExternalContainer.Root>();
+		services.AddAwaitenContainer<OwnedExternalContainer.Root>();
 		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
 
 		using IServiceScope scope = provider.CreateScope();
@@ -263,7 +263,7 @@ public sealed partial class ExternalDependencyTests
 		ServiceCollection services = new();
 		services.AddKeyedSingleton<IClock>("local", new FixedClock());
 		services.AddKeyedSingleton<IClock>("utc", utc);
-		services.AddGeneratedContainer<KeyedExternalContainer.Root>();
+		services.AddAwaitenContainer<KeyedExternalContainer.Root>();
 		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
 
 		KeyedReporter reporter = provider.GetRequiredService<KeyedReporter>();

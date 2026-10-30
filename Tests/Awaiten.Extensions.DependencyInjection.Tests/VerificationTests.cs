@@ -131,7 +131,7 @@ public sealed partial class VerificationTests
 	{
 		ServiceCollection services = new();
 		services.AddSingleton<ExternalDependencyTests.IClock>(new ExternalDependencyTests.FixedClock());
-		services.AddGeneratedContainer<ExternalDependencyTests.ExternalContainer.Root>();
+		services.AddAwaitenContainer<ExternalDependencyTests.ExternalContainer.Root>();
 		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
 
 		await That(() => provider.VerifyAwaitenContainers()).DoesNotThrow();
@@ -141,7 +141,7 @@ public sealed partial class VerificationTests
 	public async Task VerifyAwaitenContainers_ThrowsWhenExternalDependencyIsMissing()
 	{
 		ServiceCollection services = new();
-		services.AddGeneratedContainer<ExternalDependencyTests.ExternalContainer.Root>();
+		services.AddAwaitenContainer<ExternalDependencyTests.ExternalContainer.Root>();
 		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
 
 		await That(() => provider.VerifyAwaitenContainers()).Throws<InvalidOperationException>()
@@ -155,7 +155,7 @@ public sealed partial class VerificationTests
 		// provider and must not report it missing just because it cannot be resolved from the root itself.
 		ServiceCollection services = new();
 		services.AddScoped<ExternalDependencyTests.IClock>(_ => new ExternalDependencyTests.FixedClock());
-		services.AddGeneratedContainer<ExternalDependencyTests.ScopedExternalContainer.Root>();
+		services.AddAwaitenContainer<ExternalDependencyTests.ScopedExternalContainer.Root>();
 		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
 
 		await That(() => provider.VerifyAwaitenContainers()).DoesNotThrow();
@@ -168,7 +168,7 @@ public sealed partial class VerificationTests
 		// keyed surface. An unkeyed IsService check would wrongly report the keyed registration missing.
 		ServiceCollection services = new();
 		services.AddKeyedSingleton<ExternalDependencyTests.IClock>("utc", new ExternalDependencyTests.FixedClock());
-		services.AddGeneratedContainer<ExternalDependencyTests.KeyedExternalContainer.Root>();
+		services.AddAwaitenContainer<ExternalDependencyTests.KeyedExternalContainer.Root>();
 		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
 
 		await That(() => provider.VerifyAwaitenContainers()).DoesNotThrow();
@@ -182,7 +182,7 @@ public sealed partial class VerificationTests
 		ServiceCollection services = new();
 		services.AddSingleton<ExternalDependencyTests.IClock>(new ExternalDependencyTests.FixedClock());
 		services.AddKeyedSingleton<ExternalDependencyTests.IClock>("local", new ExternalDependencyTests.FixedClock());
-		services.AddGeneratedContainer<ExternalDependencyTests.KeyedExternalContainer.Root>();
+		services.AddAwaitenContainer<ExternalDependencyTests.KeyedExternalContainer.Root>();
 		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
 
 		await That(() => provider.VerifyAwaitenContainers()).Throws<InvalidOperationException>()
