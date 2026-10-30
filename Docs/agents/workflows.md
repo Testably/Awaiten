@@ -53,15 +53,16 @@ Always run in Release and compare before and after on the same machine.
 
 ## Build pipeline (Fallout)
 
-`build.ps1`, `build.sh` and `build.cmd` build and run `Pipeline/Build.csproj` (Fallout 10). `./build.ps1 --help` lists the targets. Running without a target executes the defaults `ApiChecks`, `Benchmarks` and `CodeAnalysis`, so always name a target. `--configuration` defaults to Debug locally and Release on CI.
+`build.ps1`, `build.sh` and `build.cmd` build and run `Pipeline/Build.csproj` (Fallout 10). `./build.ps1 --help` lists the targets. Running without a target executes the defaults `ApiChecks`, `DocsTests`, `Benchmarks` and `CodeAnalysis`, so always name a target. `--configuration` defaults to Debug locally and Release on CI.
 
 | Target | What it does |
 |---|---|
 | `Compile` | Clean `Artifacts/` and `TestResults/`, restore, compute the version with GitVersion and build the solution. |
-| `UnitTests` | `dotnet test` for `Awaiten.Tests`, `Awaiten.Extensions.DependencyInjection.Tests`, `Awaiten.SourceGenerators.Tests`, `Awaiten.ExampleTests` and `Awaiten.Docs.Tests` per framework (net48 only on Windows), with `<project>_<framework>.trx` and `.cobertura.xml` in `TestResults/`, then the explicit `Slow` tests of the projects in `ProjectsWithSlowTests` (`Awaiten.Docs.Tests`) in a separate leg (`<project>_<framework>_Slow`). |
+| `UnitTests` | `dotnet test` for `Awaiten.Tests`, `Awaiten.Extensions.DependencyInjection.Tests`, `Awaiten.SourceGenerators.Tests` and `Awaiten.ExampleTests` per framework (net48 only on Windows), with `<project>_<framework>.trx` and `.cobertura.xml` in `TestResults/`, then the explicit `Slow` tests of the projects in `ProjectsWithSlowTests` in a separate leg (`<project>_<framework>_Slow`). |
 | `CodeCoverage` | `UnitTests`, then ReportGenerator to the generic coverage report of SonarQube. |
 | `CodeAnalysis` | SonarCloud scan around `Compile` and `CodeCoverage` (needs `SONAR_TOKEN`). |
 | `ApiChecks` | Runs `Awaiten.Api.Tests`. |
+| `DocsTests` | Runs `Awaiten.Docs.Tests` like `UnitTests`, including its `Slow` leg. The docs do not depend on the platform, so CI runs them once, next to `ApiChecks`, instead of on every platform. |
 | `Pack` | `UpdateReadme` and `Compile`, then moves the `Awaiten` and `Awaiten.Extensions.DependencyInjection` packages to `Artifacts/Packages`. |
 | `Benchmarks` | `BenchmarkDotNet` (filter via `--benchmark-filter`) and `BenchmarkResult` (logs the reports and, on a PR build, records the PR number for the comment). |
 | `BenchmarkComment` | Downloads the `Benchmarks-*` artifacts and posts or updates the PR comment, with a baseline from recent `main` runs. |
@@ -70,7 +71,7 @@ Always run in Release and compare before and after on the same machine.
 
 ## CI workflows (`.github/workflows`)
 
-- `ci.yml` (pull requests to `main`): unit tests via `CodeCoverage` on Ubuntu, Windows and macOS, `ApiChecks`, the three benchmark classes, `AotSample` (Windows), `WebSample`, SonarCloud (not for Dependabot or forks) and published test results.
+- `ci.yml` (pull requests to `main`): unit tests via `CodeCoverage` on Ubuntu, Windows and macOS, `ApiChecks` and `DocsTests`, the three benchmark classes, `AotSample` (Windows), `WebSample`, SonarCloud (not for Dependabot or forks) and published test results.
 - `ci-analysis.yml` (after `CI` completes): `BenchmarkComment` on the PR.
 - `build.yml` (push to `main`, `v*` tags, manual): the same jobs plus `Pack`, `PublishBenchmarkReport` on `main`, and on a tag `Push` to nuget.org (gated on the test, sample, analysis and pack jobs), a GitHub release for non-prerelease tags and release comments on the linked issues and PRs. Actions are pinned to commit SHAs here.
 - `notify-docs-site.yml`: triggers the docs site rebuild.

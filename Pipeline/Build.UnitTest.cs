@@ -27,7 +27,6 @@ partial class Build
 		Solution.Tests.Awaiten_Extensions_DependencyInjection_Tests,
 		Solution.Tests.Awaiten_SourceGenerators_Tests,
 		Solution.Tests.Awaiten_ExampleTests,
-		Solution.Tests.Awaiten_Docs_Tests,
 	];
 
 	/// <summary>
@@ -40,43 +39,52 @@ partial class Build
 		Solution.Tests.Awaiten_Docs_Tests,
 	];
 
-	/// <remarks>
-	///     <c>global.json</c> runs <c>dotnet test</c> on the Microsoft.Testing.Platform, which takes the project
-	///     through <c>--project</c> and passes the TRX and coverage options on to the TUnit test application. The slow
-	///     tests of a project run in a separate leg after its regular tests.
-	/// </remarks>
 	Target DotNetUnitTests => _ => _
 		.Unlisted()
 		.DependsOn(Compile)
 		.Executes(() =>
 		{
-			string[] excludedFrameworks =
-				EnvironmentInfo.IsWin
-					? []
-					: ["net48",];
-			(Project Project, string Framework)[] testRuns = UnitTestProjects
-				.SelectMany(project => (project.GetTargetFrameworks() ?? [])
-					.Except(excludedFrameworks)
-					.Select(framework => (project, framework)))
-				.ToArray();
-			DotNetTest(s => s
-					.SetConfiguration(Configuration)
-					.SetProcessEnvironmentVariable("DOTNET_CLI_UI_LANGUAGE", "en-US")
-					.EnableNoBuild()
-					.SetResultsDirectory(TestResultsDirectory)
-					.CombineWith(
-						testRuns
-							.Select(testRun => (testRun.Project, testRun.Framework, IsSlow: false))
-							.Concat(testRuns
-								.Where(testRun => ProjectsWithSlowTests.Contains(testRun.Project))
-								.Select(testRun => (testRun.Project, testRun.Framework, IsSlow: true))),
-						(settings, testRun) => settings
-							.SetFramework(testRun.Framework)
-							.SetProcessAdditionalArguments(TestArguments(testRun.Project, testRun.Framework,
-								testRun.IsSlow))
-					), completeOnFailure: true
-			);
+			RunUnitTests(UnitTestProjects);
 		});
+
+	/// <summary>
+	///     Runs the tests of the <paramref name="projects" /> for each of their target frameworks (net48 only on
+	///     Windows), and then their slow tests.
+	/// </summary>
+	/// <remarks>
+	///     <c>global.json</c> runs <c>dotnet test</c> on the Microsoft.Testing.Platform, which takes the project
+	///     through <c>--project</c> and passes the TRX and coverage options on to the TUnit test application. The slow
+	///     tests of a project run in a separate leg after its regular tests.
+	/// </remarks>
+	void RunUnitTests(Project[] projects)
+	{
+		string[] excludedFrameworks =
+			EnvironmentInfo.IsWin
+				? []
+				: ["net48",];
+		(Project Project, string Framework)[] testRuns = projects
+			.SelectMany(project => (project.GetTargetFrameworks() ?? [])
+				.Except(excludedFrameworks)
+				.Select(framework => (project, framework)))
+			.ToArray();
+		DotNetTest(s => s
+				.SetConfiguration(Configuration)
+				.SetProcessEnvironmentVariable("DOTNET_CLI_UI_LANGUAGE", "en-US")
+				.EnableNoBuild()
+				.SetResultsDirectory(TestResultsDirectory)
+				.CombineWith(
+					testRuns
+						.Select(testRun => (testRun.Project, testRun.Framework, IsSlow: false))
+						.Concat(testRuns
+							.Where(testRun => ProjectsWithSlowTests.Contains(testRun.Project))
+							.Select(testRun => (testRun.Project, testRun.Framework, IsSlow: true))),
+					(settings, testRun) => settings
+						.SetFramework(testRun.Framework)
+						.SetProcessAdditionalArguments(TestArguments(testRun.Project, testRun.Framework,
+							testRun.IsSlow))
+				), completeOnFailure: true
+		);
+	}
 
 	static string[] TestArguments(Project project, string framework, bool isSlow)
 	{
