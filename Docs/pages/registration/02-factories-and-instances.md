@@ -17,7 +17,7 @@ public static partial class CoffeeShop
 }
 ```
 
-The method can be static or an instance method on the container. A factory that returns `Task<T>` makes the service async. See [Async initialization](../async-initialization).
+The method is `static`, like the container class that declares it. A factory that returns `Task<T>` makes the service async. See [Async initialization](../async-initialization).
 
 *Note: a `Factory` cannot name an overloaded method ([AWT112](../diagnostics#awt112)), and a registration cannot set both `Factory` and `Instance` ([AWT110](../diagnostics#awt110)).*
 

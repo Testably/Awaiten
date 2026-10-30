@@ -14,6 +14,7 @@
 	<Folder Name="/Tests/">
 		<File Path="Tests/Directory.Build.props" />
 		<Project Path="Tests/Awaiten.Api.Tests/Awaiten.Api.Tests.csproj" />
+		<Project Path="Tests/Awaiten.Docs.Tests/Awaiten.Docs.Tests.csproj" />
 		<Project Path="Tests/Awaiten.ExampleTests/Awaiten.ExampleTests.csproj" />
 		<Project Path="Tests/Awaiten.Extensions.DependencyInjection.Tests/Awaiten.Extensions.DependencyInjection.Tests.csproj" />
 		<Project Path="Tests/Awaiten.SourceGenerators.Tests/Awaiten.SourceGenerators.Tests.csproj" />

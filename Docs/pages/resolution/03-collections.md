@@ -20,7 +20,7 @@ public sealed class SyrupBar(IEnumerable<ISyrup> syrups);
 
 Any of these constructor parameter types works, and each is resolvable by type as well.
 
-```csharp
+```csharp no-compile
 IEnumerable<ISyrup>
 ISyrup[]
 IReadOnlyList<ISyrup>

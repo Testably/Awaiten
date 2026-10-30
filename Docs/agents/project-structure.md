@@ -32,6 +32,7 @@ Containers and modules must be `static partial` classes; a non-static one is a d
 - `Tests/Awaiten.SourceGenerators.Tests`: generator output and diagnostics over in-memory compilations (`TestHelpers/`), including cross-assembly cases via `RunWithReferencedAssembly` and `RunWithGeneratedReferencedAssembly`.
 - `Tests/Awaiten.Extensions.DependencyInjection.Tests`: bridge behaviour, disposal, keyed services and MS.DI conformance.
 - `Tests/Awaiten.ExampleTests`: the coffee-shop examples from the docs. The generator's `launchSettings.json` debugs against this project.
+- `Tests/Awaiten.Docs.Tests` (net10.0): compiles every `csharp` code block of `Docs/pages` with the generator and analyzers, against the placeholder types in `Scaffold/`.
 - `Tests/Awaiten.Api.Tests`: public API snapshots of both packages for each target framework.
 - `Samples/Awaiten.AotSample` and `Samples/Awaiten.WebSample`: native-AOT and ASP.NET Core proofs of the bridge.
 

@@ -86,7 +86,7 @@ A single registration picks its lifetime by its attribute: `[Singleton]`, `[Scop
 
 A singleton lives forever, so whatever it holds lives that long too. Holding a transient is fine. The transient is built once, together with the singleton, and simply shares its lifetime. Holding a scoped dependency is not fine, because that would trap a per-order object inside a shop-wide one. Awaiten makes that a build error.
 
-```csharp
+```csharp expect=AWT105
 public sealed class EspressoMachine(Order order);   // singleton needs a scoped Order
 
 [Container]

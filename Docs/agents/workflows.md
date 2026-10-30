@@ -13,6 +13,7 @@ Commands run from the repository root. On Linux and macOS use `./build.sh` inste
   - `Tests/Awaiten.SourceGenerators.Tests` (net10.0 only): runs the generator over in-memory sources with `TestHelpers/Generator.cs` and analyzers with `TestHelpers/Analyzer.cs`; one `DiagnosticTests.AwtNNN*.cs` file per diagnostic.
   - `Tests/Awaiten.Extensions.DependencyInjection.Tests`: the MS.DI bridge, including MS.DI conformance and host initialization.
   - `Tests/Awaiten.ExampleTests`: the documented examples, an ASP.NET Core example (not on net48) and the architecture test from the design principles page.
+  - `Tests/Awaiten.Docs.Tests` (net10.0 only): compiles the code blocks of `Docs/pages`, see [Documentation](#documentation).
   - `Tests/Awaiten.Api.Tests` (net10.0 only): public API snapshots.
   - `Tests/Awaiten.Tests.Support`: a plain library, not a test project, that gives `Awaiten.Tests` a referenced assembly for cross-assembly `[Scan]` and `[Module]` scenarios.
 - Tests assert with aweXpect (`await That(...)`), put the reason in `.Because(...)` instead of a comment and group related cases in a (often nested or partial) class per feature. The test rules are in [design-goals.md](design-goals.md#tests).
@@ -43,19 +44,25 @@ Always run in Release and compare before and after on the same machine.
 - `Docs/pages/11-benchmarks.mdx` renders `data.js`/`limited-data.js` that `PublishBenchmarkReport` commits to the `benchmarks` branch.
 - `Docs/pages/09-diagnostics.md` has one `### AWTnnn` section per diagnostic; other pages link to it as `./diagnostics#awtnnn`.
 - The `README.md` is packed into the NuGet packages; `UpdateReadme` rewrites badges for a release.
-- Code fences in the docs are not compiled. Keep examples that matter covered by `Tests/Awaiten.ExampleTests`.
+- Code fences in the docs are compiled by `Tests/Awaiten.Docs.Tests`, whose `CodeBlocks_ShouldCompile` test (one per page, in the explicit `Slow` category) runs the generator and the analyzers over every ```` ```csharp ```` block of a page: `dotnet test --project Tests/Awaiten.Docs.Tests -f net10.0 --treenode-filter "/*/*/*/*[Category=Slow]"`. Keep examples that matter at run time covered by `Tests/Awaiten.ExampleTests` too.
+  - All blocks of a page compile together in the namespace `Snippets`. A type that only one block declares is shared by the page; a type that several blocks declare (variants of `CoffeeShop`, say) stays local to each block. A block that declares no variant of its own continues the block before it, so its statements see that block's container. Statements become the body of a method, and registration attributes shown without a class are checked on a placeholder class.
+  - `Scaffold/Scaffold.cs` holds the global usings, the coffee-shop types the pages take for granted and a prelude of variables such as `shop` (an `IAwaitenRoot`), `cancellationToken` and `ct`. A page-specific addition goes in `Scaffold/<page>.cs`, for example a container that a page uses without showing it. `Tests/Awaiten.ExampleTests/CoffeeShopDomain.cs` is linked in, so its namespace `CoffeeShop` hides a page's `CoffeeShop.Root` when the page declares no container the block can see.
+  - ```` ```csharp no-compile ```` excludes a block. Keep it for fragments that cannot compile, like a list of parameter types, or a scenario that needs a second assembly; anything else should compile.
+  - ```` ```csharp expect=AWT101 ```` (or `expect=AWT170,AWT101`) marks a block that shows a mistake: it compiles on its own with the page's unmarked blocks and must report exactly the listed ids, compiler errors included, and nothing else. Its types are never shared with the page.
+  - An error points at `Docs/pages/<page>.md(line,column)`. Docusaurus ignores the extra words after the language, so the markers do not show on the site.
 
 ## Build pipeline (Fallout)
 
-`build.ps1`, `build.sh` and `build.cmd` build and run `Pipeline/Build.csproj` (Fallout 10). `./build.ps1 --help` lists the targets. Running without a target executes the defaults `ApiChecks`, `Benchmarks` and `CodeAnalysis`, so always name a target. `--configuration` defaults to Debug locally and Release on CI.
+`build.ps1`, `build.sh` and `build.cmd` build and run `Pipeline/Build.csproj` (Fallout 10). `./build.ps1 --help` lists the targets. Running without a target executes the defaults `ApiChecks`, `DocsTests`, `Benchmarks` and `CodeAnalysis`, so always name a target. `--configuration` defaults to Debug locally and Release on CI.
 
 | Target | What it does |
 |---|---|
 | `Compile` | Clean `Artifacts/` and `TestResults/`, restore, compute the version with GitVersion and build the solution. |
-| `UnitTests` | `dotnet test` for `Awaiten.Tests`, `Awaiten.Extensions.DependencyInjection.Tests`, `Awaiten.SourceGenerators.Tests` and `Awaiten.ExampleTests` per framework (net48 only on Windows), with `<project>_<framework>.trx` and `.cobertura.xml` in `TestResults/`. |
+| `UnitTests` | `dotnet test` for `Awaiten.Tests`, `Awaiten.Extensions.DependencyInjection.Tests`, `Awaiten.SourceGenerators.Tests` and `Awaiten.ExampleTests` per framework (net48 only on Windows), with `<project>_<framework>.trx` and `.cobertura.xml` in `TestResults/`, then the explicit `Slow` tests of the projects in `ProjectsWithSlowTests` in a separate leg (`<project>_<framework>_Slow`). |
 | `CodeCoverage` | `UnitTests`, then ReportGenerator to the generic coverage report of SonarQube. |
 | `CodeAnalysis` | SonarCloud scan around `Compile` and `CodeCoverage` (needs `SONAR_TOKEN`). |
 | `ApiChecks` | Runs `Awaiten.Api.Tests`. |
+| `DocsTests` | Runs `Awaiten.Docs.Tests` like `UnitTests`, including its `Slow` leg. The docs do not depend on the platform, so CI runs them once, next to `ApiChecks`, instead of on every platform. |
 | `Pack` | `UpdateReadme` and `Compile`, then moves the `Awaiten` and `Awaiten.Extensions.DependencyInjection` packages to `Artifacts/Packages`. |
 | `Benchmarks` | `BenchmarkDotNet` (filter via `--benchmark-filter`) and `BenchmarkResult` (logs the reports and, on a PR build, records the PR number for the comment). |
 | `BenchmarkComment` | Downloads the `Benchmarks-*` artifacts and posts or updates the PR comment, with a baseline from recent `main` runs. |
@@ -64,7 +71,7 @@ Always run in Release and compare before and after on the same machine.
 
 ## CI workflows (`.github/workflows`)
 
-- `ci.yml` (pull requests to `main`): unit tests via `CodeCoverage` on Ubuntu, Windows and macOS, `ApiChecks`, the three benchmark classes, `AotSample` (Windows), `WebSample`, SonarCloud (not for Dependabot or forks) and published test results.
+- `ci.yml` (pull requests to `main`): unit tests via `CodeCoverage` on Ubuntu, Windows and macOS, `ApiChecks` and `DocsTests`, the three benchmark classes, `AotSample` (Windows), `WebSample`, SonarCloud (not for Dependabot or forks) and published test results.
 - `ci-analysis.yml` (after `CI` completes): `BenchmarkComment` on the PR.
 - `build.yml` (push to `main`, `v*` tags, manual): the same jobs plus `Pack`, `PublishBenchmarkReport` on `main`, and on a tag `Push` to nuget.org (gated on the test, sample, analysis and pack jobs), a GitHub release for non-prerelease tags and release comments on the linked issues and PRs. Actions are pinned to commit SHAs here.
 - `notify-docs-site.yml`: triggers the docs site rebuild.

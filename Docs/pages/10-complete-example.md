@@ -20,6 +20,7 @@ public sealed class EspressoMachine : IAsyncInitializable
 }
 
 public sealed class Grinder;
+public sealed class Shot;
 public sealed class MenuBoard { public static MenuBoard Load() => new(); }
 
 // One order at a time.

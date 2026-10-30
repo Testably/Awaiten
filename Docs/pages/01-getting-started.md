@@ -85,7 +85,7 @@ Inside one scope you get the same `Order` every time. A different scope gets a d
 
 Forget to register a dependency and you do not find out at runtime. You find out when you build.
 
-```csharp
+```csharp expect=AWT101
 public sealed class Cup(Grinder grinder);
 
 [Container]
