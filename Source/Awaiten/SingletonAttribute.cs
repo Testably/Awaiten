@@ -103,8 +103,9 @@ public sealed class SingletonAttribute : Attribute
 	/// <summary>
 	///     Suppresses the container's built-in disposal of this instance; releasing it becomes your
 	///     responsibility, typically through an <see cref="OnRelease" /> hook. Defaults to
-	///     <see langword="false" />. Not reported to hosts as <see cref="AwaitenRegistration.ExternallyOwned" />, which
-	///     marks only a pre-built <see cref="Instance" />.
+	///     <see langword="false" />. Reported to hosts as
+	///     <see cref="AwaitenRegistration.DisposalSuppressed" /> when the instance may be disposable, which a
+	///     projection into Microsoft.Extensions.DependencyInjection rejects (AWT214).
 	/// </summary>
 	public bool SuppressDisposal { get; set; }
 }
@@ -189,8 +190,9 @@ public sealed class SingletonAttribute<TImplementation> : Attribute
 	///     (by constructor or <see cref="Factory" />), but does not call its <c>Dispose</c>/<c>DisposeAsync</c>
 	///     on teardown; releasing it becomes your responsibility - typically through an <see cref="OnRelease" />
 	///     hook (for example, returning it to a pool), or because its lifetime is owned outside the container.
-	///     Defaults to <see langword="false" />, where the container disposes what it builds. Not reported to hosts
-	///     as <see cref="AwaitenRegistration.ExternallyOwned" />, which marks only a pre-built <see cref="Instance" />.
+	///     Defaults to <see langword="false" />, where the container disposes what it builds. Reported to hosts as
+	///     <see cref="AwaitenRegistration.DisposalSuppressed" /> when the instance may be disposable, which a
+	///     projection into Microsoft.Extensions.DependencyInjection rejects (AWT214).
 	/// </summary>
 	public bool SuppressDisposal { get; set; }
 }
@@ -268,8 +270,9 @@ public sealed class SingletonAttribute<TImplementation, TService> : Attribute
 	///     (by constructor or <see cref="Factory" />), but does not call its <c>Dispose</c>/<c>DisposeAsync</c>
 	///     on teardown; releasing it becomes your responsibility - typically through an <see cref="OnRelease" />
 	///     hook (for example, returning it to a pool), or because its lifetime is owned outside the container.
-	///     Defaults to <see langword="false" />, where the container disposes what it builds. Not reported to hosts
-	///     as <see cref="AwaitenRegistration.ExternallyOwned" />, which marks only a pre-built <see cref="Instance" />.
+	///     Defaults to <see langword="false" />, where the container disposes what it builds. Reported to hosts as
+	///     <see cref="AwaitenRegistration.DisposalSuppressed" /> when the instance may be disposable, which a
+	///     projection into Microsoft.Extensions.DependencyInjection rejects (AWT214).
 	/// </summary>
 	public bool SuppressDisposal { get; set; }
 }

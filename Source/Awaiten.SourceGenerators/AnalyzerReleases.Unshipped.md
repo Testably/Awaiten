@@ -114,5 +114,6 @@
  AWT211  | Awaiten   | Error    | A decorator sets both Keys and AllKeys
  AWT212  | Awaiten   | Error    | A keyed composite's Key matches no registration of the composed service
  AWT213  | Awaiten   | Error    | A Type-keyed dispatch dictionary is not Func<TBase> over a non-generic interface, carries [FromKey], or its closings are not of one single-parameter generic
+ AWT214  | Awaiten   | Error    | A container that suppresses the disposal of a possibly disposable service is projected into Microsoft.Extensions.DependencyInjection, which would dispose it anyway
 
 ; AWT137 (an injected property marked [Arg]) is retired: [Arg] targets only parameters, so the compiler rejects it on a property. The id stays reserved and is never reused.

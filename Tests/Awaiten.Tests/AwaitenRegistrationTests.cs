@@ -1,13 +1,16 @@
+using System.Linq;
+using System.Threading;
+
 namespace Awaiten.Tests;
 
 /// <summary>
 ///     Value semantics of <see cref="AwaitenRegistration" /> and its two constructors: the synchronous form the
 ///     generator emits for an ordinary service, and the asynchronous form carrying the closed <c>Task&lt;T&gt;</c>
 ///     type and converter the bridge projects an async-tainted service under. Equality is by the advertised
-///     identity (service type, lifetime, async-ness, ownership, key); the derived async projection members take no
-///     part in it.
+///     identity (service type, lifetime, async-ness, ownership, suppressed disposal, key); the derived async
+///     projection members take no part in it.
 /// </summary>
-public sealed class AwaitenRegistrationTests
+public sealed partial class AwaitenRegistrationTests
 {
 	private interface IFoo;
 
@@ -27,6 +30,16 @@ public sealed class AwaitenRegistrationTests
 		await That(registration.Key).IsEqualTo("k");
 		await That(registration.AsyncTaskType).IsNull();
 		await That(registration.AsyncTaskConverter).IsNull();
+	}
+
+	[Test]
+	public async Task FullSyncConstructor_ExposesDisposalSuppressed()
+	{
+		AwaitenRegistration registration = new(typeof(IFoo), Lifetime.Transient, externallyOwned: false, key: null, disposalSuppressed: true);
+
+		await That(registration.DisposalSuppressed).IsTrue();
+		await That(registration.ExternallyOwned).IsFalse();
+		await That(registration.RequiresAsync).IsFalse();
 	}
 
 	[Test]
@@ -118,6 +131,15 @@ public sealed class AwaitenRegistrationTests
 	}
 
 	[Test]
+	public async Task Equals_FalseForDifferingDisposalSuppression()
+	{
+		AwaitenRegistration suppressed = new(typeof(IFoo), Lifetime.Singleton, externallyOwned: false, key: null, disposalSuppressed: true);
+		AwaitenRegistration disposed = new(typeof(IFoo), Lifetime.Singleton);
+
+		await That(suppressed.Equals(disposed)).IsFalse();
+	}
+
+	[Test]
 	public async Task Equals_FalseForDifferingKey()
 	{
 		AwaitenRegistration a = new(typeof(IFoo), Lifetime.Singleton, key: "a");
@@ -132,5 +154,87 @@ public sealed class AwaitenRegistrationTests
 		AwaitenRegistration registration = new(typeof(IFoo), Lifetime.Singleton);
 
 		await That(registration.Equals("not a registration")).IsFalse();
+	}
+
+	/// <summary>
+	///     What a generated container advertises as <see cref="AwaitenRegistration.DisposalSuppressed" />: a
+	///     synchronously resolvable, possibly disposable service built with <c>SuppressDisposal = true</c>, and nothing else.
+	/// </summary>
+	public sealed class Advertised
+	{
+		[Test]
+		[Arguments(typeof(SuppressedDisposable), true)]
+		[Arguments(typeof(IHidden), true)]
+		[Arguments(typeof(SuppressedPlain), false)]
+		[Arguments(typeof(Disposable), false)]
+		[Arguments(typeof(SuppressedAsync), false)]
+		public async Task DisposalSuppressed_IsSetOnlyForASyncSuppressedPossiblyDisposableService(Type serviceType, bool expected)
+		{
+			using AdvertisingContainer.Root root = new();
+
+			AwaitenRegistration registration = ((IAwaitenRoot)root).Registrations.Single(r => r.ServiceType == serviceType);
+
+			await That(registration.DisposalSuppressed).IsEqualTo(expected)
+				.Because("only a synchronously projected instance that may be disposable needs the host to keep its hands off");
+		}
+
+		[Test]
+		public async Task DisposalSuppressed_IsSetOnAKeyedRegistrationAndKeepsTheKey()
+		{
+			using AdvertisingContainer.Root root = new();
+
+			AwaitenRegistration registration = ((IAwaitenRoot)root).Registrations.Single(r => Equals(r.Key, "pool"));
+
+			await That(registration.DisposalSuppressed).IsTrue();
+			await That(registration.ServiceType).IsEqualTo(typeof(KeyedDisposable));
+		}
+	}
+
+	public sealed class SuppressedDisposable : IDisposable
+	{
+		public void Dispose()
+		{
+		}
+	}
+
+	public interface IHidden;
+
+	private sealed class Hidden : IHidden;
+
+	public sealed class SuppressedPlain;
+
+	public sealed class Disposable : IDisposable
+	{
+		public void Dispose()
+		{
+		}
+	}
+
+	public sealed class SuppressedAsync : IAsyncInitializable, IDisposable
+	{
+		public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+		public void Dispose()
+		{
+		}
+	}
+
+	public sealed class KeyedDisposable : IDisposable
+	{
+		public void Dispose()
+		{
+		}
+	}
+
+	[Container]
+	[Singleton<SuppressedDisposable>(SuppressDisposal = true)]
+	[Singleton<IHidden>(Factory = nameof(MakeHidden), SuppressDisposal = true)]
+	[Singleton<SuppressedPlain>(SuppressDisposal = true)]
+	[Singleton<Disposable>]
+	[Singleton<SuppressedAsync>(SuppressDisposal = true)]
+	[Transient<KeyedDisposable>(SuppressDisposal = true, Key = "pool")]
+	public static partial class AdvertisingContainer
+	{
+		private static IHidden MakeHidden() => new Hidden();
 	}
 }

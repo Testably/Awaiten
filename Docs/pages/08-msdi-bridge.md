@@ -66,6 +66,8 @@ On both paths above, Awaiten disposes everything it built exactly once, with the
 
 MS.DI additionally calls `Dispose` on every instance a projected registration hands out, once per service type it was resolved as, before the Awaiten scope or root that built it. That is how MS.DI treats any factory registration, for example `AddSingleton<IWriter>(sp => sp.GetRequiredService<Ledger>())`, and it relies on `Dispose` being idempotent, as the `IDisposable` contract requires. A singleton `Ledger` resolved as both `IReader` and `IWriter` therefore sees three `Dispose` calls: one per service type from MS.DI, then one from Awaiten.
 
+That is also why a service built with `SuppressDisposal = true` cannot be projected when it is or may be disposable: MS.DI would dispose it no matter what the container promised. Both paths above throw at startup instead, naming the service, and [AWT214](./diagnostics#awt214) reports the projection at build time. Remove `SuppressDisposal`, register a pre-built `Instance` you own, or let Awaiten own everything as described next. A service that needs asynchronous initialization is unaffected, because MS.DI only receives its `Task<T>`.
+
 ## Or let Awaiten own everything
 
 `AwaitenServiceProvider` adapts an Awaiten scope directly to `IServiceProvider`, `IKeyedServiceProvider`, and `IServiceScopeFactory`. Awaiten is then the single owner of construction and disposal. `GetService` maps to `TryResolve`, so a missing service returns `null`, and `GetKeyedService`/`GetRequiredKeyedService` reach a keyed registration by its key.

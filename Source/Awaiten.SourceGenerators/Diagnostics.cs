@@ -1685,4 +1685,20 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A container is projected into Microsoft.Extensions.DependencyInjection (<c>AddAwaitenContainer&lt;TRoot&gt;</c>
+	///     or <c>new AwaitenServiceProviderFactory&lt;TRoot&gt;</c>), but it builds a possibly disposable service with
+	///     <c>SuppressDisposal = true</c>. The projection registers that service through a factory, and MS.DI disposes
+	///     every disposable a factory returns, so the suppression cannot hold; the bridge throws at startup instead.
+	///     Reported by <see cref="AwaitenAnalyzer" /> at the projection site, only for a container declared in the same
+	///     compilation and a site that names its <c>Root</c> type; the startup throw remains the backstop elsewhere.
+	/// </summary>
+	public static readonly DiagnosticDescriptor SuppressedDisposalProjected = new(
+		"AWT214",
+		"A container with suppressed disposal is projected into Microsoft.Extensions.DependencyInjection",
+		"'{0}' is projected into Microsoft.Extensions.DependencyInjection, but its container suppresses the disposal of '{1}', which MS.DI would dispose anyway, so the projection throws at startup; remove SuppressDisposal, register a pre-built Instance you own, or resolve the service from the container directly (AwaitenServiceProvider)",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

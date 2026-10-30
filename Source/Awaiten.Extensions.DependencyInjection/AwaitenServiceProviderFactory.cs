@@ -46,7 +46,10 @@ public sealed class AwaitenServiceProviderFactory<TRoot> : IServiceProviderFacto
 
 	/// <inheritdoc />
 	/// <exception cref="ArgumentNullException"><paramref name="containerBuilder" /> is <see langword="null" />.</exception>
-	/// <exception cref="InvalidOperationException"><see cref="CreateBuilder" /> has not been called.</exception>
+	/// <exception cref="InvalidOperationException">
+	///     <see cref="CreateBuilder" /> has not been called, or the container suppresses the disposal of a projected,
+	///     possibly disposable service.
+	/// </exception>
 	public IServiceProvider CreateServiceProvider(TRoot containerBuilder)
 	{
 		if (containerBuilder is null)

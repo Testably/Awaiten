@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -43,10 +44,16 @@ public static class AwaitenServiceCollectionExtensions
 	///         dispose a scope or the provider while a resolved <c>Task&lt;T&gt;</c> is still in flight: MS.DI
 	///         disposes the captured <c>Task</c>, whose <c>Dispose</c> throws for an incomplete task.
 	///     </para>
+	///     <para>
+	///         A synchronously projected service that the container builds with <c>SuppressDisposal = true</c> and
+	///         that is or may be disposable cannot be projected: MS.DI would dispose it anyway. The projection then
+	///         throws before it registers anything (AWT214 reports it at build time where it can).
+	///     </para>
 	/// </remarks>
 	/// <typeparam name="TRoot">The generated Awaiten container root type.</typeparam>
 	/// <returns>A builder to configure the container's hosting further, for example its startup initialization.</returns>
 	/// <exception cref="ArgumentNullException"><paramref name="services" /> is <see langword="null" />.</exception>
+	/// <exception cref="InvalidOperationException">The container suppresses the disposal of a projected, possibly disposable service.</exception>
 	public static AwaitenContainerBuilder<TRoot> AddAwaitenContainer<TRoot>(this IServiceCollection services)
 		where TRoot : class, IAwaitenRoot, new()
 	{
@@ -76,6 +83,7 @@ public static class AwaitenServiceCollectionExtensions
 	/// <exception cref="ArgumentNullException">
 	///     <paramref name="services" /> or <paramref name="root" /> is <see langword="null" />.
 	/// </exception>
+	/// <exception cref="InvalidOperationException">The container suppresses the disposal of a projected, possibly disposable service.</exception>
 	public static AwaitenContainerBuilder<TRoot> AddAwaitenContainer<TRoot>(this IServiceCollection services, TRoot root)
 		where TRoot : class, IAwaitenRoot
 	{
@@ -100,6 +108,8 @@ public static class AwaitenServiceCollectionExtensions
 	internal static AwaitenContainerBuilder<TRoot> AddAwaitenContainer<TRoot>(IServiceCollection services, TRoot root, bool ownsRoot)
 		where TRoot : class, IAwaitenRoot
 	{
+		ThrowIfDisposalSuppressed<TRoot>(root.Registrations);
+
 		// Expose the root under its own type and the two container-facing interfaces so a host can reach it, e.g.
 		// to warm an AsyncSafety.SyncAfterInit container. Registered as a pre-built instance (a constant), which MS.DI
 		// never captures for disposal: the factory-registered owner disposes a root the bridge owns instead, at a capture
@@ -139,6 +149,28 @@ public static class AwaitenServiceCollectionExtensions
 	///     as a keyed MS.DI descriptor, so <c>[FromKeyedServices]</c> reaches it through the host's
 	///     <see cref="IKeyedServiceProvider" />; an unkeyed one is projected as an ordinary descriptor.
 	/// </summary>
+	// MS.DI disposes every disposable a factory descriptor returns and offers no opt-out, so a projected service whose
+	// disposal the container suppresses would be disposed anyway. Fail before anything is registered instead.
+	private static void ThrowIfDisposalSuppressed<TRoot>(IReadOnlyList<AwaitenRegistration> registrations)
+	{
+		List<string>? suppressed = null;
+		foreach (AwaitenRegistration registration in registrations)
+		{
+			if (registration.DisposalSuppressed)
+			{
+				(suppressed ??= new List<string>()).Add(registration.Key is null
+					? $"'{registration.ServiceType}'"
+					: $"'{registration.ServiceType}' (key '{registration.Key}')");
+			}
+		}
+
+		if (suppressed is not null)
+		{
+			throw new InvalidOperationException(
+				$"Awaiten: the container '{typeof(TRoot)}' cannot be projected into Microsoft.Extensions.DependencyInjection, because it suppresses the disposal of {string.Join(", ", suppressed)} (SuppressDisposal), and MS.DI disposes every disposable instance a projected registration hands out. Remove SuppressDisposal so the container's disposal applies, register a pre-built Instance you own, or resolve the service from the container directly through an AwaitenServiceProvider instead of projecting the container.");
+		}
+	}
+
 	private static void ProjectRegistration<TRoot>(IServiceCollection services, TRoot root, AwaitenRegistration registration, bool hasExternal)
 		where TRoot : class, IAwaitenRoot
 	{

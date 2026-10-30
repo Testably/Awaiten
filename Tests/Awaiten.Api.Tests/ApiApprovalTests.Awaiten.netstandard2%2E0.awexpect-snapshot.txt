@@ -30,9 +30,12 @@ namespace Awaiten
         [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
         public AwaitenRegistration(System.Type serviceType, Awaiten.Lifetime lifetime, bool externallyOwned = false, object? key = null) { }
         [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
+        public AwaitenRegistration(System.Type serviceType, Awaiten.Lifetime lifetime, bool externallyOwned, object? key, bool disposalSuppressed) { }
+        [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
         public System.Func<System.Threading.Tasks.Task<object>, object>? AsyncTaskConverter { get; }
         [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
         public System.Type? AsyncTaskType { get; }
+        public bool DisposalSuppressed { get; }
         public bool ExternallyOwned { get; }
         public object? Key { get; }
         public Awaiten.Lifetime Lifetime { get; }
