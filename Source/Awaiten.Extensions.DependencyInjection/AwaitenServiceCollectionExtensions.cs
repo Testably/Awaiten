@@ -18,22 +18,21 @@ public static class AwaitenServiceCollectionExtensions
 	/// </summary>
 	/// <remarks>
 	///     <para>
-	///         Awaiten owns construction, but the resolved top-level instances are handed back through factories,
-	///         so MS.DI owns their disposal and disposes each with the scope it was resolved from. Singletons
-	///         resolve from the container root. Scoped services, and transients resolved inside an MS.DI scope,
-	///         resolve from the Awaiten scope aligned to that MS.DI scope. A transient resolved from the root
-	///         provider resolves from the container root. An instance awaited through the <c>Task&lt;T&gt;</c>
-	///         projection is disposed by the bridge, since MS.DI captures only the <c>Task</c> wrapper. A pre-built
-	///         <c>Instance</c> member stays user-owned and is relayed without being captured for disposal.
+	///         Singletons resolve from the container root. Scoped services, and transients resolved inside an MS.DI
+	///         scope, resolve from the Awaiten scope aligned to that MS.DI scope. A transient resolved from the root
+	///         provider resolves from the container root. Awaiten disposes everything it built exactly once, nested
+	///         dependencies and instances awaited through the <c>Task&lt;T&gt;</c> projection included: the aligned
+	///         Awaiten scope with its MS.DI scope, and the container root with the root provider once the bridge
+	///         has used it. A pre-built <c>Instance</c> member stays user-owned and is relayed without being
+	///         captured for disposal.
 	///     </para>
 	///     <para>
-	///         The aligned Awaiten scope is not itself disposed by the bridge, so this projection does not dispose
-	///         instances Awaiten builds only as nested dependencies, and an implementation exposed under several
-	///         service types is disposed once per resolved service type. Teardown order follows MS.DI's capture
-	///         position, not Awaiten's creation order. To make the Awaiten container the single owner of disposal
-	///         end to end, make it the provider with <see cref="AwaitenServiceProvider" /> instead. Collection
-	///         resolution (<c>IEnumerable&lt;T&gt;</c>) is not projected; only the single-resolution winner of each
-	///         service type is bridged.
+	///         MS.DI additionally disposes every instance a projected factory hands out, once per service type it
+	///         was resolved as, exactly as it does for a factory relay such as
+	///         <c>AddSingleton&lt;IWriter&gt;(sp =&gt; sp.GetRequiredService&lt;Ledger&gt;())</c>. That relies on
+	///         <see cref="IDisposable.Dispose" /> being idempotent, and MS.DI disposes those instances before the
+	///         Awaiten scope or root that built them. Collection resolution (<c>IEnumerable&lt;T&gt;</c>) is not
+	///         projected; only the single-resolution winner of each service type is bridged.
 	///     </para>
 	///     <para>
 	///         Under the strict default (<c>LifetimeSafety.Strict</c>), a disposable transient resolved from the
@@ -69,11 +68,12 @@ public static class AwaitenServiceCollectionExtensions
 	{
 		// Expose the root under its own type and the two container-facing interfaces so a host can reach it, e.g.
 		// to warm a SyncResolveAfterInit container. Registered as a pre-built instance (a constant), which MS.DI
-		// never captures for disposal, so this adds no second disposal of the instances relayed below.
+		// never captures for disposal: the factory-registered owner disposes the root instead, at a capture
+		// position that precedes everything the root builds.
 		services.AddSingleton(root);
 		services.AddSingleton<IAwaitenScope>(root);
 		services.AddSingleton<IAwaitenContainerMetadata>(root);
-		services.TryAddTransient<AwaitenAsyncDisposalSlot>();
+		services.AddSingleton(_ => new AwaitenRootOwner<TRoot>(root));
 		services.TryAddSingleton(sp => new AwaitenRootProviderProbe(sp));
 
 		// If the container draws on external (host-owned) services, wire its external resolvers to the host's
@@ -83,7 +83,7 @@ public static class AwaitenServiceCollectionExtensions
 
 		services.AddScoped(sp =>
 		{
-			IAwaitenScope scope = root.CreateScope();
+			IAwaitenScope scope = sp.GetRequiredService<AwaitenRootOwner<TRoot>>().Root.CreateScope();
 			if (hasExternal)
 			{
 				((IAwaitenExternalResolverHost)scope).ExternalResolver = new ServiceProviderExternalResolver(sp);
@@ -126,9 +126,8 @@ public static class AwaitenServiceCollectionExtensions
 		if (registration.RequiresAsync)
 		{
 			// No synchronous path: expose it as Task<TService>, resolved through ResolveAsync. MS.DI captures
-			// only the returned Task, so the awaited instance is handed to a transient slot resolved alongside
-			// it, disposed in the same reverse order as a natively registered instance. The closed
-			// Task<TService> type and the Task<object>->Task<T> converter are emitted by the generator.
+			// only the returned Task, and the Awaiten scope or root that builds the awaited instance disposes it.
+			// The closed Task<TService> type and the Task<object>->Task<T> converter are emitted by the generator.
 			Type taskType = registration.AsyncTaskType!;
 			Func<Task<object>, object> asTypedTask = registration.AsyncTaskConverter!;
 			services.Add(key is null
@@ -137,8 +136,7 @@ public static class AwaitenServiceCollectionExtensions
 					sp =>
 					{
 						EnsureExternalWired(sp, root, hasExternal);
-						AwaitenAsyncDisposalSlot slot = sp.GetRequiredService<AwaitenAsyncDisposalSlot>();
-						return asTypedTask(FillSlot(ScopeFor<TRoot>(sp, lifetime, root).ResolveAsync(serviceType, key), slot));
+						return asTypedTask(ScopeFor<TRoot>(sp, lifetime).ResolveAsync(serviceType, key));
 					},
 					ToServiceLifetime(lifetime))
 				: new ServiceDescriptor(
@@ -147,8 +145,7 @@ public static class AwaitenServiceCollectionExtensions
 					(sp, _) =>
 					{
 						EnsureExternalWired(sp, root, hasExternal);
-						AwaitenAsyncDisposalSlot slot = sp.GetRequiredService<AwaitenAsyncDisposalSlot>();
-						return asTypedTask(FillSlot(ScopeFor<TRoot>(sp, lifetime, root).ResolveAsync(serviceType, key), slot));
+						return asTypedTask(ScopeFor<TRoot>(sp, lifetime).ResolveAsync(serviceType, key));
 					},
 					ToServiceLifetime(lifetime)));
 			return;
@@ -160,7 +157,7 @@ public static class AwaitenServiceCollectionExtensions
 				sp =>
 				{
 					EnsureExternalWired(sp, root, hasExternal);
-					return ScopeFor<TRoot>(sp, lifetime, root).Resolve(serviceType, key);
+					return ScopeFor<TRoot>(sp, lifetime).Resolve(serviceType, key);
 				},
 				ToServiceLifetime(lifetime))
 			: new ServiceDescriptor(
@@ -169,7 +166,7 @@ public static class AwaitenServiceCollectionExtensions
 				(sp, _) =>
 				{
 					EnsureExternalWired(sp, root, hasExternal);
-					return ScopeFor<TRoot>(sp, lifetime, root).Resolve(serviceType, key);
+					return ScopeFor<TRoot>(sp, lifetime).Resolve(serviceType, key);
 				},
 				ToServiceLifetime(lifetime)));
 	}
@@ -178,12 +175,13 @@ public static class AwaitenServiceCollectionExtensions
 	///     The Awaiten scope a service resolves from: singletons from the container root; scoped services from the
 	///     Awaiten scope aligned to the current MS.DI scope; transients from that aligned scope too when resolved
 	///     inside a scope (so their disposables are bounded by the scope), falling back to the root only when
-	///     resolved from the root provider itself.
+	///     resolved from the root provider itself. The root is reached through its owner and the aligned scope
+	///     through its holder, so MS.DI captures the one that disposes the instance before the instance itself.
 	/// </summary>
-	private static IAwaitenScope ScopeFor<TRoot>(IServiceProvider provider, Lifetime lifetime, TRoot root)
+	private static IAwaitenScope ScopeFor<TRoot>(IServiceProvider provider, Lifetime lifetime)
 		where TRoot : class, IAwaitenContainerMetadata, new()
 		=> lifetime == Lifetime.Singleton || (lifetime == Lifetime.Transient && IsRootProvider(provider))
-			? root
+			? provider.GetRequiredService<AwaitenRootOwner<TRoot>>().Root
 			: provider.GetRequiredService<AwaitenScopeHolder<TRoot>>().Scope;
 
 	/// <summary>
@@ -221,11 +219,4 @@ public static class AwaitenServiceCollectionExtensions
 		Lifetime.Scoped => ServiceLifetime.Scoped,
 		_ => ServiceLifetime.Transient,
 	};
-
-	private static async Task<object> FillSlot(Task<object> resolution, AwaitenAsyncDisposalSlot slot)
-	{
-		object instance = await resolution.ConfigureAwait(false);
-		await slot.Fill(instance).ConfigureAwait(false);
-		return instance;
-	}
 }

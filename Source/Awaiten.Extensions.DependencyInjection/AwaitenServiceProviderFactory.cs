@@ -15,7 +15,8 @@ namespace Awaiten.Extensions.DependencyInjection;
 /// </summary>
 /// <remarks>
 ///     The projection's ownership rules apply; see the remarks on
-///     <see cref="AwaitenServiceCollectionExtensions.AddGeneratedContainer{TRoot}(IServiceCollection)" />. To make
+///     <see cref="AwaitenServiceCollectionExtensions.AddGeneratedContainer{TRoot}(IServiceCollection)" />. The
+///     built provider owns the root that <see cref="CreateBuilder" /> created and disposes it with itself. To make
 ///     the Awaiten container the single owner of construction and disposal end to end, with no host registrations,
 ///     wrap it in an <see cref="AwaitenServiceProvider" /> directly; that scenario needs no factory.
 /// </remarks>
@@ -49,7 +50,12 @@ public sealed class AwaitenServiceProviderFactory<TRoot> : IServiceProviderFacto
 				$"{nameof(CreateBuilder)} must be called before {nameof(CreateServiceProvider)}.");
 		}
 
-		return AwaitenServiceCollectionExtensions.AddGeneratedContainer(_services, containerBuilder)
+		ServiceProvider provider = AwaitenServiceCollectionExtensions.AddGeneratedContainer(_services, containerBuilder)
 			.BuildServiceProvider();
+
+		// Resolving the owner up front makes the provider own the root even when the host only ever reaches the
+		// root directly, and puts it first in MS.DI's capture order, so the root is disposed last.
+		provider.GetRequiredService<AwaitenRootOwner<TRoot>>();
+		return provider;
 	}
 }
