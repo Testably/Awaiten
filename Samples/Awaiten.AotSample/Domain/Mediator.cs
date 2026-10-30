@@ -8,7 +8,7 @@ public interface IMessageHandler
 	string Handle(object message);
 }
 
-public interface IMessageHandler<T> : IMessageHandler
+public interface IMessageHandler<in T> : IMessageHandler
 {
 	string Handle(T message);
 

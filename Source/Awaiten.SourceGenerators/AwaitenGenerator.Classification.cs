@@ -622,9 +622,7 @@ partial class AwaitenGenerator
 		{
 			// Task<Owned<T>> is the async counterpart of a bare Owned<T>: async-resolve (and initialize) T into a
 			// throwaway child scope and hand back the disposal handle.
-			return IsOwned(taskResult, out ITypeSymbol taskOwnedInner)
-				? new ParameterModel(taskOwnedInner.ToDisplayString(FullyQualified), DependencyKind.Task, Key: key, Location: location, ProducesOwned: true)
-				: new ParameterModel(taskResult.ToDisplayString(FullyQualified), DependencyKind.Task, Key: key, Location: location);
+			return ClassifyTask(taskResult, key, location);
 		}
 
 		if (type is INamedTypeSymbol { IsGenericType: true, } named
@@ -657,6 +655,11 @@ partial class AwaitenGenerator
 	///     recognized relationship, or whose produced type is itself a relationship (nesting beyond one level),
 	///     returns <see langword="null" /> so the caller treats it as a direct dependency on the whole type.
 	/// </summary>
+	private static ParameterModel ClassifyTask(ITypeSymbol taskResult, string? key, LocationInfo? location)
+		=> IsOwned(taskResult, out ITypeSymbol taskOwnedInner)
+			? new ParameterModel(taskOwnedInner.ToDisplayString(FullyQualified), DependencyKind.Task, Key: key, Location: location, ProducesOwned: true)
+			: new ParameterModel(taskResult.ToDisplayString(FullyQualified), DependencyKind.Task, Key: key, Location: location);
+
 	private static ParameterModel? ClassifyRelationship(INamedTypeSymbol named, string? key, LocationInfo? location)
 	{
 		if (named is { Name: "Lazy", TypeArguments.Length: 1, } && !IsRelationshipType(named.TypeArguments[0]))
