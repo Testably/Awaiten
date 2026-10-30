@@ -1143,27 +1143,6 @@ public sealed class Barista
 public static partial class CoffeeShop;
 ```
 
-### AWT217
-
-:::danger[Error]
-The `typeof` argument of an `[InjectProperty(typeof(...), name)]` is partially open: it is neither a closed type nor an unbound generic definition, so no constructed type can match it. The C# compiler rejects it as well (CS7003). Close every type argument, or omit all of them to target every closing.
-:::
-
-```csharp expect=CS7003,AWT217
-public sealed class Shelf<T>
-{
-    public sealed class Slot<U>
-    {
-        public ITimeSystem? Time { get; set; }
-    }
-}
-
-[Container]
-[Singleton<RealTimeSystem, ITimeSystem>]
-[InjectProperty(typeof(Shelf<Order>.Slot<>), "Time")]   // use typeof(Shelf<>.Slot<>) or a closed type
-public static partial class CoffeeShop;
-```
-
 ## Scanning
 
 ### AWT138
@@ -1869,17 +1848,21 @@ public static partial class CoffeeShop;
 ### AWT215
 
 :::danger[Error]
-The `typeof` argument of `[ImportService(typeof(...))]` is neither a closed type nor an unbound generic definition, so it names neither one service nor every closing of one generic type. Pass a closed type such as `typeof(IPaymentGateway)` or an unbound generic definition such as `typeof(ILogger<>)`.
+The `typeof` argument of `[ImportService(typeof(...))]` or `[InjectProperty(typeof(...), name)]` is neither a closed type nor an unbound generic definition, so it names neither one type nor every closing of one generic type. That is a type nested in an unbound generic, such as `typeof(Recipe<>.Step)`, which C# accepts, or a partially open type, such as `typeof(Shelf<Order>.Slot<>)`, which C# rejects as well (CS7003). Pass a closed type such as `typeof(Recipe<Espresso>.Step)`, or an unbound generic definition with every type argument omitted such as `typeof(ILogger<>)` or `typeof(Shelf<>.Slot<>)`.
 :::
 
 ```csharp expect=AWT215
 public sealed class Recipe<T>
 {
-    public sealed class Step;
+    public sealed class Step
+    {
+        public ITimeSystem? Time { get; set; }
+    }
 }
 
 [Container]
-[ImportService(typeof(Recipe<>.Step))]   // a type nested in an unbound generic is neither
+[ImportService(typeof(Recipe<>.Step))]             // a type nested in an unbound generic is neither
+[InjectProperty(typeof(Recipe<>.Step), "Time")]    // the same for [InjectProperty]
 [Singleton<Menu>]
 public static partial class CoffeeShop;
 ```

@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Diagnostics.CodeAnalysis;
 using Awaiten.SourceGenerators.Entities;
 using Awaiten.SourceGenerators.Internals;
 using Microsoft.CodeAnalysis;
@@ -1127,20 +1128,18 @@ partial class AwaitenGenerator
 			}
 
 			ITypeSymbol? service = attribute.ConstructorArguments.Length == 1 ? attribute.ConstructorArguments[0].Value as ITypeSymbol : null;
-			if (service is INamedTypeSymbol named && IsOpenGenericDefinition(named))
+			if (!IsClosedOrOpenDefinition(service, attribute, "service"))
+			{
+				diagnostics.Add(TypeofArgumentNotClosedOrOpen(
+					"ImportService", service, LocationInfo.From(attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? fallbackLocation)));
+			}
+			else if (service is INamedTypeSymbol named && IsOpenGenericDefinition(named))
 			{
 				types.Open.Add(UnboundDisplay(named));
 			}
-			else if (service is not null && IsClosedType(service))
-			{
-				types.Closed.Add(service.ToDisplayString(FullyQualified));
-			}
 			else
 			{
-				diagnostics.Add(new DiagnosticInfo(
-					Diagnostics.ImportServiceTypeNotClosedOrOpen,
-					LocationInfo.From(attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? fallbackLocation),
-					new EquatableArray<string>([service is null ? "null" : Display(service.ToDisplayString(FullyQualified)),])));
+				types.Closed.Add(service.ToDisplayString(FullyQualified));
 			}
 		}
 
@@ -1172,6 +1171,28 @@ partial class AwaitenGenerator
 			                          && (named.ContainingType is null || IsClosedType(named.ContainingType)),
 			_ => true,
 		};
+
+	/// <summary>
+	///     Whether the <c>typeof</c> argument <paramref name="type" />, passed to the constructor parameter
+	///     <paramref name="parameterName" /> of <paramref name="attribute" />, is one of the two forms the <c>typeof</c>
+	///     attributes accept: a closed type or an unbound generic definition. A partially open argument such as
+	///     <c>typeof(Outer&lt;int&gt;.Inner&lt;&gt;)</c> is recognised from syntax, because C# rejects it (CS7003) but
+	///     still binds it to a symbol that passes the symbol checks.
+	/// </summary>
+	private static bool IsClosedOrOpenDefinition([NotNullWhen(true)] ITypeSymbol? type, AttributeData attribute, string parameterName)
+		=> type is not null
+		   && ((type is INamedTypeSymbol named && IsOpenGenericDefinition(named)) || IsClosedType(type))
+		   && !IsPartiallyOpenTypeof(attribute, parameterName);
+
+	/// <summary>
+	///     <see cref="Diagnostics.TypeofArgumentNotClosedOrOpen">AWT215</see> for the <c>typeof</c> argument
+	///     <paramref name="type" /> of <c>[<paramref name="attributeName" />]</c>.
+	/// </summary>
+	private static DiagnosticInfo TypeofArgumentNotClosedOrOpen(string attributeName, ITypeSymbol? type, LocationInfo? location)
+		=> new(
+			Diagnostics.TypeofArgumentNotClosedOrOpen,
+			location,
+			new EquatableArray<string>([attributeName, type is null ? "null" : Display(type.ToDisplayString(FullyQualified)),]));
 
 	private static bool IsRelationshipType(ITypeSymbol type)
 		=> type is INamedTypeSymbol { IsGenericType: true, TypeArguments.Length: 1, Name: "Func" or "Lazy", } named

@@ -80,9 +80,10 @@ public sealed class InjectPropertyAttribute<TImplementation>(string propertyName
 ///     Each closing is checked like the generic form, with the property's type substituted for that closing, so
 ///     a <c>Validator</c> property of type <c>IValidator&lt;T&gt;</c> resolves <c>IValidator&lt;Order&gt;</c> on
 ///     <c>Repository&lt;Order&gt;</c>. A name that is not a settable property on the generic definition is
-///     <c>AWT177</c>, and a partially open type is <c>AWT217</c>. When a closed entry and an open entry name the
-///     same property of one closing, the closed entry wins and the open one is ignored for that closing
-///     (<c>AWT179</c>). A type deriving from a closing is not a closing itself and is not matched.
+///     <c>AWT177</c>, and a type that is neither closed nor an unbound generic definition is <c>AWT215</c>. When a
+///     closed entry and an open entry name the same property of one closing, the closed entry wins and the open one
+///     is ignored for that closing (<c>AWT179</c>). A type deriving from a closing is not a closing itself and is not
+///     matched.
 /// </remarks>
 /// <example><c>[InjectProperty(typeof(Repository&lt;&gt;), nameof(Repository&lt;object&gt;.Logger))]</c></example>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]

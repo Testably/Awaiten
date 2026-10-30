@@ -52,7 +52,7 @@ public sealed class CashDesk(IOrderBook<Order> orders, IOrderBook<Customer> regu
 public static partial class CoffeeShop;
 ```
 
-Each closing is checked on its own, with the property type substituted: a property of type `IValidator<T>` resolves `IValidator<Order>` on `OrderBook<Order>`. `Key`, `Optional` and `Deferred` work as on the generic form. Name the property with any closing, such as `nameof(OrderBook<object>.Time)`. A closed entry for the same property, such as `[InjectProperty<OrderBook<Order>>]`, wins on its closing and the ignored open entry is flagged ([AWT179](../diagnostics#awt179)). A class that only derives from a closing is not a closing and is left alone, and a partially open `typeof` is [AWT217](../diagnostics#awt217).
+Each closing is checked on its own, with the property type substituted: a property of type `IValidator<T>` resolves `IValidator<Order>` on `OrderBook<Order>`. `Key`, `Optional` and `Deferred` work as on the generic form. Name the property with any closing, such as `nameof(OrderBook<object>.Time)`. A closed entry for the same property, such as `[InjectProperty<OrderBook<Order>>]`, wins on its closing and the ignored open entry is flagged ([AWT179](../diagnostics#awt179)). A class that only derives from a closing is not a closing and is left alone. The argument must be a closed type or an unbound generic definition; anything in between, such as `typeof(Outer<>.Inner)`, is [AWT215](../diagnostics#awt215).
 
 ## Any dependency shape works
 

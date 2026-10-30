@@ -845,6 +845,8 @@ partial class AwaitenGenerator
 	///     <c>info.ImplementationType</c> - reaching every construction site of that implementation, including one
 	///     brought in by a <c>[Scan]</c>. An unbound generic target is keyed by its definition
 	///     (<c>Repository&lt;T&gt;</c>), which <see cref="OpenInjectPropertyKey" /> derives from each closing. Reports
+	///     <see cref="Diagnostics.TypeofArgumentNotClosedOrOpen">AWT215</see> for a <c>typeof</c> target that is neither
+	///     closed nor an unbound generic definition, and
 	///     <see cref="Diagnostics.DuplicateInjectProperty">AWT179</see> for a second entry naming the same property of
 	///     the same implementation, keeping only the first.
 	/// </summary>
@@ -854,21 +856,21 @@ partial class AwaitenGenerator
 		Dictionary<string, List<InjectPropertyEntry>> map = new(StringComparer.Ordinal);
 		foreach (AttributeData attribute in containerSymbol.GetAttributes())
 		{
-			if (!TryReadInjectProperty(attribute, out INamedTypeSymbol? implementation, out string? propertyName))
+			if (!TryReadInjectProperty(attribute, out ITypeSymbol? target, out string? propertyName, out bool isTypeofForm))
 			{
 				continue;
 			}
 
 			LocationInfo? location = LocationInfo.From(attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation());
 
-			// AWT217: C# rejects a partially open typeof (CS7003), but the generator still runs and would key the
-			// entry on a type no closing ever matches, so name the actual mistake instead of an unmatched AWT180.
-			if (!implementation.IsUnboundGenericType && HasOmittedTypeArgument(attribute))
+			if (isTypeofForm && !IsClosedOrOpenDefinition(target, attribute, "implementation"))
 			{
-				diagnostics.Add(new DiagnosticInfo(
-					Diagnostics.InjectPropertyPartiallyOpen,
-					location,
-					new EquatableArray<string>([Display(implementation.ToDisplayString(FullyQualified)),])));
+				diagnostics.Add(TypeofArgumentNotClosedOrOpen("InjectProperty", target, location));
+				continue;
+			}
+
+			if (target is not INamedTypeSymbol implementation)
+			{
 				continue;
 			}
 
@@ -922,15 +924,18 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     Reads the target type and property name of an <c>[InjectProperty&lt;TImplementation&gt;(name)]</c> or an
-	///     <c>[InjectProperty(typeof(...), name)]</c>.
+	///     <c>[InjectProperty(typeof(...), name)]</c>. The target is <see langword="null" /> when the <c>typeof</c>
+	///     form passes <see langword="null" />; <paramref name="isTypeofForm" /> tells the forms apart.
 	/// </summary>
 	private static bool TryReadInjectProperty(
 		AttributeData attribute,
-		[NotNullWhen(true)] out INamedTypeSymbol? implementation,
-		[NotNullWhen(true)] out string? propertyName)
+		out ITypeSymbol? implementation,
+		[NotNullWhen(true)] out string? propertyName,
+		out bool isTypeofForm)
 	{
 		implementation = null;
 		propertyName = null;
+		isTypeofForm = false;
 		if (attribute.AttributeClass is not { Name: "InjectPropertyAttribute", } attributeClass
 		    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace)
 		{
@@ -940,31 +945,44 @@ partial class AwaitenGenerator
 		if (attributeClass is { IsGenericType: true, TypeArguments.Length: 1, }
 		    && attribute.ConstructorArguments.Length == 1)
 		{
-			implementation = attributeClass.TypeArguments[0] as INamedTypeSymbol;
+			implementation = attributeClass.TypeArguments[0];
 			propertyName = attribute.ConstructorArguments[0].Value as string;
 		}
 		else if (!attributeClass.IsGenericType && attribute.ConstructorArguments.Length == 2)
 		{
-			implementation = attribute.ConstructorArguments[0].Value as INamedTypeSymbol;
+			implementation = attribute.ConstructorArguments[0].Value as ITypeSymbol;
 			propertyName = attribute.ConstructorArguments[1].Value as string;
+			isTypeofForm = true;
 		}
 
-		return implementation is not null && propertyName is not null;
+		return propertyName is not null;
 	}
 
 	/// <summary>
-	///     Whether the attribute's <c>typeof</c> argument omits a type argument somewhere, like
-	///     <c>typeof(Outer&lt;int&gt;.Inner&lt;&gt;)</c>. Read from syntax because Roslyn binds such a type to a
-	///     constructed symbol that cannot be told apart from a closed one reliably.
+	///     Whether the <c>typeof</c> argument for <paramref name="parameterName" /> mixes omitted and given type
+	///     arguments, like <c>typeof(Outer&lt;int&gt;.Inner&lt;&gt;)</c> or <c>typeof(Outer&lt;&gt;.Inner&lt;int&gt;)</c>.
+	///     Read from syntax because C# rejects such a type (CS7003) but Roslyn still binds it to a symbol that cannot be
+	///     told apart from a closed type or an unbound definition reliably.
 	/// </summary>
-	private static bool HasOmittedTypeArgument(AttributeData attribute)
-		=> attribute.ApplicationSyntaxReference?.GetSyntax() is AttributeSyntax { ArgumentList: { } arguments, }
-		   && arguments.Arguments
-			   .Where(argument => argument.NameEquals is null
-			                      && (argument.NameColon is null || argument.NameColon.Name.Identifier.Text == "implementation"))
-			   .Select(argument => argument.Expression)
-			   .FirstOrDefault() is TypeOfExpressionSyntax typeOf
-		   && typeOf.Type.DescendantNodesAndSelf().OfType<OmittedTypeArgumentSyntax>().Any();
+	private static bool IsPartiallyOpenTypeof(AttributeData attribute, string parameterName)
+	{
+		if (attribute.ApplicationSyntaxReference?.GetSyntax() is not AttributeSyntax { ArgumentList: { } arguments, }
+		    || arguments.Arguments
+			    .Where(argument => argument.NameEquals is null
+			                       && (argument.NameColon is null || argument.NameColon.Name.Identifier.Text == parameterName))
+			    .Select(argument => argument.Expression)
+			    .FirstOrDefault() is not TypeOfExpressionSyntax typeOf)
+		{
+			return false;
+		}
+
+		List<TypeSyntax> typeArguments = typeOf.Type.DescendantNodesAndSelf()
+			.OfType<TypeArgumentListSyntax>()
+			.SelectMany(list => list.Arguments)
+			.ToList();
+		return typeArguments.Any(argument => argument is OmittedTypeArgumentSyntax)
+		       && typeArguments.Any(argument => argument is not OmittedTypeArgumentSyntax);
+	}
 
 	/// <summary>
 	///     Whether <paramref name="member" /> is a property <c>[InjectProperty]</c> can name: a non-indexer property
