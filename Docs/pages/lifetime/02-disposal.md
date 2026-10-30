@@ -62,7 +62,16 @@ Dispose with `await using` and Awaiten awaits `DisposeAsync` on every async-disp
 await using var shop = new CoffeeShop.Root();
 ```
 
-A scope disposes the same way, also through the `IAwaitenScope` interface, which is `IAsyncDisposable` on .NET 8 and later. On older frameworks (net48 and the netstandard2.0 asset), where Awaiten has no async disposal, dispose with `using`.
+A scope disposes the same way, also through the `IAwaitenScope` interface, which is `IAsyncDisposable` on .NET 8 and later.
+
+On older frameworks (net48 and the netstandard2.0 asset), `IAwaitenScope` and `Owned<T>` are synchronous only. If your project can see `IAsyncDisposable` there (through `Microsoft.Bcl.AsyncInterfaces`, which many packages bring along), the generated `Root` and `Scope` still implement it, so keep the concrete types to dispose with `await using`:
+
+```csharp
+await using CoffeeShop.Root shop = new();
+await using CoffeeShop.Scope order = shop.CreateScope();
+```
+
+A scope you only hold as `IAwaitenScope` can be cast: `await ((IAsyncDisposable)scope).DisposeAsync()`. Without `IAsyncDisposable` in the project, dispose with `using`.
 
 Disposing synchronously while the container owns a service that is `IAsyncDisposable` but not `IDisposable` throws at runtime, because a synchronous dispose cannot tear it down. Every other instance is still disposed, only the async-only one is left undisposed. Awaiten warns about this at compile time (AWT156).
 
