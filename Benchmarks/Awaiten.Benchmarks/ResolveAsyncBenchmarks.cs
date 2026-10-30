@@ -35,12 +35,15 @@ public class ResolveAsyncBenchmarks : BenchmarksBase
 	[Benchmark]
 	public Task<AsyncSingleton> ResolveAsync_WarmedAsyncSingleton() => _root.ResolveAsync<AsyncSingleton>();
 
+	// BenchmarkDotNet rejects static benchmark methods.
+#pragma warning disable CA1822
 	[Benchmark]
 	public async Task<AsyncSingleton> ResolveAsync_ColdAsyncSingleton()
 	{
 		await using AwaitenAsyncContainer.Root root = new();
 		return await root.ResolveAsync<AsyncSingleton>();
 	}
+#pragma warning restore CA1822
 
 	[Benchmark]
 	public Task<SyncScoped> ResolveAsync_Scoped() => _scope.ResolveAsync<SyncScoped>();
