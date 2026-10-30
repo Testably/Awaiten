@@ -58,7 +58,7 @@ A class takes control of building its own volatile dependency instead of receivi
 ```csharp
 public sealed class Barista
 {
-    public Receipt Serve(Order order)
+    public void Serve(Order order)
     {
         var terminal = new PaymentTerminal();   // built here, cannot be substituted
         var when = DateTime.UtcNow;             // and the clock is reached statically
@@ -75,10 +75,10 @@ Now `Barista` cannot be tested without charging a real card and reading the wall
 
 A class takes the container itself and asks it for dependencies at run time.
 
-```csharp
+```csharp expect=AWT135
 public sealed class Barista(IAwaitenResolver resolver)
 {
-    public Receipt Serve(Order order)
+    public void Serve(Order order)
     {
         var gateway = resolver.Resolve<IPaymentGateway>();   // real dependency, hidden
         // ...

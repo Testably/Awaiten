@@ -13,6 +13,9 @@ dotnet add package Awaiten.Extensions.DependencyInjection
 `AddAwaitenContainer<TRoot>` registers the container and projects its registrations into the `IServiceCollection`. Awaiten lifetimes align to `ServiceLifetime`, and one Awaiten scope aligns to each MS.DI scope.
 
 ```csharp
+using Awaiten.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
+
 var services = new ServiceCollection();
 services.AddAwaitenContainer<CoffeeShop.Root>();
 

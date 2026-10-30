@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFrameworks>net10.0</TargetFrameworks>
+	</PropertyGroup>
+
+	<!-- The snippets compile against everything this project references, so it references what a reader's project
+	     would: Awaiten, the MS.DI bridge, ASP.NET Core for the hosting samples and aweXpect.Reflection for the
+	     architecture test. -->
+	<ItemGroup>
+		<ProjectReference Include="..\..\Source\Awaiten.SourceGenerators\Awaiten.SourceGenerators.csproj"/>
+		<ProjectReference Include="..\..\Source\Awaiten\Awaiten.csproj"/>
+		<ProjectReference Include="..\..\Source\Awaiten.Extensions.DependencyInjection\Awaiten.Extensions.DependencyInjection.csproj"/>
+		<FrameworkReference Include="Microsoft.AspNetCore.App"/>
+		<PackageReference Include="aweXpect.Reflection"/>
+		<PackageReference Include="Microsoft.CodeAnalysis.CSharp"/>
+	</ItemGroup>
+
+	<ItemGroup>
+		<Compile Remove="Scaffold/**"/>
+		<None Include="Scaffold/**"/>
+		<None Include="..\Awaiten.ExampleTests\CoffeeShopDomain.cs" Link="Scaffold\CoffeeShopDomain.cs"/>
+	</ItemGroup>
+
+</Project>

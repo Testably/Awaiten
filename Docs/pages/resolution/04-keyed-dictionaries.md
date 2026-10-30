@@ -59,8 +59,8 @@ Sometimes the implementation to use depends on a type that is only known at run 
 public interface IOrderHandler { string Handle(object message); }
 public interface IOrderHandler<T> : IOrderHandler;
 
-public sealed class OrderPlacedHandler : IOrderHandler<OrderPlaced> { /* ... */ }
-public sealed class OrderPaidHandler : IOrderHandler<OrderPaid> { /* ... */ }
+public sealed class OrderPlacedHandler : IOrderHandler<OrderPlaced> { public string Handle(object message) => "placed"; }
+public sealed class OrderPaidHandler : IOrderHandler<OrderPaid> { public string Handle(object message) => "paid"; }
 
 [Container]
 [Scan(typeof(IOrderHandler<>), As = ScanAs.Marker)]

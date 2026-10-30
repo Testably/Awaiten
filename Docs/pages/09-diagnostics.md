@@ -21,7 +21,7 @@ These check that the object graph can actually be built.
 A required dependency has no registration.
 :::
 
-```csharp
+```csharp expect=AWT101
 public sealed class Cup(Grinder grinder);
 
 [Container]
@@ -35,7 +35,7 @@ public static partial class CoffeeShop;
 A dependency cycle exists in the object graph.
 :::
 
-```csharp
+```csharp expect=AWT102
 public sealed class Till(Printer printer);
 public sealed class Printer(Till till);   // Till needs Printer needs Till
 
@@ -51,7 +51,7 @@ public static partial class CoffeeShop;
 An implementation type is abstract or an interface, and no `Factory` or `Instance` member produces it.
 :::
 
-```csharp
+```csharp expect=AWT103
 public interface IBrewer;
 
 [Container]
@@ -62,8 +62,6 @@ public static partial class CoffeeShop;
 A `Factory` (or, on a singleton, `Instance`) member lifts the requirement: the container constructs nothing then, so the type argument only names the service the produced instance is resolved as. That is the shape for a library factory whose concrete type cannot be named: an internal implementation behind a public interface, such as the logger a `SerilogLoggerFactory` creates.
 
 ```csharp
-public interface IBrewer;
-
 [Container]
 [Singleton<IBrewer>(Factory = nameof(CreateBrewer))]    // the factory produces it; IBrewer names the service
 public static partial class CoffeeShop
@@ -78,7 +76,7 @@ public static partial class CoffeeShop
 An implementation type has no accessible constructor.
 :::
 
-```csharp
+```csharp expect=AWT104
 public sealed class Grinder
 {
     private Grinder() { }   // only a private constructor
@@ -95,7 +93,7 @@ public static partial class CoffeeShop;
 A singleton captures a shorter-lived scoped dependency.
 :::
 
-```csharp
+```csharp expect=AWT105
 public sealed class EspressoMachine(Order order);   // singleton needs a scoped Order
 
 [Container]
@@ -110,7 +108,7 @@ public static partial class CoffeeShop;
 An implementation is registered with conflicting lifetimes.
 :::
 
-```csharp
+```csharp expect=AWT107
 [Container]
 [Singleton<Grinder>]
 [Transient<Grinder>]    // same implementation, two lifetimes
@@ -123,7 +121,7 @@ public static partial class CoffeeShop;
 An implementation is registered with conflicting production strategies.
 :::
 
-```csharp
+```csharp expect=AWT111
 [Container]
 [Singleton<Grinder>(Factory = nameof(MakeGrinder))]
 [Singleton<Grinder>]    // one via factory, one via constructor
@@ -139,7 +137,7 @@ public static partial class CoffeeShop
 A `[Container]` class is not declared static.
 :::
 
-```csharp
+```csharp expect=AWT116
 [Container]
 public partial class CoffeeShop;   // must be static partial
 ```
@@ -150,7 +148,7 @@ public partial class CoffeeShop;   // must be static partial
 Two registrations share the same service type and key.
 :::
 
-```csharp
+```csharp expect=AWT117
 [Container]
 [Singleton<OatMilk, IMilk>(Key = "Oat")]
 [Singleton<SoyMilk, IMilk>(Key = "Oat")]   // same service and key
@@ -163,7 +161,7 @@ public static partial class CoffeeShop;
 Two overridable default registrations provide the same service ambiguously.
 :::
 
-```csharp
+```csharp expect=AWT148
 [Module]
 [Singleton<RealTimeSystem, ITimeSystem>(Fallback = Fallback.Warn)]
 public static class TimeModuleA;
@@ -188,7 +186,7 @@ These keep async-initialized services from being reached before they are ready.
 A synchronous factory's body provably produces an `IAsyncInitializable` concrete type its declared return type hides.
 :::
 
-```csharp
+```csharp expect=AWT106
 public sealed class AsyncBrewer : IBrewer, IAsyncInitializable
 {
     public Task InitializeAsync(CancellationToken ct) => Task.CompletedTask;
@@ -209,7 +207,7 @@ public static partial class CoffeeShop
 A synchronous `Func`/`Lazy`/`Owned` relationship targets an async-initialized service.
 :::
 
-```csharp
+```csharp expect=AWT119
 public sealed class EspressoMachine : IAsyncInitializable
 {
     public Task InitializeAsync(CancellationToken ct) => Task.CompletedTask;
@@ -228,7 +226,7 @@ public static partial class CoffeeShop;
 A synchronous `Func`/`Lazy`/`Owned` relationship reaches an async-tainted service transitively.
 :::
 
-```csharp
+```csharp expect=AWT120
 public sealed class EspressoMachine : IAsyncInitializable
 {
     public Task InitializeAsync(CancellationToken ct) => Task.CompletedTask;
@@ -249,7 +247,7 @@ public static partial class CoffeeShop;
 A collection dependency has an async-tainted member but is materialized synchronously.
 :::
 
-```csharp
+```csharp expect=AWT122
 public sealed class Latte : IDrink, IAsyncInitializable
 {
     public Task InitializeAsync(CancellationToken ct) => Task.CompletedTask;
@@ -268,7 +266,7 @@ public static partial class CoffeeShop;
 A generated `Root`/`Scope` is disposed synchronously although its container owns a service that implements `IAsyncDisposable` but not `IDisposable`.
 :::
 
-```csharp
+```csharp expect=AWT156
 public sealed class Boiler : IAsyncDisposable
 {
     public ValueTask DisposeAsync() => default;
@@ -287,7 +285,7 @@ using (var shop = new CoffeeShop.Root()) { }   // sync dispose cannot tear down 
 An eager singleton is async-initialized and cannot be constructed synchronously at container build time.
 :::
 
-```csharp
+```csharp expect=AWT161
 public sealed class EspressoMachine : IAsyncInitializable
 {
     public Task InitializeAsync(CancellationToken ct) => Task.CompletedTask;
@@ -306,7 +304,7 @@ public static partial class CoffeeShop;
 A `Factory` registration names a member that is not a usable factory method.
 :::
 
-```csharp
+```csharp expect=AWT108
 [Container]
 [Singleton<Grinder>(Factory = nameof(Count))]   // Count is a field, not a factory method
 public static partial class CoffeeShop
@@ -321,7 +319,7 @@ public static partial class CoffeeShop
 An `Instance` registration names a member that is not a usable instance member.
 :::
 
-```csharp
+```csharp expect=AWT109
 [Container]
 [Singleton<Grinder>(Instance = nameof(MakeGrinder))]   // MakeGrinder is a method, not an instance member
 public static partial class CoffeeShop
@@ -336,7 +334,7 @@ public static partial class CoffeeShop
 A registration sets both `Factory` and `Instance`.
 :::
 
-```csharp
+```csharp expect=AWT110
 [Container]
 [Singleton<Grinder>(Factory = nameof(MakeGrinder), Instance = nameof(Shared))]
 public static partial class CoffeeShop
@@ -352,7 +350,7 @@ public static partial class CoffeeShop
 A `Factory` registration names an overloaded method.
 :::
 
-```csharp
+```csharp expect=AWT112
 [Container]
 [Singleton<Grinder>(Factory = nameof(MakeGrinder))]   // MakeGrinder is overloaded
 public static partial class CoffeeShop
@@ -368,7 +366,7 @@ public static partial class CoffeeShop
 A `[RequestingType]` factory parameter is not of type `System.Type`.
 :::
 
-```csharp
+```csharp expect=AWT162
 [Container]
 [Transient<ILogger>(Factory = nameof(CreateLogger))]
 public static partial class CoffeeShop
@@ -383,7 +381,7 @@ public static partial class CoffeeShop
 A factory has both a `[RequestingType]` parameter and an `[Arg]` runtime-argument parameter.
 :::
 
-```csharp
+```csharp expect=AWT163
 [Container]
 [Transient<ILogger>(Factory = nameof(CreateLogger))]
 public static partial class CoffeeShop
@@ -399,7 +397,7 @@ public static partial class CoffeeShop
 An `Owned<T>` relationship (or its `Func`/`Task` forms) targets a service produced by a requesting-type factory. Such a factory is called per consumer and decides its own disposal, so it has no owner scope to build the owned target into. Consume the service directly, or through `Func<T>` / `Lazy<T>`.
 :::
 
-```csharp
+```csharp expect=AWT186
 public sealed class Barista(Owned<ILogger> logger);   // Owned<T> over a requesting-type factory
 
 [Container]
@@ -419,7 +417,7 @@ public static partial class CoffeeShop
 An `OnActivated`/`OnRelease` registration names a member that is not a usable lifecycle hook.
 :::
 
-```csharp
+```csharp expect=AWT164
 [Container]
 [Singleton<EspressoMachine>(OnActivated = nameof(Ready))]   // Ready is a field, not a hook method
 public static partial class CoffeeShop
@@ -434,7 +432,7 @@ public static partial class CoffeeShop
 An `OnActivated`/`OnRelease` lifecycle hook is set on a pre-built `Instance` registration, which the container does not own.
 :::
 
-```csharp
+```csharp expect=AWT165
 [Container]
 [Singleton<MenuBoard>(Instance = nameof(Menu), OnRelease = nameof(Archive))]
 public static partial class CoffeeShop
@@ -450,7 +448,7 @@ public static partial class CoffeeShop
 An implementation is registered with conflicting `OnActivated`/`OnRelease`/`Eager` directives that coalescing would silently drop.
 :::
 
-```csharp
+```csharp expect=AWT166
 [Container]
 [Singleton<EspressoMachine, IWarmable>(OnActivated = nameof(Calibrate))]
 [Singleton<EspressoMachine, IMachine>(OnActivated = nameof(Preheat))]   // two hooks for one implementation
@@ -467,7 +465,7 @@ public static partial class CoffeeShop
 A lifecycle hook parameter (after the instance) is marked `[Arg]`, but a hook resolves its parameters from the graph.
 :::
 
-```csharp
+```csharp expect=AWT189
 [Container]
 [Singleton<EspressoMachine>(OnActivated = nameof(Calibrate))]
 public static partial class CoffeeShop
@@ -484,7 +482,7 @@ A lifecycle hook (`OnActivated` / `OnRelease`) names an overloaded method, so th
 
 A hook is looked up by simple name on its owner (the container, or a module whose `[Scan]` names it), so two accepting overloads leave the choice (and the graph dependencies the extra parameters resolve) order-dependent. Give the hook a unique name, exactly as a factory method must be unambiguous.
 
-```csharp
+```csharp expect=AWT190
 [Container]
 [Singleton<EspressoMachine>(OnActivated = nameof(Calibrate))]
 public static partial class CoffeeShop
@@ -502,7 +500,7 @@ An `OnRelease` hook parameter is a `Func`/`Lazy` relationship, which would defer
 
 A release dependency is captured at construction, but a `Func<T>` or `Lazy<T>` captures only a resolver delegate. The hook runs while its owner is being disposed, so invoking the delegate there always throws. Take the dependency directly instead: it is resolved at construction and, released in reverse creation order, still alive when the hook uses it. An `OnActivated` hook may take `Func`/`Lazy` parameters freely, since it runs while the owner is alive.
 
-```csharp
+```csharp expect=AWT191
 [Container]
 [Singleton<BufferPool>]
 [Transient<Buffer>(OnRelease = nameof(ReturnToPool))]
@@ -520,14 +518,14 @@ public static partial class CoffeeShop
 A `Func<TArg...,T>` or `Func<TArg...,Task<T>>` relationship's runtime arguments do not match the service's `[Arg]` parameters.
 :::
 
-```csharp
+```csharp expect=AWT113
 public sealed class Cup([Arg] string size);
+public sealed class Counter(Func<int, Cup> cups);   // the [Arg] is string, not int
 
 [Container]
 [Transient<Cup>]
+[Singleton<Counter>]
 public static partial class CoffeeShop;
-
-var make = shop.Resolve<Func<int, Cup>>();   // the [Arg] is string, not int
 ```
 
 ### AWT114
@@ -536,7 +534,7 @@ var make = shop.Resolve<Func<int, Cup>>();   // the [Arg] is string, not int
 A service with `[Arg]` parameters is registered with a non-Transient lifetime.
 :::
 
-```csharp
+```csharp expect=AWT114
 public sealed class Cup([Arg] string size);
 
 [Container]
@@ -550,7 +548,7 @@ public static partial class CoffeeShop;
 A service with `[Arg]` parameters is required as a plain, `Lazy<T>`, or `Task<T>` dependency instead of a `Func<TArg...,T>`.
 :::
 
-```csharp
+```csharp expect=AWT115
 public sealed class Cup([Arg] string size);
 public sealed class Barista(Cup cup);   // must ask for Func<string, Cup>
 
@@ -566,7 +564,7 @@ public static partial class CoffeeShop;
 No longer reported. `[Arg]` is valid only on parameters, so the C# compiler rejects it on a property (CS0592). The id stays reserved and is never reused.
 :::
 
-```csharp
+```csharp expect=CS0592
 public sealed class Barista
 {
     [Inject, Arg] public string? Name { get; set; }   // CS0592: [Arg] is for constructor and factory parameters
@@ -581,7 +579,7 @@ public sealed class Barista
 A root-owned instance holds a `Func` or `Func<…,Task<T>>` over a disposable build-on-demand service. Under strict lifetime safety (the default) this is a non-suppressible error; under `LifetimeSafety.Loose` it relaxes to a suppressible warning.
 :::
 
-```csharp
+```csharp expect=AWT118
 public sealed class BrewSession : IDisposable { public void Dispose() { } }
 public sealed class Counter(Func<BrewSession> sessions);   // each call strands a disposable on the root
 
@@ -597,7 +595,7 @@ public static partial class CoffeeShop;
 An `Owned<T>` disposal handle is requested through a `Lazy<Owned<T>>` or `Lazy<Task<Owned<T>>>` relationship.
 :::
 
-```csharp
+```csharp expect=AWT121
 public sealed class BrewSession : IDisposable { public void Dispose() { } }
 public sealed class Counter(Lazy<Owned<BrewSession>> sessions);   // Owned cannot hide behind Lazy
 
@@ -613,7 +611,7 @@ public static partial class CoffeeShop;
 `SuppressDisposal` is set on a pre-built `Instance`, which the container does not own or dispose, so it has no effect. Remove it, or register the type for construction (by constructor or `Factory`) instead of as an `Instance`.
 :::
 
-```csharp
+```csharp expect=AWT192
 public sealed class Boiler : IDisposable { public void Dispose() { } }
 
 [Container]
@@ -632,7 +630,7 @@ public static partial class CoffeeShop
 A `[Decorate]` names a service with no registration to decorate. Without `Keys` or `AllKeys`, a decorator wraps only unkeyed registrations, so a service registered only under keys counts as not registered. Also raised when an open generic `[Decorate(typeof(D<>), typeof(IService<>))]` matches no closing of its service in the graph.
 :::
 
-```csharp
+```csharp expect=AWT123
 public sealed class LoggingTerminal(IPaymentTerminal inner) : IPaymentTerminal;
 
 [Container]
@@ -646,7 +644,7 @@ public static partial class CoffeeShop;
 A decorator has no single constructor parameter assignable to the decorated service type.
 :::
 
-```csharp
+```csharp expect=AWT124
 public sealed class LoggingTerminal : IPaymentTerminal;   // no IPaymentTerminal inner parameter
 
 [Container]
@@ -661,7 +659,7 @@ public static partial class CoffeeShop;
 A `[Composite]` implementation has no collection parameter of the composed service to fan out to.
 :::
 
-```csharp
+```csharp expect=AWT130
 public sealed class CompositeReceiptChannel : IReceiptChannel;   // no IEnumerable<IReceiptChannel> parameter
 
 [Container]
@@ -676,7 +674,7 @@ public static partial class CoffeeShop;
 A `[Composite]` type is also registered as an ordinary member of the service it composes.
 :::
 
-```csharp
+```csharp expect=AWT131
 public sealed class CompositeReceiptChannel(IEnumerable<IReceiptChannel> channels) : IReceiptChannel;
 
 [Container]
@@ -691,7 +689,7 @@ public static partial class CoffeeShop;
 More than one `[Composite]` names the same service.
 :::
 
-```csharp
+```csharp expect=AWT132
 [Container]
 [Composite<CompositeReceiptChannel, IReceiptChannel>]
 [Composite<BackupReceiptChannel, IReceiptChannel>]   // two composites for one service
@@ -704,7 +702,7 @@ public static partial class CoffeeShop;
 A `[Composite]`'s collection parameter is of a base type of the composed service, not the composed service itself.
 :::
 
-```csharp
+```csharp expect=AWT133
 // IReceiptChannel : IChannel
 public sealed class CompositeReceiptChannel(IEnumerable<IChannel> channels) : IReceiptChannel;   // IChannel is a base type
 
@@ -720,7 +718,7 @@ public static partial class CoffeeShop;
 A key in a `[Decorate]`'s `Keys` matches no registration of the decorated service, so that key has nothing to wrap. A `null` entry names the unkeyed registrations. For the open generic `typeof` form, no closing of the service is registered under the key.
 :::
 
-```csharp
+```csharp expect=AWT210
 [Container]
 [Singleton<CardTerminal, IPaymentTerminal>]
 [Decorate<LoggingTerminal, IPaymentTerminal>(Keys = new object?[] { "backup" })]   // nothing is registered under "backup"
@@ -733,7 +731,7 @@ public static partial class CoffeeShop;
 A `[Decorate]` sets both `Keys` and `AllKeys`. `AllKeys` already selects every key, so set one or the other. The decorator is skipped.
 :::
 
-```csharp
+```csharp expect=AWT211
 [Container]
 [Singleton<CardTerminal, IPaymentTerminal>]
 [Decorate<LoggingTerminal, IPaymentTerminal>(Keys = new object?[] { null }, AllKeys = true)]
@@ -746,7 +744,7 @@ public static partial class CoffeeShop;
 A `[Composite]`'s `Key` matches no registration of the composed service, so the composite has nothing to front. For the open generic `typeof` form, no closing of the service is registered under the key.
 :::
 
-```csharp
+```csharp expect=AWT212
 [Container]
 [Transient<PrinterChannel, IReceiptChannel>]
 [Composite<CompositeReceiptChannel, IReceiptChannel>(Key = "kitchen")]   // nothing is registered under "kitchen"
@@ -761,7 +759,7 @@ public static partial class CoffeeShop;
 An open generic registration's implementation and service have different arity. The open `[Decorate]`/`[Composite]` `typeof` forms are held to the same rule (decorator/composite arity must match the service).
 :::
 
-```csharp
+```csharp expect=AWT125
 [Container]
 [Transient(typeof(Repository<>), typeof(IRepository<,>))]   // one type parameter vs two
 public static partial class CoffeeShop;
@@ -773,7 +771,7 @@ public static partial class CoffeeShop;
 A required closed type violates the open generic implementation's type-parameter constraints, so the dependency cannot be satisfied. (For the open `[Decorate]`/`[Composite]` case, where the base service still resolves, see the warning [AWT171](#awt171).)
 :::
 
-```csharp
+```csharp expect=AWT126
 public sealed class Repository<T> : IRepository<T> where T : class;
 public sealed class Ledger(IRepository<int> repo);   // int is not a class
 
@@ -789,14 +787,16 @@ public static partial class CoffeeShop;
 The decorator/composite counterpart to [AWT126](#awt126): a closing of an open generic `[Decorate]`/`[Composite]` cannot be constructed because its type arguments violate the decorator's or composite's type-parameter constraints. A warning, not an error, because the base service still resolves. That one closing is left as-is (undecorated/unfronted), and the remaining closings are decorated/composed as usual.
 :::
 
-```csharp
+```csharp expect=AWT171
 public interface IHandler<T> { }
 public sealed class Handler<T> : IHandler<T> { }
 public sealed class Logging<T>(IHandler<T> inner) : IHandler<T> where T : class;   // reference types only
 
+public sealed class Counter(IHandler<int> handler);   // needs the closing IHandler<int>
+
 [Container]
 [Transient(typeof(Handler<>), typeof(IHandler<>))]
-[Transient<Root>]
+[Transient<Counter>]
 [Decorate(typeof(Logging<>), typeof(IHandler<>))]   // IHandler<int> can't take Logging<int>: warned and skipped
 public static partial class CoffeeShop;
 ```
@@ -807,7 +807,7 @@ public static partial class CoffeeShop;
 The `typeof`-argument form of `[Decorate]` or `[Composite]` must receive unbound open generic types. A lifetime attribute's `typeof` form accepts a closed pair, but when one of its two types is an unbound generic, both must be.
 :::
 
-```csharp
+```csharp expect=AWT127
 [Container]
 [Transient(typeof(Repository<>), typeof(IRepository<Order>))]   // open implementation, closed service
 public static partial class CoffeeShop;
@@ -819,7 +819,7 @@ public static partial class CoffeeShop;
 An open generic implementation does not expose its service with type parameters in declaration order. The open `[Decorate]`/`[Composite]` `typeof` forms are held to the same rule.
 :::
 
-```csharp
+```csharp expect=AWT128
 public sealed class Map<TKey, TValue> : IMap<TValue, TKey>;   // parameters swapped
 
 [Container]
@@ -833,7 +833,7 @@ public static partial class CoffeeShop;
 Open generic expansion nested too deep, indicating an unbounded generic recursion.
 :::
 
-```csharp
+```csharp expect=AWT129,AWT101
 public sealed class Box<T>(Box<Box<T>> inner);   // Box<Order> needs Box<Box<Order>> needs ...
 public sealed class Consumer(Box<Order> box);
 
@@ -849,7 +849,7 @@ public static partial class CoffeeShop;
 A closed `typeof` registration's implementation is not a class or interface assignable to its service. The generic form `[Singleton<Clock, IClock>]` rejects such a pair through its type constraints; the `typeof` form has none, so Awaiten reports it.
 :::
 
-```csharp
+```csharp expect=AWT206
 public sealed class Clock;   // does not implement IClock
 
 [Container]
@@ -863,7 +863,7 @@ public static partial class CoffeeShop;
 `Eager` or `Instance` is set on an open generic `typeof` registration. Both describe one concrete instance, but the closings of an open generic are whatever the graph asks for, so eagerly building "every closing" would start services because some other consumer happens to close the generic, and one pre-built instance cannot be every closing. Register the closings you want eager or pre-built with a closed type. The option is ignored.
 :::
 
-```csharp
+```csharp expect=AWT207
 [Container]
 [Singleton(typeof(Cache<>), typeof(ICache<>), Eager = true)]          // which closings?
 [Singleton(typeof(Cache<Order>), typeof(ICache<Order>), Eager = true)]  // fine: one closed type
@@ -876,7 +876,7 @@ public static partial class CoffeeShop;
 The `Factory` of an open generic `typeof` registration is not a generic method with exactly the service's type parameters. Awaiten closes the factory per closing with the closed service's type arguments, in declaration order, so the method needs one type parameter for each of the service's. The registration is dropped.
 :::
 
-```csharp
+```csharp expect=AWT208
 [Container]
 [Transient(typeof(IRepository<>), Factory = nameof(Create))]
 public static partial class CoffeeShop
@@ -891,7 +891,7 @@ public static partial class CoffeeShop
 A closing of an open generic `typeof` registration violates the type-parameter constraints of its generic `Factory`, so the factory cannot be called for it. Like [AWT126](#awt126), the closing is skipped and the dependency that asked for it is unsatisfied.
 :::
 
-```csharp
+```csharp expect=AWT209
 public sealed class Ledger(IRepository<int> numbers);   // int is not a class
 
 [Container]
@@ -911,7 +911,7 @@ public static partial class CoffeeShop
 An `[Inject]` property has no set or init accessor the container can assign through.
 :::
 
-```csharp
+```csharp expect=AWT136
 public sealed class Barista
 {
     [Inject] public ITimeSystem? Time { get; }   // get-only, nothing to assign
@@ -929,7 +929,7 @@ public static partial class CoffeeShop;
 An `[Inject(Deferred = true)]` property is init-only or required rather than assignable after construction.
 :::
 
-```csharp
+```csharp expect=AWT144
 public sealed class Node
 {
     [Inject(Deferred = true)] public Node? Peer { get; init; }   // deferred needs a plain set
@@ -946,7 +946,7 @@ public static partial class CoffeeShop;
 A deferred property cycle consists entirely of transients and cannot terminate.
 :::
 
-```csharp
+```csharp expect=AWT145
 public sealed class A { [Inject(Deferred = true)] public B? B { get; set; } }
 public sealed class B { [Inject(Deferred = true)] public A? A { get; set; } }
 
@@ -962,7 +962,7 @@ public static partial class CoffeeShop;
 A deferred property cycle includes an async-initialized service and cannot terminate.
 :::
 
-```csharp
+```csharp expect=AWT146
 public sealed class A : IAsyncInitializable
 {
     [Inject(Deferred = true)] public B? B { get; set; }
@@ -982,7 +982,7 @@ public static partial class CoffeeShop;
 A deferred property cycle still traverses a construction-time edge that duplicates a cached participant or recurses forever.
 :::
 
-```csharp
+```csharp expect=AWT147
 public sealed class A(B b);                                       // construction-time edge into the cycle
 public sealed class B { [Inject(Deferred = true)] public A? A { get; set; } }
 
@@ -998,7 +998,7 @@ public static partial class CoffeeShop;
 An `[Inject(Optional = true)]` property is required and cannot be omitted from the object initializer.
 :::
 
-```csharp
+```csharp expect=AWT157
 public sealed class Barista
 {
     [Inject(Optional = true)] public required ITimeSystem Time { get; set; }   // required cannot be omitted
@@ -1015,7 +1015,7 @@ public static partial class CoffeeShop;
 An `[Inject(Optional = true)]` property is init-only, so an unregistered dependency leaves it permanently at its default.
 :::
 
-```csharp
+```csharp expect=AWT158
 public sealed class Barista
 {
     [Inject(Optional = true)] public ITimeSystem? Time { get; init; }   // init-only stays default forever
@@ -1032,7 +1032,7 @@ public static partial class CoffeeShop;
 An `[InjectProperty<T>]` names a member that is not a settable property on the implementation: an unknown name, a field or method, or a read-only property.
 :::
 
-```csharp
+```csharp expect=AWT177
 public sealed class Barista
 {
     public ITimeSystem? Time { get; set; }
@@ -1051,7 +1051,7 @@ public static partial class CoffeeShop;
 An `[InjectProperty<T>]` targets an implementation produced by a `Factory` or `Instance` registration. Such an instance is built whole by its source, so there is no object initializer for the container to fill.
 :::
 
-```csharp
+```csharp expect=AWT178
 public sealed class Barista
 {
     public ITimeSystem? Time { get; set; }
@@ -1073,7 +1073,7 @@ public static partial class CoffeeShop
 Two `[InjectProperty<T>]` entries name the same property of the same implementation. The property is filled once; the duplicate is ignored.
 :::
 
-```csharp
+```csharp expect=AWT179
 public sealed class Barista
 {
     public ITimeSystem? Time { get; set; }
@@ -1093,7 +1093,7 @@ public static partial class CoffeeShop;
 An `[InjectProperty<T>]` names an implementation that has no container-constructed registration, so the entry is never applied: the type is unregistered, or it is an open generic no consumer closed.
 :::
 
-```csharp
+```csharp expect=AWT180
 public sealed class Barista
 {
     public ITimeSystem? Time { get; set; }
@@ -1111,7 +1111,7 @@ public static partial class CoffeeShop;
 A property carries both `[Inject]` and a container-side `[InjectProperty<T>]` entry. The property is filled once, from `[Inject]`, so the entry's `Optional`/`Deferred`/`Key` are ignored.
 :::
 
-```csharp
+```csharp expect=AWT181
 public sealed class Barista
 {
     [Inject] public ITimeSystem? Time { get; set; }
@@ -1132,7 +1132,7 @@ public static partial class CoffeeShop;
 A `[Scan]` matched no concrete type assignable to its marker.
 :::
 
-```csharp
+```csharp expect=AWT138
 public interface IPlugin;   // no implementations exist
 
 [Container]
@@ -1146,7 +1146,7 @@ public static partial class CoffeeShop;
 A `[Scan(As = ScanAs.Marker)]` matched a type with no assignable interface.
 :::
 
-```csharp
+```csharp expect=AWT139
 public abstract class Report;
 public sealed class QuarterlyReport : Report;   // a Report, but implements no interface
 
@@ -1161,7 +1161,7 @@ public static partial class CoffeeShop;
 A `[Scan(InAssembliesOf = …)]` named an assembly with no candidate types.
 :::
 
-```csharp
+```csharp expect=AWT140
 [Container]
 [Scan(typeof(IPlugin), InAssembliesOf = new[] { typeof(string) })]   // that assembly has no IPlugin types
 public static partial class CoffeeShop;
@@ -1173,7 +1173,7 @@ public static partial class CoffeeShop;
 A `[Scan(SkipUnconstructable = true)]` match the container cannot construct is skipped.
 :::
 
-```csharp
+```csharp expect=AWT141
 public sealed class LegacyPlugin : IPlugin
 {
     private LegacyPlugin() { }   // no usable constructor, so it is skipped
@@ -1190,7 +1190,7 @@ public static partial class CoffeeShop;
 Scans register one implementation with conflicting lifetimes.
 :::
 
-```csharp
+```csharp expect=AWT142
 public sealed class Widget : IPlugin, IHandler;   // matched by both scans
 
 [Container]
@@ -1205,7 +1205,7 @@ public static partial class CoffeeShop;
 A `[Scan(InAssembliesOf = …)]` resolved to no assembly at all.
 :::
 
-```csharp
+```csharp expect=AWT143
 [Container]
 [Scan(typeof(IPlugin), InAssembliesOf = new Type[0])]   // no assemblies to scan
 public static partial class CoffeeShop;
@@ -1217,7 +1217,7 @@ public static partial class CoffeeShop;
 A `[Scan]`'s name, namespace or exclude filters removed every marker-assignable match.
 :::
 
-```csharp
+```csharp expect=AWT172
 public sealed class GrinderPlugin : IPlugin;   // assignable, but filtered out by the pattern below
 
 [Container]
@@ -1231,7 +1231,7 @@ public static partial class CoffeeShop;
 A `[Scan]` exclusion (an `Exclude` type or a `!`-prefixed pattern) matched no candidate.
 :::
 
-```csharp
+```csharp expect=AWT173
 public sealed class GrinderPlugin : IPlugin;
 
 [Container]
@@ -1245,7 +1245,9 @@ public static partial class CoffeeShop;
 A `[Scan]` include pattern matches every candidate, so it does not narrow the scan.
 :::
 
-```csharp
+```csharp expect=AWT174
+public sealed class GrinderPlugin : IPlugin;
+
 [Container]
 [Scan<IPlugin>(NamePatterns = ["*"])]   // "*" matches every name; drop it
 public static partial class CoffeeShop;
@@ -1257,7 +1259,7 @@ public static partial class CoffeeShop;
 A `[Scan(As = ScanAs.MatchingInterface)]` matched a type that implements no interface named `I` + its own name.
 :::
 
-```csharp
+```csharp expect=AWT182
 public interface IEspresso;
 public sealed class Espresso : IEspresso;
 public sealed class Ristretto : IEspresso;   // no IRistretto, so it is not registered
@@ -1273,7 +1275,7 @@ public static partial class CoffeeShop;
 A markerless `[Scan]` includes the `Marker` exposure, or declares no scoping filter.
 :::
 
-```csharp
+```csharp expect=AWT183
 [Container]
 [Scan(As = ScanAs.MatchingInterface)]   // markerless, but no NamePatterns/NamespacePatterns/InAssembliesOf
 public static partial class CoffeeShop;
@@ -1285,7 +1287,7 @@ public static partial class CoffeeShop;
 A markerless `[Scan]` matched candidate types but registered none of them.
 :::
 
-```csharp
+```csharp expect=AWT184
 [Container]
 // Nothing under CoffeeShop.Legacy follows the I + name convention, so nothing registers.
 [Scan(As = ScanAs.MatchingInterface, NamespacePatterns = ["CoffeeShop.Legacy.**"])]
@@ -1298,7 +1300,7 @@ public static partial class CoffeeShop;
 A `[Scan]`'s `As` resolved to no `ScanAs` flag, so it would register nothing (usually `&` written for `|`).
 :::
 
-```csharp
+```csharp expect=AWT185
 [Container]
 [Scan<IDrink>(As = ScanAs.Self & ScanAs.Marker)]   // & is empty; use | to combine flags
 public static partial class CoffeeShop;
@@ -1310,7 +1312,7 @@ public static partial class CoffeeShop;
 A `[Scan(As = ScanAs.MatchingInterface)]` matched a type implementing several same-named convention interfaces, so it registers under each of them.
 :::
 
-```csharp
+```csharp expect=AWT187
 namespace CoffeeShop.Old { public interface IMenu; }
 namespace CoffeeShop.New { public interface IMenu; }
 
@@ -1335,7 +1337,7 @@ Reported only when several interfaces actually register (an inaccessible candida
 A scan match's only exposure interface is inaccessible to the generated container, so the match is not registered.
 :::
 
-```csharp
+```csharp no-compile
 // In a referenced assembly: the convention interface is internal.
 internal interface IRoaster;
 public sealed class Roaster : IRoaster, IEquipment;
@@ -1352,7 +1354,7 @@ public static partial class CoffeeShop;
 A `[Scan]` matched a type that is inaccessible to the generated container, so it is not registered.
 :::
 
-```csharp
+```csharp no-compile
 // In a referenced assembly: the implementation itself is internal.
 public interface IEquipment;
 internal sealed class Roaster : IEquipment;
@@ -1371,7 +1373,7 @@ Where [AWT188](#awt188) is about an interface the match cannot be exposed under,
 A generic lifecycle hook on an open-generic `[Scan]` marker could bind a match through more than one closed marker form, so its type arguments are ambiguous.
 :::
 
-```csharp
+```csharp expect=AWT198
 public interface IView<TViewModel>;
 public sealed class DualView : IView<Orders>, IView<Payments>;   // closes IView<> twice
 
@@ -1391,7 +1393,7 @@ A [generic scan hook](./registration/scanning#lifecycle-hooks) binds its type ar
 Two `[Scan]` attributes match one implementation with conflicting lifecycle hooks; the first scan's hook is used.
 :::
 
-```csharp
+```csharp expect=AWT199
 public sealed class Widget : IPlugin, IHandler;   // matched by both scans
 
 [Container]
@@ -1414,7 +1416,7 @@ Which method ran for `Widget` would depend on attribute order, so the contradict
 An `[Import]` names a type that is not marked `[Module]`.
 :::
 
-```csharp
+```csharp expect=AWT149
 public static class PaymentHelpers;   // not marked [Module]
 
 [Container]
@@ -1428,9 +1430,10 @@ public static partial class CoffeeShop;
 An imported module has its own `[Import]`, which is not followed.
 :::
 
-```csharp
+```csharp expect=AWT150
 [Module]
 [Import(typeof(BaseModule))]   // a nested import is not followed
+[Singleton<CardTerminal, IPaymentTerminal>]
 public static class PaymentModule;
 
 [Container]
@@ -1444,7 +1447,7 @@ public static partial class CoffeeShop;
 An imported module declares no registrations.
 :::
 
-```csharp
+```csharp expect=AWT151
 [Module]
 public static class EmptyModule;   // nothing to contribute
 
@@ -1459,9 +1462,14 @@ public static partial class CoffeeShop;
 An imported `[Module]` class is not declared static.
 :::
 
-```csharp
+```csharp expect=AWT152
 [Module]
+[Singleton<CardTerminal, IPaymentTerminal>]
 public class PaymentModule;   // must be static
+
+[Container]
+[Import(typeof(PaymentModule))]
+public static partial class CoffeeShop;
 ```
 
 ### AWT153
@@ -1470,13 +1478,17 @@ public class PaymentModule;   // must be static
 A module `Factory`/`Instance` member is not accessible from the generated container.
 :::
 
-```csharp
+```csharp expect=AWT153
 [Module]
 [Singleton<Grinder>(Factory = nameof(MakeGrinder))]
 public static class EquipmentModule
 {
     private static Grinder MakeGrinder() => new();   // private, so the container cannot call it
 }
+
+[Container]
+[Import(typeof(EquipmentModule))]
+public static partial class CoffeeShop;
 ```
 
 ### AWT154
@@ -1485,7 +1497,7 @@ public static class EquipmentModule
 An imported module declares a `[Scan]`, but its assembly carries no generated expansion.
 :::
 
-```csharp
+```csharp no-compile
 // In a referenced library that was compiled WITHOUT the Awaiten source generator:
 [Module]
 [Scan<IDrink>]   // never expanded, so it would contribute nothing
@@ -1504,7 +1516,7 @@ public static partial class CoffeeShop;
 Two imported modules strongly register the same service with different implementations.
 :::
 
-```csharp
+```csharp expect=AWT155
 [Module]
 [Singleton<RealTimeSystem, ITimeSystem>]
 public static class ModuleA;
@@ -1525,7 +1537,7 @@ public static partial class CoffeeShop;
 A `[Module]` that declares a `[Scan]` is not `partial` (or is nested in a type that is not), so its scan cannot be self-compiled.
 :::
 
-```csharp
+```csharp expect=AWT194
 [Module]
 [Scan<IPlugin>(As = ScanAs.MatchingInterface)]
 public static class PluginModule;   // must be partial to receive the generated factories
@@ -1539,7 +1551,7 @@ A [self-compiled module scan](./registration/modules#self-compiled-scans) emits 
 A self-compiled module `[Scan]` match has a constructor parameter of a type inaccessible outside the module's assembly.
 :::
 
-```csharp
+```csharp expect=AWT195
 internal sealed class Secret;
 internal sealed class Roaster(Secret secret) : IRoaster;   // Secret is internal
 
@@ -1556,7 +1568,7 @@ The generated factory is a `public` method whose parameters are resolved from th
 A self-compiled module `[Scan]` match has no exposure interface accessible outside the module's assembly, so it is skipped.
 :::
 
-```csharp
+```csharp expect=AWT196
 internal sealed class Roaster : IPlugin;
 
 [Module]
@@ -1572,7 +1584,7 @@ A consumer resolves a self-compiled match only through an accessible interface. 
 A self-compiled module `[Scan]` match would be exposed under more than one interface.
 :::
 
-```csharp
+```csharp expect=AWT197
 internal sealed class Roaster : IPlugin, IRoaster;
 
 [Module]
@@ -1588,7 +1600,7 @@ A self-compiled match is reached through a generated factory that returns a sing
 A self-compiled module `[Scan]` match carries injection metadata the generated factory cannot mirror.
 :::
 
-```csharp
+```csharp expect=AWT200
 internal sealed class Roaster : IRoaster
 {
     public Roaster(IClock clock) { }
@@ -1610,7 +1622,7 @@ The generated factory reduces a match to a plain parameter list resolved from th
 A generic `[Module]` (or one nested in a generic type) declares a `[Scan]`.
 :::
 
-```csharp
+```csharp expect=AWT201
 [Module]
 [Scan<IPlugin>(As = ScanAs.MatchingInterface)]
 public static partial class PluginModule<T>;   // no closed PluginModule<T> exists to [Import]
@@ -1624,7 +1636,7 @@ A consumer imports a module by `typeof`, so there is no single closed module typ
 A module `[Scan]` declares `InAssembliesOf`, but a self-compiled scan sweeps only the module's own assembly.
 :::
 
-```csharp
+```csharp expect=AWT202
 [Module]
 [Scan<IPlugin>(As = ScanAs.Marker, InAssembliesOf = new[] { typeof(OtherLibMarker) })]
 public static partial class PluginModule;
@@ -1638,9 +1650,9 @@ A self-compiled scan exists to reach the module's own `internal` types. Sweeping
 A self-compiled module `[Scan]` hook has a parameter, after the instance, whose type is not accessible outside the module's assembly.
 :::
 
-```csharp
+```csharp expect=AWT203
 internal sealed class Secret;
-internal sealed class Roaster : IPlugin;
+internal sealed class Roaster : IPlugin, IRoaster;
 
 [Module]
 [Scan<IPlugin>(As = ScanAs.MatchingInterface, OnActivated = nameof(Wire))]
@@ -1658,8 +1670,8 @@ The module emits a `public` wrapper for the hook, and that wrapper's parameters 
 A self-compiled module `[Scan]` hook has a parameter, after the instance, marked `[FromKey]` or `[Inject]`.
 :::
 
-```csharp
-internal sealed class Roaster : IPlugin;
+```csharp expect=AWT204
+internal sealed class Roaster : IPlugin, IRoaster;
 
 [Module]
 [Scan<IPlugin>(As = ScanAs.MatchingInterface, OnActivated = nameof(Wire))]
@@ -1679,7 +1691,7 @@ The hook's parameters after the instance mirror onto the generated `public` wrap
 A keyed dictionary (`IReadOnlyDictionary<TKey, TService>`) has a key type that is neither `string` nor an enum, or one whose keyed registrations do not all match it.
 :::
 
-```csharp
+```csharp expect=AWT159
 public sealed class Router(IReadOnlyDictionary<int, IMilk> milks);   // the key must be string or an enum
 
 [Container]
@@ -1694,7 +1706,7 @@ public static partial class CoffeeShop;
 A `[FromKey]` is applied to a synthesized keyed collection (`IReadOnlyDictionary<string, TService>`), which resolves every key.
 :::
 
-```csharp
+```csharp expect=AWT160
 public sealed class Router([FromKey("Oat")] IReadOnlyDictionary<string, IMilk> milks);   // the map already holds every key
 
 [Container]
@@ -1709,10 +1721,12 @@ public static partial class CoffeeShop;
 A runtime-type dispatch dictionary (`IReadOnlyDictionary<Type, Func<TBase>>`) cannot be built: its value is not `Func<TBase>` over a non-generic interface, it carries a `[FromKey]`, a closing that implements `TBase` has more than one type argument, or the closings come from more than one generic interface, so a type argument does not identify one entry. See [Dispatch by runtime type](./resolution/keyed-dictionaries#dispatch-by-runtime-type).
 :::
 
-```csharp
+```csharp expect=AWT213
 public interface IOrderHandler;
 public interface IOrderHandler<T> : IOrderHandler;
 public interface IRefundHandler<T> : IOrderHandler;   // a second family under the same base
+public sealed class OrderPlacedHandler : IOrderHandler<OrderPlaced>;
+public sealed class OrderPlacedRefund : IRefundHandler<OrderPlaced>;
 
 public sealed class Counter(IReadOnlyDictionary<Type, Func<IOrderHandler>> handlers);   // typeof(OrderPlaced) is ambiguous
 
@@ -1731,7 +1745,7 @@ public static partial class CoffeeShop;
 A `WhenInjectedInto` contextual binding never applies because the named consumer has no unkeyed direct constructor parameter to redirect.
 :::
 
-```csharp
+```csharp expect=AWT167
 public sealed class KitchenDisplay;   // has no IReceiptPrinter parameter to redirect
 
 [Container]
@@ -1747,7 +1761,7 @@ public static partial class CoffeeShop;
 A registration sets both `WhenInjectedInto` and `Key`. A contextual binding is reached only through its consumer, so the `Key` could never be selected by a `[FromKey]` and is silently dropped. Remove one of the two.
 :::
 
-```csharp
+```csharp expect=AWT168
 [Container]
 [Singleton<ThermalPrinter, IReceiptPrinter>]
 [Singleton<WidePrinter, IReceiptPrinter>(WhenInjectedInto = typeof(DriveThroughRegister), Key = "wide")]   // Key is dropped
@@ -1761,7 +1775,7 @@ public static partial class CoffeeShop;
 Two different implementations set `WhenInjectedInto` for the same service and consumer, so both claim the one contextual slot for that consumer.
 :::
 
-```csharp
+```csharp expect=AWT169
 [Container]
 [Singleton<WidePrinter, IReceiptPrinter>(WhenInjectedInto = typeof(DriveThroughRegister))]
 [Singleton<ThermalPrinter, IReceiptPrinter>(WhenInjectedInto = typeof(DriveThroughRegister))]   // two bindings for one consumer
@@ -1775,7 +1789,7 @@ public static partial class CoffeeShop;
 A `[Key]` or `[FromKey]` uses a constant whose type is not a supported key type. A resolution key must be a `string`, an `enum` value, or a `typeof(...)`.
 :::
 
-```csharp
+```csharp expect=AWT170,AWT101
 public sealed class LatteRecipe([FromKey(5)] IMilk milk);   // int is not a supported key type
 
 [Container]
@@ -1792,7 +1806,7 @@ public static partial class CoffeeShop;
 A type is declared `[ImportService<T>]` (drawn from the host provider) but is also registered on the container. A type is either host-owned or Awaiten-owned, not both.
 :::
 
-```csharp
+```csharp expect=AWT175
 [Container]
 [ImportService<IPaymentGateway>]                 // declared external
 [Singleton<StripeGateway, IPaymentGateway>]      // …but is also registered, a contradiction
@@ -1805,7 +1819,7 @@ public static partial class CoffeeShop;
 A type declared `[ImportService<T>]` is never consumed by any dependency in the graph, so the declaration is dead. This is most often a stale or mistyped `[ImportService<T>]`.
 :::
 
-```csharp
+```csharp expect=AWT176
 [Container]
 [ImportService<IPaymentGateway>]   // nothing in the graph depends on IPaymentGateway
 [Singleton<Menu>]
@@ -1822,7 +1836,7 @@ These guard the line between your domain and the container. They are suppressibl
 A container-side composition attribute (a lifetime registration, `[Scan]`, `[Decorate]`, `[Composite]`, `[Import]`, `[ImportService]`, or `[InjectProperty]`) is applied to a class in an assembly that declares no `[Container]`. Composition belongs on the `[Container]` (or an imported `[Module]`); domain code should stay free of it. This is a best-effort guard: it stays silent in an assembly that also declares the `[Container]`, where the cross-assembly boundary is better enforced by an architecture test.
 :::
 
-```csharp
+```csharp no-compile
 // A domain library that declares no [Container]:
 [Singleton<EspressoMachine>]        // registration belongs on the [Container], not here
 public sealed class EspressoMachine;
@@ -1834,7 +1848,7 @@ public sealed class EspressoMachine;
 A resolver seam (`IAwaitenResolver`, `IAwaitenScope`, `IAwaitenRoot`, and the like) is injected into a type that is not the `[Container]` composition root. Resolving from the container at run time is the Service Locator anti-pattern: it hides the type's real dependencies and defeats the compile-time graph check. Inject the dependency you actually need instead, or, if the type is a host-integration adapter, suppress this on it with a justification. The typed fast paths `IAwaitenResolver<T>` and `IAwaitenAsyncResolver<T>` are single-service seams and are not reported.
 :::
 
-```csharp
+```csharp expect=AWT135
 public sealed class Barista(IAwaitenResolver resolver)   // locates dependencies at run time
 {
     public Cup Serve() => resolver.Resolve<Cup>();
@@ -1909,7 +1923,7 @@ Suppress it on the adapter, never project-wide: the diagnostic is right about ev
 User code constructs an `Owned<T>` with `new`. The handle disposes the scope it is given, so one built over the container root disposes the root, and one built over any other scope ends that scope behind its owner's back. Only the container creates `Owned<T>`, over the throwaway scope it built the value in: resolve `Owned<T>` or inject `Func<Owned<T>>` instead. The generated container's own handles are not reported, and a deliberate construction, such as a test double, can suppress the warning in source.
 :::
 
-```csharp
+```csharp expect=AWT205
 Owned<Cup> cup = new Owned<Cup>(root, new Cup());   // disposing it disposes the root
 Owned<Cup> owned = root.Resolve<Owned<Cup>>();      // the container builds the handle
 ```

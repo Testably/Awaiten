@@ -9,6 +9,7 @@ Declare a service type external with `[ImportService<T>]` on the container. Ever
 ```csharp
 [Container]
 [ImportService<IPaymentGateway>]
+[Singleton<Till>]
 [Singleton<Register>]
 public static partial class CoffeeShop;
 
@@ -59,6 +60,8 @@ Under the [MS.DI bridge](../msdi-bridge) this is automatic. `AddAwaitenContainer
 Standing alone, you set it yourself. Implement `IExternalResolver` and pass it to the generated `Root` constructor, so it is in place before anything resolves, eager singletons included.
 
 ```csharp
+using System.Diagnostics.CodeAnalysis;
+
 public sealed class HostResolver : IExternalResolver
 {
     public bool TryResolve(Type serviceType, object? key, [NotNullWhen(true)] out object? instance)

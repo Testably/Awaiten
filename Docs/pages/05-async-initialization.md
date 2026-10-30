@@ -68,17 +68,22 @@ await using IAwaitenScope order = await shop.CreateScopeAsync(cancellationToken)
 
 ## Reaching an async service synchronously is a compile error
 
-This is the point of the whole feature. In the strict default, you cannot get an async-tainted service through a synchronous path.
+This is the point of the whole feature. In the strict default, a synchronous relationship such as `Func<T>`, `Lazy<T>` or `Owned<T>` cannot reach an async-tainted service.
 
-```csharp
-EspressoMachine machine = shop.Resolve<EspressoMachine>();   // build error
+```csharp expect=AWT119
+public sealed class Register(Func<EspressoMachine> machine);   // build error
+
+[Container]
+[Singleton<EspressoMachine>]
+[Singleton<Register>]
+public static partial class CoffeeShop;
 ```
 
 > ```
-> AWT119: 'EspressoMachine' is async-initialized. Resolve it with ResolveAsync.
+> AWT119: 'Register' resolves 'EspressoMachine' through a synchronous Func<>, but 'EspressoMachine' is async-initialized; resolve it through ResolveAsync, or set SyncResolveAfterInit on the [Container]
 > ```
 
-If you do reach it at runtime through the by-type API, `Resolve` throws with guidance toward `ResolveAsync`, and `TryResolve` reports it as not available. It never hands back an uninitialized instance.
+If you do reach it at runtime, for example with `shop.Resolve<EspressoMachine>()`, `Resolve` throws with guidance toward `ResolveAsync`, and `TryResolve` reports it as not available. It never hands back an uninitialized instance.
 
 The same rule holds for a service that is only *transitively* tainted. A `Barista` that depends on the `EspressoMachine` is async too, so it is resolved with `ResolveAsync`.
 
@@ -92,7 +97,7 @@ public sealed class Barista(
     Task<EspressoMachine> warming,         // started for you, awaited later
     Lazy<Task<EspressoMachine>> lazy)       // built once, on first use
 {
-    public async Task<Cup> PullShotAsync() => (await machine()).Pull();
+    public async Task<bool> IsReadyAsync() => (await machine()).IsHot;
 }
 
 // Barista itself resolves synchronously:

@@ -54,9 +54,9 @@ public static partial class CoffeeShop;
 `DriveThroughRegister` gets the `WidePrinter`, and its constructor still just asks for `IReceiptPrinter`. Every other consumer, and the public resolution, get the unconditional `ThermalPrinter`. The contextual registration is private to its consumer, so it is left out of the public collection too.
 
 ```csharp
-shop.Resolve<DriveThroughRegister>().Printer; // WidePrinter
-shop.Resolve<CounterRegister>().Printer;      // ThermalPrinter
-shop.Resolve<IReceiptPrinter>();              // ThermalPrinter
+DriveThroughRegister driveThrough = shop.Resolve<DriveThroughRegister>();   // built with the WidePrinter
+CounterRegister counter = shop.Resolve<CounterRegister>();                  // built with the ThermalPrinter
+IReceiptPrinter printer = shop.Resolve<IReceiptPrinter>();                  // ThermalPrinter
 ```
 
 A contextual binding fills a property injected by [`[InjectProperty<T>]`](../resolution/property-injection) the same way it fills a constructor parameter, and a decorator on the service wraps the contextual implementation along with the default.

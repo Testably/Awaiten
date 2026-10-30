@@ -85,9 +85,12 @@ public sealed class LoggingBehavior<T>(IHandler<T> inner) : IHandler<T>
     public Task HandleAsync(T request) { /* log, then */ return inner.HandleAsync(request); }
 }
 
+public sealed class Checkout(IHandler<PlaceOrder> handler);
+
 [Container]
 [Transient(typeof(Handler<>), typeof(IHandler<>))]
 [Decorate(typeof(LoggingBehavior<>), typeof(IHandler<>))]
+[Transient<Checkout>]   // needs IHandler<PlaceOrder>, so that closing is in the graph
 public static partial class CoffeeShop;
 
 // Resolve<IHandler<PlaceOrder>>() returns LoggingBehavior<PlaceOrder>(Handler<PlaceOrder>)

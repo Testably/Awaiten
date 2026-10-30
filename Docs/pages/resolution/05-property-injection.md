@@ -29,7 +29,7 @@ A container-side property resolves the same way a constructor parameter does: re
 
 ### Select a keyed registration with `Key`
 
-```csharp
+```csharp no-compile
 [InjectProperty<Barista>(nameof(Barista.DefaultMilk), Key = "Oat")]
 ```
 
@@ -49,7 +49,7 @@ A deferred property needs an accessible plain `set`, not `init` ([AWT144](../dia
 
 By default a property whose service is unregistered is a missing dependency ([AWT101](../diagnostics#awt101)). Mark the entry `Optional = true` to leave it at its default instead.
 
-```csharp
+```csharp no-compile
 [InjectProperty<Barista>(nameof(Barista.Metrics), Optional = true)]
 ```
 

@@ -20,7 +20,7 @@ Correctness is a must. The other goals are strong defaults and win in this order
 ## Validation
 
 - The tests run on TUnit (Microsoft.Testing.Platform, selected in `global.json`): `dotnet test --project Tests/Awaiten.Tests -f net10.0`, filter with `--treenode-filter "/*/*/<class>/<test>"`. Tests run in parallel, also within a class; mark a class whose tests share static state with `[NotInParallel(nameof(...))]`.
-- Run the tests relevant to your change before pushing. Generator and diagnostic changes: `Tests/Awaiten.SourceGenerators.Tests`. Runtime behaviour: `Tests/Awaiten.Tests`. MS.DI bridge: `Tests/Awaiten.Extensions.DependencyInjection.Tests`. Examples and docs: `Tests/Awaiten.ExampleTests`.
+- Run the tests relevant to your change before pushing. Generator and diagnostic changes: `Tests/Awaiten.SourceGenerators.Tests`. Runtime behaviour: `Tests/Awaiten.Tests`. MS.DI bridge: `Tests/Awaiten.Extensions.DependencyInjection.Tests`. Examples and docs: `Tests/Awaiten.ExampleTests`, and the slow `Tests/Awaiten.Docs.Tests` for any change to a code block in `Docs/pages`.
 - Public API change: run `Tests/Awaiten.Api.Tests`, accept with `AWEXPECT_ACCEPT_SNAPSHOTS=all` (or the explicit `AcceptApiChanges` test) and commit the changed `*.awexpect-snapshot.txt` files. Never commit a pending snapshot.
 - Code that compiles for net48 or netstandard2.0 has no `System.Index`/`System.Range`, so avoid `^1`, ranges and list patterns there, and run the net48 leg (Windows only) when using a newer language feature.
 - Reflection, trimming, AOT or MS.DI bridge changes: also run `./build.ps1 AotSample` (needs a platform linker) and `./build.ps1 WebSample`.
