@@ -119,7 +119,7 @@ public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScop
 		// accumulate there for the container's lifetime. The container knows exactly why and what to change, so
 		// throwing that, without constructing anything, beats returning a null the caller would report as "no such
 		// service", or would bind from somewhere else and fail far from the cause.
-		if (_metadata?.GetResolvability(serviceType, null).Reason is { } reason)
+		if (_metadata?.GetResolvability(serviceType).Reason is { } reason)
 		{
 			throw new InvalidOperationException(reason);
 		}

@@ -164,6 +164,24 @@ public sealed class AwaitenResolverExtensionsTests
 		await That(resolver.RequestedKey).IsEqualTo("special");
 	}
 
+	[Test]
+	public async Task GetResolvability_WhenRootIsNull_Throws()
+	{
+		IAwaitenRoot root = null!;
+
+		await That(() => root.GetResolvability(typeof(string))).Throws<ArgumentNullException>()
+			.WithParamName("root");
+	}
+
+	[Test]
+	public async Task GetResolvabilityOfT_WhenRootIsNull_Throws()
+	{
+		IAwaitenRoot root = null!;
+
+		await That(() => root.GetResolvability<string>()).Throws<ArgumentNullException>()
+			.WithParamName("root");
+	}
+
 	private sealed class FakeResolver : IAwaitenAsyncResolver
 	{
 		public object ResolveResult { get; set; } = null!;

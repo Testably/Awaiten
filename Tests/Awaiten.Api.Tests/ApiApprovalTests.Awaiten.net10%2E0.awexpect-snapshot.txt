@@ -70,6 +70,11 @@ namespace Awaiten
             public bool TryResolve<T>([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out T? instance) { }
             public bool TryResolve<T>(object key, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out T? instance) { }
         }
+        extension(Awaiten.IAwaitenRoot root)
+        {
+            public Awaiten.AwaitenResolvability GetResolvability(System.Type serviceType) { }
+            public Awaiten.AwaitenResolvability GetResolvability<T>() { }
+        }
     }
     [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
     public static class AwaitenTaskProjection
