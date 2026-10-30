@@ -7,7 +7,7 @@ namespace Awaiten.Extensions.DependencyInjection.Tests;
 ///     seam: an unkeyed dependency resolves through the ordinary surface, a keyed one through the provider's keyed
 ///     surface, and a provider without keyed support simply yields nothing.
 /// </summary>
-public sealed class ServiceProviderExternalResolverTests
+public sealed class AwaitenServiceProviderExternalResolverTests
 {
 	private interface IClock;
 
@@ -21,13 +21,13 @@ public sealed class ServiceProviderExternalResolverTests
 
 	[Test]
 	public async Task Constructor_NullProvider_Throws()
-		=> await That(() => _ = new ServiceProviderExternalResolver(null!)).Throws<ArgumentNullException>();
+		=> await That(() => _ = new AwaitenServiceProviderExternalResolver(null!)).Throws<ArgumentNullException>();
 
 	[Test]
 	public async Task TryResolve_NullServiceType_Throws()
 	{
 		using ServiceProvider provider = new ServiceCollection().BuildServiceProvider();
-		ServiceProviderExternalResolver resolver = new(provider);
+		AwaitenServiceProviderExternalResolver resolver = new(provider);
 
 		await That(() => resolver.TryResolve(null!, null, out _)).Throws<ArgumentNullException>();
 	}
@@ -39,7 +39,7 @@ public sealed class ServiceProviderExternalResolverTests
 		ServiceCollection services = new();
 		services.AddSingleton<IClock>(clock);
 		using ServiceProvider provider = services.BuildServiceProvider();
-		ServiceProviderExternalResolver resolver = new(provider);
+		AwaitenServiceProviderExternalResolver resolver = new(provider);
 
 		bool resolved = resolver.TryResolve(typeof(IClock), null, out object? instance);
 
@@ -51,7 +51,7 @@ public sealed class ServiceProviderExternalResolverTests
 	public async Task TryResolve_Unkeyed_ReturnsFalseWhenMissing()
 	{
 		using ServiceProvider provider = new ServiceCollection().BuildServiceProvider();
-		ServiceProviderExternalResolver resolver = new(provider);
+		AwaitenServiceProviderExternalResolver resolver = new(provider);
 
 		bool resolved = resolver.TryResolve(typeof(IClock), null, out object? instance);
 
@@ -66,7 +66,7 @@ public sealed class ServiceProviderExternalResolverTests
 		ServiceCollection services = new();
 		services.AddKeyedSingleton<IClock>("utc", utc);
 		using ServiceProvider provider = services.BuildServiceProvider();
-		ServiceProviderExternalResolver resolver = new(provider);
+		AwaitenServiceProviderExternalResolver resolver = new(provider);
 
 		bool resolved = resolver.TryResolve(typeof(IClock), "utc", out object? instance);
 
@@ -77,7 +77,7 @@ public sealed class ServiceProviderExternalResolverTests
 	[Test]
 	public async Task TryResolve_Keyed_WhenProviderHasNoKeyedSupport_ReturnsFalse()
 	{
-		ServiceProviderExternalResolver resolver = new(new NonKeyedProvider());
+		AwaitenServiceProviderExternalResolver resolver = new(new NonKeyedProvider());
 
 		bool resolved = resolver.TryResolve(typeof(IClock), "utc", out object? instance);
 

@@ -194,7 +194,7 @@ internal static partial class Sources
 
 		// The external resolver this scope routes its [ImportService<T>] / [ImportServices] dependencies through. A
 		// host wires each scope; a child without its own falls back to the root's in __ResolveExternal. The
-		// explicit IAwaitenExternalResolverHost.ExternalResolver property lands in the members region.
+		// explicit IAwaitenExternalResolverHost members land in the members region.
 		Separate(fields);
 		Indent(fields, body).AppendLine("private global::Awaiten.IExternalResolver? __externalResolver;");
 
@@ -214,18 +214,21 @@ internal static partial class Sources
 		Indent(members, body).AppendLine("}");
 
 		Separate(members);
+		Indent(members, body).AppendLine("global::Awaiten.IExternalResolver? global::Awaiten.IAwaitenExternalResolverHost.ExternalResolver => __externalResolver;");
+		Separate(members);
 		// Set-once: replacing a resolver would let one scope mix instances from two providers. Setting the same
-		// instance again stays a no-op, so a host's idempotent ??= wiring keeps working.
-		Indent(members, body).AppendLine("global::Awaiten.IExternalResolver? global::Awaiten.IAwaitenExternalResolverHost.ExternalResolver");
+		// instance again stays a no-op, so a host's idempotent "set if unset" wiring keeps working.
+		Indent(members, body).AppendLine("void global::Awaiten.IAwaitenExternalResolverHost.SetExternalResolver(global::Awaiten.IExternalResolver resolver)");
 		Indent(members, body).AppendLine("{");
-		Indent(members, body + 1).AppendLine("get => __externalResolver;");
-		Indent(members, body + 1).AppendLine("set");
+		Indent(members, body + 1).AppendLine("if (resolver == null)");
 		Indent(members, body + 1).AppendLine("{");
-		Indent(members, body + 2).AppendLine("global::Awaiten.IExternalResolver? current = global::System.Threading.Interlocked.CompareExchange(ref __externalResolver, value, null);");
-		Indent(members, body + 2).AppendLine("if (current != null && current != value)");
-		Indent(members, body + 2).AppendLine("{");
-		Indent(members, body + 3).Append("throw new global::System.InvalidOperationException(").Append(ExternalResolverAlreadySetMessage).AppendLine(");");
-		Indent(members, body + 2).AppendLine("}");
+		Indent(members, body + 2).AppendLine("throw new global::System.ArgumentNullException(nameof(resolver));");
+		Indent(members, body + 1).AppendLine("}");
+		Separate(members);
+		Indent(members, body + 1).AppendLine("global::Awaiten.IExternalResolver? current = global::System.Threading.Interlocked.CompareExchange(ref __externalResolver, resolver, null);");
+		Indent(members, body + 1).AppendLine("if (current != null && current != resolver)");
+		Indent(members, body + 1).AppendLine("{");
+		Indent(members, body + 2).Append("throw new global::System.InvalidOperationException(").Append(ExternalResolverAlreadySetMessage).AppendLine(");");
 		Indent(members, body + 1).AppendLine("}");
 		Indent(members, body).AppendLine("}");
 
@@ -692,7 +695,9 @@ internal static partial class Sources
 		builder.AppendLine();
 		Indent(builder, depth + 1).AppendLine("public global::Awaiten.AwaitenResolvability GetResolvability(global::System.Type serviceType, object? key) => default;");
 		builder.AppendLine();
-		Indent(builder, depth + 1).AppendLine("global::Awaiten.IExternalResolver? global::Awaiten.IAwaitenExternalResolverHost.ExternalResolver { get; set; }");
+		Indent(builder, depth + 1).AppendLine("global::Awaiten.IExternalResolver? global::Awaiten.IAwaitenExternalResolverHost.ExternalResolver => null;");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("void global::Awaiten.IAwaitenExternalResolverHost.SetExternalResolver(global::Awaiten.IExternalResolver resolver) { }");
 
 		Indent(builder, depth).AppendLine("}");
 	}

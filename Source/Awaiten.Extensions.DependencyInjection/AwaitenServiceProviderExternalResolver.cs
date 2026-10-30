@@ -9,12 +9,12 @@ namespace Awaiten.Extensions.DependencyInjection;
 ///     <see cref="IExternalResolver" /> seam, so a generated container can resolve its
 ///     <c>[ImportService&lt;T&gt;]</c> / <c>[ImportServices]</c> dependencies from the host's provider.
 /// </summary>
-public sealed class ServiceProviderExternalResolver : IExternalResolver
+public sealed class AwaitenServiceProviderExternalResolver : IExternalResolver
 {
 	private readonly IServiceProvider _provider;
 
 	/// <param name="provider">The provider to resolve external dependencies from.</param>
-	public ServiceProviderExternalResolver(IServiceProvider provider)
+	public AwaitenServiceProviderExternalResolver(IServiceProvider provider)
 		=> _provider = provider ?? throw new ArgumentNullException(nameof(provider));
 
 	/// <inheritdoc />

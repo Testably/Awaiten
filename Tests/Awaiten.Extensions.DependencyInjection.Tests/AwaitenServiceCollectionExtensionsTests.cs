@@ -77,7 +77,9 @@ public sealed class AwaitenServiceCollectionExtensionsTests
 		public System.Collections.Generic.IReadOnlyList<AwaitenExternalDependency> ExternalDependencies
 			=> System.Array.Empty<AwaitenExternalDependency>();
 
-		public IExternalResolver? ExternalResolver { get; set; }
+		public IExternalResolver? ExternalResolver { get; private set; }
+
+		public void SetExternalResolver(IExternalResolver resolver) => ExternalResolver = resolver;
 
 		public AwaitenResolvability GetResolvability(Type serviceType, object? key) => default;
 

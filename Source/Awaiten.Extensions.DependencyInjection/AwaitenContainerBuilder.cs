@@ -70,7 +70,10 @@ public sealed class AwaitenContainerBuilder<TRoot>
 			{
 				lock (_provider.GetRequiredService<AwaitenRootProviderProbe>())
 				{
-					_container.ExternalResolver ??= new ServiceProviderExternalResolver(_provider);
+					if (_container.ExternalResolver is null)
+					{
+						_container.SetExternalResolver(new AwaitenServiceProviderExternalResolver(_provider));
+					}
 				}
 			}
 
