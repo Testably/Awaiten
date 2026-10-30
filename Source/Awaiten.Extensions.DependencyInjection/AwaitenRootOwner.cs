@@ -23,6 +23,9 @@ internal sealed class AwaitenRootOwner<TRoot> : IDisposable, IAsyncDisposable
 	/// <inheritdoc />
 	public ValueTask DisposeAsync()
 	{
+#if NET
+		return Root.DisposeAsync();
+#else
 		if (Root is IAsyncDisposable asyncDisposable)
 		{
 			return asyncDisposable.DisposeAsync();
@@ -30,5 +33,6 @@ internal sealed class AwaitenRootOwner<TRoot> : IDisposable, IAsyncDisposable
 
 		Root.Dispose();
 		return default;
+#endif
 	}
 }

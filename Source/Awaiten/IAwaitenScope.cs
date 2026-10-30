@@ -14,8 +14,14 @@ namespace Awaiten;
 ///     Scoped registrations resolve to one instance per scope; transients resolved from a scope are owned by it.
 ///     Disposing a scope disposes the instances it owns (scoped instances and disposable transients) in reverse
 ///     order of creation. Disposing the root additionally disposes the singletons; disposing a child scope does not.
+///     A generated scope is disposed asynchronously through <c>await using</c>, which awaits the <c>DisposeAsync</c>
+///     of the instances it owns and is required when one of them is <c>IAsyncDisposable</c> only.
 /// </remarks>
-public interface IAwaitenScope : IAwaitenAsyncResolver, IDisposable
+public interface IAwaitenScope : IAwaitenAsyncResolver,
+#if NET || NETSTANDARD2_1_OR_GREATER
+	IAsyncDisposable,
+#endif
+	IDisposable
 {
 	/// <summary>Creates a new child <see cref="IAwaitenScope" />. Disposing the scope disposes the instances it owns.</summary>
 	IAwaitenScope CreateScope();
@@ -26,4 +32,17 @@ public interface IAwaitenScope : IAwaitenAsyncResolver, IDisposable
 	///     disposed rather than leaked.
 	/// </summary>
 	Task<IAwaitenScope> CreateScopeAsync(CancellationToken cancellationToken = default);
+
+#if NET || NETSTANDARD2_1_OR_GREATER
+	/// <summary>
+	///     Falls back to the synchronous <see cref="IDisposable.Dispose" />. A generated scope replaces this with an
+	///     asynchronous drain; the fallback serves scopes generated against the netstandard2.0 asset and
+	///     hand-written implementations, which own no <see cref="IAsyncDisposable" />-only instances.
+	/// </summary>
+	ValueTask IAsyncDisposable.DisposeAsync()
+	{
+		Dispose();
+		return default;
+	}
+#endif
 }

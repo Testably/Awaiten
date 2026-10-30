@@ -129,13 +129,6 @@ internal static partial class Sources
 		AppendXmlSummary(builder, depth,
 			"A resolution scope: caches scoped services and disposes the instances it created.");
 		Indent(builder, depth).Append("public class Scope : global::Awaiten.IAwaitenScope, global::Awaiten.IAwaitenExternalResolverHost");
-		if (asyncDisposal)
-		{
-			// IAsyncDisposable is implemented on the concrete Scope, not the IAwaitenScope interface (which would
-			// break every hand-implementer). Emitted only when the compilation can see the type.
-			builder.Append(", global::System.IAsyncDisposable");
-		}
-
 		EmitGenericResolverBases(builder, instances, strict, syncResolveAfterInit);
 		builder.AppendLine();
 		Indent(builder, depth).AppendLine("{");
@@ -616,14 +609,8 @@ internal static partial class Sources
 			$"\"Awaiten: container '{typeName}' has registration errors; see the build diagnostics (AWT1xx).\"";
 		// The container has registration errors, so emit a throwing Root that still satisfies the shape
 		// consumers depend on, keeping the build focused on the actionable AWT diagnostics rather than cascading
-		// "type not found" errors. It implements IAwaitenContainerMetadata (and IAsyncDisposable when available).
-		Indent(builder, depth).Append("public sealed class Root : global::Awaiten.IAwaitenContainerMetadata");
-		if (asyncDisposal)
-		{
-			builder.Append(", global::System.IAsyncDisposable");
-		}
-
-		builder.AppendLine();
+		// "type not found" errors. It implements IAwaitenContainerMetadata.
+		Indent(builder, depth).AppendLine("public sealed class Root : global::Awaiten.IAwaitenContainerMetadata");
 		Indent(builder, depth).AppendLine("{");
 		Indent(builder, depth + 1).Append(
 				"public object Resolve(global::System.Type serviceType) => throw new global::System.InvalidOperationException(")

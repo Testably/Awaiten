@@ -544,7 +544,7 @@ public partial class ComprehensiveContainerExample
 	// The tests below tear their Root down with a synchronous `using`: the example also compiles for net48,
 	// whose generated Root has no DisposeAsync surface. That is safe because the shop's only
 	// IAsyncDisposable-only service, the scoped DishStation (net8.0+), is resolved solely in
-	// ScopedAsyncDisposable_IsTornDownAsynchronouslyWithItsScope inside a child scope drained through
+	// the ScopedAsyncDisposable tests inside a child scope drained through
 	// DisposeAsync, so a root never tracks one (AWT156 warns on what the disposed owner could track).
 #pragma warning disable AWT156
 	[Test]
@@ -630,13 +630,38 @@ public partial class ComprehensiveContainerExample
 		CancellationToken ct = TestContext.Current!.Execution.CancellationToken;
 		await using CoffeeShop.Root shop = new();
 
-		IAwaitenScope order = await shop.CreateScopeAsync(ct);
-		DishStation station = order.Resolve<DishStation>();
-		await That(station.Disposed).IsFalse();
+		DishStation station = await ServeOrderAsync(shop, ct);
 
-		await ((IAsyncDisposable)order).DisposeAsync();
 		await That(station.Disposed).IsTrue()
 			.Because("a scoped IAsyncDisposable is disposed asynchronously with its scope");
+
+		static async Task<DishStation> ServeOrderAsync(CoffeeShop.Root shop, CancellationToken ct)
+		{
+			await using IAwaitenScope order = await shop.CreateScopeAsync(ct);
+			DishStation station = order.Resolve<DishStation>();
+			await That(station.Disposed).IsFalse();
+			return station;
+		}
+	}
+
+	[Test]
+	public async Task ScopedAsyncDisposable_IsTornDownAsynchronouslyWithItsConcreteScope()
+	{
+		CancellationToken ct = TestContext.Current!.Execution.CancellationToken;
+		await using CoffeeShop.Root shop = new();
+
+		DishStation station = await ServeOrderAsync(shop, ct);
+
+		await That(station.Disposed).IsTrue()
+			.Because("CreateScopeAsync returns the concrete Scope, whose DisposeAsync drains the scoped IAsyncDisposable");
+
+		static async Task<DishStation> ServeOrderAsync(CoffeeShop.Root shop, CancellationToken ct)
+		{
+			await using CoffeeShop.Scope order = await shop.CreateScopeAsync(ct);
+			DishStation station = order.Resolve<DishStation>();
+			await That(station.Disposed).IsFalse();
+			return station;
+		}
 	}
 #endif
 

@@ -294,8 +294,10 @@ public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScop
 			return default;
 		}
 
-		// The generated scope implements IAsyncDisposable concretely (it is not on IAwaitenScope), so async
-		// disposal is preferred when available and falls back to the synchronous path otherwise.
+#if NET
+		return _container.DisposeAsync();
+#else
+		// The netstandard2.0 IAwaitenScope is not IAsyncDisposable, so only a scope that opts in is disposed asynchronously.
 		if (_container is IAsyncDisposable asyncDisposable)
 		{
 			return asyncDisposable.DisposeAsync();
@@ -303,6 +305,7 @@ public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScop
 
 		_container.Dispose();
 		return default;
+#endif
 	}
 
 	/// <summary>

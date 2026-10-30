@@ -48,6 +48,6 @@ public readonly struct Owned<T> :
 	///     A synchronous <see cref="Dispose" /> of such a handle throws. Disposing a <see langword="default" /> handle is a no-op.
 	/// </summary>
 	public ValueTask DisposeAsync()
-		=> _scope is IAsyncDisposable asyncScope ? asyncScope.DisposeAsync() : default;
+		=> _scope?.DisposeAsync() ?? default;
 #endif
 }

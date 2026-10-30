@@ -1190,7 +1190,7 @@ public partial class AsyncInitializationTests
 		WarmUpRecorder recorder = container.Resolve<WarmUpRecorder>();
 		using CancellationTokenSource cts = new();
 
-		Task<IAwaitenScope> createScope = container.CreateScopeAsync(cts.Token);
+		Task<CanceledWarmUpContainer.Scope> createScope = container.CreateScopeAsync(cts.Token);
 		cts.Cancel();
 
 		OperationCanceledException thrown = await That(() => createScope)
