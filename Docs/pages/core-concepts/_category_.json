@@ -1,0 +1,8 @@
+{
+	"label": "Core concepts",
+	"collapsed": false,
+	"position": 3,
+	"customProps": {
+		"description": "The ideas every container builds on. Lifetimes, scopes, async initialization, and disposal."
+	}
+}

@@ -52,15 +52,16 @@ var cup = shop.Resolve<Cup>();       // a fresh cup, wired and ready
 ## Where to go next
 
 - [Getting started](./getting-started) builds your first container end to end.
-- [Design principles & the composition root](./design-principles) is the design behind the mechanics; read it before the feature pages.
-- [Lifetimes](./registration/lifetimes) explains singleton, scoped, and transient.
-- [Async initialization](./async-initialization) covers the headline feature.
-- [Diagnostics](./diagnostics) lists every compile-time check.
 - [Complete example](./complete-example) assembles a full coffee shop.
+- [Lifetimes](./core-concepts/lifetimes) explains singleton, scoped, and transient.
+- [Async initialization](./core-concepts/async-initialization) covers the headline feature.
+- [MS.DI bridge](./hosting/msdi-bridge) runs a container under ASP.NET Core and the generic host.
+- [Design principles & the composition root](./design-principles) is the design behind the mechanics; read it once you know the basics.
+- [Diagnostics](./diagnostics) lists every compile-time check.
 
 ## Packages
 
 | Package | Description |
 |---|---|
 | `Awaiten` | The core: attributes, the source generator, and the runtime seams. No third-party dependencies; on netstandard2.0 only `Microsoft.Bcl.AsyncInterfaces`. |
-| `Awaiten.Extensions.DependencyInjection` | Microsoft.Extensions.DependencyInjection interop for ASP.NET Core, the generic host, and other containers. See the [MS.DI bridge](./msdi-bridge). |
+| `Awaiten.Extensions.DependencyInjection` | Microsoft.Extensions.DependencyInjection interop for ASP.NET Core, the generic host, and other containers. See the [MS.DI bridge](./hosting/msdi-bridge). |

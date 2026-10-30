@@ -26,7 +26,7 @@ public sealed class Register(Lazy<MenuBoard> menu)
 
 ## Task: the async shape
 
-`Task<T>` is how a synchronous service holds an async one. See [Async initialization](../async-initialization) for the full story.
+`Task<T>` is how a synchronous service holds an async one. See [Async initialization](../core-concepts/async-initialization) for the full story.
 
 ```csharp
 public sealed class Barista(Task<EspressoMachine> machine)

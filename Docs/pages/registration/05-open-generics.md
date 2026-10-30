@@ -123,4 +123,4 @@ public static partial class CoffeeShop;
 ## Where to go next
 
 - [Collections](../resolution/collections) for resolving every implementation.
-- [Generic variance](../advanced/generic-variance) for covariant and contravariant matching.
+- [Generic variance](../resolution/generic-variance) for covariant and contravariant matching.

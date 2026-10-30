@@ -38,7 +38,7 @@ EspressoMachine b = shop.Resolve<EspressoMachine>();
 
 ## Scoped
 
-One instance per scope. The same within a scope, different across scopes. See [Scopes](../lifetime/scopes) for how to open one.
+One instance per scope. The same within a scope, different across scopes. See [Scopes](./scopes) for how to open one.
 
 ```csharp
 using IAwaitenScope morning = shop.CreateScope();
@@ -70,11 +70,11 @@ Register the same type under several service types and Awaiten shares one instan
 // Resolve<IReader>() and Resolve<IWriter>() return the same Ledger
 ```
 
-This holds for `Factory` and `Instance` registrations too. Name the same one on each service and they resolve to a single shared object. See [Factories and instances](./factories-and-instances).
+This holds for `Factory` and `Instance` registrations too. Name the same one on each service and they resolve to a single shared object. See [Factories and instances](../registration/factories-and-instances).
 
 ## Where the lifetime is set
 
-A single registration picks its lifetime by its attribute: `[Singleton]`, `[Scoped]` or `[Transient]`. A bulk or composite registration, [`[Scan]`](./scanning) and [`[Composite]`](./composites), sets it with `Lifetime =` and defaults to `Transient`. A [decorator](./decorators) has no lifetime of its own and inherits the lifetime of the service it wraps.
+A single registration picks its lifetime by its attribute: `[Singleton]`, `[Scoped]` or `[Transient]`. A bulk or composite registration, [`[Scan]`](../registration/scanning) and [`[Composite]`](../registration/composites), sets it with `Lifetime =` and defaults to `Transient`. A [decorator](../registration/decorators) has no lifetime of its own and inherits the lifetime of the service it wraps.
 
 ```csharp
 [Singleton<EspressoMachine>]
@@ -103,6 +103,6 @@ If a singleton genuinely needs a scoped dependency, reach it through a relations
 
 ## Where to go next
 
-- [Factories and instances](./factories-and-instances) when a constructor is not enough.
-- [Scopes](../lifetime/scopes) to control scoped lifetimes.
-- [Disposal](../lifetime/disposal) for how instances are torn down.
+- [Factories and instances](../registration/factories-and-instances) when a constructor is not enough.
+- [Scopes](./scopes) to control scoped lifetimes.
+- [Disposal](./disposal) for how instances are torn down.

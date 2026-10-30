@@ -106,7 +106,7 @@ A decorator inherits the lifetime of what it decorates. Wrap a singleton and the
 
 ## Async inner services
 
-If the inner service is async-initialized, the whole chain is async-tainted. Resolve it with `ResolveAsync`. A synchronous resolve is a build error ([AWT119](../diagnostics#awt119)). See [Async initialization](../async-initialization).
+If the inner service is async-initialized, the whole chain is async-tainted. Resolve it with `ResolveAsync`. A synchronous resolve is a build error ([AWT119](../diagnostics#awt119)). See [Async initialization](../core-concepts/async-initialization).
 
 *Note: decorating a service that is not registered is a build error ([AWT123](../diagnostics#awt123)), and a decorator needs exactly one constructor parameter of the decorated type ([AWT124](../diagnostics#awt124)). The open generic `typeof` form additionally requires an unbound generic ([AWT127](../diagnostics#awt127)) of matching arity ([AWT125](../diagnostics#awt125)), and skips a closing whose type arguments violate the decorator's constraints ([AWT126](../diagnostics#awt126)).*
 

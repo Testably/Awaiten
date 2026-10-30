@@ -1,7 +1,7 @@
 # Awaiten web sample
 
 An ASP.NET Core minimal-API app whose composition root is an Awaiten container. It exists to prove the
-[MS.DI bridge](../../Docs/pages/08-msdi-bridge.md) end to end against a real host, not just in unit tests:
+[MS.DI bridge](../../Docs/pages/hosting/01-msdi-bridge.md) end to end against a real host, not just in unit tests:
 every claim the bridge documentation makes is exercised here by a request that actually goes over HTTP.
 
 ## Run it

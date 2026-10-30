@@ -17,7 +17,7 @@ public static partial class CoffeeShop
 }
 ```
 
-The method is `static`, like the container class that declares it. A factory that returns `Task<T>` makes the service async. See [Async initialization](../async-initialization).
+The method is `static`, like the container class that declares it. A factory that returns `Task<T>` makes the service async. See [Async initialization](../core-concepts/async-initialization).
 
 *Note: a `Factory` cannot name an overloaded method ([AWT112](../diagnostics#awt112)), and a registration cannot set both `Factory` and `Instance` ([AWT110](../diagnostics#awt110)).*
 
@@ -42,7 +42,7 @@ A factory can return an interface that hides a disposable concrete type. Awaiten
 
 An `Instance` member is the opposite. You own it, so Awaiten leaves its disposal to you.
 
-To keep a factory-built service but opt out of that disposal, set `SuppressDisposal = true`. Awaiten builds it and never disposes it, leaving teardown to you or to an `OnRelease` hook, which is how you [pool a rented object](../lifetime/disposal#suppressing-disposal).
+To keep a factory-built service but opt out of that disposal, set `SuppressDisposal = true`. Awaiten builds it and never disposes it, leaving teardown to you or to an `OnRelease` hook, which is how you [pool a rented object](../core-concepts/disposal#suppressing-disposal).
 
 ## Where to go next
 
