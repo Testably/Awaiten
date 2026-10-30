@@ -5,7 +5,9 @@ namespace Awaiten;
 ///     and how a collision between two such defaults is handled. An overridable default applies only when
 ///     nothing else registers the same service; a stronger (non-fallback) registration, or an earlier
 ///     fallback, replaces it entirely, even in collections. The two overridable modes differ only in whether
-///     an unresolved collision between them is reported.
+///     an unresolved collision between them is reported. That choice is deliberately part of the registration:
+///     it lets a module author decide per registration whether a competing default deserves a warning
+///     (AWT148), which a consumer's project-wide <c>.editorconfig</c> severity cannot express.
 /// </summary>
 /// <remarks>
 ///     The generator reads these as their underlying int off the attribute's <c>TypedConstant</c> (it cannot

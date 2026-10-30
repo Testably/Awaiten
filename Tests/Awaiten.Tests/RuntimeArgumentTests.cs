@@ -103,6 +103,20 @@ public partial class RuntimeArgumentTests
 	}
 
 	[Test]
+	public async Task Arg_OnAPositionalRecordParameter_IsSuppliedToTheConstructorParameter()
+	{
+		using RuntimeArgumentContainer.Root container = new();
+
+		Func<string, Ticket> tickets = container.Resolve<Func<string, Ticket>>();
+		Ticket ticket = tickets("T-7");
+
+		await That(ticket.Code).IsEqualTo("T-7")
+			.Because("[Arg] on a positional record parameter targets the primary constructor parameter, not the generated property");
+		await That(ticket.Engine).IsSameAs(container.Resolve<Engine>())
+			.Because("the record's other positional parameter still resolves from the graph");
+	}
+
+	[Test]
 	public async Task Func_BoundToASingleton_ReleasesTheBuiltDisposablesWithTheContainer()
 	{
 		RuntimeArgumentContainer.Root container = new();
@@ -204,6 +218,8 @@ public partial class RuntimeArgumentTests
 		public Engine Engine { get; }
 	}
 
+	public sealed record Ticket(Engine Engine, [Arg] string Code);
+
 	// A singleton holding a Func over a disposable parameterized service: the built tools bind to the root.
 #pragma warning disable AWT118 // Root-accumulating factory: intentional here, see above.
 	public sealed class Depot
@@ -227,6 +243,7 @@ public partial class RuntimeArgumentTests
 	[Transient<Widget>]
 	[Transient<Crate>]
 	[Transient<Stamp>]
+	[Transient<Ticket>]
 	[Singleton<Depot>]
 	[Singleton<Workshop>]
 	public static partial class RuntimeArgumentContainer;

@@ -38,7 +38,6 @@
  AWT134  | Awaiten   | Warning  | A composition attribute ([Singleton], [Scan], [Decorate], …) is applied in an assembly that declares no [Container]; composition belongs on the [Container] or an imported [Module]
  AWT135  | Awaiten   | Warning  | A resolver interface (IAwaitenResolver/IAwaitenScope/IAwaitenRoot) is injected into a type that is not a [Container] composition root (Service Locator)
  AWT136  | Awaiten   | Error    | An [Inject] property has no set or init accessor the container can assign through
- AWT137  | Awaiten   | Error    | An injected property is marked [Arg]
  AWT138  | Awaiten   | Warning  | A [Scan] matched no concrete type assignable to its marker
  AWT139  | Awaiten   | Warning  | A [Scan(As = ScanAs.Marker)] matched a type with no assignable interface
  AWT140  | Awaiten   | Warning  | A [Scan(InAssembliesOf = …)] named an assembly with no candidate types
@@ -107,3 +106,5 @@
  AWT203  | Awaiten   | Error    | A self-compiled module [Scan] hook has a parameter type inaccessible outside the module's assembly, so the generated hook wrapper cannot expose it
  AWT204  | Awaiten   | Error    | A self-compiled module [Scan] hook parameter carries [FromKey]/[Inject] metadata the generated hook wrapper cannot mirror
  AWT205  | Awaiten   | Warning  | User code constructs an Owned<T> disposal handle with new, although only the container should create one
+
+; AWT137 (an injected property marked [Arg]) is retired: [Arg] targets only parameters, so the compiler rejects it on a property. The id stays reserved and is never reused.

@@ -562,19 +562,15 @@ public static partial class CoffeeShop;
 
 ### AWT137
 
-:::danger[Error]
-An injected property is marked `[Arg]`.
+:::info[Retired]
+No longer reported. `[Arg]` is valid only on parameters, so the C# compiler rejects it on a property (CS0592). The id stays reserved and is never reused.
 :::
 
 ```csharp
 public sealed class Barista
 {
-    [Inject, Arg] public string? Name { get; set; }   // [Arg] is for constructor and factory parameters
+    [Inject, Arg] public string? Name { get; set; }   // CS0592: [Arg] is for constructor and factory parameters
 }
-
-[Container]
-[Transient<Barista>]
-public static partial class CoffeeShop;
 ```
 
 ## Ownership and lifetime safety

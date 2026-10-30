@@ -107,6 +107,10 @@ public sealed class LatteRecipe([FromKey(MilkKind.Oat)] IMilk milk);
 Prefer distinct abstractions, or a [composite](./composites), over one service type selected by a key. A key is invisible to the type system, so nothing checks that a consumer asks for a key that exists. Reach for keys (and `WhenInjectedInto`) only when the implementations really are interchangeable variants of one abstraction, like the milk fridge above. Resolving the ambiguity with a key can hide a design that wants to be split into separate types, see [Design principles](../design-principles#when-power-becomes-a-smell).
 :::
 
+## Where the key goes
+
+The container side names a key with `Key =`: on a registration and on an [`[InjectProperty<T>]`](../resolution/property-injection) entry. The injection site selects one with `[FromKey]`: on a constructor or factory parameter, and on an [`[Inject]`](../resolution/property-injection) property, which has no `Key` of its own.
+
 ## Want the whole set?
 
 To get every keyed implementation as a map, ask for `IReadOnlyDictionary<string, IMilk>`. See [Keyed dictionaries](../resolution/keyed-dictionaries).

@@ -8,5 +8,5 @@ namespace Awaiten;
 ///     resolvable only through a <c>Func&lt;TArg…, TService&gt;</c> whose leading type arguments are the runtime
 ///     arguments, matched positionally to the marked parameters. The remaining parameters resolve from the graph.
 /// </summary>
-[AttributeUsage(AttributeTargets.Parameter | AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
+[AttributeUsage(AttributeTargets.Parameter, AllowMultiple = false, Inherited = false)]
 public sealed class ArgAttribute : Attribute;

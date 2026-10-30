@@ -13,8 +13,8 @@ namespace Awaiten;
 ///     <see cref="Optional" /> to leave it unassigned when nothing is registered.
 /// </summary>
 /// <remarks>
-///     The property needs a <c>set</c> or <c>init</c> accessor (otherwise <c>AWT136</c>). <c>[Arg]</c> is not
-///     valid on an injected property (<c>AWT137</c>); runtime arguments flow only through a <c>Func&lt;…&gt;</c>
+///     The property needs a <c>set</c> or <c>init</c> accessor (otherwise <c>AWT136</c>). <c>[Arg]</c> applies
+///     only to parameters: runtime arguments flow only through a <c>Func&lt;…&gt;</c>
 ///     factory into constructor parameters. A plain property edge participates fully in cycle (<c>AWT102</c>),
 ///     captive (<c>AWT105</c>) and async-initialization analysis, like a constructor parameter. Only constructed
 ///     instances are filled; a factory or pre-built-instance registration is produced whole by its source.

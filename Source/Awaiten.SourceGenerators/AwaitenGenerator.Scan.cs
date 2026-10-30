@@ -1258,8 +1258,8 @@ partial class AwaitenGenerator
 	///     The reason a scanned implementation cannot be constructed (an AWT141 fragment), or <see langword="null" />
 	///     when every dependency is satisfiable. Mirrors the AWT101 checks in <see cref="BuildInstance" /> against
 	///     the round's satisfiable surface (registered services, always-satisfiable kinds, <c>[ImportServices]</c>
-	///     fall-through, constraint-rejected services and variance redirection). A not-settable or <c>[Arg]</c>
-	///     member is not a reason; it stays the targeted AWT136/AWT137 error.
+	///     fall-through, constraint-rejected services and variance redirection). A not-settable
+	///     member is not a reason; it stays the targeted AWT136 error.
 	/// </summary>
 	private static string? FirstUnconstructableReason(
 		INamedTypeSymbol implementation,
