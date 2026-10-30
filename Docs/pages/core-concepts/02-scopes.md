@@ -39,7 +39,7 @@ The `Root` is itself a scope. A scoped service resolved directly on the root beh
 
 ## Async scopes
 
-If a scope has async scoped services, open it with `CreateScopeAsync` so they are initialized up front. See [Async initialization](../async-initialization).
+If a scope has async scoped services, open it with `CreateScopeAsync` so they are initialized up front. See [Async initialization](./async-initialization).
 
 ```csharp
 await using IAwaitenScope order = await shop.CreateScopeAsync(cancellationToken);
@@ -50,4 +50,4 @@ await using IAwaitenScope order = await shop.CreateScopeAsync(cancellationToken)
 ## Where to go next
 
 - [Disposal](./disposal) for the teardown rules.
-- [Lifetimes](../registration/lifetimes) for the difference between the three lifetimes.
+- [Lifetimes](./lifetimes) for the difference between the three lifetimes.

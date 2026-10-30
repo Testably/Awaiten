@@ -1,0 +1,8 @@
+{
+	"label": "Hosting",
+	"collapsed": false,
+	"position": 7,
+	"customProps": {
+		"description": "Run a container under ASP.NET Core and the generic host. The MS.DI bridge and services imported from the host."
+	}
+}

@@ -51,7 +51,7 @@ await shop.InitializeAsync(cancellationToken);   // boiler hot, terminal connect
 // later, on the hot path, resolves are ready immediately
 ```
 
-This is the usual startup pattern. Warm up once when the shop opens, then serve. Under the generic host, the [MS.DI bridge](./msdi-bridge#warm-async-services-on-startup) does it for you during host startup:
+This is the usual startup pattern. Warm up once when the shop opens, then serve. Under the generic host, the [MS.DI bridge](../hosting/msdi-bridge#warm-async-services-on-startup) does it for you during host startup:
 
 ```csharp
 services.AddAwaitenContainer<CoffeeShop.Root>()
@@ -152,10 +152,10 @@ An async service is often async-disposable too. Dispose the container or scope w
 await using var shop = new CoffeeShop.Root();
 ```
 
-Disposing a container synchronously while it owns an `IAsyncDisposable`-only service throws at runtime, and Awaiten warns about it at compile time ([AWT156](./diagnostics#awt156)). See [Disposal](./lifetime/disposal).
+Disposing a container synchronously while it owns an `IAsyncDisposable`-only service throws at runtime, and Awaiten warns about it at compile time ([AWT156](../diagnostics#awt156)). See [Disposal](./disposal).
 
 ## Where to go next
 
-- [Relationships](./resolution/relationships) for `Func`, `Lazy`, and `Task` shapes.
-- [Owned](./lifetime/owned) for async disposable transients you rent and return.
-- [MS.DI bridge](./msdi-bridge) to run async initialization under the generic host.
+- [Relationships](../resolution/relationships) for `Func`, `Lazy`, and `Task` shapes.
+- [Owned](../lifetime/owned) for async disposable transients you rent and return.
+- [MS.DI bridge](../hosting/msdi-bridge) to run async initialization under the generic host.

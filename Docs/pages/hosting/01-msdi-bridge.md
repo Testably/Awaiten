@@ -66,7 +66,7 @@ On both paths above, Awaiten disposes everything it built exactly once, with the
 
 MS.DI additionally calls `Dispose` on every instance a projected registration hands out, once per service type it was resolved as, before the Awaiten scope or root that built it. That is how MS.DI treats any factory registration, for example `AddSingleton<IWriter>(sp => sp.GetRequiredService<Ledger>())`, and it relies on `Dispose` being idempotent, as the `IDisposable` contract requires. A singleton `Ledger` resolved as both `IReader` and `IWriter` therefore sees three `Dispose` calls: one per service type from MS.DI, then one from Awaiten.
 
-That is also why a service built with `SuppressDisposal = true` cannot be projected when it is or may be disposable: MS.DI would dispose it no matter what the container promised. Both paths above throw at startup instead, naming the service, and [AWT214](./diagnostics#awt214) reports the projection at build time. Remove `SuppressDisposal`, register a pre-built `Instance` you own, or let Awaiten own everything as described next. A service that needs asynchronous initialization is unaffected, because MS.DI only receives its `Task<T>`.
+That is also why a service built with `SuppressDisposal = true` cannot be projected when it is or may be disposable: MS.DI would dispose it no matter what the container promised. Both paths above throw at startup instead, naming the service, and [AWT214](../diagnostics#awt214) reports the projection at build time. Remove `SuppressDisposal`, register a pre-built `Instance` you own, or let Awaiten own everything as described next. A service that needs asynchronous initialization is unaffected, because MS.DI only receives its `Task<T>`.
 
 ## Or let Awaiten own everything
 
@@ -91,7 +91,7 @@ probe.IsService(typeof(IBrewer));                 // true
 probe.IsService(typeof(EspressoMachine));         // true: it exists, but resolving it names Task<EspressoMachine>
 ```
 
-The answer comes from the container itself, through `IAwaitenRoot.GetResolvability`, so it covers every shape the container dispatches and not merely what it advertises as a registration: a registration, the [relationship shapes](./resolution/relationships) over it, the synthesized [collections](./resolution/collections) and [keyed dictionaries](./resolution/keyed-dictionaries), the awaited views over those, and a [variance](./advanced/generic-variance)-compatible closing of a registered variant generic interface. The bridge adds the `Task<T>` projection of an async-only registration. Its bare service type is reported too, because the container has it (as `AsyncOnly`); asking for it then throws the guidance naming the projection.
+The answer comes from the container itself, through `IAwaitenRoot.GetResolvability`, so it covers every shape the container dispatches and not merely what it advertises as a registration: a registration, the [relationship shapes](../resolution/relationships) over it, the synthesized [collections](../resolution/collections) and [keyed dictionaries](../resolution/keyed-dictionaries), the awaited views over those, and a [variance](../resolution/generic-variance)-compatible closing of a registered variant generic interface. The bridge adds the `Task<T>` projection of an async-only registration. Its bare service type is reported too, because the container has it (as `AsyncOnly`); asking for it then throws the guidance naming the projection.
 
 Wrapping a bare scope rather than a `Root` leaves the provider without metadata, and it then does not offer the probe at all, so the framework keeps its own fallback.
 
@@ -109,7 +109,7 @@ if (answer.Reason is { } reason)
 
 `IEnumerable<T>` resolves for every `T`, empty when the container has no *unkeyed* registration of the element type, matching the guarantee MS.DI consumers rely on: a collection is a framework's usual extension point, and "every registered handler, of which there may be none" has to answer rather than hand back `null`. A service type registered only under keys counts as empty here, exactly as in MS.DI, where keyed registrations do not join an unkeyed `IEnumerable<T>`. The guarantee covers `IEnumerable<T>` alone, again as in MS.DI, which answers `null` for `T[]`, `IList<T>` and `IReadOnlyList<T>` of an unregistered element type. Where the container does have unkeyed members and simply cannot produce the shape for them, such as a collection with an async-initialized member, resolution throws the container's guidance rather than reporting an empty sequence that would silently drop them.
 
-Two answers still under-report, and both want a `[FromServices]` on the parameter. An [open generic](./registration/open-generics) registration is expanded per closing that something in the container's own graph asks for, so a closing only a framework asks for is never synthesized: with `[Singleton(typeof(Repo<>), typeof(IRepo<>))]` and nothing in the graph consuming `IRepo<Order>`, `IsService(typeof(IRepo<Order>))` is `false` where MS.DI answers `true`. And an `IEnumerable<T>` over a *value* element type the graph never mentioned stays unreported, which is a native-AOT constraint rather than a semantic one: the empty sequence needs the `T[]` type, which AOT generates on demand for a reference element type but not for a value one. In both the probe is faithful to what the bridge will do. Each is pinned by a test in `FeatureDetectionTests`.
+Two answers still under-report, and both want a `[FromServices]` on the parameter. An [open generic](../registration/open-generics) registration is expanded per closing that something in the container's own graph asks for, so a closing only a framework asks for is never synthesized: with `[Singleton(typeof(Repo<>), typeof(IRepo<>))]` and nothing in the graph consuming `IRepo<Order>`, `IsService(typeof(IRepo<Order>))` is `false` where MS.DI answers `true`. And an `IEnumerable<T>` over a *value* element type the graph never mentioned stays unreported, which is a native-AOT constraint rather than a semantic one: the empty sequence needs the `T[]` type, which AOT generates on demand for a reference element type but not for a value one. In both the probe is faithful to what the bridge will do. Each is pinned by a test in `FeatureDetectionTests`.
 
 Writing an adapter for a framework whose dependency-injection surface is not MS.DI means honouring the same convention yourself, because it is the framework's expectation rather than MS.DI's implementation detail. A resolver that answers `null` for an unresolvable `IEnumerable<T>` breaks any framework that uses a collection as an extension point, and the failure names the collection rather than the cause. Answer an empty array of the element type instead, and only for a reference element type, for the AOT reason above.
 
@@ -126,7 +126,7 @@ Pair this with `[Container(AsyncSafety = AsyncSafety.SyncAfterInit)]` so warmed 
 
 ## Verify external dependencies at startup
 
-An Awaiten graph can depend on host services through `[ImportService<T>]` and `[ImportServices]`. See [External services](./advanced/external-services). Verify they are actually registered before you serve traffic.
+An Awaiten graph can depend on host services through `[ImportService<T>]` and `[ImportServices]`. See [External services](./external-services). Verify they are actually registered before you serve traffic.
 
 ```csharp
 provider.VerifyAwaitenContainers();
@@ -144,5 +144,5 @@ The bridge surfaces each individual registration and the external dependencies. 
 
 ## Where to go next
 
-- [Async initialization](./async-initialization) for the initialization the hosted service drives.
-- [External services](./advanced/external-services) for `[ImportService<T>]` and `[ImportServices]`.
+- [Async initialization](../core-concepts/async-initialization) for the initialization the hosted service drives.
+- [External services](./external-services) for `[ImportService<T>]` and `[ImportServices]`.

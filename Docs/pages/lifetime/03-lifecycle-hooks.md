@@ -18,7 +18,7 @@ public static partial class CoffeeShop
 
 You can type the parameter as `object` instead when one hook serves several implementations.
 
-`OnActivated` runs once, right after construction. For an async service it runs before `InitializeAsync`. `OnRelease` runs when the owner or scope is disposed, before the instance's own `Dispose`, and in reverse creation order. By default it runs *in addition to* that disposal; pair it with [`SuppressDisposal`](./disposal#suppressing-disposal) to replace disposal entirely, as when a hook returns an object to a pool.
+`OnActivated` runs once, right after construction. For an async service it runs before `InitializeAsync`. `OnRelease` runs when the owner or scope is disposed, before the instance's own `Dispose`, and in reverse creation order. By default it runs *in addition to* that disposal; pair it with [`SuppressDisposal`](../core-concepts/disposal#suppressing-disposal) to replace disposal entirely, as when a hook returns an object to a pool.
 
 ## Hook parameters
 
@@ -46,7 +46,7 @@ Hook parameters participate in the graph like any other dependency: an unregiste
 
 Activation happens before initialization and before the instance is ever handed out, so a concurrent resolve never sees a service that has not been activated. If `OnActivated` throws, the instance is not published. A later resolve builds a fresh one and tries again. Release is only queued once activation succeeds.
 
-If `OnRelease` throws, the teardown goes on: the other release hooks still run, and every instance is still disposed, including the one whose hook failed. The failure surfaces once the teardown is complete, together with any other teardown failure. See [Disposal → When teardown fails](./disposal#when-teardown-fails).
+If `OnRelease` throws, the teardown goes on: the other release hooks still run, and every instance is still disposed, including the one whose hook failed. The failure surfaces once the teardown is complete, together with any other teardown failure. See [Disposal → When teardown fails](../core-concepts/disposal#when-teardown-fails).
 
 ## Eager singletons
 
@@ -68,6 +68,6 @@ This holds for a `[Scan]` on a `[Module]` too, where a library keeps its impleme
 
 ## Where to go next
 
-- [Async initialization](../async-initialization) for `InitializeAsync`.
-- [Disposal](./disposal) for teardown order.
+- [Async initialization](../core-concepts/async-initialization) for `InitializeAsync`.
+- [Disposal](../core-concepts/disposal) for teardown order.
 - [Scanning](../registration/scanning#lifecycle-hooks) to apply a hook to a whole matched family.

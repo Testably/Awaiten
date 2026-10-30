@@ -29,7 +29,7 @@ if (shop.TryResolve<Cup>(out Cup? cup))
 }
 ```
 
-For an async-tainted service in the strict default, `TryResolve` reports `false`, because that service has no synchronous path. See [Async initialization](../async-initialization).
+For an async-tainted service in the strict default, `TryResolve` reports `false`, because that service has no synchronous path. See [Async initialization](../core-concepts/async-initialization).
 
 ## ResolveAsync
 

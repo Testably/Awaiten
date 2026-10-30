@@ -41,7 +41,7 @@ Always run in Release and compare before and after on the same machine.
 ## Documentation
 
 - `Docs/pages/` is the user documentation (Docusaurus front matter and admonitions such as `:::tip`). It is not built here: after a successful `Build` on `main`, `notify-docs-site.yml` asks `Testably/Testably.Site` to rebuild docs.testably.org/Awaiten.
-- `Docs/pages/11-benchmarks.mdx` renders `data.js`/`limited-data.js` that `PublishBenchmarkReport` commits to the `benchmarks` branch.
+- `Docs/pages/10-benchmarks.mdx` renders `data.js`/`limited-data.js` that `PublishBenchmarkReport` commits to the `benchmarks` branch.
 - `Docs/pages/09-diagnostics.md` has one `### AWTnnn` section per diagnostic; other pages link to it as `./diagnostics#awtnnn`.
 - The `README.md` is packed into the NuGet packages; `UpdateReadme` rewrites badges for a release.
 - Code fences in the docs are compiled by `Tests/Awaiten.Docs.Tests`, whose `CodeBlocks_ShouldCompile` test (one per page, in the explicit `Slow` category) runs the generator and the analyzers over every ```` ```csharp ```` block of a page: `dotnet test --project Tests/Awaiten.Docs.Tests -f net10.0 --treenode-filter "/*/*/*/*[Category=Slow]"`. Keep examples that matter at run time covered by `Tests/Awaiten.ExampleTests` too.

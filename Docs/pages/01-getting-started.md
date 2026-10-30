@@ -79,7 +79,7 @@ using (IAwaitenScope order = shop.CreateScope())
 } // the order and everything it owns is disposed here
 ```
 
-Inside one scope you get the same `Order` every time. A different scope gets a different one. See [Scopes](./lifetime/scopes) for the full picture.
+Inside one scope you get the same `Order` every time. A different scope gets a different one. See [Scopes](./core-concepts/scopes) for the full picture.
 
 ## Let the compiler check your wiring
 
@@ -101,6 +101,7 @@ Cyclic graphs, captive dependencies, and async services touched synchronously ar
 
 ## Where to go next
 
-- [Lifetimes](./registration/lifetimes) for singleton, scoped, and transient in depth.
+- [Complete example](./complete-example) for a full container that uses the main features together.
+- [Lifetimes](./core-concepts/lifetimes) for singleton, scoped, and transient in depth.
 - [Resolving services](./resolution/resolving-services) for the full resolve surface.
-- [Async initialization](./async-initialization) once a service needs async setup.
+- [Async initialization](./core-concepts/async-initialization) once a service needs async setup.

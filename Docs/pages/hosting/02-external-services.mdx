@@ -123,7 +123,7 @@ public static partial class CoffeeShop;
 
 Awaiten does not create the external provider. It asks an *external resolver* for these dependencies, and you supply that resolver once, up front.
 
-Under the [MS.DI bridge](../msdi-bridge) this is automatic. `AddAwaitenContainer` and the startup initialization wire the container to the host's `IServiceProvider`, so `[ImportService]` and `[ImportServices]` dependencies resolve from the host with nothing extra to do.
+Under the [MS.DI bridge](./msdi-bridge) this is automatic. `AddAwaitenContainer` and the startup initialization wire the container to the host's `IServiceProvider`, so `[ImportService]` and `[ImportServices]` dependencies resolve from the host with nothing extra to do.
 
 Standing alone, you set it yourself. Implement `IExternalResolver` and pass it to the generated `Root` constructor, so it is in place before anything resolves, eager singletons included.
 
@@ -156,7 +156,7 @@ A scope's resolver is set once. Hosts that wire a resolver later, as the MS.DI b
 
 ## Verifying the wiring
 
-Awaiten advertises its external dependencies so you can check them at startup. If one is missing from the provider, verification throws and names it. See [MS.DI bridge](../msdi-bridge) for `VerifyAwaitenContainers`.
+Awaiten advertises its external dependencies so you can check them at startup. If one is missing from the provider, verification throws and names it. See [MS.DI bridge](./msdi-bridge) for `VerifyAwaitenContainers`.
 
 ## Ownership
 
@@ -164,5 +164,5 @@ An externally supplied instance belongs to the external provider. Awaiten never 
 
 ## Where to go next
 
-- [MS.DI bridge](../msdi-bridge) for host integration and verification.
+- [MS.DI bridge](./msdi-bridge) for host integration and verification.
 - [Keyed services](../registration/keyed-services) for `[FromKey]`.

@@ -1,7 +1,7 @@
 ---
 title: Design principles & the composition root
 sidebar_label: Design principles
-sidebar_position: 2
+sidebar_position: 8
 ---
 
 # Design principles & the composition root
@@ -122,7 +122,7 @@ The few features that would otherwise put an Awaiten attribute on a domain class
 
 | Need | Container-side idiom (clean domain) | Consumer-side escape hatch |
 |---|---|---|
-| A host-owned service | [`[ImportService<T>]`](./advanced/external-services) | *(none needed)* |
+| A host-owned service | [`[ImportService<T>]`](./hosting/external-services) | *(none needed)* |
 | A keyed implementation | [`WhenInjectedInto`](./registration/keyed-services) or a factory [`[FromKey]`](./registration/keyed-services) | `[FromKey]` on the parameter |
 | A runtime argument | a factory `[Arg]` behind [`Func<TArg, T>`](./resolution/runtime-arguments) | `[Arg]` on the parameter |
 | Property injection | [`[InjectProperty<T>]`](./resolution/property-injection) | `[Inject]` on the property |

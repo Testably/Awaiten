@@ -1,6 +1,6 @@
 # Complete example
 
-This page assembles a full coffee shop from the pieces in the rest of the docs. It shows a realistic container: async equipment, per-order scopes, keyed milk, a decorated payment terminal, and a module. Read it top to bottom and you have seen how the features fit together.
+This page assembles a full coffee shop from the pieces in the rest of the docs. It shows a realistic container: [async equipment](./core-concepts/async-initialization), [per-order scopes](./core-concepts/scopes), [keyed milk](./registration/keyed-services), a [decorated](./registration/decorators) payment terminal, and a [module](./registration/modules). Read it top to bottom for an overview of how the features fit together, and follow the links for the details.
 
 ## The services
 
@@ -135,6 +135,6 @@ None of this wiring is trusted at runtime. Before the app ran, Awaiten verified 
 
 ## Where to go next
 
-- [Getting started](./getting-started) if you skipped ahead.
+- [Lifetimes](./core-concepts/lifetimes) to start on the concepts behind it.
 - [Diagnostics](./diagnostics) for every check the compiler runs.
-- [MS.DI bridge](./msdi-bridge) to run this under ASP.NET Core.
+- [MS.DI bridge](./hosting/msdi-bridge) to run this under ASP.NET Core.

@@ -26,17 +26,17 @@ using (IAwaitenScope order = shop.CreateScope())
 
 ## Who owns a transient
 
-A transient is disposed by the owner that built it. Resolve one inside a scope and the scope disposes it. This is why [strict lifetime safety](./lifetime-safety) withholds disposable transients from the root by default. On the root they would pile up for the whole life of the container. To get a disposable transient with a bounded lifetime, use [Owned](./owned).
+A transient is disposed by the owner that built it. Resolve one inside a scope and the scope disposes it. This is why [strict lifetime safety](../lifetime/lifetime-safety) withholds disposable transients from the root by default. On the root they would pile up for the whole life of the container. To get a disposable transient with a bounded lifetime, use [Owned](../lifetime/owned).
 
 ## What Awaiten does not dispose
 
-An object you supplied with `Instance = nameof(...)` is yours. Awaiten never disposes it. The same is true for anything resolved from an external provider across the [MS.DI bridge](../msdi-bridge).
+An object you supplied with `Instance = nameof(...)` is yours. Awaiten never disposes it. The same is true for anything resolved from an external provider across the [MS.DI bridge](../hosting/msdi-bridge).
 
 ## Suppressing disposal
 
 Sometimes the container builds a service but should not tear it down: the object is rented from a pool you return it to, or its lifetime belongs to something outside the container. Set `SuppressDisposal = true` and Awaiten constructs the service as usual but never calls its `Dispose`/`DisposeAsync`.
 
-On its own this is opt-out ownership, the built counterpart of an `Instance`: the container makes the object but hands its teardown to you. Paired with an [`OnRelease` hook](./lifecycle-hooks) it becomes a clean return-to-pool, and with [`Owned<T>`](./owned) the rent-and-return is bounded to a `using` block.
+On its own this is opt-out ownership, the built counterpart of an `Instance`: the container makes the object but hands its teardown to you. Paired with an [`OnRelease` hook](../lifetime/lifecycle-hooks) it becomes a clean return-to-pool, and with [`Owned<T>`](../lifetime/owned) the rent-and-return is bounded to a `using` block.
 
 ```csharp
 [Container]
@@ -52,9 +52,9 @@ public static partial class CoffeeShop
 
 `SuppressDisposal` applies to a service the container constructs, by constructor or `Factory`. Setting it on a pre-built `Instance`, which the container never owns or disposes anyway, is a build error ([AWT192](../diagnostics#awt192)).
 
-An `OnRelease` hook counts like disposal for [strict lifetime safety](./lifetime-safety): each construction queues the release on the owner, so a release-hooked transient like `Cup` above is withheld from by-type resolution on the container root just as a disposable one is — on the root, every rented cup would be held until the container itself is disposed, and none would return to the pool before then. Rent through [`Owned<T>`](./owned) or from a child scope and the return-to-pool runs when the handle or scope is disposed. A `SuppressDisposal` service *without* a release hook tracks nothing at all, so it stays resolvable everywhere.
+An `OnRelease` hook counts like disposal for [strict lifetime safety](../lifetime/lifetime-safety): each construction queues the release on the owner, so a release-hooked transient like `Cup` above is withheld from by-type resolution on the container root just as a disposable one is — on the root, every rented cup would be held until the container itself is disposed, and none would return to the pool before then. Rent through [`Owned<T>`](../lifetime/owned) or from a child scope and the return-to-pool runs when the handle or scope is disposed. A `SuppressDisposal` service *without* a release hook tracks nothing at all, so it stays resolvable everywhere.
 
-Projected into Microsoft.Extensions.DependencyInjection, a disposable `SuppressDisposal` service would be disposed by MS.DI anyway, so the [bridge](../msdi-bridge#disposal) rejects it at startup ([AWT214](../diagnostics#awt214)).
+Projected into Microsoft.Extensions.DependencyInjection, a disposable `SuppressDisposal` service would be disposed by MS.DI anyway, so the [bridge](../hosting/msdi-bridge#disposal) rejects it at startup ([AWT214](../diagnostics#awt214)).
 
 ## Async disposal
 
@@ -83,5 +83,5 @@ Resolving from a container or scope after it is disposed throws `ObjectDisposedE
 
 ## Where to go next
 
-- [Owned](./owned) for disposable transients you rent and return.
-- [Lifetime safety](./lifetime-safety) for how Awaiten prevents disposal leaks.
+- [Owned](../lifetime/owned) for disposable transients you rent and return.
+- [Lifetime safety](../lifetime/lifetime-safety) for how Awaiten prevents disposal leaks.

@@ -38,4 +38,4 @@ Variance applies to single resolution, to collections (exact matches lead, varia
 ## Where to go next
 
 - [Open generics](../registration/open-generics) for generic implementations closed on demand.
-- [Collections](../resolution/collections) for resolving every match.
+- [Collections](./collections) for resolving every match.
