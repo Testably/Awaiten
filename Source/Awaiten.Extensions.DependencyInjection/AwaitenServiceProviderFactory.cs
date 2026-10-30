@@ -8,14 +8,14 @@ namespace Awaiten.Extensions.DependencyInjection;
 ///     <typeparamref name="TRoot" /> inside a Microsoft.Extensions.DependencyInjection host.
 ///     <see cref="CreateServiceProvider" /> projects the container into the host's
 ///     <see cref="IServiceCollection" /> (through
-///     <see cref="AwaitenServiceCollectionExtensions.AddGeneratedContainer{TRoot}(IServiceCollection)" />) and
+///     <see cref="AwaitenServiceCollectionExtensions.AddAwaitenContainer{TRoot}(IServiceCollection)" />) and
 ///     builds a standard MS.DI provider, so the host's framework registrations and the Awaiten-owned services
 ///     resolve side by side, including Awaiten services injected into host services. Hand it to
 ///     <c>UseServiceProviderFactory(new AwaitenServiceProviderFactory&lt;MyContainer.Root&gt;())</c>.
 /// </summary>
 /// <remarks>
 ///     The projection's ownership rules apply; see the remarks on
-///     <see cref="AwaitenServiceCollectionExtensions.AddGeneratedContainer{TRoot}(IServiceCollection)" />. The
+///     <see cref="AwaitenServiceCollectionExtensions.AddAwaitenContainer{TRoot}(IServiceCollection)" />. The
 ///     built provider owns the root that <see cref="CreateBuilder" /> created and disposes it with itself. To make
 ///     the Awaiten container the single owner of construction and disposal end to end, with no host registrations,
 ///     wrap it in an <see cref="AwaitenServiceProvider" /> directly; that scenario needs no factory.
@@ -24,7 +24,17 @@ namespace Awaiten.Extensions.DependencyInjection;
 public sealed class AwaitenServiceProviderFactory<TRoot> : IServiceProviderFactory<TRoot>
 	where TRoot : class, IAwaitenRoot, new()
 {
+	private readonly Action<AwaitenContainerBuilder<TRoot>>? _configure;
 	private IServiceCollection? _services;
+
+	/// <summary>Creates a factory that hosts a new <typeparamref name="TRoot" />.</summary>
+	/// <param name="configure">
+	///     Configures the container's hosting once it is registered, for example
+	///     <c>c =&gt; c.WithInitialization()</c>, exactly as chaining onto
+	///     <see cref="AwaitenServiceCollectionExtensions.AddAwaitenContainer{TRoot}(IServiceCollection)" /> does.
+	/// </param>
+	public AwaitenServiceProviderFactory(Action<AwaitenContainerBuilder<TRoot>>? configure = null)
+		=> _configure = configure;
 
 	/// <inheritdoc />
 	/// <exception cref="ArgumentNullException"><paramref name="services" /> is <see langword="null" />.</exception>
@@ -50,8 +60,10 @@ public sealed class AwaitenServiceProviderFactory<TRoot> : IServiceProviderFacto
 				$"{nameof(CreateBuilder)} must be called before {nameof(CreateServiceProvider)}.");
 		}
 
-		ServiceProvider provider = AwaitenServiceCollectionExtensions.AddGeneratedContainer(_services, containerBuilder)
-			.BuildServiceProvider();
+		AwaitenContainerBuilder<TRoot> builder =
+			AwaitenServiceCollectionExtensions.AddAwaitenContainer(_services, containerBuilder, ownsRoot: true);
+		_configure?.Invoke(builder);
+		ServiceProvider provider = builder.Services.BuildServiceProvider();
 
 		// Resolving the owner up front makes the provider own the root even when the host only ever reaches the
 		// root directly, and puts it first in MS.DI's capture order, so the root is disposed last.

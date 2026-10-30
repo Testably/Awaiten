@@ -51,7 +51,12 @@ await shop.InitializeAsync(cancellationToken);   // boiler hot, terminal connect
 // later, on the hot path, resolves are ready immediately
 ```
 
-This is the usual startup pattern. Warm up once when the shop opens, then serve.
+This is the usual startup pattern. Warm up once when the shop opens, then serve. Under the generic host, the [MS.DI bridge](./msdi-bridge#warm-async-services-on-startup) does it for you during host startup:
+
+```csharp
+services.AddAwaitenContainer<CoffeeShop.Root>()
+        .WithInitialization();
+```
 
 ## Warm a scope
 

@@ -11,7 +11,7 @@ namespace Awaiten.WebSample;
 /// <remarks>
 ///     <c>SyncResolveAfterInit</c> is what makes an async-initialized service usable from ASP.NET at all: the
 ///     framework binds handler parameters synchronously, so without it <see cref="PriceList" /> would only be
-///     reachable as <c>Task&lt;PriceList&gt;</c>. Paired with <c>AddAwaitenInitialization</c> the warm-up has
+///     reachable as <c>Task&lt;PriceList&gt;</c>. Paired with <c>WithInitialization()</c> the warm-up has
 ///     already run by the time the first request arrives, so the synchronous resolve is a cache read and
 ///     never blocks.
 /// </remarks>

@@ -92,7 +92,7 @@ public sealed partial class BridgeGuardTests
 	public async Task Projection_SyncDisposeOfAsyncOnlyDisposable_ThrowsGuidance()
 	{
 		ServiceCollection services = new();
-		services.AddGeneratedContainer<AsyncOnlyProjectionContainer.Root>();
+		services.AddAwaitenContainer<AsyncOnlyProjectionContainer.Root>();
 		ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
 
 		_ = await provider.GetRequiredService<Task<AsyncOnlyDisposableSingleton>>();

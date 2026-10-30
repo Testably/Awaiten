@@ -49,6 +49,14 @@ public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScop
 	private readonly IAwaitenRoot? _metadata;
 
 	/// <summary>Adapts the given container to <see cref="IServiceProvider" />.</summary>
+	/// <remarks>
+	///     Wrapping a generated container root picks up its registration metadata, so the provider offers
+	///     <see cref="IServiceProviderIsService" /> and <see cref="IServiceProviderIsKeyedService" />, serves
+	///     async services as <c>Task&lt;T&gt;</c> and passes all of that on to the scopes it creates. A wrapped child
+	///     <see cref="IAwaitenScope" /> carries no metadata, so that provider runs without the feature-detection
+	///     probe and without the <c>Task&lt;T&gt;</c> projection. To get both in a scope, wrap the root and create
+	///     the scope from the provider.
+	/// </remarks>
 	/// <param name="container">The Awaiten container to adapt.</param>
 	/// <param name="ownsContainer">
 	///     When <see langword="true" /> (the default), disposing this provider disposes the container.

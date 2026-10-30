@@ -34,7 +34,7 @@ what makes the sample a test rather than a demo — `Awaiten.AotSample` does the
 | Framework and Awaiten services resolving side by side                                         | every endpoint takes both                             |
 | One Awaiten scope aligned to each request's MS.DI scope                                       | `/orders/{drink}` reports `sameScopePerRequest`       |
 | Transients fresh per resolution inside a shared scope                                         | `/orders/{drink}` reports `distinctTransients`        |
-| `AddAwaitenInitialization` warming async singletons before serving                            | `/menu` reports `warm: true` on the first request     |
+| `WithInitialization()` warming async singletons before serving                               | `/menu` reports `warm: true` on the first request     |
 | `[Container(SyncResolveAfterInit = true)]` so ASP.NET can bind an async service synchronously | `CoffeeShop`                                          |
 | `[ImportService<T>]` pulling host services into the graph                                     | `IConfiguration`, `ILoggerFactory`                    |
 | `VerifyAwaitenContainers()` checking those imports at startup                                 | `Program.cs`, right after `Build()`                   |
@@ -44,7 +44,7 @@ what makes the sample a test rather than a demo — `Awaiten.AotSample` does the
 
 `PriceList` is the point of the whole exercise. It needs asynchronous setup, and ASP.NET binds handler
 parameters synchronously — normally an impossible pairing. Awaiten resolves it by warming the singleton
-during host startup (`AddAwaitenInitialization`) and then allowing the synchronous resolve
+during host startup (`WithInitialization()`) and then allowing the synchronous resolve
 (`SyncResolveAfterInit`). By the time a request arrives the resolve is a cache read, so it never blocks.
 Without the warm-up the first synchronous resolve would block the request thread instead.
 

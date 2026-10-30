@@ -2,7 +2,7 @@
 
 A minimal console app that proves Awaiten's `Microsoft.Extensions.DependencyInjection` bridge is
 reflection-free and native-AOT compatible. It registers a generated `[Container]` into an
-`IServiceCollection` with `AddGeneratedContainer`, verifies its external dependencies with
+`IServiceCollection` with `AddAwaitenContainer`, verifies its external dependencies with
 `VerifyAwaitenContainers`, and resolves a service (whose graph mixes an Awaiten-owned `IClock` with a
 host-owned `Banner` injected across the seam via `[ImportService<T>]`) from an MS.DI scope.
 

@@ -8,7 +8,7 @@ Product code is in `Source/`, tests in `Tests/`, benchmarks in `Benchmarks/`, ru
 |---|---|
 | `Awaiten` | The public surface users reference: registration attributes (`[Container]`, `[Singleton<T>]`, `[Scoped<T>]`, `[Transient<T>]`, `[Decorate]`, `[Composite]`, `[Scan]`, `[Module]`, `[Import]`, `[ImportService<T>]`, `[Inject]`, `[Arg]`, `[FromKey]` and more), the resolver interfaces (`IAwaitenResolver`, `IAwaitenScope`, `IAwaitenRoot`, `IAwaitenAsyncResolver`), `IAsyncInitializable`, `Owned<T>` and the small runtime seams the generated code calls. Ships the generator as an analyzer. |
 | `Awaiten.SourceGenerators` | The `AwaitenGenerator` incremental generator plus the `AwaitenAnalyzer` (AWT118, AWT156) and `AwaitenBoundaryAnalyzer` (AWT134, AWT135, AWT205). netstandard2.0, packed into `Awaiten`. |
-| `Awaiten.Extensions.DependencyInjection` | The MS.DI bridge: `AddGeneratedContainer` projects a generated container into an `IServiceCollection`, `AwaitenServiceProvider`/`AwaitenServiceProviderFactory` make the container the provider, plus host initialization and `VerifyAwaitenContainers`. |
+| `Awaiten.Extensions.DependencyInjection` | The MS.DI bridge: `AddAwaitenContainer` projects a generated container into an `IServiceCollection`, `AwaitenServiceProvider`/`AwaitenServiceProviderFactory` make the container the provider, plus host initialization (`AwaitenContainerBuilder.WithInitialization`) and `VerifyAwaitenContainers`. |
 
 ## How the generator works
 

@@ -10,14 +10,23 @@ dotnet add package Awaiten.Extensions.DependencyInjection
 
 ## Project into a service collection
 
-`AddGeneratedContainer<TRoot>` registers the container and projects its registrations into the `IServiceCollection`. Awaiten lifetimes align to `ServiceLifetime`, and one Awaiten scope aligns to each MS.DI scope.
+`AddAwaitenContainer<TRoot>` registers the container and projects its registrations into the `IServiceCollection`. Awaiten lifetimes align to `ServiceLifetime`, and one Awaiten scope aligns to each MS.DI scope.
 
 ```csharp
 var services = new ServiceCollection();
-services.AddGeneratedContainer<CoffeeShop.Root>();
+services.AddAwaitenContainer<CoffeeShop.Root>();
 
 using var provider = services.BuildServiceProvider();
 IBrewer brewer = provider.GetRequiredService<IBrewer>();
+```
+
+It returns an `AwaitenContainerBuilder<TRoot>` for the container's hosting options, such as [startup initialization](#warm-async-services-on-startup). Its `Services` property is the collection, for chaining further registrations.
+
+To configure the root before the host sees it, for example to construct it with your own external resolver, build it yourself and pass it in. The root is projected as-is and stays yours, as with any instance you register in MS.DI: the provider never disposes it, so dispose it after the provider.
+
+```csharp
+using var shop = new CoffeeShop.Root(myResolver);
+services.AddAwaitenContainer(shop);
 ```
 
 An async-only service has no synchronous path, so this projection does not register its bare type. It is available as `Task<T>`, which routes through `ResolveAsync`. (Under the [replacement path](#or-let-awaiten-own-everything) the bare type does resolve, into the container's guidance naming this projection, because there the container answers every request rather than contributing descriptors.)
@@ -41,9 +50,16 @@ builder.Host.UseServiceProviderFactory(
     new AwaitenServiceProviderFactory<CoffeeShop.Root>());
 ```
 
+The factory takes an optional callback that receives the same `AwaitenContainerBuilder<TRoot>`, so its options read the same on both paths:
+
+```csharp
+builder.Host.UseServiceProviderFactory(
+    new AwaitenServiceProviderFactory<CoffeeShop.Root>(c => c.WithInitialization()));
+```
+
 ## Disposal
 
-On both paths above, Awaiten disposes everything it built exactly once, with the scope that owns it. The Awaiten scope aligned to an MS.DI scope is disposed with that scope, and the container root with the root provider. (After a plain `AddGeneratedContainer`, the root provider takes over the root on the first bridged resolution or when `AddAwaitenInitialization` warms it, so dispose a root you only use directly yourself.) That includes disposables reached only as nested dependencies, which MS.DI never sees, and instances awaited through `Task<T>`. Disposing the provider or a scope with `DisposeAsync` drains them asynchronously, so `IAsyncDisposable`-only services are supported there. A pre-built `Instance` member stays yours and is never disposed.
+On both paths above, Awaiten disposes everything it built exactly once, with the scope that owns it. The Awaiten scope aligned to an MS.DI scope is disposed with that scope, and the container root with the root provider. (After a plain `AddAwaitenContainer<TRoot>()`, the root provider takes over the root on the first bridged resolution or when `WithInitialization()` warms it, so dispose a root you only use directly yourself. A root you passed to `AddAwaitenContainer(root)` is always yours to dispose.) That includes disposables reached only as nested dependencies, which MS.DI never sees, and instances awaited through `Task<T>`. Disposing the provider or a scope with `DisposeAsync` drains them asynchronously, so `IAsyncDisposable`-only services are supported there. A pre-built `Instance` member stays yours and is never disposed.
 
 MS.DI additionally calls `Dispose` on every instance a projected registration hands out, once per service type it was resolved as, before the Awaiten scope or root that built it. That is how MS.DI treats any factory registration, for example `AddSingleton<IWriter>(sp => sp.GetRequiredService<Ledger>())`, and it relies on `Dispose` being idempotent, as the `IDisposable` contract requires. A singleton `Ledger` resolved as both `IReader` and `IWriter` therefore sees three `Dispose` calls: one per service type from MS.DI, then one from Awaiten.
 
@@ -94,11 +110,11 @@ Writing an adapter for a framework whose dependency-injection surface is not MS.
 
 ## Warm async services on startup
 
-`AddAwaitenInitialization<TContainer>` registers an `IHostedService` that calls `InitializeAsync` on startup. It wires the external resolver first, so `[ImportService<T>]` dependencies resolve during warm-up. It is idempotent.
+`WithInitialization()` registers an `IHostedService` that calls `InitializeAsync` on startup. It wires the external resolver first unless you set one, so `[ImportService<T>]` dependencies resolve during warm-up. It is idempotent.
 
 ```csharp
-services.AddGeneratedContainer<CoffeeShop.Root>();
-services.AddAwaitenInitialization<CoffeeShop.Root>();
+services.AddAwaitenContainer<CoffeeShop.Root>()
+        .WithInitialization();
 ```
 
 Pair this with `[Container(SyncResolveAfterInit = true)]` so warmed singletons resolve synchronously afterwards.
