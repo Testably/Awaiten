@@ -399,25 +399,8 @@ partial class AwaitenGenerator
 			INamedTypeSymbol closedImpl = candidate.Implementation.Construct(typeArguments);
 			string closedImplName = closedImpl.ToDisplayString(FullyQualified);
 
-			// AWT126: the closed type arguments must satisfy the implementation's constraints
-			// (e.g. Repository<int> against where T : class). Record the closed service so the emitter can
-			// suppress the AWT101 the consumer's now-unregistered parameter would otherwise also raise.
-			if (!ConstraintsSatisfied(candidate.Implementation, typeArguments))
+			if (!TryAcceptClosing(candidate, closed, closedService, closedImplName, context, out List<IMethodSymbol> factories))
 			{
-				context.ConstraintRejectedServices.Add(closedService);
-				ReportConstraintViolation(candidate, closedImplName, context);
-				continue;
-			}
-
-			// AWT209: a generic factory is called with the closing's type arguments, so they must satisfy its
-			// constraints too. Skipped like an AWT126 closing, so the consumer's AWT101 is suppressed the same way.
-			List<IMethodSymbol> factories = candidate.FactoryMethods
-				.Where(method => SatisfiesConstraints(method, closed.TypeArguments, context.Compilation))
-				.ToList();
-			if (candidate.FactoryMethods.Count > 0 && factories.Count == 0)
-			{
-				context.ConstraintRejectedServices.Add(closedService);
-				ReportFactoryConstraintViolation(candidate, closedService, context);
 				continue;
 			}
 
@@ -456,6 +439,42 @@ partial class AwaitenGenerator
 				context.Worklist.Enqueue((closedImpl, producer, depth + 1));
 			}
 		}
+	}
+
+	/// <summary>
+	///     Checks that <paramref name="closed" />'s type arguments satisfy the constraints of the candidate's
+	///     implementation (AWT126) and of at least one of its generic factories (AWT209), returning the factories that
+	///     accept them. A rejected closing records its service so the emitter can suppress the AWT101 the consumer's
+	///     now-unregistered parameter would otherwise also raise.
+	/// </summary>
+	private static bool TryAcceptClosing(
+		OpenRegistration candidate,
+		INamedTypeSymbol closed,
+		string closedService,
+		string closedImplName,
+		ExpansionContext context,
+		out List<IMethodSymbol> factories)
+	{
+		factories = [];
+		if (!ConstraintsSatisfied(candidate.Implementation, closed.TypeArguments.ToArray()))
+		{
+			context.ConstraintRejectedServices.Add(closedService);
+			ReportConstraintViolation(candidate, closedImplName, context);
+			return false;
+		}
+
+		// A generic factory is called with the closing's type arguments, so they must satisfy its constraints too.
+		factories = candidate.FactoryMethods
+			.Where(method => SatisfiesConstraints(method, closed.TypeArguments, context.Compilation))
+			.ToList();
+		if (candidate.FactoryMethods.Count > 0 && factories.Count == 0)
+		{
+			context.ConstraintRejectedServices.Add(closedService);
+			ReportFactoryConstraintViolation(candidate, closedService, context);
+			return false;
+		}
+
+		return true;
 	}
 
 	private static bool IsClaimedByStrongerRegistration(OpenRegistration candidate, string closedService, List<RawRegistration> raw)
