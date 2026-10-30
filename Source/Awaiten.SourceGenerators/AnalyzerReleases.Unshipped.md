@@ -106,5 +106,9 @@
  AWT203  | Awaiten   | Error    | A self-compiled module [Scan] hook has a parameter type inaccessible outside the module's assembly, so the generated hook wrapper cannot expose it
  AWT204  | Awaiten   | Error    | A self-compiled module [Scan] hook parameter carries [FromKey]/[Inject] metadata the generated hook wrapper cannot mirror
  AWT205  | Awaiten   | Warning  | User code constructs an Owned<T> disposal handle with new, although only the container should create one
+ AWT206  | Awaiten   | Error    | A closed typeof registration's implementation is not a class or interface assignable to its service
+ AWT207  | Awaiten   | Error    | Eager or Instance is set on an open generic typeof registration, but both need a closed type
+ AWT208  | Awaiten   | Error    | The Factory of an open generic typeof registration is not a generic method with the service's number of type parameters
+ AWT209  | Awaiten   | Error    | A closing of an open generic typeof registration violates the constraints of its generic Factory, so the closing is skipped
 
 ; AWT137 (an injected property marked [Arg]) is retired: [Arg] targets only parameters, so the compiler rejects it on a property. The id stays reserved and is never reused.

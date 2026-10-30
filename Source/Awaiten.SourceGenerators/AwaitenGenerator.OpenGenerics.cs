@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using Awaiten.SourceGenerators.Entities;
 using Awaiten.SourceGenerators.Internals;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 
 namespace Awaiten.SourceGenerators;
 
@@ -22,40 +23,132 @@ partial class AwaitenGenerator
 	private const int MaxExpansionCount = 10_000;
 
 	/// <summary>
-	///     Reads a non-generic <c>[Singleton(typeof(Repository&lt;&gt;), typeof(IRepository&lt;&gt;))]</c>
-	///     registration into an <see cref="OpenRegistration" />. Reports AWT125 on mismatched arity (no closed
-	///     service could then be mapped onto the implementation). <paramref name="origin" /> and
-	///     <paramref name="fallbackLocation" /> mirror <see cref="CollectLifetimeRegistrations" /> for imported modules.
+	///     Reads the <c>typeof</c> arguments of a non-generic lifetime attribute: the implementation and the service,
+	///     which defaults to the implementation. Returns <see langword="false" /> when an argument is missing or does
+	///     not bind, which the compiler already reports.
+	/// </summary>
+	private static bool TryReadTypeofPair(AttributeData attribute, out INamedTypeSymbol implementation, out INamedTypeSymbol service)
+	{
+		implementation = null!;
+		service = null!;
+		if (attribute.ConstructorArguments.Length < 1
+		    || attribute.ConstructorArguments[0].Value is not INamedTypeSymbol { TypeKind: not TypeKind.Error, } declaredImplementation)
+		{
+			return false;
+		}
+
+		implementation = declaredImplementation;
+		if (attribute.ConstructorArguments.Length < 2)
+		{
+			service = implementation;
+			return true;
+		}
+
+		if (attribute.ConstructorArguments[1].Value is not INamedTypeSymbol { TypeKind: not TypeKind.Error, } declaredService)
+		{
+			return false;
+		}
+
+		service = declaredService;
+		return true;
+	}
+
+	/// <summary>
+	///     Whether a closed <c>typeof</c> pair satisfies what the generic form's <c>where TImplementation : class, TService</c>
+	///     constraint enforces: a reference type with an identity or implicit reference conversion to the service.
+	/// </summary>
+	private static bool IsAssignableRegistration(INamedTypeSymbol implementation, INamedTypeSymbol service, Compilation compilation)
+	{
+		if (!implementation.IsReferenceType)
+		{
+			return false;
+		}
+
+		Conversion conversion = ((CSharpCompilation)compilation).ClassifyConversion(implementation, service);
+		return conversion.IsIdentity || (conversion.IsImplicit && conversion.IsReference);
+	}
+
+	/// <summary>
+	///     Reads an open <c>[Singleton(typeof(Repository&lt;&gt;), typeof(IRepository&lt;&gt;))]</c> registration into an
+	///     <see cref="OpenRegistration" /> carrying every option the generic form has that can hold per closing. Reports
+	///     AWT125/AWT127/AWT128 for a malformed pair, AWT207 for <c>Eager</c> or <c>Instance</c> (each needs a closed
+	///     type, and the option is ignored), and AWT208 when the owner declares a method named by <c>Factory</c> but none
+	///     with the service's arity (the registration is dropped). <paramref name="owner" /> is the container or module
+	///     declaring the attribute; <paramref name="origin" /> and <paramref name="fallbackLocation" /> mirror
+	///     <see cref="CollectLifetimeRegistrations" /> for imported modules.
 	/// </summary>
 	private static void CollectOpenRegistration(
 		AttributeData attribute,
 		Lifetime lifetime,
+		INamedTypeSymbol implementation,
+		INamedTypeSymbol service,
+		INamedTypeSymbol owner,
 		List<OpenRegistration> open,
 		List<DiagnosticInfo> diagnostics,
 		INamedTypeSymbol? origin,
 		Location? fallbackLocation)
 	{
-		if (attribute.ConstructorArguments.Length < 1
-		    || attribute.ConstructorArguments[0].Value is not INamedTypeSymbol implementation)
-		{
-			return;
-		}
-
-		INamedTypeSymbol service = attribute.ConstructorArguments.Length > 1
-		                           && attribute.ConstructorArguments[1].Value is INamedTypeSymbol declaredService
-			? declaredService
-			: implementation;
-
-		LocationInfo? location = LocationInfo.From(
-			attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? fallbackLocation);
+		Location? liveLocation = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? fallbackLocation;
+		LocationInfo? location = LocationInfo.From(liveLocation);
 
 		if (TryReadOpenGenericPair(implementation, service, location, diagnostics) is not { } pair)
 		{
 			return;
 		}
 
-		ReportUnsupportedRegistrationKey(attribute, location, Display(implementation.ToDisplayString(FullyQualified)), diagnostics);
-		open.Add(new OpenRegistration(pair.Service, pair.Mapped, lifetime, NamedKeyArgument(attribute), location, origin));
+		string display = Display(pair.Mapped.ToDisplayString(FullyQualified));
+		if (NamedFlag(attribute, "Eager"))
+		{
+			ReportNeedsClosedType("Eager");
+		}
+
+		if (NamedArgument(attribute, "Instance") is not null)
+		{
+			ReportNeedsClosedType("Instance");
+		}
+
+		string? factory = NamedArgument(attribute, "Factory");
+		List<IMethodSymbol> factoryMethods = new();
+		if (factory is not null)
+		{
+			List<IMethodSymbol> named = owner.GetMembers(factory)
+				.OfType<IMethodSymbol>()
+				.Where(method => method.MethodKind == MethodKind.Ordinary)
+				.ToList();
+			factoryMethods = named.Where(method => method.Arity == pair.Service.Arity).ToList();
+			if (named.Count > 0 && factoryMethods.Count == 0)
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.GenericFactoryArityMismatch,
+					location,
+					new EquatableArray<string>([display, factory, DescribeOwner(origin), pair.Service.Arity.ToString(),])));
+				return;
+			}
+		}
+
+		string? key = NamedKeyArgument(attribute);
+		string? whenInjectedInto = NamedTypeArgument(attribute, "WhenInjectedInto");
+		ReportContextualBindingWithKey(key, whenInjectedInto, pair.Mapped, liveLocation, diagnostics);
+		ReportUnsupportedRegistrationKey(attribute, location, display, diagnostics);
+
+		int fallback = NamedFallback(attribute);
+		open.Add(new OpenRegistration(pair.Service, pair.Mapped, lifetime, key, location, origin)
+		{
+			Factory = factory,
+			FactoryMethods = factoryMethods,
+			Weak = fallback != 0,
+			IsDefault = fallback == 1,
+			WhenInjectedInto = whenInjectedInto,
+			OnActivated = NamedArgument(attribute, "OnActivated"),
+			OnRelease = NamedArgument(attribute, "OnRelease"),
+			SuppressDisposal = NamedFlag(attribute, "SuppressDisposal"),
+		});
+
+		void ReportNeedsClosedType(string option)
+			=> diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.OpenGenericNeedsClosedType,
+				location,
+				new EquatableArray<string>([option, display,])));
 	}
 
 	/// <summary>
@@ -220,16 +313,17 @@ partial class AwaitenGenerator
 
 		// The constructor parameters to scan for closed generic dependencies, each carried with the expansion
 		// depth that reached it. Seeded from every known surviving implementation at depth 0; grows as closed
-		// impls are synthesized, each one depth deeper than the closed service that produced it.
-		Queue<(INamedTypeSymbol Impl, int Depth)> worklist = new();
-		HashSet<INamedTypeSymbol> seen = new(SymbolEqualityComparer.Default);
+		// impls are synthesized, each one depth deeper than the closed service that produced it. A closing produced
+		// by a generic factory carries the closed factory method, whose parameters are scanned instead.
+		Queue<(INamedTypeSymbol Impl, IMethodSymbol? Producer, int Depth)> worklist = new();
+		HashSet<ISymbol> seen = new(SymbolEqualityComparer.Default);
 		SeedExpansionWorklist(raw, droppedWeak, worklist, seen);
 
-		ExpansionContext context = new(raw, open, worklist, seen, diagnostics, constraintRejected);
+		ExpansionContext context = new(raw, open, worklist, seen, compilation, diagnostics, constraintRejected);
 
 		while (worklist.Count > 0)
 		{
-			(INamedTypeSymbol impl, int depth) = worklist.Dequeue();
+			(INamedTypeSymbol impl, IMethodSymbol? producer, int depth) = worklist.Dequeue();
 
 			// AWT129: a self-growing registration (Node<T> depending on Node<List<T>>) synthesizes an
 			// ever-larger closed implementation at every step and would never converge. Once the total count
@@ -248,7 +342,10 @@ partial class AwaitenGenerator
 				continue;
 			}
 
-			foreach (ITypeSymbol required in RequiredServiceTypes(impl, containerSymbol, compilation, raw, openServices, external))
+			IEnumerable<ITypeSymbol> requiredTypes = producer is null
+				? RequiredServiceTypes(impl, containerSymbol, compilation, raw, openServices, external)
+				: producer.Parameters.Select(parameter => RequiredServiceType(parameter.Type));
+			foreach (ITypeSymbol required in requiredTypes)
 			{
 				if (required is INamedTypeSymbol { IsGenericType: true, IsUnboundGenericType: false, } closed
 				    && expandedServices.Add(closed.ToDisplayString(FullyQualified)))
@@ -267,14 +364,14 @@ partial class AwaitenGenerator
 	private static void SeedExpansionWorklist(
 		List<RawRegistration> raw,
 		HashSet<int> droppedWeak,
-		Queue<(INamedTypeSymbol Impl, int Depth)> worklist,
-		HashSet<INamedTypeSymbol> seen)
+		Queue<(INamedTypeSymbol Impl, IMethodSymbol? Producer, int Depth)> worklist,
+		HashSet<ISymbol> seen)
 	{
 		for (int index = 0; index < raw.Count; index++)
 		{
 			if (!droppedWeak.Contains(index) && seen.Add(raw[index].Implementation))
 			{
-				worklist.Enqueue((raw[index].Implementation, 0));
+				worklist.Enqueue((raw[index].Implementation, null, 0));
 			}
 		}
 	}
@@ -292,11 +389,15 @@ partial class AwaitenGenerator
 		string closedService = closed.ToDisplayString(FullyQualified);
 		ITypeSymbol[] typeArguments = closed.TypeArguments.ToArray();
 
-		// Dedup by (implementation, key): two open registrations that produce the same closed implementation
-		// under different keys must both survive as distinct keyed registrations.
+		// Dedup by (implementation, key, consumer): two open registrations that produce the same closed implementation
+		// under different keys (or contextual consumers) must both survive as distinct registrations.
 		HashSet<string> synthesized = new(StringComparer.Ordinal);
 
-		foreach (OpenRegistration candidate in context.Open.Where(c => SymbolEqualityComparer.Default.Equals(c.Service, openForm)))
+		// Strong templates first (OrderBy is stable, so declaration order holds within each group), so a Fallback
+		// template can tell below whether a stronger registration already claims this closing.
+		foreach (OpenRegistration candidate in context.Open
+			         .Where(c => SymbolEqualityComparer.Default.Equals(c.Service, openForm))
+			         .OrderBy(c => c.Weak))
 		{
 			// Map the closed service's type arguments onto the implementation's type parameters and
 			// construct the closed implementation (e.g. Repository<> + [Order] -> Repository<Order>).
@@ -313,28 +414,91 @@ partial class AwaitenGenerator
 				continue;
 			}
 
-			if (!synthesized.Add(closedImplName + "\0" + candidate.Key))
+			// AWT209: a generic factory is called with the closing's type arguments, so they must satisfy its
+			// constraints too. Skipped like an AWT126 closing, so the consumer's AWT101 is suppressed the same way.
+			List<IMethodSymbol> factories = candidate.FactoryMethods
+				.Where(method => SatisfiesConstraints(method, closed.TypeArguments, context.Compilation))
+				.ToList();
+			if (candidate.FactoryMethods.Count > 0 && factories.Count == 0)
+			{
+				context.ConstraintRejectedServices.Add(closedService);
+				ReportFactoryConstraintViolation(candidate, closedService, context);
+				continue;
+			}
+
+			if (!synthesized.Add(closedImplName + "\0" + candidate.Key + "\0" + candidate.WhenInjectedInto))
 			{
 				continue;
 			}
 
+			// A Fallback closing that a stronger (or earlier) registration already claims is dropped by coalescing,
+			// so it must not seed expansion either (see DroppedOverridableDefaults for the explicit ones).
+			bool dropped = candidate.Weak && context.Raw.Any(registration =>
+				!registration.IsScan
+				&& registration.ServiceType == closedService
+				&& registration.Key == candidate.Key
+				&& registration.WhenInjectedInto == candidate.WhenInjectedInto);
+
+			IReadOnlyList<INamedTypeSymbol> markers = [closed,];
 			context.Raw.Add(new RawRegistration(
 				closedService,
 				closedImplName,
 				candidate.Lifetime,
 				closedImpl,
 				candidate.Location?.ToLocation(),
+				candidate.Factory is null ? ProductionKind.Constructor : ProductionKind.Factory,
+				candidate.Factory,
 				Key: candidate.Key,
 				ServiceSymbol: closed,
+				Weak: candidate.Weak,
+				IsDefault: candidate.IsDefault,
 				Origin: candidate.Origin,
-				IsSynthesized: true));
+				IsSynthesized: true,
+				OnActivated: candidate.OnActivated,
+				OnRelease: candidate.OnRelease,
+				SuppressDisposal: candidate.SuppressDisposal,
+				WhenInjectedInto: candidate.WhenInjectedInto,
+				OnActivatedMarkers: candidate.OnActivated is null ? null : markers,
+				OnReleaseMarkers: candidate.OnRelease is null ? null : markers,
+				GenericFactory: candidate.Factory is not null));
 			context.Synthesized++;
 
-			if (context.Seen.Add(closedImpl))
+			if (dropped)
 			{
-				context.Worklist.Enqueue((closedImpl, depth + 1));
+				continue;
+			}
+
+			if (candidate.Factory is null)
+			{
+				Enqueue(closedImpl, null);
+			}
+
+			foreach (IMethodSymbol factory in factories)
+			{
+				Enqueue(closedImpl, factory.Construct(closed.TypeArguments.ToArray()));
 			}
 		}
+
+		void Enqueue(INamedTypeSymbol closedImpl, IMethodSymbol? producer)
+		{
+			if (context.Seen.Add(producer ?? (ISymbol)closedImpl))
+			{
+				context.Worklist.Enqueue((closedImpl, producer, depth + 1));
+			}
+		}
+	}
+
+	private static void ReportFactoryConstraintViolation(OpenRegistration candidate, string closedService, ExpansionContext context)
+	{
+		if (!context.ReportedConstraints.Add("factory:" + closedService + "\0" + candidate.Factory))
+		{
+			return;
+		}
+
+		context.Diagnostics.Add(new DiagnosticInfo(
+			Diagnostics.GenericFactoryConstraintViolation,
+			candidate.Location,
+			new EquatableArray<string>([AwaitenGenerator.Display(closedService), candidate.Factory!,])));
 	}
 
 	private static void ReportConstraintViolation(OpenRegistration candidate, string closedImplName, ExpansionContext context)
@@ -611,9 +775,34 @@ partial class AwaitenGenerator
 	///     service and implementation definitions. Not an instance itself; expanded into concrete closed
 	///     <see cref="RawRegistration" />s on demand by <see cref="ExpandOpenGenerics" />. <see cref="Origin" />
 	///     is the imported module that declared the template (<see langword="null" /> for the container's own),
-	///     stamped onto every closed registration expanded from it.
+	///     stamped onto every closed registration expanded from it, like the per-closing options below.
 	/// </summary>
-	private sealed record OpenRegistration(INamedTypeSymbol Service, INamedTypeSymbol Implementation, Lifetime Lifetime, string? Key, LocationInfo? Location, INamedTypeSymbol? Origin);
+	private sealed record OpenRegistration(INamedTypeSymbol Service, INamedTypeSymbol Implementation, Lifetime Lifetime, string? Key, LocationInfo? Location, INamedTypeSymbol? Origin)
+	{
+		/// <summary>The name of the generic factory method closed per closing, or <see langword="null" /> to construct.</summary>
+		public string? Factory { get; init; }
+
+		/// <summary>
+		///     The owner's methods named <see cref="Factory" /> with the service's arity, checked against each closing's
+		///     type arguments (AWT209) before the closing is synthesized. Empty when no such method exists, which
+		///     <c>ResolveFactory</c> then reports per closing (AWT108).
+		/// </summary>
+		public IReadOnlyList<IMethodSymbol> FactoryMethods { get; init; } = [];
+
+		/// <summary>An overridable default (<c>Fallback.Warn</c>/<c>Fallback.Silent</c>), applying per closing.</summary>
+		public bool Weak { get; init; }
+
+		/// <summary><c>Fallback.Warn</c>, which reports AWT148 when two defaults collide on a closing.</summary>
+		public bool IsDefault { get; init; }
+
+		public string? WhenInjectedInto { get; init; }
+
+		public string? OnActivated { get; init; }
+
+		public string? OnRelease { get; init; }
+
+		public bool SuppressDisposal { get; init; }
+	}
 
 	/// <summary>
 	///     The mutable state threaded through open generic expansion: the growing registration list and worklist,
@@ -623,8 +812,9 @@ partial class AwaitenGenerator
 	private sealed record ExpansionContext(
 		List<RawRegistration> Raw,
 		List<OpenRegistration> Open,
-		Queue<(INamedTypeSymbol Impl, int Depth)> Worklist,
-		HashSet<INamedTypeSymbol> Seen,
+		Queue<(INamedTypeSymbol Impl, IMethodSymbol? Producer, int Depth)> Worklist,
+		HashSet<ISymbol> Seen,
+		Compilation Compilation,
 		List<DiagnosticInfo> Diagnostics,
 		HashSet<string> ConstraintRejectedServices)
 	{

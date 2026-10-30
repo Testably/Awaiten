@@ -109,7 +109,7 @@ partial class AwaitenGenerator
 			disposable,
 			info.Symbol.IsReferenceType,
 			info.Production,
-			QualifiedProductionMember(info),
+			ProducerCall(info, producer),
 			asyncInit,
 			IsAsyncFactory: asyncFactory,
 			RuntimeDisposalCheck: runtimeDisposalCheck,
@@ -806,8 +806,9 @@ partial class AwaitenGenerator
 		List<DiagnosticInfo> diagnostics)
 	{
 		INamedTypeSymbol owner = info.Origin ?? containerSymbol;
-		List<IMethodSymbol> candidates = FindFactoryCandidates(
-			owner, info.ProductionMember!, info.Symbol, compilation);
+		List<IMethodSymbol> candidates = info.GenericFactory
+			? FindGenericFactoryCandidates(owner, info.ProductionMember!, info.Symbol, compilation)
+			: FindFactoryCandidates(owner, info.ProductionMember!, info.Symbol, compilation);
 
 		// The generated partial reaches its container's own members at any accessibility, but a module's
 		// members are called from outside, so only those the container can see qualify. A match hidden from
@@ -920,6 +921,23 @@ partial class AwaitenGenerator
 			: $"{info.Origin.ToDisplayString(FullyQualified)}.{info.ProductionMember}";
 
 	/// <summary>
+	///     The <see cref="QualifiedProductionMember" /> the generated code calls, carrying the bound type arguments of a
+	///     generic factory (<c>Create&lt;global::App.Order&gt;</c>) so the emitter, which writes the name verbatim, needs
+	///     no generic awareness.
+	/// </summary>
+	private static string? ProducerCall(ImplInfo info, IMethodSymbol producer)
+	{
+		string? member = QualifiedProductionMember(info);
+		if (info.Production != ProductionKind.Factory || !producer.IsGenericMethod)
+		{
+			return member;
+		}
+
+		string arguments = string.Join(", ", producer.TypeArguments.Select(argument => argument.ToDisplayString(FullyQualified)));
+		return $"{member}<{arguments}>";
+	}
+
+	/// <summary>
 	///     Chooses the constructor the container builds <paramref name="implementation" /> through: its single
 	///     accessible constructor, or the greediest whose parameters are all satisfiable (falling back to the
 	///     greediest so unresolved parameters surface as AWT101). <paramref name="external" /> marks external
@@ -1012,6 +1030,35 @@ partial class AwaitenGenerator
 			    && compilation.HasImplicitConversion(ProducedType(method.ReturnType, compilation), serviceType))
 			{
 				candidates.Add(method);
+			}
+		}
+
+		return candidates;
+	}
+
+	/// <summary>
+	///     The candidate factory methods for a closing of an open generic <c>typeof</c> registration: the generic
+	///     methods named <paramref name="name" /> with the closing's arity, constructed with its type arguments in
+	///     declaration order when they satisfy the method's constraints, whose constructed return type produces
+	///     <paramref name="closedImplementation" />. Each candidate is returned constructed, so its parameters and
+	///     return type are the closing's. None means AWT108; more than one an ambiguous factory (AWT112).
+	/// </summary>
+	private static List<IMethodSymbol> FindGenericFactoryCandidates(
+		INamedTypeSymbol container, string name, INamedTypeSymbol closedImplementation, Compilation compilation)
+	{
+		ImmutableArray<ITypeSymbol> arguments = closedImplementation.TypeArguments;
+		List<IMethodSymbol> candidates = new();
+		foreach (ISymbol member in AccessibleMembers(container, name, compilation))
+		{
+			if (member is IMethodSymbol { MethodKind: MethodKind.Ordinary, } method
+			    && method.Arity == arguments.Length
+			    && SatisfiesConstraints(method, arguments, compilation))
+			{
+				IMethodSymbol constructed = method.Construct(arguments.ToArray());
+				if (compilation.HasImplicitConversion(ProducedType(constructed.ReturnType, compilation), closedImplementation))
+				{
+					candidates.Add(constructed);
+				}
 			}
 		}
 

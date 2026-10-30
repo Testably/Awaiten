@@ -765,12 +765,12 @@ public static partial class CoffeeShop;
 ### AWT127
 
 :::danger[Error]
-The `typeof`-argument form of a lifetime, `[Decorate]` or `[Composite]` attribute must receive an unbound open generic type.
+The `typeof`-argument form of `[Decorate]` or `[Composite]` must receive unbound open generic types. A lifetime attribute's `typeof` form accepts a closed pair, but when one of its two types is an unbound generic, both must be.
 :::
 
 ```csharp
 [Container]
-[Transient(typeof(Repository<Order>), typeof(IRepository<Order>))]   // closed, not open
+[Transient(typeof(Repository<>), typeof(IRepository<Order>))]   // open implementation, closed service
 public static partial class CoffeeShop;
 ```
 
@@ -802,6 +802,66 @@ public sealed class Consumer(Box<Order> box);
 [Transient(typeof(Box<>))]
 [Singleton<Consumer>]
 public static partial class CoffeeShop;
+```
+
+### AWT206
+
+:::danger[Error]
+A closed `typeof` registration's implementation is not a class or interface assignable to its service. The generic form `[Singleton<Clock, IClock>]` rejects such a pair through its type constraints; the `typeof` form has none, so Awaiten reports it.
+:::
+
+```csharp
+public sealed class Clock;   // does not implement IClock
+
+[Container]
+[Singleton(typeof(Clock), typeof(IClock))]
+public static partial class CoffeeShop;
+```
+
+### AWT207
+
+:::danger[Error]
+`Eager` or `Instance` is set on an open generic `typeof` registration. Both describe one concrete instance, but the closings of an open generic are whatever the graph asks for, so eagerly building "every closing" would start services because some other consumer happens to close the generic, and one pre-built instance cannot be every closing. Register the closings you want eager or pre-built with a closed type. The option is ignored.
+:::
+
+```csharp
+[Container]
+[Singleton(typeof(Cache<>), typeof(ICache<>), Eager = true)]          // which closings?
+[Singleton(typeof(Cache<Order>), typeof(ICache<Order>), Eager = true)]  // fine: one closed type
+public static partial class CoffeeShop;
+```
+
+### AWT208
+
+:::danger[Error]
+The `Factory` of an open generic `typeof` registration is not a generic method with exactly the service's type parameters. Awaiten closes the factory per closing with the closed service's type arguments, in declaration order, so the method needs one type parameter for each of the service's. The registration is dropped.
+:::
+
+```csharp
+[Container]
+[Transient(typeof(IRepository<>), Factory = nameof(Create))]
+public static partial class CoffeeShop
+{
+    private static IRepository<Order> Create() => new Repository<Order>();   // needs Create<T>()
+}
+```
+
+### AWT209
+
+:::danger[Error]
+A closing of an open generic `typeof` registration violates the type-parameter constraints of its generic `Factory`, so the factory cannot be called for it. Like [AWT126](#awt126), the closing is skipped and the dependency that asked for it is unsatisfied.
+:::
+
+```csharp
+public sealed class Ledger(IRepository<int> numbers);   // int is not a class
+
+[Container]
+[Transient(typeof(IRepository<>), Factory = nameof(Create))]
+[Singleton<Ledger>]
+public static partial class CoffeeShop
+{
+    private static IRepository<T> Create<T>() where T : class => new Repository<T>();
+}
 ```
 
 ## Property injection

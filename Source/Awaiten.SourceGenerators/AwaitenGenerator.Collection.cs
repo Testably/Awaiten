@@ -31,7 +31,7 @@ partial class AwaitenGenerator
 		// concrete closed registrations on demand (see ExpandOpenGenerics).
 		List<OpenRegistration> open = new();
 
-		CollectLifetimeRegistrations(containerSymbol, result, open, diagnostics, origin: null, fallbackLocation: null);
+		CollectLifetimeRegistrations(containerSymbol, compilation, result, open, diagnostics, origin: null, fallbackLocation: null);
 
 		// [Import(typeof(Module))] pulls a module's registrations in after the container's own, so the container
 		// wins ties and a module's overridable defaults (Fallback.Warn/Silent) only fill the gaps it leaves. Resolved
@@ -42,7 +42,7 @@ partial class AwaitenGenerator
 		foreach (ImportedModule module in modules)
 		{
 			bool sameCompilation = SymbolEqualityComparer.Default.Equals(module.Symbol.ContainingAssembly, containerSymbol.ContainingAssembly);
-			CollectLifetimeRegistrations(module.Symbol, result, open, diagnostics, origin: module.Symbol, fallbackLocation: module.ImportLocation, skipGeneratedScanRegistrations: sameCompilation);
+			CollectLifetimeRegistrations(module.Symbol, compilation, result, open, diagnostics, origin: module.Symbol, fallbackLocation: module.ImportLocation, skipGeneratedScanRegistrations: sameCompilation);
 		}
 
 		// The container's own scan matches must outrank a module's within the scan tier (the container wins ties
@@ -145,13 +145,15 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     Reads the <c>[Singleton]</c>/<c>[Transient]</c>/<c>[Scoped]</c> registrations declared on a symbol (a
 	///     container or imported module) into <paramref name="result" />, and the open generic <c>typeof</c>-form
-	///     ones into <paramref name="open" />. <paramref name="origin" /> is the imported module being read
-	///     (<see langword="null" /> for the container), recorded so a module's <c>Factory</c>/<c>Instance</c> member
+	///     ones into <paramref name="open" />; a closed <c>typeof</c> pair registers like the generic form.
+	///     <paramref name="origin" /> is the imported module being read (<see langword="null" /> for the
+	///     container), recorded so a module's <c>Factory</c>/<c>Instance</c> member
 	///     resolves against the module. <paramref name="fallbackLocation" /> is the container's <c>[Import]</c>
 	///     location, used for a referenced-assembly module whose attributes have no syntax.
 	/// </summary>
 	private static void CollectLifetimeRegistrations(
 		INamedTypeSymbol symbol,
+		Compilation compilation,
 		List<RawRegistration> result,
 		List<OpenRegistration> open,
 		List<DiagnosticInfo> diagnostics,
@@ -186,22 +188,49 @@ partial class AwaitenGenerator
 				continue;
 			}
 
-			// The non-generic Type-ctor form, [Transient(typeof(Repository<>), typeof(IRepository<>))], carries
-			// open generics that cannot be type arguments. Recorded as an open registration to be expanded into
-			// concrete closed registrations on demand.
-			if (!attributeClass.IsGenericType)
+			ITypeSymbol? implementation;
+			ITypeSymbol? service;
+			if (attributeClass.IsGenericType)
 			{
-				CollectOpenRegistration(attribute, lifetime.Value, open, diagnostics, origin, fallbackLocation);
-				continue;
-			}
+				ImmutableArrayGuard(attributeClass.TypeArguments, out implementation, out service);
+				if (implementation is null)
+				{
+					continue;
+				}
 
-			ImmutableArrayGuard(attributeClass.TypeArguments, out ITypeSymbol? implementation, out ITypeSymbol? service);
-			if (implementation is null)
+				service ??= implementation;
+			}
+			else
 			{
-				continue;
-			}
+				// The non-generic Type-ctor form, [Transient(typeof(Repository<>), typeof(IRepository<>))], is the only
+				// way to name an open generic, which cannot be a type argument. An open pair is recorded as a template
+				// expanded into concrete closed registrations on demand; a closed pair registers like the generic form.
+				if (!TryReadTypeofPair(attribute, out INamedTypeSymbol typeofImplementation, out INamedTypeSymbol typeofService))
+				{
+					continue;
+				}
 
-			service ??= implementation;
+				if (typeofImplementation.IsUnboundGenericType || typeofService.IsUnboundGenericType)
+				{
+					CollectOpenRegistration(attribute, lifetime.Value, typeofImplementation, typeofService, symbol, open, diagnostics, origin, fallbackLocation);
+					continue;
+				}
+
+				if (!IsAssignableRegistration(typeofImplementation, typeofService, compilation))
+				{
+					diagnostics.Add(new DiagnosticInfo(
+						Diagnostics.TypeofImplementationNotAssignable,
+						LocationInfo.From(attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? fallbackLocation),
+						new EquatableArray<string>([
+							Display(typeofImplementation.ToDisplayString(FullyQualified)),
+							Display(typeofService.ToDisplayString(FullyQualified)),
+						])));
+					continue;
+				}
+
+				implementation = typeofImplementation;
+				service = typeofService;
+			}
 
 			(ProductionKind production, string? productionMember, bool conflictingDirectives) =
 				ReadProduction(attribute);
@@ -215,8 +244,8 @@ partial class AwaitenGenerator
 
 			string? key = NamedKeyArgument(attribute);
 
-			// A [Singleton<…>(WhenInjectedInto = typeof(Consumer))] contextual binding; absent (null) on the
-			// open-generic Type-ctor form, which exposes no such property. Resolved to the consumer's context key.
+			// A [Singleton<…>(WhenInjectedInto = typeof(Consumer))] contextual binding, resolved to the consumer's
+			// context key.
 			string? whenInjectedInto = NamedTypeArgument(attribute, "WhenInjectedInto");
 
 			Location? location = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? fallbackLocation;
@@ -238,13 +267,11 @@ partial class AwaitenGenerator
 				Weak: weak,
 				IsDefault: isDefault,
 				Origin: origin,
-				// Eager is exposed on [Singleton<…>] alone; a Transient/Scoped attribute has no such property, so
+				// Eager is exposed on [Singleton] alone; a Transient/Scoped attribute has no such property, so
 				// this reads false there. BuildInstance honors it only for a singleton lifetime.
 				Eager: NamedFlag(attribute, "Eager"),
 				OnActivated: NamedArgument(attribute, "OnActivated"),
 				OnRelease: NamedArgument(attribute, "OnRelease"),
-				// SuppressDisposal is exposed on the generic [Singleton<…>]/[Transient<…>]/[Scoped<…>] forms; the
-				// open-generic Type-ctor form has no such property, so NamedFlag reads false there.
 				SuppressDisposal: NamedFlag(attribute, "SuppressDisposal"),
 				WhenInjectedInto: whenInjectedInto));
 		}

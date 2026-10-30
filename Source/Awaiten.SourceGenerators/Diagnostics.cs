@@ -1577,4 +1577,60 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Warning,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A closed <c>typeof</c> registration (<c>[Singleton(typeof(Repository), typeof(IRepository))]</c>) names an
+	///     implementation that is not a reference type convertible to its service. The generic attribute form rejects
+	///     the same pair through its <c>where TImplementation : class, TService</c> constraint at compile time; the
+	///     <c>typeof</c> form has no such constraint, so the generator reports it instead of emitting a broken cast.
+	/// </summary>
+	public static readonly DiagnosticDescriptor TypeofImplementationNotAssignable = new(
+		"AWT206",
+		"typeof registration's implementation does not implement its service",
+		"'{0}' cannot be registered as '{1}': the implementation of a typeof registration must be a class or interface assignable to its service",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     <c>Eager</c> or <c>Instance</c> on an open generic <c>typeof</c> registration. Both describe one concrete
+	///     instance, but an open generic only becomes concrete per closing, and the closings are whatever the graph
+	///     happens to ask for. Eager construction of "every closing" would start services because some other consumer
+	///     closed the generic, and a single pre-built instance cannot be every closing, so both need a closed type.
+	/// </summary>
+	public static readonly DiagnosticDescriptor OpenGenericNeedsClosedType = new(
+		"AWT207",
+		"Option needs a closed type",
+		"{0} needs a closed type, but '{1}' is an open generic; register the closings you want with a closed type instead",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     The <c>Factory</c> of an open generic <c>typeof</c> registration must be a generic method with exactly the
+	///     service's type parameters, mapped in declaration order like open decorators and composites, so each closing
+	///     constructs it with the closed service's type arguments. The owner declares methods of that name, but none
+	///     with that arity.
+	/// </summary>
+	public static readonly DiagnosticDescriptor GenericFactoryArityMismatch = new(
+		"AWT208",
+		"Generic factory has the wrong number of type parameters",
+		"'{0}' is an open generic, so its factory '{1}' on {2} must be a generic method with exactly {3} type parameter(s), mapped in declaration order onto the service's",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A closing of an open generic <c>typeof</c> registration with a generic <c>Factory</c> violates the factory
+	///     method's type-parameter constraints, so the factory cannot be called for it. The closing is skipped, like a
+	///     closing that violates the implementation's own constraints (<see cref="OpenGenericConstraintViolation">AWT126</see>),
+	///     and an error because the dependency that asked for it is then unsatisfiable.
+	/// </summary>
+	public static readonly DiagnosticDescriptor GenericFactoryConstraintViolation = new(
+		"AWT209",
+		"Generic factory constraint violation",
+		"'{0}' cannot be produced by the generic factory '{1}': the type argument(s) violate its type-parameter constraints",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }
