@@ -25,9 +25,9 @@ namespace Awaiten;
 ///     only to a container-constructed instance, so a <typeparamref name="TImplementation" /> produced by a
 ///     <c>Factory</c> or <c>Instance</c> registration is <c>AWT178</c> (the source produces it whole). A
 ///     property that also carries <c>[Inject]</c> is filled once, from the <c>[Inject]</c> attribute, so this
-///     entry's <c>Optional</c>/<c>Deferred</c>/<c>Key</c> are ignored, which is reported as <c>AWT181</c>. A closed implementation
-///     type is required: matching an <em>open</em> generic <typeparamref name="TImplementation" /> against
-///     open-generic scanned types is not supported. Targeting a <c>[Decorate]</c> decorator type is likewise not
+///     entry's <c>Optional</c>/<c>Deferred</c>/<c>Key</c> are ignored, which is reported as <c>AWT181</c>. To fill a
+///     property on every closing of an open generic, use the <see cref="Awaiten.InjectPropertyAttribute">typeof form</see> with an
+///     unbound generic such as <c>typeof(Repository&lt;&gt;)</c>. Targeting a <c>[Decorate]</c> decorator type is not
 ///     supported: a decorator wrapper is built by the decorator chain, not filled by an entry, so an
 ///     <c>[InjectProperty]</c> naming a decorator type has no effect (add <c>[Inject]</c> to the decorator's own
 ///     property instead). To fill a property on the wrapped implementation, name that implementation.
@@ -64,5 +64,46 @@ public sealed class InjectPropertyAttribute<TImplementation>(string propertyName
     ///     <c>[FromKey]</c> would on an <c>[Inject]</c> property. A <c>string</c>, an <c>enum</c> value, or a
     ///     <c>typeof(...)</c>.
     /// </summary>
+    public object? Key { get; set; }
+}
+
+/// <summary>
+///     Declares, on the <see cref="ContainerAttribute">container</see>, a property of
+///     <see cref="Implementation" /> to fill from the object graph after construction, like
+///     <see cref="InjectPropertyAttribute{TImplementation}" /> but through a <see cref="Type" /> argument. With a
+///     closed type it behaves exactly like the generic form. With an unbound generic like
+///     <c>typeof(Repository&lt;&gt;)</c>, which cannot be a type argument, it fills the property on every closing of
+///     that definition the container constructs (<c>Repository&lt;Order&gt;</c>, <c>Repository&lt;Customer&gt;</c>,
+///     ...), however the closing is registered.
+/// </summary>
+/// <remarks>
+///     Each closing is checked like the generic form, with the property's type substituted for that closing, so
+///     a <c>Validator</c> property of type <c>IValidator&lt;T&gt;</c> resolves <c>IValidator&lt;Order&gt;</c> on
+///     <c>Repository&lt;Order&gt;</c>. A name that is not a settable property on the generic definition is
+///     <c>AWT177</c>, and a partially open type is <c>AWT217</c>. When a closed entry and an open entry name the
+///     same property of one closing, the closed entry wins and the open one is ignored for that closing
+///     (<c>AWT179</c>). A type deriving from a closing is not a closing itself and is not matched.
+/// </remarks>
+/// <example><c>[InjectProperty(typeof(Repository&lt;&gt;), nameof(Repository&lt;object&gt;.Logger))]</c></example>
+[AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
+public sealed class InjectPropertyAttribute(Type implementation, string propertyName) : Attribute
+{
+    /// <summary>The type whose property is filled: a closed type, or an unbound generic definition.</summary>
+    public Type Implementation { get; } = implementation;
+
+    /// <summary>
+    ///     The name of the property on <see cref="Implementation" /> to fill. Use <c>nameof(...)</c> so a rename
+    ///     carries through, closing an open generic with any type argument, e.g.
+    ///     <c>nameof(Repository&lt;object&gt;.Logger)</c>.
+    /// </summary>
+    public string PropertyName { get; } = propertyName;
+
+    /// <inheritdoc cref="InjectPropertyAttribute{TImplementation}.Optional" />
+    public bool Optional { get; set; }
+
+    /// <inheritdoc cref="InjectPropertyAttribute{TImplementation}.Deferred" />
+    public bool Deferred { get; set; }
+
+    /// <inheritdoc cref="InjectPropertyAttribute{TImplementation}.Key" />
     public object? Key { get; set; }
 }

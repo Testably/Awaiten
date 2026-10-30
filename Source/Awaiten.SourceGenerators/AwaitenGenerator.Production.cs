@@ -157,6 +157,12 @@ partial class AwaitenGenerator
 				? entries
 				: new List<InjectPropertyEntry>();
 
+		if (OpenInjectPropertyKey(info) is { } openKey
+		    && context.InjectProperties.TryGetValue(openKey, out List<InjectPropertyEntry>? openEntries))
+		{
+			injectProperties = MergeOpenInjectProperties(info, injectProperties, openEntries, context.Diagnostics);
+		}
+
 		List<MemberModel> members = new();
 
 		if (info.Production != ProductionKind.Constructor)
@@ -178,6 +184,47 @@ partial class AwaitenGenerator
 			injectProperties,
 			members);
 		return members;
+	}
+
+	/// <summary>
+	///     The key of the <c>[InjectProperty(typeof(Definition&lt;&gt;), name)]</c> entries that apply to
+	///     <paramref name="info" />: its generic definition when it is a closing constructed under its own type, or
+	///     <see langword="null" />. A decorator chain link carries a synthetic identity and is skipped, exactly as a
+	///     closed entry naming the decorator type does not reach it.
+	/// </summary>
+	private static string? OpenInjectPropertyKey(ImplInfo info)
+		=> !SymbolEqualityComparer.Default.Equals(info.Symbol, info.Symbol.OriginalDefinition)
+		   && info.ImplementationType == info.Symbol.ToDisplayString(FullyQualified)
+			? info.Symbol.OriginalDefinition.ToDisplayString(FullyQualified)
+			: null;
+
+	/// <summary>
+	///     Appends the open-generic entries for a closing to its closed entries. A closed entry is the more specific
+	///     declaration, so an open entry for a property a closed entry already names is ignored for this closing and
+	///     reported as <see cref="Diagnostics.DuplicateInjectProperty">AWT179</see> at the open entry.
+	/// </summary>
+	private static List<InjectPropertyEntry> MergeOpenInjectProperties(
+		ImplInfo info,
+		List<InjectPropertyEntry> closedEntries,
+		List<InjectPropertyEntry> openEntries,
+		List<DiagnosticInfo> diagnostics)
+	{
+		List<InjectPropertyEntry> merged = new(closedEntries);
+		foreach (InjectPropertyEntry entry in openEntries)
+		{
+			if (closedEntries.Any(closed => closed.PropertyName == entry.PropertyName))
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.DuplicateInjectProperty,
+					entry.Location ?? info.Location,
+					new EquatableArray<string>([entry.PropertyName, DisplayInstance(info.ImplementationType),])));
+				continue;
+			}
+
+			merged.Add(entry);
+		}
+
+		return merged;
 	}
 
 	/// <summary>

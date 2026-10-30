@@ -2,7 +2,7 @@
 
 Awaiten fills constructor parameters by default. Property injection is the opt-in alternative for the odd case where a constructor does not fit, like breaking a cycle between two services. It is done through an object initializer, so there is still no reflection.
 
-There are two ways to ask for it. Declaring it on the container with `[InjectProperty<T>]` keeps the service a plain class, with no Awaiten reference in your domain code. That is the idiom. Marking the property itself with `[Inject]` is the escape hatch for the one shape the container-side form cannot express.
+There are two ways to ask for it. Declaring it on the container with `[InjectProperty<T>]`, or its `typeof` form for open generics, keeps the service a plain class, with no Awaiten reference in your domain code. That is the idiom. Marking the property itself with `[Inject]` is the escape hatch for the one shape the container-side form cannot express.
 
 ## Declare it on the container with `[InjectProperty<T>]`
 
@@ -22,6 +22,37 @@ public static partial class CoffeeShop;
 ```
 
 Pass `nameof(Barista.Time)` so a rename carries through. Repeat the attribute, once per property. It reads the *implementation* type, so it applies wherever that type is constructed, including a type pulled in by a [`[Scan]`](../registration/scanning) that a per-registration list of names could never reach.
+
+## Open generics with the `typeof` form
+
+Every entry also comes in a `typeof` form. For a closed type the two are the same entry:
+
+```csharp no-compile
+[InjectProperty<Barista>(nameof(Barista.Time))]           // generic form
+[InjectProperty(typeof(Barista), nameof(Barista.Time))]   // typeof form, same behavior
+```
+
+The `typeof` form exists for an unbound generic, which cannot be a type argument: `typeof(OrderBook<>)` fills the property on every closing of `OrderBook<T>` that the container constructs, whether an [open-generic registration](../registration/open-generics) or an explicit closed one produced it.
+
+```csharp
+public interface IOrderBook<T>;
+
+public sealed class OrderBook<T> : IOrderBook<T>
+{
+    public ITimeSystem? Time { get; set; }   // a plain property, no Awaiten attribute
+}
+
+public sealed class CashDesk(IOrderBook<Order> orders, IOrderBook<Customer> regulars);
+
+[Container]
+[Singleton<RealTimeSystem, ITimeSystem>]
+[Singleton(typeof(OrderBook<>), typeof(IOrderBook<>))]
+[Transient<CashDesk>]
+[InjectProperty(typeof(OrderBook<>), nameof(OrderBook<object>.Time))]   // fills OrderBook<Order> and OrderBook<Customer>
+public static partial class CoffeeShop;
+```
+
+Each closing is checked on its own, with the property type substituted: a property of type `IValidator<T>` resolves `IValidator<Order>` on `OrderBook<Order>`. `Key`, `Optional` and `Deferred` work as on the generic form. Name the property with any closing, such as `nameof(OrderBook<object>.Time)`. A closed entry for the same property, such as `[InjectProperty<OrderBook<Order>>]`, wins on its closing and the ignored open entry is flagged ([AWT179](../diagnostics#awt179)). A class that only derives from a closing is not a closing and is left alone, and a partially open `typeof` is [AWT217](../diagnostics#awt217).
 
 ## Any dependency shape works
 
@@ -53,7 +84,7 @@ By default a property whose service is unregistered is a missing dependency ([AW
 [InjectProperty<Barista>(nameof(Barista.Metrics), Optional = true)]
 ```
 
-*Note: a bad name, a read-only member, or a field is [AWT177](../diagnostics#awt177); an unreachable setter is [AWT136](../diagnostics#awt136); a duplicate entry for one property is [AWT179](../diagnostics#awt179); and a `Factory`/`Instance`-produced type, built whole by its source with nothing for the container to fill, is [AWT178](../diagnostics#awt178).*
+*Note: a bad name, a read-only member, or a field is [AWT177](../diagnostics#awt177) (for an open-generic target, checked once on the generic definition); an unreachable setter is [AWT136](../diagnostics#awt136); a duplicate entry for one property is [AWT179](../diagnostics#awt179); and a `Factory`/`Instance`-produced type, built whole by its source with nothing for the container to fill, is [AWT178](../diagnostics#awt178).*
 
 A property without an entry is left alone. Injection stays opt-in, one property at a time, and if a property carries both `[Inject]` and an `[InjectProperty<T>]` entry the `[Inject]` member wins and the redundant entry is flagged ([AWT181](../diagnostics#awt181)).
 
@@ -69,7 +100,7 @@ public sealed class Handler<T>
 ```
 
 :::caution[Last resort]
-`[Inject]` puts an Awaiten reference on your class. Reach for it only for the one shape `[InjectProperty<T>]` cannot express: an **open-generic** implementation like `Handler<T>` above, whose closings are only expanded on demand and so cannot be named by a closed type argument. For every closed type, prefer the container-side form above. Where the residual applies, `[Inject]` is the accepted trade, not a defect.
+`[Inject]` puts an Awaiten reference on your class. Reach for it only for the one shape `[InjectProperty]` cannot express: a property of a **decorator**, which its decorator chain builds rather than an entry filling it. For every other type, including an open-generic one like `Handler<T>` above, prefer the container-side form, with `typeof(Handler<>)` for the open generic. Where the residual applies, `[Inject]` is the accepted trade, not a defect.
 :::
 
 :::caution[When not to reach for this]

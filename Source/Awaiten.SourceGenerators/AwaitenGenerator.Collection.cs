@@ -3,6 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 using Awaiten.SourceGenerators.Entities;
 using Awaiten.SourceGenerators.Internals;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace Awaiten.SourceGenerators;
 
@@ -838,11 +839,14 @@ partial class AwaitenGenerator
 	private sealed record InjectPropertyEntry(string PropertyName, bool Optional, bool Deferred, string? Key, LocationInfo? Location);
 
 	/// <summary>
-	///     Reads the container's <c>[InjectProperty&lt;TImplementation&gt;(name)]</c> entries into a map from the
-	///     implementation's fully-qualified type to its properties to fill, so <see cref="BuildInstance" /> can look
-	///     them up by <c>info.ImplementationType</c> - reaching every construction site of that implementation,
-	///     including one brought in by a <c>[Scan]</c>. Reports <see cref="Diagnostics.DuplicateInjectProperty">AWT179</see>
-	///     for a second entry naming the same property of the same implementation, keeping only the first.
+	///     Reads the container's <c>[InjectProperty&lt;TImplementation&gt;(name)]</c> and
+	///     <c>[InjectProperty(typeof(...), name)]</c> entries into a map from the implementation's fully-qualified
+	///     type to its properties to fill, so <see cref="BuildInstance" /> can look them up by
+	///     <c>info.ImplementationType</c> - reaching every construction site of that implementation, including one
+	///     brought in by a <c>[Scan]</c>. An unbound generic target is keyed by its definition
+	///     (<c>Repository&lt;T&gt;</c>), which <see cref="OpenInjectPropertyKey" /> derives from each closing. Reports
+	///     <see cref="Diagnostics.DuplicateInjectProperty">AWT179</see> for a second entry naming the same property of
+	///     the same implementation, keeping only the first.
 	/// </summary>
 	private static Dictionary<string, List<InjectPropertyEntry>> CollectInjectProperties(
 		INamedTypeSymbol containerSymbol, List<DiagnosticInfo> diagnostics)
@@ -850,18 +854,39 @@ partial class AwaitenGenerator
 		Dictionary<string, List<InjectPropertyEntry>> map = new(StringComparer.Ordinal);
 		foreach (AttributeData attribute in containerSymbol.GetAttributes())
 		{
-			if (attribute.AttributeClass is not { Name: "InjectPropertyAttribute", IsGenericType: true, } attributeClass
-			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace
-			    || attributeClass.TypeArguments.Length != 1
-			    || attributeClass.TypeArguments[0] is not INamedTypeSymbol implementation
-			    || attribute.ConstructorArguments.Length != 1
-			    || attribute.ConstructorArguments[0].Value is not string propertyName)
+			if (!TryReadInjectProperty(attribute, out INamedTypeSymbol? implementation, out string? propertyName))
 			{
 				continue;
 			}
 
-			string implementationType = implementation.ToDisplayString(FullyQualified);
 			LocationInfo? location = LocationInfo.From(attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation());
+
+			// AWT217: C# rejects a partially open typeof (CS7003), but the generator still runs and would key the
+			// entry on a type no closing ever matches, so name the actual mistake instead of an unmatched AWT180.
+			if (!implementation.IsUnboundGenericType && HasOmittedTypeArgument(attribute))
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.InjectPropertyPartiallyOpen,
+					location,
+					new EquatableArray<string>([Display(implementation.ToDisplayString(FullyQualified)),])));
+				continue;
+			}
+
+			string implementationType = implementation.IsUnboundGenericType
+				? implementation.OriginalDefinition.ToDisplayString(FullyQualified)
+				: implementation.ToDisplayString(FullyQualified);
+
+			// AWT177 on the definition: every closing shares its members, so a bad name is reported once at the
+			// attribute, even when no closing is constructed, instead of once per closing.
+			if (implementation.IsUnboundGenericType
+			    && !IsSettableProperty(ResolveNamedInstanceMember(implementation.OriginalDefinition, propertyName)))
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.InjectPropertyNotFound,
+					location,
+					new EquatableArray<string>([propertyName, Display(implementationType),])));
+				continue;
+			}
 
 			if (!map.TryGetValue(implementationType, out List<InjectPropertyEntry>? entries))
 			{
@@ -896,6 +921,59 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
+	///     Reads the target type and property name of an <c>[InjectProperty&lt;TImplementation&gt;(name)]</c> or an
+	///     <c>[InjectProperty(typeof(...), name)]</c>.
+	/// </summary>
+	private static bool TryReadInjectProperty(
+		AttributeData attribute,
+		[NotNullWhen(true)] out INamedTypeSymbol? implementation,
+		[NotNullWhen(true)] out string? propertyName)
+	{
+		implementation = null;
+		propertyName = null;
+		if (attribute.AttributeClass is not { Name: "InjectPropertyAttribute", } attributeClass
+		    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace)
+		{
+			return false;
+		}
+
+		if (attributeClass is { IsGenericType: true, TypeArguments.Length: 1, }
+		    && attribute.ConstructorArguments.Length == 1)
+		{
+			implementation = attributeClass.TypeArguments[0] as INamedTypeSymbol;
+			propertyName = attribute.ConstructorArguments[0].Value as string;
+		}
+		else if (!attributeClass.IsGenericType && attribute.ConstructorArguments.Length == 2)
+		{
+			implementation = attribute.ConstructorArguments[0].Value as INamedTypeSymbol;
+			propertyName = attribute.ConstructorArguments[1].Value as string;
+		}
+
+		return implementation is not null && propertyName is not null;
+	}
+
+	/// <summary>
+	///     Whether the attribute's <c>typeof</c> argument omits a type argument somewhere, like
+	///     <c>typeof(Outer&lt;int&gt;.Inner&lt;&gt;)</c>. Read from syntax because Roslyn binds such a type to a
+	///     constructed symbol that cannot be told apart from a closed one reliably.
+	/// </summary>
+	private static bool HasOmittedTypeArgument(AttributeData attribute)
+		=> attribute.ApplicationSyntaxReference?.GetSyntax() is AttributeSyntax { ArgumentList: { } arguments, }
+		   && arguments.Arguments
+			   .Where(argument => argument.NameEquals is null
+			                      && (argument.NameColon is null || argument.NameColon.Name.Identifier.Text == "implementation"))
+			   .Select(argument => argument.Expression)
+			   .FirstOrDefault() is TypeOfExpressionSyntax typeOf
+		   && typeOf.Type.DescendantNodesAndSelf().OfType<OmittedTypeArgumentSyntax>().Any();
+
+	/// <summary>
+	///     Whether <paramref name="member" /> is a property <c>[InjectProperty]</c> can name: a non-indexer property
+	///     with a set or init accessor. Whether the container can reach that accessor is checked per closing (AWT136).
+	/// </summary>
+	private static bool IsSettableProperty([NotNullWhen(true)] ISymbol? member)
+		=> member is IPropertySymbol { IsIndexer: false, SetMethod: not null, };
+
+	/// <summary>
 	///     Reports <see cref="Diagnostics.InjectPropertyImplementationNotRegistered">AWT180</see> for every
 	///     <c>[InjectProperty&lt;TImplementation&gt;]</c> entry whose implementation type matches no registration in
 	///     <paramref name="implOrder" />, so the entry is never applied (an unregistered type, or an unexpanded
@@ -906,7 +984,8 @@ partial class AwaitenGenerator
 	///     its <c>ImplementationType</c>: a decorator chain link's <c>ImplementationType</c> is a synthetic
 	///     <c>Type@__dec:…</c> identity, so keying only on that would misreport an entry targeting the decorator type
 	///     as unmatched. (Property injection is not applied to a decorator wrapper; see the <c>[InjectProperty]</c>
-	///     XML doc.)
+	///     XML doc.) It also carries each impl's generic definition, the key of an open-generic entry, so such an
+	///     entry is unmatched only when no closing of its definition is constructed.
 	/// </summary>
 	private static void ReportUnmatchedInjectProperties(
 		Dictionary<string, List<InjectPropertyEntry>> injectProperties,
@@ -923,6 +1002,7 @@ partial class AwaitenGenerator
 		{
 			registered.Add(info.ImplementationType);
 			registered.Add(info.Symbol.ToDisplayString(FullyQualified));
+			registered.Add(info.Symbol.OriginalDefinition.ToDisplayString(FullyQualified));
 		}
 
 		foreach (KeyValuePair<string, List<InjectPropertyEntry>> implementation in injectProperties)
