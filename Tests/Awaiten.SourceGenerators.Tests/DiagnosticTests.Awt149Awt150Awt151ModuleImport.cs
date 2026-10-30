@@ -196,5 +196,91 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).DoesNotContain("*AWT151*").AsWildcard()
 				.Because("a module with registrations contributes something");
 		}
+
+		[Test]
+		[Arguments("[ImportService<IClock>]")]
+		[Arguments("[ImportService(typeof(IClock))]")]
+		[Arguments("[ImportService(typeof(ILogger<>))]")]
+		public async Task DoesNotReportForAModuleThatOnlyImportsServices(string importService)
+		{
+			GeneratorResult result = Generator.Run($$"""
+			                                         using Awaiten;
+
+			                                         namespace MyCode;
+
+			                                         public interface IClock { }
+			                                         public interface ILogger<T> { }
+
+			                                         [Module]
+			                                         {{importService}}
+			                                         public static class HostModule { }
+
+			                                         [Container]
+			                                         [Import(typeof(HostModule))]
+			                                         public static partial class MyContainer
+			                                         {
+			                                         }
+			                                         """);
+
+			await That(result.Diagnostics).DoesNotContain("*AWT151*").AsWildcard()
+				.Because("an imported service is a contribution: removing the module would turn the dependency into AWT101");
+		}
+
+		[Test]
+		public async Task DoesNotReportForAReferencedModuleThatOnlyImportsServices()
+		{
+			GeneratorResult result = Generator.RunWithReferencedAssembly("""
+				using Awaiten;
+
+				namespace Lib;
+
+				public interface IClock { }
+
+				[Module]
+				[ImportService<IClock>]
+				public static class HostModule { }
+				""", """
+				using Awaiten;
+				using Lib;
+
+				namespace MyCode;
+
+				[Container]
+				[Import(typeof(HostModule))]
+				public static partial class MyContainer
+				{
+				}
+				""");
+
+			await That(result.Diagnostics).DoesNotContain("*AWT151*").AsWildcard()
+				.Because("a module read from metadata carries its [ImportService] like one in the same compilation");
+		}
+
+		[Test]
+		public async Task ReportsForAReferencedModuleThatDeclaresNothing()
+		{
+			GeneratorResult result = Generator.RunWithReferencedAssembly("""
+				using Awaiten;
+
+				namespace Lib;
+
+				[Module]
+				public static class EmptyModule { }
+				""", """
+				using Awaiten;
+				using Lib;
+
+				namespace MyCode;
+
+				[Container]
+				[Import(typeof(EmptyModule))]
+				public static partial class MyContainer
+				{
+				}
+				""");
+
+			await That(result.Diagnostics).Contains("*AWT151*EmptyModule*").AsWildcard()
+				.Because("a module read from metadata that declares nothing still contributes nothing");
+		}
 	}
 }

@@ -530,11 +530,11 @@ partial class AwaitenGenerator
 				Diagnostics.ModuleScanNotExpanded, location, new EquatableArray<string>([moduleName,])));
 		}
 
-		// AWT151: a module that declares no lifetime registrations imports nothing useful. A module with a [Scan]
+		// AWT151: a module that declares nothing to contribute imports nothing useful. A module with a [Scan]
 		// is exempt regardless of what the scan produced: the module's own build reports an empty scan at its
 		// declaration (AWT138/AWT184), and an unexpanded one is AWT154 above, so repeating the blame at the
 		// consumer's [Import] would point at code the consumer does not own.
-		if (!DeclaresAnyRegistration(moduleAttributes) && !declaresScan)
+		if (!DeclaresAnyContribution(moduleAttributes) && !declaresScan)
 		{
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.EmptyModule, location, new EquatableArray<string>([moduleName,])));
@@ -546,12 +546,13 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     Whether an attribute list carries anything a module contributes to an importing container: a
 	///     <c>[Singleton]</c>/<c>[Transient]</c>/<c>[Scoped]</c> lifetime registration (generic or open
-	///     <c>typeof</c> form), a <c>[Decorate]</c>, a <c>[Composite]</c>, or <c>[ImportServices]</c>. Used to
-	///     detect a module that declares nothing to import (AWT151). A module-declared <c>[Scan]</c> does not
-	///     count here on its own: its matches are self-compiled into <c>[GeneratedScanRegistration]</c> attributes
-	///     (which do count), so a scan-only module whose scan matched something carries those generated attributes.
+	///     <c>typeof</c> form), a <c>[Decorate]</c>, a <c>[Composite]</c>, <c>[ImportServices]</c> or an
+	///     <c>[ImportService]</c> (generic or <c>typeof</c> form). Used to detect a module that declares nothing to
+	///     import (AWT151). A module-declared <c>[Scan]</c> does not count here on its own: its matches are
+	///     self-compiled into <c>[GeneratedScanRegistration]</c> attributes (which do count), so a scan-only module
+	///     whose scan matched something carries those generated attributes.
 	/// </summary>
-	private static bool DeclaresAnyRegistration(ImmutableArray<AttributeData> attributes)
+	private static bool DeclaresAnyContribution(ImmutableArray<AttributeData> attributes)
 	{
 		foreach (AttributeData attribute in attributes)
 		{
@@ -559,7 +560,7 @@ partial class AwaitenGenerator
 			    && attributeClass.ContainingNamespace?.ToDisplayString() == AttributeNamespace
 			    && attributeClass.Name is "SingletonAttribute" or "TransientAttribute" or "ScopedAttribute"
 				    or "DecorateAttribute" or "CompositeAttribute" or "ImportServicesAttribute"
-				    or "GeneratedScanRegistrationAttribute")
+				    or "ImportServiceAttribute" or "GeneratedScanRegistrationAttribute")
 			{
 				return true;
 			}

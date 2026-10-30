@@ -735,8 +735,9 @@ internal static class Diagnostics
 
 	/// <summary>
 	///     An imported <c>[Module]</c> declares no <c>[Singleton]</c>/<c>[Transient]</c>/<c>[Scoped]</c>
-	///     registrations, so the import contributes nothing, most likely the module is incomplete or the wrong
-	///     type was named.
+	///     registration, <c>[Scan]</c>, <c>[Decorate]</c>, <c>[Composite]</c>, <c>[ImportServices]</c> or
+	///     <c>[ImportService]</c>, so the import contributes nothing, most likely the module is incomplete or the
+	///     wrong type was named.
 	/// </summary>
 	public static readonly DiagnosticDescriptor EmptyModule = new(
 		"AWT151",
