@@ -758,9 +758,16 @@ partial class AwaitenGenerator
 	/// </summary>
 	private static string AttributeTypeArgument(AttributeData attribute, INamedTypeSymbol attributeClass, int index)
 	{
-		ITypeSymbol? type = attributeClass.IsGenericType
-			? attributeClass.TypeArguments[index]
-			: attribute.ConstructorArguments.Length == 2 ? attribute.ConstructorArguments[index].Value as ITypeSymbol : null;
+		ITypeSymbol? type = null;
+		if (attributeClass.IsGenericType)
+		{
+			type = attributeClass.TypeArguments[index];
+		}
+		else if (attribute.ConstructorArguments.Length == 2)
+		{
+			type = attribute.ConstructorArguments[index].Value as ITypeSymbol;
+		}
+
 		return type is null ? "?" : Display(type.ToDisplayString(FullyQualified));
 	}
 

@@ -29,34 +29,7 @@ partial class AwaitenGenerator
 				display => decorator.Keys is not { } keys
 					? PresentUnderAnyKey(graph, display)
 					: keys.Any(key => PresentUnderKey(graph, display, key)));
-
-			// AWT210: a selected key that no closing of the service is registered under.
-			if (decorator.Keys is { Count: > 0, } selected && !(selected.Count == 1 && selected[0] is null))
-			{
-				foreach (string? key in selected.Where(key => !closings.Any(closed => PresentUnderKey(graph, closed.ToDisplayString(FullyQualified), key))))
-				{
-					diagnostics.Add(new DiagnosticInfo(
-						Diagnostics.DecoratedKeyNotRegistered,
-						LocationInfo.From(decorator.Location),
-						new EquatableArray<string>([
-							Display(decorator.Service.ToDisplayString(FullyQualified)),
-							Display(decorator.Decorator.ToDisplayString(FullyQualified)),
-							key is null ? "null" : KeyDisplay(key),
-						])));
-				}
-			}
-			else if (closings.Count == 0)
-			{
-				// AWT123: the open decorator names a service that has no closing in the graph to decorate.
-				diagnostics.Add(new DiagnosticInfo(
-					Diagnostics.DecoratedServiceNotRegistered,
-					LocationInfo.From(decorator.Location),
-					new EquatableArray<string>([
-						Display(decorator.Service.ToDisplayString(FullyQualified)),
-						Display(decorator.Decorator.ToDisplayString(FullyQualified)),
-					])));
-				continue;
-			}
+			ReportUnmatchedOpenDecorator(decorator, closings, graph, diagnostics);
 
 			foreach (INamedTypeSymbol closed in closings)
 			{
@@ -81,6 +54,44 @@ partial class AwaitenGenerator
 					decorator.Location,
 					keys));
 			}
+		}
+	}
+
+	/// <summary>
+	///     Reports AWT210 for each key an open decorator selects that none of its <paramref name="closings" /> is
+	///     registered under, or AWT123 when it selects no key and has no closing at all.
+	/// </summary>
+	private static void ReportUnmatchedOpenDecorator(
+		OpenDecorateRegistration decorator,
+		List<INamedTypeSymbol> closings,
+		CoalescedGraph graph,
+		List<DiagnosticInfo> diagnostics)
+	{
+		// AWT210: a selected key that no closing of the service is registered under.
+		if (decorator.Keys is { Count: > 0, } selected && !(selected.Count == 1 && selected[0] is null))
+		{
+			foreach (string? key in selected.Where(key => !closings.Any(closed => PresentUnderKey(graph, closed.ToDisplayString(FullyQualified), key))))
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.DecoratedKeyNotRegistered,
+					LocationInfo.From(decorator.Location),
+					new EquatableArray<string>([
+						Display(decorator.Service.ToDisplayString(FullyQualified)),
+						Display(decorator.Decorator.ToDisplayString(FullyQualified)),
+						key is null ? "null" : KeyDisplay(key),
+					])));
+			}
+		}
+		else if (closings.Count == 0)
+		{
+			// AWT123: the open decorator names a service that has no closing in the graph to decorate.
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.DecoratedServiceNotRegistered,
+				LocationInfo.From(decorator.Location),
+				new EquatableArray<string>([
+					Display(decorator.Service.ToDisplayString(FullyQualified)),
+					Display(decorator.Decorator.ToDisplayString(FullyQualified)),
+				])));
 		}
 	}
 
