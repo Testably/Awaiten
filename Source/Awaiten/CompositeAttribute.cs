@@ -36,6 +36,13 @@ public sealed class CompositeAttribute<TComposite, TService> : Attribute
 	///     re-materializes its member array on every resolve. Members keep their own lifetimes regardless.
 	/// </summary>
 	public Lifetime Lifetime { get; set; } = Lifetime.Transient;
+
+	/// <summary>
+	///     The registration key the composite fronts. Leave unset to front the unkeyed registrations. With a key, the
+	///     composite is what a resolve under that key returns, and its collection parameter receives the members
+	///     registered under that key.
+	/// </summary>
+	public object? Key { get; set; }
 }
 
 /// <summary>
@@ -76,4 +83,10 @@ public sealed class CompositeAttribute : Attribute
 	///     <see cref="Lifetime.Transient" />, so each closing re-materializes its member array on every resolve.
 	/// </summary>
 	public Lifetime Lifetime { get; set; } = Lifetime.Transient;
+
+	/// <summary>
+	///     The registration key each closing's composite fronts. Leave unset to front the unkeyed registrations. With
+	///     a key, each closing registered under that key gets a composite over that key's members.
+	/// </summary>
+	public object? Key { get; set; }
 }

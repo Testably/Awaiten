@@ -159,4 +159,124 @@ public class DecoratorTests
 				.Because("an unkeyed decorator does not wrap keyed registrations, so it has nothing to decorate");
 		}
 	}
+
+	public sealed class KeyedDecorators
+	{
+		private const string Types = """
+		                             using Awaiten;
+		                             using System.Collections.Generic;
+
+		                             namespace MyCode;
+
+		                             public interface IService { }
+		                             public sealed class Real : IService { }
+		                             public sealed class Contextual : IService { }
+		                             public sealed class Backup : IService { }
+		                             public sealed class Spare : IService { }
+		                             public sealed class LoggingDecorator : IService { public LoggingDecorator(IService inner) { } }
+		                             public sealed class RetryDecorator : IService { public RetryDecorator(IService inner) { } }
+		                             public sealed class Special { public Special(IService service) { } }
+
+		                             """;
+
+		[Test]
+		public async Task Keys_WrapsOnlyTheSelectedKeyedRegistration()
+		{
+			GeneratorResult result = Generator.Run(Types + """
+			                                               [Container]
+			                                               [Transient<Real, IService>]
+			                                               [Transient<Backup, IService>(Key = "backup")]
+			                                               [Transient<Spare, IService>(Key = "spare")]
+			                                               [Decorate<LoggingDecorator, IService>(Keys = new object[] { "backup" })]
+			                                               public static partial class MyContainer
+			                                               {
+			                                               }
+			                                               """);
+
+			await That(result.Diagnostics).IsEmpty();
+			string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+			await That(source).Contains("new global::MyCode.LoggingDecorator(ResolveBackup(__s))")
+				.Because("the selected key is decorated");
+			await That(source).DoesNotContain("new global::MyCode.LoggingDecorator(ResolveReal(__s))")
+				.Because("a decorator with Keys leaves the unkeyed registration alone unless null is selected");
+			await That(source).DoesNotContain("new global::MyCode.LoggingDecorator(ResolveSpare(__s))")
+				.Because("an unselected key stays undecorated");
+		}
+
+		[Test]
+		public async Task Keys_WithNull_WrapsTheUnkeyedAndContextualRegistrationsToo()
+		{
+			GeneratorResult result = Generator.Run(Types + """
+			                                               [Container]
+			                                               [Transient<Real, IService>]
+			                                               [Transient<Contextual, IService>(WhenInjectedInto = typeof(Special))]
+			                                               [Transient<Backup, IService>(Key = "backup")]
+			                                               [Transient<Special>]
+			                                               [Decorate<LoggingDecorator, IService>(Keys = new object[] { null, "backup" })]
+			                                               public static partial class MyContainer
+			                                               {
+			                                               }
+			                                               """);
+
+			await That(result.Diagnostics).IsEmpty();
+			string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+			await That(source).Contains("new global::MyCode.LoggingDecorator(ResolveReal(__s))")
+				.Because("a null entry selects the unkeyed registration");
+			await That(source).Contains("new global::MyCode.LoggingDecorator(ResolveContextual(__s))")
+				.Because("a WhenInjectedInto variant follows the unkeyed selection");
+			await That(source).Contains("new global::MyCode.LoggingDecorator(ResolveBackup(__s))")
+				.Because("the selected key is decorated as well");
+		}
+
+		[Test]
+		public async Task AllKeys_WrapsEveryRegistration()
+		{
+			GeneratorResult result = Generator.Run(Types + """
+			                                               [Container]
+			                                               [Transient<Real, IService>]
+			                                               [Transient<Backup, IService>(Key = "backup")]
+			                                               [Transient<Spare, IService>(Key = "spare")]
+			                                               [Decorate<LoggingDecorator, IService>(AllKeys = true)]
+			                                               public static partial class MyContainer
+			                                               {
+			                                               }
+			                                               """);
+
+			await That(result.Diagnostics).IsEmpty();
+			string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+			await That(source).Contains("new global::MyCode.LoggingDecorator(ResolveReal(__s))");
+			await That(source).Contains("new global::MyCode.LoggingDecorator(ResolveBackup(__s))");
+			await That(source).Contains("new global::MyCode.LoggingDecorator(ResolveSpare(__s))");
+		}
+
+		[Test]
+		public async Task Order_AppliesWithinEachKeysChain()
+		{
+			GeneratorResult result = Generator.Run(Types + """
+			                                               [Container]
+			                                               [Transient<Real, IService>]
+			                                               [Transient<Backup, IService>(Key = "backup")]
+			                                               [Decorate<LoggingDecorator, IService>(AllKeys = true, Order = 1)]
+			                                               [Decorate<RetryDecorator, IService>(Keys = new object[] { "backup" })]
+			                                               public static partial class MyContainer
+			                                               {
+			                                               }
+			                                               """);
+
+			await That(result.Diagnostics).IsEmpty();
+			string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+			await That(source).Contains("new global::MyCode.RetryDecorator(ResolveBackup(__s))")
+				.Because("the lower Order sits innermost in the backup chain");
+			await That(source).Contains("new global::MyCode.LoggingDecorator(ResolveRetryDecorator(__s))")
+				.Because("the higher Order wraps it, so the backup chain is LoggingDecorator(RetryDecorator(Backup))");
+			await That(source).Contains("new global::MyCode.LoggingDecorator(ResolveReal(__s))")
+				.Because("the unkeyed chain holds only the decorator that selects it");
+			await That(source).DoesNotContain("new global::MyCode.RetryDecorator(ResolveReal(__s))")
+				.Because("the keyed-only decorator stays out of the unkeyed chain");
+		}
+	}
 }

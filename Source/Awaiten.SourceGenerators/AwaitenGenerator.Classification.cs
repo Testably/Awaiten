@@ -94,6 +94,7 @@ partial class AwaitenGenerator
 			ReportUnsupportedFromKey(parameter.GetAttributes(), parameterModel.Location ?? info.Location, DisplayInstance(info.ImplementationType), context.Diagnostics);
 
 			parameterModel = RedirectDecoratorInner(parameterModel, info, context.DecoratorInner);
+			parameterModel = RedirectCompositeCollection(parameterModel, info, context.CompositeCollections);
 
 			// A [FromKey] and a decorator's inner redirect already carry a key, so both take precedence; the
 			// redirect also keeps the parameter off the [ImportServices] fall-through below.

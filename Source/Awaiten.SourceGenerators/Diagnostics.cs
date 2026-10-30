@@ -1633,4 +1633,42 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A key in a decorator's <c>Keys</c> matches no registration of the decorated service, so that chain has
+	///     nothing to wrap (the keyed counterpart of <see cref="DecoratedServiceNotRegistered">AWT123</see>). A
+	///     <see langword="null" /> entry names the unkeyed registrations. For the open generic form, the key matches no
+	///     closing of the service.
+	/// </summary>
+	public static readonly DiagnosticDescriptor DecoratedKeyNotRegistered = new(
+		"AWT210",
+		"Decorated key not registered",
+		"'{0}' is decorated by '{1}' under key '{2}', but no registration of '{0}' has that key; register it under that key or remove the key from Keys",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A decorator sets both <c>Keys</c> and <c>AllKeys</c>. <c>AllKeys</c> already selects every key, so the
+	///     combination is contradictory; the decorator is skipped.
+	/// </summary>
+	public static readonly DiagnosticDescriptor DecoratorKeysWithAllKeys = new(
+		"AWT211",
+		"Decorator sets both Keys and AllKeys",
+		"The decorator '{0}' for '{1}' sets both Keys and AllKeys; set Keys to decorate selected keys, or AllKeys to decorate every key",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A keyed composite's <c>Key</c> matches no registration of the composed service, so it has nothing to
+	///     front. For the open generic form, the key matches no closing of the service.
+	/// </summary>
+	public static readonly DiagnosticDescriptor CompositeKeyNotRegistered = new(
+		"AWT212",
+		"Composite key not registered",
+		"The composite '{0}' fronts '{1}' under key '{2}', but no registration of '{1}' has that key; register the members under that key or change the composite's Key",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

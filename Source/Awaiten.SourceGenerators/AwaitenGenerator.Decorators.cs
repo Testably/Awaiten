@@ -13,12 +13,16 @@ partial class AwaitenGenerator
 	/// </summary>
 	private const string DecoratorKeyPrefix = "__dec:";
 
+	/// <summary>The prefix of a keyed composite's synthetic identity, trimmed by <c>DisplayInstance</c> like <see cref="DecoratorKeyPrefix" />.</summary>
+	private const string CompositeKeyPrefix = "__cmp:";
+
 	/// <summary>
 	///     Builds the decorator chains after coalescing. Over each base impl (every collection member, or the
-	///     single-dispatch winner) it synthesizes a chain of synthetic-keyed links: the base moves onto a synthetic
-	///     key, each decorator's inner parameter is redirected to the next-lower key, and the public winner is
-	///     rewritten to the outermost decorator, so the resolver produces <c>D2(D1(Real))</c>. Collection membership
-	///     is rewritten to the chain. Reports AWT123 (nothing to decorate) and AWT124 (no single inner parameter).
+	///     single-dispatch winner) of each selected key it synthesizes a chain of synthetic-keyed links: the base moves
+	///     onto a synthetic key, each decorator's inner parameter is redirected to the next-lower key, and the winner is
+	///     rewritten to the outermost decorator, so the resolver produces <c>D2(D1(Real))</c>. Collection and keyed
+	///     dictionary membership is rewritten to the chain. Reports AWT123 (nothing to decorate), AWT210 (a selected key
+	///     without a registration) and AWT124 (no single inner parameter).
 	/// </summary>
 	private sealed class DecoratorChainBuilder
 	{
@@ -27,6 +31,7 @@ partial class AwaitenGenerator
 		private readonly Dictionary<ServiceKey, string> _serviceToImpl;
 		private readonly List<ImplInfo> _implOrder;
 		private readonly Dictionary<ServiceKey, List<string>> _serviceMembers;
+		private readonly Dictionary<string, List<KeyedMember>> _keyedMembers;
 		private readonly Dictionary<string, DecoratorInner> _decoratorInner;
 		private readonly ExternalSurface _external;
 		private readonly List<DiagnosticInfo> _diagnostics;
@@ -41,6 +46,7 @@ partial class AwaitenGenerator
 			INamedTypeSymbol containerSymbol,
 			Compilation compilation,
 			CoalescedGraph graph,
+			Dictionary<string, List<KeyedMember>> keyedMembers,
 			Dictionary<string, DecoratorInner> decoratorInner,
 			ExternalSurface external,
 			List<DiagnosticInfo> diagnostics)
@@ -50,6 +56,7 @@ partial class AwaitenGenerator
 			_serviceToImpl = graph.ServiceToImpl;
 			_implOrder = graph.ImplOrder;
 			_serviceMembers = graph.ServiceMembers;
+			_keyedMembers = keyedMembers;
 			_decoratorInner = decoratorInner;
 			_external = external;
 			_diagnostics = diagnostics;
@@ -90,8 +97,8 @@ partial class AwaitenGenerator
 		}
 
 		/// <summary>
-		///     The base implementations to wrap: every unkeyed collection member (so the collection view is also
-		///     decorated), or the single-dispatch winner when the service has no collection membership.
+		///     The base implementations to wrap: every collection member (so the collection view is also
+		///     decorated), or the single-dispatch winner when the key has no collection membership.
 		/// </summary>
 		private static List<string> CollectBaseImpls(List<string>? members, string? winner)
 		{
@@ -105,25 +112,29 @@ partial class AwaitenGenerator
 
 		private void ProcessService(string service, List<DecorateRegistration> chain)
 		{
-			// The public (unkeyed) resolution, then each contextual (WhenInjectedInto) resolution of the service, so
-			// a contextually-bound implementation is wrapped by the same chain as the default. Snapshotted and sorted
-			// before wrapping mutates _serviceToImpl (and for deterministic synthetic keys).
+			// The public (unkeyed) resolution, each contextual (WhenInjectedInto) resolution, then each user key of
+			// the service, so every slot a decorator selects gets its own chain. Snapshotted and sorted before
+			// wrapping mutates _serviceToImpl (and for deterministic synthetic keys).
 			List<string?> targets = new() { null, };
-			targets.AddRange(ContextTargetKeys(service));
+			targets.AddRange(TargetKeys(service, contextual: true));
+			targets.AddRange(TargetKeys(service, contextual: false));
+			List<string?> populated = targets.Where(key => TargetBaseImpls(service, key).Count > 0).ToList();
 
-			// AWT123: the decorated service has no registration (under any resolution key) to wrap.
-			if (targets.All(key => TargetBaseImpls(service, key).Count == 0))
+			// Order the chain by (Order, declaration): innermost first, outermost last. A decorator with nothing to
+			// wrap under the keys it selects is reported (AWT123/AWT210) and left out.
+			List<DecorateRegistration> ordered = new();
+			foreach (DecorateRegistration decorator in chain.OrderBy(d => d.Order).ThenBy(d => d.DeclarationOrder))
 			{
-				Report(Diagnostics.DecoratedServiceNotRegistered, chain[0].Location,
-					service, chain[0].Decorator.ToDisplayString(FullyQualified));
-				return;
+				if (HasSomethingToWrap(service, decorator, populated))
+				{
+					ordered.Add(decorator);
+				}
 			}
 
-			// Order the chain by (Order, declaration): innermost first, outermost last.
-			List<DecorateRegistration> ordered = chain
-				.OrderBy(d => d.Order)
-				.ThenBy(d => d.DeclarationOrder)
-				.ToList();
+			if (ordered.Count == 0)
+			{
+				return;
+			}
 
 			// AWT124: each decorator must have exactly one constructor parameter assignable to the service.
 			List<string>? innerParameterTypes = ResolveInnerParameterTypes(service, ordered);
@@ -132,12 +143,28 @@ partial class AwaitenGenerator
 				return;
 			}
 
+			// Order applies per key: each slot's chain holds only the decorators selecting it, in the shared order.
 			int baseIndex = 0;
-			foreach (string? resolutionKey in targets)
+			foreach (string? resolutionKey in populated)
 			{
+				List<DecorateRegistration> slotChain = new();
+				List<string> slotInnerTypes = new();
+				for (int i = 0; i < ordered.Count; i++)
+				{
+					if (Selects(ordered[i], resolutionKey))
+					{
+						slotChain.Add(ordered[i]);
+						slotInnerTypes.Add(innerParameterTypes[i]);
+					}
+				}
+
+				if (slotChain.Count == 0)
+				{
+					continue;
+				}
+
 				_serviceToImpl.TryGetValue(new ServiceKey(service, resolutionKey), out string? winner);
-				List<string>? members = resolutionKey is null ? MembersOf(service) : null;
-				ServiceChain sc = new(service, resolutionKey, winner, members, ordered, innerParameterTypes);
+				ServiceChain sc = new(service, resolutionKey, winner, CollectionOf(service, resolutionKey), slotChain, slotInnerTypes);
 				foreach (string baseImpl in TargetBaseImpls(service, resolutionKey))
 				{
 					WrapBaseImpl(sc, baseImpl, baseIndex++);
@@ -146,29 +173,71 @@ partial class AwaitenGenerator
 		}
 
 		/// <summary>
-		///     The base implementations to wrap under a resolution key: the unkeyed key's collection members (so the
+		///     Whether the decorator wraps at least one base implementation under the keys it selects. Reports AWT210
+		///     for each key named in <c>Keys</c> without a registration, and AWT123 when an unset <c>Keys</c> or
+		///     <c>AllKeys</c> finds nothing to decorate.
+		/// </summary>
+		private bool HasSomethingToWrap(string service, DecorateRegistration decorator, List<string?> populated)
+		{
+			bool any = populated.Any(key => Selects(decorator, key));
+			if (decorator.Keys is { Count: > 0, } keys && !(keys.Count == 1 && keys[0] is null))
+			{
+				foreach (string? key in keys.Where(key => !populated.Any(resolutionKey => SelectedBy(key, resolutionKey))))
+				{
+					Report(Diagnostics.DecoratedKeyNotRegistered, decorator.Location,
+						service, decorator.Decorator.ToDisplayString(FullyQualified), key is null ? "null" : KeyDisplay(key));
+				}
+			}
+			else if (!any)
+			{
+				Report(Diagnostics.DecoratedServiceNotRegistered, decorator.Location,
+					service, decorator.Decorator.ToDisplayString(FullyQualified));
+			}
+
+			return any;
+		}
+
+		/// <summary>
+		///     Whether the decorator applies to a resolution key: every key under <c>AllKeys</c>, otherwise a key it
+		///     selects, where a contextual key follows the unkeyed selection.
+		/// </summary>
+		private static bool Selects(DecorateRegistration decorator, string? resolutionKey)
+			=> decorator.Keys is not { } keys || keys.Any(key => SelectedBy(key, resolutionKey));
+
+		private static bool SelectedBy(string? selectedKey, string? resolutionKey)
+			=> selectedKey is null
+				? resolutionKey is null || resolutionKey.StartsWith(ContextKeyPrefix, StringComparison.Ordinal)
+				: selectedKey == resolutionKey;
+
+		/// <summary>
+		///     The base implementations to wrap under a resolution key: the key's collection members (so the
 		///     collection view is decorated too), or the single winner for a contextual key (which has no public
 		///     collection). A snapshot, since wrapping mutates the underlying membership.
 		/// </summary>
 		private List<string> TargetBaseImpls(string service, string? resolutionKey)
 		{
 			_serviceToImpl.TryGetValue(new ServiceKey(service, resolutionKey), out string? winner);
-			return CollectBaseImpls(resolutionKey is null ? MembersOf(service) : null, winner);
+			return CollectBaseImpls(CollectionOf(service, resolutionKey), winner);
 		}
 
-		private List<string>? MembersOf(string service)
-			=> _serviceMembers.TryGetValue(new ServiceKey(service, null), out List<string>? members) ? members : null;
+		/// <summary>The collection membership of the unkeyed or a user key, or <see langword="null" /> for a contextual key.</summary>
+		private List<string>? CollectionOf(string service, string? resolutionKey)
+			=> (resolutionKey is null || IsUserKey(resolutionKey))
+			   && _serviceMembers.TryGetValue(new ServiceKey(service, resolutionKey), out List<string>? members)
+				? members
+				: null;
 
 		/// <summary>
-		///     The synthetic contextual (WhenInjectedInto) keys of a service, sorted for deterministic wrapping. Each
-		///     is a separate resolution slot the consumer redirects to, wrapped by the same decorator chain.
+		///     The synthetic contextual (WhenInjectedInto) keys of a service, or its user keys, sorted for
+		///     deterministic wrapping. Each is a separate resolution slot with its own chain.
 		/// </summary>
-		private List<string> ContextTargetKeys(string service)
+		private List<string> TargetKeys(string service, bool contextual)
 		{
 			List<string> keys = new();
 			foreach (ServiceKey key in _serviceToImpl.Keys)
 			{
-				if (key.Service == service && key.Key is { } k && k.StartsWith(ContextKeyPrefix, StringComparison.Ordinal))
+				if (key.Service == service && key.Key is { } k
+				    && (contextual ? k.StartsWith(ContextKeyPrefix, StringComparison.Ordinal) : IsUserKey(k)))
 				{
 					keys.Add(k);
 				}
@@ -231,6 +300,27 @@ partial class AwaitenGenerator
 			// Collection membership is unbypassable: replace the base impl with the chain's outermost decorator
 			// identity, so a collection view yields the full chain as a single element rather than the bare impl.
 			RewriteCollectionMembership(chain.Members, baseImpl, outermostIdentity);
+			RewriteKeyedMembership(service, chain.ResolutionKey, baseImpl, outermostIdentity);
+		}
+
+		/// <summary>
+		///     Points a decorated user key's keyed dictionary entry at the chain's outermost decorator, so the keyed
+		///     dictionary cannot bypass the decorator either.
+		/// </summary>
+		private void RewriteKeyedMembership(string service, string? resolutionKey, string baseImpl, string outermostIdentity)
+		{
+			if (!IsUserKey(resolutionKey) || !_keyedMembers.TryGetValue(service, out List<KeyedMember>? members))
+			{
+				return;
+			}
+
+			for (int i = 0; i < members.Count; i++)
+			{
+				if (members[i].Key == resolutionKey && members[i].Implementation == baseImpl)
+				{
+					members[i] = members[i] with { Implementation = outermostIdentity, };
+				}
+			}
 		}
 
 		private void MoveBaseToSyntheticKey(string? resolutionKey, string service, string baseImpl, string baseKey)
@@ -251,8 +341,8 @@ partial class AwaitenGenerator
 		/// <summary>
 		///     Registers one chain link and returns its synthetic identity. The outermost link of the winner chain
 		///     (<c>isPublic</c>) takes the target resolution key (null for public dispatch, a context key for a
-		///     contextual binding); every other link is keyed so it is reached only as the inner of the link above it
-		///     (or as a rewritten collection member).
+		///     contextual binding, a user key for a keyed registration); every other link is keyed so it is reached only
+		///     as the inner of the link above it (or as a rewritten collection member).
 		/// </summary>
 		private string AddChainLink(ServiceChain chain, int baseIndex, int linkIndex, bool isPublic, Lifetime lifetime, LocationInfo? location, string innerKey)
 		{
@@ -302,8 +392,8 @@ partial class AwaitenGenerator
 		/// <summary>
 		///     The per-target state threaded through <c>WrapBaseImpl</c> / <c>AddChainLink</c>: the decorated service,
 		///     the resolution key being wrapped (null for the public dispatch, a synthetic context key for a
-		///     contextual binding), that key's winner and collection membership (if any), the decorators
-		///     innermost-first, and each decorator's inner-parameter type (positionally matching <c>Ordered</c>).
+		///     contextual binding, a user key for a keyed registration), that key's winner and collection membership
+		///     (if any), the decorators innermost-first, and each decorator's inner-parameter type (positionally matching <c>Ordered</c>).
 		/// </summary>
 		private readonly record struct ServiceChain(
 			string Service,
@@ -375,7 +465,9 @@ partial class AwaitenGenerator
 	///     <c>serviceMembers</c>, so every collection of <c>TService</c> resolves to the other registrations, never
 	///     the composite (no self-edge, so cycle/captive analysis is unchanged). Reports AWT130 (no collection
 	///     parameter of the service), AWT133 (a collection of a base type), AWT132 (a second composite), and AWT131
-	///     (the composite is also a bare member, which is dropped to keep the no-self-edge invariant).
+	///     (the composite is also a bare member, which is dropped to keep the no-self-edge invariant). A keyed composite
+	///     does the same for its key under a synthetic identity, and <paramref name="compositeCollections" /> records the
+	///     key its collection parameter is redirected to; a key without a registration reports AWT212.
 	/// </summary>
 	private static void BuildComposites(
 		List<CompositeRegistration> composites,
@@ -383,6 +475,7 @@ partial class AwaitenGenerator
 		INamedTypeSymbol containerSymbol,
 		CoalescedGraph graph,
 		ExternalSurface external,
+		Dictionary<string, ServiceKey> compositeCollections,
 		List<DiagnosticInfo> diagnostics)
 	{
 		(Dictionary<ServiceKey, string> serviceToImpl, List<ImplInfo> implOrder, Dictionary<ServiceKey, List<string>> serviceMembers) = graph;
@@ -395,16 +488,24 @@ partial class AwaitenGenerator
 			byImpl[info.ImplementationType] = info;
 		}
 
-		// The composite type chosen for each composed service, so a second composite for the same service is
+		// The composite type chosen for each composed service and key, so a second composite for the same slot is
 		// caught (AWT132) rather than silently overwriting the first and leaving it as a dead built instance.
-		Dictionary<string, string> compositeByService = new(StringComparer.Ordinal);
+		Dictionary<ServiceKey, string> compositeByService = new();
 
 		foreach (CompositeRegistration composite in composites)
 		{
 			string compositeType = composite.Composite.ToDisplayString(FullyQualified);
+			ServiceKey slot = new(composite.Service, composite.Key);
 
-			// AWT132: a service can have at most one composite façade; a later composite for it is skipped.
-			if (IsDuplicateComposite(composite, compositeType, compositeByService, diagnostics))
+			// AWT212: a keyed composite needs registrations under its key to front.
+			if (composite.Key is not null && !PresentUnderKey(graph, composite.Service, composite.Key))
+			{
+				ReportCompositeKeyNotRegistered(compositeType, composite.Service, composite.Key, composite.Location, diagnostics);
+				continue;
+			}
+
+			// AWT132: a service can have at most one composite façade per key; a later composite for it is skipped.
+			if (IsDuplicateComposite(composite, slot, compositeType, compositeByService, diagnostics))
 			{
 				continue;
 			}
@@ -415,26 +516,60 @@ partial class AwaitenGenerator
 				continue;
 			}
 
-			ImplInfo compositeInfo = EnsureCompositeInstance(composite, compositeType, byImpl, implOrder);
+			// A keyed composite gets its own identity, so the same type can front another key (or the unkeyed
+			// registrations) with a different collection redirect.
+			string identity = composite.Key is null ? compositeType : $"{compositeType}@{CompositeKeyPrefix}{composite.Service}:{composite.Key}";
+			ImplInfo compositeInfo = EnsureCompositeInstance(composite, identity, byImpl, implOrder);
 			DropRedundantSelfMembership(composite, compositeType, serviceMembers, diagnostics);
-			MakeCompositeThePublicWinner(composite, compositeType, compositeInfo, serviceToImpl, byImpl);
+			MakeCompositeThePublicWinner(slot, identity, compositeInfo, serviceToImpl, byImpl);
+			if (composite.Key is not null)
+			{
+				compositeCollections[identity] = slot;
+			}
 		}
 	}
 
+	/// <summary>Reports AWT212: a keyed composite (or open composite) whose key matches no registration of its service.</summary>
+	private static void ReportCompositeKeyNotRegistered(string compositeType, string service, string key, Location? location, List<DiagnosticInfo> diagnostics)
+		=> diagnostics.Add(new DiagnosticInfo(
+			Diagnostics.CompositeKeyNotRegistered,
+			LocationInfo.From(location),
+			new EquatableArray<string>([Display(compositeType), Display(service), KeyDisplay(key),])));
+
 	/// <summary>
-	///     AWT132: whether this composite duplicates one already chosen for its service (so the caller skips it),
-	///     recording the first composite per service. A second composite of a DIFFERENT type is reported; the same
+	///     Redirects a keyed composite's unkeyed collection parameter of the composed service to the composite's key, so
+	///     it fans out over that key's members rather than the unkeyed collection. Any other parameter is unchanged.
+	/// </summary>
+	private static ParameterModel RedirectCompositeCollection(
+		ParameterModel parameterModel,
+		ImplInfo info,
+		Dictionary<string, ServiceKey> compositeCollections)
+	{
+		if (parameterModel is { Kind: DependencyKind.Enumerable, Key: null, }
+		    && compositeCollections.TryGetValue(info.ImplementationType, out ServiceKey slot)
+		    && parameterModel.ServiceType == slot.Service)
+		{
+			return parameterModel with { Key = slot.Key, };
+		}
+
+		return parameterModel;
+	}
+
+	/// <summary>
+	///     AWT132: whether this composite duplicates one already chosen for its service and key (so the caller skips
+	///     it), recording the first composite per slot. A second composite of a DIFFERENT type is reported; the same
 	///     type declared twice is idempotent and left silent.
 	/// </summary>
 	private static bool IsDuplicateComposite(
 		CompositeRegistration composite,
+		ServiceKey slot,
 		string compositeType,
-		Dictionary<string, string> compositeByService,
+		Dictionary<ServiceKey, string> compositeByService,
 		List<DiagnosticInfo> diagnostics)
 	{
-		if (!compositeByService.TryGetValue(composite.Service, out string? firstComposite))
+		if (!compositeByService.TryGetValue(slot, out string? firstComposite))
 		{
-			compositeByService.Add(composite.Service, compositeType);
+			compositeByService.Add(slot, compositeType);
 			return false;
 		}
 
@@ -494,23 +629,23 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     Registers the composite as an ordinary instance (constructed, cached and disposed by index) and returns its
 	///     <c>ImplInfo</c>, reusing the existing one if the type was already registered (idempotent when named twice or
-	///     when the composite type is also a normal service).
+	///     when the composite type is also a normal service). A keyed composite passes its synthetic identity.
 	/// </summary>
 	private static ImplInfo EnsureCompositeInstance(
 		CompositeRegistration composite,
-		string compositeType,
+		string identity,
 		Dictionary<string, ImplInfo> byImpl,
 		List<ImplInfo> implOrder)
 	{
-		if (byImpl.TryGetValue(compositeType, out ImplInfo? compositeInfo))
+		if (byImpl.TryGetValue(identity, out ImplInfo? compositeInfo))
 		{
 			return compositeInfo;
 		}
 
 		compositeInfo = new ImplInfo(
-			compositeType, composite.Composite, composite.Lifetime,
+			identity, composite.Composite, composite.Lifetime,
 			LocationInfo.From(composite.Location), ProductionKind.Constructor, null);
-		byImpl.Add(compositeType, compositeInfo);
+		byImpl.Add(identity, compositeInfo);
 		implOrder.Add(compositeInfo);
 		return compositeInfo;
 	}
@@ -518,8 +653,9 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     AWT131: the composite type is also registered as a bare member of the service it composes (e.g. a
 	///     <c>[Transient&lt;C, S&gt;]</c> alongside <c>[Composite&lt;C, S&gt;]</c>). A composite is excluded from its
-	///     own fan-out, so drop it from every collection of the composed service and warn. Without the removal its own
-	///     collection edge would include itself and surface as a confusing AWT102 dependency cycle.
+	///     own fan-out, so drop it from every collection of the composed service (only the one under its key for a
+	///     keyed composite) and warn. Without the removal its own collection edge would include itself and surface as a
+	///     confusing AWT102 dependency cycle.
 	/// </summary>
 	private static void DropRedundantSelfMembership(
 		CompositeRegistration composite,
@@ -530,7 +666,9 @@ partial class AwaitenGenerator
 		bool wasMember = false;
 		foreach (KeyValuePair<ServiceKey, List<string>> entry in serviceMembers)
 		{
-			if (entry.Key.Service == composite.Service && entry.Value.Remove(compositeType))
+			if (entry.Key.Service == composite.Service
+			    && (composite.Key is null || entry.Key.Key == composite.Key)
+			    && entry.Value.Remove(compositeType))
 			{
 				wasMember = true;
 			}
@@ -551,27 +689,26 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     Makes the composite the public single-dispatch winner: takes the unkeyed service off whatever impl
-	///     currently holds it (a former winner stays a collection member, just no longer the façade) and hands it to
-	///     the composite. The composite is never a <c>serviceMembers</c> entry, so it stays excluded from every
-	///     <c>IEnumerable&lt;TService&gt;</c>.
+	///     Makes the composite the single-dispatch winner of its slot (the unkeyed service, or the service under the
+	///     composite's key): takes the slot off whatever impl currently holds it (a former winner stays a collection
+	///     member, just no longer the façade) and hands it to the composite. The composite is never a
+	///     <c>serviceMembers</c> or keyed dictionary entry, so it stays excluded from every collection of the service.
 	/// </summary>
 	private static void MakeCompositeThePublicWinner(
-		CompositeRegistration composite,
-		string compositeType,
+		ServiceKey publicKey,
+		string identity,
 		ImplInfo compositeInfo,
 		Dictionary<ServiceKey, string> serviceToImpl,
 		Dictionary<string, ImplInfo> byImpl)
 	{
-		ServiceKey publicKey = new(composite.Service, null);
 		if (serviceToImpl.TryGetValue(publicKey, out string? previousWinner)
-		    && previousWinner != compositeType
+		    && previousWinner != identity
 		    && byImpl.TryGetValue(previousWinner, out ImplInfo? previousInfo))
 		{
 			previousInfo.Services.Remove(publicKey);
 		}
 
-		serviceToImpl[publicKey] = compositeType;
+		serviceToImpl[publicKey] = identity;
 		if (!compositeInfo.Services.Contains(publicKey))
 		{
 			compositeInfo.Services.Add(publicKey);

@@ -208,4 +208,67 @@ public class OpenGenericDecoratorTests
 		await That(result.Diagnostics).Contains("*AWT127*").AsWildcard()
 			.Because("the typeof form must receive an unbound generic composite such as typeof(CompositeHandler<>)");
 	}
+
+	[Test]
+	public async Task OpenDecorator_WithKeys_DecoratesOnlyTheClosingsUnderTheSelectedKey()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class Order { }
+		                                       public interface IHandler<T> { }
+		                                       public sealed class Handler<T> : IHandler<T> { }
+		                                       public sealed class AuditHandler<T> : IHandler<T> { }
+		                                       public sealed class LoggingBehavior<T> : IHandler<T> { public LoggingBehavior(IHandler<T> inner) { } }
+
+		                                       [Container]
+		                                       [Transient<Handler<Order>, IHandler<Order>>]
+		                                       [Transient<AuditHandler<Order>, IHandler<Order>>(Key = "audit")]
+		                                       [Decorate(typeof(LoggingBehavior<>), typeof(IHandler<>), Keys = new object[] { "audit" })]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("new global::MyCode.LoggingBehavior<global::MyCode.Order>(ResolveAuditHandler(__s))")
+			.Because("the closing under the selected key is decorated");
+		await That(source).DoesNotContain("new global::MyCode.LoggingBehavior<global::MyCode.Order>(ResolveHandler(__s))")
+			.Because("the unkeyed closing is not selected");
+	}
+
+	[Test]
+	public async Task OpenComposite_WithKey_FrontsTheClosingsUnderThatKey()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Collections.Generic;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class Order { }
+		                                       public interface IHandler<T> { }
+		                                       public sealed class Handler<T> : IHandler<T> { }
+		                                       public sealed class AuditHandler<T> : IHandler<T> { }
+		                                       public sealed class CompositeHandler<T> : IHandler<T> { public CompositeHandler(IEnumerable<IHandler<T>> inner) { } }
+
+		                                       [Container]
+		                                       [Transient<Handler<Order>, IHandler<Order>>]
+		                                       [Transient<AuditHandler<Order>, IHandler<Order>>(Key = "audit")]
+		                                       [Composite(typeof(CompositeHandler<>), typeof(IHandler<>), Key = "audit")]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("new global::MyCode.CompositeHandler<global::MyCode.Order>(new global::MyCode.IHandler<global::MyCode.Order>[] { ResolveAuditHandler(__s) })")
+			.Because("the keyed open composite fans out over the closing's members under its key");
+	}
 }

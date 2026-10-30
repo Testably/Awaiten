@@ -658,6 +658,11 @@ partial class AwaitenGenerator
 			}
 
 			Location? location = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? fallbackLocation;
+			if (!TryReadDecoratorKeys(attribute, attributeClass, LocationInfo.From(location), diagnostics, out IReadOnlyList<string?>? keys))
+			{
+				declarationOrder++;
+				continue;
+			}
 
 			if (attributeClass.IsGenericType)
 			{
@@ -666,7 +671,7 @@ partial class AwaitenGenerator
 				    && attributeClass.TypeArguments[1] is INamedTypeSymbol service)
 				{
 					closed.Add(new DecorateRegistration(
-						service.ToDisplayString(FullyQualified), service, decorator, order, declarationOrder, location));
+						service.ToDisplayString(FullyQualified), service, decorator, order, declarationOrder, location, keys));
 				}
 			}
 			else if (attribute.ConstructorArguments.Length == 2
@@ -674,7 +679,7 @@ partial class AwaitenGenerator
 			         && attribute.ConstructorArguments[1].Value is INamedTypeSymbol openService
 			         && TryReadOpenGenericPair(openDecorator, openService, LocationInfo.From(location), diagnostics) is { } pair)
 			{
-				open.Add(new OpenDecorateRegistration(pair.Service, pair.Mapped, order, declarationOrder, location));
+				open.Add(new OpenDecorateRegistration(pair.Service, pair.Mapped, order, declarationOrder, location, keys));
 			}
 
 			// One slot per [Decorate] attribute (well-formed or not), so open and closed decorators keep their
@@ -683,6 +688,80 @@ partial class AwaitenGenerator
 		}
 
 		return (closed, open);
+	}
+
+	/// <summary>
+	///     Reads the <c>Keys</c> and <c>AllKeys</c> named arguments of a <c>[Decorate]</c> as the selected canonical
+	///     keys: unset yields the unkeyed registration only (<c>[null]</c>), <c>AllKeys</c> yields
+	///     <see langword="null" />. Returns <see langword="false" /> (having reported AWT211) when both are set, so the
+	///     decorator is skipped. An entry of an unsupported key type is reported as AWT170 and left out.
+	/// </summary>
+	private static bool TryReadDecoratorKeys(
+		AttributeData attribute,
+		INamedTypeSymbol attributeClass,
+		LocationInfo? location,
+		List<DiagnosticInfo> diagnostics,
+		out IReadOnlyList<string?>? keys)
+	{
+		bool allKeys = NamedFlag(attribute, "AllKeys");
+		TypedConstant? selected = null;
+		foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
+		{
+			if (argument.Key == "Keys" && !argument.Value.IsNull)
+			{
+				selected = argument.Value;
+			}
+		}
+
+		if (selected is null)
+		{
+			keys = allKeys ? null : new string?[] { null, };
+			return true;
+		}
+
+		if (allKeys)
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.DecoratorKeysWithAllKeys,
+				location,
+				new EquatableArray<string>([AttributeTypeArgument(attribute, attributeClass, 0), AttributeTypeArgument(attribute, attributeClass, 1),])));
+			keys = null;
+			return false;
+		}
+
+		List<string?> list = new();
+		foreach (TypedConstant element in selected.Value.Values)
+		{
+			if (IsUnsupportedKeyConstant(element))
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.UnsupportedKeyType, location,
+					new EquatableArray<string>([AttributeTypeArgument(attribute, attributeClass, 0), KeyConstantTypeDisplay(element),])));
+				continue;
+			}
+
+			string? key = EncodeKeyConstant(element);
+			if (!list.Contains(key))
+			{
+				list.Add(key);
+			}
+		}
+
+		keys = list;
+		return true;
+	}
+
+	/// <summary>
+	///     The display of a <c>[Decorate]</c>/<c>[Composite]</c> type at <paramref name="index" /> (0 the decorator or
+	///     composite, 1 the service), read from the generic form's type arguments or the <c>typeof</c> form's
+	///     constructor arguments.
+	/// </summary>
+	private static string AttributeTypeArgument(AttributeData attribute, INamedTypeSymbol attributeClass, int index)
+	{
+		ITypeSymbol? type = attributeClass.IsGenericType
+			? attributeClass.TypeArguments[index]
+			: attribute.ConstructorArguments.Length == 2 ? attribute.ConstructorArguments[index].Value as ITypeSymbol : null;
+		return type is null ? "?" : Display(type.ToDisplayString(FullyQualified));
 	}
 
 	/// <summary>
@@ -718,6 +797,8 @@ partial class AwaitenGenerator
 			}
 
 			Location? location = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? fallbackLocation;
+			ReportUnsupportedRegistrationKey(attribute, LocationInfo.From(location), AttributeTypeArgument(attribute, attributeClass, 0), diagnostics);
+			string? key = NamedKeyArgument(attribute);
 
 			if (attributeClass.IsGenericType)
 			{
@@ -726,7 +807,7 @@ partial class AwaitenGenerator
 				    && attributeClass.TypeArguments[1] is INamedTypeSymbol service)
 				{
 					closed.Add(new CompositeRegistration(
-						service.ToDisplayString(FullyQualified), service, composite, lifetime, location));
+						service.ToDisplayString(FullyQualified), service, composite, lifetime, location, key));
 				}
 			}
 			else if (attribute.ConstructorArguments.Length == 2
@@ -734,7 +815,7 @@ partial class AwaitenGenerator
 			         && attribute.ConstructorArguments[1].Value is INamedTypeSymbol openService
 			         && TryReadOpenGenericPair(openComposite, openService, LocationInfo.From(location), diagnostics) is { } pair)
 			{
-				open.Add(new OpenCompositeRegistration(pair.Service, pair.Mapped, lifetime, location));
+				open.Add(new OpenCompositeRegistration(pair.Service, pair.Mapped, lifetime, location, key));
 			}
 		}
 

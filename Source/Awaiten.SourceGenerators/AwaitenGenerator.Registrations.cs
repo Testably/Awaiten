@@ -62,8 +62,9 @@ internal sealed record ImportedModule(INamedTypeSymbol Symbol, Location? ImportL
 
 /// <summary>
 ///     A single <c>[Decorate&lt;TDecorator, TService&gt;]</c> registration: the decorated service, the service and
-///     decorator symbols, the chain <see cref="Order" />, and the declaration index breaking ties. Expanded after
-///     coalescing into synthetic-keyed chain links.
+///     decorator symbols, the chain <see cref="Order" />, the declaration index breaking ties and the selected
+///     <see cref="Keys" /> (a <see langword="null" /> entry is the unkeyed registration, a <see langword="null" />
+///     list is <c>AllKeys</c>). Expanded after coalescing into synthetic-keyed chain links.
 /// </summary>
 /// <remarks>An intermediate type carrying a live Roslyn <see cref="Location" />; see <see cref="RawRegistration" />.</remarks>
 internal sealed record DecorateRegistration(
@@ -72,11 +73,13 @@ internal sealed record DecorateRegistration(
 	INamedTypeSymbol Decorator,
 	int Order,
 	int DeclarationOrder,
-	Location? Location);
+	Location? Location,
+	IReadOnlyList<string?>? Keys);
 
 /// <summary>
 ///     A single <c>[Composite&lt;TComposite, TService&gt;]</c> registration: the composed service, the service and
-///     composite symbols, and the lifetime (default transient). Applied after coalescing (and decorator chains) as
+///     composite symbols, the lifetime (default transient) and the fronted <see cref="Key" />
+///     (<see langword="null" /> for the unkeyed registrations). Applied after coalescing (and decorator chains) as
 ///     the public single-dispatch winner, excluded from collection membership.
 /// </summary>
 /// <remarks>An intermediate type carrying a live Roslyn <see cref="Location" />; see <see cref="RawRegistration" />.</remarks>
@@ -85,13 +88,15 @@ internal sealed record CompositeRegistration(
 	INamedTypeSymbol ServiceSymbol,
 	INamedTypeSymbol Composite,
 	Lifetime Lifetime,
-	Location? Location);
+	Location? Location,
+	string? Key);
 
 /// <summary>
 ///     A single open generic <c>[Decorate(typeof(D&lt;&gt;), typeof(IService&lt;&gt;))]</c> registration: the unbound
 ///     service and decorator definitions, the chain <see cref="Order" /> and the declaration index (shared with the
-///     closed <c>[Decorate&lt;,&gt;]</c> forms so open and closed decorators interleave). Expanded into a closed
-///     <see cref="DecorateRegistration" /> per existing closing of the service.
+///     closed <c>[Decorate&lt;,&gt;]</c> forms so open and closed decorators interleave) and the selected <see cref="Keys" />
+///     (as on <see cref="DecorateRegistration" />). Expanded into a closed <see cref="DecorateRegistration" /> per
+///     existing closing of the service.
 /// </summary>
 /// <remarks>An intermediate type carrying a live Roslyn <see cref="Location" />; see <see cref="RawRegistration" />.</remarks>
 internal sealed record OpenDecorateRegistration(
@@ -99,19 +104,21 @@ internal sealed record OpenDecorateRegistration(
 	INamedTypeSymbol Decorator,
 	int Order,
 	int DeclarationOrder,
-	Location? Location);
+	Location? Location,
+	IReadOnlyList<string?>? Keys);
 
 /// <summary>
 ///     A single open generic <c>[Composite(typeof(C&lt;&gt;), typeof(IService&lt;&gt;))]</c> registration: the unbound
-///     service and composite definitions and the lifetime. Expanded into a closed <see cref="CompositeRegistration" />
-///     per existing closing of the service.
+///     service and composite definitions, the lifetime and the fronted <see cref="Key" />. Expanded into a closed
+///     <see cref="CompositeRegistration" /> per existing closing of the service.
 /// </summary>
 /// <remarks>An intermediate type carrying a live Roslyn <see cref="Location" />; see <see cref="RawRegistration" />.</remarks>
 internal sealed record OpenCompositeRegistration(
 	INamedTypeSymbol Service,
 	INamedTypeSymbol Composite,
 	Lifetime Lifetime,
-	Location? Location);
+	Location? Location,
+	string? Key);
 
 partial class AwaitenGenerator
 {

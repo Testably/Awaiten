@@ -319,6 +319,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		Compilation Compilation,
 		Dictionary<ServiceKey, string> ServiceToImpl,
 		Dictionary<string, DecoratorInner> DecoratorInner,
+		Dictionary<string, ServiceKey> CompositeCollections,
 		WellKnownTypes WellKnown,
 		HashSet<string> ConstraintRejected,
 		ExternalSurface External,
@@ -407,7 +408,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		Dictionary<string, DecoratorInner> decoratorInner = new(StringComparer.Ordinal);
 		if (decorators.Count > 0)
 		{
-			new DecoratorChainBuilder(containerSymbol, compilation, graph, decoratorInner, external, diagnostics)
+			new DecoratorChainBuilder(containerSymbol, compilation, graph, keyedMembers, decoratorInner, external, diagnostics)
 				.Build(decorators);
 		}
 
@@ -419,9 +420,10 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		// Composites: each [Composite<TComposite, TService>] registers the composite and makes it the public
 		// winner for TService, excluded from its own collection so its collection parameter fans out to the
 		// others. Runs after decorator chains so a composite fronts the decorated members.
+		Dictionary<string, ServiceKey> compositeCollections = new(StringComparer.Ordinal);
 		if (composites.Count > 0)
 		{
-			BuildComposites(composites, compilation, containerSymbol, graph, external, diagnostics);
+			BuildComposites(composites, compilation, containerSymbol, graph, external, compositeCollections, diagnostics);
 		}
 
 		List<InstanceModel> instances = new();
@@ -445,7 +447,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		// BuildInstance fills them wherever that implementation is constructed (including [Scan]-registered types).
 		Dictionary<string, List<InjectPropertyEntry>> injectProperties = CollectInjectProperties(containerSymbol, diagnostics);
 
-		BuildContext buildContext = new(containerSymbol, compilation, serviceToImpl, decoratorInner, wellKnown, constraintRejected, external, variance, consumedConditionals, injectProperties, diagnostics);
+		BuildContext buildContext = new(containerSymbol, compilation, serviceToImpl, decoratorInner, compositeCollections, wellKnown, constraintRejected, external, variance, consumedConditionals, injectProperties, diagnostics);
 
 		// Validate each implementation, select its constructor and build the instance.
 		foreach (ImplInfo info in implOrder)

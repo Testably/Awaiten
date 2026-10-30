@@ -74,4 +74,41 @@ public class CompositeTests
 		await That(source).Contains("new global::MyCode.CompositeNotifier(new global::MyCode.INotifier[]")
 			.Because("the composite fans out to an empty array when there are no other registrations");
 	}
+
+	public sealed class KeyedComposites
+	{
+		[Test]
+		public async Task KeyedComposite_FrontsItsKey_AndFansOutOverThatKeysMembersOnly()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+			                                       using System.Collections.Generic;
+
+			                                       namespace MyCode;
+
+			                                       public interface INotifier { }
+			                                       public sealed class Email : INotifier { }
+			                                       public sealed class Pager : INotifier { }
+			                                       public sealed class CompositeNotifier : INotifier { public CompositeNotifier(IEnumerable<INotifier> channels) { } }
+			                                       public sealed class Host { public Host([FromKey("urgent")] INotifier urgent, INotifier plain) { } }
+
+			                                       [Container]
+			                                       [Transient<Email, INotifier>]
+			                                       [Transient<Pager, INotifier>(Key = "urgent")]
+			                                       [Transient<Host>]
+			                                       [Composite<CompositeNotifier, INotifier>(Key = "urgent")]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).IsEmpty();
+			string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+			await That(source).Contains("new global::MyCode.CompositeNotifier(new global::MyCode.INotifier[] { ResolvePager(__s) })")
+				.Because("a keyed composite's collection parameter receives only the members under its key");
+			await That(source).Contains("new global::MyCode.Host(ResolveCompositeNotifier(__s), ResolveEmail(__s))")
+				.Because("the keyed composite fronts its key, while the unkeyed registration stays the plain winner");
+		}
+	}
 }
