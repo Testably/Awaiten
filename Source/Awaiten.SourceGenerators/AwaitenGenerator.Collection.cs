@@ -856,37 +856,8 @@ partial class AwaitenGenerator
 		Dictionary<string, List<InjectPropertyEntry>> map = new(StringComparer.Ordinal);
 		foreach (AttributeData attribute in containerSymbol.GetAttributes())
 		{
-			if (!TryReadInjectProperty(attribute, out ITypeSymbol? target, out string? propertyName, out bool isTypeofForm))
+			if (!TryReadInjectPropertyTarget(attribute, diagnostics, out string? propertyName, out string? implementationType, out LocationInfo? location))
 			{
-				continue;
-			}
-
-			LocationInfo? location = LocationInfo.From(attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation());
-
-			if (isTypeofForm && !IsClosedOrOpenDefinition(target, attribute, "implementation"))
-			{
-				diagnostics.Add(TypeofArgumentNotClosedOrOpen("InjectProperty", target, location));
-				continue;
-			}
-
-			if (target is not INamedTypeSymbol implementation)
-			{
-				continue;
-			}
-
-			string implementationType = implementation.IsUnboundGenericType
-				? implementation.OriginalDefinition.ToDisplayString(FullyQualified)
-				: implementation.ToDisplayString(FullyQualified);
-
-			// AWT177 on the definition: every closing shares its members, so a bad name is reported once at the
-			// attribute, even when no closing is constructed, instead of once per closing.
-			if (implementation.IsUnboundGenericType
-			    && !IsSettableProperty(ResolveNamedInstanceMember(implementation.OriginalDefinition, propertyName)))
-			{
-				diagnostics.Add(new DiagnosticInfo(
-					Diagnostics.InjectPropertyNotFound,
-					location,
-					new EquatableArray<string>([propertyName, Display(implementationType),])));
 				continue;
 			}
 
@@ -920,6 +891,61 @@ partial class AwaitenGenerator
 		}
 
 		return map;
+	}
+
+	/// <summary>
+	///     Reads one <c>[InjectProperty]</c> entry and checks its target: the property name and the key of the
+	///     implementation it targets, where an unbound generic target is keyed by its definition. Reports
+	///     <see cref="Diagnostics.TypeofArgumentNotClosedOrOpen">AWT215</see> for a <c>typeof</c> target that is neither
+	///     closed nor an unbound generic definition, and <see cref="Diagnostics.InjectPropertyNotFound">AWT177</see> for a
+	///     name that is no settable property of a generic definition. Returns <see langword="false" /> for a rejected
+	///     entry and for an attribute that is not an <c>[InjectProperty]</c>.
+	/// </summary>
+	private static bool TryReadInjectPropertyTarget(
+		AttributeData attribute,
+		List<DiagnosticInfo> diagnostics,
+		[NotNullWhen(true)] out string? propertyName,
+		[NotNullWhen(true)] out string? implementationType,
+		out LocationInfo? location)
+	{
+		implementationType = null;
+		location = null;
+		if (!TryReadInjectProperty(attribute, out ITypeSymbol? target, out propertyName, out bool isTypeofForm))
+		{
+			return false;
+		}
+
+		location = LocationInfo.From(attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation());
+
+		if (isTypeofForm && !IsClosedOrOpenDefinition(target, attribute, "implementation"))
+		{
+			diagnostics.Add(TypeofArgumentNotClosedOrOpen("InjectProperty", target, location));
+			return false;
+		}
+
+		if (target is not INamedTypeSymbol implementation)
+		{
+			return false;
+		}
+
+		string type = implementation.IsUnboundGenericType
+			? implementation.OriginalDefinition.ToDisplayString(FullyQualified)
+			: implementation.ToDisplayString(FullyQualified);
+
+		// AWT177 on the definition: every closing shares its members, so a bad name is reported once at the
+		// attribute, even when no closing is constructed, instead of once per closing.
+		if (implementation.IsUnboundGenericType
+		    && !IsSettableProperty(ResolveNamedInstanceMember(implementation.OriginalDefinition, propertyName)))
+		{
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.InjectPropertyNotFound,
+				location,
+				new EquatableArray<string>([propertyName, Display(type),])));
+			return false;
+		}
+
+		implementationType = type;
+		return true;
 	}
 
 	/// <summary>
