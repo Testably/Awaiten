@@ -1831,7 +1831,7 @@ public sealed class EspressoMachine;
 ### AWT135
 
 :::warning[Warning]
-A resolver seam (`IAwaitenResolver`, `IAwaitenScope`, `IAwaitenRoot`, and the like) is injected into a type that is not the `[Container]` composition root. Resolving from the container at run time is the Service Locator anti-pattern: it hides the type's real dependencies and defeats the compile-time graph check. Inject the dependency you actually need instead, or, if the type is a host-integration adapter, suppress this on it with a justification. The typed fast-path `IAwaitenResolver<T>` is a single-service seam and is not reported.
+A resolver seam (`IAwaitenResolver`, `IAwaitenScope`, `IAwaitenRoot`, and the like) is injected into a type that is not the `[Container]` composition root. Resolving from the container at run time is the Service Locator anti-pattern: it hides the type's real dependencies and defeats the compile-time graph check. Inject the dependency you actually need instead, or, if the type is a host-integration adapter, suppress this on it with a justification. The typed fast paths `IAwaitenResolver<T>` and `IAwaitenAsyncResolver<T>` are single-service seams and are not reported.
 :::
 
 ```csharp

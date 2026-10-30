@@ -97,6 +97,13 @@ public static class AwaitenResolverExtensions
 			// async function below, which the synchronous body invokes only after the argument is checked.
 			ThrowIfNull(resolver);
 
+			// Typed fast path: returns the typed task directly (a cached completed one for a warmed singleton)
+			// instead of converting the Task<object> of the Type-based path below.
+			if (resolver is IAwaitenAsyncResolver<T> typed)
+			{
+				return typed.ResolveAsync(cancellationToken);
+			}
+
 			return Cast(resolver.ResolveAsync(typeof(T), cancellationToken));
 
 			static async Task<T> Cast(Task<object> resolution) => (T)await resolution.ConfigureAwait(false);
