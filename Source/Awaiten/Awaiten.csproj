@@ -9,6 +9,10 @@
 		<None Include="$(MSBuildProjectDirectory)\..\Awaiten.SourceGenerators\bin\$(Configuration)\netstandard2.0\Awaiten.SourceGenerators.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
 	</ItemGroup>
 
+	<ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+		<PackageReference Include="Microsoft.Bcl.AsyncInterfaces" />
+	</ItemGroup>
+
 	<ItemGroup>
 		<PackageReference Include="IsExternalInit">
 			<PrivateAssets>all</PrivateAssets>

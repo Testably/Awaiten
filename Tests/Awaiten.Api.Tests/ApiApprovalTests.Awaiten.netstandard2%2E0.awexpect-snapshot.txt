@@ -190,14 +190,14 @@ namespace Awaiten
     {
         T Resolve();
     }
-    public interface IAwaitenRoot : Awaiten.IAwaitenAsyncResolver, Awaiten.IAwaitenExternalResolverHost, Awaiten.IAwaitenResolver, Awaiten.IAwaitenScope, System.IDisposable
+    public interface IAwaitenRoot : Awaiten.IAwaitenAsyncResolver, Awaiten.IAwaitenExternalResolverHost, Awaiten.IAwaitenResolver, Awaiten.IAwaitenScope, System.IAsyncDisposable, System.IDisposable
     {
         System.Collections.Generic.IReadOnlyList<Awaiten.AwaitenExternalDependency> ExternalDependencies { get; }
         System.Collections.Generic.IReadOnlyList<Awaiten.AwaitenRegistration> Registrations { get; }
         Awaiten.AwaitenResolvability GetResolvability(System.Type serviceType, object? key);
         System.Threading.Tasks.Task InitializeAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
     }
-    public interface IAwaitenScope : Awaiten.IAwaitenAsyncResolver, Awaiten.IAwaitenResolver, System.IDisposable
+    public interface IAwaitenScope : Awaiten.IAwaitenAsyncResolver, Awaiten.IAwaitenResolver, System.IAsyncDisposable, System.IDisposable
     {
         Awaiten.IAwaitenScope CreateScope();
         System.Threading.Tasks.Task<Awaiten.IAwaitenScope> CreateScopeAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
@@ -254,12 +254,13 @@ namespace Awaiten
     {
         public ModuleAttribute() { }
     }
-    public readonly struct Owned<T> : System.IDisposable
+    public readonly struct Owned<T> : System.IAsyncDisposable, System.IDisposable
     {
         [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
         public Owned(Awaiten.IAwaitenScope scope, T value) { }
         public T Value { get; }
         public void Dispose() { }
+        public System.Threading.Tasks.ValueTask DisposeAsync() { }
     }
     [System.AttributeUsage(System.AttributeTargets.Parameter, AllowMultiple = false, Inherited = false)]
     public sealed class RequestingTypeAttribute : System.Attribute

@@ -116,5 +116,7 @@ public sealed class AwaitenServiceCollectionExtensionsTests
 		public void Dispose()
 		{
 		}
+
+		public ValueTask DisposeAsync() => default;
 	}
 }

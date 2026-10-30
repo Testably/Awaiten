@@ -10,7 +10,7 @@ Add the package to your project:
 dotnet add package Awaiten
 ```
 
-Awaiten targets `net10.0`, `net8.0`, and `netstandard2.0`, so it runs on modern .NET and on older toolchains. The package has no third-party dependencies.
+Awaiten targets `net10.0`, `net8.0`, and `netstandard2.0`, so it runs on modern .NET and on older toolchains. The package has no third-party dependencies; on netstandard2.0 it references only `Microsoft.Bcl.AsyncInterfaces`, for async disposal.
 
 ## Declare a container
 

@@ -124,7 +124,6 @@ public partial class AsyncInitializationFailureTests
 		await That(recorder.Disposed).IsEqualTo(2).Because("the live instance is registered on success and disposed at teardown");
 	}
 
-#if NET || NETSTANDARD2_1_OR_GREATER
 	// An IAsyncDisposable-only instance (no synchronous IDisposable) exercises the awaited teardown arm of the
 	// failure path: when its InitializeAsync throws, the async resolver's guarded catch must await DisposeAsync
 	// rather than fall through the synchronous IDisposable branch.
@@ -141,7 +140,6 @@ public partial class AsyncInitializationFailureTests
 		await That(recorder.DisposedAsync).IsEqualTo(1)
 			.Because("an IAsyncDisposable-only instance whose init throws is torn down through the awaited DisposeAsync, not leaked");
 	}
-#endif
 
 	/// <summary>Per-container observation channel: the probes report construction and disposal here.</summary>
 	public sealed class Recorder
@@ -224,7 +222,6 @@ public partial class AsyncInitializationFailureTests
 		public void Dispose() => throw new InvalidOperationException("dispose-boom");
 	}
 
-#if NET || NETSTANDARD2_1_OR_GREATER
 	public sealed class AsyncInitThrowsAsyncDisposable : IAsyncInitializable, IAsyncDisposable
 	{
 		private readonly Recorder _recorder;
@@ -243,7 +240,6 @@ public partial class AsyncInitializationFailureTests
 			return default;
 		}
 	}
-#endif
 
 	[Container]
 	[Singleton<Recorder>]
@@ -276,10 +272,8 @@ public partial class AsyncInitializationFailureTests
 	[Singleton<InitAndDisposeThrow>]
 	public static partial class DisposeAlsoThrowsContainer;
 
-#if NET || NETSTANDARD2_1_OR_GREATER
 	[Container]
 	[Singleton<Recorder>]
 	[Singleton<AsyncInitThrowsAsyncDisposable>]
 	public static partial class SingletonAsyncDisposableInitContainer;
-#endif
 }

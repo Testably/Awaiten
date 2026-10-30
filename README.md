@@ -45,7 +45,7 @@ dotnet add package Awaiten
 
 | Package | Description |
 |---|---|
-| `Awaiten` | The core: attributes, the source generator, and the runtime seams. No third-party dependencies. |
+| `Awaiten` | The core: attributes, the source generator, and the runtime seams. No third-party dependencies; on netstandard2.0 only `Microsoft.Bcl.AsyncInterfaces`. |
 | `Awaiten.Extensions.DependencyInjection` | Microsoft.Extensions.DependencyInjection interop (ASP.NET Core, generic host, and other containers). |
 
 ## Documentation

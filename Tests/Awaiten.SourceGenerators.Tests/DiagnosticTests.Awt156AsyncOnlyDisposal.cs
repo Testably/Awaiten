@@ -316,6 +316,7 @@ public partial class DiagnosticTests
 			                                       		public IAwaitenScope CreateScope() => this;
 			                                       		public Task<IAwaitenScope> CreateScopeAsync(CancellationToken cancellationToken = default) => Task.FromResult<IAwaitenScope>(this);
 			                                       		public void Dispose() { }
+			                                       		public ValueTask DisposeAsync() => default;
 			                                       	}
 			                                       }
 

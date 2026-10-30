@@ -74,9 +74,7 @@ public sealed partial class BridgeGuardTests
 			.WithMessage("*Widget*missing*").AsWildcard();
 	}
 
-#if NET
-	// An async-initialized service (Task<T>-projected) that can only be disposed asynchronously. The generated
-	// async-disposal surface exists only on net8.0+, so this scenario is net-only.
+	// An async-initialized service (Task<T>-projected) that can only be disposed asynchronously.
 	public sealed class AsyncOnlyDisposableSingleton : IAsyncInitializable, IAsyncDisposable
 	{
 		public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
@@ -102,5 +100,4 @@ public sealed partial class BridgeGuardTests
 			.WithMessage("*asynchronous disposal*DisposeAsync*").AsWildcard()
 			.Because("a synchronous teardown of the root that built an IAsyncDisposable-only instance throws the container's guidance rather than blocking on async disposal");
 	}
-#endif
 }

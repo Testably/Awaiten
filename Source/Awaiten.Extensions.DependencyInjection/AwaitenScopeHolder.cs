@@ -29,18 +29,5 @@ internal sealed class AwaitenScopeHolder<TRoot> : IDisposable, IAsyncDisposable
 	public void Dispose() => Scope.Dispose();
 
 	/// <inheritdoc />
-	public ValueTask DisposeAsync()
-	{
-#if NET
-		return Scope.DisposeAsync();
-#else
-		if (Scope is IAsyncDisposable asyncDisposable)
-		{
-			return asyncDisposable.DisposeAsync();
-		}
-
-		Scope.Dispose();
-		return default;
-#endif
-	}
+	public ValueTask DisposeAsync() => Scope.DisposeAsync();
 }

@@ -1096,7 +1096,6 @@ public partial class AsyncInitializationTests
 	[Singleton<WidgetPlant>]
 	public static partial class ParameterizedAsyncOwnedContainer;
 
-#if NET || NETSTANDARD2_1_OR_GREATER
 	[Test]
 	public async Task AsyncOwned_FuncOfTaskOfOwned_DisposeAsync_TearsDownAnAsyncDisposableService()
 	{
@@ -1340,5 +1339,4 @@ public partial class AsyncInitializationTests
 	[Scoped<SecondWarmedThrowingAsyncDisposable>]
 	[Scoped<FailingWarmUp>]
 	public static partial class FailingWarmUpAndDisposalsContainer;
-#endif
 }

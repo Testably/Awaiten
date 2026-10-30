@@ -1,11 +1,10 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 
 namespace Awaiten.Tests;
 
 /// <summary>
 ///     The scope surface for asynchronous disposal: <c>CreateScopeAsync</c> hands back the concrete generated
-///     <c>Scope</c>, and on .NET 8 and later <see cref="IAwaitenScope" /> is <see cref="IAsyncDisposable" />, so a
+///     <c>Scope</c>, and <see cref="IAwaitenScope" /> is <see cref="IAsyncDisposable" /> on every framework, so a
 ///     scope opened through the interface can be <c>await using</c>d without a cast.
 /// </summary>
 public partial class AsyncDisposableScopeTests
@@ -39,7 +38,6 @@ public partial class AsyncDisposableScopeTests
 	[Scoped<Order>]
 	public static partial class PlainContainer;
 
-#if NET || NETSTANDARD2_1_OR_GREATER
 	[Test]
 	public async Task AwaitUsing_AnInterfaceTypedScope_DisposesAsyncOnlyServicesAsynchronously()
 	{
@@ -57,20 +55,6 @@ public partial class AsyncDisposableScopeTests
 		}
 	}
 
-	[Test]
-	public async Task AwaitUsing_AHandWrittenScopeWithoutDisposeAsync_FallsBackToDispose()
-	{
-		HandWrittenScope handWritten = new();
-
-		await using (IAwaitenScope scope = handWritten)
-		{
-			await That(scope.CreateScope()).IsSameAs(handWritten);
-		}
-
-		await That(handWritten.DisposeCount).IsEqualTo(1)
-			.Because("a scope that implements no DisposeAsync of its own is disposed asynchronously through the interface's synchronous fallback");
-	}
-
 	public sealed class Rinse : IAsyncDisposable
 	{
 		public bool DisposedAsync { get; private set; }
@@ -85,39 +69,4 @@ public partial class AsyncDisposableScopeTests
 	[Container]
 	[Scoped<Rinse>]
 	public static partial class AsyncOnlyContainer;
-
-	private sealed class HandWrittenScope : IAwaitenScope
-	{
-		public int DisposeCount { get; private set; }
-
-		public object Resolve(Type serviceType) => throw new NotSupportedException();
-
-		public object Resolve(Type serviceType, object? key) => throw new NotSupportedException();
-
-		public bool TryResolve(Type serviceType, [NotNullWhen(true)] out object? instance)
-		{
-			instance = null;
-			return false;
-		}
-
-		public bool TryResolve(Type serviceType, object? key, [NotNullWhen(true)] out object? instance)
-		{
-			instance = null;
-			return false;
-		}
-
-		public Task<object> ResolveAsync(Type serviceType, CancellationToken cancellationToken = default)
-			=> throw new NotSupportedException();
-
-		public Task<object> ResolveAsync(Type serviceType, object? key, CancellationToken cancellationToken = default)
-			=> throw new NotSupportedException();
-
-		public IAwaitenScope CreateScope() => this;
-
-		public Task<IAwaitenScope> CreateScopeAsync(CancellationToken cancellationToken = default)
-			=> Task.FromResult<IAwaitenScope>(this);
-
-		public void Dispose() => DisposeCount++;
-	}
-#endif
 }

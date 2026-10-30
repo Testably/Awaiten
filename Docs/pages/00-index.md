@@ -62,5 +62,5 @@ var cup = shop.Resolve<Cup>();       // a fresh cup, wired and ready
 
 | Package | Description |
 |---|---|
-| `Awaiten` | The core: attributes, the source generator, and the runtime seams. No third-party dependencies. |
+| `Awaiten` | The core: attributes, the source generator, and the runtime seams. No third-party dependencies; on netstandard2.0 only `Microsoft.Bcl.AsyncInterfaces`. |
 | `Awaiten.Extensions.DependencyInjection` | Microsoft.Extensions.DependencyInjection interop for ASP.NET Core, the generic host, and other containers. See the [MS.DI bridge](./msdi-bridge). |
