@@ -27,7 +27,8 @@ explicit factory/instance delegates, so no reflection-based activation is involv
 (a service bridged as `Task<TService>`, exercised here by `Warmup`) is reflection-free too: the generator
 emits the closed `typeof(Task<TService>)` and the `Task<object>`→`Task<T>` converter into the container's
 registration metadata, so the bridge never calls `MakeGenericType` / `MakeGenericMethod` at runtime and needs
-no trim/AOT suppressions.
+no trim/AOT suppressions. The `Mediator` dispatches a message by its runtime type through a generated
+`IReadOnlyDictionary<Type, Func<IMessageHandler>>`, a plain dictionary of delegates with no reflection either.
 
 ## Run without the AOT toolchain
 

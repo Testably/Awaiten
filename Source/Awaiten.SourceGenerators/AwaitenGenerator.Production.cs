@@ -174,7 +174,7 @@ partial class AwaitenGenerator
 
 		DiscoverInjectedMembers(
 			info,
-			new InjectionContext(context.ContainerSymbol, context.Compilation, context.ServiceToImpl, context.ConstraintRejected, context.ConsumedConditionals, context.External.ServiceTypes, context.Diagnostics),
+			new InjectionContext(context.ContainerSymbol, context.Compilation, context.ServiceToImpl, context.ConstraintRejected, context.ConsumedConditionals, context.External.ServiceTypes, context.DispatchCandidates, context.Diagnostics),
 			injectProperties,
 			members);
 		return members;
@@ -454,8 +454,9 @@ partial class AwaitenGenerator
 			}
 
 			// AWT191: a release hook's Func/Lazy parameter (any of the four deferred-delegate kinds, covering their
-			// Task and Owned forms) captures a resolver delegate that is dead by the time the hook runs.
-			if (release && parameterModel.Kind is DependencyKind.Func or DependencyKind.Lazy or DependencyKind.FuncTask or DependencyKind.LazyTask)
+			// Task and Owned forms, and the dispatch dictionary of Funcs) captures a resolver delegate that is dead by the
+			// time the hook runs.
+			if (release && parameterModel.Kind is DependencyKind.Func or DependencyKind.Lazy or DependencyKind.FuncTask or DependencyKind.LazyTask or DependencyKind.TypeDispatch)
 			{
 				context.Diagnostics.Add(new DiagnosticInfo(
 					Diagnostics.ReleaseHookDeferredParameter,
@@ -469,6 +470,7 @@ partial class AwaitenGenerator
 
 			parameterModel = RedirectContextualBinding(parameterModel, info, context.ServiceToImpl, context.ConsumedConditionals);
 			parameterModel = SuppressRegisteredCollectionSynthesis(parameterModel, parameter.Type, context.ServiceToImpl);
+			parameterModel = ResolveTypeDispatch(parameterModel, parameter.Type, info, context.DispatchCandidates, context.Diagnostics);
 
 			// AWT159/AWT160: keyed-collection misuse (an unsupported key type, or a [FromKey] on a synthesized keyed
 			// collection), reported only for a dictionary that stayed synthesized past the suppression above.

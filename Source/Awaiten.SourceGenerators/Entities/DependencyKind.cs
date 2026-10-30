@@ -88,4 +88,12 @@ internal enum DependencyKind
 	///     and AWT159/AWT160 apply as for <see cref="KeyedCollection" /> while it stays synthesized.
 	/// </summary>
 	AwaitedKeyedCollection,
+
+	/// <summary>
+	///     A runtime-type dispatch dictionary (<c>IReadOnlyDictionary&lt;Type, Func&lt;TBase&gt;&gt;</c>): every
+	///     unkeyed closed-generic registration implementing <c>TBase</c>, keyed by its single type argument. Each
+	///     value is exactly the <see cref="Func" /> a parameter of the closed service would get, so it contributes no
+	///     edge and is analyzed per member through <c>AwaitenGenerator.AnalyzedDependencies</c>.
+	/// </summary>
+	TypeDispatch,
 }

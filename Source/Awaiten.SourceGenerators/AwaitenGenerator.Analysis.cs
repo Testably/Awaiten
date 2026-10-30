@@ -453,7 +453,7 @@ partial class AwaitenGenerator
 		{
 			// A constructor parameter, an injected [Inject] member and a lifecycle hook parameter all resolve a
 			// synchronous relationship's target without awaiting initialization, so all are checked alike.
-			foreach (ParameterModel parameter in instances[i].WalkedDependencies())
+			foreach (ParameterModel parameter in AnalyzedDependencies(instances[i].WalkedDependencies()))
 			{
 				CheckDependency(i, parameter);
 			}
@@ -716,7 +716,7 @@ partial class AwaitenGenerator
 			// Func<TArg…, Task<T>>. Misuse is caught at the consumption site (AWT119 or AWT115), not the
 			// registration, so there is no registration-time diagnostic for [Arg]-plus-async. A hook parameter is a
 			// graph dependency too, so a plain hook parameter over a parameterized target is AWT115 like a constructor's.
-			foreach (ParameterModel parameter in instance.ConstructorParameters.AsArray().Concat(instance.HookParameters()))
+			foreach (ParameterModel parameter in AnalyzedDependencies(instance.ConstructorParameters.AsArray().Concat(instance.HookParameters())))
 			{
 				// A collection resolves to a set of members, not a single registration whose [Arg] parameters could
 				// be supplied, so runtime-argument matching does not apply (excluded explicitly). Guard the

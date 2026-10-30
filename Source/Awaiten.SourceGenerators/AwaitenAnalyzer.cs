@@ -230,11 +230,19 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 		// reached through one is reported like a constructor parameter's. (A release hook's Func is rejected
 		// outright by AWT191, so only activation hooks reach here with one in practice.)
 		InstanceModel holder = graph.Instances[node];
-		foreach (ParameterModel parameter in holder.ConstructorParameters.AsArray().Concat(holder.HookParameters()))
+		foreach (ParameterModel dependency in holder.ConstructorParameters.AsArray().Concat(holder.HookParameters()))
+		{
+			foreach (ParameterModel parameter in AwaitenGenerator.AnalyzedDependencies([dependency,]))
+			{
+				ReportAccumulatingFunc(parameter, dispatch: dependency.Kind == DependencyKind.TypeDispatch);
+			}
+		}
+
+		void ReportAccumulatingFunc(ParameterModel parameter, bool dispatch)
 		{
 			if (!IsRootAccumulatingFunc(graph, serviceToIndex, membership, parameter) || !reported.Add($"{node}|{parameter.ServiceType}|{parameter.Key}"))
 			{
-				continue;
+				return;
 			}
 
 			string service = AwaitenGenerator.Display(parameter.ServiceType);
@@ -242,10 +250,19 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 			// The leak-free remedy differs by relationship. A synchronous Func is redirected to a
 			// Func<…, Owned<T>> disposal handle; an async Func<…, Task<T>> cannot use Owned<T> (a synchronous
 			// handle that cannot await initialization, AWT119), so it is redirected to the async owned form
-			// Func<…, Task<Owned<T>>>, which async-resolves each instance into a throwaway scope.
-			string remedy = parameter.Kind == DependencyKind.FuncTask
-				? $"resolve it as Func<…, Task<Owned<{service}>>> for per-use disposal"
-				: $"resolve it as Func<…, Owned<{service}>> for per-use disposal";
+			// Func<…, Task<Owned<T>>>, which async-resolves each instance into a throwaway scope. A dispatch
+			// dictionary has no Owned form, so its holder is bounded to a scope instead.
+			string remedy;
+			if (dispatch)
+			{
+				remedy = $"register '{AwaitenGenerator.Display(holder.ImplementationType)}' as Scoped so each scope disposes what its dispatch dictionary builds";
+			}
+			else
+			{
+				remedy = parameter.Kind == DependencyKind.FuncTask
+					? $"resolve it as Func<…, Task<Owned<{service}>>> for per-use disposal"
+					: $"resolve it as Func<…, Owned<{service}>> for per-use disposal";
+			}
 
 			diagnostics.Add(new DiagnosticInfo(
 				descriptor,

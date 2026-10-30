@@ -526,7 +526,7 @@ partial class AwaitenGenerator
 
 		if (release
 		    && ClassifyParameter(parameter, asyncFactory: false, new HashSet<string>(StringComparer.Ordinal)).Kind
-			    is DependencyKind.Func or DependencyKind.Lazy or DependencyKind.FuncTask or DependencyKind.LazyTask)
+			    is DependencyKind.Func or DependencyKind.Lazy or DependencyKind.FuncTask or DependencyKind.LazyTask or DependencyKind.TypeDispatch)
 		{
 			return new DiagnosticInfo(
 				Diagnostics.ReleaseHookDeferredParameter,

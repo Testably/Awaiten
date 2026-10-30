@@ -27,6 +27,8 @@ namespace Awaiten.SourceGenerators.Entities;
 ///     <c>KeyType</c> is the requested dictionary key type of a keyed collection (the <c>string</c> keyword or a
 ///     fully-qualified enum type), used to synthesize a <c>Dictionary&lt;TKey, T&gt;</c> of the right key type,
 ///     including the empty case where no keyed registration exists to derive it from (null for every other kind).
+///     <c>DispatchMembers</c> are the entries of a <see cref="DependencyKind.TypeDispatch" /> dictionary, whose
+///     <c>ServiceType</c> is the base interface <c>TBase</c> (empty for every other kind).
 /// </summary>
 internal sealed record ParameterModel(
 	string ServiceType,
@@ -36,4 +38,5 @@ internal sealed record ParameterModel(
 	LocationInfo? Location = null,
 	bool ProducesOwned = false,
 	string? AwaitedCollectionType = null,
-	string? KeyType = null);
+	string? KeyType = null,
+	EquatableArray<DispatchMember> DispatchMembers = default);

@@ -1671,4 +1671,18 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A <c>Type</c>-keyed dictionary dependency cannot be synthesized as a runtime-type dispatch dictionary: its
+	///     value is not <c>Func&lt;TBase&gt;</c> over a non-generic interface, it carries a <c>[FromKey]</c>, a
+	///     closing that implements <c>TBase</c> has more than one type argument, or the closings implementing
+	///     <c>TBase</c> come from more than one generic definition, so a type argument does not identify one entry.
+	/// </summary>
+	public static readonly DiagnosticDescriptor UnsupportedTypeDispatch = new(
+		"AWT213",
+		"Unsupported runtime-type dispatch dictionary",
+		"'{0}' requests the runtime-type dispatch dictionary '{1}', which {2}",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

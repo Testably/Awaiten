@@ -25,7 +25,7 @@ partial class AwaitenGenerator
 		                           && CollectionShapeTypes(parameterModel.ServiceType).Any(shape => serviceToImpl.ContainsKey(new ServiceKey(shape, parameterModel.Key)));
 		bool asyncShapeRegistered = parameterModel.Kind == DependencyKind.AsyncEnumerable
 		                            && serviceToImpl.ContainsKey(new ServiceKey(AsyncEnumerableShapeType(parameterModel.ServiceType), parameterModel.Key));
-		bool awaitedOrKeyedShapeRegistered = parameterModel.Kind is DependencyKind.AwaitedEnumerable or DependencyKind.KeyedCollection or DependencyKind.AwaitedKeyedCollection
+		bool awaitedOrKeyedShapeRegistered = parameterModel.Kind is DependencyKind.AwaitedEnumerable or DependencyKind.KeyedCollection or DependencyKind.AwaitedKeyedCollection or DependencyKind.TypeDispatch
 		                                     && serviceToImpl.ContainsKey(new ServiceKey(declaredType.ToDisplayString(FullyQualified), parameterModel.Key));
 		// A registered dictionary claims the awaited Task<…> view too (inner dictionary type in
 		// AwaitedCollectionType). How it is claimed depends on whether a synthesized awaited view could exist at
@@ -101,6 +101,7 @@ partial class AwaitenGenerator
 			parameterModel = RedirectContextualBinding(parameterModel, info, context.ServiceToImpl, context.ConsumedConditionals);
 
 			parameterModel = SuppressRegisteredCollectionSynthesis(parameterModel, parameter.Type, context.ServiceToImpl);
+			parameterModel = ResolveTypeDispatch(parameterModel, parameter.Type, info, context.DispatchCandidates, context.Diagnostics);
 
 			// AWT159/AWT160: keyed-collection misuse is reported only for a dictionary that stays synthesized. An
 			// explicitly registered dictionary was rewritten to Direct above and resolves that registration,
@@ -152,7 +153,7 @@ partial class AwaitenGenerator
 	///     element type yields an empty collection, never a missing dependency.
 	/// </summary>
 	private static bool IsSynthesizedCollection(DependencyKind kind)
-		=> kind is DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.AwaitedEnumerable or DependencyKind.KeyedCollection or DependencyKind.AwaitedKeyedCollection;
+		=> kind is DependencyKind.Enumerable or DependencyKind.AsyncEnumerable or DependencyKind.AwaitedEnumerable or DependencyKind.KeyedCollection or DependencyKind.AwaitedKeyedCollection or DependencyKind.TypeDispatch;
 
 	/// <summary>
 	///     Reports <see cref="Diagnostics.MissingDependency">AWT101</see> (or
@@ -192,7 +193,7 @@ partial class AwaitenGenerator
 	///     stay small: the container symbol, the compilation (which answers whether a setter is reachable from the
 	///     container), the coalesced service map, the constraint-rejected and consumed-context sets, the
 	///     <c>[ImportService&lt;T&gt;]</c> external service types (a member of one resolves externally rather than
-	///     being reported missing), and the diagnostics sink.
+	///     being reported missing), the closings a dispatch dictionary can key, and the diagnostics sink.
 	/// </summary>
 	private sealed record InjectionContext(
 		INamedTypeSymbol ContainerSymbol,
@@ -201,6 +202,7 @@ partial class AwaitenGenerator
 		HashSet<string> ConstraintRejected,
 		HashSet<ServiceKey> ConsumedConditionals,
 		HashSet<string> ExternalServiceTypes,
+		List<(string ServiceType, INamedTypeSymbol Symbol)> DispatchCandidates,
 		List<DiagnosticInfo> Diagnostics);
 
 	/// <summary>
@@ -389,6 +391,7 @@ partial class AwaitenGenerator
 		// member exactly as for a constructor parameter: the member is rewritten to a direct dependency on the
 		// registered opaque value.
 		dependency = SuppressRegisteredCollectionSynthesis(dependency, property.Type, context.ServiceToImpl);
+		dependency = ResolveTypeDispatch(dependency, property.Type, info, context.DispatchCandidates, context.Diagnostics);
 
 		// AWT159/AWT160: keyed-collection misuse is reported only for a dictionary that stays synthesized. An
 		// explicitly registered dictionary was rewritten to Direct above and resolves that registration.
@@ -553,6 +556,13 @@ partial class AwaitenGenerator
 			return new ParameterModel(asyncElementType!, DependencyKind.AsyncEnumerable, Key: key, Location: location);
 		}
 
+		// A Type-keyed dictionary is a runtime-type dispatch dictionary, recognized before the keyed collection that
+		// shares its shape. Its entries and its AWT213 checks come later from ResolveTypeDispatch.
+		if (TryGetTypeDispatch(type, out ITypeSymbol? dispatchValue))
+		{
+			return new ParameterModel(DispatchBaseDisplay(dispatchValue!), DependencyKind.TypeDispatch, Key: key, Location: location);
+		}
+
 		// A keyed collection (IReadOnlyDictionary<TKey, T>) resolves every keyed registration of its value type T,
 		// keyed by each registration's [Key]. Recognized before the plain collection shapes (both live in
 		// System.Collections.Generic). The [FromKey] key is carried only for suppression; a [FromKey] that survives
@@ -612,9 +622,7 @@ partial class AwaitenGenerator
 		{
 			// Task<Owned<T>> is the async counterpart of a bare Owned<T>: async-resolve (and initialize) T into a
 			// throwaway child scope and hand back the disposal handle.
-			return IsOwned(taskResult, out ITypeSymbol taskOwnedInner)
-				? new ParameterModel(taskOwnedInner.ToDisplayString(FullyQualified), DependencyKind.Task, Key: key, Location: location, ProducesOwned: true)
-				: new ParameterModel(taskResult.ToDisplayString(FullyQualified), DependencyKind.Task, Key: key, Location: location);
+			return ClassifyTask(taskResult, key, location);
 		}
 
 		if (type is INamedTypeSymbol { IsGenericType: true, } named
@@ -647,6 +655,11 @@ partial class AwaitenGenerator
 	///     recognized relationship, or whose produced type is itself a relationship (nesting beyond one level),
 	///     returns <see langword="null" /> so the caller treats it as a direct dependency on the whole type.
 	/// </summary>
+	private static ParameterModel ClassifyTask(ITypeSymbol taskResult, string? key, LocationInfo? location)
+		=> IsOwned(taskResult, out ITypeSymbol taskOwnedInner)
+			? new ParameterModel(taskOwnedInner.ToDisplayString(FullyQualified), DependencyKind.Task, Key: key, Location: location, ProducesOwned: true)
+			: new ParameterModel(taskResult.ToDisplayString(FullyQualified), DependencyKind.Task, Key: key, Location: location);
+
 	private static ParameterModel? ClassifyRelationship(INamedTypeSymbol named, string? key, LocationInfo? location)
 	{
 		if (named is { Name: "Lazy", TypeArguments.Length: 1, } && !IsRelationshipType(named.TypeArguments[0]))
