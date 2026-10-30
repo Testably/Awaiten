@@ -282,18 +282,7 @@ public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScop
 			return default;
 		}
 
-#if NET
 		return _container.DisposeAsync();
-#else
-		// The netstandard2.0 IAwaitenScope is not IAsyncDisposable, so only a scope that opts in is disposed asynchronously.
-		if (_container is IAsyncDisposable asyncDisposable)
-		{
-			return asyncDisposable.DisposeAsync();
-		}
-
-		_container.Dispose();
-		return default;
-#endif
 	}
 
 	/// <summary>

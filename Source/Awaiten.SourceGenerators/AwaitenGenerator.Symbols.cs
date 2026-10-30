@@ -9,12 +9,10 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     The <c>System.IAsyncDisposable</c> symbol when the consumer's compilation can emit an async drain,
-	///     otherwise <see langword="null" />. This is read off the compilation, not off the referenced Awaiten
-	///     asset: a consumer of the netstandard2.0 asset (for example net48 with Microsoft.Bcl.AsyncInterfaces)
-	///     has no async disposal on <c>IAwaitenScope</c> or <c>Owned&lt;T&gt;</c>, but its generated <c>Root</c>
-	///     and <c>Scope</c> can still implement <c>IAsyncDisposable</c> themselves. Ignoring it there would leave
-	///     an async-only disposable service untracked and never disposed. <c>async ValueTask</c> also needs
-	///     <c>AsyncValueTaskMethodBuilder</c>, which netstandard2.0 only gets from System.Threading.Tasks.Extensions.
+	///     otherwise <see langword="null" />. Every Awaiten asset provides it (the netstandard2.0 asset through its
+	///     Microsoft.Bcl.AsyncInterfaces dependency), so this is <see langword="null" /> only for a compilation that
+	///     excludes those assets. <c>async ValueTask</c> also needs <c>AsyncValueTaskMethodBuilder</c>, which
+	///     netstandard2.0 only gets from System.Threading.Tasks.Extensions.
 	/// </summary>
 	private static INamedTypeSymbol? AsyncDisposableSupport(Compilation compilation)
 		=> compilation.GetTypeByMetadataName("System.Runtime.CompilerServices.AsyncValueTaskMethodBuilder") is null

@@ -129,13 +129,6 @@ internal static partial class Sources
 		AppendXmlSummary(builder, depth,
 			"A resolution scope: caches scoped services and disposes the instances it created.");
 		Indent(builder, depth).Append("public class Scope : global::Awaiten.IAwaitenScope, global::Awaiten.IAwaitenExternalResolverHost");
-		if (asyncDisposal)
-		{
-			// Redundant on .NET 8+, where IAwaitenScope already is IAsyncDisposable, but required on the
-			// netstandard2.0 asset, whose IAwaitenScope is synchronous only.
-			builder.Append(", global::System.IAsyncDisposable");
-		}
-
 		EmitGenericResolverBases(builder, instances, strict, syncAfterInit);
 		builder.AppendLine();
 		Indent(builder, depth).AppendLine("{");
@@ -638,13 +631,7 @@ internal static partial class Sources
 		// The container has registration errors, so emit a throwing Root that still satisfies the shape
 		// consumers depend on, keeping the build focused on the actionable AWT diagnostics rather than cascading
 		// "type not found" errors. It implements IAwaitenRoot.
-		Indent(builder, depth).Append("public sealed class Root : global::Awaiten.IAwaitenRoot");
-		if (asyncDisposal)
-		{
-			builder.Append(", global::System.IAsyncDisposable");
-		}
-
-		builder.AppendLine();
+		Indent(builder, depth).AppendLine("public sealed class Root : global::Awaiten.IAwaitenRoot");
 		Indent(builder, depth).AppendLine("{");
 		Indent(builder, depth + 1).AppendLine("public Root()");
 		Indent(builder, depth + 1).AppendLine("{");

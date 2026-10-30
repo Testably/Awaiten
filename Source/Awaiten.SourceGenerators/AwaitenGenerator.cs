@@ -210,8 +210,8 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		// them, and the AWT119/AWT120 sync-resolution diagnostics are not reported.
 		bool syncAfterInit = ReadSyncAfterInit(containerSymbol);
 
-		// IAsyncDisposable support is emitted whenever the compilation can see it, also on the netstandard2.0
-		// asset (see AsyncDisposableSupport). When absent the container is sync-dispose only.
+		// IAsyncDisposable support is emitted whenever the compilation can see it (see AsyncDisposableSupport).
+		// When absent the container is sync-dispose only.
 		bool hasAsyncDisposable = AsyncDisposableSupport(compilation) is not null;
 
 		List<DiagnosticInfo> diagnostics = new();

@@ -127,15 +127,13 @@ public partial class OwnedTests
 		await That(() => handle.Dispose()).DoesNotThrow();
 	}
 
-#if NET
 	[Test]
 	public async Task DefaultHandle_DisposeAsyncIsANoOp()
 	{
 		Owned<Widget> handle = default;
 
-		await That(() => handle.DisposeAsync()).DoesNotThrow();
+		await That(() => handle.DisposeAsync().AsTask()).DoesNotThrow();
 	}
-#endif
 
 	public sealed class Engine : IDisposable
 	{

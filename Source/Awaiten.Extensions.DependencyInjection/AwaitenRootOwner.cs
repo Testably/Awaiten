@@ -41,16 +41,6 @@ internal sealed class AwaitenRootOwner<TRoot> : IDisposable, IAsyncDisposable
 			return default;
 		}
 
-#if NET
 		return Root.DisposeAsync();
-#else
-		if (Root is IAsyncDisposable asyncDisposable)
-		{
-			return asyncDisposable.DisposeAsync();
-		}
-
-		Root.Dispose();
-		return default;
-#endif
 	}
 }

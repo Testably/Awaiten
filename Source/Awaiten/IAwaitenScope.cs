@@ -17,11 +17,7 @@ namespace Awaiten;
 ///     A generated scope is disposed asynchronously through <c>await using</c>, which awaits the <c>DisposeAsync</c>
 ///     of the instances it owns and is required when one of them is <c>IAsyncDisposable</c> only.
 /// </remarks>
-public interface IAwaitenScope : IAwaitenAsyncResolver,
-#if NET || NETSTANDARD2_1_OR_GREATER
-	IAsyncDisposable,
-#endif
-	IDisposable
+public interface IAwaitenScope : IAwaitenAsyncResolver, IAsyncDisposable, IDisposable
 {
 	/// <summary>Creates a new child <see cref="IAwaitenScope" />. Disposing the scope disposes the instances it owns.</summary>
 	IAwaitenScope CreateScope();
@@ -36,8 +32,9 @@ public interface IAwaitenScope : IAwaitenAsyncResolver,
 #if NET || NETSTANDARD2_1_OR_GREATER
 	/// <summary>
 	///     Falls back to the synchronous <see cref="IDisposable.Dispose" />. A generated scope replaces this with an
-	///     asynchronous drain; the fallback serves scopes generated against the netstandard2.0 asset and
-	///     hand-written implementations, which own no <see cref="IAsyncDisposable" />-only instances.
+	///     asynchronous drain; the fallback serves hand-written implementations, which own no
+	///     <see cref="IAsyncDisposable" />-only instances. The netstandard2.0 asset cannot carry a default
+	///     implementation, so a hand-written scope there implements <c>DisposeAsync</c> itself.
 	/// </summary>
 	ValueTask IAsyncDisposable.DisposeAsync()
 	{

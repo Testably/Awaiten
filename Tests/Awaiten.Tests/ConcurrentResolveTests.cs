@@ -691,7 +691,6 @@ public partial class ConcurrentResolveTests
 	[Transient<ScopedTransient>]
 	public static partial class TransientScopeContainer;
 
-#if NET || NETSTANDARD2_1_OR_GREATER
 	[Test]
 	public async Task AsyncDisposableSingleton_ResolvedConcurrently_IsInitializedOnceAndAsyncDisposedOnce()
 	{
@@ -740,5 +739,4 @@ public partial class ConcurrentResolveTests
 	[Container]
 	[Singleton<AsyncDisposableSingleton>]
 	public static partial class AsyncDisposableContainer;
-#endif
 }

@@ -92,7 +92,6 @@ public partial class DisposalFailureTests
 				.Because("the first Dispose already gave every instance its teardown attempt");
 		}
 
-#if NET || NETSTANDARD2_1_OR_GREATER
 		[Test]
 		[Arguments(true)]
 		[Arguments(false)]
@@ -115,10 +114,8 @@ public partial class DisposalFailureTests
 			await That(recorder.Log).IsEqualTo(new[] { "disposed:Third", "disposed:First" })
 				.Because("an async-only instance stays undisposed on the synchronous path, but no other instance is skipped");
 		}
-#endif
 	}
 
-#if NET || NETSTANDARD2_1_OR_GREATER
 	public class AsynchronousDispose
 	{
 		[Test]
@@ -199,7 +196,6 @@ public partial class DisposalFailureTests
 				.Because("the first DisposeAsync already gave every instance its teardown attempt");
 		}
 	}
-#endif
 
 	public sealed class Recorder
 	{
@@ -235,9 +231,7 @@ public partial class DisposalFailureTests
 	public sealed class FlushedSecond(Recorder recorder) : Part(recorder);
 
 	public class FaultyPart(Recorder recorder) : IDisposable
-#if NET || NETSTANDARD2_1_OR_GREATER
 		, IAsyncDisposable
-#endif
 	{
 		public void Dispose()
 		{
@@ -245,13 +239,11 @@ public partial class DisposalFailureTests
 			throw recorder.Fail("failed:" + GetType().Name, new InvalidOperationException(GetType().Name + " failed"));
 		}
 
-#if NET || NETSTANDARD2_1_OR_GREATER
 		public ValueTask DisposeAsync()
 		{
 			GC.SuppressFinalize(this);
 			throw recorder.Fail("failedAsync:" + GetType().Name, new InvalidOperationException(GetType().Name + " failed"));
 		}
-#endif
 	}
 
 	public sealed class FaultyFirst(Recorder recorder) : FaultyPart(recorder);
@@ -285,7 +277,6 @@ public partial class DisposalFailureTests
 	[Scoped<FaultyThird>]
 	public static partial class SeveralFailuresContainer;
 
-#if NET || NETSTANDARD2_1_OR_GREATER
 	public sealed class AsyncOnlySecond : IAsyncDisposable
 	{
 		public ValueTask DisposeAsync() => default;
@@ -297,5 +288,4 @@ public partial class DisposalFailureTests
 	[Scoped<AsyncOnlySecond>]
 	[Scoped<Third>]
 	public static partial class AsyncOnlyContainer;
-#endif
 }

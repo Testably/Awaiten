@@ -146,7 +146,6 @@ public sealed partial class BridgeDisposalTests
 			.Because("the warm-up built the singleton on the root, so the root provider must own the root although nothing was resolved through a bridged registration");
 	}
 
-#if NET
 	public sealed class AsyncOnlyConsumer
 	{
 		public AsyncOnlyConsumer(AsyncOnlyDisposable dependency) => Dependency = dependency;
@@ -194,7 +193,6 @@ public sealed partial class BridgeDisposalTests
 		await That(dependency.DisposeCount).IsEqualTo(1)
 			.Because("an asynchronous root provider teardown drains the container root asynchronously");
 	}
-#endif
 
 	public interface IFirst;
 
@@ -446,10 +444,6 @@ public sealed partial class BridgeDisposalTests
 			.Because("a pre-built Instance member is user-owned; neither the container nor MS.DI disposes it");
 	}
 
-#if NET
-	// The generated async-disposal surface exists only where the Awaiten runtime exposes it (net8.0+). The
-	// net48 build binds the netstandard2.0 asset, which has none, so an IAsyncDisposable-only service is not
-	// supported there.
 	public sealed class AsyncOnlyDisposable : IAsyncDisposable
 	{
 		public int DisposeCount { get; private set; }
@@ -485,5 +479,4 @@ public sealed partial class BridgeDisposalTests
 
 		await That(service.DisposeCount).IsEqualTo(1);
 	}
-#endif
 }

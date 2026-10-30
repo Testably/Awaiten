@@ -14,11 +14,7 @@ namespace Awaiten;
 /// </summary>
 /// <typeparam name="T">The resolved service type.</typeparam>
 [SuppressMessage("Awaiten", "AWT135:Service locator: a resolver interface is injected into a service", Justification = "Owned<T> is a framework disposal handle: it holds the throwaway scope it owns so it can dispose it, handed in by generated container code. It never resolves arbitrary services, so this is not a service-locator dependency.")]
-public readonly struct Owned<T> :
-#if NET || NETSTANDARD2_1_OR_GREATER
-	IAsyncDisposable,
-#endif
-	IDisposable
+public readonly struct Owned<T> : IAsyncDisposable, IDisposable
 {
 	private readonly IAwaitenScope _scope;
 
@@ -42,7 +38,6 @@ public readonly struct Owned<T> :
 	/// </summary>
 	public void Dispose() => _scope?.Dispose();
 
-#if NET || NETSTANDARD2_1_OR_GREATER
 	/// <summary>
 	///     Asynchronously disposes the scope backing this handle, awaiting the <c>DisposeAsync</c> of the instances
 	///     it owns and falling back to <see cref="IDisposable.Dispose" /> for the rest. Use this through
@@ -51,5 +46,4 @@ public readonly struct Owned<T> :
 	/// </summary>
 	public ValueTask DisposeAsync()
 		=> _scope?.DisposeAsync() ?? default;
-#endif
 }
