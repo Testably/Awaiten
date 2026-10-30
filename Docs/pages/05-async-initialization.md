@@ -55,7 +55,7 @@ This is the usual startup pattern. Warm up once when the shop opens, then serve.
 
 ## Warm a scope
 
-`CreateScopeAsync` opens a scope and initializes its async scoped services eagerly. If one of them throws during initialization, the half-built scope is disposed for you rather than leaked, asynchronously when `IAsyncDisposable` is available, so async-only disposables are torn down too. You get the original exception (or `OperationCanceledException`) unchanged. Only if the disposal throws as well do you get an `AggregateException` that holds the original failure first and the disposal failure second.
+`CreateScopeAsync` opens a scope and initializes its async scoped services eagerly. If one of them throws during initialization, the half-built scope is disposed for you rather than leaked, asynchronously when `IAsyncDisposable` is available, so async-only disposables are torn down too. You get the original exception (or `OperationCanceledException`) unchanged. Only if the disposal throws as well do you get an `AggregateException` that holds the original failure first, followed by every disposal failure in one flat list.
 
 ```csharp
 await using IAwaitenScope order = await shop.CreateScopeAsync(cancellationToken);
@@ -116,7 +116,7 @@ public static partial class CoffeeShop
 
 ## Failures are not cached
 
-If initialization throws, the faulted result is not memoized. The next resolve builds and initializes a fresh instance. A cancellation from one caller does not poison the shared singleton either. A later caller with a live token can still initialize it.
+If initialization throws, the faulted result is not memoized. The next resolve builds and initializes a fresh instance. The failed instance is disposed rather than leaked, and you get the original exception unchanged. Only if its disposal throws as well do you get an `AggregateException` that holds the original failure first and the disposal failure second. A cancellation from one caller does not poison the shared singleton either. A later caller with a live token can still initialize it.
 
 ## Relax the rule when you need to
 

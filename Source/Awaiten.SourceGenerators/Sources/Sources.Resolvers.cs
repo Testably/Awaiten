@@ -155,11 +155,11 @@ internal static partial class Sources
 				Indent(builder, depth + 1).AppendLine("{");
 				emitDeferred(depth + 2);
 				Indent(builder, depth + 1).AppendLine("}");
-				Indent(builder, depth + 1).AppendLine("catch");
+				Indent(builder, depth + 1).AppendLine("catch (global::System.Exception __failure)");
 				Indent(builder, depth + 1).AppendLine("{");
 				EmitGuardedTeardown(builder, depth + 2, asyncDisposal, asyncContext: false);
 				builder.AppendLine();
-				Indent(builder, depth + 2).AppendLine("throw;");
+				EmitRethrowAfterGuardedTeardown(builder, depth + 2);
 				Indent(builder, depth + 1).AppendLine("}");
 				builder.AppendLine();
 			}
@@ -625,12 +625,12 @@ internal static partial class Sources
 		EmitActivation(builder, depth + 1, instance, "created", context, asynchronous: true);
 		EmitAsyncInitialization(builder, depth + 1, instance, "created");
 		Indent(builder, depth).AppendLine("}");
-		Indent(builder, depth).AppendLine("catch");
+		Indent(builder, depth).AppendLine("catch (global::System.Exception __failure)");
 		Indent(builder, depth).AppendLine("{");
 		// Dispose the instance we constructed but failed to wire/activate/initialize, then rethrow the original failure.
 		EmitGuardedTeardown(builder, depth + 1, context.AsyncDisposal, asyncContext: true);
 		builder.AppendLine();
-		Indent(builder, depth + 1).AppendLine("throw;");
+		EmitRethrowAfterGuardedTeardown(builder, depth + 1);
 		Indent(builder, depth).AppendLine("}");
 		builder.AppendLine();
 		// Register disposal and queue the release only on success, so a failure that tore the instance down above
@@ -755,8 +755,8 @@ internal static partial class Sources
 	///     child scope and warms its async-initialized scoped services before handing it back. If warm-up
 	///     throws, the scope is disposed (draining whatever was built before the failure) rather than leaked.
 	///     When <paramref name="asyncDisposal" /> is set the scope is disposed through <c>DisposeAsync</c>, because
-	///     the synchronous drain throws for an <c>IAsyncDisposable</c>-only instance and would replace the original
-	///     failure. The original is rethrown unchanged; only if the disposal throws too are both surfaced in an
+	///     the synchronous drain cannot tear down an <c>IAsyncDisposable</c>-only instance. The original is
+	///     rethrown unchanged; only if the disposal throws too are both surfaced in one flat
 	///     <c>AggregateException</c>, the original first.
 	/// </summary>
 	private static void EmitCreateScopeAsync(StringBuilder builder, int depth, bool asyncDisposal)
@@ -785,30 +785,18 @@ internal static partial class Sources
 		Indent(builder, depth + 2).AppendLine("}");
 		// Initialization failed (or was canceled) partway through: dispose the scope so the instances it
 		// already built and tracked are torn down rather than leaked, then surface the original failure.
-		if (asyncDisposal)
-		{
-			Indent(builder, depth + 2).AppendLine("catch (global::System.Exception __failure)");
-			Indent(builder, depth + 2).AppendLine("{");
-			Indent(builder, depth + 3).AppendLine("try");
-			Indent(builder, depth + 3).AppendLine("{");
-			Indent(builder, depth + 4).AppendLine("await __scope.DisposeAsync().ConfigureAwait(false);");
-			Indent(builder, depth + 3).AppendLine("}");
-			Indent(builder, depth + 3).AppendLine("catch (global::System.Exception __disposalFailure)");
-			Indent(builder, depth + 3).AppendLine("{");
-			Indent(builder, depth + 4).AppendLine("throw new global::System.AggregateException(__failure, __disposalFailure);");
-			Indent(builder, depth + 3).AppendLine("}");
-			builder.AppendLine();
-			Indent(builder, depth + 3).AppendLine("throw;");
-			Indent(builder, depth + 2).AppendLine("}");
-		}
-		else
-		{
-			Indent(builder, depth + 2).AppendLine("catch");
-			Indent(builder, depth + 2).AppendLine("{");
-			Indent(builder, depth + 3).AppendLine("__scope.Dispose();");
-			Indent(builder, depth + 3).AppendLine("throw;");
-			Indent(builder, depth + 2).AppendLine("}");
-		}
+		Indent(builder, depth + 2).AppendLine("catch (global::System.Exception __failure)");
+		Indent(builder, depth + 2).AppendLine("{");
+		Indent(builder, depth + 3).AppendLine("try");
+		Indent(builder, depth + 3).AppendLine("{");
+		Indent(builder, depth + 4).AppendLine(asyncDisposal
+			? "await __scope.DisposeAsync().ConfigureAwait(false);"
+			: "__scope.Dispose();");
+		Indent(builder, depth + 3).AppendLine("}");
+		EmitCleanupFailureCatches(builder, depth + 3);
+		builder.AppendLine();
+		Indent(builder, depth + 3).AppendLine("throw;");
+		Indent(builder, depth + 2).AppendLine("}");
 		builder.AppendLine();
 		Indent(builder, depth + 2).AppendLine("return __scope;");
 		Indent(builder, depth + 1).AppendLine("}");
@@ -932,7 +920,7 @@ internal static partial class Sources
 			EmitActivation(builder, depth + 4, instance, "__s." + field, context, asynchronous: false);
 			EmitCachedReleaseRegistration(builder, depth + 4, instance, field, type, context, asynchronous: false);
 			Indent(builder, depth + 3).AppendLine("}");
-			Indent(builder, depth + 3).AppendLine("catch");
+			Indent(builder, depth + 3).AppendLine(disposal != DisposalTracking.None ? "catch (global::System.Exception __failure)" : "catch");
 			Indent(builder, depth + 3).AppendLine("{");
 			// A failed wiring episode must not leave a half-wired instance published: a later resolve would skip
 			// the miss block (field non-null) and silently return it forever. Unpublish this field and, from the
@@ -957,7 +945,15 @@ internal static partial class Sources
 			Indent(builder, depth + 5).AppendLine("__s.__RollbackWiring();");
 			Indent(builder, depth + 4).AppendLine("}");
 			builder.AppendLine();
-			Indent(builder, depth + 4).AppendLine("throw;");
+			if (disposal != DisposalTracking.None)
+			{
+				EmitRethrowAfterGuardedTeardown(builder, depth + 4);
+			}
+			else
+			{
+				Indent(builder, depth + 4).AppendLine("throw;");
+			}
+
 			Indent(builder, depth + 3).AppendLine("}");
 			Indent(builder, depth + 3).AppendLine("finally");
 			Indent(builder, depth + 3).AppendLine("{");

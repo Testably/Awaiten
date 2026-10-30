@@ -183,10 +183,12 @@ internal static partial class Sources
 
 	/// <summary>
 	///     Emits the reverse-order synchronous drain of the (possibly null) <c>__toDispose</c> list captured
-	///     under the lock, disposing what the owner created newest first. When <paramref name="asyncDisposal" />
-	///     is set, an instance that is <c>IAsyncDisposable</c> but not <c>IDisposable</c> cannot be torn down on
-	///     this synchronous path, so it throws guidance to use <c>DisposeAsync</c> (matching
-	///     Microsoft.Extensions.DependencyInjection rather than blocking on an async dispose).
+	///     under the lock, disposing what the owner created newest first. A throwing <c>Dispose</c> is collected
+	///     into <c>__failures</c> and the drain continues, so every older instance still gets its teardown. When
+	///     <paramref name="asyncDisposal" /> is set, an instance that is <c>IAsyncDisposable</c> but not
+	///     <c>IDisposable</c> cannot be torn down on this synchronous path, so guidance to use <c>DisposeAsync</c>
+	///     is collected as a failure instead (matching Microsoft.Extensions.DependencyInjection rather than
+	///     blocking on an async dispose).
 	/// </summary>
 	private static void EmitDrainDisposables(StringBuilder builder, int depth, bool asyncDisposal)
 	{
@@ -196,13 +198,13 @@ internal static partial class Sources
 		Indent(builder, depth + 1).AppendLine("{");
 		Indent(builder, depth + 2).AppendLine("if (__toDispose[__index] is global::System.IDisposable __disposable)");
 		Indent(builder, depth + 2).AppendLine("{");
-		Indent(builder, depth + 3).AppendLine("__disposable.Dispose();");
+		EmitCollectingTry(builder, depth + 3, "__disposable.Dispose();");
 		Indent(builder, depth + 2).AppendLine("}");
 		if (asyncDisposal)
 		{
 			Indent(builder, depth + 2).AppendLine("else if (__toDispose[__index] is global::System.IAsyncDisposable)");
 			Indent(builder, depth + 2).AppendLine("{");
-			Indent(builder, depth + 3).AppendLine("throw new global::System.InvalidOperationException(\"Awaiten: a resolved service requires asynchronous disposal (it implements IAsyncDisposable but not IDisposable); dispose this scope or container with DisposeAsync ('await using') instead of a synchronous Dispose().\");");
+			EmitCollectFailure(builder, depth + 3, "new global::System.InvalidOperationException(\"Awaiten: a resolved service requires asynchronous disposal (it implements IAsyncDisposable but not IDisposable); dispose this scope or container with DisposeAsync ('await using') instead of a synchronous Dispose().\")");
 			Indent(builder, depth + 2).AppendLine("}");
 		}
 
@@ -213,7 +215,8 @@ internal static partial class Sources
 	/// <summary>
 	///     Emits the reverse-order asynchronous drain of the captured <c>__toDispose</c> list: each instance is
 	///     torn down newest-first, awaiting <c>IAsyncDisposable.DisposeAsync</c> when available and falling back
-	///     to a synchronous <c>IDisposable.Dispose</c> otherwise.
+	///     to a synchronous <c>IDisposable.Dispose</c> otherwise. A throwing teardown is collected into
+	///     <c>__failures</c> and the drain continues.
 	/// </summary>
 	private static void EmitDrainDisposablesAsync(StringBuilder builder, int depth)
 	{
@@ -223,13 +226,78 @@ internal static partial class Sources
 		Indent(builder, depth + 1).AppendLine("{");
 		Indent(builder, depth + 2).AppendLine("if (__toDispose[__index] is global::System.IAsyncDisposable __asyncDisposable)");
 		Indent(builder, depth + 2).AppendLine("{");
-		Indent(builder, depth + 3).AppendLine("await __asyncDisposable.DisposeAsync().ConfigureAwait(false);");
+		EmitCollectingTry(builder, depth + 3, "await __asyncDisposable.DisposeAsync().ConfigureAwait(false);");
 		Indent(builder, depth + 2).AppendLine("}");
 		Indent(builder, depth + 2).AppendLine("else if (__toDispose[__index] is global::System.IDisposable __disposable)");
 		Indent(builder, depth + 2).AppendLine("{");
-		Indent(builder, depth + 3).AppendLine("__disposable.Dispose();");
+		EmitCollectingTry(builder, depth + 3, "__disposable.Dispose();");
 		Indent(builder, depth + 2).AppendLine("}");
 		Indent(builder, depth + 1).AppendLine("}");
+		Indent(builder, depth).AppendLine("}");
+	}
+
+	/// <summary>
+	///     Emits <paramref name="statement" /> inside a <c>try</c> whose <c>catch</c> collects the failure into
+	///     <c>__failures</c>, so a teardown step that throws does not end the drain.
+	/// </summary>
+	private static void EmitCollectingTry(StringBuilder builder, int depth, string statement)
+	{
+		Indent(builder, depth).AppendLine("try");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).AppendLine(statement);
+		Indent(builder, depth).AppendLine("}");
+		Indent(builder, depth).AppendLine("catch (global::System.Exception __failure)");
+		Indent(builder, depth).AppendLine("{");
+		EmitCollectFailure(builder, depth + 1, "__failure");
+		Indent(builder, depth).AppendLine("}");
+	}
+
+	/// <summary>
+	///     Adds <paramref name="exception" /> to the lazily allocated <c>__failures</c> list, so a teardown
+	///     without failures allocates nothing extra.
+	/// </summary>
+	private static void EmitCollectFailure(StringBuilder builder, int depth, string exception)
+	{
+		Indent(builder, depth).Append("(__failures ??= new global::System.Collections.Generic.List<global::System.Exception>()).Add(")
+			.Append(exception).AppendLine(");");
+	}
+
+	/// <summary>
+	///     Emits the end of a teardown: a single collected failure is rethrown unchanged (with its original stack
+	///     trace), so a caller catching its specific type keeps working; several become one
+	///     <c>AggregateException</c> in teardown order.
+	/// </summary>
+	private static void EmitThrowFailures(StringBuilder builder, int depth)
+	{
+		Indent(builder, depth).AppendLine("if (__failures is not null)");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).AppendLine("if (__failures.Count == 1)");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).AppendLine("global::System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(__failures[0]).Throw();");
+		Indent(builder, depth + 1).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("throw new global::System.AggregateException(__failures);");
+		Indent(builder, depth).AppendLine("}");
+	}
+
+	/// <summary>
+	///     Emits the <c>catch</c> clauses for a cleanup that runs after an original failure <c>__failure</c>: when
+	///     the cleanup throws too, both surface in one <c>AggregateException</c>, the original first. An
+	///     <c>AggregateException</c> from the cleanup (a teardown that collected several failures) is flattened
+	///     into it, so the caller sees one flat list.
+	/// </summary>
+	private static void EmitCleanupFailureCatches(StringBuilder builder, int depth)
+	{
+		Indent(builder, depth).AppendLine("catch (global::System.AggregateException __disposalFailures)");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).AppendLine("global::System.Exception[] __all = new global::System.Exception[__disposalFailures.InnerExceptions.Count + 1];");
+		Indent(builder, depth + 1).AppendLine("__all[0] = __failure;");
+		Indent(builder, depth + 1).AppendLine("__disposalFailures.InnerExceptions.CopyTo(__all, 1);");
+		Indent(builder, depth + 1).AppendLine("throw new global::System.AggregateException(__all);");
+		Indent(builder, depth).AppendLine("}");
+		Indent(builder, depth).AppendLine("catch (global::System.Exception __disposalFailure)");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).AppendLine("throw new global::System.AggregateException(__failure, __disposalFailure);");
 		Indent(builder, depth).AppendLine("}");
 	}
 
@@ -364,22 +432,39 @@ internal static partial class Sources
 	}
 
 	/// <summary>
-	///     Emits the failure-path teardown of a partially-built <paramref name="instance" />: a
-	///     <see cref="EmitRacedTeardown" /> wrapped in its own <c>try</c>/<c>catch</c> that swallows a throw from
-	///     the instance's own <c>Dispose</c>/<c>DisposeAsync</c>, so the disposal failure cannot mask the original
-	///     wiring/initialization failure the caller is about to see (the caller rethrows after this). Shared by the
-	///     async and synchronous guarded-wiring resolvers.
+	///     Emits the failure-path teardown of a partially-built <paramref name="instance" /> inside a
+	///     <c>catch (Exception __failure)</c>: a <see cref="EmitRacedTeardown" /> wrapped in its own
+	///     <c>try</c>/<c>catch</c> that records a throw from the instance's own <c>Dispose</c>/<c>DisposeAsync</c>
+	///     in <c>__disposalFailure</c> rather than letting it replace the original wiring/initialization failure.
+	///     The caller finishes its cleanup and then emits <see cref="EmitRethrowAfterGuardedTeardown" />. Shared by
+	///     the async and synchronous guarded-wiring resolvers.
 	/// </summary>
 	private static void EmitGuardedTeardown(StringBuilder builder, int depth, bool asyncDisposal, bool asyncContext, string instance = "created")
 	{
+		Indent(builder, depth).AppendLine("global::System.Exception? __disposalFailure = null;");
 		Indent(builder, depth).AppendLine("try");
 		Indent(builder, depth).AppendLine("{");
 		EmitRacedTeardown(builder, depth + 1, asyncDisposal, asyncContext, instance);
 		Indent(builder, depth).AppendLine("}");
-		Indent(builder, depth).AppendLine("catch");
+		Indent(builder, depth).AppendLine("catch (global::System.Exception __caught)");
 		Indent(builder, depth).AppendLine("{");
-		Indent(builder, depth + 1).AppendLine("// Swallowed: a throw from the instance's own disposal must not mask the original failure below.");
+		Indent(builder, depth + 1).AppendLine("__disposalFailure = __caught;");
 		Indent(builder, depth).AppendLine("}");
+	}
+
+	/// <summary>
+	///     Ends the <c>catch</c> of a <see cref="EmitGuardedTeardown" />: the original failure is rethrown unchanged,
+	///     unless the teardown threw too, in which case both surface in one <c>AggregateException</c>, the original
+	///     first, matching how <c>CreateScopeAsync</c> reports a failed warm-up whose cleanup also fails.
+	/// </summary>
+	private static void EmitRethrowAfterGuardedTeardown(StringBuilder builder, int depth)
+	{
+		Indent(builder, depth).AppendLine("if (__disposalFailure is not null)");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).AppendLine("throw new global::System.AggregateException(__failure, __disposalFailure);");
+		Indent(builder, depth).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, depth).AppendLine("throw;");
 	}
 
 	/// <summary>
@@ -433,19 +518,23 @@ internal static partial class Sources
 		builder.AppendLine();
 		// Outside the lock so user code does not run under it: run the release hooks (reverse creation order)
 		// first, so each instance is released while its dependencies are still alive, then dispose.
+		Indent(builder, depth + 1).AppendLine("global::System.Collections.Generic.List<global::System.Exception>? __failures = null;");
 		if (hasReleases)
 		{
 			EmitDrainReleases(builder, depth + 1);
 		}
 
 		EmitDrainDisposables(builder, depth + 1, asyncDisposal);
+		builder.AppendLine();
+		EmitThrowFailures(builder, depth + 1);
 		Indent(builder, depth).AppendLine("}");
 	}
 
 	/// <summary>
 	///     Emits the reverse-order drain of the (possibly null) captured <c>__toRelease</c> list: each queued
-	///     <c>OnRelease</c> action runs newest-first, before the instances are disposed. Release actions are
-	///     synchronous, so the synchronous and asynchronous disposal paths drain them identically.
+	///     <c>OnRelease</c> action runs newest-first, before the instances are disposed. A throwing hook is
+	///     collected into <c>__failures</c> and neither skips the other hooks nor any disposal. Release actions
+	///     are synchronous, so the synchronous and asynchronous disposal paths drain them identically.
 	/// </summary>
 	private static void EmitDrainReleases(StringBuilder builder, int depth)
 	{
@@ -453,7 +542,7 @@ internal static partial class Sources
 		Indent(builder, depth).AppendLine("{");
 		Indent(builder, depth + 1).AppendLine("for (int __index = __toRelease.Count - 1; __index >= 0; __index--)");
 		Indent(builder, depth + 1).AppendLine("{");
-		Indent(builder, depth + 2).AppendLine("__toRelease[__index]();");
+		EmitCollectingTry(builder, depth + 2, "__toRelease[__index]();");
 		Indent(builder, depth + 1).AppendLine("}");
 		Indent(builder, depth).AppendLine("}");
 	}
@@ -497,12 +586,15 @@ internal static partial class Sources
 		builder.AppendLine();
 		// Outside the lock so an awaited DisposeAsync (user code) never runs under it: run the synchronous
 		// release hooks (reverse creation order) first, then tear down.
+		Indent(builder, depth + 1).AppendLine("global::System.Collections.Generic.List<global::System.Exception>? __failures = null;");
 		if (hasReleases)
 		{
 			EmitDrainReleases(builder, depth + 1);
 		}
 
 		EmitDrainDisposablesAsync(builder, depth + 1);
+		builder.AppendLine();
+		EmitThrowFailures(builder, depth + 1);
 		Indent(builder, depth).AppendLine("}");
 	}
 }

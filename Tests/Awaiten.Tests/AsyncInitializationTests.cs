@@ -1218,6 +1218,19 @@ public partial class AsyncInitializationTests
 			.Because("a failure while disposing the half-warmed scope is reported alongside the original, not swallowed");
 	}
 
+	[Test]
+	public async Task CreateScopeAsync_WhenWarmUpAndSeveralDisposalsThrow_ThrowsOneFlatListWithTheOriginalFirst()
+	{
+		await using FailingWarmUpAndDisposalsContainer.Root container = new();
+		WarmUpRecorder recorder = container.Resolve<WarmUpRecorder>();
+
+		AggregateException thrown = await That(() => container.CreateScopeAsync(Ct))
+			.Throws<AggregateException>();
+
+		await That(thrown.InnerExceptions).IsEqualTo(new[] { recorder.InitFailure, recorder.SecondDisposalFailure, recorder.DisposalFailure })
+			.Because("the AggregateException of the scope's teardown is flattened behind the original failure rather than nested");
+	}
+
 	public sealed class WarmUpRecorder
 	{
 		public int DisposedAsync { get; set; }
@@ -1225,6 +1238,8 @@ public partial class AsyncInitializationTests
 		public Exception? InitFailure { get; set; }
 
 		public Exception? DisposalFailure { get; set; }
+
+		public Exception? SecondDisposalFailure { get; set; }
 	}
 
 	public sealed class WarmedAsyncDisposable(WarmUpRecorder recorder) : IAsyncInitializable, IAsyncDisposable
@@ -1246,6 +1261,17 @@ public partial class AsyncInitializationTests
 		{
 			recorder.DisposalFailure = new InvalidOperationException("dispose-boom");
 			throw recorder.DisposalFailure;
+		}
+	}
+
+	public sealed class SecondWarmedThrowingAsyncDisposable(WarmUpRecorder recorder) : IAsyncInitializable, IAsyncDisposable
+	{
+		public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+		public ValueTask DisposeAsync()
+		{
+			recorder.SecondDisposalFailure = new InvalidOperationException("second-dispose-boom");
+			throw recorder.SecondDisposalFailure;
 		}
 	}
 
@@ -1291,5 +1317,12 @@ public partial class AsyncInitializationTests
 	[Scoped<WarmedThrowingAsyncDisposable>]
 	[Scoped<FailingWarmUp>]
 	public static partial class FailingWarmUpAndDisposalContainer;
+
+	[Container]
+	[Singleton<WarmUpRecorder>]
+	[Scoped<WarmedThrowingAsyncDisposable>]
+	[Scoped<SecondWarmedThrowingAsyncDisposable>]
+	[Scoped<FailingWarmUp>]
+	public static partial class FailingWarmUpAndDisposalsContainer;
 #endif
 }

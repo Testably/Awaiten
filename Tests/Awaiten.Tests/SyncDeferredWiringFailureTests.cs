@@ -74,6 +74,28 @@ public partial class SyncDeferredWiringFailureTests
 		await That(recorder.Disposed).IsEqualTo(1).Because("the owner is not disposed again at teardown");
 	}
 
+	[Test]
+	public async Task Singleton_DeferredMemberAndDisposeThrow_BothFailuresSurface_AndTheEpisodeIsRolledBack()
+	{
+		using SingletonThrowingDisposeContainer.Root container = new();
+		Recorder recorder = container.Resolve<Recorder>();
+
+		AggregateException thrown = await That(() => container.Resolve<FlakyThrowingDisposeOwner>())
+			.Throws<AggregateException>();
+
+		await That(thrown.InnerExceptions.Count).IsEqualTo(2);
+		await That(thrown.InnerExceptions[0].Message).IsEqualTo("first-attempt-boom")
+			.Because("the wiring failure that aborted the resolve comes first");
+		await That(thrown.InnerExceptions[1].Message).IsEqualTo("dispose-boom")
+			.Because("a failure while disposing the failed owner is reported alongside the original, not swallowed");
+
+		FlakyThrowingDisposeOwner second = container.Resolve<FlakyThrowingDisposeOwner>();
+
+		await That(recorder.Constructed).IsEqualTo(2)
+			.Because("the failed episode is still rolled back when the owner's disposal throws, so the retry rebuilds it");
+		await That(second.Dep).IsNotNull();
+	}
+
 	/// <summary>Per-container observation channel: the probes report construction and disposal here.</summary>
 	public sealed class Recorder
 	{
@@ -135,6 +157,28 @@ public partial class SyncDeferredWiringFailureTests
 		public void Dispose() => _recorder.Disposed++;
 	}
 
+	public sealed class FlakyThrowingDisposeOwner : IDisposable
+	{
+		private readonly Recorder _recorder;
+
+		public FlakyThrowingDisposeOwner(Recorder recorder)
+		{
+			_recorder = recorder;
+			_recorder.Constructed++;
+		}
+
+		[Inject(Deferred = true)]
+		public FlakyDep? Dep { get; set; }
+
+		public void Dispose()
+		{
+			if (_recorder.Disposed++ == 0)
+			{
+				throw new InvalidOperationException("dispose-boom");
+			}
+		}
+	}
+
 	public sealed class Leaf;
 
 	/// <summary>A disposable, deferred-member peer: built and registered before its sibling's wiring throws.</summary>
@@ -180,6 +224,12 @@ public partial class SyncDeferredWiringFailureTests
 	[Transient<FlakyDep>]
 	[Singleton<FlakyOwner>]
 	public static partial class SingletonFlakyContainer;
+
+	[Container]
+	[Singleton<Recorder>]
+	[Transient<FlakyDep>]
+	[Singleton<FlakyThrowingDisposeOwner>]
+	public static partial class SingletonThrowingDisposeContainer;
 
 	[Container]
 	[Singleton<Recorder>]
