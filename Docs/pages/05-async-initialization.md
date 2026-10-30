@@ -80,7 +80,7 @@ public static partial class CoffeeShop;
 ```
 
 > ```
-> AWT119: 'Register' resolves 'EspressoMachine' through a synchronous Func<>, but 'EspressoMachine' is async-initialized; resolve it through ResolveAsync, or set SyncResolveAfterInit on the [Container]
+> AWT119: 'Register' resolves 'EspressoMachine' through a synchronous Func<>, but 'EspressoMachine' is async-initialized; resolve it through ResolveAsync, or set AsyncSafety.SyncAfterInit on the [Container]
 > ```
 
 If you do reach it at runtime, for example with `shop.Resolve<EspressoMachine>()`, `Resolve` throws with guidance toward `ResolveAsync`, and `TryResolve` reports it as not available. It never hands back an uninitialized instance.
@@ -130,10 +130,10 @@ If initialization throws, the faulted result is not memoized. The next resolve b
 
 ## Relax the rule when you need to
 
-Set `SyncResolveAfterInit = true` on the container to allow synchronous resolution of async services.
+Set `AsyncSafety = AsyncSafety.SyncAfterInit` on the container to allow synchronous resolution of async services.
 
 ```csharp
-[Container(SyncResolveAfterInit = true)]
+[Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
 [Singleton<EspressoMachine>]
 public static partial class CoffeeShop;
 ```

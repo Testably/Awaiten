@@ -56,7 +56,7 @@ By default a singleton is built the first time it is resolved. Mark it `Eager = 
 [Singleton<EspressoMachine>(Eager = true)]
 ```
 
-Combine `Eager` with async and `SyncResolveAfterInit`, and the singleton is constructed and initialized at build time. A plain eager singleton that is async-initialized cannot be built synchronously at construction, so that combination is a build error ([AWT161](../diagnostics#awt161)).
+Combine `Eager` with async and `AsyncSafety.SyncAfterInit`, and the singleton is constructed and initialized at build time. A plain eager singleton that is async-initialized cannot be built synchronously at construction, so that combination is a build error ([AWT161](../diagnostics#awt161)).
 
 *Note: hooks are for services the container owns. Setting one on a pre-built `Instance` registration is an error ([AWT165](../diagnostics#awt165)). Conflicting coalesced directives across registrations of one implementation are caught too ([AWT166](../diagnostics#awt166)).*
 

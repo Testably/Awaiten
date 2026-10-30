@@ -556,7 +556,7 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     AWT122: a collection dependency is materialized synchronously, so an async-tainted member would be
 	///     resolved without awaiting its initialization. Reported under both strict and loose safety; only
-	///     SyncResolveAfterInit suppresses it.
+	///     AsyncSafety.SyncAfterInit suppresses it.
 	/// </summary>
 	private static void DetectSynchronousAsyncCollection(
 		List<InstanceModel> instances,
@@ -869,7 +869,7 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     Reports <see cref="Diagnostics.EagerAsyncSingleton">AWT161</see> for an async-tainted <c>Eager</c>
 	///     singleton: it has no synchronous construction path, so it cannot be built in the root's synchronous
-	///     constructor. Strict default only; <c>SyncResolveAfterInit</c> emits a blocking resolver and allows it.
+	///     constructor. Strict default only; <c>AsyncSafety.SyncAfterInit</c> emits a blocking resolver and allows it.
 	/// </summary>
 	private static void DetectEagerAsyncSingletons(
 		List<InstanceModel> instances,

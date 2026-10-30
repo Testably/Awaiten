@@ -26,7 +26,7 @@ internal static partial class Sources
 	///     fail to compile). Parameterized services (reachable only through their <c>Func&lt;TArg…, T&gt;</c>) and
 	///     keyed registrations (reached only by <c>[FromKey]</c>) are excluded, since neither has a typed fast path.
 	/// </summary>
-	private static IEnumerable<(string Service, int Index)> UniqueServices(InstanceModel[] instances, bool strict, bool syncResolveAfterInit)
+	private static IEnumerable<(string Service, int Index)> UniqueServices(InstanceModel[] instances, bool strict, bool syncAfterInit)
 	{
 		HashSet<string> seen = new(StringComparer.Ordinal);
 		for (int i = 0; i < instances.Length; i++)
@@ -35,7 +35,7 @@ internal static partial class Sources
 			// Owned<T>), async-tainted services in the strict default (reached only through ResolveAsync), and
 			// requesting-type factories (the typed Resolve<T>() has nowhere to supply the requesting type, so they
 			// go through the Type-based dispatch, which passes null).
-			if (instances[i].IsParameterized || instances[i].IsRequestingTypeFactory || IsWithheld(instances[i], strict) || !EmitsSync(instances[i], syncResolveAfterInit))
+			if (instances[i].IsParameterized || instances[i].IsRequestingTypeFactory || IsWithheld(instances[i], strict) || !EmitsSync(instances[i], syncAfterInit))
 			{
 				continue;
 			}
@@ -59,9 +59,9 @@ internal static partial class Sources
 	///     for each registered service type to a just-written base list, so the scope (and its root) exposes a typed
 	///     resolution fast path.
 	/// </summary>
-	private static void EmitGenericResolverBases(StringBuilder builder, InstanceModel[] instances, bool strict, bool syncResolveAfterInit)
+	private static void EmitGenericResolverBases(StringBuilder builder, InstanceModel[] instances, bool strict, bool syncAfterInit)
 	{
-		foreach ((string service, int _) in UniqueServices(instances, strict, syncResolveAfterInit))
+		foreach ((string service, int _) in UniqueServices(instances, strict, syncAfterInit))
 		{
 			builder.Append(", global::Awaiten.IAwaitenResolver<").Append(service).Append('>');
 		}
@@ -78,7 +78,7 @@ internal static partial class Sources
 	///     sequence names a singleton's <c>__typedTask</c> field on the Root.
 	/// </summary>
 	private static IEnumerable<(string Service, int Index)> TypedAsyncServices(InstanceModel[] instances, bool strict)
-		=> UniqueServices(instances, strict, syncResolveAfterInit: true);
+		=> UniqueServices(instances, strict, syncAfterInit: true);
 
 	/// <summary>
 	///     Emits the Root's <c>__typedTask</c> field for each singleton of the typed async fast path: the completed
@@ -206,9 +206,9 @@ internal static partial class Sources
 	///     types get a typed path; the synthetic <c>Func&lt;T&gt;</c>/<c>Lazy&lt;T&gt;</c> relationship entries
 	///     remain reachable through the Type-based dispatch table.
 	/// </summary>
-	private static void EmitGenericResolverImpls(StringBuilder builder, int depth, InstanceModel[] instances, Names names, bool strict, bool syncResolveAfterInit)
+	private static void EmitGenericResolverImpls(StringBuilder builder, int depth, InstanceModel[] instances, Names names, bool strict, bool syncAfterInit)
 	{
-		foreach ((string service, int index) in UniqueServices(instances, strict, syncResolveAfterInit))
+		foreach ((string service, int index) in UniqueServices(instances, strict, syncAfterInit))
 		{
 			// An instance method on the Scope, resolving over `this`: a singleton through its Root-hosted resolver
 			// over the root, a scoped/transient through its Scope-hosted resolver over this scope.
@@ -257,9 +257,9 @@ internal static partial class Sources
 	///     services are omitted (not resolvable by service type alone); a user-keyed registration is advertised with
 	///     its <c>Key</c>, while the synthetic decorator/contextual keys stay internal. An async-tainted service is
 	///     flagged <c>requiresAsync</c> so the bridge projects it as a <c>Task&lt;T&gt;</c>, unless
-	///     <paramref name="syncResolveAfterInit" /> makes it synchronously resolvable after warm-up.
+	///     <paramref name="syncAfterInit" /> makes it synchronously resolvable after warm-up.
 	/// </summary>
-	private static void EmitRegistrations(StringBuilder fields, StringBuilder members, int depth, InstanceModel[] instances, bool syncResolveAfterInit)
+	private static void EmitRegistrations(StringBuilder fields, StringBuilder members, int depth, InstanceModel[] instances, bool syncAfterInit)
 	{
 		// The registrations are compile-time constants for the container type, so they live in one static
 		// array rather than being rebuilt per Root construction.
@@ -276,7 +276,7 @@ internal static partial class Sources
 				continue;
 			}
 
-			bool requiresAsync = instance.IsAsyncTainted && !syncResolveAfterInit;
+			bool requiresAsync = instance.IsAsyncTainted && !syncAfterInit;
 			bool externallyOwned = instance.Production == ProductionKind.Instance;
 			// The synthetic decorator/contextual keys are internal wiring, never advertised. Unkeyed and
 			// user-keyed registrations are both advertised, the latter carrying its user-declared Key.
@@ -365,7 +365,7 @@ internal static partial class Sources
 	///     <see cref="EmitResolvabilityApi" /> can probe the same tables without duplicating the decision of whether
 	///     they were emitted at all.
 	/// </summary>
-	private static DispatchShape EmitResolutionApi(ApiRegions regions, int depth, EmitContext context, bool strict, bool syncResolveAfterInit, string[] varianceCandidates, bool hasWithheld)
+	private static DispatchShape EmitResolutionApi(ApiRegions regions, int depth, EmitContext context, bool strict, bool syncAfterInit, string[] varianceCandidates, bool hasWithheld)
 	{
 		(StringBuilder members, StringBuilder fields, StringBuilder helpers) = regions;
 		InstanceModel[] instances = context.Instances;
@@ -374,7 +374,7 @@ internal static partial class Sources
 		StringBuilder builder = members;
 		Separate(members);
 
-		List<DispatchEntry> entries = BuildDispatchEntries(instances, names, serviceToIndex, strict, syncResolveAfterInit);
+		List<DispatchEntry> entries = BuildDispatchEntries(instances, names, serviceToIndex, strict, syncAfterInit);
 		// The runtime variance-fallback candidates: the registered variant closed-generic-interface service
 		// types that are actually by-type dispatchable, in registration order. A candidate excluded from the
 		// synchronous dispatch (async-tainted under the strict default, or failed to build) is dropped. The
@@ -745,7 +745,7 @@ internal static partial class Sources
 	///     factory/lazy bound to this owner's resolver). The order is identical on the container and its
 	///     scope, so a single static table built on the container is valid for both.
 	/// </summary>
-	private static List<DispatchEntry> BuildDispatchEntries(InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool strict, bool syncResolveAfterInit)
+	private static List<DispatchEntry> BuildDispatchEntries(InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool strict, bool syncAfterInit)
 	{
 		List<DispatchEntry> entries = new();
 		HashSet<string> seen = new(StringComparer.Ordinal);
@@ -769,7 +769,7 @@ internal static partial class Sources
 		// is reachable only through ResolveAsync, so neither its bare type nor any relationship over it is added.
 		for (int i = 0; i < instances.Length; i++)
 		{
-			if (!EmitsSync(instances[i], syncResolveAfterInit))
+			if (!EmitsSync(instances[i], syncAfterInit))
 			{
 				continue;
 			}
@@ -783,7 +783,7 @@ internal static partial class Sources
 		// the Func<TArg…, T> added above.
 		for (int i = 0; i < instances.Length; i++)
 		{
-			if (!instances[i].IsParameterized && EmitsSync(instances[i], syncResolveAfterInit))
+			if (!instances[i].IsParameterized && EmitsSync(instances[i], syncAfterInit))
 			{
 				AddRelationshipEntries(instances[i], names.Resolver(i), entries, seen, IsFuncWithheld(instances, i, serviceToIndex, membership, strict));
 			}

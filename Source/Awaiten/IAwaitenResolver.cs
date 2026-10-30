@@ -31,7 +31,7 @@ public interface IAwaitenResolver
 	///     service (one that is <see cref="IAsyncInitializable" /> or reaches one through its non-deferred
 	///     dependencies) has no synchronous path, so this returns <see langword="false" /> even though the service
 	///     is registered. Resolve it through <see cref="IAwaitenAsyncResolver.ResolveAsync(Type, System.Threading.CancellationToken)" /> instead, or set
-	///     <c>SyncResolveAfterInit</c> on the <c>[Container]</c> to make it synchronously resolvable after warm-up.
+	///     <c>AsyncSafety.SyncAfterInit</c> on the <c>[Container]</c> to make it synchronously resolvable after warm-up.
 	/// </remarks>
 	bool TryResolve(Type serviceType, [NotNullWhen(true)] out object? instance);
 

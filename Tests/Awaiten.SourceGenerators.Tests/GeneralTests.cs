@@ -2385,7 +2385,7 @@ public class GeneralTests
 	}
 
 	[Test]
-	public async Task AsyncRequestingType_UnderSyncResolveAfterInit_EmitsABlockingSyncResolverTakingTheRequestingType()
+	public async Task AsyncRequestingType_UnderSyncAfterInit_EmitsABlockingSyncResolverTakingTheRequestingType()
 	{
 		GeneratorResult result = Generator.Run("""
 			#nullable enable
@@ -2399,7 +2399,7 @@ public class GeneralTests
 			public sealed class Logger : ILogger { public Logger(string c) { } }
 			public sealed class Alpha { public Alpha(ILogger logger) { } }
 
-			[Container(SyncResolveAfterInit = true)]
+			[Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
 			[Transient<ILogger>(Factory = nameof(CreateLogger))]
 			[Transient<Alpha>]
 			public static partial class MyContainer

@@ -7,6 +7,11 @@ namespace Awaiten
     {
         public ArgAttribute() { }
     }
+    public enum AsyncSafety
+    {
+        Strict = 0,
+        SyncAfterInit = 1,
+    }
     public readonly struct AwaitenExternalDependency : System.IEquatable<Awaiten.AwaitenExternalDependency>
     {
         public AwaitenExternalDependency(System.Type serviceType, object? key = null) { }
@@ -101,8 +106,8 @@ namespace Awaiten
     public sealed class ContainerAttribute : System.Attribute
     {
         public ContainerAttribute() { }
+        public Awaiten.AsyncSafety AsyncSafety { get; set; }
         public Awaiten.LifetimeSafety LifetimeSafety { get; set; }
-        public bool SyncResolveAfterInit { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
     public sealed class DecorateAttribute : System.Attribute

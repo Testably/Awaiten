@@ -199,11 +199,11 @@ public sealed partial class FeatureDetectionTests
 		public static partial class KeyedAsyncOnlyContainer;
 
 		/// <summary>
-		///     <c>SyncResolveAfterInit</c> makes a warmed async-tainted service synchronously resolvable, and the
+		///     <c>AsyncSafety.SyncAfterInit</c> makes a warmed async-tainted service synchronously resolvable, and the
 		///     metadata advertises it as synchronous — the one input <c>HasSyncRegistration</c> and the
 		///     <c>Task&lt;T&gt;</c> projection read, so the reported shapes swap over with it.
 		/// </summary>
-		[Container(SyncResolveAfterInit = true)]
+		[Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
 		[Singleton<AsyncOnly>]
 		public static partial class SyncAfterInitContainer;
 
@@ -316,7 +316,7 @@ public sealed partial class FeatureDetectionTests
 		}
 
 		[Test]
-		public async Task SyncResolveAfterInitMovesTheAnswerToTheBareType()
+		public async Task SyncAfterInitMovesTheAnswerToTheBareType()
 		{
 			Type[] shapes =
 			[
@@ -610,7 +610,7 @@ public sealed partial class FeatureDetectionTests
 			string? reason = container.GetResolvability(typeof(Registrations.AsyncOnly), null).Reason;
 
 			await That(reason).Contains("ResolveAsync");
-			await That(reason).Contains("SyncResolveAfterInit")
+			await That(reason).Contains("AsyncSafety.SyncAfterInit")
 				.Because("a reason a caller cannot act on is no better than the generic failure it replaces");
 		}
 

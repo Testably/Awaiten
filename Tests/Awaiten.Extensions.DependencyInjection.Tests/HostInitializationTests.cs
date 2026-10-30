@@ -10,7 +10,7 @@ public sealed partial class HostInitializationTests
 	public sealed class AsyncResource : IAsyncInitializable
 	{
 		// Counted statically so the test observes initialization without resolving the singleton. A
-		// synchronous resolve of a SyncResolveAfterInit service before warm-up would itself drive it.
+		// synchronous resolve of an AsyncSafety.SyncAfterInit service before warm-up would itself drive it.
 		internal static int InitializeCount;
 
 		public Task InitializeAsync(CancellationToken cancellationToken)
@@ -21,7 +21,7 @@ public sealed partial class HostInitializationTests
 	}
 
 	// Pragmatic mode so the warmed async singleton can be resolved synchronously through MS.DI.
-	[Container(SyncResolveAfterInit = true)]
+	[Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
 	[Singleton<AsyncResource>]
 	public static partial class HostContainer;
 
@@ -77,7 +77,7 @@ public sealed partial class HostInitializationTests
 		}
 	}
 
-	[Container(SyncResolveAfterInit = true)]
+	[Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
 	[ImportService<IClock>]
 	[Singleton<ExternalAsyncResource>]
 	public static partial class ExternalHostContainer;
@@ -136,7 +136,7 @@ public sealed partial class HostInitializationTests
 		}
 	}
 
-	[Container(SyncResolveAfterInit = true)]
+	[Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
 	[Singleton<FactoryAsyncResource>]
 	public static partial class FactoryContainer;
 

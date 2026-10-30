@@ -7,7 +7,7 @@ namespace Awaiten.Tests;
 ///     Runtime behavior of async initialization: <see cref="IAsyncInitializable" /> services are
 ///     constructed and initialized through <c>ResolveAsync</c> / <c>InitializeAsync</c> /
 ///     <c>CreateScopeAsync</c>, exactly once, in dependency order, and thread-safely. In the strict
-///     default an async-tainted service is reachable only asynchronously; <c>SyncResolveAfterInit</c>
+///     default an async-tainted service is reachable only asynchronously; <c>AsyncSafety.SyncAfterInit</c>
 ///     relaxes that.
 /// </summary>
 [NotInParallel(nameof(AsyncInitializationTests))]
@@ -166,13 +166,25 @@ public partial class AsyncInitializationTests
 	}
 
 	[Test]
+	public async Task ExplicitStrictAsyncSafety_KeepsAWarmedSingletonAsyncOnly()
+	{
+		using ExplicitStrictContainer.Root container = new();
+
+		await container.InitializeAsync(Ct);
+
+		await That(container.TryResolve(typeof(Connection), out _)).IsFalse()
+			.Because("AsyncSafety.Strict spelled out behaves like the default, even after InitializeAsync warmed the singleton");
+		await That(() => container.Resolve<Connection>()).Throws<InvalidOperationException>();
+	}
+
+	[Test]
 	public async Task PragmaticMode_AllowsSyncResolutionOfAWarmedSingleton()
 	{
 		using PragmaticContainer.Root container = new();
 
 		await container.InitializeAsync(Ct);
 
-		// SyncResolveAfterInit = true: once warmed, the singleton is also resolvable synchronously and
+		// AsyncSafety = AsyncSafety.SyncAfterInit: once warmed, the singleton is also resolvable synchronously and
 		// returns the very instance that ResolveAsync initialized.
 		Connection sync = container.Resolve<Connection>();
 		Connection async = await container.ResolveAsync<Connection>(Ct);
@@ -441,10 +453,14 @@ public partial class AsyncInitializationTests
 	[Singleton<Plain>]
 	public static partial class AsyncContainer;
 
-	[Container(SyncResolveAfterInit = true)]
+	[Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
 	[Singleton<Connection>]
 	[Transient<Worker>]
 	public static partial class PragmaticContainer;
+
+	[Container(AsyncSafety = AsyncSafety.Strict)]
+	[Singleton<Connection>]
+	public static partial class ExplicitStrictContainer;
 
 	public sealed class Database : IAsyncInitializable
 	{
@@ -671,7 +687,7 @@ public partial class AsyncInitializationTests
 	}
 
 	[Test]
-	public async Task AsyncFactory_Singleton_WarmedByInitializeAsync_IsSyncResolvableUnderSyncResolveAfterInit()
+	public async Task AsyncFactory_Singleton_WarmedByInitializeAsync_IsSyncResolvableUnderSyncAfterInit()
 	{
 		PragmaticAsyncFactoryService.Reset();
 		using PragmaticAsyncFactoryContainer.Root container = new();
@@ -682,7 +698,7 @@ public partial class AsyncInitializationTests
 		PragmaticAsyncFactoryService async = await container.ResolveAsync<PragmaticAsyncFactoryService>(Ct);
 
 		await That(sync).IsSameAs(async)
-			.Because("SyncResolveAfterInit = true: once warmed, the async-factory singleton is also resolvable synchronously and returns the very instance ResolveAsync built");
+			.Because("AsyncSafety = AsyncSafety.SyncAfterInit: once warmed, the async-factory singleton is also resolvable synchronously and returns the very instance ResolveAsync built");
 		await That(PragmaticAsyncFactoryService.BuildCount).IsEqualTo(1)
 			.Because("warm-up and the two resolutions share the single memoized instance, so the factory ran once");
 	}
@@ -784,7 +800,7 @@ public partial class AsyncInitializationTests
 		public static void Built() => BuildCount++;
 	}
 
-	[Container(SyncResolveAfterInit = true)]
+	[Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
 	[Singleton<PragmaticAsyncFactoryService>(Factory = nameof(CreateAsync))]
 	public static partial class PragmaticAsyncFactoryContainer
 	{

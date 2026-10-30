@@ -13,13 +13,13 @@ namespace Awaiten;
 public sealed class ContainerAttribute : Attribute
 {
 	/// <summary>
-	///     Opt into synchronous resolution of async-initialized services after <c>InitializeAsync</c> has
-	///     completed. Defaults to <see langword="false" /> (strict: async-tainted services must be resolved
-	///     through <c>ResolveAsync</c>). When enabled, a warmed service returns immediately from a synchronous
-	///     resolve, but resolving one before warm-up blocks the calling thread until initialization completes.
-	///     Prefer warming up first, and beware blocking a captured synchronization context.
+	///     How strictly the container keeps asynchronous initialization explicit. Defaults to
+	///     <see cref="Awaiten.AsyncSafety.Strict" />, where async-initialized services must be resolved through
+	///     <c>ResolveAsync</c>. Set <see cref="Awaiten.AsyncSafety.SyncAfterInit" /> to also resolve them
+	///     synchronously after <c>InitializeAsync</c> has warmed them; resolving one before warm-up then blocks the
+	///     calling thread until its initialization completes.
 	/// </summary>
-	public bool SyncResolveAfterInit { get; set; }
+	public AsyncSafety AsyncSafety { get; set; }
 
 	/// <summary>
 	///     How strictly the container guards against unbounded disposal leaks. Defaults to

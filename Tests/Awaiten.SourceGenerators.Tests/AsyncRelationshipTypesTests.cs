@@ -142,7 +142,7 @@ public class AsyncRelationshipTypesTests
 		                                           public Factory(Func<int, Robot> make) { }
 		                                       }
 
-		                                       [Container(SyncResolveAfterInit = true)]
+		                                       [Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
 		                                       [Transient<Robot>]
 		                                       [Singleton<Factory>]
 		                                       public static partial class MyContainer

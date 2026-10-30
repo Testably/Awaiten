@@ -15,7 +15,7 @@ internal sealed record ContainerModel(
 	EquatableArray<InstanceModel> Instances,
 	EquatableArray<DiagnosticInfo> Diagnostics,
 	bool Strict,
-	bool SyncResolveAfterInit,
+	bool SyncAfterInit,
 	bool HasAsyncDisposable,
 	EquatableArray<ServiceMembers> Collections = default,
 	EquatableArray<string> VarianceCandidates = default,

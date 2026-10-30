@@ -16,10 +16,10 @@ internal static partial class Sources
 	///     dispatch, with the same guidance messages. Returns whether the <c>__keyed</c> table was emitted, so the
 	///     resolvability probe knows whether it may look there.
 	/// </summary>
-	private static bool EmitKeyedResolutionApi(ApiRegions regions, int depth, EmitContext context, bool strict, bool syncResolveAfterInit, bool asObjectEmitted)
+	private static bool EmitKeyedResolutionApi(ApiRegions regions, int depth, EmitContext context, bool strict, bool syncAfterInit, bool asObjectEmitted)
 	{
 		(StringBuilder members, StringBuilder fields, StringBuilder helpers) = regions;
-		List<KeyedDispatchEntry> entries = BuildKeyedEntries(context, strict, syncResolveAfterInit);
+		List<KeyedDispatchEntry> entries = BuildKeyedEntries(context, strict, syncAfterInit);
 		bool hasEntries = entries.Count > 0;
 		bool keyedAsync = entries.Any(entry => entry.Async is not null);
 
@@ -143,7 +143,7 @@ internal static partial class Sources
 	///     strict default), its async resolver (null when synchronous), whether it is root-withheld under strict
 	///     lifetime safety, and the guidance a synchronous miss throws.
 	/// </summary>
-	private static List<KeyedDispatchEntry> BuildKeyedEntries(EmitContext context, bool strict, bool syncResolveAfterInit)
+	private static List<KeyedDispatchEntry> BuildKeyedEntries(EmitContext context, bool strict, bool syncAfterInit)
 	{
 		List<KeyedDispatchEntry> entries = new();
 		HashSet<ServiceKey> seen = new();
@@ -158,7 +158,7 @@ internal static partial class Sources
 					continue;
 				}
 
-				if (TryBuildKeyedEntry(serviceKey, context, strict, syncResolveAfterInit) is { } entry)
+				if (TryBuildKeyedEntry(serviceKey, context, strict, syncAfterInit) is { } entry)
 				{
 					entries.Add(entry);
 				}
@@ -173,7 +173,7 @@ internal static partial class Sources
 	///     winning registration has no bare (key-only) resolution (a parameterized service or a requesting-type
 	///     factory, reachable only through its <c>Func&lt;…&gt;</c> relationship).
 	/// </summary>
-	private static KeyedDispatchEntry? TryBuildKeyedEntry(ServiceKey serviceKey, EmitContext context, bool strict, bool syncResolveAfterInit)
+	private static KeyedDispatchEntry? TryBuildKeyedEntry(ServiceKey serviceKey, EmitContext context, bool strict, bool syncAfterInit)
 	{
 		// The authoritative winner of a (service, key) slot, so imperative keyed resolution agrees with
 		// [FromKey] injection (which resolves through the same map).
@@ -190,7 +190,7 @@ internal static partial class Sources
 		string service = serviceKey.Service;
 		string resolver = context.Names.Resolver(index);
 		bool rootOwned = IsRootOwned(instance);
-		bool emitsSync = EmitsSync(instance, syncResolveAfterInit);
+		bool emitsSync = EmitsSync(instance, syncAfterInit);
 		bool withheld = IsWithheld(instance, strict);
 
 		string? sync = KeyedSyncCall(emitsSync, rootOwned, resolver);

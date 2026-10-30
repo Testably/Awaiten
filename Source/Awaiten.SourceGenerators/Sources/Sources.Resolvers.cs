@@ -8,14 +8,14 @@ internal static partial class Sources
 	/// <summary>
 	///     The async collections resolvable by type through <c>ResolveAsync</c>: each unkeyed, non-synthesis-
 	///     suppressed collection whose async shape is not itself registered and that is not synchronously
-	///     materializable (it holds an async-tainted member). Empty under <c>SyncResolveAfterInit</c>, where every
+	///     materializable (it holds an async-tainted member). Empty under <c>AsyncSafety.SyncAfterInit</c>, where every
 	///     collection is synchronously materializable. Each is paired with its async resolver method, named by the
 	///     collection's position in <see cref="Names.Collections" /> so emission and the async dispatch arm agree.
 	/// </summary>
 	private static IEnumerable<(ServiceMembers Collection, string Method)> AsyncByTypeCollections(
-		Names names, Dictionary<ServiceKey, int> serviceToIndex, bool syncResolveAfterInit)
+		Names names, Dictionary<ServiceKey, int> serviceToIndex, bool syncAfterInit)
 	{
-		if (syncResolveAfterInit)
+		if (syncAfterInit)
 		{
 			yield break;
 		}
@@ -232,7 +232,7 @@ internal static partial class Sources
 	///     collection. Each carries the guidance a root-withheld arm throws off the Root (null when not withheld).
 	/// </summary>
 	private static List<(string Service, string AsyncResolver, bool RootOwned, bool RequestingType, string? RootWithheldMessage)> BuildAsyncArms(
-		InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool strict, bool syncResolveAfterInit)
+		InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool strict, bool syncAfterInit)
 	{
 		List<(string Service, string AsyncResolver, bool RootOwned, bool RequestingType, string? RootWithheldMessage)> arms = new();
 		for (int i = 0; i < instances.Length; i++)
@@ -271,7 +271,7 @@ internal static partial class Sources
 		}
 
 		CollectionMembership membership = AwaitenGenerator.MembershipIndices(names.Collections, names.KeyedCollections, implToIndex);
-		foreach ((ServiceMembers collection, string method) in AsyncByTypeCollections(names, serviceToIndex, syncResolveAfterInit))
+		foreach ((ServiceMembers collection, string method) in AsyncByTypeCollections(names, serviceToIndex, syncAfterInit))
 		{
 			ServiceKey collectionKey = new(collection.Service, collection.Key);
 			string shape = AwaitenGenerator.AsyncEnumerableShapeType(collection.Service);
@@ -295,14 +295,14 @@ internal static partial class Sources
 	///     Whether the <c>__AsObject</c> Task-to-<c>Task&lt;object&gt;</c> helper was emitted (it is when any
 	///     async arm exists), so the keyed dispatch can share it instead of emitting a duplicate.
 	/// </returns>
-	private static bool EmitAsyncResolutionApi(ApiRegions regions, int depth, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool strict, bool syncResolveAfterInit)
+	private static bool EmitAsyncResolutionApi(ApiRegions regions, int depth, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool strict, bool syncAfterInit)
 	{
 		const string task = "global::System.Threading.Tasks.Task";
 		(StringBuilder members, StringBuilder fields, StringBuilder helpers) = regions;
 		StringBuilder builder = members;
 		Separate(members);
 
-		List<(string Service, string AsyncResolver, bool RootOwned, bool RequestingType, string? RootWithheldMessage)> arms = BuildAsyncArms(instances, names, serviceToIndex, strict, syncResolveAfterInit);
+		List<(string Service, string AsyncResolver, bool RootOwned, bool RequestingType, string? RootWithheldMessage)> arms = BuildAsyncArms(instances, names, serviceToIndex, strict, syncAfterInit);
 
 		AppendXmlSummary(builder, depth,
 			"Asynchronously resolves the service registered for <paramref name=\"serviceType\" />, awaiting any async initialization.");
@@ -480,7 +480,7 @@ internal static partial class Sources
 
 	/// <summary>
 	///     Emits the synchronous resolver for an async-tainted service in pragmatic mode
-	///     (<c>SyncResolveAfterInit</c>): it blocks on the memoizing async resolver (the single
+	///     (<c>AsyncSafety.SyncAfterInit</c>): it blocks on the memoizing async resolver (the single
 	///     construction-and-initialization path) rather than building a second, uninitialized instance. Once
 	///     the service has been warmed (through <c>InitializeAsync</c> / <c>CreateScopeAsync</c> / an earlier
 	///     <c>ResolveAsync</c>) the async resolver returns a completed task, so this returns the cached
@@ -505,7 +505,7 @@ internal static partial class Sources
 		}
 
 		AppendXmlSummary(builder, depth,
-			$"Resolves {XmlTypeRef(instance.ConstructedType)} by blocking on its async resolver (<c>SyncResolveAfterInit</c>).");
+			$"Resolves {XmlTypeRef(instance.ConstructedType)} by blocking on its async resolver (<c>AsyncSafety.SyncAfterInit</c>).");
 		Indent(builder, depth).Append("internal static ").Append(instance.ConstructedType).Append(' ')
 			.Append(names.Resolver(index)).Append('(').Append(owner).Append(" __s").Append(signature).AppendLine(")");
 		Indent(builder, depth).AppendLine("{");

@@ -231,7 +231,7 @@ public class AsyncFactoryTests
 	}
 
 	[Test]
-	public async Task TaskFactory_UnderSyncResolveAfterInit_WarmsTheSingletonAndExposesItSynchronously()
+	public async Task TaskFactory_UnderSyncAfterInit_WarmsTheSingletonAndExposesItSynchronously()
 	{
 		GeneratorResult result = Generator.Run("""
 		                                       using Awaiten;
@@ -241,7 +241,7 @@ public class AsyncFactoryTests
 
 		                                       public sealed class Foo { }
 
-		                                       [Container(SyncResolveAfterInit = true)]
+		                                       [Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
 		                                       [Singleton<Foo>(Factory = nameof(Create))]
 		                                       public static partial class MyContainer
 		                                       {

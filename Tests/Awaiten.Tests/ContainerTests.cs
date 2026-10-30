@@ -11,10 +11,10 @@ public sealed class ContainerTests
 	}
 
 	[Test]
-	public async Task SyncResolveAfterInit_ShouldInitializeToFalse()
+	public async Task AsyncSafety_ShouldInitializeToStrict()
 	{
 		ContainerAttribute sut = new();
 
-		await That(sut.SyncResolveAfterInit).IsFalse();
+		await That(sut.AsyncSafety).IsEqualTo(AsyncSafety.Strict);
 	}
 }

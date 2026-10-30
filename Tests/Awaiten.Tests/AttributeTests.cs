@@ -131,9 +131,9 @@ public sealed class AttributeTests
 	[Test]
 	public async Task ContainerAttribute_RoundTripsItsOptions()
 	{
-		ContainerAttribute attribute = new() { SyncResolveAfterInit = true, LifetimeSafety = LifetimeSafety.Loose };
+		ContainerAttribute attribute = new() { AsyncSafety = AsyncSafety.SyncAfterInit, LifetimeSafety = LifetimeSafety.Loose };
 
-		await That(attribute.SyncResolveAfterInit).IsTrue();
+		await That(attribute.AsyncSafety).IsEqualTo(AsyncSafety.SyncAfterInit);
 		await That(attribute.LifetimeSafety).IsEqualTo(LifetimeSafety.Loose);
 	}
 }
