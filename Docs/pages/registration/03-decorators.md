@@ -40,7 +40,22 @@ Need a different order? Set `Order`. A higher `Order` sits further out.
 
 ## Collections are decorated too
 
-If a service has several implementations, each one is wrapped. A consumer that asks for `IEnumerable<IPaymentTerminal>` gets a collection of decorated terminals. There is no way to reach an undecorated instance.
+If a service has several implementations, each one is wrapped. A consumer that asks for `IEnumerable<IPaymentTerminal>` gets a collection of decorated terminals, so neither a plain resolve nor the collection reaches an undecorated instance. A [`WhenInjectedInto`](./keyed-services#bind-a-variant-to-a-consumer-with-wheninjectedinto) registration is wrapped by the same chain.
+
+## Keyed registrations are not decorated
+
+A decorator wraps the unkeyed registrations of its service only. A registration with a `Key` stays undecorated, so a keyed resolve, a `[FromKey]` parameter and a [keyed dictionary](../resolution/keyed-dictionaries) get the bare implementation:
+
+```csharp
+[Singleton<CardTerminal, IPaymentTerminal>]
+[Singleton<CashTerminal, IPaymentTerminal>(Key = "backup")]
+[Decorate<LoggingTerminal, IPaymentTerminal>]
+
+// Resolve<IPaymentTerminal>()         returns LoggingTerminal(CardTerminal)
+// Resolve<IPaymentTerminal>("backup") returns CashTerminal
+```
+
+This holds even when the same implementation is registered both with and without a key. A service registered only under keys has nothing to decorate ([AWT123](../diagnostics#awt123)).
 
 ## Decorate every closing of an open generic
 
