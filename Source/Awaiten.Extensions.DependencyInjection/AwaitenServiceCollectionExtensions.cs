@@ -120,7 +120,7 @@ public static class AwaitenServiceCollectionExtensions
 			IAwaitenScope scope = sp.GetRequiredService<AwaitenRootOwner<TRoot>>().Root.CreateScope();
 			if (hasExternal)
 			{
-				((IAwaitenExternalResolverHost)scope).ExternalResolver = new ServiceProviderExternalResolver(sp);
+				((IAwaitenExternalResolverHost)scope).SetExternalResolver(new AwaitenServiceProviderExternalResolver(sp));
 			}
 
 			return new AwaitenScopeHolder<TRoot>(scope);
@@ -243,7 +243,10 @@ public static class AwaitenServiceCollectionExtensions
 		AwaitenRootProviderProbe probe = provider.GetRequiredService<AwaitenRootProviderProbe>();
 		lock (probe)
 		{
-			root.ExternalResolver ??= new ServiceProviderExternalResolver(probe.RootProvider);
+			if (root.ExternalResolver is null)
+			{
+				root.SetExternalResolver(new AwaitenServiceProviderExternalResolver(probe.RootProvider));
+			}
 		}
 	}
 

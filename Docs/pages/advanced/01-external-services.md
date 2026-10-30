@@ -84,7 +84,7 @@ var register = shop.Resolve<Register>();   // its IPaymentGateway comes from Hos
 
 The `key` argument carries the `[FromKey]` value for a keyed external dependency. A child scope, and the throwaway scope behind an `Owned<T>`, inherit the resolver from the scope that created them, so passing it once to the root is enough.
 
-A scope's resolver is set once. Hosts that wire a resolver later, as the MS.DI bridge does for each scope, set it through `IAwaitenExternalResolverHost.ExternalResolver`. Setting the resolver a scope already holds again does nothing; setting a different one throws an `InvalidOperationException`, because the scope would then mix instances from two providers.
+A scope's resolver is set once. Hosts that wire a resolver later, as the MS.DI bridge does for each scope, call `IAwaitenExternalResolverHost.SetExternalResolver`. Setting the resolver a scope already holds again does nothing; setting a different one throws an `InvalidOperationException`, because the scope would then mix instances from two providers.
 
 ## Verifying the wiring
 

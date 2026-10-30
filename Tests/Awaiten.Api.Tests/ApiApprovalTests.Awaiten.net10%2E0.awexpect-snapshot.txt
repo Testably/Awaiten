@@ -163,7 +163,8 @@ namespace Awaiten
     }
     public interface IAwaitenExternalResolverHost
     {
-        Awaiten.IExternalResolver? ExternalResolver { get; set; }
+        Awaiten.IExternalResolver? ExternalResolver { get; }
+        void SetExternalResolver(Awaiten.IExternalResolver resolver);
     }
     public interface IAwaitenResolver
     {

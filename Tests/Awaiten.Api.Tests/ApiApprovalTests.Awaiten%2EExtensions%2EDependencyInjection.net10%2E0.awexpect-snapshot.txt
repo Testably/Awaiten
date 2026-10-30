@@ -24,6 +24,11 @@ namespace Awaiten.Extensions.DependencyInjection
         public bool IsKeyedService(System.Type serviceType, object? serviceKey) { }
         public bool IsService(System.Type serviceType) { }
     }
+    public sealed class AwaitenServiceProviderExternalResolver : Awaiten.IExternalResolver
+    {
+        public AwaitenServiceProviderExternalResolver(System.IServiceProvider provider) { }
+        public bool TryResolve(System.Type serviceType, object? key, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? instance) { }
+    }
     public sealed class AwaitenServiceProviderFactory<TRoot> : Microsoft.Extensions.DependencyInjection.IServiceProviderFactory<TRoot> where TRoot : class, Awaiten.IAwaitenRoot, new()
     {
         public AwaitenServiceProviderFactory(System.Action<Awaiten.Extensions.DependencyInjection.AwaitenContainerBuilder<TRoot>>? configure = null) { }
@@ -34,11 +39,6 @@ namespace Awaiten.Extensions.DependencyInjection
     {
         public static void VerifyAgainst(this Awaiten.IAwaitenRoot container, System.IServiceProvider provider) { }
         public static System.IServiceProvider VerifyAwaitenContainers(this System.IServiceProvider provider) { }
-    }
-    public sealed class ServiceProviderExternalResolver : Awaiten.IExternalResolver
-    {
-        public ServiceProviderExternalResolver(System.IServiceProvider provider) { }
-        public bool TryResolve(System.Type serviceType, object? key, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? instance) { }
     }
 }
 
