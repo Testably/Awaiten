@@ -228,6 +228,10 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 
 		GraphModel graph = BuildGraph(containerSymbol, compilation, diagnostics, cancellationToken);
 
+		// AWT179 is reported by AwaitenAnalyzer from its own graph build: a generator diagnostic is not tied to a
+		// syntax tree, so it could not be suppressed in source.
+		diagnostics.RemoveAll(diagnostic => ReferenceEquals(diagnostic.Descriptor, Diagnostics.DuplicateInjectProperty));
+
 		ValidateRuntimeArguments(graph.Instances, graph.InstanceLocations, graph.ServiceToImpl, graph.ImplToIndex, diagnostics);
 
 		LocationInfo? containerLocation = LocationInfo.From(containerSymbol.Locations.FirstOrDefault());
@@ -400,7 +404,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 	/// <summary>
 	///     Resolves the container's object graph: coalesces registrations, builds an <see cref="InstanceModel" />
 	///     per implementation and computes the dependency edges. Registration faults (AWT101/103/104/107-112) go
-	///     to <paramref name="diagnostics" />. Shared by the generator and <see cref="AwaitenAnalyzer" /> (AWT118).
+	///     to <paramref name="diagnostics" />. Shared by the generator and <see cref="AwaitenAnalyzer" /> (AWT118, AWT179).
 	/// </summary>
 	internal static GraphModel BuildGraph(
 		INamedTypeSymbol containerSymbol,

@@ -27,7 +27,9 @@ namespace Awaiten.SourceGenerators;
 ///     instance (a singleton or pre-built instance) always lives on the <c>Root</c>, so it never faults a
 ///     child <c>Scope</c>'s disposal. Also reports <see cref="Diagnostics.SuppressedDisposalProjected">AWT214</see>
 ///     where a container that suppresses the disposal of a possibly disposable service is projected into
-///     Microsoft.Extensions.DependencyInjection, which would dispose it anyway.
+///     Microsoft.Extensions.DependencyInjection, which would dispose it anyway. Also reports
+///     <see cref="Diagnostics.DuplicateInjectProperty">AWT179</see>, which the graph build detects and the generator
+///     leaves to the analyzer so that it can be suppressed in source.
 /// </summary>
 /// <remarks>
 ///     AWT118 is an analyzer (rather than a generator) diagnostic so that, under loose lifetime safety where
@@ -51,7 +53,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 	/// <inheritdoc />
 	public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
 		ImmutableArray.Create(Diagnostics.RootAccumulatingFactory, Diagnostics.RootAccumulatingFactoryStrict, Diagnostics.AsyncOnlyDisposal,
-			Diagnostics.SuppressedDisposalProjected);
+			Diagnostics.SuppressedDisposalProjected, Diagnostics.DuplicateInjectProperty);
 
 	/// <inheritdoc />
 	public override void Initialize(AnalysisContext context)
@@ -69,7 +71,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 			// One graph build per container per compilation, shared by the AWT118 symbol walk and the AWT156
 			// disposal sites; one compilation can dispose the same container in many places. The Lazy
 			// (ExecutionAndPublication) collapses concurrent callers into a single BuildGraph per container.
-			ConcurrentDictionary<INamedTypeSymbol, Lazy<GraphModel>> graphByContainer =
+			ConcurrentDictionary<INamedTypeSymbol, Lazy<ContainerGraph>> graphByContainer =
 				new(SymbolEqualityComparer.Default);
 
 			start.RegisterSymbolAction(
@@ -105,7 +107,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 		INamedTypeSymbol type,
 		INamedTypeSymbol containerAttribute,
 		Compilation compilation,
-		ConcurrentDictionary<INamedTypeSymbol, Lazy<GraphModel>> graphByContainer,
+		ConcurrentDictionary<INamedTypeSymbol, Lazy<ContainerGraph>> graphByContainer,
 		Action<Diagnostic> report,
 		CancellationToken cancellationToken)
 	{
@@ -117,12 +119,22 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 		// Re-derive the object graph (cached, shared with the AWT156 disposal sites). Strict lifetime safety
 		// reports the root-accumulating pattern through the non-suppressible error descriptor, loose reports
 		// the plain suppressible warning.
-		GraphModel graph = CachedGraph(graphByContainer, type, compilation, cancellationToken);
+		ContainerGraph built = CachedGraph(graphByContainer, type, compilation, cancellationToken);
 		bool strict = AwaitenGenerator.ReadStrict(type);
 
-		foreach (DiagnosticInfo diagnostic in Detect(graph, strict))
+		foreach (DiagnosticInfo diagnostic in Detect(built.Graph, strict))
 		{
 			report(ToDiagnostic(diagnostic, compilation));
+		}
+
+		// AWT179 comes out of the graph build, but the generator leaves it to the analyzer so that it can be
+		// suppressed in source.
+		foreach (DiagnosticInfo diagnostic in built.Diagnostics)
+		{
+			if (ReferenceEquals(diagnostic.Descriptor, Diagnostics.DuplicateInjectProperty))
+			{
+				report(ToDiagnostic(diagnostic, compilation));
+			}
 		}
 	}
 
@@ -145,18 +157,22 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 			: Diagnostic.Create(info.Descriptor, location, args);
 	}
 
-	// Builds (or returns the cached) object graph of a container. The registration diagnostics produced
-	// while building it are the generator's to report, so they are collected into a throwaway list and
-	// discarded here.
-	private static GraphModel CachedGraph(
-		ConcurrentDictionary<INamedTypeSymbol, Lazy<GraphModel>> graphByContainer,
+	// Builds (or returns the cached) object graph of a container, with the diagnostics produced while building
+	// it. Apart from AWT179 they are the generator's to report, so the analyzer ignores them.
+	private static ContainerGraph CachedGraph(
+		ConcurrentDictionary<INamedTypeSymbol, Lazy<ContainerGraph>> graphByContainer,
 		INamedTypeSymbol container,
 		Compilation compilation,
 		CancellationToken cancellationToken)
 		=> graphByContainer.GetOrAdd(
 			container,
-			c => new Lazy<GraphModel>(
-				() => AwaitenGenerator.BuildGraph(c, compilation, new List<DiagnosticInfo>(), cancellationToken),
+			c => new Lazy<ContainerGraph>(
+				() =>
+				{
+					List<DiagnosticInfo> diagnostics = new();
+					GraphModel graph = AwaitenGenerator.BuildGraph(c, compilation, diagnostics, cancellationToken);
+					return new ContainerGraph(graph, diagnostics);
+				},
 				LazyThreadSafetyMode.ExecutionAndPublication)).Value;
 
 	private static List<DiagnosticInfo> Detect(GraphModel graph, bool strict)
@@ -315,7 +331,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 		INamedTypeSymbol containerAttribute,
 		INamedTypeSymbol scopeInterface,
 		Compilation compilation,
-		ConcurrentDictionary<INamedTypeSymbol, Lazy<GraphModel>> graphByContainer)
+		ConcurrentDictionary<INamedTypeSymbol, Lazy<ContainerGraph>> graphByContainer)
 	{
 		IOperation resources;
 		switch (context.Operation)
@@ -360,7 +376,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 		INamedTypeSymbol containerAttribute,
 		INamedTypeSymbol scopeInterface,
 		Compilation compilation,
-		ConcurrentDictionary<INamedTypeSymbol, Lazy<GraphModel>> graphByContainer)
+		ConcurrentDictionary<INamedTypeSymbol, Lazy<ContainerGraph>> graphByContainer)
 	{
 		if (context.Operation is IInvocationOperation { TargetMethod: { Name: "Dispose", Parameters.Length: 0, }, Instance: { } receiver, })
 		{
@@ -385,7 +401,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 		INamedTypeSymbol containerAttribute,
 		INamedTypeSymbol scopeInterface,
 		Compilation compilation,
-		ConcurrentDictionary<INamedTypeSymbol, Lazy<GraphModel>> graphByContainer)
+		ConcurrentDictionary<INamedTypeSymbol, Lazy<ContainerGraph>> graphByContainer)
 	{
 		if (disposedType is not INamedTypeSymbol { Name: "Root" or "Scope", } named
 		    || named.ContainingType is not { } container
@@ -404,7 +420,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 			return;
 		}
 
-		GraphModel graph = CachedGraph(graphByContainer, container, compilation, context.CancellationToken);
+		GraphModel graph = CachedGraph(graphByContainer, container, compilation, context.CancellationToken).Graph;
 		ImmutableArray<string> asyncOnly = AsyncOnlyDisposables(graph, includeRootOwned: named.Name == "Root");
 		if (asyncOnly.IsEmpty)
 		{
@@ -451,7 +467,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 		OperationAnalysisContext context,
 		INamedTypeSymbol containerAttribute,
 		Compilation compilation,
-		ConcurrentDictionary<INamedTypeSymbol, Lazy<GraphModel>> graphByContainer)
+		ConcurrentDictionary<INamedTypeSymbol, Lazy<ContainerGraph>> graphByContainer)
 	{
 		ITypeSymbol? rootType = context.Operation switch
 		{
@@ -468,7 +484,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 			return;
 		}
 
-		GraphModel graph = CachedGraph(graphByContainer, container, compilation, context.CancellationToken);
+		GraphModel graph = CachedGraph(graphByContainer, container, compilation, context.CancellationToken).Graph;
 		bool syncAfterInit = AwaitenGenerator.ReadSyncAfterInit(container);
 		string[] suppressed = graph.Instances
 			.Where(instance => !instance.IsParameterized
@@ -494,4 +510,6 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 
 	private static bool IsRootOwned(InstanceModel instance)
 		=> instance.Lifetime == Lifetime.Singleton || instance.Production == ProductionKind.Instance;
+
+	private sealed record ContainerGraph(GraphModel Graph, List<DiagnosticInfo> Diagnostics);
 }

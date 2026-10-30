@@ -82,8 +82,9 @@ public sealed class InjectPropertyAttribute<TImplementation>(string propertyName
 ///     <c>Repository&lt;Order&gt;</c>. A name that is not a settable property on the generic definition is
 ///     <c>AWT177</c>, and a type that is neither closed nor an unbound generic definition is <c>AWT215</c>. When a
 ///     closed entry and an open entry name the same property of one closing, the closed entry wins and the open one
-///     is ignored for that closing (<c>AWT179</c>). A type deriving from a closing is not a closing itself and is not
-///     matched.
+///     is ignored for that closing, which specialises the closing when the closed entry changes <c>Key</c>,
+///     <c>Optional</c> or <c>Deferred</c> and is <c>AWT179</c> when it changes none of them. A type deriving from a
+///     closing is not a closing itself and is not matched.
 /// </remarks>
 /// <example><c>[InjectProperty(typeof(Repository&lt;&gt;), nameof(Repository&lt;object&gt;.Logger))]</c></example>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]

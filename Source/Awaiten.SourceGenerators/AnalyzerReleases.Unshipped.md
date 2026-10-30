@@ -79,7 +79,7 @@
  AWT176  | Awaiten   | Warning  | A type declared [ImportService] (or every closing of an open generic one) is never consumed by any dependency in the graph
  AWT177  | Awaiten   | Error    | An [InjectProperty<TImplementation>] names a member that is not a settable property on TImplementation
  AWT178  | Awaiten   | Error    | An [InjectProperty<TImplementation>] targets a TImplementation produced by a Factory or Instance registration
- AWT179  | Awaiten   | Warning  | Two [InjectProperty<TImplementation>] entries name the same property of the same implementation
+ AWT179  | Awaiten   | Warning  | Two [InjectProperty] entries name the same property of the same implementation, or a closed entry repeats an open-generic one on a closing
  AWT180  | Awaiten   | Warning  | An [InjectProperty<TImplementation>] targets a TImplementation with no container-constructed registration, so the entry is never applied
  AWT181  | Awaiten   | Warning  | A property is named by both [Inject] and an [InjectProperty<TImplementation>] entry, so the entry's flags are ignored
  AWT182  | Awaiten   | Warning  | A [Scan(As = ScanAs.MatchingInterface)] matched a type that implements no interface named I + its own name

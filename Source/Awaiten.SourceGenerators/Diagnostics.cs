@@ -1154,11 +1154,14 @@ internal static class Diagnostics
 		isEnabledByDefault: true);
 
 	/// <summary>
-	///     Two <c>[InjectProperty&lt;TImplementation&gt;]</c> entries name the same property of the same
-	///     implementation. The property is filled once; the redundant entry is likely a copy-paste and is
-	///     reported so a contradicting <c>Optional</c>/<c>Deferred</c>/<c>Key</c> on it is not silently ignored. A
-	///     warning rather than an error: the graph is well-defined (the first entry wins, and a closed entry wins
-	///     over an open-generic one on the same closing), like the other no-op detections (AWT172-AWT174).
+	///     Two <c>[InjectProperty]</c> entries of the same shape (both closed or both open-generic) name the same
+	///     property of the same implementation, or a closed entry overrides an open-generic one on a closing without
+	///     changing <c>Key</c>, <c>Optional</c> or <c>Deferred</c>. The property is filled once; the redundant entry is
+	///     likely a copy-paste and is reported so a contradicting option on it is not silently ignored. A closed entry
+	///     that changes an option is a deliberate specialisation of that closing and is not reported. A warning rather
+	///     than an error: the graph is well-defined (the first entry wins, and a closed entry wins over an open-generic
+	///     one on the same closing), like the other no-op detections (AWT172-AWT174). Reported by
+	///     <see cref="AwaitenAnalyzer" /> rather than the generator, so it can be suppressed in source.
 	/// </summary>
 	public static readonly DiagnosticDescriptor DuplicateInjectProperty = new(
 		"AWT179",
