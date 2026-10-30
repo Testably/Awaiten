@@ -132,7 +132,9 @@ public partial class ResolvabilityTests
 			using MixedContainer.Root container = new();
 			AwaitenResolvability expected = container.GetResolvability(typeof(Plain), null);
 
+#pragma warning disable CA2263
 			await That(container.GetResolvability(typeof(Plain))).IsEqualTo(expected);
+#pragma warning restore CA2263
 			await That(container.GetResolvability<Plain>()).IsEqualTo(expected);
 			await That(expected.Status).IsEqualTo(AwaitenResolvabilityStatus.Resolvable);
 		}
@@ -143,7 +145,9 @@ public partial class ResolvabilityTests
 			using MixedContainer.Root container = new();
 			AwaitenResolvability expected = container.GetResolvability(typeof(Unregistered), null);
 
+#pragma warning disable CA2263
 			await That(container.GetResolvability(typeof(Unregistered))).IsEqualTo(expected);
+#pragma warning restore CA2263
 			await That(container.GetResolvability<Unregistered>()).IsEqualTo(expected);
 			await That(expected.Status).IsEqualTo(AwaitenResolvabilityStatus.NotRegistered);
 		}
@@ -154,8 +158,10 @@ public partial class ResolvabilityTests
 			using AsyncOnlyContainer.Root container = new();
 			AwaitenResolvability expected = container.GetResolvability(typeof(Warming), null);
 
+#pragma warning disable CA2263
 			await That(container.GetResolvability(typeof(Warming))).IsEqualTo(expected)
 				.Because("the overload forwards the reason too, not only the status");
+#pragma warning restore CA2263
 			await That(container.GetResolvability<Warming>()).IsEqualTo(expected);
 			await That(expected.Status).IsEqualTo(AwaitenResolvabilityStatus.AsyncOnly);
 		}

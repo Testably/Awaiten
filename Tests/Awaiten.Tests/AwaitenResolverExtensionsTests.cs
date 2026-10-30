@@ -169,8 +169,10 @@ public sealed class AwaitenResolverExtensionsTests
 	{
 		IAwaitenRoot root = null!;
 
+#pragma warning disable CA2263
 		await That(() => root.GetResolvability(typeof(string))).Throws<ArgumentNullException>()
 			.WithParamName("root");
+#pragma warning restore CA2263
 	}
 
 	[Test]
