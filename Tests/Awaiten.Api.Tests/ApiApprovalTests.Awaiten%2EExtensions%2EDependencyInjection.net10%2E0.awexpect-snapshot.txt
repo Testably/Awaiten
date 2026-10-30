@@ -4,11 +4,11 @@ namespace Awaiten.Extensions.DependencyInjection
 {
     public static class AwaitenInitializationServiceCollectionExtensions
     {
-        public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddAwaitenInitialization<TContainer>(this Microsoft.Extensions.DependencyInjection.IServiceCollection services) where TContainer : class, Awaiten.IAwaitenContainerMetadata { }
+        public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddAwaitenInitialization<TContainer>(this Microsoft.Extensions.DependencyInjection.IServiceCollection services) where TContainer : class, Awaiten.IAwaitenRoot { }
     }
     public static class AwaitenServiceCollectionExtensions
     {
-        public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddGeneratedContainer<TRoot>(this Microsoft.Extensions.DependencyInjection.IServiceCollection services) where TRoot : class, Awaiten.IAwaitenContainerMetadata, new() { }
+        public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddGeneratedContainer<TRoot>(this Microsoft.Extensions.DependencyInjection.IServiceCollection services) where TRoot : class, Awaiten.IAwaitenRoot, new() { }
     }
     public sealed class AwaitenServiceProvider : Microsoft.Extensions.DependencyInjection.IKeyedServiceProvider, Microsoft.Extensions.DependencyInjection.IServiceProviderIsKeyedService, Microsoft.Extensions.DependencyInjection.IServiceProviderIsService, Microsoft.Extensions.DependencyInjection.IServiceScopeFactory, System.IAsyncDisposable, System.IDisposable, System.IServiceProvider
     {
@@ -22,7 +22,7 @@ namespace Awaiten.Extensions.DependencyInjection
         public bool IsKeyedService(System.Type serviceType, object? serviceKey) { }
         public bool IsService(System.Type serviceType) { }
     }
-    public sealed class AwaitenServiceProviderFactory<TRoot> : Microsoft.Extensions.DependencyInjection.IServiceProviderFactory<TRoot> where TRoot : class, Awaiten.IAwaitenContainerMetadata, new()
+    public sealed class AwaitenServiceProviderFactory<TRoot> : Microsoft.Extensions.DependencyInjection.IServiceProviderFactory<TRoot> where TRoot : class, Awaiten.IAwaitenRoot, new()
     {
         public AwaitenServiceProviderFactory() { }
         public TRoot CreateBuilder(Microsoft.Extensions.DependencyInjection.IServiceCollection services) { }
@@ -30,7 +30,7 @@ namespace Awaiten.Extensions.DependencyInjection
     }
     public static class AwaitenVerificationExtensions
     {
-        public static void VerifyAgainst(this Awaiten.IAwaitenContainerMetadata container, System.IServiceProvider provider) { }
+        public static void VerifyAgainst(this Awaiten.IAwaitenRoot container, System.IServiceProvider provider) { }
         public static System.IServiceProvider VerifyAwaitenContainers(this System.IServiceProvider provider) { }
     }
     public sealed class ServiceProviderExternalResolver : Awaiten.IExternalResolver

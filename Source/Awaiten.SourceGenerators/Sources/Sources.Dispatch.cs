@@ -117,7 +117,7 @@ internal static partial class Sources
 	}
 
 	/// <summary>
-	///     Emits the compile-time, reflection-free <c>IAwaitenContainerMetadata.Registrations</c> list on the Root:
+	///     Emits the compile-time, reflection-free <c>IAwaitenRoot.Registrations</c> list on the Root:
 	///     public (unkeyed) registrations with their lifetimes, which the
 	///     <c>Awaiten.Extensions.DependencyInjection</c> companion projects into a service collection. Parameterized
 	///     services are omitted (not resolvable by service type alone); a user-keyed registration is advertised with
@@ -132,7 +132,7 @@ internal static partial class Sources
 		StringBuilder builder = fields;
 		Separate(fields);
 		AppendXmlSummary(builder, depth,
-			"The registration metadata advertised through <c>IAwaitenContainerMetadata.Registrations</c>.");
+			"The registration metadata advertised through <c>IAwaitenRoot.Registrations</c>.");
 		Indent(builder, depth).AppendLine("private static readonly global::Awaiten.AwaitenRegistration[] __registrations =");
 		Indent(builder, depth).AppendLine("{");
 		foreach (InstanceModel instance in instances)
@@ -155,7 +155,7 @@ internal static partial class Sources
 
 		Indent(builder, depth).AppendLine("};");
 		Separate(members);
-		Indent(members, depth).AppendLine("global::System.Collections.Generic.IReadOnlyList<global::Awaiten.AwaitenRegistration> global::Awaiten.IAwaitenContainerMetadata.Registrations => __registrations;");
+		Indent(members, depth).AppendLine("global::System.Collections.Generic.IReadOnlyList<global::Awaiten.AwaitenRegistration> global::Awaiten.IAwaitenRoot.Registrations => __registrations;");
 	}
 
 	/// <summary>
@@ -190,7 +190,7 @@ internal static partial class Sources
 
 	/// <summary>
 	///     Emits the Root's advertised <c>ExternalDependencies</c> list (the distinct <c>[ImportService&lt;T&gt;]</c> /
-	///     <c>[ImportServices]</c> service types, empty when there are none) that <c>IAwaitenContainerMetadata</c>
+	///     <c>[ImportServices]</c> service types, empty when there are none) that <c>IAwaitenRoot</c>
 	///     requires. The <c>ExternalResolver</c> the container routes those dependencies through is emitted on the
 	///     base <c>Scope</c> (inherited by the Root), so a host can wire each scope independently.
 	/// </summary>
@@ -201,7 +201,7 @@ internal static partial class Sources
 		if (external.Length == 0)
 		{
 			Indent(members, depth).AppendLine(
-				"global::System.Collections.Generic.IReadOnlyList<global::Awaiten.AwaitenExternalDependency> global::Awaiten.IAwaitenContainerMetadata.ExternalDependencies => global::System.Array.Empty<global::Awaiten.AwaitenExternalDependency>();");
+				"global::System.Collections.Generic.IReadOnlyList<global::Awaiten.AwaitenExternalDependency> global::Awaiten.IAwaitenRoot.ExternalDependencies => global::System.Array.Empty<global::Awaiten.AwaitenExternalDependency>();");
 			return;
 		}
 
@@ -216,7 +216,7 @@ internal static partial class Sources
 
 		Indent(fields, depth).AppendLine("};");
 		Indent(members, depth).AppendLine(
-			"global::System.Collections.Generic.IReadOnlyList<global::Awaiten.AwaitenExternalDependency> global::Awaiten.IAwaitenContainerMetadata.ExternalDependencies => __externalDependencies;");
+			"global::System.Collections.Generic.IReadOnlyList<global::Awaiten.AwaitenExternalDependency> global::Awaiten.IAwaitenRoot.ExternalDependencies => __externalDependencies;");
 	}
 
 	private static string PublicLifetimeOf(Lifetime lifetime) => lifetime switch
@@ -265,7 +265,7 @@ internal static partial class Sources
 			// scope resolved it through TryResolve and returned above), or it is an async-only service excluded
 			// from synchronous resolution on every scope. Surface the targeted guidance (Owned<T> / ResolveAsync)
 			// instead of the generic "no registration" message. TryResolve stays non-throwing in both cases.
-			Indent(builder, depth + 1).AppendLine("if (__WithheldReason(serviceType, null) is string __guidance)");
+			Indent(builder, depth + 1).AppendLine("if (__GetResolvability(serviceType, null).Reason is string __guidance)");
 			Indent(builder, depth + 1).AppendLine("{");
 			Indent(builder, depth + 2).AppendLine("throw new global::System.InvalidOperationException(__guidance);");
 			Indent(builder, depth + 1).AppendLine("}");
@@ -290,7 +290,7 @@ internal static partial class Sources
 			Indent(builder, depth + 1).AppendLine("instance = null;");
 			Indent(builder, depth + 1).AppendLine("return false;");
 			Indent(builder, depth).AppendLine("}");
-			return new DispatchShape(false, false, hasWithheld);
+			return new DispatchShape(false, false, hasWithheld, false);
 		}
 
 		// Open-addressed probe: hash the requested type into its bucket window and scan the (small, fixed-width)
@@ -339,28 +339,30 @@ internal static partial class Sources
 			Indent(builder, depth + 1).AppendLine("return __TryResolveVariant(serviceType, out instance);");
 			Indent(builder, depth).AppendLine("}");
 			EmitVarianceFallback(fields, helpers, depth, varianceEntries, hasWithheld);
-			return new DispatchShape(true, true, hasWithheld);
+			return new DispatchShape(true, true, hasWithheld, hasRootWithheld);
 		}
 
 		Indent(builder, depth + 1).AppendLine("instance = null;");
 		Indent(builder, depth + 1).AppendLine("return false;");
 		Indent(builder, depth).AppendLine("}");
-		return new DispatchShape(true, false, hasWithheld);
+		return new DispatchShape(true, false, hasWithheld, hasRootWithheld);
 	}
 
 	/// <summary>
 	///     Which dispatch structures the emitted container carries: the <c>__buckets</c> table and the variance
 	///     fallback's candidate list, both from the synchronous resolution surface, and the <c>__withheld</c>
 	///     guidance table, which the caller emits and reports here so every reader of it agrees with the decision
-	///     to emit it. All false for a container with nothing to dispatch and nothing to withhold.
+	///     to emit it, plus whether a bucket slot carries the <c>RootWithheld</c> flag. All false for a container with
+	///     nothing to dispatch and nothing to withhold.
 	/// </summary>
 	private readonly struct DispatchShape
 	{
-		public DispatchShape(bool hasBuckets, bool hasVariance, bool hasWithheld)
+		public DispatchShape(bool hasBuckets, bool hasVariance, bool hasWithheld, bool hasRootWithheld)
 		{
 			HasBuckets = hasBuckets;
 			HasVariance = hasVariance;
 			HasWithheld = hasWithheld;
+			HasRootWithheld = hasRootWithheld;
 		}
 
 		public bool HasBuckets { get; }
@@ -368,153 +370,139 @@ internal static partial class Sources
 		public bool HasVariance { get; }
 
 		public bool HasWithheld { get; }
+
+		public bool HasRootWithheld { get; }
 	}
 
 	/// <summary>
-	///     Emits <c>IsResolvable(Type, object?)</c>, the <c>IAwaitenContainerMetadata</c> member a host uses to
-	///     decide whether a value comes from the container. It probes the very tables <c>TryResolve</c> dispatches
-	///     through, so it covers every shape the container serves: relationship shapes, synthesized collections and
-	///     dictionaries, awaited views, variance-compatible closings, with no separate rule set to drift out of step.
+	///     Emits the Scope's <c>__GetResolvability(Type, object?)</c> probe behind the Root's
+	///     <c>IAwaitenRoot.GetResolvability</c>, whose reason both the unkeyed and the keyed <c>Resolve</c> throw. It
+	///     reads the very tables <c>TryResolve</c> dispatches through, so it covers every shape the container serves:
+	///     relationship shapes, synthesized collections and dictionaries, awaited views, variance-compatible closings,
+	///     with no separate rule set to drift out of step. Returns whether it emitted the probe; a container with no
+	///     table to read reports a constant instead.
 	/// </summary>
 	/// <remarks>
-	///     Two deliberate differences from <c>TryResolve</c>: nothing is invoked, and the per-scope
-	///     <c>RootWithheld</c> flag is ignored. The latter is what makes this an existence question rather than a
-	///     "can this scope serve it" question, which is the semantics a host's feature-detection surface needs. A
-	///     root-withheld disposable exists, and <c>Resolve</c> names why the root will not build it.
+	///     A slot carrying the <c>RootWithheld</c> flag is withheld on the Root, and its reason is the one
+	///     <c>Resolve</c> throws there; a child scope's <c>Resolve</c> asks only after its <c>TryResolve</c> missed,
+	///     which such a slot never does there. A withheld type without a synchronous slot is served only asynchronously. A
+	///     variance-compatible closing answers like its nearest candidate, which always has a slot, as
+	///     <c>TryResolve</c> and <c>Resolve</c> route it there too.
 	/// </remarks>
-	private static void EmitResolvabilityApi(
+	private static bool EmitResolvabilityApi(
 		ApiRegions regions, int depth, DispatchShape dispatch, bool hasKeyedEntries)
 	{
-		StringBuilder builder = regions.Members;
+		if (!dispatch.HasBuckets && !dispatch.HasWithheld && !hasKeyedEntries)
+		{
+			return false;
+		}
+
+		const string resolvable = "new global::Awaiten.AwaitenResolvability(global::Awaiten.AwaitenResolvabilityStatus.Resolvable, null)";
+		const string asyncOnly = "new global::Awaiten.AwaitenResolvability(global::Awaiten.AwaitenResolvabilityStatus.AsyncOnly, ";
+		const string withheldOnRoot = "new global::Awaiten.AwaitenResolvability(global::Awaiten.AwaitenResolvabilityStatus.WithheldOnRoot, ";
+
+		StringBuilder builder = regions.Helpers;
 		Separate(builder);
-		AppendXmlSummary(builder, depth,
-			"Whether this container can resolve <paramref name=\"serviceType\" /> under <paramref name=\"key\" />, without constructing anything.");
-		Indent(builder, depth).AppendLine("public bool IsResolvable(global::System.Type serviceType, object? key)");
+		// private protected so the derived Root can expose it without publishing it on every scope.
+		Indent(builder, depth).AppendLine("private protected static global::Awaiten.AwaitenResolvability __GetResolvability(global::System.Type serviceType, object? key)");
 		Indent(builder, depth).AppendLine("{");
-		Indent(builder, depth + 1).AppendLine("if (serviceType is null)");
-		Indent(builder, depth + 1).AppendLine("{");
-		Indent(builder, depth + 2).AppendLine("return false;");
-		Indent(builder, depth + 1).AppendLine("}");
-		builder.AppendLine();
 		Indent(builder, depth + 1).AppendLine("if (key is not null)");
 		Indent(builder, depth + 1).AppendLine("{");
 		if (hasKeyedEntries)
 		{
-			// A keyed slot exists for the host's purposes when it has a synchronous arm; the RootWithheld flag is
-			// deliberately not consulted, mirroring the unkeyed probe below.
-			Indent(builder, depth + 2).AppendLine(
-				"return __keyed.TryGetValue(new __KeyedKey(serviceType, key), out __KeyedEntry __entry) && __entry.Sync is not null;");
+			Indent(builder, depth + 2).AppendLine("if (!__keyed.TryGetValue(new __KeyedKey(serviceType, key), out __KeyedEntry __entry))");
+			Indent(builder, depth + 2).AppendLine("{");
+			Indent(builder, depth + 3).AppendLine("return default;");
+			Indent(builder, depth + 2).AppendLine("}");
+			builder.AppendLine();
+			Indent(builder, depth + 2).AppendLine("if (__entry.Sync is null)");
+			Indent(builder, depth + 2).AppendLine("{");
+			Indent(builder, depth + 3).Append("return ").Append(asyncOnly).AppendLine("__entry.Guidance);");
+			Indent(builder, depth + 2).AppendLine("}");
+			builder.AppendLine();
+			Indent(builder, depth + 2).AppendLine("return __entry.RootWithheld");
+			Indent(builder, depth + 3).Append("? ").Append(withheldOnRoot).AppendLine("__entry.Guidance)");
+			Indent(builder, depth + 3).Append(": ").Append(resolvable).AppendLine(";");
 		}
 		else
 		{
-			Indent(builder, depth + 2).AppendLine("return false;");
+			Indent(builder, depth + 2).AppendLine("return default;");
 		}
 
 		Indent(builder, depth + 1).AppendLine("}");
 		builder.AppendLine();
-		if (!dispatch.HasBuckets)
+		if (dispatch.HasBuckets)
 		{
-			Indent(builder, depth + 1).AppendLine("return false;");
-			Indent(builder, depth).AppendLine("}");
-			return;
+			// The same open-addressed probe TryResolve uses, stopping at the identity match instead of invoking it.
+			Indent(builder, depth + 1).AppendLine("int __i = (int)((uint)serviceType.TypeHandle.GetHashCode() % (uint)__bucketCount) * __bucketSize;");
+			Indent(builder, depth + 1).AppendLine("int __end = __i + __bucketSize;");
+			Indent(builder, depth + 1).AppendLine("for (; __i < __end; __i++)");
+			Indent(builder, depth + 1).AppendLine("{");
+			Indent(builder, depth + 2).AppendLine("ref readonly __Bucket __b = ref __buckets[__i];");
+			Indent(builder, depth + 2).AppendLine("if ((object?)__b.Key == (object?)serviceType)");
+			Indent(builder, depth + 2).AppendLine("{");
+			if (dispatch.HasRootWithheld)
+			{
+				Indent(builder, depth + 3).AppendLine("return __b.RootWithheld");
+				Indent(builder, depth + 4).Append("? ").Append(withheldOnRoot).AppendLine("__withheld[serviceType])");
+				Indent(builder, depth + 4).Append(": ").Append(resolvable).AppendLine(";");
+			}
+			else
+			{
+				Indent(builder, depth + 3).Append("return ").Append(resolvable).AppendLine(";");
+			}
+
+			Indent(builder, depth + 2).AppendLine("}");
+			builder.AppendLine();
+			Indent(builder, depth + 2).AppendLine("if (__b.Key is null)");
+			Indent(builder, depth + 2).AppendLine("{");
+			Indent(builder, depth + 3).AppendLine("break;");
+			Indent(builder, depth + 2).AppendLine("}");
+			Indent(builder, depth + 1).AppendLine("}");
+			builder.AppendLine();
 		}
 
-		// The same open-addressed probe TryResolve uses, stopping at the identity match instead of invoking it.
-		Indent(builder, depth + 1).AppendLine("int __i = (int)((uint)serviceType.TypeHandle.GetHashCode() % (uint)__bucketCount) * __bucketSize;");
-		Indent(builder, depth + 1).AppendLine("int __end = __i + __bucketSize;");
-		Indent(builder, depth + 1).AppendLine("for (; __i < __end; __i++)");
-		Indent(builder, depth + 1).AppendLine("{");
-		Indent(builder, depth + 2).AppendLine("ref readonly __Bucket __b = ref __buckets[__i];");
-		Indent(builder, depth + 2).AppendLine("if ((object?)__b.Key == (object?)serviceType)");
-		Indent(builder, depth + 2).AppendLine("{");
-		Indent(builder, depth + 3).AppendLine("return true;");
-		Indent(builder, depth + 2).AppendLine("}");
-		builder.AppendLine();
-		Indent(builder, depth + 2).AppendLine("if (__b.Key is null)");
-		Indent(builder, depth + 2).AppendLine("{");
-		Indent(builder, depth + 3).AppendLine("break;");
-		Indent(builder, depth + 2).AppendLine("}");
-		Indent(builder, depth + 1).AppendLine("}");
-		builder.AppendLine();
-		if (!dispatch.HasVariance)
-		{
-			Indent(builder, depth + 1).AppendLine("return false;");
-			Indent(builder, depth).AppendLine("}");
-			return;
-		}
-
-		// A cached route or a fresh match answers existence; which candidate wins only matters when resolving.
-		Indent(builder, depth + 1).AppendLine("return __varianceRoutes.ContainsKey(serviceType) || __FindVariantMatch(serviceType) is not null;");
-		Indent(builder, depth).AppendLine("}");
-	}
-
-	/// <summary>
-	///     Emits the <c>__WithheldReason(Type, object?)</c> lookup that both the unkeyed and the keyed
-	///     <c>Resolve</c> throw from, and that the Root's <c>IAwaitenContainerMetadata.WithheldReason</c> reports
-	///     without throwing. Called only when one of the two tables it reads exists; a container that withholds
-	///     nothing reports the constant instead, so no such container carries a lookup that cannot answer.
-	/// </summary>
-	/// <remarks>
-	///     The public member is emitted on the Root, not here, because the answer is the Root's: a root-withheld
-	///     disposable transient is built normally by a child scope, so a scope reporting the Root's refusal would
-	///     be wrong. On the Root every withheld entry is one <c>TryResolve</c> genuinely declines, which is what
-	///     makes the lookup and the thrown message the same answer.
-	/// </remarks>
-	private static void EmitWithheldReasonApi(
-		ApiRegions regions, int depth, DispatchShape dispatch, bool hasKeyedEntries)
-	{
-		StringBuilder helpers = regions.Helpers;
-		Separate(helpers);
-		// private protected so the derived Root can read it without publishing it to the consuming assembly.
-		Indent(helpers, depth).AppendLine("private protected static string? __WithheldReason(global::System.Type serviceType, object? key)");
-		Indent(helpers, depth).AppendLine("{");
-		Indent(helpers, depth + 1).AppendLine("if (key is not null)");
-		Indent(helpers, depth + 1).AppendLine("{");
-		Indent(helpers, depth + 2).AppendLine(hasKeyedEntries
-			? "return __keyed.TryGetValue(new __KeyedKey(serviceType, key), out __KeyedEntry __entry) ? __entry.Guidance : null;"
-			: "return null;");
-		Indent(helpers, depth + 1).AppendLine("}");
-		helpers.AppendLine();
 		if (dispatch.HasWithheld)
 		{
-			Indent(helpers, depth + 1).AppendLine("if (__withheld.TryGetValue(serviceType, out string? __guidance))");
-			Indent(helpers, depth + 1).AppendLine("{");
-			Indent(helpers, depth + 2).AppendLine("return __guidance;");
-			Indent(helpers, depth + 1).AppendLine("}");
-			helpers.AppendLine();
-			if (dispatch.HasVariance)
-			{
-				// A variant closing has no withheld entry of its own, so it reports its nearest candidate's reason.
-				Indent(helpers, depth + 1).AppendLine("global::System.Type? __variantMatch = __FindVariantMatch(serviceType);");
-				Indent(helpers, depth + 1).AppendLine("if (__variantMatch is not null && __withheld.TryGetValue(__variantMatch, out string? __variantGuidance))");
-				Indent(helpers, depth + 1).AppendLine("{");
-				Indent(helpers, depth + 2).AppendLine("return __variantGuidance;");
-				Indent(helpers, depth + 1).AppendLine("}");
-				helpers.AppendLine();
-			}
+			// Every root-withheld type has a slot, so a withheld type the probe above missed has no synchronous path.
+			Indent(builder, depth + 1).AppendLine("if (__withheld.TryGetValue(serviceType, out string? __guidance))");
+			Indent(builder, depth + 1).AppendLine("{");
+			Indent(builder, depth + 2).Append("return ").Append(asyncOnly).AppendLine("__guidance);");
+			Indent(builder, depth + 1).AppendLine("}");
+			builder.AppendLine();
 		}
 
-		Indent(helpers, depth + 1).AppendLine("return null;");
-		Indent(helpers, depth).AppendLine("}");
+		if (dispatch.HasVariance)
+		{
+			Indent(builder, depth + 1).AppendLine("global::System.Type? __variantMatch = __FindVariantMatch(serviceType);");
+			Indent(builder, depth + 1).AppendLine("if (__variantMatch is not null)");
+			Indent(builder, depth + 1).AppendLine("{");
+			Indent(builder, depth + 2).AppendLine("return __GetResolvability(__variantMatch, null);");
+			Indent(builder, depth + 1).AppendLine("}");
+			builder.AppendLine();
+		}
+
+		Indent(builder, depth + 1).AppendLine("return default;");
+		Indent(builder, depth).AppendLine("}");
+		return true;
 	}
 
 	/// <summary>
-	///     Emits the Root's <c>IAwaitenContainerMetadata.WithheldReason</c> over the Scope's
-	///     <c>__WithheldReason</c> lookup, or as a constant <see langword="null" /> when the container withholds
-	///     nothing, so that no lookup is emitted for it to read.
+	///     Emits the Root's <c>IAwaitenRoot.GetResolvability</c> over the Scope's <c>__GetResolvability</c> probe, or
+	///     as a constant <c>NotRegistered</c> when the container has no table for a probe to read.
 	/// </summary>
-	private static void EmitWithheldReasonMember(StringBuilder builder, int depth, bool hasWithheldReasons)
+	private static void EmitResolvabilityMember(StringBuilder builder, int depth, bool hasResolvabilityProbe)
 	{
 		AppendXmlSummary(builder, depth,
-			"Why this container has <paramref name=\"serviceType\" /> but will not hand it over synchronously, or <see langword=\"null\" /> when it has no such reason.");
-		if (!hasWithheldReasons)
+			"Whether this container root resolves <paramref name=\"serviceType\" /> under <paramref name=\"key\" /> synchronously and, if it has the service but will not, why.");
+		if (!hasResolvabilityProbe)
 		{
-			Indent(builder, depth).AppendLine("public string? WithheldReason(global::System.Type serviceType, object? key) => null;");
+			Indent(builder, depth).AppendLine("public global::Awaiten.AwaitenResolvability GetResolvability(global::System.Type serviceType, object? key) => default;");
 			return;
 		}
 
-		Indent(builder, depth).AppendLine("public string? WithheldReason(global::System.Type serviceType, object? key)");
-		Indent(builder, depth + 1).AppendLine("=> serviceType is null ? null : __WithheldReason(serviceType, key);");
+		Indent(builder, depth).AppendLine("public global::Awaiten.AwaitenResolvability GetResolvability(global::System.Type serviceType, object? key)");
+		Indent(builder, depth + 1).AppendLine("=> serviceType is null ? default : __GetResolvability(serviceType, key);");
 	}
 
 	/// <summary>
@@ -540,9 +528,8 @@ internal static partial class Sources
 	///     imperative and injected resolution agree even for a closed type no consumer ever requested. Successful
 	///     routes are memoized in <c>__varianceRoutes</c>; failures are not (they throw anyway, and junk types must
 	///     not grow the cache). A type with withheld guidance keeps its targeted error instead of being routed. The
-	///     matching itself lives in the static <c>__FindVariantMatch</c>, shared with the resolvability probe and
-	///     with the withheld-reason lookup that <c>Resolve</c> and <c>WithheldReason</c> read, so every consumer
-	///     picks the same candidate.
+	///     matching itself lives in the static <c>__FindVariantMatch</c>, shared with the resolvability probe that
+	///     <c>Resolve</c> and <c>GetResolvability</c> read, so every consumer picks the same candidate.
 	/// </summary>
 	private static void EmitVarianceFallback(StringBuilder fields, StringBuilder helpers, int depth, List<string> candidates, bool hasWithheld)
 	{

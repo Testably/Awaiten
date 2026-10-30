@@ -1,3 +1,5 @@
+using System.ComponentModel;
+
 namespace Awaiten;
 
 /// <summary>
@@ -10,6 +12,7 @@ namespace Awaiten;
 /// </summary>
 /// <typeparam name="T">The exact service type this resolver can produce.</typeparam>
 #pragma warning disable S3246 // Invariance is required here, so the type parameter is intentionally not co/contravariant.
+[EditorBrowsable(EditorBrowsableState.Never)]
 public interface IAwaitenResolver<T>
 #pragma warning restore S3246
 {

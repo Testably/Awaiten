@@ -104,7 +104,7 @@ public sealed partial class KeyedBridgeTests
 	{
 		KeyedContainer.Root root = new();
 		System.Collections.Generic.IReadOnlyList<AwaitenRegistration> registrations =
-			((IAwaitenContainerMetadata)root).Registrations;
+			((IAwaitenRoot)root).Registrations;
 
 		await That(registrations.Any(r => r.ServiceType == typeof(IChannel) && Equals(r.Key, "fast"))).IsTrue()
 			.Because("the keyed 'fast' registration advertises its user key");

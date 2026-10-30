@@ -37,7 +37,7 @@ public sealed class AwaitenServiceCollectionExtensionsTests
 		await That(type is { IsAbstract: true, IsSealed: true, }).IsTrue();
 	}
 
-	private sealed class DummyContainer : IAwaitenContainerMetadata
+	private sealed class DummyContainer : IAwaitenRoot
 	{
 		public System.Collections.Generic.IReadOnlyList<AwaitenRegistration> Registrations
 			=> System.Array.Empty<AwaitenRegistration>();
@@ -47,9 +47,7 @@ public sealed class AwaitenServiceCollectionExtensionsTests
 
 		public IExternalResolver? ExternalResolver { get; set; }
 
-		public bool IsResolvable(Type serviceType, object? key) => false;
-
-		public string? WithheldReason(Type serviceType, object? key) => null;
+		public AwaitenResolvability GetResolvability(Type serviceType, object? key) => default;
 
 		public object Resolve(Type serviceType) => throw new NotSupportedException();
 

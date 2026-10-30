@@ -1735,7 +1735,7 @@ using System.Diagnostics.CodeAnalysis;
 
 [SuppressMessage("Awaiten", "AWT135:Service locator: a resolver interface is injected into a service",
     Justification = "This is a custom bridge adapter: holding the scope is the adaptation itself, not a hidden run-time dependency.")]
-internal sealed class AwaitenServiceLocator(IAwaitenContainerMetadata container, IAwaitenScope scope) : IServiceLocator
+internal sealed class AwaitenServiceLocator(IAwaitenRoot container, IAwaitenScope scope) : IServiceLocator
 {
     public object? Resolve(Type? type)
     {
@@ -1750,7 +1750,7 @@ internal sealed class AwaitenServiceLocator(IAwaitenContainerMetadata container,
         }
 
         // Reported as absent, the framework would bind it from elsewhere and fail far from the cause.
-        if (container.WithheldReason(type, null) is { } reason)
+        if (container.GetResolvability(type, null).Reason is { } reason)
         {
             throw new InvalidOperationException(reason);
         }
@@ -1774,7 +1774,10 @@ internal sealed class AwaitenServiceLocator(IAwaitenContainerMetadata container,
         }
 
         Type elementType = type.GenericTypeArguments[0];
-        return elementType.IsValueType || container.IsResolvable(elementType, null) ? null : elementType;
+        return elementType.IsValueType
+               || container.GetResolvability(elementType, null).Status != AwaitenResolvabilityStatus.NotRegistered
+            ? null
+            : elementType;
     }
 }
 ```
@@ -1782,3 +1785,14 @@ internal sealed class AwaitenServiceLocator(IAwaitenContainerMetadata container,
 `AwaitenServiceProvider` is the same shape against MS.DI's `IServiceProvider`, so read it alongside this if your framework's surface is keyed or asks resolvability questions.
 
 Suppress it on the adapter, never project-wide: the diagnostic is right about every other type.
+
+### AWT205
+
+:::warning[Warning]
+User code constructs an `Owned<T>` with `new`. The handle disposes the scope it is given, so one built over the container root disposes the root, and one built over any other scope ends that scope behind its owner's back. Only the container creates `Owned<T>`, over the throwaway scope it built the value in: resolve `Owned<T>` or inject `Func<Owned<T>>` instead. The generated container's own handles are not reported, and a deliberate construction, such as a test double, can suppress the warning in source.
+:::
+
+```csharp
+Owned<Cup> cup = new Owned<Cup>(root, new Cup());   // disposing it disposes the root
+Owned<Cup> owned = root.Resolve<Owned<Cup>>();      // the container builds the handle
+```

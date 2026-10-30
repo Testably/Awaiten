@@ -34,7 +34,7 @@ public static class AwaitenInitializationServiceCollectionExtensions
 	/// </remarks>
 	/// <typeparam name="TContainer">The generated Awaiten container root type.</typeparam>
 	public static IServiceCollection AddAwaitenInitialization<TContainer>(this IServiceCollection services)
-		where TContainer : class, IAwaitenContainerMetadata
+		where TContainer : class, IAwaitenRoot
 	{
 		if (services is null)
 		{
@@ -47,7 +47,7 @@ public static class AwaitenInitializationServiceCollectionExtensions
 	}
 
 	private sealed class AwaitenInitializationHostedService<TContainer> : IHostedService
-		where TContainer : class, IAwaitenContainerMetadata
+		where TContainer : class, IAwaitenRoot
 	{
 		private readonly TContainer _container;
 		private readonly IServiceProvider _provider;

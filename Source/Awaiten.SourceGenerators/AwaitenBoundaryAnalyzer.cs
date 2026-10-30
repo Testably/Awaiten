@@ -3,6 +3,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Diagnostics;
+using Microsoft.CodeAnalysis.Operations;
 
 namespace Awaiten.SourceGenerators;
 
@@ -10,15 +11,17 @@ namespace Awaiten.SourceGenerators;
 ///     Guards the boundary between application code and the container. Reports
 ///     <see cref="Diagnostics.ServiceLocatorInjection">AWT135</see> when a resolver seam
 ///     (<c>IAwaitenResolver</c> and everything that extends it: <c>IAwaitenAsyncResolver</c>,
-///     <c>IAwaitenScope</c>, <c>IAwaitenRoot</c>, <c>IAwaitenContainerMetadata</c>) is injected into a type that is
-///     not a <c>[Container]</c> composition root, as a constructor parameter or property - the Service Locator
-///     anti-pattern. Also reports <see cref="Diagnostics.CompositionAttributeOutsideRoot">AWT134</see>
+///     <c>IAwaitenScope</c>, <c>IAwaitenRoot</c>) is injected into a type that is not a <c>[Container]</c>
+///     composition root, as a constructor parameter or property - the Service Locator anti-pattern. Also reports
+///     <see cref="Diagnostics.CompositionAttributeOutsideRoot">AWT134</see>
 ///     when a container-side composition attribute (a lifetime registration, <c>[Scan]</c>, <c>[Decorate]</c>,
 ///     <c>[Composite]</c>, <c>[Import]</c>, <c>[ImportService]</c>/<c>[ImportServices]</c>, or
-///     <c>[InjectProperty]</c>) is applied to a class in an assembly that declares no <c>[Container]</c>.
+///     <c>[InjectProperty]</c>) is applied to a class in an assembly that declares no <c>[Container]</c>, and
+///     <see cref="Diagnostics.OwnedConstructedByHand">AWT205</see> when user code constructs an
+///     <c>Owned&lt;T&gt;</c> handle that only the container should create.
 /// </summary>
 /// <remarks>
-///     Both are analyzer (rather than generator) diagnostics so they can be suppressed in source with
+///     All three are analyzer (rather than generator) diagnostics so they can be suppressed in source with
 ///     <c>#pragma warning disable</c> or <c>[SuppressMessage]</c> (a legitimate seam such as the MS.DI bridge
 ///     adapter does exactly that), or turned into errors per project through editorconfig. AWT134 is a
 ///     best-effort boundary lint: it fires only in an assembly that declares no <c>[Container]</c>, so it stays
@@ -34,6 +37,7 @@ public sealed class AwaitenBoundaryAnalyzer : DiagnosticAnalyzer
 	private const string ContainerAttributeName = "Awaiten.ContainerAttribute";
 	private const string ModuleAttributeName = "Awaiten.ModuleAttribute";
 	private const string ResolverInterfaceName = "Awaiten.IAwaitenResolver";
+	private const string OwnedTypeName = "Awaiten.Owned`1";
 
 	// The container-side composition attributes, matched by simple name within the Awaiten namespace so the
 	// generic-arity forms (SingletonAttribute<T>, SingletonAttribute<T, S>, …) all match one entry, exactly as
@@ -53,7 +57,7 @@ public sealed class AwaitenBoundaryAnalyzer : DiagnosticAnalyzer
 
 	/// <inheritdoc />
 	public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
-		ImmutableArray.Create(Diagnostics.CompositionAttributeOutsideRoot, Diagnostics.ServiceLocatorInjection);
+		ImmutableArray.Create(Diagnostics.CompositionAttributeOutsideRoot, Diagnostics.ServiceLocatorInjection, Diagnostics.OwnedConstructedByHand);
 
 	/// <inheritdoc />
 	public override void Initialize(AnalysisContext context)
@@ -81,7 +85,29 @@ public sealed class AwaitenBoundaryAnalyzer : DiagnosticAnalyzer
 				ctx => Analyze(
 					(INamedTypeSymbol)ctx.Symbol, containerAttribute, moduleAttribute, resolverInterface, assemblyDeclaresContainer, ctx.ReportDiagnostic),
 				SymbolKind.NamedType);
+
+			if (start.Compilation.GetTypeByMetadataName(OwnedTypeName) is { } ownedType)
+			{
+				start.RegisterOperationAction(ctx => ReportOwnedConstruction(ctx, ownedType), OperationKind.ObjectCreation);
+			}
 		});
+	}
+
+	// AWT205: an Owned<T> built with its (scope, value) constructor in user code. Generated code is skipped by
+	// ConfigureGeneratedCodeAnalysis, and a parameterless new Owned<T>() is the harmless default handle.
+	private static void ReportOwnedConstruction(OperationAnalysisContext context, INamedTypeSymbol ownedType)
+	{
+		IObjectCreationOperation creation = (IObjectCreationOperation)context.Operation;
+		if (creation.Constructor is not { Parameters.Length: > 0 } constructor
+		    || !SymbolEqualityComparer.Default.Equals(constructor.ContainingType.OriginalDefinition, ownedType))
+		{
+			return;
+		}
+
+		context.ReportDiagnostic(Diagnostic.Create(
+			Diagnostics.OwnedConstructedByHand,
+			creation.Syntax.GetLocation(),
+			constructor.ContainingType.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)));
 	}
 
 	private static void Analyze(
@@ -184,7 +210,7 @@ public sealed class AwaitenBoundaryAnalyzer : DiagnosticAnalyzer
 	}
 
 	// A resolver seam is IAwaitenResolver itself, or anything that extends it (IAwaitenAsyncResolver,
-	// IAwaitenScope, IAwaitenRoot, IAwaitenContainerMetadata, and a concrete container Root/Scope). The generic
+	// IAwaitenScope, IAwaitenRoot, and a concrete container Root/Scope). The generic
 	// IAwaitenResolver<T> does not implement the non-generic IAwaitenResolver, so it is not matched here.
 	private static bool IsResolverSeam(ITypeSymbol type, INamedTypeSymbol resolverInterface)
 		=> SymbolEqualityComparer.Default.Equals(type, resolverInterface)

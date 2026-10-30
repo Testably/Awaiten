@@ -48,7 +48,7 @@ internal static partial class Sources
 		{
 			// A registered keyed service that could not be resolved synchronously (async-tainted, or a disposable
 			// build-on-demand service withheld on the Root) carries targeted guidance instead of "no registration".
-			Indent(builder, depth + 1).AppendLine("if (__WithheldReason(serviceType, key) is string __guidance)");
+			Indent(builder, depth + 1).AppendLine("if (__GetResolvability(serviceType, key).Reason is string __guidance)");
 			Indent(builder, depth + 1).AppendLine("{");
 			Indent(builder, depth + 2).AppendLine("throw new global::System.InvalidOperationException(__guidance);");
 			Indent(builder, depth + 1).AppendLine("}");

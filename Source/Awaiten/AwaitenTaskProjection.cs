@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Threading.Tasks;
 
 namespace Awaiten;
@@ -9,6 +10,7 @@ namespace Awaiten;
 ///     metadata carries a delegate bound to the closed <see cref="AsTask{T}" /> for each async service type, so the
 ///     bridge never constructs the generic method at runtime and the projection is native-AOT compatible.
 /// </summary>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public static class AwaitenTaskProjection
 {
 	/// <summary>

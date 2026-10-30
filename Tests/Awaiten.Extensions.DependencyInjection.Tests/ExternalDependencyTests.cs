@@ -113,7 +113,7 @@ public sealed partial class ExternalDependencyTests
 	{
 		using ExternalContainer.Root container = new();
 
-		await That(((IAwaitenContainerMetadata)container).ExternalDependencies)
+		await That(((IAwaitenRoot)container).ExternalDependencies)
 			.Contains(new AwaitenExternalDependency(typeof(IClock)));
 	}
 
@@ -122,7 +122,7 @@ public sealed partial class ExternalDependencyTests
 	{
 		using KeyedExternalContainer.Root container = new();
 
-		await That(((IAwaitenContainerMetadata)container).ExternalDependencies)
+		await That(((IAwaitenRoot)container).ExternalDependencies)
 			.Contains(new AwaitenExternalDependency(typeof(IClock), "utc"));
 	}
 

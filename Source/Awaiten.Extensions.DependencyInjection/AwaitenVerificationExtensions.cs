@@ -19,9 +19,9 @@ public static class AwaitenVerificationExtensions
 	///     <paramref name="provider" />, throwing an <see cref="InvalidOperationException" /> that lists
 	///     the gaps when any is missing.
 	/// </summary>
-	/// <param name="container">The generated container's metadata.</param>
+	/// <param name="container">The generated container root.</param>
 	/// <param name="provider">The provider expected to satisfy the external dependencies.</param>
-	public static void VerifyAgainst(this IAwaitenContainerMetadata container, IServiceProvider provider)
+	public static void VerifyAgainst(this IAwaitenRoot container, IServiceProvider provider)
 	{
 		if (container is null)
 		{
@@ -60,7 +60,7 @@ public static class AwaitenVerificationExtensions
 			throw new ArgumentNullException(nameof(provider));
 		}
 
-		foreach (IAwaitenContainerMetadata container in provider.GetServices<IAwaitenContainerMetadata>())
+		foreach (IAwaitenRoot container in provider.GetServices<IAwaitenRoot>())
 		{
 			container.VerifyAgainst(provider);
 		}

@@ -582,7 +582,7 @@ public sealed partial class FeatureDetectionTests
 	}
 
 	/// <summary>
-	///     <c>IAwaitenContainerMetadata.WithheldReason</c>, which tells "no registration" apart from "registered but
+	///     <c>IAwaitenRoot.GetResolvability</c>, which tells "no registration" apart from "registered but
 	///     not served synchronously". Both are the same <see langword="false" /> from <c>TryResolve</c>, so without
 	///     this an adapter that answers an unknown type with <see langword="null" /> reports its framework's generic
 	///     failure in place of the container's specific one.
@@ -598,8 +598,8 @@ public sealed partial class FeatureDetectionTests
 			await That(container.TryResolve(typeof(Unregistered), out _)).IsFalse()
 				.Because("the two are indistinguishable through TryResolve alone, which is the gap this closes");
 
-			await That(container.WithheldReason(typeof(Registrations.AsyncOnly), null)).IsNotNull();
-			await That(container.WithheldReason(typeof(Unregistered), null)).IsNull();
+			await That(container.GetResolvability(typeof(Registrations.AsyncOnly), null).Reason).IsNotNull();
+			await That(container.GetResolvability(typeof(Unregistered), null).Reason).IsNull();
 		}
 
 		[Test]
@@ -607,7 +607,7 @@ public sealed partial class FeatureDetectionTests
 		{
 			using Registrations.AsyncOnlyContainer.Root container = new();
 
-			string? reason = container.WithheldReason(typeof(Registrations.AsyncOnly), null);
+			string? reason = container.GetResolvability(typeof(Registrations.AsyncOnly), null).Reason;
 
 			await That(reason).Contains("ResolveAsync");
 			await That(reason).Contains("SyncResolveAfterInit")
@@ -626,7 +626,7 @@ public sealed partial class FeatureDetectionTests
 
 			foreach (Type shape in ThingShapes)
 			{
-				bool hasReason = container.WithheldReason(shape, null) is not null;
+				bool hasReason = container.GetResolvability(shape, null).Reason is not null;
 				bool guided = RefusalMessage(container, shape) is { } message
 				              && !message.StartsWith("No registration for type", StringComparison.Ordinal);
 				if (hasReason != guided)
@@ -645,7 +645,7 @@ public sealed partial class FeatureDetectionTests
 			using GenericVariance.WithheldVarianceContainer.Root container = new();
 			Type closing = typeof(GenericVariance.IHandler<GenericVariance.IEvent>);
 
-			await That(container.WithheldReason(closing, null)).IsEqualTo(RefusalMessage(container, closing))
+			await That(container.GetResolvability(closing, null).Reason).IsEqualTo(RefusalMessage(container, closing))
 				.Because("a variant closing has no withheld entry of its own, so both paths have to reach its nearest candidate's reason through the variance match");
 		}
 
@@ -656,14 +656,14 @@ public sealed partial class FeatureDetectionTests
 		[Test]
 		public async Task AreOfferedByTheRootAlone()
 		{
-			await That(typeof(WithheldServices.WithheldContainer.Root).GetMethod("WithheldReason")).IsNotNull();
-			await That(typeof(WithheldServices.WithheldContainer.Scope).GetMethod("WithheldReason")).IsNull()
+			await That(typeof(WithheldServices.WithheldContainer.Root).GetMethod("GetResolvability")).IsNotNull();
+			await That(typeof(WithheldServices.WithheldContainer.Scope).GetMethod("GetResolvability")).IsNull()
 				.Because("a scope cannot answer the question correctly, so it must not be asked");
 
 			using WithheldServices.WithheldContainer.Root container = new();
 			using IAwaitenScope scope = container.CreateScope();
 
-			await That(container.WithheldReason(typeof(WithheldServices.DisposableTransient), null)).IsNotNull()
+			await That(container.GetResolvability(typeof(WithheldServices.DisposableTransient), null).Reason).IsNotNull()
 				.Because("the strict lifetime default withholds a disposable transient on the root");
 			await That(scope.Resolve<WithheldServices.DisposableTransient>()).IsNotNull()
 				.Because("the same service is built by a scope, which is why the root's answer is not the scope's");
@@ -674,9 +674,9 @@ public sealed partial class FeatureDetectionTests
 		{
 			using AcceptedDivergences.SingleRegistrationContainer.Root container = new();
 
-			await That(container.WithheldReason(typeof(IThing), null)).IsNull()
+			await That(container.GetResolvability(typeof(IThing), null).Reason).IsNull()
 				.Because("a resolvable service has no reason to report");
-			await That(container.WithheldReason(typeof(Unregistered), null)).IsNull();
+			await That(container.GetResolvability(typeof(Unregistered), null).Reason).IsNull();
 		}
 
 		[Test]
@@ -685,10 +685,10 @@ public sealed partial class FeatureDetectionTests
 			using Registrations.KeyedAsyncOnlyContainer.Root container = new();
 			Type service = typeof(Registrations.AsyncOnly);
 
-			await That(container.WithheldReason(service, "async"))
+			await That(container.GetResolvability(service, "async").Reason)
 				.IsEqualTo(RefusalMessage(container, service, "async"))
 				.Because("the keyed Resolve throws its own targeted guidance, so a keyed adapter needs the same answer the unkeyed one gets");
-			await That(container.WithheldReason(service, "absent")).IsNull()
+			await That(container.GetResolvability(service, "absent").Reason).IsNull()
 				.Because("no slot exists under that key, so there is nothing withheld to explain");
 		}
 

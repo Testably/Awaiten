@@ -22,7 +22,7 @@ namespace Awaiten.Extensions.DependencyInjection;
 /// </remarks>
 /// <typeparam name="TRoot">The generated Awaiten container root type.</typeparam>
 public sealed class AwaitenServiceProviderFactory<TRoot> : IServiceProviderFactory<TRoot>
-	where TRoot : class, IAwaitenContainerMetadata, new()
+	where TRoot : class, IAwaitenRoot, new()
 {
 	private IServiceCollection? _services;
 

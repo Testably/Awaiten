@@ -7,7 +7,7 @@ Product code is in `Source/`, tests in `Tests/`, benchmarks in `Benchmarks/`, ru
 | Project | Responsibility |
 |---|---|
 | `Awaiten` | The public surface users reference: registration attributes (`[Container]`, `[Singleton<T>]`, `[Scoped<T>]`, `[Transient<T>]`, `[Decorate]`, `[Composite]`, `[Scan]`, `[Module]`, `[Import]`, `[ImportService<T>]`, `[Inject]`, `[Arg]`, `[FromKey]` and more), the resolver interfaces (`IAwaitenResolver`, `IAwaitenScope`, `IAwaitenRoot`, `IAwaitenAsyncResolver`), `IAsyncInitializable`, `Owned<T>` and the small runtime seams the generated code calls. Ships the generator as an analyzer. |
-| `Awaiten.SourceGenerators` | The `AwaitenGenerator` incremental generator plus the `AwaitenAnalyzer` (AWT118, AWT156) and `AwaitenBoundaryAnalyzer` (AWT134, AWT135). netstandard2.0, packed into `Awaiten`. |
+| `Awaiten.SourceGenerators` | The `AwaitenGenerator` incremental generator plus the `AwaitenAnalyzer` (AWT118, AWT156) and `AwaitenBoundaryAnalyzer` (AWT134, AWT135, AWT205). netstandard2.0, packed into `Awaiten`. |
 | `Awaiten.Extensions.DependencyInjection` | The MS.DI bridge: `AddGeneratedContainer` projects a generated container into an `IServiceCollection`, `AwaitenServiceProvider`/`AwaitenServiceProviderFactory` make the container the provider, plus host initialization and `VerifyAwaitenContainers`. |
 
 ## How the generator works
@@ -17,7 +17,7 @@ Product code is in `Source/`, tests in `Tests/`, benchmarks in `Benchmarks/`, ru
 3. The result is an equatable `ContainerModel` (`Entities/`, using `Internals/EquatableArray.cs`) that carries the diagnostics as `DiagnosticInfo`. Roslyn symbols and live locations must not reach this model, or incremental caching breaks.
 4. `Sources/` emits the code: a `Scope` with the resolution logic and a sealed `Root` that owns the singletons (`Sources.cs`, `.Construction.cs`, `.Dispatch.cs`, `.Disposal.cs`, `.Keyed.cs`, `.Resolvers.cs`, `.Guidance.cs`, `.Names.cs`). `Sources.Module.cs` emits the self-compiled factories and `[GeneratedScanRegistration]` attributes of a module scan.
 
-Containers and modules must be `static partial` classes; a non-static one is a diagnostic (AWT116, AWT152). Errors still emit a container shell (`model.HasErrors`) so the user's code keeps compiling around it. Runtime error texts the generated code throws are built in `Sources.Guidance.cs`; reuse them so `Resolve` and `WithheldReason` give the same answer.
+Containers and modules must be `static partial` classes; a non-static one is a diagnostic (AWT116, AWT152). Errors still emit a container shell (`model.HasErrors`) so the user's code keeps compiling around it. Runtime error texts the generated code throws are built in `Sources.Guidance.cs`; reuse them so `Resolve` and `GetResolvability` give the same answer.
 
 ## Diagnostics
 

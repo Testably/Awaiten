@@ -73,7 +73,7 @@ public partial class AspNetCoreExampleTests
 	/// <summary>
 	///     A service that requires asynchronous initialization has no synchronous resolution path, so the bridge
 	///     projects it as <c>Task&lt;T&gt;</c>. Warm it once at startup (resolve
-	///     <see cref="IAwaitenContainerMetadata" /> and await <c>InitializeAsync</c>), then endpoints await the
+	///     <see cref="IAwaitenRoot" /> and await <c>InitializeAsync</c>), then endpoints await the
 	///     projected <c>Task&lt;T&gt;</c> to obtain the initialized instance.
 	/// </summary>
 	[Test]
@@ -89,7 +89,7 @@ public partial class AspNetCoreExampleTests
 
 		// Warm the async-initialized singletons once, so the first request hands back a ready instance instead
 		// of paying initialization on the request path.
-		await app.Services.GetRequiredService<IAwaitenContainerMetadata>().InitializeAsync();
+		await app.Services.GetRequiredService<IAwaitenRoot>().InitializeAsync();
 
 		using HttpClient client = ClientFor(app);
 		string body = await client.GetStringAsync("/report");
