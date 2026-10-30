@@ -124,6 +124,52 @@ public partial class ResolvabilityTests
 		}
 	}
 
+	public sealed class UnkeyedOverloads
+	{
+		[Test]
+		public async Task ForwardsARegisteredServiceToTheNullKey()
+		{
+			using MixedContainer.Root container = new();
+			AwaitenResolvability expected = container.GetResolvability(typeof(Plain), null);
+
+			await That(container.GetResolvability(typeof(Plain))).IsEqualTo(expected);
+			await That(container.GetResolvability<Plain>()).IsEqualTo(expected);
+			await That(expected.Status).IsEqualTo(AwaitenResolvabilityStatus.Resolvable);
+		}
+
+		[Test]
+		public async Task ForwardsAnUnregisteredTypeToTheNullKey()
+		{
+			using MixedContainer.Root container = new();
+			AwaitenResolvability expected = container.GetResolvability(typeof(Unregistered), null);
+
+			await That(container.GetResolvability(typeof(Unregistered))).IsEqualTo(expected);
+			await That(container.GetResolvability<Unregistered>()).IsEqualTo(expected);
+			await That(expected.Status).IsEqualTo(AwaitenResolvabilityStatus.NotRegistered);
+		}
+
+		[Test]
+		public async Task ForwardsAnAsyncInitializedServiceToTheNullKey()
+		{
+			using AsyncOnlyContainer.Root container = new();
+			AwaitenResolvability expected = container.GetResolvability(typeof(Warming), null);
+
+			await That(container.GetResolvability(typeof(Warming))).IsEqualTo(expected)
+				.Because("the overload forwards the reason too, not only the status");
+			await That(container.GetResolvability<Warming>()).IsEqualTo(expected);
+			await That(expected.Status).IsEqualTo(AwaitenResolvabilityStatus.AsyncOnly);
+		}
+
+		[Test]
+		public async Task DoesNotFallBackToAKeyedRegistration()
+		{
+			using KeyedContainer.Root container = new();
+
+			await That(container.GetResolvability<Plain>().Status).IsEqualTo(AwaitenResolvabilityStatus.NotRegistered)
+				.Because("the unkeyed overloads ask for the unkeyed registration only, like the null key");
+		}
+	}
+
 	public sealed class VarianceClosing
 	{
 		[Test]

@@ -8,7 +8,8 @@ namespace Awaiten;
 /// <summary>
 ///     Generic conveniences over the <see cref="IAwaitenResolver" /> resolution surface, so callers
 ///     with a compile-time type can write <c>resolver.Resolve&lt;T&gt;()</c> instead of casting the
-///     result of <see cref="IAwaitenResolver.Resolve(Type)" />.
+///     result of <see cref="IAwaitenResolver.Resolve(Type)" />, and the unkeyed and generic forms of
+///     <see cref="IAwaitenRoot.GetResolvability(Type, object)" />.
 /// </summary>
 public static class AwaitenResolverExtensions
 {
@@ -17,6 +18,14 @@ public static class AwaitenResolverExtensions
 		if (resolver is null)
 		{
 			throw new ArgumentNullException(nameof(resolver));
+		}
+	}
+
+	private static void ThrowIfNull(IAwaitenRoot root)
+	{
+		if (root is null)
+		{
+			throw new ArgumentNullException(nameof(root));
 		}
 	}
 
@@ -121,6 +130,33 @@ public static class AwaitenResolverExtensions
 			return Cast(resolver.ResolveAsync(typeof(T), key, cancellationToken));
 
 			static async Task<T> Cast(Task<object> resolution) => (T)await resolution.ConfigureAwait(false);
+		}
+	}
+
+	/// <inheritdoc cref="AwaitenResolverExtensions" />
+	extension(IAwaitenRoot root)
+	{
+		/// <summary>
+		///     Whether the root can resolve <paramref name="serviceType" /> without a key synchronously.
+		///     Forwards to <see cref="IAwaitenRoot.GetResolvability(Type, object)" /> with a <see langword="null" /> key.
+		/// </summary>
+		/// <param name="serviceType">The service type to ask about.</param>
+		public AwaitenResolvability GetResolvability(Type serviceType)
+		{
+			ThrowIfNull(root);
+
+			return root.GetResolvability(serviceType, null);
+		}
+
+		/// <summary>
+		///     Whether the root can resolve <typeparamref name="T" /> without a key synchronously.
+		///     Forwards to <see cref="IAwaitenRoot.GetResolvability(Type, object)" /> with a <see langword="null" /> key.
+		/// </summary>
+		public AwaitenResolvability GetResolvability<T>()
+		{
+			ThrowIfNull(root);
+
+			return root.GetResolvability(typeof(T), null);
 		}
 	}
 }
