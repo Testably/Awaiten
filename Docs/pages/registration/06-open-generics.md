@@ -21,7 +21,7 @@ IRepository<Order> orders = shop.Resolve<IRepository<Order>>();
 IRepository<Customer> customers = shop.Resolve<IRepository<Customer>>();
 ```
 
-Each type argument gets its own closed implementation, and each keeps the declared lifetime. Awaiten works out which closed forms you need at compile time from what the graph actually asks for.
+Each type argument gets its own closed implementation, and each keeps the declared lifetime. Awaiten works out which closed forms you need at compile time from what the graph actually asks for: constructor and factory parameters, [injected properties](../resolution/property-injection) and the parameters of [lifecycle hooks](../lifetime/lifecycle-hooks), also when the closed service sits inside a collection, a `Lazy<T>` or a `Func<T>`.
 
 ## Self-registration
 

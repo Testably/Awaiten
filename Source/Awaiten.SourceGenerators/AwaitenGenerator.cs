@@ -437,9 +437,14 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		ExternalServiceTypes externalServiceTypes = CollectExternalServiceTypes(containerSymbol, modules, diagnostics);
 		ExternalSurface external = new(importServices, externalServiceTypes);
 
+		// Container-side property injection: [InjectProperty<TImpl>] entries keyed by implementation type, so
+		// BuildInstance fills them wherever that implementation is constructed (including [Scan]-registered types).
+		// Read before Collect, since an injected property seeds open generic expansion like a constructor parameter.
+		Dictionary<string, List<InjectPropertyEntry>> injectProperties = CollectInjectProperties(containerSymbol, diagnostics);
+
 		// Collect also expands [Scan]s into overridable registrations (IsScan), ordered after the explicit ones
 		// so an explicit registration wins single resolution while every match still joins its collection.
-		(List<RawRegistration> raw, HashSet<string> constraintRejected) = Collect(containerSymbol, modules, compilation, external, diagnostics);
+		(List<RawRegistration> raw, HashSet<string> constraintRejected) = Collect(containerSymbol, modules, compilation, external, injectProperties, diagnostics);
 
 		// [Scan(SkipUnconstructable = true)] trades the AWT101 error for a skip-with-warning (AWT141) on matches
 		// the container cannot construct. Scans without the opt-in, and explicit registrations, keep the error.
@@ -508,10 +513,6 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		// host-owned or Awaiten-owned, not both. Reported now that the coalesced service->impl map is known. The
 		// closings of an open import are checked once the instances are built (ReportOpenExternalServices).
 		ReportContradictingExternalServices(externalServiceTypes.Closed, serviceToImpl, containerSymbol, diagnostics);
-
-		// Container-side property injection: [InjectProperty<TImpl>] entries keyed by implementation type, so
-		// BuildInstance fills them wherever that implementation is constructed (including [Scan]-registered types).
-		Dictionary<string, List<InjectPropertyEntry>> injectProperties = CollectInjectProperties(containerSymbol, diagnostics);
 
 		BuildContext buildContext = new(containerSymbol, compilation, serviceToImpl, decoratorInner, compositeCollections, wellKnown, constraintRejected, external, variance, consumedConditionals, injectProperties, CollectDispatchCandidates(raw, serviceToImpl), diagnostics);
 
