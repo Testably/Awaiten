@@ -55,7 +55,7 @@ This is the usual startup pattern. Warm up once when the shop opens, then serve.
 
 ## Warm a scope
 
-`CreateScopeAsync` opens a scope and initializes its async scoped services eagerly. If one of them throws during initialization, the half-built scope is disposed for you rather than leaked.
+`CreateScopeAsync` opens a scope and initializes its async scoped services eagerly. If one of them throws during initialization, the half-built scope is disposed for you rather than leaked, asynchronously when `IAsyncDisposable` is available, so async-only disposables are torn down too. You get the original exception (or `OperationCanceledException`) unchanged. Only if the disposal throws as well do you get an `AggregateException` that holds the original failure first and the disposal failure second.
 
 ```csharp
 await using IAwaitenScope order = await shop.CreateScopeAsync(cancellationToken);

@@ -248,7 +248,7 @@ internal static partial class Sources
 		}
 
 		Separate(members);
-		EmitCreateScopeAsync(members, body);
+		EmitCreateScopeAsync(members, body, asyncDisposal);
 		// Nesting shares the same root (same singletons), so a child created from a child is no different from one
 		// created from the root. A child scope's lifetime is owned by its caller; the parent does not track it.
 		Separate(members);
