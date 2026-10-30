@@ -92,15 +92,18 @@ public partial class AsyncInitializationFailureTests
 	}
 
 	[Test]
-	public async Task InitThrows_AndDisposeAlsoThrows_OriginalFailurePropagates()
+	public async Task InitThrows_AndDisposeAlsoThrows_BothFailuresSurfaceWithTheOriginalFirst()
 	{
 		using DisposeAlsoThrowsContainer.Root container = new();
 
-		// The instance's InitializeAsync throws "init-boom"; its Dispose then throws "dispose-boom" during the
-		// failure-path cleanup. The caller must still see the original init failure, not the disposal one.
-		await That(() => container.ResolveAsync<InitAndDisposeThrow>(TestContext.Current!.Execution.CancellationToken))
-			.Throws<InvalidOperationException>()
-			.WithMessage("*init-boom*").AsWildcard();
+		AggregateException thrown = await That(() => container.ResolveAsync<InitAndDisposeThrow>(TestContext.Current!.Execution.CancellationToken))
+			.Throws<AggregateException>();
+
+		await That(thrown.InnerExceptions.Count).IsEqualTo(2);
+		await That(thrown.InnerExceptions[0].Message).IsEqualTo("init-boom")
+			.Because("the initialization failure that aborted the resolve comes first, so the disposal failure cannot mask it");
+		await That(thrown.InnerExceptions[1].Message).IsEqualTo("dispose-boom")
+			.Because("a failure while disposing the failed instance is reported alongside the original, not swallowed");
 	}
 
 	[Test]

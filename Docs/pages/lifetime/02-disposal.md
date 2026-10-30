@@ -62,7 +62,16 @@ Dispose with `await using` and Awaiten awaits `DisposeAsync` on every async-disp
 await using var shop = new CoffeeShop.Root();
 ```
 
-Disposing synchronously while the container owns a service that is `IAsyncDisposable` but not `IDisposable` throws at runtime, because a synchronous dispose cannot tear it down. Awaiten warns about this at compile time (AWT156).
+Disposing synchronously while the container owns a service that is `IAsyncDisposable` but not `IDisposable` throws at runtime, because a synchronous dispose cannot tear it down. Every other instance is still disposed, only the async-only one is left undisposed. Awaiten warns about this at compile time (AWT156).
+
+## When teardown fails
+
+Every instance gets its teardown attempt, whatever fails before it. If an `OnRelease` hook or an instance's own `Dispose`/`DisposeAsync` throws, Awaiten keeps going: the remaining release hooks run, and every remaining instance is disposed, in the usual order. The failures are reported together once the teardown is complete:
+
+- One failure is rethrown unchanged, so `catch (IOException)` keeps working.
+- Several failures become one `AggregateException` that holds them in teardown order.
+
+A scope or container is disposed once. Disposing it again after a failed teardown does nothing, because every instance has already had its attempt.
 
 ## Using a disposed container throws
 

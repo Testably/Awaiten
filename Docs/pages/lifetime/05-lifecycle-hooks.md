@@ -46,6 +46,8 @@ Hook parameters participate in the graph like any other dependency: an unregiste
 
 Activation happens before initialization and before the instance is ever handed out, so a concurrent resolve never sees a service that has not been activated. If `OnActivated` throws, the instance is not published. A later resolve builds a fresh one and tries again. Release is only queued once activation succeeds.
 
+If `OnRelease` throws, the teardown goes on: the other release hooks still run, and every instance is still disposed, including the one whose hook failed. The failure surfaces once the teardown is complete, together with any other teardown failure. See [Disposal → When teardown fails](./disposal#when-teardown-fails).
+
 ## Eager singletons
 
 By default a singleton is built the first time it is resolved. Mark it `Eager = true` to build it in the container's constructor instead, before any resolve, in registration order.
