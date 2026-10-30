@@ -2,12 +2,6 @@ window.BENCHMARK_DATA = {
   "Resolve (Size=8)": {
     "commits": [
       {
-        "sha": "91168c962877ab3f096a1912f0e5459d266c95c0",
-        "author": "dependabot[bot]",
-        "date": "Sun Aug 16 17:28:33 2026 \u002B0200",
-        "message": "chore: Bump Autofac from 9.3.1 to 9.3.2 (#140)"
-      },
-      {
         "sha": "776ea1a9da3ac36d6753b6b6b32ae6473a7b65e0",
         "author": "dependabot[bot]",
         "date": "Sun Aug 16 17:28:41 2026 \u002B0200",
@@ -300,10 +294,15 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Oct 30 14:21:56 2026 \u002B0100",
         "message": "refactor!: replace SyncResolveAfterInit with an AsyncSafety enum (#218)"
+      },
+      {
+        "sha": "a15aa752249762e424a8675149ff6953a8ad4277",
+        "author": "Valentin Breu\u00DF",
+        "date": "Fri Oct 30 14:23:56 2026 \u002B0100",
+        "message": "refactor!: rename the MS.DI external resolver and make the resolver assignment explicit (#219)"
       }
     ],
     "labels": [
-      "91168c96",
       "776ea1a9",
       "d3be90b8",
       "2c30eee1",
@@ -352,14 +351,14 @@ window.BENCHMARK_DATA = {
       "1853c4dd",
       "5d43f0d2",
       "12f4f8b2",
-      "f6700169"
+      "f6700169",
+      "a15aa752"
     ],
     "datasets": [
       {
         "label": "Awaiten time",
         "unit": "ns",
         "data": [
-          7.470518263677756,
           6.861564521988233,
           7.565412029623985,
           7.025941386818886,
@@ -408,7 +407,8 @@ window.BENCHMARK_DATA = {
           7.160927368061883,
           7.148565242687861,
           7.17207462659904,
-          7.862874705592791
+          7.862874705592791,
+          7.062152735392252
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -484,7 +484,6 @@ window.BENCHMARK_DATA = {
         "label": "MsDI time",
         "unit": "ns",
         "data": [
-          7.3494094635049505,
           5.951317323105676,
           7.2557803231936235,
           7.22408485909303,
@@ -533,7 +532,8 @@ window.BENCHMARK_DATA = {
           8.09870228767395,
           9.391345676566873,
           7.610769769320121,
-          8.689235616723696
+          8.689235616723696,
+          7.811177894473076
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -609,7 +609,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac time",
         "unit": "ns",
         "data": [
-          104.66916214568275,
           104.75294290383657,
           132.27920201619466,
           127.3397529443105,
@@ -658,7 +657,8 @@ window.BENCHMARK_DATA = {
           135.4598232428233,
           131.96044478416442,
           131.8671813928164,
-          148.55068585077922
+          148.55068585077922,
+          120.64650362730026
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -734,7 +734,6 @@ window.BENCHMARK_DATA = {
         "label": "Jab time",
         "unit": "ns",
         "data": [
-          2.6501569133251905,
           2.7905732795596117,
           2.8249444694568715,
           3.0961812042764256,
@@ -783,7 +782,8 @@ window.BENCHMARK_DATA = {
           2.8421653929565633,
           2.684015699351827,
           3.197356429237586,
-          3.0751087053545882
+          3.0751087053545882,
+          2.2913420761624974
         ],
         "borderColor": "#4A6FA5",
         "backgroundColor": "#4A6FA5",
@@ -859,7 +859,6 @@ window.BENCHMARK_DATA = {
         "label": "PureDI time",
         "unit": "ns",
         "data": [
-          5.419877972740394,
           4.381327880422274,
           5.439879149198532,
           5.424859481362196,
@@ -908,7 +907,8 @@ window.BENCHMARK_DATA = {
           5.4800135259117395,
           5.436346412769386,
           5.187154766704355,
-          6.061249589920044
+          6.061249589920044,
+          4.431919668863217
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
@@ -984,7 +984,6 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc time",
         "unit": "ns",
         "data": [
-          8.490892441074054,
           7.761790796050003,
           9.07028691470623,
           8.698628878364197,
@@ -1033,7 +1032,8 @@ window.BENCHMARK_DATA = {
           9.072869116706508,
           9.083967781492643,
           8.107299767434597,
-          8.779967521627745
+          8.779967521627745,
+          8.713035894930362
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -1109,7 +1109,6 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector time",
         "unit": "ns",
         "data": [
-          10.89797484072355,
           9.999347940087318,
           10.655925800757748,
           10.67628160577554,
@@ -1158,7 +1157,8 @@ window.BENCHMARK_DATA = {
           11.297448114625045,
           11.22829378568209,
           12.142498032251995,
-          11.591786737625416
+          11.591786737625416,
+          11.401660260558128
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -1235,12 +1235,6 @@ window.BENCHMARK_DATA = {
   "Resolve (Size=256)": {
     "commits": [
       {
-        "sha": "91168c962877ab3f096a1912f0e5459d266c95c0",
-        "author": "dependabot[bot]",
-        "date": "Sun Aug 16 17:28:33 2026 \u002B0200",
-        "message": "chore: Bump Autofac from 9.3.1 to 9.3.2 (#140)"
-      },
-      {
         "sha": "776ea1a9da3ac36d6753b6b6b32ae6473a7b65e0",
         "author": "dependabot[bot]",
         "date": "Sun Aug 16 17:28:41 2026 \u002B0200",
@@ -1533,10 +1527,15 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Oct 30 14:21:56 2026 \u002B0100",
         "message": "refactor!: replace SyncResolveAfterInit with an AsyncSafety enum (#218)"
+      },
+      {
+        "sha": "a15aa752249762e424a8675149ff6953a8ad4277",
+        "author": "Valentin Breu\u00DF",
+        "date": "Fri Oct 30 14:23:56 2026 \u002B0100",
+        "message": "refactor!: rename the MS.DI external resolver and make the resolver assignment explicit (#219)"
       }
     ],
     "labels": [
-      "91168c96",
       "776ea1a9",
       "d3be90b8",
       "2c30eee1",
@@ -1585,14 +1584,14 @@ window.BENCHMARK_DATA = {
       "1853c4dd",
       "5d43f0d2",
       "12f4f8b2",
-      "f6700169"
+      "f6700169",
+      "a15aa752"
     ],
     "datasets": [
       {
         "label": "Awaiten time",
         "unit": "ns",
         "data": [
-          8.31924910446008,
           8.48262171347936,
           8.132291130721569,
           7.785578704306057,
@@ -1641,7 +1640,8 @@ window.BENCHMARK_DATA = {
           8.14164054623017,
           8.454573358480747,
           8.726151735654899,
-          8.675854024978785
+          8.675854024978785,
+          7.8650856733322145
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -1717,7 +1717,6 @@ window.BENCHMARK_DATA = {
         "label": "MsDI time",
         "unit": "ns",
         "data": [
-          7.323444281633083,
           5.796581591878619,
           7.272789967060089,
           7.219784168096689,
@@ -1766,7 +1765,8 @@ window.BENCHMARK_DATA = {
           7.860138550400734,
           7.7157958765824635,
           7.556330411632856,
-          8.430168521404266
+          8.430168521404266,
+          6.066863006779125
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -1842,7 +1842,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac time",
         "unit": "ns",
         "data": [
-          108.42649379571279,
           106.5660160779953,
           135.14252492586772,
           126.8431580265363,
@@ -1891,7 +1890,8 @@ window.BENCHMARK_DATA = {
           134.05799576441447,
           136.3143172774996,
           130.2347735087077,
-          144.49937499364216
+          144.49937499364216,
+          102.87026645342509
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -1967,7 +1967,6 @@ window.BENCHMARK_DATA = {
         "label": "Jab time",
         "unit": "ns",
         "data": [
-          42.670958233731135,
           43.28303877512614,
           63.08108724080599,
           42.812950638624336,
@@ -2016,7 +2015,8 @@ window.BENCHMARK_DATA = {
           42.84065674742063,
           42.68785978356997,
           77.61670090357462,
-          45.92725784778595
+          45.92725784778595,
+          37.42488746245702
         ],
         "borderColor": "#4A6FA5",
         "backgroundColor": "#4A6FA5",
@@ -2092,7 +2092,6 @@ window.BENCHMARK_DATA = {
         "label": "PureDI time",
         "unit": "ns",
         "data": [
-          8.268475359039646,
           8.526882361372312,
           8.593995501597723,
           8.240538126000992,
@@ -2141,7 +2140,8 @@ window.BENCHMARK_DATA = {
           7.665742081190858,
           8.899907549986473,
           7.5588122854630155,
-          8.156121894717216
+          8.156121894717216,
+          6.083212028656687
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
@@ -2217,7 +2217,6 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc time",
         "unit": "ns",
         "data": [
-          8.434005376238089,
           7.73740982512633,
           9.035308670997619,
           8.72850995936564,
@@ -2266,7 +2265,8 @@ window.BENCHMARK_DATA = {
           9.039553901323906,
           9.03237624572856,
           8.100954097050886,
-          8.732412988940874
+          8.732412988940874,
+          7.309448443926298
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -2342,7 +2342,6 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector time",
         "unit": "ns",
         "data": [
-          14.331711254517238,
           10.031372801615642,
           14.321009315053622,
           14.480039296405655,
@@ -2391,7 +2390,8 @@ window.BENCHMARK_DATA = {
           14.932575941085815,
           16.08106211253575,
           10.752586263418198,
-          15.40400761961937
+          15.40400761961937,
+          8.917384281754494
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -2468,12 +2468,6 @@ window.BENCHMARK_DATA = {
   "Build (Size=8)": {
     "commits": [
       {
-        "sha": "91168c962877ab3f096a1912f0e5459d266c95c0",
-        "author": "dependabot[bot]",
-        "date": "Sun Aug 16 17:28:33 2026 \u002B0200",
-        "message": "chore: Bump Autofac from 9.3.1 to 9.3.2 (#140)"
-      },
-      {
         "sha": "776ea1a9da3ac36d6753b6b6b32ae6473a7b65e0",
         "author": "dependabot[bot]",
         "date": "Sun Aug 16 17:28:41 2026 \u002B0200",
@@ -2766,10 +2760,15 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Oct 30 14:21:56 2026 \u002B0100",
         "message": "refactor!: replace SyncResolveAfterInit with an AsyncSafety enum (#218)"
+      },
+      {
+        "sha": "a15aa752249762e424a8675149ff6953a8ad4277",
+        "author": "Valentin Breu\u00DF",
+        "date": "Fri Oct 30 14:23:56 2026 \u002B0100",
+        "message": "refactor!: rename the MS.DI external resolver and make the resolver assignment explicit (#219)"
       }
     ],
     "labels": [
-      "91168c96",
       "776ea1a9",
       "d3be90b8",
       "2c30eee1",
@@ -2818,14 +2817,14 @@ window.BENCHMARK_DATA = {
       "1853c4dd",
       "5d43f0d2",
       "12f4f8b2",
-      "f6700169"
+      "f6700169",
+      "a15aa752"
     ],
     "datasets": [
       {
         "label": "Awaiten time",
         "unit": "ns",
         "data": [
-          18.771453607082368,
           15.74774934564318,
           20.781590060393015,
           16.548098291953405,
@@ -2874,7 +2873,8 @@ window.BENCHMARK_DATA = {
           11.975062455122288,
           21.734128686097954,
           15.359008379777272,
-          19.20304852525393
+          19.20304852525393,
+          11.595332758767265
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -2930,7 +2930,7 @@ window.BENCHMARK_DATA = {
           144,
           144,
           144,
-          144,
+          208,
           208,
           208,
           208,
@@ -2950,7 +2950,6 @@ window.BENCHMARK_DATA = {
         "label": "MsDI time",
         "unit": "ns",
         "data": [
-          1595.9261006673178,
           1441.0380507151285,
           1755.5917382558187,
           1421.55065574646,
@@ -2999,7 +2998,8 @@ window.BENCHMARK_DATA = {
           947.2871310551961,
           1563.596320969718,
           1183.4312183380127,
-          1550.2178853352864
+          1550.2178853352864,
+          806.4398472125714
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -3075,7 +3075,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac time",
         "unit": "ns",
         "data": [
-          31104.364713541665,
           28744.754847935266,
           24717.397572835285,
           29322.13741861979,
@@ -3124,7 +3123,8 @@ window.BENCHMARK_DATA = {
           19189.494020734513,
           31279.35906110491,
           26503.87578125,
-          33939.82451520647
+          33939.82451520647,
+          19100.839313761393
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -3136,7 +3136,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
-          33098,
           33098,
           33092,
           33098,
@@ -3185,7 +3184,8 @@ window.BENCHMARK_DATA = {
           32477,
           32482,
           32478,
-          32482
+          32482,
+          32477
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -3200,7 +3200,6 @@ window.BENCHMARK_DATA = {
         "label": "Jab time",
         "unit": "ns",
         "data": [
-          13.476770444711049,
           10.218164003888766,
           12.029351558287939,
           15.572649530569713,
@@ -3249,7 +3248,8 @@ window.BENCHMARK_DATA = {
           5.160289133588473,
           9.26275013287862,
           6.352108747760455,
-          8.519527924557527
+          8.519527924557527,
+          4.963484271367391
         ],
         "borderColor": "#4A6FA5",
         "backgroundColor": "#4A6FA5",
@@ -3325,7 +3325,6 @@ window.BENCHMARK_DATA = {
         "label": "PureDI time",
         "unit": "ns",
         "data": [
-          16.36866015791893,
           14.412056701878706,
           18.634746185938518,
           13.461852681178312,
@@ -3374,7 +3373,8 @@ window.BENCHMARK_DATA = {
           9.962492595116297,
           16.11826977133751,
           12.590953326651029,
-          14.941697965065638
+          14.941697965065638,
+          9.269721765319506
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
@@ -3450,7 +3450,6 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc time",
         "unit": "ns",
         "data": [
-          679.1951740809849,
           710.0486492792766,
           706.5502618380955,
           659.5726377623422,
@@ -3499,7 +3498,8 @@ window.BENCHMARK_DATA = {
           452.5572237332662,
           810.0591949316172,
           577.2915293375651,
-          737.4715375219073
+          737.4715375219073,
+          450.19083404541016
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -3575,7 +3575,6 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector time",
         "unit": "ns",
         "data": [
-          11691.241608755929,
           11451.539334106445,
           13347.60471089681,
           10629.142162068685,
@@ -3624,7 +3623,8 @@ window.BENCHMARK_DATA = {
           8075.617836585412,
           13100.462368774413,
           8984.107233319965,
-          11502.42147216797
+          11502.42147216797,
+          7828.069591522217
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -3639,7 +3639,6 @@ window.BENCHMARK_DATA = {
           24760,
           24760,
           24760,
-          24760,
           24761,
           24760,
           24760,
@@ -3685,7 +3684,8 @@ window.BENCHMARK_DATA = {
           24760,
           24761,
           24761,
-          24761
+          24761,
+          24760
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -3700,12 +3700,6 @@ window.BENCHMARK_DATA = {
   },
   "Build (Size=256)": {
     "commits": [
-      {
-        "sha": "91168c962877ab3f096a1912f0e5459d266c95c0",
-        "author": "dependabot[bot]",
-        "date": "Sun Aug 16 17:28:33 2026 \u002B0200",
-        "message": "chore: Bump Autofac from 9.3.1 to 9.3.2 (#140)"
-      },
       {
         "sha": "776ea1a9da3ac36d6753b6b6b32ae6473a7b65e0",
         "author": "dependabot[bot]",
@@ -3999,10 +3993,15 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Oct 30 14:21:56 2026 \u002B0100",
         "message": "refactor!: replace SyncResolveAfterInit with an AsyncSafety enum (#218)"
+      },
+      {
+        "sha": "a15aa752249762e424a8675149ff6953a8ad4277",
+        "author": "Valentin Breu\u00DF",
+        "date": "Fri Oct 30 14:23:56 2026 \u002B0100",
+        "message": "refactor!: rename the MS.DI external resolver and make the resolver assignment explicit (#219)"
       }
     ],
     "labels": [
-      "91168c96",
       "776ea1a9",
       "d3be90b8",
       "2c30eee1",
@@ -4051,14 +4050,14 @@ window.BENCHMARK_DATA = {
       "1853c4dd",
       "5d43f0d2",
       "12f4f8b2",
-      "f6700169"
+      "f6700169",
+      "a15aa752"
     ],
     "datasets": [
       {
         "label": "Awaiten time",
         "unit": "ns",
         "data": [
-          93.42557965914408,
           85.8272475997607,
           155.215984582901,
           80.96690879662832,
@@ -4107,7 +4106,8 @@ window.BENCHMARK_DATA = {
           83.53994943300883,
           185.929670388882,
           108.92926082611083,
-          134.4530368584853
+          134.4530368584853,
+          85.87624213695526
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -4163,7 +4163,7 @@ window.BENCHMARK_DATA = {
           2128,
           2128,
           2128,
-          2128,
+          4176,
           4176,
           4176,
           4176,
@@ -4183,7 +4183,6 @@ window.BENCHMARK_DATA = {
         "label": "MsDI time",
         "unit": "ns",
         "data": [
-          14312.2422649677,
           14811.980535888672,
           15608.156799316406,
           13425.113284301759,
@@ -4232,7 +4231,8 @@ window.BENCHMARK_DATA = {
           8678.56275000939,
           14902.770018513997,
           11787.285293579102,
-          13327.55557861328
+          13327.55557861328,
+          7458.828954424177
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -4308,7 +4308,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac time",
         "unit": "ns",
         "data": [
-          725291.0034877232,
           706699.538922991,
           572116.2836914062,
           702045.5097005208,
@@ -4357,7 +4356,8 @@ window.BENCHMARK_DATA = {
           443989.1337890625,
           768760.8725911458,
           663749.3334960938,
-          825523.6574358259
+          825523.6574358259,
+          416680.8427408854
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -4369,7 +4369,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
-          741778,
           737611,
           736536,
           719762,
@@ -4418,7 +4417,8 @@ window.BENCHMARK_DATA = {
           718223,
           736741,
           740437,
-          741377
+          741377,
+          738983
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -4433,7 +4433,6 @@ window.BENCHMARK_DATA = {
         "label": "Jab time",
         "unit": "ns",
         "data": [
-          78.45981229345004,
           75.61555549303691,
           132.48474647204083,
           91.69595597471509,
@@ -4482,7 +4481,8 @@ window.BENCHMARK_DATA = {
           41.25234413998468,
           81.04304563999176,
           50.459651057209285,
-          63.18821606465748
+          63.18821606465748,
+          35.599135590451105
         ],
         "borderColor": "#4A6FA5",
         "backgroundColor": "#4A6FA5",
@@ -4558,7 +4558,6 @@ window.BENCHMARK_DATA = {
         "label": "PureDI time",
         "unit": "ns",
         "data": [
-          90.264836532729,
           88.14731085300446,
           128.15744568620408,
           79.1861942921366,
@@ -4607,7 +4606,8 @@ window.BENCHMARK_DATA = {
           44.90134395020349,
           94.56032819407326,
           56.998685558636986,
-          71.20145719051361
+          71.20145719051361,
+          41.92184210618337
         ],
         "borderColor": "#FF8C00",
         "backgroundColor": "#FF8C00",
@@ -4683,7 +4683,6 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc time",
         "unit": "ns",
         "data": [
-          42484.99379475912,
           45199.940096028644,
           43186.6991414388,
           42846.93612467448,
@@ -4732,7 +4731,8 @@ window.BENCHMARK_DATA = {
           27644.40278977614,
           44927.06261393229,
           35730.72441755022,
-          43367.90917532785
+          43367.90917532785,
+          22945.03320719401
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -4744,7 +4744,6 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
-          79754,
           81169,
           79817,
           80349,
@@ -4793,7 +4792,8 @@ window.BENCHMARK_DATA = {
           81347,
           81168,
           81430,
-          79680
+          79680,
+          79051
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -4808,7 +4808,6 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector time",
         "unit": "ns",
         "data": [
-          355309.7740234375,
           347297.17353515624,
           389906.18873697915,
           337444.0938476563,
@@ -4857,7 +4856,8 @@ window.BENCHMARK_DATA = {
           245144.14280348556,
           389642.696219308,
           272608.6998697917,
-          344932.99775390624
+          344932.99775390624,
+          206823.59927133413
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -4869,7 +4869,6 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
-          572962,
           573104,
           572285,
           573042,
@@ -4918,7 +4917,8 @@ window.BENCHMARK_DATA = {
           573075,
           573133,
           573073,
-          573108
+          573108,
+          573074
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -4933,12 +4933,6 @@ window.BENCHMARK_DATA = {
   },
   "Realistic": {
     "commits": [
-      {
-        "sha": "91168c962877ab3f096a1912f0e5459d266c95c0",
-        "author": "dependabot[bot]",
-        "date": "Sun Aug 16 17:28:33 2026 \u002B0200",
-        "message": "chore: Bump Autofac from 9.3.1 to 9.3.2 (#140)"
-      },
       {
         "sha": "776ea1a9da3ac36d6753b6b6b32ae6473a7b65e0",
         "author": "dependabot[bot]",
@@ -5232,10 +5226,15 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Oct 30 14:21:56 2026 \u002B0100",
         "message": "refactor!: replace SyncResolveAfterInit with an AsyncSafety enum (#218)"
+      },
+      {
+        "sha": "a15aa752249762e424a8675149ff6953a8ad4277",
+        "author": "Valentin Breu\u00DF",
+        "date": "Fri Oct 30 14:23:56 2026 \u002B0100",
+        "message": "refactor!: rename the MS.DI external resolver and make the resolver assignment explicit (#219)"
       }
     ],
     "labels": [
-      "91168c96",
       "776ea1a9",
       "d3be90b8",
       "2c30eee1",
@@ -5284,14 +5283,14 @@ window.BENCHMARK_DATA = {
       "1853c4dd",
       "5d43f0d2",
       "12f4f8b2",
-      "f6700169"
+      "f6700169",
+      "a15aa752"
     ],
     "datasets": [
       {
         "label": "Awaiten time",
         "unit": "ns",
         "data": [
-          232.48258730570475,
           266.80715805689493,
           257.7116198539734,
           260.81855283464705,
@@ -5340,7 +5339,8 @@ window.BENCHMARK_DATA = {
           244.83204598426818,
           252.3068213780721,
           270.8072752611978,
-          252.49475307464598
+          252.49475307464598,
+          311.3347945213318
         ],
         "borderColor": "#3949AB",
         "backgroundColor": "#3949AB",
@@ -5416,7 +5416,6 @@ window.BENCHMARK_DATA = {
         "label": "MsDI time",
         "unit": "ns",
         "data": [
-          584.8502012399526,
           597.829108101981,
           634.8762370623075,
           584.8171599933079,
@@ -5465,7 +5464,8 @@ window.BENCHMARK_DATA = {
           593.4664003665631,
           599.863578637441,
           689.7395954813276,
-          623.8396647317069
+          623.8396647317069,
+          598.488841193063
         ],
         "borderColor": "#512BD4",
         "backgroundColor": "#512BD4",
@@ -5541,7 +5541,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac time",
         "unit": "ns",
         "data": [
-          6501.420926607572,
           6685.648954264323,
           6857.82529296875,
           6261.334141322544,
@@ -5590,7 +5589,8 @@ window.BENCHMARK_DATA = {
           6517.880067552839,
           6730.426765950521,
           6473.684244791667,
-          6716.518798828125
+          6716.518798828125,
+          6393.623248173641
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -5666,7 +5666,6 @@ window.BENCHMARK_DATA = {
         "label": "Jab time",
         "unit": "ns",
         "data": [
-          173.780304312706,
           202.22289499214716,
           191.71879541079204,
           200.62421145805945,
@@ -5715,7 +5714,8 @@ window.BENCHMARK_DATA = {
           170.9600546543415,
           181.66934995991843,
           209.66075333527155,
-          185.4221714178721
+          185.4221714178721,
+          198.44285660130637
         ],
         "borderColor": "#D9534F",
         "backgroundColor": "#D9534F",
@@ -5791,7 +5791,6 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc time",
         "unit": "ns",
         "data": [
-          389.00408522288006,
           447.8134157498678,
           425.80444927215575,
           445.11448720296227,
@@ -5840,7 +5839,8 @@ window.BENCHMARK_DATA = {
           382.37727212905884,
           400.6971861975534,
           412.2930894631606,
-          604.050765101115
+          604.050765101115,
+          426.13155206044513
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -5916,7 +5916,6 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector time",
         "unit": "ns",
         "data": [
-          792.4626824696859,
           719.0755692890713,
           734.4204705556234,
           714.9273447309222,
@@ -5965,7 +5964,8 @@ window.BENCHMARK_DATA = {
           726.1650281633649,
           741.9315960747855,
           766.1113536198934,
-          751.3157238642375
+          751.3157238642375,
+          696.904826777322
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -6041,7 +6041,6 @@ window.BENCHMARK_DATA = {
         "label": "PureDI time",
         "unit": "ns",
         "data": [
-          174.4124734242757,
           188.56244366509574,
           188.82022052151817,
           190.40199645360312,
@@ -6090,7 +6089,8 @@ window.BENCHMARK_DATA = {
           173.9314236811229,
           175.43967384951455,
           182.87057396570842,
-          192.83525980313618
+          192.83525980313618,
+          190.71907869180043
         ],
         "borderColor": "#F0AD4E",
         "backgroundColor": "#F0AD4E",
