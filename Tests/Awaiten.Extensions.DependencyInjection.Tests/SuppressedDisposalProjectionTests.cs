@@ -145,7 +145,10 @@ public sealed partial class SuppressedDisposalProjectionTests
 	[Singleton<IBuffer>(Factory = nameof(Make), SuppressDisposal = true)]
 	public static partial class SuppressedFactoryContainer
 	{
+#pragma warning disable CA1859
+		// Declared as the interface on purpose: it hides the disposable Buffer, which the projection must still catch.
 		private static IBuffer Make() => new Buffer();
+#pragma warning restore CA1859
 	}
 
 	[Container]

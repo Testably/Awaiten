@@ -235,6 +235,9 @@ public sealed partial class AwaitenRegistrationTests
 	[Transient<KeyedDisposable>(SuppressDisposal = true, Key = "pool")]
 	public static partial class AdvertisingContainer
 	{
+#pragma warning disable CA1859
+		// Declared as the interface on purpose: a factory whose declared type may hide a disposable counts as possibly disposable.
 		private static IHidden MakeHidden() => new Hidden();
+#pragma warning restore CA1859
 	}
 }
