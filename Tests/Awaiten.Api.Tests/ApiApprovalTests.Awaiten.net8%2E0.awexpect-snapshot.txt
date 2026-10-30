@@ -216,6 +216,12 @@ namespace Awaiten
         public System.Type Module { get; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
+    public sealed class ImportServiceAttribute : System.Attribute
+    {
+        public ImportServiceAttribute(System.Type service) { }
+        public System.Type Service { get; }
+    }
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
     public sealed class ImportServiceAttribute<TService> : System.Attribute
     {
         public ImportServiceAttribute() { }

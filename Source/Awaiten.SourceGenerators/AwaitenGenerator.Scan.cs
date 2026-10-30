@@ -1349,7 +1349,7 @@ partial class AwaitenGenerator
 		Compilation compilation,
 		HashSet<ServiceKey> services,
 		HashSet<string> constraintRejected,
-		HashSet<string> externalServiceTypes)
+		ExternalServiceTypes externalServiceTypes)
 	{
 		ParameterModel member = ClassifyDependency(property.Type, property.GetAttributes(), asyncFactory: false, location: null, externalServiceTypes);
 		if (property.SetMethod is not { } setter || !IsAccessibleSetter(setter, containerSymbol, compilation)

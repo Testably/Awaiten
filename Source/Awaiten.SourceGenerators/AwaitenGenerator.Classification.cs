@@ -201,7 +201,7 @@ partial class AwaitenGenerator
 		Dictionary<ServiceKey, string> ServiceToImpl,
 		HashSet<string> ConstraintRejected,
 		HashSet<ServiceKey> ConsumedConditionals,
-		HashSet<string> ExternalServiceTypes,
+		ExternalServiceTypes ExternalServiceTypes,
 		List<(string ServiceType, INamedTypeSymbol Symbol)> DispatchCandidates,
 		List<DiagnosticInfo> Diagnostics);
 
@@ -339,7 +339,7 @@ partial class AwaitenGenerator
 		InjectionContext context,
 		InjectionSpec spec)
 	{
-		HashSet<string> externalServiceTypes = context.ExternalServiceTypes;
+		ExternalServiceTypes externalServiceTypes = context.ExternalServiceTypes;
 
 		// A container-side entry points its diagnostics at the [InjectProperty] attribute the author edits; an
 		// [Inject] property (EntryLocation null) points at the property declaration.
@@ -508,7 +508,7 @@ partial class AwaitenGenerator
 	///     direct dependency, so it surfaces as an unregistered service type rather than a misleading diagnostic
 	///     about the inner relationship.
 	/// </summary>
-	private static ParameterModel ClassifyParameter(IParameterSymbol parameter, bool asyncFactory, HashSet<string> externalServiceTypes)
+	private static ParameterModel ClassifyParameter(IParameterSymbol parameter, bool asyncFactory, ExternalServiceTypes externalServiceTypes)
 	{
 		LocationInfo? location = LocationInfo.From(parameter.Locations.FirstOrDefault());
 		return ClassifyDependency(parameter.Type, parameter.GetAttributes(), asyncFactory, location, externalServiceTypes);
@@ -522,8 +522,10 @@ partial class AwaitenGenerator
 	///     dependency. Returns the underlying service type it resolves and an optional <c>[FromKey]</c> selection.
 	///     The property path reuses this verbatim, so a member resolves exactly like a constructor parameter.
 	/// </summary>
-	private static ParameterModel ClassifyDependency(ITypeSymbol type, ImmutableArray<AttributeData> attributes, bool asyncFactory, LocationInfo? location, HashSet<string> externalServiceTypes)
+	private static ParameterModel ClassifyDependency(ITypeSymbol type, ImmutableArray<AttributeData> attributes, bool asyncFactory, LocationInfo? location, ExternalServiceTypes externalServiceTypes)
 	{
+		externalServiceTypes.RecordClosings(type);
+
 		if (HasArgAttribute(attributes))
 		{
 			return new ParameterModel(type.ToDisplayString(FullyQualified), DependencyKind.Arg, Location: location);
@@ -632,14 +634,14 @@ partial class AwaitenGenerator
 			return relationship;
 		}
 
-		// [ImportService<T>]: a direct dependency whose service type is declared external is satisfied from the
-		// container's IExternalResolver, forwarding any [FromKey] key. Stronger than the blanket [ImportServices]
-		// fall-through (which routes only unkeyed direct dependencies): it also routes a keyed one, whether a
-		// constructor parameter, a factory parameter or an [Inject] property (this is the shared classification core).
-		// A relationship (Func/Lazy/Task) or collection over T returned above, so only the direct dependency of type
-		// T is routed; every other unresolved dependency still gets the AWT101 check.
+		// [ImportService]: a direct dependency whose service type is declared external, or is a closing of a declared
+		// open generic definition, is satisfied from the container's IExternalResolver, forwarding any [FromKey] key.
+		// Stronger than the blanket [ImportServices] fall-through (which routes only unkeyed direct dependencies): it
+		// also routes a keyed one, whether a constructor parameter, a factory parameter or an [Inject] property (this
+		// is the shared classification core). A relationship (Func/Lazy/Task) or collection over T returned above, so
+		// only the direct dependency of type T is routed; every other unresolved dependency still gets the AWT101 check.
 		string serviceType = type.ToDisplayString(FullyQualified);
-		if (externalServiceTypes.Contains(serviceType))
+		if (externalServiceTypes.Routes(type, serviceType))
 		{
 			return new ParameterModel(serviceType, DependencyKind.External, Key: key, Location: location);
 		}
@@ -1100,36 +1102,76 @@ partial class AwaitenGenerator
 		=> HasAwaitenAttribute(containerSymbol.GetAttributes(), "ImportServicesAttribute");
 
 	/// <summary>
-	///     The fully-qualified service types declared external with <c>[ImportService&lt;T&gt;]</c> on the container
-	///     or any imported <c>[Module]</c> (symmetric with the blanket <c>[ImportServices]</c>, which a module can
-	///     contribute too). Each routes every unregistered direct dependency of that type (keyed or not, in a
-	///     constructor, factory or <c>[Inject]</c> property) to the container's <c>IExternalResolver</c>, forwarding
-	///     any <c>[FromKey]</c> key.
+	///     The service types declared external with <c>[ImportService&lt;T&gt;]</c> or <c>[ImportService(typeof(…))]</c>
+	///     on the container or any imported <c>[Module]</c> (symmetric with the blanket <c>[ImportServices]</c>, which a
+	///     module can contribute too). Each routes every direct dependency of that type, or of a closing of an open
+	///     generic definition (keyed or not, in a constructor, factory or <c>[Inject]</c> property), to the container's
+	///     <c>IExternalResolver</c>, forwarding any <c>[FromKey]</c> key. A <c>typeof</c> argument that is neither a
+	///     closed type nor an unbound generic definition is AWT215.
 	/// </summary>
-	private static HashSet<string> CollectExternalServiceTypes(INamedTypeSymbol containerSymbol, List<ImportedModule> modules)
+	private static ExternalServiceTypes CollectExternalServiceTypes(INamedTypeSymbol containerSymbol, List<ImportedModule> modules, List<DiagnosticInfo> diagnostics)
 	{
-		HashSet<string> types = new(StringComparer.Ordinal);
-		AddExternalServiceTypes(containerSymbol, types);
-		foreach (ImportedModule module in modules)
+		ExternalServiceTypes types = new();
+		foreach ((AttributeData attribute, Location? fallbackLocation) in AttributesOf(containerSymbol, modules))
 		{
-			AddExternalServiceTypes(module.Symbol, types);
+			if (attribute.AttributeClass is not { Name: "ImportServiceAttribute", } attributeClass
+			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace)
+			{
+				continue;
+			}
+
+			if (attributeClass is { IsGenericType: true, TypeArguments.Length: 1, })
+			{
+				types.Closed.Add(attributeClass.TypeArguments[0].ToDisplayString(FullyQualified));
+				continue;
+			}
+
+			ITypeSymbol? service = attribute.ConstructorArguments.Length == 1 ? attribute.ConstructorArguments[0].Value as ITypeSymbol : null;
+			if (service is INamedTypeSymbol named && IsOpenGenericDefinition(named))
+			{
+				types.Open.Add(UnboundDisplay(named));
+			}
+			else if (service is not null && IsClosedType(service))
+			{
+				types.Closed.Add(service.ToDisplayString(FullyQualified));
+			}
+			else
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.ImportServiceTypeNotClosedOrOpen,
+					LocationInfo.From(attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? fallbackLocation),
+					new EquatableArray<string>([service is null ? "null" : Display(service.ToDisplayString(FullyQualified)),])));
+			}
 		}
 
 		return types;
 	}
 
-	/// <summary>Adds every <c>[ImportService&lt;T&gt;]</c> type argument declared on <paramref name="symbol" /> to <paramref name="types" />.</summary>
-	private static void AddExternalServiceTypes(INamedTypeSymbol symbol, HashSet<string> types)
-	{
-		foreach (AttributeData attribute in symbol.GetAttributes())
+	/// <summary>
+	///     Whether <paramref name="type" /> is an unbound generic definition such as <c>typeof(ILogger&lt;&gt;)</c>: an
+	///     unbound generic from source, or its own original definition when read back from a referenced assembly's
+	///     metadata, where the <c>typeof</c> argument decodes as the definition with its type parameters. The arity
+	///     check excludes <c>Outer&lt;&gt;.Inner</c>, which Roslyn flags unbound although it has no type parameters.
+	/// </summary>
+	private static bool IsOpenGenericDefinition(INamedTypeSymbol type)
+		=> type.Arity > 0
+		   && (type.IsUnboundGenericType || SymbolEqualityComparer.Default.Equals(type, type.OriginalDefinition));
+
+	/// <summary>
+	///     Whether <paramref name="type" /> names no type parameter and no unbound generic anywhere: in its type
+	///     arguments, its containing types, or the element of an array or pointer (so <c>Outer&lt;&gt;.Inner</c> is not).
+	/// </summary>
+	private static bool IsClosedType(ITypeSymbol type)
+		=> type switch
 		{
-			if (attribute.AttributeClass is { Name: "ImportServiceAttribute", IsGenericType: true, TypeArguments.Length: 1, } attributeClass
-			    && attributeClass.ContainingNamespace?.ToDisplayString() == AttributeNamespace)
-			{
-				types.Add(attributeClass.TypeArguments[0].ToDisplayString(FullyQualified));
-			}
-		}
-	}
+			ITypeParameterSymbol => false,
+			IArrayTypeSymbol array => IsClosedType(array.ElementType),
+			IPointerTypeSymbol pointer => IsClosedType(pointer.PointedAtType),
+			INamedTypeSymbol named => !named.IsUnboundGenericType
+			                          && named.TypeArguments.All(IsClosedType)
+			                          && (named.ContainingType is null || IsClosedType(named.ContainingType)),
+			_ => true,
+		};
 
 	private static bool IsRelationshipType(ITypeSymbol type)
 		=> type is INamedTypeSymbol { IsGenericType: true, TypeArguments.Length: 1, Name: "Func" or "Lazy", } named

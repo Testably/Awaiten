@@ -133,5 +133,128 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).DoesNotContain("*AWT176*").AsWildcard()
 				.Because("an [ImportService<T>] consumed only by a lifecycle hook parameter is still live");
 		}
+
+		[Test]
+		public async Task ReportsWhenNoClosingOfAnOpenImportIsConsumed()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface ILog<T> { }
+			                                       public sealed class Service { }
+
+			                                       [Container]
+			                                       [ImportService(typeof(ILog<>))]
+			                                       [Singleton<Service>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT176*ILog<>*").AsWildcard()
+				.Because("an open import none of whose closings is consumed is dead");
+		}
+
+		[Test]
+		public async Task ReportsWhenAClosingOfAnOpenImportIsReferencedOnlyThroughACollection()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using System.Collections.Generic;
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface ILog<T> { }
+			                                       public sealed class Service { public Service(IEnumerable<ILog<Service>> logs) { } }
+
+			                                       [Container]
+			                                       [ImportService(typeof(ILog<>))]
+			                                       [Singleton<Service>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT176*ILog<>*").AsWildcard()
+				.Because("a collection over a closing is not routed, so the open import stays inert");
+		}
+
+		[Test]
+		public async Task DoesNotReportWhenAClosingOfAnOpenImportIsReferencedOnlyThroughARelationship()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using System;
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface ILog<T> { }
+			                                       public sealed class Service { public Service(Func<ILog<Service>> factory) { } }
+
+			                                       [Container]
+			                                       [ImportService(typeof(ILog<>))]
+			                                       [Singleton<Service>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT101*ILog<MyCode.Service>*").AsWildcard()
+				.Because("a relationship over a closing is not routed, so the missing registration is AWT101");
+			await That(result.Diagnostics).DoesNotContain("*AWT176*").AsWildcard()
+				.Because("the closing is referenced through the relationship, so the AWT101 is the one signal, as for the closed form");
+		}
+
+		[Test]
+		public async Task DoesNotReportWhenAClosingOfAnOpenImportIsConsumed()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface ILog<T> { }
+			                                       public sealed class Service { public Service(ILog<Service> log) { } }
+
+			                                       [Container]
+			                                       [ImportService(typeof(ILog<>))]
+			                                       [Singleton<Service>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("a consumed closing makes the open import live and needs no registration");
+		}
+
+		[Test]
+		public async Task ReportsAnUnconsumedOpenImportDeclaredOnAModule()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface ILog<T> { }
+			                                       public sealed class Service { }
+
+			                                       [Module]
+			                                       [ImportService(typeof(ILog<>))]
+			                                       [Singleton<Service>]
+			                                       public static class MyModule;
+
+			                                       [Container]
+			                                       [Import(typeof(MyModule))]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT176*ILog<>*").AsWildcard()
+				.Because("a module's open import is honored for the importing container, so it is checked there too");
+		}
 	}
 }

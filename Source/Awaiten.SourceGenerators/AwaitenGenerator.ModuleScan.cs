@@ -525,7 +525,7 @@ partial class AwaitenGenerator
 		}
 
 		if (release
-		    && ClassifyParameter(parameter, asyncFactory: false, new HashSet<string>(StringComparer.Ordinal)).Kind
+		    && ClassifyParameter(parameter, asyncFactory: false, new ExternalServiceTypes()).Kind
 			    is DependencyKind.Func or DependencyKind.Lazy or DependencyKind.FuncTask or DependencyKind.LazyTask or DependencyKind.TypeDispatch)
 		{
 			return new DiagnosticInfo(
@@ -786,7 +786,7 @@ partial class AwaitenGenerator
 		}
 
 		IMethodSymbol? constructor = SelectConstructor(
-			type, module, compilation, Array.Empty<string>(), new ExternalSurface(false, new HashSet<string>(StringComparer.Ordinal)), _ => true);
+			type, module, compilation, Array.Empty<string>(), new ExternalSurface(false, new ExternalServiceTypes()), _ => true);
 		if (constructor is null)
 		{
 			diagnostics.Add(new DiagnosticInfo(

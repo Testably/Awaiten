@@ -75,8 +75,8 @@
  AWT172  | Awaiten   | Warning  | A [Scan]'s name, namespace or exclude filters removed every marker-assignable match, so the scan registers nothing
  AWT173  | Awaiten   | Warning  | A [Scan] exclusion (an Exclude type or a !-prefixed name/namespace pattern) matched no candidate and is likely stale
  AWT174  | Awaiten   | Warning  | A [Scan] include pattern (* for a name, ** for a namespace) matches every candidate and does not narrow the scan
- AWT175  | Awaiten   | Error    | A type is declared [ImportService<T>] but is also registered on the container
- AWT176  | Awaiten   | Warning  | A type declared [ImportService<T>] is never consumed by any dependency in the graph
+ AWT175  | Awaiten   | Error    | A type declared [ImportService], or a routed closing of an open generic one, is also registered on the container
+ AWT176  | Awaiten   | Warning  | A type declared [ImportService] (or every closing of an open generic one) is never consumed by any dependency in the graph
  AWT177  | Awaiten   | Error    | An [InjectProperty<TImplementation>] names a member that is not a settable property on TImplementation
  AWT178  | Awaiten   | Error    | An [InjectProperty<TImplementation>] targets a TImplementation produced by a Factory or Instance registration
  AWT179  | Awaiten   | Warning  | Two [InjectProperty<TImplementation>] entries name the same property of the same implementation
@@ -115,6 +115,7 @@
  AWT212  | Awaiten   | Error    | A keyed composite's Key matches no registration of the composed service
  AWT213  | Awaiten   | Error    | A Type-keyed dispatch dictionary is not Func<TBase> over a non-generic interface, carries [FromKey], or its closings are not of one single-parameter generic
  AWT214  | Awaiten   | Error    | A container that suppresses the disposal of a possibly disposable service is projected into Microsoft.Extensions.DependencyInjection, which would dispose it anyway
+ AWT215  | Awaiten   | Error    | An [ImportService(typeof(...))] argument is neither a closed type nor an unbound generic definition
  AWT217  | Awaiten   | Error    | An [InjectProperty(typeof(...), name)] target is partially open, neither a closed type nor an unbound generic definition
 
 ; AWT137 (an injected property marked [Arg]) is retired: [Arg] targets only parameters, so the compiler rejects it on a property. The id stays reserved and is never reused.

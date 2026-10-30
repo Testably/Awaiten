@@ -1843,7 +1843,7 @@ public static partial class CoffeeShop;
 ### AWT175
 
 :::danger[Error]
-A type is declared `[ImportService<T>]` (drawn from the host provider) but is also registered on the container. A type is either host-owned or Awaiten-owned, not both.
+A type is declared `[ImportService]` (drawn from the host provider) but is also registered on the container. A type is either host-owned or Awaiten-owned, not both. For an open generic import such as `[ImportService(typeof(ILogger<>))]`, this is reported for each closing that a dependency routes to the host while the container also registers it.
 :::
 
 ```csharp expect=AWT175
@@ -1856,12 +1856,30 @@ public static partial class CoffeeShop;
 ### AWT176
 
 :::warning[Warning]
-A type declared `[ImportService<T>]` is never consumed by any dependency in the graph, so the declaration is dead. This is most often a stale or mistyped `[ImportService<T>]`.
+A type declared `[ImportService]` is never consumed by any dependency in the graph, so the declaration is dead. For an open generic import, no closing of it is consumed. This is most often a stale or mistyped `[ImportService]`.
 :::
 
 ```csharp expect=AWT176
 [Container]
 [ImportService<IPaymentGateway>]   // nothing in the graph depends on IPaymentGateway
+[Singleton<Menu>]
+public static partial class CoffeeShop;
+```
+
+### AWT215
+
+:::danger[Error]
+The `typeof` argument of `[ImportService(typeof(...))]` is neither a closed type nor an unbound generic definition, so it names neither one service nor every closing of one generic type. Pass a closed type such as `typeof(IPaymentGateway)` or an unbound generic definition such as `typeof(ILogger<>)`.
+:::
+
+```csharp expect=AWT215
+public sealed class Recipe<T>
+{
+    public sealed class Step;
+}
+
+[Container]
+[ImportService(typeof(Recipe<>.Step))]   // a type nested in an unbound generic is neither
 [Singleton<Menu>]
 public static partial class CoffeeShop;
 ```
