@@ -1705,27 +1705,16 @@ internal static class Diagnostics
 		isEnabledByDefault: true);
 
 	/// <summary>
-	///     The <c>typeof</c> argument of an <c>[ImportService(typeof(…))]</c> is neither a closed type nor an unbound
-	///     generic definition, for example a type nested in an unbound generic (<c>Outer&lt;&gt;.Inner</c>), so it names
-	///     neither one service nor every closing of one generic definition. The declaration is ignored.
+	///     The <c>typeof</c> argument of an <c>[ImportService(typeof(…))]</c> or an
+	///     <c>[InjectProperty(typeof(…), name)]</c> is neither a closed type nor an unbound generic definition, for
+	///     example a type nested in an unbound generic (<c>Outer&lt;&gt;.Inner</c>, which C# accepts) or a partially
+	///     open type (<c>Outer&lt;int&gt;.Inner&lt;&gt;</c>, which C# also rejects as CS7003), so it names neither one
+	///     type nor every closing of one generic definition. The declaration is ignored.
 	/// </summary>
-	public static readonly DiagnosticDescriptor ImportServiceTypeNotClosedOrOpen = new(
+	public static readonly DiagnosticDescriptor TypeofArgumentNotClosedOrOpen = new(
 		"AWT215",
-		"Imported service type is partially open",
-		"[ImportService] cannot import '{0}': it is neither a closed type nor an unbound generic definition; pass a closed type such as typeof(IClock) or an unbound generic definition such as typeof(ILogger<>)",
-		"Awaiten",
-		DiagnosticSeverity.Error,
-		isEnabledByDefault: true);
-
-	/// <summary>
-	///     The <c>typeof</c> argument of an <c>[InjectProperty(typeof(...), name)]</c> is partially open, like
-	///     <c>typeof(Outer&lt;int&gt;.Inner&lt;&gt;)</c>: it is neither a closed type nor an unbound generic definition,
-	///     so no constructed type can match it. The C# compiler rejects it as well (CS7003); this names the fix.
-	/// </summary>
-	public static readonly DiagnosticDescriptor InjectPropertyPartiallyOpen = new(
-		"AWT217",
-		"[InjectProperty] target is partially open",
-		"The [InjectProperty] target '{0}' is partially open; pass a closed type such as typeof(Repository<Order>), or an unbound generic definition with every type argument omitted such as typeof(Repository<>)",
+		"A typeof argument is neither a closed type nor an unbound generic definition",
+		"The typeof argument '{1}' of [{0}] is neither a closed type nor an unbound generic definition; pass a closed type such as typeof(Repository<Order>) or an unbound generic definition with every type argument omitted such as typeof(Repository<>)",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
