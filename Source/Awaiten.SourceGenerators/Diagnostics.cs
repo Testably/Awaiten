@@ -1098,14 +1098,15 @@ internal static class Diagnostics
 		isEnabledByDefault: true);
 
 	/// <summary>
-	///     A type is declared <c>[ImportService&lt;T&gt;]</c> (drawn from the external provider) yet is also registered
-	///     on the container: it is either host-owned or Awaiten-owned, not both. Remove the registration to keep it
-	///     external, or drop the <c>[ImportService&lt;T&gt;]</c> to resolve it from the graph.
+	///     A type is declared <c>[ImportService]</c> (drawn from the external provider) yet is also registered on the
+	///     container: it is either host-owned or Awaiten-owned, not both. For an open generic import this is reported
+	///     for each closing that a dependency routes externally while the container also registers it. Remove the
+	///     registration to keep it external, or drop the <c>[ImportService]</c> to resolve it from the graph.
 	/// </summary>
 	public static readonly DiagnosticDescriptor ContradictingExternalService = new(
 		"AWT175",
 		"External service is also registered",
-		"'{0}' is declared [ImportService<{0}>] but also registered on the container; a type is either host-owned or Awaiten-owned. Remove the registration or the [ImportService<>] declaration.",
+		"'{0}' is drawn from the external provider by [ImportService] but also registered on the container; a type is either host-owned or Awaiten-owned. Remove the registration or the [ImportService] declaration.",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
@@ -1125,13 +1126,14 @@ internal static class Diagnostics
 		isEnabledByDefault: true);
 
 	/// <summary>
-	///     A type declared <c>[ImportService&lt;T&gt;]</c> is never consumed by any dependency in the graph, so the
-	///     declaration is dead - most often a mistyped or stale <c>[ImportService&lt;T&gt;]</c> left after a refactor.
+	///     A type declared <c>[ImportService]</c> is never consumed by any dependency in the graph (for an open generic
+	///     import, no closing of it is), so the declaration is dead - most often a mistyped or stale
+	///     <c>[ImportService]</c> left after a refactor.
 	/// </summary>
 	public static readonly DiagnosticDescriptor UnconsumedExternalService = new(
 		"AWT176",
 		"External service is never consumed",
-		"'{0}' is declared [ImportService<{0}>] but no dependency in the container consumes it, so the declaration has no effect. Remove it or add the consuming dependency.",
+		"'{0}' is declared [ImportService] but no dependency in the container consumes it, so the declaration has no effect. Remove it or add the consuming dependency.",
 		"Awaiten",
 		DiagnosticSeverity.Warning,
 		isEnabledByDefault: true);
@@ -1698,6 +1700,19 @@ internal static class Diagnostics
 		"AWT214",
 		"A container with suppressed disposal is projected into Microsoft.Extensions.DependencyInjection",
 		"'{0}' is projected into Microsoft.Extensions.DependencyInjection, but its container suppresses the disposal of '{1}', which MS.DI would dispose anyway, so the projection throws at startup; remove SuppressDisposal, register a pre-built Instance you own, or resolve the service from the container directly (AwaitenServiceProvider)",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     The <c>typeof</c> argument of an <c>[ImportService(typeof(…))]</c> is neither a closed type nor an unbound
+	///     generic definition, for example a type nested in an unbound generic (<c>Outer&lt;&gt;.Inner</c>), so it names
+	///     neither one service nor every closing of one generic definition. The declaration is ignored.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ImportServiceTypeNotClosedOrOpen = new(
+		"AWT215",
+		"Imported service type is partially open",
+		"[ImportService] cannot import '{0}': it is neither a closed type nor an unbound generic definition; pass a closed type such as typeof(IClock) or an unbound generic definition such as typeof(ILogger<>)",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);

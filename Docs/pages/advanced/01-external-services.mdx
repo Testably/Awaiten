@@ -1,10 +1,17 @@
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
 # External services
 
 Not everything comes from Awaiten. When you run under ASP.NET Core or the generic host, some services live in the host's provider. The payment gateway, the framework logger, and the configuration are wired there. External services let an Awaiten graph pull those in.
 
-## Pull a single type with `[ImportService<T>]`
+## Pull a single type with `[ImportService]`
 
-Declare a service type external with `[ImportService<T>]` on the container. Every unregistered dependency of that type is satisfied from the external provider instead of the graph, whether it is keyed or not, and whether it arrives as a constructor parameter, a factory parameter, or an `[Inject]` property. No Awaiten registration is needed for it. Every *other* unresolved dependency still gets the missing-dependency check (AWT101), so this is safer than the blanket fall-through below.
+Declare a service type external with `[ImportService<T>]` on the container, or with its `typeof` form `[ImportService(typeof(T))]`; the two behave the same. Every unregistered dependency of that type is satisfied from the external provider instead of the graph, whether it is keyed or not, and whether it arrives as a constructor parameter, a factory parameter, or an `[Inject]` property. No Awaiten registration is needed for it. Every *other* unresolved dependency still gets the missing-dependency check (AWT101), so this is safer than the blanket fall-through below.
+
+<Tabs groupId="importServiceForm">
+
+<TabItem value="generic" label="Generic" default>
 
 ```csharp
 [Container]
@@ -15,6 +22,22 @@ public static partial class CoffeeShop;
 
 public sealed class Register(Till till, IPaymentGateway gateway);   // IPaymentGateway comes from the host
 ```
+
+</TabItem>
+
+<TabItem value="typeof" label="typeof">
+
+```csharp
+[Container]
+[ImportService(typeof(IPaymentGateway))]   // same as [ImportService<IPaymentGateway>]
+[Singleton<Till>]
+[Singleton<Register>]
+public static partial class CoffeeShop;
+```
+
+</TabItem>
+
+</Tabs>
 
 For a keyed external service, select the key on a container [factory method](../registration/factories-and-instances) so the consumer stays a plain class; the `[FromKey]` is forwarded to the resolver.
 
@@ -30,13 +53,58 @@ public static partial class CoffeeShop
 }
 ```
 
-`[ImportService<T>]` works on an imported `[Module]` too, exactly as it does on the container.
+`[ImportService]` works on an imported `[Module]` too, exactly as it does on the container.
 
 :::tip[Keeping DI out of your domain]
-Because external-ness is declared on the container, a service that consumes a host type just asks for it as an ordinary parameter, with no Awaiten reference in the domain class. `[ImportService<T>]` is the clean-domain form. The only per-parameter attribute involved is `[FromKey]`, and only when you need a keyed external service.
+Because external-ness is declared on the container, a service that consumes a host type just asks for it as an ordinary parameter, with no Awaiten reference in the domain class. `[ImportService]` is the clean-domain form. The only per-parameter attribute involved is `[FromKey]`, and only when you need a keyed external service.
 :::
 
 Only the *direct* dependency of type `T` is routed. A relationship or collection over it (`Func<T>`, `Lazy<T>`, `Task<T>`, `IEnumerable<T>`, and the like) is not, because the resolver hands back an instance, not a deferred or fanned-out shape. Such a dependency still resolves from the Awaiten graph, so with no registration it surfaces as AWT101 (or an empty collection). Declaring a type external that nothing in the graph consumes is a dead declaration and is reported as AWT176.
+
+## Pull every closing of a generic type
+
+Some host services are generic, and every consumer asks for its own closing: under the generic host each class wants an `ILogger<ThatClass>`. Pass the unbound generic definition to the `typeof` form, and every closing that a dependency asks for comes from the external provider. The generic form cannot express this, because C# does not allow an unbound generic such as `ILogger<>` as a type argument.
+
+<Tabs groupId="importServiceForm">
+
+<TabItem value="generic" label="Generic" default>
+
+```csharp
+using Microsoft.Extensions.Logging;
+
+public sealed class OrderDesk(ILogger<OrderDesk> logger);
+public sealed class Roaster(ILogger<Roaster> logger);
+
+[Container]
+[ImportService<ILogger<OrderDesk>>]   // one declaration per consumer
+[ImportService<ILogger<Roaster>>]
+[Singleton<OrderDesk>]
+[Singleton<Roaster>]
+public static partial class CoffeeShop;
+```
+
+</TabItem>
+
+<TabItem value="typeof" label="typeof">
+
+```csharp
+using Microsoft.Extensions.Logging;
+
+public sealed class OrderDesk(ILogger<OrderDesk> logger);
+public sealed class Roaster(ILogger<Roaster> logger);
+
+[Container]
+[ImportService(typeof(ILogger<>))]   // ILogger<OrderDesk>, ILogger<Roaster>, and any later consumer
+[Singleton<OrderDesk>]
+[Singleton<Roaster>]
+public static partial class CoffeeShop;
+```
+
+</TabItem>
+
+</Tabs>
+
+Each closing is routed exactly as if it were imported on its own: a `[FromKey]` key is forwarded, a relationship or collection over a closing is not routed, and the closing is listed as an [external dependency](#verifying-the-wiring) of the container, so startup verification checks every closing the graph consumes. A closing that is routed to the host but also registered on the container is reported as AWT175, and an open import none of whose closings is consumed as AWT176. The argument must be a closed type or an unbound generic definition; anything in between, such as `typeof(Outer<>.Inner)`, is reported as AWT215.
 
 ## Fall through everything with `[ImportServices]`
 
@@ -55,7 +123,7 @@ public static partial class CoffeeShop;
 
 Awaiten does not create the external provider. It asks an *external resolver* for these dependencies, and you supply that resolver once, up front.
 
-Under the [MS.DI bridge](../msdi-bridge) this is automatic. `AddAwaitenContainer` and the startup initialization wire the container to the host's `IServiceProvider`, so `[ImportService<T>]` and `[ImportServices]` dependencies resolve from the host with nothing extra to do.
+Under the [MS.DI bridge](../msdi-bridge) this is automatic. `AddAwaitenContainer` and the startup initialization wire the container to the host's `IServiceProvider`, so `[ImportService]` and `[ImportServices]` dependencies resolve from the host with nothing extra to do.
 
 Standing alone, you set it yourself. Implement `IExternalResolver` and pass it to the generated `Root` constructor, so it is in place before anything resolves, eager singletons included.
 

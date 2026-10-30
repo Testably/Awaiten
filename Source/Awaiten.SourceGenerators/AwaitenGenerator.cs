@@ -304,11 +304,70 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 	/// <summary>
 	///     The container's external-resolution surface, consulted during constructor selection and open-generic/scan
 	///     seeding: the blanket <c>[ImportServices]</c> fall-through (<see cref="ImportServices" />) plus the per-type
-	///     <c>[ImportService&lt;T&gt;]</c> declarations (<see cref="ServiceTypes" />). The two are computed together
+	///     <c>[ImportService]</c> declarations (<see cref="ServiceTypes" />). The two are computed together
 	///     and bundled so they travel as one through the coalescing-phase helpers that decide whether a constructor
 	///     parameter is satisfiable, keeping their parameter lists short.
 	/// </summary>
-	internal readonly record struct ExternalSurface(bool ImportServices, HashSet<string> ServiceTypes);
+	internal readonly record struct ExternalSurface(bool ImportServices, ExternalServiceTypes ServiceTypes);
+
+	/// <summary>
+	///     The service types declared external with <c>[ImportService&lt;T&gt;]</c> or <c>[ImportService(typeof(…))]</c>:
+	///     the closed types (<see cref="Closed" />) and the unbound generic definitions (<see cref="Open" />), each by its
+	///     fully qualified display (<c>global::Ns.ILogger&lt;&gt;</c> for a definition).
+	/// </summary>
+	/// <remarks>
+	///     Lives only inside one graph build and never reaches a model. <see cref="Closings" /> is filled while
+	///     dependencies are classified, because the model's service type strings no longer carry the generic definition
+	///     that AWT175 and AWT176 group the closings of an open import by.
+	/// </remarks>
+	internal sealed class ExternalServiceTypes
+	{
+		/// <summary>The closed service types, routed only when a dependency names exactly that type.</summary>
+		public HashSet<string> Closed { get; } = new(StringComparer.Ordinal);
+
+		/// <summary>The unbound generic definitions, routing every closing a dependency names.</summary>
+		public HashSet<string> Open { get; } = new(StringComparer.Ordinal);
+
+		/// <summary>Each closing of an <see cref="Open" /> definition met during classification, mapped to that definition.</summary>
+		public Dictionary<string, string> Closings { get; } = new(StringComparer.Ordinal);
+
+		/// <summary>Whether a direct dependency of <paramref name="type" /> (displayed as <paramref name="serviceType" />) is routed externally.</summary>
+		public bool Routes(ITypeSymbol type, string serviceType)
+			=> Closed.Contains(serviceType) || (Open.Count > 0 && OpenDefinitionOf(type) is { } definition && Open.Contains(definition));
+
+		/// <summary>
+		///     Records every closing of an <see cref="Open" /> definition within <paramref name="type" /> (the type itself
+		///     and its type arguments, recursively), so a closing reached only through a relationship such as
+		///     <c>Func&lt;ILogger&lt;T&gt;&gt;</c> still counts as consuming its import.
+		/// </summary>
+		public void RecordClosings(ITypeSymbol type)
+		{
+			if (Open.Count == 0 || type is not INamedTypeSymbol named)
+			{
+				return;
+			}
+
+			if (OpenDefinitionOf(named) is { } definition && Open.Contains(definition))
+			{
+				Closings[named.ToDisplayString(FullyQualified)] = definition;
+			}
+
+			foreach (ITypeSymbol argument in named.TypeArguments)
+			{
+				RecordClosings(argument);
+			}
+		}
+
+		/// <summary>The display of the unbound generic definition <paramref name="type" /> closes, or <see langword="null" /> when it is not a closed generic.</summary>
+		private static string? OpenDefinitionOf(ITypeSymbol type)
+			=> type is INamedTypeSymbol { Arity: > 0, IsUnboundGenericType: false, } named
+				? UnboundDisplay(named)
+				: null;
+	}
+
+	/// <summary>The fully qualified display of the unbound generic definition of <paramref name="type" />, e.g. <c>global::Ns.ILogger&lt;&gt;</c>.</summary>
+	internal static string UnboundDisplay(INamedTypeSymbol type)
+		=> type.OriginalDefinition.ConstructUnboundGenericType().ToDisplayString(FullyQualified);
 
 	/// <summary>
 	///     The container-wide inputs threaded to each per-implementation <see cref="BuildInstance" />, passed
@@ -365,12 +424,13 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		bool importServices = ContainerImportsServices(containerSymbol)
 		                      || modules.Any(module => HasAwaitenAttribute(module.Symbol.GetAttributes(), "ImportServicesAttribute"));
 
-		// [ImportService<T>]: the typed counterpart of the blanket flag above, honored on the container and any
-		// imported module. Each declared type routes every unregistered dependency of that type - keyed or not,
-		// whether a constructor parameter, factory parameter or [Inject] property - to the external provider, while
-		// every other unresolved dependency keeps the AWT101 check. Bundled with the blanket flag as the container's
-		// external-resolution surface, threaded through the coalescing phase that decides constructor satisfiability.
-		HashSet<string> externalServiceTypes = CollectExternalServiceTypes(containerSymbol, modules);
+		// [ImportService<T>] / [ImportService(typeof(...))]: the typed counterpart of the blanket flag above, honored on
+		// the container and any imported module. Each declared type (or every closing of a declared open generic
+		// definition) routes every dependency of that type - keyed or not, whether a constructor parameter, factory
+		// parameter or [Inject] property - to the external provider, while every other unresolved dependency keeps the
+		// AWT101 check. Bundled with the blanket flag as the container's external-resolution surface, threaded through
+		// the coalescing phase that decides constructor satisfiability.
+		ExternalServiceTypes externalServiceTypes = CollectExternalServiceTypes(containerSymbol, modules, diagnostics);
 		ExternalSurface external = new(importServices, externalServiceTypes);
 
 		// Collect also expands [Scan]s into overridable registrations (IsScan), ordered after the explicit ones
@@ -440,9 +500,10 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		List<ConditionalRegistration> conditionals = CollectConditionalRegistrations(raw);
 		HashSet<ServiceKey> consumedConditionals = new();
 
-		// AWT175: a type declared [ImportService<T>] must not also be registered on the container - it is either
-		// host-owned or Awaiten-owned, not both. Reported now that the coalesced service->impl map is known.
-		ReportContradictingExternalServices(externalServiceTypes, serviceToImpl, containerSymbol, diagnostics);
+		// AWT175: a closed type declared [ImportService] must not also be registered on the container - it is either
+		// host-owned or Awaiten-owned, not both. Reported now that the coalesced service->impl map is known. The
+		// closings of an open import are checked once the instances are built (ReportOpenExternalServices).
+		ReportContradictingExternalServices(externalServiceTypes.Closed, serviceToImpl, containerSymbol, diagnostics);
 
 		// Container-side property injection: [InjectProperty<TImpl>] entries keyed by implementation type, so
 		// BuildInstance fills them wherever that implementation is constructed (including [Scan]-registered types).
@@ -470,7 +531,11 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		// AWT176: a declared [ImportService<T>] whose type no graph edge ever routed externally is dead - a mistyped
 		// or stale declaration. Reported once every instance is built, so every dependency has had the chance to
 		// route. A type flagged AWT175 (registered, so resolved from the graph rather than externally) is excluded.
-		ReportUnconsumedExternalServices(externalServiceTypes, serviceToImpl, instances, containerSymbol, diagnostics);
+		// An open import is dead when no closing of it is consumed, and contradictory (AWT175) for each routed closing
+		// the container also registers.
+		(HashSet<string> consumedExternal, HashSet<string> routedExternal) = ExternalConsumption(instances);
+		ReportUnconsumedExternalServices(externalServiceTypes.Closed, serviceToImpl, consumedExternal, containerSymbol, diagnostics);
+		ReportOpenExternalServices(externalServiceTypes, serviceToImpl, consumedExternal, routedExternal, containerSymbol, diagnostics);
 
 		// AWT180: an [InjectProperty<TImpl>] entry whose implementation type matches no registration is never
 		// applied, reported now that every registered implementation has been seen.
