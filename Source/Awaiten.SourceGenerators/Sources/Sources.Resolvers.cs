@@ -757,7 +757,8 @@ internal static partial class Sources
 	///     When <paramref name="asyncDisposal" /> is set the scope is disposed through <c>DisposeAsync</c>, because
 	///     the synchronous drain cannot tear down an <c>IAsyncDisposable</c>-only instance. The original is
 	///     rethrown unchanged; only if the disposal throws too are both surfaced in one flat
-	///     <c>AggregateException</c>, the original first.
+	///     <c>AggregateException</c>, the original first. Like <c>CreateScope</c> it returns the concrete <c>Scope</c>
+	///     and implements <c>IAwaitenScope.CreateScopeAsync</c> explicitly.
 	/// </summary>
 	private static void EmitCreateScopeAsync(StringBuilder builder, int depth, bool asyncDisposal)
 	{
@@ -769,14 +770,14 @@ internal static partial class Sources
 		AppendXmlSummary(builder, depth,
 			"Opens a child scope, warming its async-initialized scoped services.");
 		Indent(builder, depth).Append("public ").Append(task)
-			.AppendLine("<global::Awaiten.IAwaitenScope> CreateScopeAsync(global::System.Threading.CancellationToken cancellationToken = default)");
+			.AppendLine("<Scope> CreateScopeAsync(global::System.Threading.CancellationToken cancellationToken = default)");
 		Indent(builder, depth).AppendLine("{");
 		EmitDisposedGuard(builder, depth + 1);
 		Indent(builder, depth + 1).AppendLine("return Core();");
 		builder.AppendLine();
 
 		Indent(builder, depth + 1).Append("async ").Append(task)
-			.AppendLine("<global::Awaiten.IAwaitenScope> Core()");
+			.AppendLine("<Scope> Core()");
 		Indent(builder, depth + 1).AppendLine("{");
 		Indent(builder, depth + 2).AppendLine("Scope __scope = CreateScope();");
 		Indent(builder, depth + 2).AppendLine("try");
@@ -800,6 +801,18 @@ internal static partial class Sources
 		builder.AppendLine();
 		Indent(builder, depth + 2).AppendLine("return __scope;");
 		Indent(builder, depth + 1).AppendLine("}");
+		Indent(builder, depth).AppendLine("}");
+		builder.AppendLine();
+
+		// Task<T> is not covariant, so the interface member awaits the concrete task. It calls the concrete member
+		// first, keeping the disposed-guard eager on this path too.
+		Indent(builder, depth).Append(task).AppendLine("<global::Awaiten.IAwaitenScope> global::Awaiten.IAwaitenScope.CreateScopeAsync(global::System.Threading.CancellationToken cancellationToken)");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).Append(task).AppendLine("<Scope> __created = CreateScopeAsync(cancellationToken);");
+		Indent(builder, depth + 1).AppendLine("return Core();");
+		builder.AppendLine();
+		Indent(builder, depth + 1).Append("async ").Append(task)
+			.AppendLine("<global::Awaiten.IAwaitenScope> Core() => await __created.ConfigureAwait(false);");
 		Indent(builder, depth).AppendLine("}");
 	}
 

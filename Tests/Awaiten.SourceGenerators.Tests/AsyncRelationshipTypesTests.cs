@@ -255,15 +255,36 @@ public class AsyncRelationshipTypesTests
 
 		await That(result.Diagnostics).IsEmpty();
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-		await That(source).Contains("public class Scope : global::Awaiten.IAwaitenScope")
-			.Because("the IAsyncDisposable surface is on the concrete Scope, not added to the IAwaitenScope interface");
-		await That(source).Contains("global::System.IAsyncDisposable")
-			.Because("the generated Scope implements IAsyncDisposable when the compilation can see the type");
 		await That(source).Contains("public async global::System.Threading.Tasks.ValueTask DisposeAsync()")
 			.Because("a DisposeAsync drain is emitted alongside the synchronous Dispose");
 		await That(source).Contains("await __asyncDisposable.DisposeAsync().ConfigureAwait(false)")
 			.Because("the async drain awaits IAsyncDisposable, preferring it over a synchronous Dispose");
 		await That(source).Contains("global::System.InvalidOperationException")
 			.Because("the synchronous Dispose throws when it meets an IAsyncDisposable-only service rather than blocking");
+	}
+
+	[Test]
+	public async Task CreateScopeAsync_ReturnsTheConcreteScopeAndImplementsTheInterfaceExplicitly()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class Order;
+
+		                                       [Container]
+		                                       [Scoped<Order>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+		await That(source).Contains("public global::System.Threading.Tasks.Task<Scope> CreateScopeAsync(global::System.Threading.CancellationToken cancellationToken = default)")
+			.Because("like CreateScope, the async counterpart hands back the concrete Scope, which await using can dispose");
+		await That(source).Contains("global::System.Threading.Tasks.Task<global::Awaiten.IAwaitenScope> global::Awaiten.IAwaitenScope.CreateScopeAsync(global::System.Threading.CancellationToken cancellationToken)")
+			.Because("the IAwaitenScope member is implemented explicitly over the concrete one");
 	}
 }
