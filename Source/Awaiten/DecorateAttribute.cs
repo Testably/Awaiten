@@ -17,7 +17,8 @@ namespace Awaiten;
 ///     <c>[Decorate&lt;D1, IService&gt;]</c> then <c>[Decorate&lt;D2, IService&gt;]</c>, resolving <c>IService</c>
 ///     yields <c>D2(D1(Real))</c>. Use <see cref="Order" /> to position a decorator explicitly. Decorating a
 ///     service also decorates every collection view of it, member by member, so the decorator cannot be bypassed.
-///     Only the unkeyed registration is decorated; a service registered solely under a <c>[FromKey]</c> key reports AWT123.
+///     By default only the unkeyed registrations (and their <c>WhenInjectedInto</c> variants) are decorated; select
+///     keyed registrations with <see cref="Keys" /> or <see cref="AllKeys" />. Each key gets its own chain.
 ///     <para>
 ///         The type parameters are ordered concrete type first, then service, to match the lifetime attributes.
 ///     </para>
@@ -37,8 +38,23 @@ public sealed class DecorateAttribute<TDecorator, TService> : Attribute
 	/// <summary>
 	///     The decorator's position in the chain (ascending, outermost last). Decorators are ordered by
 	///     <see cref="Order" /> first, then declaration order. Leave unset to chain purely by declaration order.
+	///     The order applies within each key's chain.
 	/// </summary>
 	public int Order { get; set; }
+
+	/// <summary>
+	///     The registration keys to decorate, where a <see langword="null" /> entry selects the unkeyed
+	///     registrations. Leave unset to decorate only the unkeyed registrations. Cannot be combined with
+	///     <see cref="AllKeys" />.
+	/// </summary>
+	/// <example><c>[Decorate&lt;LoggingTerminal, IPaymentTerminal&gt;(Keys = new object?[] { null, "backup" })]</c></example>
+	public object?[]? Keys { get; set; }
+
+	/// <summary>
+	///     Decorates every registration of the service, unkeyed and under each key. Cannot be combined with
+	///     <see cref="Keys" />.
+	/// </summary>
+	public bool AllKeys { get; set; }
 }
 
 /// <summary>
@@ -77,7 +93,21 @@ public sealed class DecorateAttribute : Attribute
 
 	/// <summary>
 	///     The decorator's position in each closing's chain (ascending, outermost last), interleaved with that
-	///     closing's explicit decorators by <see cref="Order" /> first, then declaration order.
+	///     closing's explicit decorators by <see cref="Order" /> first, then declaration order. The order applies
+	///     within each key's chain.
 	/// </summary>
 	public int Order { get; set; }
+
+	/// <summary>
+	///     The registration keys whose closings are decorated, where a <see langword="null" /> entry selects the
+	///     unkeyed registrations. Leave unset to decorate only the unkeyed closings. Cannot be combined with
+	///     <see cref="AllKeys" />.
+	/// </summary>
+	public object?[]? Keys { get; set; }
+
+	/// <summary>
+	///     Decorates every closing of the service, unkeyed and under each key. Cannot be combined with
+	///     <see cref="Keys" />.
+	/// </summary>
+	public bool AllKeys { get; set; }
 }

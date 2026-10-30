@@ -9,11 +9,12 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     Expands each open generic <c>[Decorate(typeof(D&lt;&gt;), typeof(IService&lt;&gt;))]</c> into a closed
 	///     <see cref="DecorateRegistration" /> for every closing of its service already present in the coalesced graph
-	///     (an unkeyed winner or collection member, however it was registered - explicit, scanned or open generic),
+	///     under a key the decorator selects (however it was registered - explicit, scanned or open generic),
 	///     constructing the matching closing of the decorator. The synthesized registrations carry the open form's
-	///     <c>Order</c> and declaration order, so the existing <see cref="DecoratorChainBuilder" /> interleaves them
-	///     with explicit closed decorators of the same closing. Warns AWT171 and skips a closing whose type arguments
-	///     violate the decorator's constraints; reports AWT123 for an open decorator that matches no closing at all.
+	///     <c>Order</c>, declaration order and the keys present for that closing, so the existing
+	///     <see cref="DecoratorChainBuilder" /> interleaves them with explicit closed decorators of the same closing.
+	///     Warns AWT171 and skips a closing whose type arguments violate the decorator's constraints; reports AWT123 for
+	///     an open decorator that matches no closing at all and AWT210 for a selected key that no closing has.
 	/// </summary>
 	private static void ExpandOpenDecorators(
 		List<DecorateRegistration> decorators,
@@ -24,20 +25,11 @@ partial class AwaitenGenerator
 	{
 		foreach (OpenDecorateRegistration decorator in open)
 		{
-			List<INamedTypeSymbol> closings = MatchingClosings(decorator.Service, closedServices, graph);
-
-			// AWT123: the open decorator names a service that has no closing in the graph to decorate.
-			if (closings.Count == 0)
-			{
-				diagnostics.Add(new DiagnosticInfo(
-					Diagnostics.DecoratedServiceNotRegistered,
-					LocationInfo.From(decorator.Location),
-					new EquatableArray<string>([
-						Display(decorator.Service.ToDisplayString(FullyQualified)),
-						Display(decorator.Decorator.ToDisplayString(FullyQualified)),
-					])));
-				continue;
-			}
+			List<INamedTypeSymbol> closings = MatchingClosings(decorator.Service, closedServices,
+				display => decorator.Keys is not { } keys
+					? PresentUnderAnyKey(graph, display)
+					: keys.Any(key => PresentUnderKey(graph, display, key)));
+			ReportUnmatchedOpenDecorator(decorator, closings, graph, diagnostics);
 
 			foreach (INamedTypeSymbol closed in closings)
 			{
@@ -50,23 +42,65 @@ partial class AwaitenGenerator
 					continue;
 				}
 
+				// Only the keys this closing is registered under, so a key another closing lacks is no AWT210 here.
+				string display = closed.ToDisplayString(FullyQualified);
+				IReadOnlyList<string?>? keys = decorator.Keys?.Where(key => PresentUnderKey(graph, display, key)).ToList();
 				decorators.Add(new DecorateRegistration(
-					closed.ToDisplayString(FullyQualified),
+					display,
 					closed,
 					decorator.Decorator.Construct(typeArguments),
 					decorator.Order,
 					decorator.DeclarationOrder,
-					decorator.Location));
+					decorator.Location,
+					keys));
 			}
 		}
 	}
 
 	/// <summary>
+	///     Reports AWT210 for each key an open decorator selects that none of its <paramref name="closings" /> is
+	///     registered under, or AWT123 when it selects no key and has no closing at all.
+	/// </summary>
+	private static void ReportUnmatchedOpenDecorator(
+		OpenDecorateRegistration decorator,
+		List<INamedTypeSymbol> closings,
+		CoalescedGraph graph,
+		List<DiagnosticInfo> diagnostics)
+	{
+		// AWT210: a selected key that no closing of the service is registered under.
+		if (decorator.Keys is { Count: > 0, } selected && !(selected.Count == 1 && selected[0] is null))
+		{
+			foreach (string? key in selected.Where(key => !closings.Any(closed => PresentUnderKey(graph, closed.ToDisplayString(FullyQualified), key))))
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.DecoratedKeyNotRegistered,
+					LocationInfo.From(decorator.Location),
+					new EquatableArray<string>([
+						Display(decorator.Service.ToDisplayString(FullyQualified)),
+						Display(decorator.Decorator.ToDisplayString(FullyQualified)),
+						key is null ? "null" : KeyDisplay(key),
+					])));
+			}
+		}
+		else if (closings.Count == 0)
+		{
+			// AWT123: the open decorator names a service that has no closing in the graph to decorate.
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.DecoratedServiceNotRegistered,
+				LocationInfo.From(decorator.Location),
+				new EquatableArray<string>([
+					Display(decorator.Service.ToDisplayString(FullyQualified)),
+					Display(decorator.Decorator.ToDisplayString(FullyQualified)),
+				])));
+		}
+	}
+
+	/// <summary>
 	///     Expands each open generic <c>[Composite(typeof(C&lt;&gt;), typeof(IService&lt;&gt;))]</c> into a closed
-	///     <see cref="CompositeRegistration" /> for every closing of its service present in the coalesced graph,
-	///     constructing the matching closing of the composite. Each synthesized composite then follows the closed
-	///     <c>[Composite]</c> rules in <see cref="BuildComposites" />. Warns AWT171 and skips a closing whose type
-	///     arguments violate the composite's constraints.
+	///     <see cref="CompositeRegistration" /> for every closing of its service present in the coalesced graph under the
+	///     composite's key, constructing the matching closing of the composite. Each synthesized composite then follows
+	///     the closed <c>[Composite]</c> rules in <see cref="BuildComposites" />. Warns AWT171 and skips a closing whose
+	///     type arguments violate the composite's constraints; reports AWT212 for a key that no closing has.
 	/// </summary>
 	private static void ExpandOpenComposites(
 		List<CompositeRegistration> composites,
@@ -77,7 +111,19 @@ partial class AwaitenGenerator
 	{
 		foreach (OpenCompositeRegistration composite in open)
 		{
-			foreach (INamedTypeSymbol closed in MatchingClosings(composite.Service, closedServices, graph))
+			List<INamedTypeSymbol> closings = MatchingClosings(composite.Service, closedServices,
+				display => PresentUnderKey(graph, display, composite.Key));
+
+			// AWT212: a keyed open composite whose key no closing of the service is registered under.
+			if (composite.Key is not null && closings.Count == 0)
+			{
+				ReportCompositeKeyNotRegistered(
+					composite.Composite.ToDisplayString(FullyQualified), composite.Service.ToDisplayString(FullyQualified),
+					composite.Key, composite.Location, diagnostics);
+				continue;
+			}
+
+			foreach (INamedTypeSymbol closed in closings)
 			{
 				ITypeSymbol[] typeArguments = closed.TypeArguments.ToArray();
 
@@ -93,28 +139,29 @@ partial class AwaitenGenerator
 					closed,
 					composite.Composite.Construct(typeArguments),
 					composite.Lifetime,
-					composite.Location));
+					composite.Location,
+					composite.Key));
 			}
 		}
 	}
 
 	/// <summary>
-	///     The closed generic service symbols whose open form is <paramref name="openService" /> and which are present
-	///     in the coalesced graph under the unkeyed resolution key (a single-dispatch winner or a collection member),
-	///     in first-seen registration order. Only unkeyed closings are decorated/composed, matching the closed forms:
-	///     a purely keyed closing is left alone rather than reported.
+	///     The closed generic service symbols whose open form is <paramref name="openService" /> and which
+	///     <paramref name="present" /> finds in the coalesced graph, in first-seen registration order. Only the keys
+	///     the decorator/composite selects count, matching the closed forms: a closing registered only under other
+	///     keys is left alone rather than reported.
 	/// </summary>
 	private static List<INamedTypeSymbol> MatchingClosings(
 		INamedTypeSymbol openService,
 		List<(string Display, INamedTypeSymbol Symbol)> closedServices,
-		CoalescedGraph graph)
+		Func<string, bool> present)
 	{
 		List<INamedTypeSymbol> closings = new();
 		foreach ((string display, INamedTypeSymbol symbol) in closedServices)
 		{
 			if (symbol is { IsGenericType: true, }
 			    && SymbolEqualityComparer.Default.Equals(symbol.ConstructedFrom, openService)
-			    && PresentWithNullKey(graph, display))
+			    && present(display))
 			{
 				closings.Add(symbol);
 			}
@@ -124,15 +171,21 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     Whether the coalesced graph holds <paramref name="service" /> under the unkeyed resolution key, either as
-	///     the single-dispatch winner or as a non-empty collection membership.
+	///     Whether the coalesced graph holds <paramref name="service" /> under <paramref name="key" /> (the unkeyed
+	///     resolution key when <see langword="null" />), either as the single-dispatch winner or as a non-empty
+	///     collection membership.
 	/// </summary>
-	private static bool PresentWithNullKey(CoalescedGraph graph, string service)
+	private static bool PresentUnderKey(CoalescedGraph graph, string service, string? key)
 	{
-		ServiceKey key = new(service, null);
-		return graph.ServiceToImpl.ContainsKey(key)
-		       || (graph.ServiceMembers.TryGetValue(key, out List<string>? members) && members.Count > 0);
+		ServiceKey serviceKey = new(service, key);
+		return graph.ServiceToImpl.ContainsKey(serviceKey)
+		       || (graph.ServiceMembers.TryGetValue(serviceKey, out List<string>? members) && members.Count > 0);
 	}
+
+	/// <summary>Whether the coalesced graph holds <paramref name="service" /> unkeyed or under any user key.</summary>
+	private static bool PresentUnderAnyKey(CoalescedGraph graph, string service)
+		=> PresentUnderKey(graph, service, null)
+		   || graph.ServiceToImpl.Keys.Any(key => key.Service == service && IsUserKey(key.Key));
 
 	/// <summary>
 	///     Reports AWT171 (a warning) for a closing (of an open decorator or composite) whose type arguments violate

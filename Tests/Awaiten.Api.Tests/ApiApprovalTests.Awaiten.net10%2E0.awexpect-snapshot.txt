@@ -81,6 +81,7 @@ namespace Awaiten
     {
         public CompositeAttribute(System.Type composite, System.Type service) { }
         public System.Type Composite { get; }
+        public object? Key { get; set; }
         public Awaiten.Lifetime Lifetime { get; set; }
         public System.Type Service { get; }
     }
@@ -88,6 +89,7 @@ namespace Awaiten
     public sealed class CompositeAttribute<TComposite, TService> : System.Attribute where TComposite : class, TService
     {
         public CompositeAttribute() { }
+        public object? Key { get; set; }
         public Awaiten.Lifetime Lifetime { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, Inherited = false)]
@@ -101,7 +103,9 @@ namespace Awaiten
     public sealed class DecorateAttribute : System.Attribute
     {
         public DecorateAttribute(System.Type decorator, System.Type service) { }
+        public bool AllKeys { get; set; }
         public System.Type Decorator { get; }
+        public object?[]? Keys { get; set; }
         public int Order { get; set; }
         public System.Type Service { get; }
     }
@@ -109,6 +113,8 @@ namespace Awaiten
     public sealed class DecorateAttribute<TDecorator, TService> : System.Attribute where TDecorator : class, TService
     {
         public DecorateAttribute() { }
+        public bool AllKeys { get; set; }
+        public object?[]? Keys { get; set; }
         public int Order { get; set; }
     }
     public enum Fallback

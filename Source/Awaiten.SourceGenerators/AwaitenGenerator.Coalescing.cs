@@ -56,8 +56,8 @@ partial class AwaitenGenerator
 		List<ServiceKey> serviceMemberOrder = new();
 
 		// Keyed-collection membership: every real keyed registration of a service ([Key] and implementation),
-		// grouped by service (value) type in registration order. Only real [Key] registrations join here, so a
-		// keyed dictionary never surfaces a decorator's synthetic chain link (minted by a later phase).
+		// grouped by service (value) type in registration order. Only real [Key] registrations join here; a decorated
+		// key later points its entry at the outermost decorator, never at an inner chain link.
 		Dictionary<string, List<KeyedMember>> keyedMembers = new(StringComparer.Ordinal);
 		List<string> keyedMemberOrder = new();
 

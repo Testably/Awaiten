@@ -1294,11 +1294,17 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     Renders an instance identity for diagnostics. A decorator chain link carries a synthetic
-	///     <c>&lt;type&gt;@__dec:…</c> identity; trim the synthetic suffix so an error names the real decorator type.
+	///     <c>&lt;type&gt;@__dec:…</c> identity and a keyed composite a <c>&lt;type&gt;@__cmp:…</c> one; trim the
+	///     synthetic suffix so an error names the real decorator or composite type.
 	/// </summary>
 	internal static string DisplayInstance(string implementationType)
 	{
 		int marker = implementationType.IndexOf("@" + DecoratorKeyPrefix, StringComparison.Ordinal);
+		if (marker < 0)
+		{
+			marker = implementationType.IndexOf("@" + CompositeKeyPrefix, StringComparison.Ordinal);
+		}
+
 		if (marker < 0)
 		{
 			// A self-compiled module-scan match carries a synthetic '<service>@scan:<factory>' identity (see

@@ -629,7 +629,7 @@ public static partial class CoffeeShop
 ### AWT123
 
 :::danger[Error]
-A `[Decorate]` names a service with no registration to decorate. A decorator wraps only unkeyed registrations, so a service registered only under keys counts as not registered. Also raised when an open generic `[Decorate(typeof(D<>), typeof(IService<>))]` matches no closing of its service in the graph.
+A `[Decorate]` names a service with no registration to decorate. Without `Keys` or `AllKeys`, a decorator wraps only unkeyed registrations, so a service registered only under keys counts as not registered. Also raised when an open generic `[Decorate(typeof(D<>), typeof(IService<>))]` matches no closing of its service in the graph.
 :::
 
 ```csharp
@@ -711,6 +711,45 @@ public sealed class CompositeReceiptChannel(IEnumerable<IChannel> channels) : IR
 [Container]
 [Transient<PrinterChannel, IReceiptChannel>]
 [Composite<CompositeReceiptChannel, IReceiptChannel>]
+public static partial class CoffeeShop;
+```
+
+### AWT210
+
+:::danger[Error]
+A key in a `[Decorate]`'s `Keys` matches no registration of the decorated service, so that key has nothing to wrap. A `null` entry names the unkeyed registrations. For the open generic `typeof` form, no closing of the service is registered under the key.
+:::
+
+```csharp
+[Container]
+[Singleton<CardTerminal, IPaymentTerminal>]
+[Decorate<LoggingTerminal, IPaymentTerminal>(Keys = new object?[] { "backup" })]   // nothing is registered under "backup"
+public static partial class CoffeeShop;
+```
+
+### AWT211
+
+:::danger[Error]
+A `[Decorate]` sets both `Keys` and `AllKeys`. `AllKeys` already selects every key, so set one or the other. The decorator is skipped.
+:::
+
+```csharp
+[Container]
+[Singleton<CardTerminal, IPaymentTerminal>]
+[Decorate<LoggingTerminal, IPaymentTerminal>(Keys = new object?[] { null }, AllKeys = true)]
+public static partial class CoffeeShop;
+```
+
+### AWT212
+
+:::danger[Error]
+A `[Composite]`'s `Key` matches no registration of the composed service, so the composite has nothing to front. For the open generic `typeof` form, no closing of the service is registered under the key.
+:::
+
+```csharp
+[Container]
+[Transient<PrinterChannel, IReceiptChannel>]
+[Composite<CompositeReceiptChannel, IReceiptChannel>(Key = "kitchen")]   // nothing is registered under "kitchen"
 public static partial class CoffeeShop;
 ```
 

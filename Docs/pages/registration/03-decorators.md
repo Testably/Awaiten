@@ -42,9 +42,9 @@ Need a different order? Set `Order`. A higher `Order` sits further out.
 
 If a service has several implementations, each one is wrapped. A consumer that asks for `IEnumerable<IPaymentTerminal>` gets a collection of decorated terminals, so neither a plain resolve nor the collection reaches an undecorated instance. A [`WhenInjectedInto`](./keyed-services#bind-a-variant-to-a-consumer-with-wheninjectedinto) registration is wrapped by the same chain.
 
-## Keyed registrations are not decorated
+## Keyed registrations
 
-A decorator wraps the unkeyed registrations of its service only. A registration with a `Key` stays undecorated, so a keyed resolve, a `[FromKey]` parameter and a [keyed dictionary](../resolution/keyed-dictionaries) get the bare implementation:
+By default a decorator wraps the unkeyed registrations of its service only. A registration with a `Key` stays undecorated, so a keyed resolve, a `[FromKey]` parameter and a [keyed dictionary](../resolution/keyed-dictionaries) get the bare implementation:
 
 ```csharp
 [Singleton<CardTerminal, IPaymentTerminal>]
@@ -56,6 +56,24 @@ A decorator wraps the unkeyed registrations of its service only. A registration 
 ```
 
 This holds even when the same implementation is registered both with and without a key. A service registered only under keys has nothing to decorate ([AWT123](../diagnostics#awt123)).
+
+To decorate keyed registrations, name the keys in `Keys`, where `null` stands for the unkeyed registrations, or set `AllKeys` to decorate every registration of the service:
+
+```csharp
+[Singleton<CardTerminal, IPaymentTerminal>]
+[Singleton<CashTerminal, IPaymentTerminal>(Key = "backup")]
+[Singleton<SpareTerminal, IPaymentTerminal>(Key = "spare")]
+[Decorate<LoggingTerminal, IPaymentTerminal>(Keys = new object?[] { null, "backup" })]
+[Decorate<RetryingTerminal, IPaymentTerminal>(AllKeys = true)]
+
+// Resolve<IPaymentTerminal>()         returns RetryingTerminal(LoggingTerminal(CardTerminal))
+// Resolve<IPaymentTerminal>("backup") returns RetryingTerminal(LoggingTerminal(CashTerminal))
+// Resolve<IPaymentTerminal>("spare")  returns RetryingTerminal(SpareTerminal)
+```
+
+Each key gets its own chain of the decorators that select it, ordered by `Order` and declaration order as above. A decorated key is decorated everywhere: a keyed resolve, a `[FromKey]` parameter and the keyed dictionary all get the chain. The open generic `typeof` form below takes `Keys` and `AllKeys` the same way and decorates the closings registered under the selected keys.
+
+*Note: a key in `Keys` that matches no registration is a build error ([AWT210](../diagnostics#awt210)), and so is setting `Keys` together with `AllKeys` ([AWT211](../diagnostics#awt211)).*
 
 ## Decorate every closing of an open generic
 

@@ -110,5 +110,8 @@
  AWT207  | Awaiten   | Error    | Eager or Instance is set on an open generic typeof registration, but both need a closed type
  AWT208  | Awaiten   | Error    | The Factory of an open generic typeof registration is not a generic method with the service's number of type parameters
  AWT209  | Awaiten   | Error    | A closing of an open generic typeof registration violates the constraints of its generic Factory, so the closing is skipped
+ AWT210  | Awaiten   | Error    | A key in a decorator's Keys matches no registration of the decorated service
+ AWT211  | Awaiten   | Error    | A decorator sets both Keys and AllKeys
+ AWT212  | Awaiten   | Error    | A keyed composite's Key matches no registration of the composed service
 
 ; AWT137 (an injected property marked [Arg]) is retired: [Arg] targets only parameters, so the compiler rejects it on a property. The id stays reserved and is never reused.

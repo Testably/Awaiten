@@ -111,6 +111,12 @@ Prefer distinct abstractions, or a [composite](./composites), over one service t
 
 The container side names a key with `Key =`: on a registration and on an [`[InjectProperty<T>]`](../resolution/property-injection) entry. The injection site selects one with `[FromKey]`: on a constructor or factory parameter, and on an [`[Inject]`](../resolution/property-injection) property, which has no `Key` of its own.
 
+## Decorators and composites on keys
+
+A [decorator](./decorators#keyed-registrations) wraps only the unkeyed registrations unless it names keys: `Keys = new object?[] { null, "Oat" }` decorates the unkeyed registration and the `"Oat"` one, and `AllKeys = true` decorates every registration of the service. A decorated key is decorated wherever it is reached, through `Resolve`, `[FromKey]` or the keyed dictionary.
+
+A [composite](./composites#front-a-key) with a `Key` fronts that key: a resolve or `[FromKey]` under the key gets the composite, which fans out over the registrations under that key.
+
 ## Want the whole set?
 
 To get every keyed implementation as a map, ask for `IReadOnlyDictionary<string, IMilk>`. See [Keyed dictionaries](../resolution/keyed-dictionaries).
