@@ -629,7 +629,7 @@ public static partial class CoffeeShop
 ### AWT123
 
 :::danger[Error]
-A `[Decorate]` names a service with no registration to decorate. Also raised when an open generic `[Decorate(typeof(D<>), typeof(IService<>))]` matches no closing of its service in the graph.
+A `[Decorate]` names a service with no registration to decorate. A decorator wraps only unkeyed registrations, so a service registered only under keys counts as not registered. Also raised when an open generic `[Decorate(typeof(D<>), typeof(IService<>))]` matches no closing of its service in the graph.
 :::
 
 ```csharp

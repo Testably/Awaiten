@@ -192,6 +192,34 @@ public partial class DecoratorTests
 		await That(log.Order[1]).IsEqualTo("Real");
 	}
 
+	[Test]
+	public async Task UnkeyedDecorator_LeavesAKeyedRegistrationUndecorated()
+	{
+		using KeyedRegistrationContainer.Root container = new();
+
+		await That(container.Resolve<IService>().Describe()).IsEqualTo("Logging(Real1)")
+			.Because("the unkeyed registration is decorated");
+		await That(container.Resolve<IService>("backup").Describe()).IsEqualTo("Real2")
+			.Because("an unkeyed decorator does not wrap a user-keyed registration");
+		await That(container.Resolve<BackupConsumer>().Service.Describe()).IsEqualTo("Real2")
+			.Because("[FromKey] injection reaches the undecorated keyed registration");
+		await That(container.Resolve<IReadOnlyDictionary<string, IService>>()["backup"].Describe()).IsEqualTo("Real2")
+			.Because("the keyed dictionary holds the undecorated keyed registrations");
+		await That(container.Resolve<IService[]>().Select(s => s.Describe())).IsEqualTo(["Logging(Real1)",])
+			.Because("the collection holds only the decorated unkeyed registrations");
+	}
+
+	[Test]
+	public async Task UnkeyedDecorator_LeavesTheKeyedRegistrationOfTheSameImplementationUndecorated()
+	{
+		using SameImplementationKeyedContainer.Root container = new();
+
+		await That(container.Resolve<IService>().Describe()).IsEqualTo("Logging(Real)")
+			.Because("the unkeyed registration is decorated");
+		await That(container.Resolve<IService>("raw")).Is<Real>()
+			.Because("a keyed resolve reaches an undecorated instance even when the same type is also registered unkeyed");
+	}
+
 	public interface IService
 	{
 		string Describe();
@@ -369,4 +397,22 @@ public partial class DecoratorTests
 	[Singleton<DisposableReal, IService>]
 	[Decorate<DisposableDecorator, IService>]
 	public static partial class DisposalOrderContainer;
+
+	public sealed class BackupConsumer([FromKey("backup")] IService service)
+	{
+		public IService Service => service;
+	}
+
+	[Container]
+	[Transient<Real1, IService>]
+	[Transient<Real2, IService>(Key = "backup")]
+	[Transient<BackupConsumer>]
+	[Decorate<LoggingDecorator, IService>]
+	public static partial class KeyedRegistrationContainer;
+
+	[Container]
+	[Transient<Real, IService>]
+	[Transient<Real, IService>(Key = "raw")]
+	[Decorate<LoggingDecorator, IService>]
+	public static partial class SameImplementationKeyedContainer;
 }
