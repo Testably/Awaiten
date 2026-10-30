@@ -72,6 +72,16 @@ Register the same type under several service types and Awaiten shares one instan
 
 This holds for `Factory` and `Instance` registrations too. Name the same one on each service and they resolve to a single shared object. See [Factories and instances](./factories-and-instances).
 
+## Where the lifetime is set
+
+A single registration picks its lifetime by its attribute: `[Singleton]`, `[Scoped]` or `[Transient]`. A bulk or composite registration, [`[Scan]`](./scanning) and [`[Composite]`](./composites), sets it with `Lifetime =` and defaults to `Transient`. A [decorator](./decorators) has no lifetime of its own and inherits the lifetime of the service it wraps.
+
+```csharp
+[Singleton<EspressoMachine>]
+[Scan<IDrink>(Lifetime = Lifetime.Singleton)]
+[Composite<CompositeReceiptChannel, IReceiptChannel>]   // Transient
+```
+
 ## Lifetimes must line up
 
 A singleton lives forever, so whatever it holds lives that long too. Holding a transient is fine. The transient is built once, together with the singleton, and simply shares its lifetime. Holding a scoped dependency is not fine, because that would trap a per-order object inside a shop-wide one. Awaiten makes that a build error.

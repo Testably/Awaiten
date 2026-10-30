@@ -6,7 +6,10 @@ namespace Awaiten;
 ///     container's life; a <see cref="Transient" /> is created per request; a <see cref="Scoped" />
 ///     instance is created once per scope (the container root acts as the outermost scope). A host such as
 ///     the <c>Awaiten.Extensions.DependencyInjection</c> companion maps these to the matching
-///     Microsoft.Extensions.DependencyInjection <c>ServiceLifetime</c>.
+///     Microsoft.Extensions.DependencyInjection <c>ServiceLifetime</c>. A single registration picks its
+///     lifetime by its attribute (<c>[Singleton]</c>, <c>[Scoped]</c>, <c>[Transient]</c>); a bulk or composite
+///     registration (<c>[Scan]</c>, <c>[Composite]</c>) sets it through its <c>Lifetime</c> property, which
+///     defaults to <see cref="Transient" />; a decorator inherits the lifetime of the service it wraps.
 /// </summary>
 /// <remarks>
 ///     The generator reads these as their underlying int off the attribute's <c>TypedConstant</c> and casts

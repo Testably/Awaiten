@@ -325,7 +325,7 @@ partial class AwaitenGenerator
 	///     <c>[InjectProperty&lt;TImpl&gt;]</c> entry, per <paramref name="spec" /> - into the member edge to fill
 	///     after construction, or reports why it cannot be injected and returns <c>null</c>. Diagnostics (each at
 	///     <see cref="InjectionSpec.EntryLocation" /> for a container-side entry, else the property's location): AWT136
-	///     (no reachable set/init accessor), AWT137 (<c>[Arg]</c> on an injected property), AWT157/AWT158 (a malformed
+	///     (no reachable set/init accessor), AWT157/AWT158 (a malformed
 	///     <c>Optional</c> property), and AWT101/AWT121 for a missing registration. A required member with a missing
 	///     registration still yields an edge (so it participates in analysis); an <c>Optional</c> one is dropped
 	///     without diagnostic.
@@ -393,17 +393,6 @@ partial class AwaitenGenerator
 		// explicitly registered dictionary was rewritten to Direct above and resolves that registration.
 		ReportUnsupportedKeyedCollectionKey(dependency, property.Type, info, context.ServiceToImpl, context.Diagnostics);
 		ReportFromKeyOnKeyedCollection(dependency, property.Type, info, context.Diagnostics);
-
-		// AWT137: runtime arguments flow only through a Func<…> factory into [Arg] constructor parameters, never
-		// through property injection (the member resolves entirely from the graph).
-		if (dependency.Kind == DependencyKind.Arg)
-		{
-			context.Diagnostics.Add(new DiagnosticInfo(
-				Diagnostics.InjectedPropertyIsArg,
-				location,
-				new EquatableArray<string>([property.Name, DisplayInstance(info.ImplementationType),])));
-			return null;
-		}
 
 		// AWT101: a direct/relationship member edge needs a registration to satisfy it (a collection member is
 		// satisfied elsewhere, like a constructor parameter, and yields an empty collection when unregistered).
