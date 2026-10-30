@@ -24,6 +24,7 @@
 		<File Path=".editorconfig" />
 		<File Path=".gitattributes" />
 		<File Path=".gitignore" />
+		<File Path="AGENTS.md" />
 		<File Path="Awaiten.slnx.DotSettings" />
 		<File Path="CODE_OF_CONDUCT.md" />
 		<File Path="CONTRIBUTING.md" />

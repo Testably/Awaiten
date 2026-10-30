@@ -15,7 +15,7 @@ Commands run from the repository root. On Linux and macOS use `./build.sh` inste
   - `Tests/Awaiten.ExampleTests`: the documented examples, an ASP.NET Core example (not on net48) and the architecture test from the design principles page.
   - `Tests/Awaiten.Api.Tests` (net10.0 only): public API snapshots.
   - `Tests/Awaiten.Tests.Support`: a plain library, not a test project, that gives `Awaiten.Tests` a referenced assembly for cross-assembly `[Scan]` and `[Module]` scenarios.
-- Tests assert with aweXpect (`await That(...)`), put the reason in `.Because(...)` and group related cases in a (often nested or partial) class per feature.
+- Tests assert with aweXpect (`await That(...)`), put the reason in `.Because(...)` instead of a comment and group related cases in a (often nested or partial) class per feature. The test rules are in [design-goals.md](design-goals.md#tests).
 
 ## Public API snapshots
 
@@ -35,7 +35,7 @@ To accept an intentional change, run the tests with the environment variable `AW
 - Through the pipeline: `./build.ps1 Benchmarks --benchmark-filter "*BuildBenchmarks*"` (results in `Artifacts/Benchmarks`).
 - Directly: `dotnet run -c Release --project Benchmarks/Awaiten.Benchmarks -- --filter "*RealisticResolveBenchmarks*"`.
 
-Always run in Release and compare before and after on the same machine. There is no mutation testing in this repository.
+Always run in Release and compare before and after on the same machine.
 
 ## Documentation
 
@@ -68,4 +68,4 @@ Always run in Release and compare before and after on the same machine. There is
 - `ci-analysis.yml` (after `CI` completes): `BenchmarkComment` on the PR.
 - `build.yml` (push to `main`, `v*` tags, manual): the same jobs plus `Pack`, `PublishBenchmarkReport` on `main`, and on a tag `Push` to nuget.org (gated on the test, sample, analysis and pack jobs), a GitHub release for non-prerelease tags and release comments on the linked issues and PRs. Actions are pinned to commit SHAs here.
 - `notify-docs-site.yml`: triggers the docs site rebuild.
-- Dependabot updates NuGet packages and actions weekly with a `chore` prefix; Mergify squash-merges Dependabot PRs once the unit and API tests pass. Release notes are grouped by label (`.github/release.yml`).
+- Dependabot updates NuGet packages and actions weekly (Thursday night) with a `chore` prefix and ignores `Microsoft.CodeAnalysis*`, which sets the oldest compiler that can load the generator; Mergify squash-merges Dependabot PRs once the unit and API tests pass. Release notes are grouped by label (`.github/release.yml`).
