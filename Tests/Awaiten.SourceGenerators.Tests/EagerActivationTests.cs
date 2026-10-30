@@ -3,7 +3,7 @@ namespace Awaiten.SourceGenerators.Tests;
 /// <summary>
 ///     Eager singleton activation (<c>[Singleton&lt;T&gt;(Eager = true)]</c>): the root constructor warms
 ///     eager singletons through their cached resolvers in registration order, leaving lazy ones out. An
-///     async-initialized eager singleton is AWT161 in strict mode; <c>SyncResolveAfterInit</c> allows it
+///     async-initialized eager singleton is AWT161 in strict mode; <c>AsyncSafety.SyncAfterInit</c> allows it
 ///     by emitting a blocking synchronous resolver.
 /// </summary>
 public class EagerActivationTests
@@ -123,7 +123,7 @@ public class EagerActivationTests
 		                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 		                                       }
 
-		                                       [Container(SyncResolveAfterInit = true)]
+		                                       [Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
 		                                       [Singleton<AsyncWarm>(Eager = true)]
 		                                       public static partial class MyContainer
 		                                       {
@@ -131,7 +131,7 @@ public class EagerActivationTests
 		                                       """);
 
 		await That(result.Diagnostics).IsEmpty()
-			.Because("SyncResolveAfterInit emits a blocking synchronous resolver, so eager construction is allowed");
+			.Because("AsyncSafety.SyncAfterInit emits a blocking synchronous resolver, so eager construction is allowed");
 		await That(result.Sources["Awaiten.MyCode.MyContainer.g.cs"]).Contains("ResolveAsyncWarm(this);")
 			.Because("the eager async singleton is constructed at build time through its (blocking) synchronous resolver");
 	}

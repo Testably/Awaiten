@@ -210,14 +210,14 @@ public partial class CollectionTests
 	}
 
 	[Test]
-	public async Task SyncResolveAfterInit_CollectionWithAnAsyncMember_ResolvesInitializedMembersAfterWarmUp()
+	public async Task SyncAfterInit_CollectionWithAnAsyncMember_ResolvesInitializedMembersAfterWarmUp()
 	{
 		using PragmaticCollectionContainer.Root container = new();
 
 		await container.InitializeAsync(TestContext.Current!.Execution.CancellationToken);
 
 		// The collection holds an async-initialized member. In the strict default this is AWT122 (a synchronous
-		// materialization cannot await the initialization); SyncResolveAfterInit warms the graph first, so the
+		// materialization cannot await the initialization); AsyncSafety.SyncAfterInit warms the graph first, so the
 		// collection materializes synchronously and hands back the already-initialized member, both when injected
 		// through a host and when resolved publicly by type.
 		AsyncPluginHost host = container.Resolve<AsyncPluginHost>();
@@ -436,7 +436,7 @@ public partial class CollectionTests
 	}
 
 	[Test]
-	public async Task SyncResolveAfterInit_AsyncEnumerable_IsSynchronouslyResolvableAfterWarmUp()
+	public async Task SyncAfterInit_AsyncEnumerable_IsSynchronouslyResolvableAfterWarmUp()
 	{
 		using PragmaticCollectionContainer.Root container = new();
 
@@ -979,9 +979,9 @@ public partial class CollectionTests
 	public static partial class CollectionContainer;
 
 	// A collection holding an async-initialized member. Under the strict default injecting it is AWT122 (a
-	// synchronous materialization has no place to await the member's initialization); SyncResolveAfterInit warms
+	// synchronous materialization has no place to await the member's initialization); AsyncSafety.SyncAfterInit warms
 	// the graph so the collection is synchronously materializable after InitializeAsync.
-	[Container(SyncResolveAfterInit = true)]
+	[Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
 	[Singleton<Alpha, IPlugin>]
 	[Singleton<AsyncPlugin, IPlugin>]
 	[Singleton<AsyncPluginHost>]

@@ -528,10 +528,10 @@ public partial class ComprehensiveContainerExample
 	[Singleton<Menu, IMenu>]
 	public static partial class SelfServeKiosk;
 
-	// SyncResolveAfterInit: an async-initialized service also gets a delegating synchronous resolver that
+	// AsyncSafety.SyncAfterInit: an async-initialized service also gets a delegating synchronous resolver that
 	// blocks on the async path once warmed, exercising the pragmatic sync-after-init emission (a drive-thru
 	// that serves synchronously once the machine is hot).
-	[Container(SyncResolveAfterInit = true)]
+	[Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
 	[Singleton<EspressoMachine>]
 	public static partial class DriveThru;
 
@@ -840,7 +840,7 @@ public partial class ComprehensiveContainerExample
 		await driveThru.InitializeAsync(ct);
 
 		await That(driveThru.Resolve<EspressoMachine>().Warm).IsTrue()
-			.Because("SyncResolveAfterInit serves the warmed async singleton synchronously");
+			.Because("AsyncSafety.SyncAfterInit serves the warmed async singleton synchronously");
 	}
 
 	private sealed class GatewayResolver : IExternalResolver

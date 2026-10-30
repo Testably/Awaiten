@@ -120,7 +120,7 @@ services.AddAwaitenContainer<CoffeeShop.Root>()
         .WithInitialization();
 ```
 
-Pair this with `[Container(SyncResolveAfterInit = true)]` so warmed singletons resolve synchronously afterwards.
+Pair this with `[Container(AsyncSafety = AsyncSafety.SyncAfterInit)]` so warmed singletons resolve synchronously afterwards.
 
 ## Verify external dependencies at startup
 

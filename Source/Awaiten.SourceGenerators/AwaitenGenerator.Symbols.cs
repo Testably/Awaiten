@@ -54,19 +54,20 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     Reads the container's <c>SyncResolveAfterInit</c> flag from its <c>[Container]</c> attribute
-	///     (default <see langword="false" />: strict async resolution, where an async-tainted service is
-	///     reachable only through <c>ResolveAsync</c>).
+	///     Reads the container's <c>AsyncSafety</c> from its <c>[Container]</c> attribute. Strict (the default,
+	///     enum value 0, where an async-tainted service is reachable only through <c>ResolveAsync</c>) unless the
+	///     attribute explicitly sets <c>SyncAfterInit</c>.
 	/// </summary>
-	internal static bool ReadSyncResolveAfterInit(INamedTypeSymbol containerSymbol)
+	internal static bool ReadSyncAfterInit(INamedTypeSymbol containerSymbol)
 	{
 		if (TryGetAwaitenAttribute(containerSymbol.GetAttributes(), "ContainerAttribute", out AttributeData? attribute))
 		{
 			foreach (KeyValuePair<string, TypedConstant> argument in attribute!.NamedArguments)
 			{
-				if (argument.Key == "SyncResolveAfterInit" && argument.Value.Value is bool value)
+				// AsyncSafety is an enum; its TypedConstant value is the underlying int (Strict = 0, SyncAfterInit = 1).
+				if (argument.Key == "AsyncSafety" && argument.Value.Value is int value)
 				{
-					return value;
+					return value == 1;
 				}
 			}
 		}

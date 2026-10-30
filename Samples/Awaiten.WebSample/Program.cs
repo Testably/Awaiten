@@ -28,7 +28,7 @@ WebApplication app = builder.Build();
 // container's [ImportService<T>] dependencies must actually be registered. Throws and names them if not.
 app.Services.VerifyAwaitenContainers();
 
-// An async-initialized singleton, bound synchronously because the container opted into SyncResolveAfterInit
+// An async-initialized singleton, bound synchronously because the container opted into AsyncSafety.SyncAfterInit
 // and the hosted service already warmed it.
 app.MapGet("/menu", (PriceList prices) => Results.Ok(new
 {

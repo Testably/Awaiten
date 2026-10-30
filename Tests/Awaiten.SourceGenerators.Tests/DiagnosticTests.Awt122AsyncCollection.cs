@@ -62,7 +62,7 @@ public partial class DiagnosticTests
 		}
 
 		[Test]
-		public async Task DoesNotReportUnderSyncResolveAfterInit()
+		public async Task DoesNotReportUnderSyncAfterInit()
 		{
 			GeneratorResult result = Generator.Run("""
 			                                       using Awaiten;
@@ -79,7 +79,7 @@ public partial class DiagnosticTests
 			                                       }
 			                                       public sealed class Host { public Host(IEnumerable<IPlugin> plugins) { } }
 
-			                                       [Container(SyncResolveAfterInit = true)]
+			                                       [Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
 			                                       [Singleton<AsyncPlugin, IPlugin>]
 			                                       [Singleton<Host>]
 			                                       public static partial class MyContainer
@@ -88,7 +88,7 @@ public partial class DiagnosticTests
 			                                       """);
 
 			await That(result.Diagnostics).DoesNotContain("*AWT122*").AsWildcard()
-				.Because("SyncResolveAfterInit permits synchronous resolution of an async-tainted member after warm-up");
+				.Because("AsyncSafety.SyncAfterInit permits synchronous resolution of an async-tainted member after warm-up");
 		}
 
 		[Test]

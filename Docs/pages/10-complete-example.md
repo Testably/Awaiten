@@ -70,7 +70,7 @@ public static class PaymentModule;
 ## The container
 
 ```csharp
-[Container(SyncResolveAfterInit = true)]
+[Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
 [Import(typeof(PaymentModule))]
 
 // equipment

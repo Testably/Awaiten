@@ -121,7 +121,7 @@ internal static partial class Sources
 		/// </summary>
 		public string WiredField(int index) => _fields[index] + "Wired";
 
-		public static Names Build(InstanceModel[] instances, ServiceMembers[] collections, KeyedServiceMembers[] keyedCollections, bool syncResolveAfterInit)
+		public static Names Build(InstanceModel[] instances, ServiceMembers[] collections, KeyedServiceMembers[] keyedCollections, bool syncAfterInit)
 		{
 			string[] resolvers = new string[instances.Length];
 			string[] fields = new string[instances.Length];
@@ -147,8 +147,8 @@ internal static partial class Sources
 				implToIndex[instances[i].ImplementationType] = i;
 
 				// A member is synchronously resolvable unless it is async-tainted in strict mode (in pragmatic
-				// SyncResolveAfterInit mode every service has a synchronous resolver, delegating to the async one).
-				if (!instances[i].IsAsyncTainted || syncResolveAfterInit)
+				// AsyncSafety.SyncAfterInit mode every service has a synchronous resolver, delegating to the async one).
+				if (!instances[i].IsAsyncTainted || syncAfterInit)
 				{
 					syncImpls.Add(instances[i].ImplementationType);
 				}

@@ -225,7 +225,7 @@ public partial class DiagnosticTests
 		}
 
 		[Test]
-		public async Task DoesNotReport_WhenSyncResolveAfterInitIsSet()
+		public async Task DoesNotReport_WhenSyncAfterInitIsSet()
 		{
 			GeneratorResult result = Generator.Run("""
 			                                       using Awaiten;
@@ -242,7 +242,7 @@ public partial class DiagnosticTests
 
 			                                       public sealed class Consumer { public Consumer(Func<Connection> connection) { } }
 
-			                                       [Container(SyncResolveAfterInit = true)]
+			                                       [Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
 			                                       [Singleton<Consumer>]
 			                                       [Singleton<Connection>]
 			                                       public static partial class MyContainer

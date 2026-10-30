@@ -79,7 +79,7 @@ public sealed partial class PrebuiltRootTests
 	[Singleton<TimeReporter>]
 	public static partial class ExternalContainer;
 
-	[Container(SyncResolveAfterInit = true)]
+	[Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
 	[ImportService<IClock>]
 	[Singleton<WarmedReporter>]
 	public static partial class WarmedExternalContainer;

@@ -42,7 +42,7 @@ internal static partial class Sources
 		}
 		else
 		{
-			Names names = Names.Build(model.Instances.AsArray(), model.Collections.AsArray(), model.KeyedCollections.AsArray(), model.SyncResolveAfterInit);
+			Names names = Names.Build(model.Instances.AsArray(), model.Collections.AsArray(), model.KeyedCollections.AsArray(), model.SyncAfterInit);
 			Dictionary<ServiceKey, int> serviceToIndex = BuildServiceMap(model);
 			EmitContainerBody(builder, depth + 1, model, names, serviceToIndex);
 		}
@@ -87,8 +87,8 @@ internal static partial class Sources
 		// root; the sealed Root owns the singletons and is the usable instance (new MyContainer.Root()). Buffering
 		// the Scope keeps the Root first in the file while still reading what only the Scope's emit can decide.
 		StringBuilder scope = new();
-		bool hasResolvabilityProbe = EmitScopeBaseClass(scope, depth, context, model.Strict, model.SyncResolveAfterInit, model.VarianceCandidates.AsArray());
-		EmitRootClass(builder, depth, context, model.Strict, model.SyncResolveAfterInit, hasResolvabilityProbe);
+		bool hasResolvabilityProbe = EmitScopeBaseClass(scope, depth, context, model.Strict, model.SyncAfterInit, model.VarianceCandidates.AsArray());
+		EmitRootClass(builder, depth, context, model.Strict, model.SyncAfterInit, hasResolvabilityProbe);
 		builder.AppendLine();
 		builder.Append(scope);
 
@@ -107,11 +107,11 @@ internal static partial class Sources
 
 	/// <summary>
 	///     Whether synchronous resolution members are emitted for an instance: always for a non-tainted service,
-	///     and for an async-tainted one only in pragmatic mode (SyncResolveAfterInit). In the strict default an
+	///     and for an async-tainted one only in pragmatic mode (AsyncSafety.SyncAfterInit). In the strict default an
 	///     async-tainted service is reachable only through ResolveAsync.
 	/// </summary>
-	private static bool EmitsSync(InstanceModel instance, bool syncResolveAfterInit)
-		=> !instance.IsAsyncTainted || syncResolveAfterInit;
+	private static bool EmitsSync(InstanceModel instance, bool syncAfterInit)
+		=> !instance.IsAsyncTainted || syncAfterInit;
 
 	/// <summary>
 	///     Emits the base <c>Scope</c>: the home of resolution logic. It caches scoped instances, constructs
@@ -119,7 +119,7 @@ internal static partial class Sources
 	///     are instances of this type. Returns whether it emitted the <c>__GetResolvability</c> probe the Root's
 	///     <c>GetResolvability</c> reports over.
 	/// </summary>
-	private static bool EmitScopeBaseClass(StringBuilder builder, int depth, EmitContext context, bool strict, bool syncResolveAfterInit, string[] varianceCandidates)
+	private static bool EmitScopeBaseClass(StringBuilder builder, int depth, EmitContext context, bool strict, bool syncAfterInit, string[] varianceCandidates)
 	{
 		InstanceModel[] instances = context.Instances;
 		Names names = context.Names;
@@ -129,7 +129,7 @@ internal static partial class Sources
 		AppendXmlSummary(builder, depth,
 			"A resolution scope: caches scoped services and disposes the instances it created.");
 		Indent(builder, depth).Append("public class Scope : global::Awaiten.IAwaitenScope, global::Awaiten.IAwaitenExternalResolverHost");
-		EmitGenericResolverBases(builder, instances, strict, syncResolveAfterInit);
+		EmitGenericResolverBases(builder, instances, strict, syncAfterInit);
 		builder.AppendLine();
 		Indent(builder, depth).AppendLine("{");
 		int body = depth + 1;
@@ -145,12 +145,12 @@ internal static partial class Sources
 		// The static dispatch table lives on the Scope, built once for the whole container. A root-withheld entry
 		// also appears in the __withheld table and carries the RootWithheld slot flag (consulted only on the Root),
 		// so a child scope resolves it while the Root withholds it.
-		List<DispatchEntry> entries = BuildDispatchEntries(instances, names, serviceToIndex, strict, syncResolveAfterInit);
+		List<DispatchEntry> entries = BuildDispatchEntries(instances, names, serviceToIndex, strict, syncAfterInit);
 		List<DispatchEntry> rootWithheld = Withheld(entries);
 		// The __withheld guidance table merges the root-withheld disposable services and the async-tainted services
 		// excluded from synchronous resolution, so Resolve surfaces a targeted message instead of the generic "no
 		// registration". Only the former needs the RootWithheld slot flag, which rides on the dispatch entries.
-		List<(string Type, string Guidance)> withheldTypes = WithheldTypes(rootWithheld, instances, names, serviceToIndex, syncResolveAfterInit);
+		List<(string Type, string Guidance)> withheldTypes = WithheldTypes(rootWithheld, instances, names, serviceToIndex, syncAfterInit);
 
 		// Fields region. The dispatch table's static fields and static constructor land here; its slot type,
 		// distributor and __R forwarders go to helpers. An open-addressed table keyed by Type identity hash grows
@@ -232,15 +232,15 @@ internal static partial class Sources
 		ApiRegions regions = new(members, fields, helpers);
 		// hasWithheld is passed rather than re-derived, so the decision to emit __withheld cannot drift from the
 		// decision to read it.
-		DispatchShape dispatch = EmitResolutionApi(regions, body, context, strict, syncResolveAfterInit, varianceCandidates, withheldTypes.Count > 0);
+		DispatchShape dispatch = EmitResolutionApi(regions, body, context, strict, syncAfterInit, varianceCandidates, withheldTypes.Count > 0);
 		Separate(members);
 		EmitGenericResolveMethod(members, body);
 		// The asynchronous surface: ResolveAsync(Type) on every owner, plus CreateScopeAsync. The Root's
 		// InitializeAsync and per-singleton async resolvers are emitted on the Root.
-		bool asObjectEmitted = EmitAsyncResolutionApi(regions, body, instances, names, serviceToIndex, strict, syncResolveAfterInit);
+		bool asObjectEmitted = EmitAsyncResolutionApi(regions, body, instances, names, serviceToIndex, strict, syncAfterInit);
 		// The keyed resolution surface (Resolve/TryResolve/ResolveAsync over object? key), sharing the __AsObject
 		// helper with the async dispatch above.
-		bool hasKeyedEntries = EmitKeyedResolutionApi(regions, body, context, strict, syncResolveAfterInit, asObjectEmitted);
+		bool hasKeyedEntries = EmitKeyedResolutionApi(regions, body, context, strict, syncAfterInit, asObjectEmitted);
 		// The resolvability probe reads the dispatch tables both surfaces just emitted, so it comes after both.
 		bool hasResolvabilityProbe = EmitResolvabilityApi(regions, body, dispatch, hasKeyedEntries);
 
@@ -264,7 +264,7 @@ internal static partial class Sources
 
 		// Typed-resolver region: the explicit IAwaitenResolver<T>.Resolve() and IAwaitenAsyncResolver<T>.ResolveAsync() fast
 		// paths for each registered service.
-		EmitGenericResolverImpls(typed, body, instances, names, strict, syncResolveAfterInit);
+		EmitGenericResolverImpls(typed, body, instances, names, strict, syncAfterInit);
 		if (EmitTypedAsyncResolverImpls(typed, body, instances, names, strict))
 		{
 			EmitAsTaskHelper(helpers, body);
@@ -272,8 +272,8 @@ internal static partial class Sources
 
 		// Resolvers region: the per-type internal static resolvers, plus one async by-type resolver per async
 		// collection (whose IAsyncEnumerable<T> shape ResolveAsync serves through the async dispatch arm).
-		EmitInstanceResolvers(resolvers, body, context, instances, names, syncResolveAfterInit);
-		foreach ((ServiceMembers collection, string method) in AsyncByTypeCollections(names, serviceToIndex, syncResolveAfterInit))
+		EmitInstanceResolvers(resolvers, body, context, instances, names, syncAfterInit);
+		foreach ((ServiceMembers collection, string method) in AsyncByTypeCollections(names, serviceToIndex, syncAfterInit))
 		{
 			Separate(resolvers);
 			EmitAsyncCollectionResolver(resolvers, body, collection, method, names, instances);
@@ -319,7 +319,7 @@ internal static partial class Sources
 	///     an async-tainted service in the strict default, delegating to the async one in pragmatic mode) and, for
 	///     every async-tainted service, its async resolver.
 	/// </summary>
-	private static void EmitInstanceResolvers(StringBuilder builder, int depth, EmitContext context, InstanceModel[] instances, Names names, bool syncResolveAfterInit)
+	private static void EmitInstanceResolvers(StringBuilder builder, int depth, EmitContext context, InstanceModel[] instances, Names names, bool syncAfterInit)
 	{
 		for (int i = 0; i < instances.Length; i++)
 		{
@@ -330,7 +330,7 @@ internal static partial class Sources
 				continue;
 			}
 
-			if (EmitsSync(instances[i], syncResolveAfterInit))
+			if (EmitsSync(instances[i], syncAfterInit))
 			{
 				Separate(builder);
 				if (instances[i].IsAsyncTainted)
@@ -435,7 +435,7 @@ internal static partial class Sources
 	///     instance (<c>new MyContainer.Root()</c>). It overrides the base's virtual singleton delegators, so a
 	///     child scope delegating through <c>__root</c> lands here.
 	/// </summary>
-	private static void EmitRootClass(StringBuilder builder, int depth, EmitContext context, bool strict, bool syncResolveAfterInit, bool hasResolvabilityProbe)
+	private static void EmitRootClass(StringBuilder builder, int depth, EmitContext context, bool strict, bool syncAfterInit, bool hasResolvabilityProbe)
 	{
 		InstanceModel[] instances = context.Instances;
 		Names names = context.Names;
@@ -483,7 +483,7 @@ internal static partial class Sources
 		EmitRootInitializeAsync(members, body, instances, names);
 		// The registration metadata array (fields region) and its IAwaitenRoot.Registrations getter
 		// (members region, beside InitializeAsync).
-		EmitRegistrations(fields, members, body, instances, syncResolveAfterInit);
+		EmitRegistrations(fields, members, body, instances, syncAfterInit);
 		// The external-dependency metadata: the advertised list (fields region when non-empty) and its getter
 		// (members region); the getter returns an empty array when the container has no external dependencies.
 		EmitExternalMetadata(fields, members, body, instances);
@@ -506,7 +506,7 @@ internal static partial class Sources
 			// A non-async singleton gets its caching static resolver here. An async singleton in pragmatic mode gets
 			// a delegating synchronous resolver that blocks on its async one; in the strict default it has no
 			// synchronous resolver at all.
-			if (EmitsSync(instance, syncResolveAfterInit))
+			if (EmitsSync(instance, syncAfterInit))
 			{
 				Separate(resolvers);
 				if (instance.IsAsyncTainted)

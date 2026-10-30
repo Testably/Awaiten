@@ -10,7 +10,7 @@ namespace Awaiten.WebSample.Domain;
 /// <summary>
 ///     An async-initialized singleton. Loading the price table is asynchronous, so the service is not usable
 ///     the moment it is constructed. <c>WithInitialization()</c> warms it during host startup, before the
-///     first request is served, and <c>SyncResolveAfterInit</c> then lets ASP.NET resolve it synchronously
+///     first request is served, and <c>AsyncSafety.SyncAfterInit</c> then lets ASP.NET resolve it synchronously
 ///     when binding a handler parameter.
 /// </summary>
 /// <remarks>

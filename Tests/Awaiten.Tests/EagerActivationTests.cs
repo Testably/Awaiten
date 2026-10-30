@@ -9,7 +9,7 @@ namespace Awaiten.Tests;
 ///     singleton is constructed in the generated container root's constructor (before any <c>Resolve</c>) in
 ///     registration order, it is cached (so a later resolve hands back the same instance), and a disposable
 ///     eager singleton is tracked for disposal by that eager construction alone (no resolve needed). In
-///     pragmatic <c>SyncResolveAfterInit</c> mode an eager <c>IAsyncInitializable</c> singleton is even
+///     pragmatic <c>AsyncSafety.SyncAfterInit</c> mode an eager <c>IAsyncInitializable</c> singleton is even
 ///     constructed and initialized at build time through its blocking synchronous resolver. Construction,
 ///     initialization and disposal are observed through a static probe because the container is a static
 ///     definition and the usable instance is <c>new …Root()</c>.
@@ -103,7 +103,7 @@ public partial class EagerActivationTests
 		await That(Probe.Constructed).Contains("AsyncEager");
 		await That(Probe.Constructed).Contains("AsyncEager:init");
 
-		// A later synchronous resolve (allowed by SyncResolveAfterInit) hands back that same, already-initialized
+		// A later synchronous resolve (allowed by AsyncSafety.SyncAfterInit) hands back that same, already-initialized
 		// instance, constructed exactly once.
 		AsyncEager resolved = container.Resolve<AsyncEager>();
 		await That(resolved.Initialized).IsTrue();
@@ -188,7 +188,7 @@ public partial class EagerActivationTests
 	[Singleton<ProbeDisposable>(Eager = true)]
 	public static partial class ProbeDisposableContainer;
 
-	[Container(SyncResolveAfterInit = true)]
+	[Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
 	[Singleton<AsyncEager>(Eager = true)]
 	public static partial class PragmaticEagerContainer;
 }

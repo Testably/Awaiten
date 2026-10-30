@@ -281,12 +281,12 @@ internal static class Diagnostics
 	///     A synchronous <c>Func&lt;T&gt;</c> / <c>Lazy&lt;T&gt;</c> / <c>Owned&lt;T&gt;</c> relationship
 	///     targets a service whose implementation is <c>IAsyncInitializable</c>: it would resolve the service
 	///     without awaiting its initialization. Resolve it through <c>ResolveAsync</c>, or set
-	///     <c>SyncResolveAfterInit</c> on the <c>[Container]</c> to allow synchronous resolution after warm-up.
+	///     <c>AsyncSafety.SyncAfterInit</c> on the <c>[Container]</c> to allow synchronous resolution after warm-up.
 	/// </summary>
 	public static readonly DiagnosticDescriptor SynchronousAsyncResolution = new(
 		"AWT119",
 		"Synchronous resolution of an async-initialized service",
-		"'{0}' resolves '{2}' through a synchronous {1}<>, but '{2}' is async-initialized; resolve it through ResolveAsync, or set SyncResolveAfterInit on the [Container]",
+		"'{0}' resolves '{2}' through a synchronous {1}<>, but '{2}' is async-initialized; resolve it through ResolveAsync, or set AsyncSafety.SyncAfterInit on the [Container]",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
@@ -300,7 +300,7 @@ internal static class Diagnostics
 	public static readonly DiagnosticDescriptor AsyncDependencyOnSyncPath = new(
 		"AWT120",
 		"Async-tainted service reached synchronously",
-		"'{0}' resolves an async-tainted service synchronously: {1}. Resolve it through ResolveAsync, or set SyncResolveAfterInit on the [Container].",
+		"'{0}' resolves an async-tainted service synchronously: {1}. Resolve it through ResolveAsync, or set AsyncSafety.SyncAfterInit on the [Container].",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
@@ -327,13 +327,13 @@ internal static class Diagnostics
 	///     synchronous shapes build every member eagerly into an array, with no place to await an asynchronous
 	///     initialization. Consume the collection through a shape that awaits its members
 	///     (<c>IAsyncEnumerable&lt;T&gt;</c>, or an awaited <c>Task&lt;IReadOnlyList&lt;T&gt;&gt;</c> and friends),
-	///     warm the graph with <c>SyncResolveAfterInit</c> on the <c>[Container]</c> (after
+	///     warm the graph with <c>AsyncSafety.SyncAfterInit</c> on the <c>[Container]</c> (after
 	///     <c>InitializeAsync</c>), or restructure so the collection holds no async-tainted members.
 	/// </summary>
 	public static readonly DiagnosticDescriptor AsyncCollectionResolution = new(
 		"AWT122",
 		"Async-tainted service reached synchronously through a collection",
-		"'{0}' resolves the collection of '{1}' synchronously, but the member '{2}' is async-tainted; a synchronous collection is materialized eagerly, with no place to await an initialization - consume it as IAsyncEnumerable<T> or Task<IReadOnlyList<T>> (which await each member), set SyncResolveAfterInit on the [Container] (and resolve after InitializeAsync), or remove the async member from the collection",
+		"'{0}' resolves the collection of '{1}' synchronously, but the member '{2}' is async-tainted; a synchronous collection is materialized eagerly, with no place to await an initialization - consume it as IAsyncEnumerable<T> or Task<IReadOnlyList<T>> (which await each member), set AsyncSafety.SyncAfterInit on the [Container] (and resolve after InitializeAsync), or remove the async member from the collection",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
@@ -907,12 +907,12 @@ internal static class Diagnostics
 	///     async-initialized (or reaches one through its non-deferred dependencies), so it cannot be constructed
 	///     synchronously in the generated root's constructor without handing back an uninitialized instance.
 	///     <c>InitializeAsync</c> already warms the async singletons, or opt into
-	///     <c>[Container(SyncResolveAfterInit = true)]</c> to allow synchronous eager construction.
+	///     <c>[Container(AsyncSafety = AsyncSafety.SyncAfterInit)]</c> to allow synchronous eager construction.
 	/// </summary>
 	public static readonly DiagnosticDescriptor EagerAsyncSingleton = new(
 		"AWT161",
 		"Eager async-initialized singleton",
-		"'{0}' is marked Eager but is async-initialized; it cannot be constructed synchronously at container build time - InitializeAsync already warms the async singletons, or opt into [Container(SyncResolveAfterInit = true)] to allow synchronous eager construction",
+		"'{0}' is marked Eager but is async-initialized; it cannot be constructed synchronously at container build time - InitializeAsync already warms the async singletons, or opt into [Container(AsyncSafety = AsyncSafety.SyncAfterInit)] to allow synchronous eager construction",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);

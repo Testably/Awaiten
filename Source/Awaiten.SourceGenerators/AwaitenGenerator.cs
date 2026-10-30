@@ -208,7 +208,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 
 		// When set, async-tainted services may also be resolved synchronously after InitializeAsync warms
 		// them, and the AWT119/AWT120 sync-resolution diagnostics are not reported.
-		bool syncResolveAfterInit = ReadSyncResolveAfterInit(containerSymbol);
+		bool syncAfterInit = ReadSyncAfterInit(containerSymbol);
 
 		// IAsyncDisposable support is emitted only when the referenced Awaiten runtime exposes it (read off
 		// Owned<T>, not System.IAsyncDisposable). When absent the container is sync-dispose only.
@@ -237,14 +237,14 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 
 		// AWT186: an Owned<T> relationship over a requesting-type factory has no owner scope to build into, so the
 		// combination is unsupported. Reported regardless of lifetime safety - it is a structural incompatibility,
-		// not an async concern - so it is outside the SyncResolveAfterInit gate below.
+		// not an async concern - so it is outside the AsyncSafety.SyncAfterInit gate below.
 		DetectOwnedOverRequestingTypeFactory(
 			graph.Instances, graph.ServiceToImpl, graph.ImplToIndex, graph.InstanceLocations, diagnostics);
 
 		// AWT119/AWT120 (strict only): a synchronous Func<T>/Lazy<T>/Owned<T> relationship resolves its target
-		// without awaiting initialization, so it may not target an async-tainted service. SyncResolveAfterInit
+		// without awaiting initialization, so it may not target an async-tainted service. AsyncSafety.SyncAfterInit
 		// allows it and so is not reported.
-		if (!syncResolveAfterInit)
+		if (!syncAfterInit)
 		{
 			DetectSynchronousAsyncResolution(
 				graph.Instances, graph.Dependencies, graph.ServiceToImpl, graph.ImplToIndex, graph.InstanceLocations, diagnostics);
@@ -252,7 +252,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 				graph.Instances, graph.Collections, graph.KeyedCollections, graph.ImplToIndex, graph.InstanceLocations, diagnostics);
 
 			// AWT161 (strict only): an async-tainted Eager singleton has no synchronous construction path, so it
-			// cannot be built in the root's synchronous constructor. SyncResolveAfterInit allows it (blocking resolver).
+			// cannot be built in the root's synchronous constructor. AsyncSafety.SyncAfterInit allows it (blocking resolver).
 			DetectEagerAsyncSingletons(graph.Instances, graph.InstanceLocations, diagnostics);
 		}
 
@@ -284,7 +284,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			new EquatableArray<InstanceModel>(graph.Instances.ToArray()),
 			new EquatableArray<DiagnosticInfo>(diagnostics.ToArray()),
 			strict,
-			syncResolveAfterInit,
+			syncAfterInit,
 			hasAsyncDisposable,
 			new EquatableArray<ServiceMembers>(graph.Collections.ToArray()),
 			new EquatableArray<string>(graph.VarianceCandidates.ToArray()),

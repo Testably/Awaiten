@@ -101,13 +101,13 @@ internal static partial class Sources
 	///     The guidance thrown by Resolve(Type) for a collection (<c>IEnumerable&lt;T&gt;</c> / <c>T[]</c>) that
 	///     holds an async-tainted member: a collection is materialized synchronously (built eagerly into an array,
 	///     with no place to await an initialization), so it has no synchronous and no asynchronous resolution
-	///     on any scope. Mirrors AWT122; the pragmatic SyncResolveAfterInit mode (which warms the graph) is
+	///     on any scope. Mirrors AWT122; the pragmatic AsyncSafety.SyncAfterInit mode (which warms the graph) is
 	///     the way to make it synchronously resolvable after InitializeAsync.
 	/// </summary>
 	private static string CollectionAsyncMessage(string collection)
 	{
 		string display = collection.Replace("global::", string.Empty);
-		return $"\"Awaiten: the collection '{display}' has an async-tainted member and cannot be materialized synchronously (a collection is built eagerly, with no place to await an initialization); consume it as IAsyncEnumerable<T> and resolve it through ResolveAsync, set SyncResolveAfterInit on the [Container] and resolve it after InitializeAsync, or remove the async member from the collection.\"";
+		return $"\"Awaiten: the collection '{display}' has an async-tainted member and cannot be materialized synchronously (a collection is built eagerly, with no place to await an initialization); consume it as IAsyncEnumerable<T> and resolve it through ResolveAsync, set AsyncSafety.SyncAfterInit on the [Container] and resolve it after InitializeAsync, or remove the async member from the collection.\"";
 	}
 
 	/// <summary>
@@ -119,7 +119,7 @@ internal static partial class Sources
 	private static string AsyncCollectionAsyncMessage(string collection)
 	{
 		string display = collection.Replace("global::", string.Empty);
-		return $"\"Awaiten: the async collection '{display}' has a member that requires asynchronous initialization, so it awaits its members and cannot be materialized synchronously; resolve it through ResolveAsync (or warm it through InitializeAsync / CreateScopeAsync), or set SyncResolveAfterInit on the [Container].\"";
+		return $"\"Awaiten: the async collection '{display}' has a member that requires asynchronous initialization, so it awaits its members and cannot be materialized synchronously; resolve it through ResolveAsync (or warm it through InitializeAsync / CreateScopeAsync), or set AsyncSafety.SyncAfterInit on the [Container].\"";
 	}
 
 	/// <summary>
@@ -156,7 +156,7 @@ internal static partial class Sources
 	private static string AsyncWithheldMessage(string service)
 	{
 		string display = service.Replace("global::", string.Empty);
-		return $"\"Awaiten: '{display}' requires asynchronous initialization (it is IAsyncInitializable, is produced by an async Task<T> factory, or depends on one) and cannot be resolved synchronously; resolve it through ResolveAsync (or warm it through InitializeAsync / CreateScopeAsync), or set SyncResolveAfterInit on the [Container].\"";
+		return $"\"Awaiten: '{display}' requires asynchronous initialization (it is IAsyncInitializable, is produced by an async Task<T> factory, or depends on one) and cannot be resolved synchronously; resolve it through ResolveAsync (or warm it through InitializeAsync / CreateScopeAsync), or set AsyncSafety.SyncAfterInit on the [Container].\"";
 	}
 
 	/// <summary>
@@ -208,7 +208,7 @@ internal static partial class Sources
 	///     belt-and-braces dedup keeps the emitted dictionary initializer free of a duplicate-key throw).
 	/// </summary>
 	private static List<(string Type, string Guidance)> WithheldTypes(
-		List<DispatchEntry> rootWithheld, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool syncResolveAfterInit)
+		List<DispatchEntry> rootWithheld, InstanceModel[] instances, Names names, Dictionary<ServiceKey, int> serviceToIndex, bool syncAfterInit)
 	{
 		List<(string Type, string Guidance)> result = new();
 		HashSet<string> seen = new(StringComparer.Ordinal);
@@ -217,7 +217,7 @@ internal static partial class Sources
 			result.Add((entry.Type, entry.Guidance!));
 		}
 
-		foreach ((string service, string guidance) in AsyncWithheldServices(instances, syncResolveAfterInit))
+		foreach ((string service, string guidance) in AsyncWithheldServices(instances, syncAfterInit))
 		{
 			if (seen.Add(service))
 			{
@@ -225,7 +225,7 @@ internal static partial class Sources
 			}
 		}
 
-		foreach ((string type, string guidance) in AsyncWithheldCollections(names, serviceToIndex, syncResolveAfterInit))
+		foreach ((string type, string guidance) in AsyncWithheldCollections(names, serviceToIndex, syncAfterInit))
 		{
 			if (seen.Add(type))
 			{
@@ -239,15 +239,15 @@ internal static partial class Sources
 	/// <summary>
 	///     The collection shape types that are reachable only after asynchronous warm-up, paired with their
 	///     guidance: every shape of an unkeyed, non-synthesis-suppressed collection that holds an async-tainted
-	///     member, when the container is not in pragmatic SyncResolveAfterInit mode. Unlike a single async service
+	///     member, when the container is not in pragmatic AsyncSafety.SyncAfterInit mode. Unlike a single async service
 	///     a collection has no <c>ResolveAsync</c> form (it is built eagerly, with no place to await), so its
 	///     shapes have no synchronous dispatch entry on any scope; without this they would surface as a generic
 	///     "no registration" rather than the AWT122-style guidance.
 	/// </summary>
 	private static IEnumerable<(string Type, string Guidance)> AsyncWithheldCollections(
-		Names names, Dictionary<ServiceKey, int> serviceToIndex, bool syncResolveAfterInit)
+		Names names, Dictionary<ServiceKey, int> serviceToIndex, bool syncAfterInit)
 	{
-		if (syncResolveAfterInit)
+		if (syncAfterInit)
 		{
 			yield break;
 		}
@@ -288,9 +288,9 @@ internal static partial class Sources
 	///     not fit; its bare-type unavailability is governed by parameterization, not asynchronous initialization.
 	/// </summary>
 	private static IEnumerable<(string Service, string Guidance)> AsyncWithheldServices(
-		InstanceModel[] instances, bool syncResolveAfterInit)
+		InstanceModel[] instances, bool syncAfterInit)
 	{
-		if (syncResolveAfterInit)
+		if (syncAfterInit)
 		{
 			yield break;
 		}

@@ -37,7 +37,7 @@ public static class AwaitenServiceCollectionExtensions
 	///     <para>
 	///         Under the strict default (<c>LifetimeSafety.Strict</c>), a disposable transient resolved from the
 	///         root provider rather than a scope throws the container's guidance. Resolve it from a scope, or use
-	///         <c>LifetimeSafety.Loose</c>. Warm a <c>SyncResolveAfterInit</c> container at startup with
+	///         <c>LifetimeSafety.Loose</c>. Warm a <c>AsyncSafety.SyncAfterInit</c> container at startup with
 	///         <see cref="AwaitenContainerBuilder{TRoot}.WithInitialization" /> before its async-initialized services
 	///         are first resolved, otherwise the first resolution blocks synchronously. Do not
 	///         dispose a scope or the provider while a resolved <c>Task&lt;T&gt;</c> is still in flight: MS.DI
@@ -101,7 +101,7 @@ public static class AwaitenServiceCollectionExtensions
 		where TRoot : class, IAwaitenRoot
 	{
 		// Expose the root under its own type and the two container-facing interfaces so a host can reach it, e.g.
-		// to warm a SyncResolveAfterInit container. Registered as a pre-built instance (a constant), which MS.DI
+		// to warm an AsyncSafety.SyncAfterInit container. Registered as a pre-built instance (a constant), which MS.DI
 		// never captures for disposal: the factory-registered owner disposes a root the bridge owns instead, at a capture
 		// position that precedes everything the root builds.
 		services.AddSingleton(root);
