@@ -1155,8 +1155,8 @@ internal static class Diagnostics
 	///     Two <c>[InjectProperty&lt;TImplementation&gt;]</c> entries name the same property of the same
 	///     implementation. The property is filled once; the redundant entry is likely a copy-paste and is
 	///     reported so a contradicting <c>Optional</c>/<c>Deferred</c>/<c>Key</c> on it is not silently ignored. A
-	///     warning rather than an error: the graph is well-defined (the first entry wins), like the other no-op
-	///     detections (AWT172-AWT174).
+	///     warning rather than an error: the graph is well-defined (the first entry wins, and a closed entry wins
+	///     over an open-generic one on the same closing), like the other no-op detections (AWT172-AWT174).
 	/// </summary>
 	public static readonly DiagnosticDescriptor DuplicateInjectProperty = new(
 		"AWT179",
@@ -1170,14 +1170,14 @@ internal static class Diagnostics
 	///     An <c>[InjectProperty&lt;TImplementation&gt;]</c> targets a <c>TImplementation</c> that has no
 	///     container-constructed registration, so the entry is never applied: the type is not registered, or it is
 	///     an unexpanded closed generic no consumer required. A warning rather than an error: the container is still
-	///     well-defined (the dead entry contributes nothing), the contextual analogue of AWT167. A closed,
-	///     container-constructed type is required; an open generic is not matched (its closings are only expanded on
-	///     demand), and a Factory/Instance-produced type is AWT178 instead.
+	///     well-defined (the dead entry contributes nothing), the contextual analogue of AWT167. An entry for an
+	///     unbound generic definition is reported when the container constructs none of its closings, and a
+	///     Factory/Instance-produced type is AWT178 instead.
 	/// </summary>
 	public static readonly DiagnosticDescriptor InjectPropertyImplementationNotRegistered = new(
 		"AWT180",
 		"[InjectProperty] implementation is not registered",
-		"'{1}' has no container-constructed registration, so its [InjectProperty] entry for '{0}' is never applied; register '{1}' as a constructed service (a closed, container-constructed type - an unregistered or open-generic type is not matched)",
+		"'{1}' has no container-constructed registration, so its [InjectProperty] entry for '{0}' is never applied; register '{1}' as a constructed service, or for a generic definition make sure a consumer requires one of its closings",
 		"Awaiten",
 		DiagnosticSeverity.Warning,
 		isEnabledByDefault: true);
@@ -1698,6 +1698,19 @@ internal static class Diagnostics
 		"AWT214",
 		"A container with suppressed disposal is projected into Microsoft.Extensions.DependencyInjection",
 		"'{0}' is projected into Microsoft.Extensions.DependencyInjection, but its container suppresses the disposal of '{1}', which MS.DI would dispose anyway, so the projection throws at startup; remove SuppressDisposal, register a pre-built Instance you own, or resolve the service from the container directly (AwaitenServiceProvider)",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     The <c>typeof</c> argument of an <c>[InjectProperty(typeof(...), name)]</c> is partially open, like
+	///     <c>typeof(Outer&lt;int&gt;.Inner&lt;&gt;)</c>: it is neither a closed type nor an unbound generic definition,
+	///     so no constructed type can match it. The C# compiler rejects it as well (CS7003); this names the fix.
+	/// </summary>
+	public static readonly DiagnosticDescriptor InjectPropertyPartiallyOpen = new(
+		"AWT217",
+		"[InjectProperty] target is partially open",
+		"The [InjectProperty] target '{0}' is partially open; pass a closed type such as typeof(Repository<Order>), or an unbound generic definition with every type argument omitted such as typeof(Repository<>)",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);

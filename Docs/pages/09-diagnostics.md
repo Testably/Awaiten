@@ -1048,7 +1048,7 @@ public static partial class CoffeeShop;
 ### AWT177
 
 :::danger[Error]
-An `[InjectProperty<T>]` names a member that is not a settable property on the implementation: an unknown name, a field or method, or a read-only property.
+An `[InjectProperty<T>]` names a member that is not a settable property on the implementation: an unknown name, a field or method, or a read-only property. For an open-generic target such as `[InjectProperty(typeof(OrderBook<>), ...)]` the generic definition is checked, once.
 :::
 
 ```csharp expect=AWT177
@@ -1089,7 +1089,7 @@ public static partial class CoffeeShop
 ### AWT179
 
 :::warning[Warning]
-Two `[InjectProperty<T>]` entries name the same property of the same implementation. The property is filled once; the duplicate is ignored.
+Two `[InjectProperty<T>]` entries name the same property of the same implementation. The property is filled once; the duplicate is ignored. A closed entry and an open-generic `typeof` entry that meet on one closing count too: the closed entry wins, and the open entry is ignored for that closing.
 :::
 
 ```csharp expect=AWT179
@@ -1140,6 +1140,27 @@ public sealed class Barista
 [Singleton<RealTimeSystem, ITimeSystem>]
 [Singleton<Barista>]
 [InjectProperty<Barista>(nameof(Barista.Time))]   // [Inject] already fills it: remove one
+public static partial class CoffeeShop;
+```
+
+### AWT217
+
+:::danger[Error]
+The `typeof` argument of an `[InjectProperty(typeof(...), name)]` is partially open: it is neither a closed type nor an unbound generic definition, so no constructed type can match it. The C# compiler rejects it as well (CS7003). Close every type argument, or omit all of them to target every closing.
+:::
+
+```csharp expect=CS7003,AWT217
+public sealed class Shelf<T>
+{
+    public sealed class Slot<U>
+    {
+        public ITimeSystem? Time { get; set; }
+    }
+}
+
+[Container]
+[Singleton<RealTimeSystem, ITimeSystem>]
+[InjectProperty(typeof(Shelf<Order>.Slot<>), "Time")]   // use typeof(Shelf<>.Slot<>) or a closed type
 public static partial class CoffeeShop;
 ```
 

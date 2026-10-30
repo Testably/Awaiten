@@ -233,6 +233,16 @@ namespace Awaiten
         public bool Optional { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
+    public sealed class InjectPropertyAttribute : System.Attribute
+    {
+        public InjectPropertyAttribute(System.Type implementation, string propertyName) { }
+        public bool Deferred { get; set; }
+        public System.Type Implementation { get; }
+        public object? Key { get; set; }
+        public bool Optional { get; set; }
+        public string PropertyName { get; }
+    }
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
     public sealed class InjectPropertyAttribute<TImplementation> : System.Attribute where TImplementation : class
     {
         public InjectPropertyAttribute(string propertyName) { }
