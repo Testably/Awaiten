@@ -47,6 +47,7 @@ Its headline feature is **async initialization**. Some services need asynchronou
 - [Lifetimes](./03-core-concepts/01-lifetimes.md) explains singleton, scoped, and transient.
 - [Async initialization](./03-core-concepts/03-async-initialization.md) covers the headline feature.
 - [MS.DI bridge](./07-hosting/01-msdi-bridge.md) runs a container under ASP.NET Core and the generic host.
+- [Migrating from MS.DI](./07-hosting/03-migrate-from-msdi.md) maps your `IServiceCollection` registrations to Awaiten.
 - [Design principles & the composition root](./08-design-principles.md) is the design behind the mechanics; read it once you know the basics.
 - [Diagnostics](./09-diagnostics.md) lists every compile-time check.
 - [Benchmarks](./10-benchmarks.mdx) compares Awaiten with other .NET containers.
