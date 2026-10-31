@@ -1,0 +1,124 @@
+---
+description: Wrap a service in decorators that share its interface, for closed, keyed and open generic registrations.
+---
+
+# Decorators
+
+A decorator wraps a service in another that shares its interface. It is how you add logging, retries, or caching without touching the real implementation. The consumer asks for the interface and gets the wrapped version. It cannot tell the difference, and it cannot bypass the wrapper.
+
+## Wrap a service
+
+Register the real service, then add `[Decorate<TDecorator, TService>]`. The decorator takes the inner service as a constructor parameter.
+
+```csharp
+public sealed class LoggingTerminal(IPaymentTerminal inner) : IPaymentTerminal
+{
+    public Task ChargeAsync(decimal amount) { /* log, then */ return inner.ChargeAsync(amount); }
+}
+
+[Container]
+[Singleton<CardTerminal, IPaymentTerminal>]
+[Decorate<LoggingTerminal, IPaymentTerminal>]
+public static partial class CoffeeShop;
+
+// Resolve<IPaymentTerminal>() returns LoggingTerminal(CardTerminal)
+```
+
+## Chain several
+
+Stack decorators by declaring more than one. They chain in declaration order, and the last declared ends up outermost.
+
+```csharp
+[Singleton<CardTerminal, IPaymentTerminal>]
+[Decorate<RetryingTerminal, IPaymentTerminal>]
+[Decorate<LoggingTerminal, IPaymentTerminal>]
+// result: LoggingTerminal(RetryingTerminal(CardTerminal))
+```
+
+Need a different order? Set `Order`. A higher `Order` sits further out.
+
+```csharp
+[Decorate<LoggingTerminal, IPaymentTerminal>(Order = 1)]
+[Decorate<RetryingTerminal, IPaymentTerminal>]
+```
+
+## Collections are decorated too
+
+If a service has several implementations, each one is wrapped. A consumer that asks for `IEnumerable<IPaymentTerminal>` gets a collection of decorated terminals, so neither a plain resolve nor the collection reaches an undecorated instance. A [`WhenInjectedInto`](./04-keyed-services.md#bind-a-variant-to-a-consumer-with-wheninjectedinto) registration is wrapped by the same chain.
+
+## Keyed registrations
+
+By default a decorator wraps the unkeyed registrations of its service only. A registration with a `Key` stays undecorated, so a keyed resolve, a `[FromKey]` parameter and a [keyed dictionary](../05-resolution/04-keyed-dictionaries.md) get the bare implementation:
+
+```csharp
+[Singleton<CardTerminal, IPaymentTerminal>]
+[Singleton<CashTerminal, IPaymentTerminal>(Key = "backup")]
+[Decorate<LoggingTerminal, IPaymentTerminal>]
+
+// Resolve<IPaymentTerminal>()         returns LoggingTerminal(CardTerminal)
+// Resolve<IPaymentTerminal>("backup") returns CashTerminal
+```
+
+This holds even when the same implementation is registered both with and without a key. A service registered only under keys has nothing to decorate ([AWT123](../09-diagnostics.md#awt123)).
+
+To decorate keyed registrations, name the keys in `Keys`, where `null` stands for the unkeyed registrations, or set `AllKeys` to decorate every registration of the service:
+
+```csharp
+[Singleton<CardTerminal, IPaymentTerminal>]
+[Singleton<CashTerminal, IPaymentTerminal>(Key = "backup")]
+[Singleton<SpareTerminal, IPaymentTerminal>(Key = "spare")]
+[Decorate<LoggingTerminal, IPaymentTerminal>(Keys = new object?[] { null, "backup" })]
+[Decorate<RetryingTerminal, IPaymentTerminal>(AllKeys = true)]
+
+// Resolve<IPaymentTerminal>()         returns RetryingTerminal(LoggingTerminal(CardTerminal))
+// Resolve<IPaymentTerminal>("backup") returns RetryingTerminal(LoggingTerminal(CashTerminal))
+// Resolve<IPaymentTerminal>("spare")  returns RetryingTerminal(SpareTerminal)
+```
+
+Each key gets its own chain of the decorators that select it, ordered by `Order` and declaration order as above. A decorated key is decorated everywhere: a keyed resolve, a `[FromKey]` parameter and the keyed dictionary all get the chain. The open generic `typeof` form below takes `Keys` and `AllKeys` the same way and decorates the closings registered under the selected keys.
+
+:::note
+A key in `Keys` that matches no registration is a build error ([AWT210](../09-diagnostics.md#awt210)), and so is setting `Keys` together with `AllKeys` ([AWT211](../09-diagnostics.md#awt211)).
+:::
+
+## Decorate every closing of an open generic
+
+A pipeline behavior wraps *every* closing of an open generic service (`IHandler<PlaceOrder>`, `IHandler<Refund>`, and the rest) with one attribute. The generic `[Decorate<,>]` form only takes closed types, so use the `typeof` form with unbound generics instead:
+
+```csharp
+public sealed class LoggingBehavior<T>(IHandler<T> inner) : IHandler<T>
+{
+    public Task HandleAsync(T request) { /* log, then */ return inner.HandleAsync(request); }
+}
+
+public sealed class Checkout(IHandler<PlaceOrder> handler);
+
+[Container]
+[Transient(typeof(Handler<>), typeof(IHandler<>))]
+[Decorate(typeof(LoggingBehavior<>), typeof(IHandler<>))]
+[Transient<Checkout>]   // needs IHandler<PlaceOrder>, so that closing is in the graph
+public static partial class CoffeeShop;
+
+// Resolve<IHandler<PlaceOrder>>() returns LoggingBehavior<PlaceOrder>(Handler<PlaceOrder>)
+```
+
+Awaiten synthesizes a closed decorator for every closing already in the graph, however it was registered: an open generic, an explicit closed registration, or a scan. Each closing then behaves exactly like a hand-written closed decorator: it joins its collection, respects `Order`, and interleaves with any explicit `[Decorate<D, IHandler<PlaceOrder>>]` on that one closing by the same rules.
+
+The decorator's arity must match the service's, and it must expose the service with its type parameters in declaration order (`LoggingBehavior<T> : IHandler<T>`). A closing whose type arguments violate the decorator's constraints is skipped with a diagnostic. Like the closed form, a decorator's *own* generic dependencies are supplied only when some other registration already expands them into the graph.
+
+## Lifetime and disposal
+
+A decorator inherits the lifetime of what it decorates. Wrap a singleton and the decorator is a singleton. On teardown the chain is disposed outermost first, so the decorator is disposed before its inner service.
+
+## Async inner services
+
+If the inner service is async-initialized, the whole chain is async-tainted. Resolve it with `ResolveAsync`. A synchronous resolve is a build error ([AWT119](../09-diagnostics.md#awt119)). See [Async initialization](../03-core-concepts/03-async-initialization.md).
+
+:::note
+Decorating a service that is not registered is a build error ([AWT123](../09-diagnostics.md#awt123)), and a decorator needs exactly one constructor parameter of the decorated type ([AWT124](../09-diagnostics.md#awt124)). The open generic `typeof` form additionally requires an unbound generic ([AWT127](../09-diagnostics.md#awt127)) of matching arity ([AWT125](../09-diagnostics.md#awt125)), and skips a closing whose type arguments violate the decorator's constraints ([AWT126](../09-diagnostics.md#awt126)).
+:::
+
+## Where to go next
+
+- [Composites](./03-composites.md) to expose many implementations as one.
+- [Collections](../05-resolution/03-collections.md) for resolving every implementation.

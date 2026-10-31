@@ -11,6 +11,12 @@ Awaiten is a Roslyn source generator that wires your object graph at build time.
 
 Its headline feature is **async initialization**. Services that need asynchronous setup after construction, like opening a connection or handshaking with hardware, are tracked through the graph. Reaching one before it is ready is a compile error.
 
+## Installation
+
+```shell
+dotnet add package Awaiten
+```
+
 ## Quick start
 
 ```csharp
@@ -22,15 +28,9 @@ using Awaiten;
 [Transient<Cup>]
 public static partial class CoffeeShop;
 
-await using var shop = new CoffeeShop.Root();
+await using CoffeeShop.Root shop = new();
 await shop.InitializeAsync();        // async-initialized services are warmed up
-var cup = shop.Resolve<Cup>();
-```
-
-Install with:
-
-```sh
-dotnet add package Awaiten
+Cup cup = shop.Resolve<Cup>();
 ```
 
 ## Features

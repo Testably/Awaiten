@@ -1,5 +1,5 @@
 ---
-title: Diagnostics
+description: Every AWT diagnostic that Awaiten reports at compile time, with an example that triggers it.
 toc_max_heading_level: 2
 ---
 
@@ -7,7 +7,7 @@ toc_max_heading_level: 2
 
 Awaiten checks your wiring while it builds. A mistake that other containers would surface at startup, or on the first resolve in production, is a compile error here. The barista never reaches for a cup that is not there.
 
-Every diagnostic has an `AWT###` id. Errors stop the build. Warnings point at something that is legal but probably not what you meant. This page is the full catalogue, one entry per id with a concrete example that triggers it. The feature pages link here for the codes they mention.
+Every diagnostic has an `AWT###` id. Errors stop the build. Warnings point at something that is legal but probably not what you meant. This page is the full catalog, one entry per id with a concrete example that triggers it. The feature pages link here for the codes they mention.
 
 The examples reuse a few coffee-shop types (`Grinder`, `EspressoMachine`, `Order`, `Cup`, `IMilk`, `IBrewer`, and so on). Only the detail that trips the diagnostic is spelled out in each snippet.
 
@@ -276,7 +276,7 @@ public sealed class Boiler : IAsyncDisposable
 [Singleton<Boiler>]
 public static partial class CoffeeShop;
 
-using (var shop = new CoffeeShop.Root()) { }   // sync dispose cannot tear down Boiler; use await using
+using (CoffeeShop.Root shop = new()) { }   // sync dispose cannot tear down Boiler; use await using
 ```
 
 ### AWT161
@@ -560,7 +560,7 @@ public static partial class CoffeeShop;
 
 ### AWT137
 
-:::info[Retired]
+:::note[Retired]
 No longer reported. `[Arg]` is valid only on parameters, so the C# compiler rejects it on a property (CS0592). The id stays reserved and is never reused.
 :::
 
@@ -625,7 +625,7 @@ public static partial class CoffeeShop
 ### AWT214
 
 :::danger[Error]
-A container is projected into Microsoft.Extensions.DependencyInjection with `AddAwaitenContainer<TRoot>()` or `new AwaitenServiceProviderFactory<TRoot>()`, but it builds a possibly disposable service with `SuppressDisposal = true`. MS.DI disposes every disposable instance a projected registration hands out, so the suppression cannot hold, and the projection throws at startup. Remove `SuppressDisposal`, register a pre-built `Instance` you own, or resolve the service from the container directly through an [`AwaitenServiceProvider`](./hosting/msdi-bridge#or-let-awaiten-own-everything) instead of projecting the container. The analyzer sees a projection that names the container's `Root` in the container's own project; elsewhere the startup check still applies.
+A container is projected into Microsoft.Extensions.DependencyInjection with `AddAwaitenContainer<TRoot>()` or `new AwaitenServiceProviderFactory<TRoot>()`, but it builds a possibly disposable service with `SuppressDisposal = true`. MS.DI disposes every disposable instance a projected registration hands out, so the suppression cannot hold, and the projection throws at startup. Remove `SuppressDisposal`, register a pre-built `Instance` you own, or resolve the service from the container directly through an [`AwaitenServiceProvider`](./07-hosting/01-msdi-bridge.md#or-let-awaiten-own-everything) instead of projecting the container. The analyzer sees a projection that names the container's `Root` in the container's own project; elsewhere the startup check still applies.
 :::
 
 ```csharp expect=AWT214
@@ -1089,7 +1089,7 @@ public static partial class CoffeeShop
 ### AWT179
 
 :::warning[Warning]
-Two `[InjectProperty]` entries name the same property of the same implementation, both closed or both open-generic. The property is filled once; the duplicate is ignored. A closed entry and an open-generic `typeof` entry that meet on one closing are reported only when the closed entry repeats the open entry's `Key`, `Optional` and `Deferred`: the closed entry wins on its closing either way, so one that changes an option is a deliberate [specialisation of that closing](./resolution/property-injection#open-generics-with-the-typeof-form) and is not reported. This is an analyzer diagnostic, so a deliberate duplicate can be suppressed in source with `#pragma warning disable AWT179` or `[SuppressMessage]`.
+Two `[InjectProperty]` entries name the same property of the same implementation, both closed or both open-generic. The property is filled once; the duplicate is ignored. A closed entry and an open-generic `typeof` entry that meet on one closing are reported only when the closed entry repeats the open entry's `Key`, `Optional` and `Deferred`: the closed entry wins on its closing either way, so one that changes an option is a deliberate [specialization of that closing](./05-resolution/05-property-injection.md#open-generics-with-the-typeof-form) and is not reported. This is an analyzer diagnostic, so a deliberate duplicate can be suppressed in source with `#pragma warning disable AWT179` or `[SuppressMessage]`.
 :::
 
 ```csharp expect=AWT179
@@ -1404,7 +1404,14 @@ public static partial class CoffeeShop
 }
 ```
 
-A [generic scan hook](./registration/scanning#lifecycle-hooks) binds its type argument from a closed marker form, so it needs exactly one it can bind. `DualView`, which closes `IView<>` at both `Orders` and `Payments`, offers two; the same happens when two scans bind the same generic hook through differently-closed markers of one type. Only forms the hook could actually bind count: matching arity, type arguments the generated container can access, satisfied constraints, and a first parameter that accepts the match. If exactly one form remains after those checks the hook binds it, so a `where TViewModel : class` constraint can settle a family that closes the marker at one class and one struct, and a closing at another assembly's internal type yields to an accessible sibling. Register the type explicitly with the intended hook, or split the family so only one closed form binds it. Reported only when the ambiguous generic method is the sole usable overload of the hook name: if another overload also accepts the match, the collision is between overloads rather than closings (settling the closings would still leave two usable overloads), so it is [AWT190](#awt190) instead. Only a *generic* hook is affected: a non-generic hook (its parameter typed as the marker or `object`) takes no type argument, so a match with several closings is fine for it, as is a match closing the marker several times *without* any hook (each closed form registers as its own collection member).
+A [generic scan hook](./04-registration/06-scanning.md#lifecycle-hooks) binds its type argument from a closed marker form, so it needs exactly one it can bind. `DualView`, which closes `IView<>` at both `Orders` and `Payments`, offers two; the same happens when two scans bind the same generic hook through differently-closed markers of one type. Register the type explicitly with the intended hook, or split the family so only one closed form binds it.
+
+<details>
+<summary>Which closed forms count</summary>
+
+Only forms the hook could actually bind count: matching arity, type arguments the generated container can access, satisfied constraints, and a first parameter that accepts the match. If exactly one form remains after those checks the hook binds it, so a `where TViewModel : class` constraint can settle a family that closes the marker at one class and one struct, and a closing at another assembly's internal type yields to an accessible sibling. Reported only when the ambiguous generic method is the sole usable overload of the hook name: if another overload also accepts the match, the collision is between overloads rather than closings (settling the closings would still leave two usable overloads), so it is [AWT190](#awt190) instead. Only a *generic* hook is affected: a non-generic hook (its parameter typed as the marker or `object`) takes no type argument, so a match with several closings is fine for it, as is a match closing the marker several times *without* any hook (each closed form registers as its own collection member).
+
+</details>
 
 ### AWT199
 
@@ -1527,7 +1534,11 @@ public static partial class MenuModule;
 public static partial class CoffeeShop;
 ```
 
-*(Repurposed: this ID previously rejected any `[Scan]` on a module.)* A `[Scan]` on a `[Module]` is [self-compiled in the module's own build](./registration/modules#self-compiled-scans), which stamps the module with a generated marker even when the scan matched nothing. A module whose metadata carries a `[Scan]` but no marker was compiled without the Awaiten generator, or with a version predating self-compiled scans, so its scan would silently contribute nothing. Rebuild the library with the Awaiten generator referenced. Reported at the consumer's `[Import]`. The self-compilation constraints themselves are reported as [AWT194](#awt194)–[AWT197](#awt197), [AWT200](#awt200)–[AWT202](#awt202).
+:::note[Repurposed id]
+This id previously rejected any `[Scan]` on a module.
+:::
+
+A `[Scan]` on a `[Module]` is [self-compiled in the module's own build](./04-registration/07-modules.md#self-compiled-scans), which stamps the module with a generated marker even when the scan matched nothing. A module whose metadata carries a `[Scan]` but no marker was compiled without the Awaiten generator, or with a version predating self-compiled scans, so its scan would silently contribute nothing. Rebuild the library with the Awaiten generator referenced. Reported at the consumer's `[Import]`. The self-compilation constraints themselves are reported as [AWT194](#awt194) to [AWT197](#awt197) and [AWT200](#awt200) to [AWT202](#awt202).
 
 ### AWT155
 
@@ -1562,7 +1573,7 @@ A `[Module]` that declares a `[Scan]` is not `partial` (or is nested in a type t
 public static class PluginModule;   // must be partial to receive the generated factories
 ```
 
-A [self-compiled module scan](./registration/modules#self-compiled-scans) emits a factory method and a registration attribute into the module's partial, re-opening the whole nesting chain of a nested module. Add the `partial` modifier to the module class and every type containing it. Reported in the module's own build.
+A [self-compiled module scan](./04-registration/07-modules.md#self-compiled-scans) emits a factory method and a registration attribute into the module's partial, re-opening the whole nesting chain of a nested module. Add the `partial` modifier to the module class and every type containing it. Reported in the module's own build.
 
 ### AWT195
 
@@ -1737,7 +1748,7 @@ public static partial class CoffeeShop;
 ### AWT213
 
 :::danger[Error]
-A runtime-type dispatch dictionary (`IReadOnlyDictionary<Type, Func<TBase>>`) cannot be built: its value is not `Func<TBase>` over a non-generic interface, it carries a `[FromKey]`, a closing that implements `TBase` has more than one type argument, or the closings come from more than one generic interface, so a type argument does not identify one entry. See [Dispatch by runtime type](./resolution/keyed-dictionaries#dispatch-by-runtime-type).
+A runtime-type dispatch dictionary (`IReadOnlyDictionary<Type, Func<TBase>>`) cannot be built: its value is not `Func<TBase>` over a non-generic interface, it carries a `[FromKey]`, a closing that implements `TBase` has more than one type argument, or the closings come from more than one generic interface, so a type argument does not identify one entry. See [Dispatch by runtime type](./05-resolution/04-keyed-dictionaries.md#dispatch-by-runtime-type).
 :::
 
 ```csharp expect=AWT213
@@ -1896,11 +1907,11 @@ public sealed class Barista(IAwaitenResolver resolver)   // locates dependencies
 }
 ```
 
-Dispatching by a type known only at run time, like a mediator looking up the handler for `message.GetType()`, needs no resolver either: inject a [dispatch dictionary](./resolution/keyed-dictionaries#dispatch-by-runtime-type).
+Dispatching by a type known only at run time, like a mediator looking up the handler for `message.GetType()`, needs no resolver either: inject a [dispatch dictionary](./05-resolution/04-keyed-dictionaries.md#dispatch-by-runtime-type).
 
 One kind of type is meant to hold a resolver: an adapter that bridges the container to a host's own dependency-injection surface, where holding it *is* the adaptation rather than a hidden run-time dependency. `AwaitenServiceProvider` is one, and anything you write against a framework's own registrar is another. This is an analyzer diagnostic, so suppress it in source, with the justification saying which adapter it is.
 
-Below, `IServiceLocator` stands for whatever single-method resolution interface your framework declares, where returning `null` is how an adapter says "not mine". Both answers that are not a plain instance carry their weight: the [collection convention](./hosting/msdi-bridge#feature-detection) every framework expects, and the withheld reason that keeps a container's own failure from being reported as absence.
+Below, `IServiceLocator` stands for whatever single-method resolution interface your framework declares, where returning `null` is how an adapter says "not mine". Both answers that are not a plain instance carry their weight: the [collection convention](./07-hosting/01-msdi-bridge.md#feature-detection) every framework expects, and the withheld reason that keeps a container's own failure from being reported as absence.
 
 ```csharp
 using System.Diagnostics.CodeAnalysis;

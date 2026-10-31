@@ -1,0 +1,6 @@
+{
+	"label": "Ownership & lifecycle",
+	"customProps": {
+		"description": "Take finer control of when instances go away. Owned handles, lifetime safety, and lifecycle hooks."
+	}
+}

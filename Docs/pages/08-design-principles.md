@@ -1,7 +1,6 @@
 ---
-title: Design principles & the composition root
+description: The design that Awaiten's mechanics serve, from the composition root and volatile dependencies to the four DI anti-patterns.
 sidebar_label: Design principles
-sidebar_position: 8
 ---
 
 # Design principles & the composition root
@@ -26,7 +25,7 @@ Your `[Container]` is the **[composition root](https://blog.ploeh.dk/2011/07/28/
 public static partial class CoffeeShop;
 
 // at the entry point, and nowhere else:
-await using var shop = new CoffeeShop.Root();
+await using CoffeeShop.Root shop = new();
 ```
 
 Compose the graph *only* there. The opposite is composition scattered through the code: a service reaching for the container to build its own collaborators, a factory buried three layers deep newing up a database connection. When wiring is spread out like that, no single place tells you what the application is made of, and every one of those sites is a small coupling to how things are built.
@@ -60,8 +59,8 @@ public sealed class Barista
 {
     public void Serve(Order order)
     {
-        var terminal = new PaymentTerminal();   // built here, cannot be substituted
-        var when = DateTime.UtcNow;             // and the clock is reached statically
+        PaymentTerminal terminal = new();       // built here, cannot be substituted
+        DateTime when = DateTime.UtcNow;        // and the clock is reached statically
         // ...
     }
 }
@@ -80,7 +79,7 @@ public sealed class Barista(IAwaitenResolver resolver)
 {
     public void Serve(Order order)
     {
-        var gateway = resolver.Resolve<IPaymentGateway>();   // real dependency, hidden
+        IPaymentGateway gateway = resolver.Resolve<IPaymentGateway>();   // real dependency, hidden
         // ...
     }
 }
@@ -88,16 +87,16 @@ public sealed class Barista(IAwaitenResolver resolver)
 
 This looks like DI, but it is the opposite. Seemann's [*Service Locator is an Anti-Pattern*](https://blog.ploeh.dk/2010/02/03/ServiceLocatorisanAnti-Pattern/) is the classic write-up. `Barista`'s real dependencies no longer show in its constructor, so you cannot tell what it needs without reading its body, and Awaiten cannot check the graph it hides.
 
-**Rule: never inject `IAwaitenResolver`, `IAwaitenScope`, or `IAwaitenRoot` into a service.** They are seams for the composition root, not for the classes it composes. Awaiten flags this one for you: holding a resolver in anything but the `[Container]` is the suppressible warning [AWT135](./diagnostics#awt135). Take the dependency you actually need through the constructor and let the container supply it. When the type you need is only known at run time, like the handler for a message arriving as `object`, take a [dispatch dictionary](./resolution/keyed-dictionaries#dispatch-by-runtime-type) instead of a resolver.
+**Rule: never inject `IAwaitenResolver`, `IAwaitenScope`, or `IAwaitenRoot` into a service.** They are seams for the composition root, not for the classes it composes. Awaiten flags this one for you: holding a resolver in anything but the `[Container]` is the suppressible warning [AWT135](./09-diagnostics.md#awt135). Take the dependency you actually need through the constructor and let the container supply it. When the type you need is only known at run time, like the handler for a message arriving as `object`, take a [dispatch dictionary](./05-resolution/04-keyed-dictionaries.md#dispatch-by-runtime-type) instead of a resolver.
 
 ### Ambient Context
 
 A class reaches a dependency through static, process-wide state rather than receiving it.
 
 ```csharp
-var when = DateTime.UtcNow;             // the ambient clock
-var barista = Thread.CurrentPrincipal;  // the ambient identity
-Log.Info("order served");               // the ambient logger
+DateTime when = DateTime.UtcNow;               // the ambient clock
+IPrincipal? barista = Thread.CurrentPrincipal; // the ambient identity
+Log.Info("order served");                      // the ambient logger
 ```
 
 It reads conveniently, but the dependency is invisible in the signature and shared across the whole process, so a test cannot pin the time, the identity, or capture the log without global setup.
@@ -122,29 +121,30 @@ The few features that would otherwise put an Awaiten attribute on a domain class
 
 | Need | Container-side idiom (clean domain) | Consumer-side escape hatch |
 |---|---|---|
-| A host-owned service | [`[ImportService<T>]`](./hosting/external-services) | *(none needed)* |
-| A keyed implementation | [`WhenInjectedInto`](./registration/keyed-services) or a factory [`[FromKey]`](./registration/keyed-services) | `[FromKey]` on the parameter |
-| A runtime argument | a factory `[Arg]` behind [`Func<TArg, T>`](./resolution/runtime-arguments) | `[Arg]` on the parameter |
-| Property injection | [`[InjectProperty<T>]`](./resolution/property-injection) | `[Inject]` on the property |
+| A host-owned service | [`[ImportService<T>]`](./07-hosting/02-external-services.mdx) | *(none needed)* |
+| A keyed implementation | [`WhenInjectedInto`](./04-registration/04-keyed-services.md) or a factory [`[FromKey]`](./04-registration/04-keyed-services.md) | `[FromKey]` on the parameter |
+| A runtime argument | a factory `[Arg]` behind [`Func<TArg, T>`](./05-resolution/06-runtime-arguments.md) | `[Arg]` on the parameter |
+| Property injection | [`[InjectProperty<T>]`](./05-resolution/05-property-injection.md) | `[Inject]` on the property |
 
 Prefer the container-side form every time. It leaves the domain class free of any reference to Awaiten, which is the whole point. The three consumer-side attributes (`[Arg]`, `[FromKey]`, `[Inject]`) are honest escape hatches for the rare shape the root cannot express, not defects, but each one couples the class that carries it to Awaiten.
 
-Awaiten guards part of this for you: applying a composition attribute (`[Singleton]`, `[Scan]`, and the like) in an assembly that declares no `[Container]` is the suppressible warning [AWT134](./diagnostics#awt134). That guard is best-effort, and it goes quiet in a single-project app that mixes the root with its domain. To enforce the full boundary, add an **architecture test** that asserts your domain and application assemblies carry no reference to Awaiten. That turns a convention into a red build the day someone crosses the line.
+Awaiten guards part of this for you: applying a composition attribute (`[Singleton]`, `[Scan]`, and the like) in an assembly that declares no `[Container]` is the suppressible warning [AWT134](./09-diagnostics.md#awt134). That guard is best-effort, and it goes quiet in a single-project app that mixes the root with its domain. To enforce the full boundary, add an **architecture test** that asserts your domain and application assemblies carry no reference to Awaiten. That turns a convention into a red build the day someone crosses the line.
 
-[aweXpect.Reflection](https://docs.testably.org/Extensions/aweXpect.Reflection/) expresses that rule directly. Point it at the assembly that holds your domain code and assert it depends on nothing in the `Awaiten` namespace:
+[aweXpect.Reflection](/aweXpect/extensions/aweXpect.Reflection/) expresses that rule directly. Point it at the assembly that holds your domain code and assert it depends on nothing in the `Awaiten` namespace:
 
 ```csharp
 using aweXpect;
 using aweXpect.Reflection;
+using aweXpect.Reflection.Collections;
+using static aweXpect.Expect;
 
 [Test]
-public async Task Domain_has_no_reference_to_Awaiten()
+public async Task Domain_ShouldNotReferenceAwaiten()
 {
     // every type in the assembly that holds your domain and application code
-    var domain = In.AssemblyContaining<Barista>().Types();
+    Filtered.Types domain = In.AssemblyContaining<Barista>().Types();
 
-    await Expect.That(domain)
-        .DoNotDependOn(Types.InNamespace("Awaiten"));
+    await That(domain).DoNotDependOn(Types.InNamespace("Awaiten"));
 }
 ```
 
@@ -152,13 +152,13 @@ Only the composition-root assembly (the one that declares your `[Container]`) sh
 
 ## When power becomes a smell
 
-Some of Awaiten's features resolve ambiguity gracefully: [keyed services](./registration/keyed-services), contextual binding, [scanning](./registration/scanning), and [context-aware factories](./resolution/context-aware-factories) all let you say "it depends" and have the container sort it out. That power is real, and sometimes exactly right. But resolving an ambiguity is not the same as removing it, and a container that smooths one over can hide a design that wants to be split into two clear abstractions instead of one clever registration.
+Some of Awaiten's features resolve ambiguity gracefully: [keyed services](./04-registration/04-keyed-services.md), contextual binding, [scanning](./04-registration/06-scanning.md), and [context-aware factories](./05-resolution/07-context-aware-factories.md) all let you say "it depends" and have the container sort it out. That power is real, and sometimes exactly right. But resolving an ambiguity is not the same as removing it, and a container that smooths one over can hide a design that wants to be split into two clear abstractions instead of one clever registration.
 
 Each of those feature pages carries a **"When not to reach for this"** note that names the simpler thing to prefer and the genuine case that justifies the feature. Read them as a set. When you find yourself reaching for the powerful form to paper over a design you are not happy with, that is the smell, and the fix usually lives in the design, not the registration.
 
 ## Where to go next
 
-- [Getting started](./getting-started) if you have not built a container yet.
-- [Keyed services](./registration/keyed-services) and [scanning](./registration/scanning) for the registration features to use sparingly.
-- [Property injection](./resolution/property-injection) and [context-aware factories](./resolution/context-aware-factories) for the resolution features to use sparingly.
-- [Diagnostics](./diagnostics) for the mechanics Awaiten *does* enforce.
+- [Getting started](./01-getting-started.md) if you have not built a container yet.
+- [Keyed services](./04-registration/04-keyed-services.md) and [scanning](./04-registration/06-scanning.md) for the registration features to use sparingly.
+- [Property injection](./05-resolution/05-property-injection.md) and [context-aware factories](./05-resolution/07-context-aware-factories.md) for the resolution features to use sparingly.
+- [Diagnostics](./09-diagnostics.md) for the mechanics Awaiten *does* enforce.

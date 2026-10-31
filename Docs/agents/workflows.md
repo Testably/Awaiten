@@ -42,7 +42,7 @@ Always run in Release and compare before and after on the same machine.
 
 - `Docs/pages/` is the user documentation (Docusaurus front matter and admonitions such as `:::tip`). It is not built here: after a successful `Build` on `main`, `notify-docs-site.yml` asks `Testably/Testably.Site` to rebuild docs.testably.org/Awaiten.
 - `Docs/pages/10-benchmarks.mdx` renders `data.js`/`limited-data.js` that `PublishBenchmarkReport` commits to the `benchmarks` branch.
-- `Docs/pages/09-diagnostics.md` has one `### AWTnnn` section per diagnostic; other pages link to it as `./diagnostics#awtnnn`.
+- `Docs/pages/09-diagnostics.md` has one `### AWTnnn` section per diagnostic; other pages link to it by its file, e.g. `../09-diagnostics.md#awtnnn` from a page in a subfolder.
 - The `README.md` is packed into the NuGet packages; `UpdateReadme` rewrites badges for a release.
 - Code fences in the docs are compiled by `Tests/Awaiten.Docs.Tests`, whose `CodeBlocks_ShouldCompile` test (one per page, in the explicit `Slow` category) runs the generator and the analyzers over every ```` ```csharp ```` block of a page: `dotnet test --project Tests/Awaiten.Docs.Tests -f net10.0 --treenode-filter "/*/*/*/*[Category=Slow]"`. Keep examples that matter at run time covered by `Tests/Awaiten.ExampleTests` too.
   - All blocks of a page compile together in the namespace `Snippets`. A type that only one block declares is shared by the page; a type that several blocks declare (variants of `CoffeeShop`, say) stays local to each block. A block that declares no variant of its own continues the block before it, so its statements see that block's container. Statements become the body of a method, and registration attributes shown without a class are checked on a placeholder class.
