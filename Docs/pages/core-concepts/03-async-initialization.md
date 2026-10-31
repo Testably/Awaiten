@@ -27,6 +27,12 @@ public static partial class CoffeeShop;
 
 A service that implements `IAsyncInitializable` is *async-tainted*. So is any service that depends on one. Awaiten follows the taint through the whole graph.
 
+```mermaid
+flowchart RL
+    cup["Cup<br/>async-tainted"] -- "depends on" --> machine["EspressoMachine<br/>implements IAsyncInitializable"]
+    consumer["Any service that needs a Cup<br/>async-tainted"] -- "depends on" --> cup
+```
+
 ## Resolve it asynchronously
 
 Use `ResolveAsync`. It constructs the service, awaits its initialization, and returns it ready to use.
