@@ -3,7 +3,7 @@ title: Awaiten
 sidebar_position: -1
 ---
 
-# Awaiten [![Nuget](https://img.shields.io/nuget/v/Awaiten?logo=nuget)](https://www.nuget.org/packages/Awaiten)
+# Awaiten
 
 <img align="right" width="200" src="https://raw.githubusercontent.com/Testably/Awaiten/main/Docs/Awaiten_256x256.png" alt="Awaiten logo" />
 

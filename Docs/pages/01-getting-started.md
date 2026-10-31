@@ -1,3 +1,5 @@
+import PackageInstall from '@site/src/components/PackageInstall';
+
 # Getting started
 
 This page opens a coffee shop from scratch. By the end you have a working container, you know how to resolve services, and you have seen the compiler catch a mistake.
@@ -6,9 +8,7 @@ This page opens a coffee shop from scratch. By the end you have a working contai
 
 Add the package to your project:
 
-```sh
-dotnet add package Awaiten
-```
+<PackageInstall package="Awaiten" />
 
 Awaiten targets `net10.0`, `net8.0`, and `netstandard2.0`, so it runs on modern .NET and on older toolchains. The package has no third-party dependencies; on netstandard2.0 it references only `Microsoft.Bcl.AsyncInterfaces`, for async disposal.
 

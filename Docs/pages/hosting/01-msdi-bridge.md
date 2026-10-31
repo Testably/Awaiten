@@ -1,12 +1,12 @@
+import PackageInstall from '@site/src/components/PackageInstall';
+
 # MS.DI bridge
 
 Most .NET apps run on Microsoft.Extensions.DependencyInjection. ASP.NET Core, the generic host, and worker services all speak it. The `Awaiten.Extensions.DependencyInjection` package bridges your generated container into that world, so you keep Awaiten's compile-time safety and still fit the host.
 
 Install it alongside the core package:
 
-```sh
-dotnet add package Awaiten.Extensions.DependencyInjection
-```
+<PackageInstall package="Awaiten.Extensions.DependencyInjection" />
 
 ## Project into a service collection
 
