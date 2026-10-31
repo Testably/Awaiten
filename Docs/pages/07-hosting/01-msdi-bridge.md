@@ -150,3 +150,4 @@ The bridge surfaces each individual registration and the external dependencies. 
 
 - [Async initialization](../03-core-concepts/03-async-initialization.md) for the initialization the hosted service drives.
 - [External services](./02-external-services.mdx) for `[ImportService<T>]` and `[ImportServices]`.
+- [Migrating from MS.DI](./03-migrate-from-msdi.md) to move an existing `IServiceCollection` setup to Awaiten, one group of services at a time.
