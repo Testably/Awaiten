@@ -1,6 +1,10 @@
+---
+description: A full coffee-shop container that combines async initialization, scopes, keyed services, decorators and modules.
+---
+
 # Complete example
 
-This page assembles a full coffee shop from the pieces in the rest of the docs. It shows a realistic container: [async equipment](./core-concepts/async-initialization), [per-order scopes](./core-concepts/scopes), [keyed milk](./registration/keyed-services), a [decorated](./registration/decorators) payment terminal, and a [module](./registration/modules). Read it top to bottom for an overview of how the features fit together, and follow the links for the details.
+This page assembles a full coffee shop from the pieces in the rest of the docs. It shows a realistic container: [async equipment](./03-core-concepts/03-async-initialization.md), [per-order scopes](./03-core-concepts/02-scopes.md), [keyed milk](./04-registration/04-keyed-services.md), a [decorated](./04-registration/02-decorators.md) payment terminal, and a [module](./04-registration/07-modules.md). Read it top to bottom for an overview of how the features fit together, and follow the links for the details.
 
 ## The services
 
@@ -98,14 +102,14 @@ public static partial class CoffeeShop
 }
 ```
 
-A `Cup` needs the async `EspressoMachine`, so in the strict default it could only be resolved asynchronously. The order below takes its cup through a synchronous `Func<string, Cup>`, so the container opts into [`AsyncSafety.SyncAfterInit`](./core-concepts/async-initialization#relax-the-rule-when-you-need-to). Once the machine is warmed at startup, that synchronous resolve returns immediately.
+A `Cup` needs the async `EspressoMachine`, so in the strict default it could only be resolved asynchronously. The order below takes its cup through a synchronous `Func<string, Cup>`, so the container opts into [`AsyncSafety.SyncAfterInit`](./03-core-concepts/03-async-initialization.md#relax-the-rule-when-you-need-to). Once the machine is warmed at startup, that synchronous resolve returns immediately.
 
 ## Opening the shop
 
 Create the root and warm the equipment once at startup.
 
 ```csharp
-await using var shop = new CoffeeShop.Root();
+await using CoffeeShop.Root shop = new();
 await shop.InitializeAsync();     // the espresso machine heats its boiler
 ```
 
@@ -119,8 +123,8 @@ using (IAwaitenScope order = shop.CreateScope())
     Tab tab = order.Resolve<Tab>();
     Cup cup = order.Resolve<Func<string, Cup>>()("Large");
 
-    var syrups = order.Resolve<IEnumerable<ISyrup>>();
-    var milk = order.Resolve<IReadOnlyDictionary<string, IMilk>>()["Oat"];
+    IEnumerable<ISyrup> syrups = order.Resolve<IEnumerable<ISyrup>>();
+    IMilk milk = order.Resolve<IReadOnlyDictionary<string, IMilk>>()["Oat"];
 
     IPaymentTerminal terminal = order.Resolve<IPaymentTerminal>();  // LoggingTerminal(CardTerminal)
     await terminal.ChargeAsync(4.50m);
@@ -137,6 +141,6 @@ None of this wiring is trusted at runtime. Before the app ran, Awaiten verified 
 
 ## Where to go next
 
-- [Lifetimes](./core-concepts/lifetimes) to start on the concepts behind it.
-- [Diagnostics](./diagnostics) for every check the compiler runs.
-- [MS.DI bridge](./hosting/msdi-bridge) to run this under ASP.NET Core.
+- [Lifetimes](./03-core-concepts/01-lifetimes.md) to start on the concepts behind it.
+- [Diagnostics](./09-diagnostics.md) for every check the compiler runs.
+- [MS.DI bridge](./07-hosting/01-msdi-bridge.md) to run this under ASP.NET Core.

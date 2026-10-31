@@ -1,0 +1,6 @@
+{
+	"label": "Resolution",
+	"customProps": {
+		"description": "Ask the container for services. The resolve surface, relationship shapes like Func and Lazy, collections, keyed dictionaries, property injection, runtime arguments, and generic variance."
+	}
+}

@@ -1,11 +1,12 @@
 ---
-title: Benchmarks
-sidebar_position: 10
+description: Benchmarks that compare Awaiten with other .NET dependency injection containers on build, resolve and per-request workloads.
 ---
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 import AwaitenBenchmarkResult from '@site/src/components/AwaitenBenchmarkResult';
+
+# Benchmarks
 
 Awaiten wires the graph at build time, so there is nothing to reflect over at runtime. These benchmarks compare it against
 [Microsoft.Extensions.DependencyInjection](https://learn.microsoft.com/dotnet/core/extensions/dependency-injection),
@@ -15,7 +16,7 @@ Awaiten wires the graph at build time, so there is nothing to reflect over at ru
 [DryIoc](https://github.com/dadhi/DryIoc) and
 [Simple Injector](https://simpleinjector.org/) across the same graphs.
 
-:::info[Methodology]
+:::note[Methodology]
 
 - **Suite**: [`Awaiten.Benchmarks`](https://github.com/Testably/Awaiten/tree/main/Benchmarks/Awaiten.Benchmarks) driven by [BenchmarkDotNet](https://benchmarkdotnet.org/).
 - **Job**: `MediumRun` with the in-process toolchain.

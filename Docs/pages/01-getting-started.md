@@ -1,23 +1,46 @@
+---
+description: Install Awaiten, declare your first container, resolve services and let the compiler check your wiring.
+---
+
 import PackageInstall from '@site/src/components/PackageInstall';
 
 # Getting started
 
 This page opens a coffee shop from scratch. By the end you have a working container, you know how to resolve services, and you have seen the compiler catch a mistake.
 
-## Install
+:::note
+Where an example checks a result in a test, it uses [aweXpect](/aweXpect/) in the form `await That(...)`. aweXpect is optional; Awaiten works with any test framework and assertion library.
+:::
 
-Add the package to your project:
+## Requirements
+
+:::info[.NET 10.0.300 SDK and C# 11]
+- Build with the .NET SDK 10.0.300 or later. The source generator needs the C# compiler that ships with it.
+- Write C# 11 or later. The registration attributes in these docs, such as `[Singleton<T>]`, are generic attributes.
+- Target `net10.0`, `net8.0` or any framework that supports `netstandard2.0`, including .NET Framework 4.8. The package has no third-party dependencies; on netstandard2.0 it references only `Microsoft.Bcl.AsyncInterfaces`, for async disposal.
+:::
+
+## Install the package
 
 <PackageInstall package="Awaiten" />
 
-Awaiten targets `net10.0`, `net8.0`, and `netstandard2.0`, so it runs on modern .NET and on older toolchains. The package has no third-party dependencies; on netstandard2.0 it references only `Microsoft.Bcl.AsyncInterfaces`, for async disposal.
+| Package | Description |
+|---|---|
+| `Awaiten` | The core: attributes, the source generator, and the runtime seams. No third-party dependencies; on netstandard2.0 only `Microsoft.Bcl.AsyncInterfaces`. |
+| `Awaiten.Extensions.DependencyInjection` | Microsoft.Extensions.DependencyInjection interop for ASP.NET Core, the generic host, and other containers. See the [MS.DI bridge](./07-hosting/01-msdi-bridge.md). |
 
-## Declare a container
+## Build your first container
+
+In short: declare a `[Container]`, register your services on it, then create its `Root` and start resolving.
 
 A container is a `static partial` class marked with `[Container]`. You register services with lifetime attributes on that class. Nothing else is needed. The source generator does the rest at build time.
 
-```csharp
+```csharp title="Program.cs"
 using Awaiten;
+
+using CoffeeShop.Root shop = new();
+
+Cup cup = shop.Resolve<Cup>();
 
 public sealed class EspressoMachine;
 public sealed class Grinder;
@@ -30,17 +53,7 @@ public sealed class Cup(EspressoMachine machine, Grinder grinder);
 public static partial class CoffeeShop;
 ```
 
-The generator emits a nested `Root` type for you. The `Root` is your composition root. It owns the singletons and it is the outermost scope.
-
-## Create the root and resolve
-
-Create the `Root`, then ask it for services with `Resolve<T>()`:
-
-```csharp
-using var shop = new CoffeeShop.Root();
-
-Cup cup = shop.Resolve<Cup>();
-```
+The generator emits a nested `Root` type for you. The `Root` is your composition root. It owns the singletons and it is the outermost scope. You create it, then ask it for services with `Resolve<T>()`.
 
 Awaiten built the `Cup` for you and passed in the shared `EspressoMachine` and `Grinder`. You wrote no factory code.
 
@@ -71,7 +84,7 @@ Some things belong to a single order, like the running tab. Register them as `[S
 [Scoped<Order>]
 public static partial class CoffeeShop;
 
-using var shop = new CoffeeShop.Root();
+using CoffeeShop.Root shop = new();
 
 using (IAwaitenScope order = shop.CreateScope())
 {
@@ -79,7 +92,7 @@ using (IAwaitenScope order = shop.CreateScope())
 } // the order and everything it owns is disposed here
 ```
 
-Inside one scope you get the same `Order` every time. A different scope gets a different one. See [Scopes](./core-concepts/scopes) for the full picture.
+Inside one scope you get the same `Order` every time. A different scope gets a different one. See [Scopes](./03-core-concepts/02-scopes.md) for the full picture.
 
 ## Let the compiler check your wiring
 
@@ -93,15 +106,15 @@ public sealed class Cup(Grinder grinder);
 public static partial class CoffeeShop;
 ```
 
-> ```
-> AWT101: 'Cup' needs 'Grinder', but nothing registers it
-> ```
+```text title="Build error"
+error AWT101: 'Cup' cannot be resolved: 'Cup' requires 'Grinder', which is not registered on the container
+```
 
-Cyclic graphs, captive dependencies, and async services touched synchronously are caught the same way. The full list is on the [Diagnostics](./diagnostics) page.
+Cyclic graphs, captive dependencies, and async services touched synchronously are caught the same way. The full list is on the [Diagnostics](./09-diagnostics.md) page.
 
-## Where to go next
+## Next steps
 
-- [Complete example](./complete-example) for a full container that uses the main features together.
-- [Lifetimes](./core-concepts/lifetimes) for singleton, scoped, and transient in depth.
-- [Resolving services](./resolution/resolving-services) for the full resolve surface.
-- [Async initialization](./core-concepts/async-initialization) once a service needs async setup.
+- [Complete example](./02-complete-example.md) for a full container that uses the main features together.
+- [Lifetimes](./03-core-concepts/01-lifetimes.md) for singleton, scoped, and transient in depth.
+- [Resolving services](./05-resolution/01-resolving-services.md) for the full resolve surface.
+- [Async initialization](./03-core-concepts/03-async-initialization.md) once a service needs async setup.

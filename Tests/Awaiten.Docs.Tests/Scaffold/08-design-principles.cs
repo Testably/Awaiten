@@ -1,5 +1,6 @@
 // The architecture test runs in a TUnit test project.
 global using TUnit.Core;
+global using System.Security.Principal;
 
 namespace Snippets;
 

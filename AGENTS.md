@@ -30,7 +30,24 @@ Correctness is a must. The other goals are strong defaults and win in this order
 - Files are stored with LF in git and checked out per platform (`* text=auto`); `.editorconfig` asks for CRLF and tabs. Raw string literals therefore contain the checkout's line endings, so do not assert on exact newlines in generated text.
 - Most files have no UTF-8 BOM, a few do. Keep a file's existing BOM state: PowerShell rewrites strip or add BOMs, so prefer careful editors and check `git diff` for a stray U+FEFF.
 - Comments are rare and explain why; prefer XML docs. In tests, put the reason into `.Because(...)` instead of a comment.
-- No em-dashes in docs, XML docs or comments. `Docs/pages/` is published to docs.testably.org; keep it user-facing and describe the current behaviour, not its history.
+- No em-dashes in XML docs or comments.
+
+## Documentation
+
+Pages under `Docs/pages` are published on docs.testably.org and follow the [docs style guide](https://github.com/Testably/Testably.Site/blob/main/Docs/style-guide.md). The key rules:
+
+- US English, sentence case for headings and labels, no em dashes, one line per paragraph.
+- A `description` in the front matter of every page; the H1 is the title; order with unique `NN-` prefixes.
+- Relative file links within the repository, site-absolute `/Library/...` links across libraries.
+- Install instructions only through `<PackageInstall package="..." />`, never hand-written commands or NuGet badges.
+- Examples check results with `await That(...)`; complete examples use TUnit `[Test]`.
+
+In this repository:
+
+- Keep the pages user-facing and describe the current behavior, not its history.
+- Do not set `collapsed` in `_category_.json`.
+- Most examples show container usage rather than tests; add a test only where an example checks a result. The coffee shop is the running example.
+- `Tests/Awaiten.Docs.Tests` compiles every `csharp` block of a page; the fence meta `no-compile` and `expect=AWTnnn` and the `Scaffold/` files are described in [Docs/agents/workflows.md](Docs/agents/workflows.md#documentation).
 
 ## Git workflow
 
