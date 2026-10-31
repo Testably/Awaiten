@@ -33,6 +33,13 @@ Order c = second.Resolve<Order>();   // a different order
 
 A child scope shares the container's singletons. It has its own scoped instances. Disposing a child does not touch the parent, and the espresso machine keeps running across every order.
 
+```mermaid
+flowchart TB
+    root["Root<br/>singleton EspressoMachine"]
+    root -- "CreateScope()" --> first["Scope: first order<br/>own Order and Tab,<br/>shared EspressoMachine"]
+    root -- "CreateScope()" --> second["Scope: second order<br/>own Order and Tab,<br/>shared EspressoMachine"]
+```
+
 ## The root is the outermost scope
 
 The `Root` is itself a scope. A scoped service resolved directly on the root behaves like a singleton, because the root lives as long as the container.
