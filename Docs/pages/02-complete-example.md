@@ -98,6 +98,8 @@ public static partial class CoffeeShop
 }
 ```
 
+A `Cup` needs the async `EspressoMachine`, so in the strict default it could only be resolved asynchronously. The order below takes its cup through a synchronous `Func<string, Cup>`, so the container opts into [`AsyncSafety.SyncAfterInit`](./core-concepts/async-initialization#relax-the-rule-when-you-need-to). Once the machine is warmed at startup, that synchronous resolve returns immediately.
+
 ## Opening the shop
 
 Create the root and warm the equipment once at startup.
@@ -131,7 +133,7 @@ Disposing the root disposes the singletons in reverse creation order. Because th
 
 ## What the compiler checked
 
-None of this wiring is trusted at runtime. Before the app ran, Awaiten verified that every dependency is registered, that no singleton captures a scoped service, that the async machine is never reached synchronously, and that the decorated terminal has something to decorate. A mistake in any of those would have failed the build.
+None of this wiring is trusted at runtime. Before the app ran, Awaiten verified that every dependency is registered, that no singleton captures a scoped service, and that the decorated terminal has something to decorate. A mistake in any of those would have failed the build. The one check this container relaxes keeps the async machine off synchronous paths: with `SyncAfterInit`, a synchronous resolve before warm-up blocks instead of failing the build, so warming the machine at startup is up to you.
 
 ## Where to go next
 
