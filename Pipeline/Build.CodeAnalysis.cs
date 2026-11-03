@@ -23,6 +23,7 @@ partial class Build
 				.SetCoverageExclusions("Benchmarks/**,Samples/**")
 				.SetPullRequestOrBranchName(GitHubActions, GitVersion)
 				.SetVersion(GitVersion.SemVer)
+				.SetQualityGateWait(GitHubActions?.IsPullRequest == true)
 				.SetToken(SonarToken));
 		});
 
