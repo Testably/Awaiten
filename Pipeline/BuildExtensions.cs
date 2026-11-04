@@ -18,7 +18,7 @@ namespace Build;
 
 public static class BuildExtensions
 {
-	internal const string Owner = "Testably";
+	internal const string Owner = "awaiten-dev";
 	internal const string Repo = "Awaiten";
 	private const string RepositoryApiBaseUrl = "https://api.github.com/repos/" + Owner + "/" + Repo;
 

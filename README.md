@@ -1,9 +1,9 @@
 # Awaiten
 
 [![Nuget](https://img.shields.io/nuget/v/Awaiten)](https://www.nuget.org/packages/Awaiten)
-[![Build](https://github.com/Testably/Awaiten/actions/workflows/build.yml/badge.svg)](https://github.com/Testably/Awaiten/actions/workflows/build.yml)
-[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=Testably_Awaiten&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=Testably_Awaiten)
-[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=Testably_Awaiten&metric=coverage)](https://sonarcloud.io/summary/overall?id=Testably_Awaiten)
+[![Build](https://github.com/awaiten-dev/Awaiten/actions/workflows/build.yml/badge.svg)](https://github.com/awaiten-dev/Awaiten/actions/workflows/build.yml)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=awaiten-dev_Awaiten&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=awaiten-dev_Awaiten)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=awaiten-dev_Awaiten&metric=coverage)](https://sonarcloud.io/summary/overall?id=awaiten-dev_Awaiten)
 
 **The async-first dependency injection container for .NET.**
 

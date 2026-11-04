@@ -16,8 +16,8 @@ partial class Build
 		.Executes(() =>
 		{
 			SonarScannerTasks.SonarScannerBegin(s => s
-				.SetOrganization("testably")
-				.SetProjectKey("Testably_Awaiten")
+				.SetOrganization("awaiten-dev")
+				.SetProjectKey("awaiten-dev_Awaiten")
 				.AddVSTestReports(TestResultsDirectory / "*.trx")
 				.AddGenericCoveragePaths(TestResultsDirectory / "reports" / "SonarQube.xml")
 				.SetCoverageExclusions("Benchmarks/**,Samples/**")
