@@ -9,7 +9,7 @@ import PackageInstall from '@site/src/components/PackageInstall';
 This page opens a coffee shop from scratch. By the end you have a working container, you know how to resolve services, and you have seen the compiler catch a mistake.
 
 :::note
-Where an example checks a result in a test, it uses [aweXpect](/aweXpect/) in the form `await That(...)`. aweXpect is optional; Awaiten works with any test framework and assertion library.
+Where an example checks a result in a test, it uses [aweXpect](https://docs.testably.org/aweXpect/) in the form `await That(...)`. aweXpect is optional; Awaiten works with any test framework and assertion library.
 :::
 
 ## Requirements

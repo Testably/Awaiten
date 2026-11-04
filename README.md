@@ -50,14 +50,14 @@ Cup cup = shop.Resolve<Cup>();
 
 ## Documentation
 
-Full documentation lives at [docs.testably.org/Awaiten](https://docs.testably.org/Awaiten).
+Full documentation lives at [awaiten-dev.github.io/Awaiten](https://awaiten-dev.github.io/Awaiten).
 
-- [Getting started](https://docs.testably.org/Awaiten/getting-started)
-- [Complete example](https://docs.testably.org/Awaiten/complete-example)
-- Core concepts: [lifetimes](https://docs.testably.org/Awaiten/core-concepts/lifetimes), [scopes](https://docs.testably.org/Awaiten/core-concepts/scopes), [async initialization](https://docs.testably.org/Awaiten/core-concepts/async-initialization), [disposal](https://docs.testably.org/Awaiten/core-concepts/disposal)
-- Registration: [factories and instances](https://docs.testably.org/Awaiten/registration/factories-and-instances), [decorators](https://docs.testably.org/Awaiten/registration/decorators), [composites](https://docs.testably.org/Awaiten/registration/composites), [keyed services](https://docs.testably.org/Awaiten/registration/keyed-services), [open generics](https://docs.testably.org/Awaiten/registration/open-generics), [scanning](https://docs.testably.org/Awaiten/registration/scanning), [modules](https://docs.testably.org/Awaiten/registration/modules)
-- Resolution: [resolving services](https://docs.testably.org/Awaiten/resolution/resolving-services), [relationships](https://docs.testably.org/Awaiten/resolution/relationships), [collections](https://docs.testably.org/Awaiten/resolution/collections), [keyed dictionaries](https://docs.testably.org/Awaiten/resolution/keyed-dictionaries), [property injection](https://docs.testably.org/Awaiten/resolution/property-injection), [runtime arguments](https://docs.testably.org/Awaiten/resolution/runtime-arguments), [context-aware factories](https://docs.testably.org/Awaiten/resolution/context-aware-factories), [generic variance](https://docs.testably.org/Awaiten/resolution/generic-variance)
-- Ownership and lifecycle: [owned](https://docs.testably.org/Awaiten/lifetime/owned), [lifetime safety](https://docs.testably.org/Awaiten/lifetime/lifetime-safety), [lifecycle hooks](https://docs.testably.org/Awaiten/lifetime/lifecycle-hooks)
-- Hosting: [MS.DI bridge](https://docs.testably.org/Awaiten/hosting/msdi-bridge), [external services](https://docs.testably.org/Awaiten/hosting/external-services)
-- [Design principles & the composition root](https://docs.testably.org/Awaiten/design-principles)
-- [Diagnostics](https://docs.testably.org/Awaiten/diagnostics)
+- [Getting started](https://awaiten-dev.github.io/Awaiten/getting-started)
+- [Complete example](https://awaiten-dev.github.io/Awaiten/complete-example)
+- Core concepts: [lifetimes](https://awaiten-dev.github.io/Awaiten/core-concepts/lifetimes), [scopes](https://awaiten-dev.github.io/Awaiten/core-concepts/scopes), [async initialization](https://awaiten-dev.github.io/Awaiten/core-concepts/async-initialization), [disposal](https://awaiten-dev.github.io/Awaiten/core-concepts/disposal)
+- Registration: [factories and instances](https://awaiten-dev.github.io/Awaiten/registration/factories-and-instances), [decorators](https://awaiten-dev.github.io/Awaiten/registration/decorators), [composites](https://awaiten-dev.github.io/Awaiten/registration/composites), [keyed services](https://awaiten-dev.github.io/Awaiten/registration/keyed-services), [open generics](https://awaiten-dev.github.io/Awaiten/registration/open-generics), [scanning](https://awaiten-dev.github.io/Awaiten/registration/scanning), [modules](https://awaiten-dev.github.io/Awaiten/registration/modules)
+- Resolution: [resolving services](https://awaiten-dev.github.io/Awaiten/resolution/resolving-services), [relationships](https://awaiten-dev.github.io/Awaiten/resolution/relationships), [collections](https://awaiten-dev.github.io/Awaiten/resolution/collections), [keyed dictionaries](https://awaiten-dev.github.io/Awaiten/resolution/keyed-dictionaries), [property injection](https://awaiten-dev.github.io/Awaiten/resolution/property-injection), [runtime arguments](https://awaiten-dev.github.io/Awaiten/resolution/runtime-arguments), [context-aware factories](https://awaiten-dev.github.io/Awaiten/resolution/context-aware-factories), [generic variance](https://awaiten-dev.github.io/Awaiten/resolution/generic-variance)
+- Ownership and lifecycle: [owned](https://awaiten-dev.github.io/Awaiten/lifetime/owned), [lifetime safety](https://awaiten-dev.github.io/Awaiten/lifetime/lifetime-safety), [lifecycle hooks](https://awaiten-dev.github.io/Awaiten/lifetime/lifecycle-hooks)
+- Hosting: [MS.DI bridge](https://awaiten-dev.github.io/Awaiten/hosting/msdi-bridge), [external services](https://awaiten-dev.github.io/Awaiten/hosting/external-services)
+- [Design principles & the composition root](https://awaiten-dev.github.io/Awaiten/design-principles)
+- [Diagnostics](https://awaiten-dev.github.io/Awaiten/diagnostics)

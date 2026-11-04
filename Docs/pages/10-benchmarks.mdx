@@ -16,7 +16,7 @@ Awaiten wires the graph at build time, so there is nothing to reflect over at ru
 
 :::note[Methodology]
 
-- **Suite**: [`Awaiten.Benchmarks`](https://github.com/Testably/Awaiten/tree/main/Benchmarks/Awaiten.Benchmarks) driven by [BenchmarkDotNet](https://benchmarkdotnet.org/).
+- **Suite**: [`Awaiten.Benchmarks`](https://github.com/awaiten-dev/Awaiten/tree/main/Benchmarks/Awaiten.Benchmarks) driven by [BenchmarkDotNet](https://benchmarkdotnet.org/).
 - **Job**: `MediumRun` with the in-process toolchain.
 - **Runner**: `ubuntu-latest` GitHub Actions agent, refreshed on every push to `main`.
 - Each row shows time and allocated memory, sorted fastest-first; bars are scaled within the row so length corresponds to magnitude. The Awaiten row is highlighted as the baseline (`1.00x`) and every other row shows its ratio relative to Awaiten. **Lower is better.**
@@ -52,4 +52,4 @@ Container construction from cold, over a graph of singletons.
 
 </Tabs>
 
-[View the benchmark source on GitHub →](https://github.com/Testably/Awaiten/tree/main/Benchmarks/Awaiten.Benchmarks)
+[View the benchmark source on GitHub →](https://github.com/awaiten-dev/Awaiten/tree/main/Benchmarks/Awaiten.Benchmarks)

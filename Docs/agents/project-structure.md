@@ -1,6 +1,6 @@
 # Architecture and source locations
 
-Product code is in `Source/`, tests in `Tests/`, benchmarks in `Benchmarks/`, runnable samples in `Samples/`, the Fallout build in `Pipeline/` and the user documentation in `Docs/pages/`. `Awaiten.slnx` contains all of them.
+Product code is in `Source/`, tests in `Tests/`, benchmarks in `Benchmarks/`, runnable samples in `Samples/`, the Fallout build in `Pipeline/`, the user documentation in `Docs/pages/` and the Docusaurus site that publishes it in `Docs/site/`. `Awaiten.slnx` contains all of them.
 
 ## Projects (`Source/`)
 

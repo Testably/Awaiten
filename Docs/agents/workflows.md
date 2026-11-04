@@ -40,8 +40,8 @@ Always run in Release and compare before and after on the same machine.
 
 ## Documentation
 
-- `Docs/pages/` is the user documentation (Docusaurus front matter and admonitions such as `:::tip`). It is not built here: after a successful `Build` on `main`, `notify-docs-site.yml` asks `Testably/Testably.Site` to rebuild docs.testably.org/Awaiten.
-- `Docs/pages/10-benchmarks.mdx` renders `data.js`/`limited-data.js` that `PublishBenchmarkReport` commits to the `benchmarks` branch.
+- `Docs/pages/` is the user documentation (Docusaurus front matter and admonitions such as `:::tip`). `Docs/site/` is the Docusaurus site that publishes it on GitHub Pages: run `./build.ps1 DocsData` to refresh its benchmark and changelog data, then `npm ci` and `npm start` (or `npm run build`) in `Docs/site`.
+- `Docs/pages/10-benchmarks.mdx` renders `Docs/site/src/data/benchmarks.json`, which `DocsData` reduces from the `limited-data.js` that `PublishBenchmarkReport` commits to the `benchmarks` branch. `Docs/pages/11-changelog.mdx` renders `Docs/site/src/data/changelog.json`, which `DocsData` generates from the GitHub releases.
 - `Docs/pages/09-diagnostics.md` has one `### AWTnnn` section per diagnostic; other pages link to it by its file, e.g. `../09-diagnostics.md#awtnnn` from a page in a subfolder.
 - The `README.md` is packed into the NuGet packages; `UpdateReadme` rewrites badges for a release.
 - Code fences in the docs are compiled by `Tests/Awaiten.Docs.Tests`, whose `CodeBlocks_ShouldCompile` test (one per page, in the explicit `Slow` category) runs the generator and the analyzers over every ```` ```csharp ```` block of a page: `dotnet test --project Tests/Awaiten.Docs.Tests -f net10.0 --treenode-filter "/*/*/*/*[Category=Slow]"`. Keep examples that matter at run time covered by `Tests/Awaiten.ExampleTests` too.
@@ -67,12 +67,13 @@ Always run in Release and compare before and after on the same machine.
 | `Benchmarks` | `BenchmarkDotNet` (filter via `--benchmark-filter`) and `BenchmarkResult` (logs the reports and, on a PR build, records the PR number for the comment). |
 | `BenchmarkComment` | Downloads the `Benchmarks-*` artifacts and posts or updates the PR comment, with a baseline from recent `main` runs. |
 | `PublishBenchmarkReport` | Appends the results to `data.js` on the `benchmarks` branch. |
+| `DocsData` | Writes the benchmark snapshot and the changelog that the docs site renders to `Docs/site/src/data`. |
 | `AotSample`, `WebSample` | See Samples. |
 
 ## CI workflows (`.github/workflows`)
 
-- `ci.yml` (pull requests to `main`): unit tests via `CodeCoverage` on Ubuntu, Windows and macOS, `ApiChecks` and `DocsTests`, the three benchmark classes, `AotSample` (Windows), `WebSample`, SonarCloud (not for Dependabot or forks) and published test results.
+- `ci.yml` (pull requests to `main`): unit tests via `CodeCoverage` on Ubuntu, Windows and macOS, `ApiChecks` and `DocsTests`, the three benchmark classes, `AotSample` (Windows), `WebSample`, a build of the docs site in `Docs/site`, SonarCloud (not for Dependabot or forks) and published test results.
 - `ci-analysis.yml` (after `CI` completes): `BenchmarkComment` on the PR.
 - `build.yml` (push to `main`, `v*` tags, manual): the same jobs plus `Pack`, `PublishBenchmarkReport` on `main`, and on a tag `Push` to nuget.org (gated on the test, sample, analysis and pack jobs), a GitHub release for non-prerelease tags and release comments on the linked issues and PRs. Actions are pinned to commit SHAs here.
-- `notify-docs-site.yml`: triggers the docs site rebuild.
+- `pages.yml` (after a successful `Build` on `main` or a `v*` tag, manual): `DocsData`, builds `Docs/site` and deploys it to GitHub Pages. After a tag it first waits until the release is listed on NuGet, because the install instructions show the latest version.
 - Dependabot updates NuGet packages and actions weekly (Thursday night) with a `chore` prefix and ignores `Microsoft.CodeAnalysis*`, which sets the oldest compiler that can load the generator; Mergify squash-merges Dependabot PRs once the unit and API tests pass. Release notes are grouped by label (`.github/release.yml`).

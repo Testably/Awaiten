@@ -130,7 +130,7 @@ Prefer the container-side form every time. It leaves the domain class free of an
 
 Awaiten guards part of this for you: applying a composition attribute (`[Singleton]`, `[Scan]`, and the like) in an assembly that declares no `[Container]` is the suppressible warning [AWT134](./09-diagnostics.md#awt134). That guard is best-effort, and it goes quiet in a single-project app that mixes the root with its domain. To enforce the full boundary, add an **architecture test** that asserts your domain and application assemblies carry no reference to Awaiten. That turns a convention into a red build the day someone crosses the line.
 
-[aweXpect.Reflection](/aweXpect/extensions/aweXpect.Reflection/) expresses that rule directly. Point it at the assembly that holds your domain code and assert it depends on nothing in the `Awaiten` namespace:
+[aweXpect.Reflection](https://docs.testably.org/aweXpect/extensions/aweXpect.Reflection/) expresses that rule directly. Point it at the assembly that holds your domain code and assert it depends on nothing in the `Awaiten` namespace:
 
 ```csharp
 using aweXpect;

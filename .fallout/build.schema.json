@@ -37,6 +37,7 @@
         "CodeAnalysisEnd",
         "CodeCoverage",
         "Compile",
+        "DocsData",
         "DocsTests",
         "DotNetUnitTests",
         "Pack",

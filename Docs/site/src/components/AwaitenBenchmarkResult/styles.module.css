@@ -1,0 +1,240 @@
+.result {
+  margin: 1rem 0 1.5rem;
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-radius: 6px;
+  padding: 1rem 1.25rem 0.75rem;
+  background: var(--ifm-card-background-color, var(--ifm-background-surface-color));
+}
+
+.paramTabs {
+  display: flex;
+  gap: 0.25rem;
+  margin: 0 0 0.75rem;
+  padding: 0.2rem;
+  background: var(--ifm-color-emphasis-100);
+  border-radius: 6px;
+  width: fit-content;
+}
+
+.paramTab {
+  padding: 0.25rem 0.75rem;
+  border: 0;
+  background: transparent;
+  border-radius: 4px;
+  color: var(--ifm-color-emphasis-700);
+  font-size: 0.85rem;
+  font-family: var(--ifm-font-family-monospace);
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+
+.paramTab:hover {
+  background: var(--ifm-color-emphasis-200);
+}
+
+.paramTabActive,
+.paramTabActive:hover {
+  background: var(--ifm-card-background-color, var(--ifm-background-surface-color));
+  color: var(--ifm-color-emphasis-900);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.metricBlock {
+  margin: 0.75rem 0;
+}
+
+.metricLabel {
+  font-weight: 600;
+  color: var(--ifm-color-emphasis-700);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.4rem;
+}
+
+.bars {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.barRow {
+  /* Columns: library label, bar, value, ratio, sparkline. The ratio sits between
+     the value and the sparkline so the visual flow is "what" → "how much" →
+     "vs Awaiten" → "trend." */
+  display: grid;
+  grid-template-columns: 9rem 1fr 5.5rem 4rem 6rem;
+  align-items: center;
+  column-gap: 0.5rem;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.9rem;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  /* Reset button defaults so the same grid layout works for clickable rows
+     (active/inactive toggles) and non-clickable divs (missing data). */
+  width: 100%;
+  border: 0;
+  font-family: inherit;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+}
+
+button.barRow {
+  cursor: pointer;
+  transition: box-shadow 0.1s, background 0.1s;
+}
+
+button.barRow:hover {
+  box-shadow: inset 0 0 0 1px var(--ifm-color-emphasis-300);
+}
+
+button.barRow:focus-visible {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: -2px;
+}
+
+.barRowBaseline {
+  background: var(--ifm-color-primary-contrast-background, rgba(99, 162, 172, 0.12));
+  font-weight: 600;
+}
+
+.barRowMissing {
+  color: var(--ifm-color-emphasis-500);
+  font-style: italic;
+}
+
+.barRowInactive,
+.barRowInactive.barRowBaseline {
+  background: transparent;
+  opacity: 0.5;
+}
+
+.barRowInactive .libraryLabel {
+  text-decoration: line-through;
+}
+
+.barRowMissing .libraryLabel,
+.barRowMissing .barValue,
+.barRowMissing .ratio {
+  color: var(--ifm-color-emphasis-500);
+}
+
+.libraryLabel {
+  color: var(--ifm-color-emphasis-800);
+  font-size: 0.85rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bar {
+  position: relative;
+  height: 0.6rem;
+  background: var(--ifm-color-emphasis-100);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.barFill {
+  display: block;
+  height: 100%;
+  background: var(--ifm-color-emphasis-500);
+  border-radius: 3px;
+}
+
+.barFillBaseline {
+  display: block;
+  height: 100%;
+  background: var(--ifm-color-primary);
+  border-radius: 3px;
+}
+
+.barValue {
+  text-align: right;
+  color: var(--ifm-color-emphasis-800);
+}
+
+.ratio {
+  text-align: right;
+  font-size: 0.85rem;
+  color: var(--ifm-color-emphasis-600);
+}
+
+.barRowBaseline .ratio {
+  color: var(--ifm-color-emphasis-700);
+  font-style: italic;
+  font-weight: 400;
+}
+
+.sparkline {
+  display: block;
+  justify-self: end;
+  color: var(--ifm-color-emphasis-500);
+}
+
+.sparklineBaseline {
+  color: var(--ifm-color-primary);
+}
+
+.caption {
+  margin-top: 0.75rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--ifm-color-emphasis-200);
+  color: var(--ifm-color-emphasis-600);
+  font-size: 0.8rem;
+}
+
+.caption code {
+  font-size: 0.78rem;
+}
+
+.error {
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--ifm-color-danger);
+  border-radius: 6px;
+  color: var(--ifm-color-danger);
+  background: var(--ifm-color-danger-contrast-background);
+  font-size: 0.9rem;
+}
+
+/* Anything narrower than wide-desktop: drop the sparkline so the value
+   and ratio columns keep their room. Threshold accounts for Docusaurus'
+   left sidebar (~250 px) and right TOC (~200 px) eating into the content
+   area. */
+@media (max-width: 1200px) {
+  .barRow {
+    grid-template-columns: 9rem 1fr 5.5rem 4rem;
+  }
+  .sparkline {
+    display: none;
+  }
+}
+
+/* Phone: stack label / bar / value+ratio so values stay readable. */
+@media (max-width: 600px) {
+  .barRow {
+    grid-template-columns: 1fr 4.5rem 3.5rem;
+    column-gap: 0.4rem;
+    row-gap: 0.2rem;
+  }
+  .bar {
+    grid-column: 1 / -1;
+    order: 2;
+  }
+  .libraryLabel {
+    grid-column: 1 / -1;
+    order: 1;
+  }
+  .barValue {
+    grid-column: 1;
+    order: 3;
+    text-align: left;
+  }
+  .ratio {
+    grid-column: 2 / -1;
+    order: 4;
+    text-align: right;
+  }
+}
