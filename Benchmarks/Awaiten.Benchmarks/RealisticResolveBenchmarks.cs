@@ -16,26 +16,21 @@ namespace Awaiten.Benchmarks;
 ///     a single by-<see cref="Type" /> lookup over flat singletons, this measures the work a real application
 ///     does per request: singletons shared across scopes, scoped instances built once per scope, transients
 ///     built fresh each resolution. The graph (see the Realistic helpers) is ~13 concrete classes wired by
-///     constructor injection, at least five levels deep. The compile-time containers (Awaiten, Jab, Pure.DI)
-///     are generated; the rest are built at runtime in <see cref="Setup" /> so every framework's setup and
-///     measured call sit in one place.
+///     constructor injection, at least five levels deep. Awaiten's container is generated; the rest are built
+///     at runtime in <see cref="Setup" /> so every framework's setup and measured call sit in one place.
 /// </summary>
 public class RealisticResolveBenchmarks : BenchmarksBase
 {
 	private IContainer _autofac = null!;
 	private AwaitenRealisticContainer.Root _awaiten = null!;
 	private DryIoc.Container _dryioc = null!;
-	private JabRealisticContainer _jab = null!;
 	private ServiceProvider _msdi = null!;
-	private PureRealisticContainer _pure = null!;
 	private Container _simpleInjector = null!;
 
 	[GlobalSetup]
 	public void Setup()
 	{
 		_awaiten = new AwaitenRealisticContainer.Root();
-		_jab = new JabRealisticContainer();
-		_pure = new PureRealisticContainer();
 
 		ServiceCollection msdi = new();
 		msdi.AddSingleton<Config>();
@@ -105,7 +100,6 @@ public class RealisticResolveBenchmarks : BenchmarksBase
 		_awaiten.Dispose();
 		_msdi.Dispose();
 		_autofac.Dispose();
-		_jab.Dispose();
 		_dryioc.Dispose();
 		_simpleInjector.Dispose();
 	}
@@ -132,13 +126,6 @@ public class RealisticResolveBenchmarks : BenchmarksBase
 	}
 
 	[Benchmark]
-	public object Realistic_Jab()
-	{
-		using JabRealisticContainer.Scope scope = _jab.CreateScope();
-		return scope.GetService<RequestHandler>();
-	}
-
-	[Benchmark]
 	public object Realistic_DryIoc()
 	{
 		using IResolverContext scope = _dryioc.OpenScope();
@@ -152,12 +139,5 @@ public class RealisticResolveBenchmarks : BenchmarksBase
 		{
 			return _simpleInjector.GetInstance<RequestHandler>();
 		}
-	}
-
-	[Benchmark]
-	public object Realistic_PureDI()
-	{
-		using PureRealisticContainer scope = PureRealisticContainer.CreateScope(_pure, new PureRealisticContainer());
-		return scope.Resolve<RequestHandler>();
 	}
 }

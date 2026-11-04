@@ -21,7 +21,7 @@ namespace Build;
 ///     renderer can pick up Awaiten's data without per-project tweaks. The differences are:
 ///     <list type="bullet">
 ///         <item>The set of compared libraries (Awaiten plus its hand-written Linear reference and
-///         MsDI/Autofac/Jab/PureDI).</item>
+///         MsDI/Autofac/DryIoc/SimpleInjector).</item>
 ///         <item>Chart keys include BenchmarkDotNet parameter sets (e.g. <c>Resolve (Size=64)</c>) so that each
 ///         <c>[Params]</c> combination becomes its own chart.</item>
 ///     </list>
@@ -60,6 +60,7 @@ public class PageBenchmarkReportGenerator
 			"Updating benchmark report for {Sha}: {Message} by {Author} on {Date}",
 			commitInfo.Sha, commitInfo.Message, commitInfo.Author, commitInfo.Date);
 
+		pageReport.RemoveExcludedLibraries();
 		foreach (string benchmarkReportContent in benchmarkReportsContents)
 		{
 			BenchmarkReport benchmarkReport = JsonSerializer.Deserialize<BenchmarkReport>(benchmarkReportContent);
@@ -78,6 +79,18 @@ public class PageBenchmarkReportGenerator
 
 	internal sealed class PageReportData : Dictionary<string, PageReport>
 	{
+		/// <summary>
+		///     Drops the datasets of libraries that are no longer compared, so their last results do not linger in
+		///     the charts.
+		/// </summary>
+		public void RemoveExcludedLibraries()
+		{
+			foreach (PageReport report in Values)
+			{
+				report.Datasets.RemoveAll(dataset => !IsIncluded(dataset.Label.Split(' ')[0]));
+			}
+		}
+
 		public bool Append(CommitInfo commitInfo, BenchmarkReport benchmarkReport)
 		{
 			HashSet<string> chartsTouchedByBaseline = new();
@@ -184,7 +197,7 @@ public class PageBenchmarkReportGenerator
 		}
 
 		private static bool IsIncluded(string library)
-			=> library is "Awaiten" or "MsDI" or "Autofac" or "Jab" or "PureDI" or "DryIoc" or "SimpleInjector";
+			=> library is "Awaiten" or "MsDI" or "Autofac" or "DryIoc" or "SimpleInjector";
 
 		private static string GetColor(string library)
 			=> library switch
@@ -192,8 +205,6 @@ public class PageBenchmarkReportGenerator
 				"Awaiten"        => "#3949AB",
 				"MsDI"           => "#512BD4",
 				"Autofac"        => "#5E2750",
-				"Jab"            => "#D9534F",
-				"PureDI"         => "#F0AD4E",
 				"DryIoc"         => "#1565C0",
 				"SimpleInjector" => "#43A047",
 				_                => "#B0B0B0",
