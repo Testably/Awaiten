@@ -144,7 +144,7 @@ public class PageBenchmarkReportGenerator
 			return true;
 		}
 
-		private static string BuildChartKey(string scenario, string parameters)
+		internal static string BuildChartKey(string scenario, string parameters)
 			=> string.IsNullOrWhiteSpace(parameters) ? scenario : $"{scenario} ({parameters})";
 
 		private static void AppendMemoryDataset(BenchmarkReport.Benchmark benchmark, PageReport pageReport,
@@ -210,7 +210,7 @@ public class PageBenchmarkReportGenerator
 				_                => "#B0B0B0",
 			};
 
-		private static bool ParseMethod(string method, out string scenario, out string library)
+		internal static bool ParseMethod(string method, out string scenario, out string library)
 		{
 			int index = method.LastIndexOf('_');
 			if (index <= 0)
