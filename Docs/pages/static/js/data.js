@@ -1062,6 +1062,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Wed Nov 4 17:51:50 2026 \u002B0100",
         "message": "docs: publish the documentation on GitHub Pages from this repository (#241)"
+      },
+      {
+        "sha": "0f19f50e37f7d90fd8707198f05416c3084ad10a",
+        "author": "Valentin Breu\u00DF",
+        "date": "Wed Nov 4 18:03:05 2026 \u002B0100",
+        "message": "chore: let Dependabot update the npm packages of the docs site (#245)"
       }
     ],
     "labels": [
@@ -1241,7 +1247,8 @@ window.BENCHMARK_DATA = {
       "836f24dc",
       "20fe85a1",
       "42ebfdc1",
-      "d414e954"
+      "d414e954",
+      "0f19f50e"
     ],
     "datasets": [
       {
@@ -1424,7 +1431,8 @@ window.BENCHMARK_DATA = {
           6.181250978509585,
           4.333773547067092,
           7.14302912230293,
-          4.215154405683279
+          4.215154405683279,
+          5.137713657816251
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -1436,6 +1444,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -1803,7 +1812,8 @@ window.BENCHMARK_DATA = {
           7.718858749738762,
           4.264337435364723,
           8.01674353480339,
-          3.875690248111884
+          3.875690248111884,
+          8.166216450241896
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -1815,6 +1825,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -2182,7 +2193,8 @@ window.BENCHMARK_DATA = {
           86.09352699120839,
           70.93705562750499,
           126.60672596295674,
-          59.84509944518407
+          59.84509944518407,
+          89.22451087144705
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -2194,6 +2206,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -2557,7 +2570,8 @@ window.BENCHMARK_DATA = {
           6.289524330447118,
           4.572064952055613,
           8.784676281469208,
-          4.6678718785444895
+          4.6678718785444895,
+          6.463912828763326
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -2569,6 +2583,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -2928,7 +2943,8 @@ window.BENCHMARK_DATA = {
           8.724627816251346,
           6.096964804331462,
           11.044007768233618,
-          5.912013929088911
+          5.912013929088911,
+          8.722112960049085
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -2940,6 +2956,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -4188,6 +4205,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Wed Nov 4 17:51:50 2026 \u002B0100",
         "message": "docs: publish the documentation on GitHub Pages from this repository (#241)"
+      },
+      {
+        "sha": "0f19f50e37f7d90fd8707198f05416c3084ad10a",
+        "author": "Valentin Breu\u00DF",
+        "date": "Wed Nov 4 18:03:05 2026 \u002B0100",
+        "message": "chore: let Dependabot update the npm packages of the docs site (#245)"
       }
     ],
     "labels": [
@@ -4367,7 +4390,8 @@ window.BENCHMARK_DATA = {
       "836f24dc",
       "20fe85a1",
       "42ebfdc1",
-      "d414e954"
+      "d414e954",
+      "0f19f50e"
     ],
     "datasets": [
       {
@@ -4550,7 +4574,8 @@ window.BENCHMARK_DATA = {
           6.3665963788827264,
           4.671954985459646,
           8.468214093574456,
-          4.2292218288140635
+          4.2292218288140635,
+          5.972636700822757
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -4562,6 +4587,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -4929,7 +4955,8 @@ window.BENCHMARK_DATA = {
           6.446770252784093,
           3.996003957895132,
           7.807243731617928,
-          3.9124948978424072
+          3.9124948978424072,
+          6.714167223374049
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -4941,6 +4968,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -5308,7 +5336,8 @@ window.BENCHMARK_DATA = {
           86.73261908690135,
           60.03634014496436,
           120.36708203156789,
-          58.81966981093089
+          58.81966981093089,
+          88.18475545247396
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -5320,6 +5349,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -5683,7 +5713,8 @@ window.BENCHMARK_DATA = {
           6.557126046373294,
           4.850611983736356,
           8.787831749767065,
-          4.637533284723759
+          4.637533284723759,
+          6.699241537849108
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -5695,6 +5726,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -6054,7 +6086,8 @@ window.BENCHMARK_DATA = {
           8.495620302282846,
           6.275532152255376,
           14.633172113696734,
-          5.844218065341313
+          5.844218065341313,
+          11.903095732132593
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -6066,6 +6099,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -7314,6 +7348,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Wed Nov 4 17:51:50 2026 \u002B0100",
         "message": "docs: publish the documentation on GitHub Pages from this repository (#241)"
+      },
+      {
+        "sha": "0f19f50e37f7d90fd8707198f05416c3084ad10a",
+        "author": "Valentin Breu\u00DF",
+        "date": "Wed Nov 4 18:03:05 2026 \u002B0100",
+        "message": "chore: let Dependabot update the npm packages of the docs site (#245)"
       }
     ],
     "labels": [
@@ -7493,7 +7533,8 @@ window.BENCHMARK_DATA = {
       "836f24dc",
       "20fe85a1",
       "42ebfdc1",
-      "d414e954"
+      "d414e954",
+      "0f19f50e"
     ],
     "datasets": [
       {
@@ -7676,7 +7717,8 @@ window.BENCHMARK_DATA = {
           16.956785041093827,
           27.573993015289307,
           23.6793565928936,
-          15.586625031630199
+          15.586625031630199,
+          15.294351984347616
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -7838,6 +7880,7 @@ window.BENCHMARK_DATA = {
           144,
           144,
           144,
+          208,
           208,
           208,
           208,
@@ -8055,7 +8098,8 @@ window.BENCHMARK_DATA = {
           1412.5668219248453,
           1778.6053737640382,
           1615.2945438385009,
-          1173.4060801097326
+          1173.4060801097326,
+          1200.2248420715332
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -8067,6 +8111,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          5688,
           5688,
           5688,
           5688,
@@ -8434,7 +8479,8 @@ window.BENCHMARK_DATA = {
           26856.371154785156,
           25508.396211896623,
           30330.74226597377,
-          25860.29587402344
+          25860.29587402344,
+          26117.898049490792
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -8622,6 +8668,7 @@ window.BENCHMARK_DATA = {
           32482,
           32476,
           32482,
+          32478,
           32478
         ],
         "borderColor": "#5E2750",
@@ -8809,7 +8856,8 @@ window.BENCHMARK_DATA = {
           624.0983496983846,
           781.306055205209,
           761.1802495956421,
-          561.6188453946795
+          561.6188453946795,
+          593.3621552149455
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -8839,6 +8887,7 @@ window.BENCHMARK_DATA = {
           1472,
           1472,
           1472,
+          1528,
           1528,
           1528,
           1528,
@@ -9180,7 +9229,8 @@ window.BENCHMARK_DATA = {
           9206.206610616047,
           13109.729975773738,
           13465.788891601562,
-          8948.914367675781
+          8948.914367675781,
+          9046.533822631836
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -9364,7 +9414,8 @@ window.BENCHMARK_DATA = {
           24760,
           24760,
           24761,
-          24761
+          24761,
+          24760
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -10440,6 +10491,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Wed Nov 4 17:51:50 2026 \u002B0100",
         "message": "docs: publish the documentation on GitHub Pages from this repository (#241)"
+      },
+      {
+        "sha": "0f19f50e37f7d90fd8707198f05416c3084ad10a",
+        "author": "Valentin Breu\u00DF",
+        "date": "Wed Nov 4 18:03:05 2026 \u002B0100",
+        "message": "chore: let Dependabot update the npm packages of the docs site (#245)"
       }
     ],
     "labels": [
@@ -10619,7 +10676,8 @@ window.BENCHMARK_DATA = {
       "836f24dc",
       "20fe85a1",
       "42ebfdc1",
-      "d414e954"
+      "d414e954",
+      "0f19f50e"
     ],
     "datasets": [
       {
@@ -10802,7 +10860,8 @@ window.BENCHMARK_DATA = {
           115.78746886054675,
           254.00867999394734,
           231.8163410504659,
-          113.10505035718282
+          113.10505035718282,
+          113.05510992209116
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -10964,6 +11023,7 @@ window.BENCHMARK_DATA = {
           2128,
           2128,
           2128,
+          4176,
           4176,
           4176,
           4176,
@@ -11181,7 +11241,8 @@ window.BENCHMARK_DATA = {
           11537.538397216797,
           15757.8271484375,
           15935.262278965542,
-          10773.254559326171
+          10773.254559326171,
+          10906.050315348308
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -11193,6 +11254,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          61016,
           61016,
           61016,
           61016,
@@ -11560,7 +11622,8 @@ window.BENCHMARK_DATA = {
           654131.3473307291,
           600647.5397786458,
           751709.5521484375,
-          618252.7292829241
+          618252.7292829241,
+          635725.8701171875
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -11748,7 +11811,8 @@ window.BENCHMARK_DATA = {
           736756,
           736829,
           736979,
-          719482
+          719482,
+          740792
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -11935,7 +11999,8 @@ window.BENCHMARK_DATA = {
           37752.18764822824,
           43901.6412222726,
           47838.73460693359,
-          36068.219571940106
+          36068.219571940106,
+          36620.402444022046
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -12119,7 +12184,8 @@ window.BENCHMARK_DATA = {
           81168,
           80328,
           81572,
-          80326
+          80326,
+          80302
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -12306,7 +12372,8 @@ window.BENCHMARK_DATA = {
           298083.37688802084,
           373330.4401855469,
           381385.1567871094,
-          266557.538671875
+          266557.538671875,
+          267101.3173828125
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -12490,7 +12557,8 @@ window.BENCHMARK_DATA = {
           573057,
           572263,
           573108,
-          573040
+          573040,
+          573107
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -13542,6 +13610,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Wed Nov 4 17:51:50 2026 \u002B0100",
         "message": "docs: publish the documentation on GitHub Pages from this repository (#241)"
+      },
+      {
+        "sha": "0f19f50e37f7d90fd8707198f05416c3084ad10a",
+        "author": "Valentin Breu\u00DF",
+        "date": "Wed Nov 4 18:03:05 2026 \u002B0100",
+        "message": "chore: let Dependabot update the npm packages of the docs site (#245)"
       }
     ],
     "labels": [
@@ -13717,7 +13791,8 @@ window.BENCHMARK_DATA = {
       "836f24dc",
       "20fe85a1",
       "42ebfdc1",
-      "d414e954"
+      "d414e954",
+      "0f19f50e"
     ],
     "datasets": [
       {
@@ -13896,7 +13971,8 @@ window.BENCHMARK_DATA = {
           257.5062457084656,
           169.95375445910864,
           439.20451154027666,
-          167.28270382540566
+          167.28270382540566,
+          204.60447363853456
         ],
         "borderColor": "#3949AB",
         "backgroundColor": "#3949AB",
@@ -13931,6 +14007,7 @@ window.BENCHMARK_DATA = {
           560,
           560,
           560,
+          568,
           568,
           568,
           568,
@@ -14267,7 +14344,8 @@ window.BENCHMARK_DATA = {
           648.210603420551,
           405.0412059227626,
           623.0102205912273,
-          451.3294880390167
+          451.3294880390167,
+          456.0909945487976
         ],
         "borderColor": "#512BD4",
         "backgroundColor": "#512BD4",
@@ -14279,6 +14357,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          1104,
           1104,
           1104,
           1104,
@@ -14638,7 +14717,8 @@ window.BENCHMARK_DATA = {
           6830.1383407592775,
           3486.1027246202743,
           6969.412118094308,
-          3686.3983424050466
+          3686.3983424050466,
+          4904.391601816813
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -14722,6 +14802,7 @@ window.BENCHMARK_DATA = {
           13696,
           13696,
           13696,
+          10784,
           10784,
           10784,
           10784,
@@ -15009,7 +15090,8 @@ window.BENCHMARK_DATA = {
           428.43357168833415,
           249.27125559534346,
           416.0741336743037,
-          272.30408056577045
+          272.30408056577045,
+          336.78906582196555
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -15021,6 +15103,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          944,
           944,
           944,
           944,
@@ -15380,7 +15463,8 @@ window.BENCHMARK_DATA = {
           778.1892145792643,
           401.6462879547706,
           761.4379814147949,
-          413.0524007161458
+          413.0524007161458,
+          541.018697806767
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -15392,6 +15476,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          1096,
           1096,
           1096,
           1096,
