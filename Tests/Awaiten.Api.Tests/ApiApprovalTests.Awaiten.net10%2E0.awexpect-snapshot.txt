@@ -1,4 +1,4 @@
-[assembly: System.Reflection.AssemblyMetadata("RepositoryUrl", "https://github.com/Testably/Awaiten.git")]
+[assembly: System.Reflection.AssemblyMetadata("RepositoryUrl", "https://github.com/awaiten-dev/Awaiten.git")]
 [assembly: System.Runtime.Versioning.TargetFramework(".NETCoreApp,Version=v10.0", FrameworkDisplayName = ".NET 10.0")]
 namespace Awaiten
 {
