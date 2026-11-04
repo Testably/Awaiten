@@ -65,7 +65,7 @@ Always run in Release and compare before and after on the same machine.
 | `DocsTests` | Runs `Awaiten.Docs.Tests` like `UnitTests`, including its `Slow` leg. The docs do not depend on the platform, so CI runs them once, next to `ApiChecks`, instead of on every platform. |
 | `Pack` | `UpdateReadme` and `Compile`, then moves the `Awaiten` and `Awaiten.Extensions.DependencyInjection` packages to `Artifacts/Packages`. |
 | `Benchmarks` | `BenchmarkDotNet` (filter via `--benchmark-filter`) and `BenchmarkResult` (logs the reports and, on a PR build, records the PR number for the comment). |
-| `BenchmarkComment` | Downloads the `Benchmarks-*` artifacts and posts or updates the PR comment: changes in memory and in the time relative to the other containers, compared to the `limited-data.js` of `main` on the `benchmarks` branch (time and ratios as the median of the last 10 runs), followed by the raw results. |
+| `BenchmarkComment` | Downloads the `Benchmarks-*` artifacts and posts or updates the PR comment: changes in memory, in time and in the time relative to the other containers, compared to the latest run of `main` in the `limited-data.js` on the `benchmarks` branch, followed by the raw results. |
 | `PublishBenchmarkReport` | Appends the results to `data.js` on the `benchmarks` branch. |
 | `DocsData` | Writes the benchmark snapshot and the changelog that the docs site renders to `Docs/site/src/data`. |
 | `AotSample`, `WebSample` | See Samples. |

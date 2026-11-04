@@ -18,12 +18,6 @@ partial class Build
 {
 	const string BenchmarkCommentHeading = "## :rocket: Benchmark Results";
 
-	/// <summary>
-	///     The number of runs on <c>main</c> whose median is the baseline of the time, as a single run on a shared
-	///     runner is too noisy.
-	/// </summary>
-	const int BaselineRuns = 10;
-
 	const double RelativeChangeThreshold = 0.15;
 
 	/// <summary>
@@ -119,7 +113,8 @@ partial class Build
 			.Where(compared => measurements.Values.Any(benchmark => benchmark.ContainsKey(compared.Library)))
 			.ToArray();
 		sb.AppendLine(
-			$"Compared to `main` @ `{baseline.Sha.Substring(0, 8)}`: memory to the latest run, time to the median of the last {BaselineRuns} runs, as the runners differ in speed. " +
+			$"Compared to the latest run of `main` @ `{baseline.Sha.Substring(0, 8)}`. " +
+			$"The time table marks when Awaiten gets more than {FormatPercent(RelativeChangeThreshold).TrimStart('+')} faster or slower, which can also come from a faster or slower runner. " +
 			$"A relative change marks when Awaiten gets more than {FormatPercent(RelativeChangeThreshold).TrimStart('+')} faster or slower relative to " +
 			$"{JoinNames(libraries.Select(compared => compared.DisplayName).ToArray())}: {StrongWorse} / {StrongBetter} against all of them, " +
 			$"{WeakWorse} / {WeakBetter} against some.");
@@ -133,6 +128,7 @@ partial class Build
 		string[] newBenchmarks = benchmarks.Where(name => !baseline.Benchmarks.ContainsKey(name)).ToArray();
 		string[] removedBenchmarks = baseline.Benchmarks.Keys.Except(benchmarks).Order(StringComparer.Ordinal).ToArray();
 		List<string> memoryRows = new();
+		List<string> timeRows = new();
 		List<string> relativeRows = new();
 		List<string> allRows = new();
 		foreach (string name in benchmarks.Except(newBenchmarks))
@@ -147,6 +143,13 @@ partial class Build
 					$"| `{name}` | {FormatBytes(main.Allocated)} | {FormatBytes(current.Allocated)} | {FormatMemoryChange(main.Allocated, current.Allocated)} |");
 			}
 
+			double timeChange = current.Mean / main.Mean - 1;
+			if (Math.Abs(timeChange) > RelativeChangeThreshold)
+			{
+				timeRows.Add(
+					$"| `{name}` | {FormatTime(main.Mean)} | {FormatTime(current.Mean)} | {(timeChange > 0 ? StrongWorse : StrongBetter)} {FormatPercent(timeChange)} |");
+			}
+
 			if (relativeChanged)
 			{
 				relativeRows.Add($"| `{name}` | {string.Join(" | ", relativeCells)} |");
@@ -159,9 +162,9 @@ partial class Build
 
 		string libraryHeaders = string.Join(" | ", libraries.Select(compared => $"vs {compared.DisplayName}"));
 		string libraryAlignments = string.Concat(libraries.Select(_ => "--:|"));
-		if (memoryRows.Count == 0 && relativeRows.Count == 0)
+		if (memoryRows.Count == 0 && timeRows.Count == 0 && relativeRows.Count == 0)
 		{
-			sb.AppendLine($"✅ No changes in memory or relative performance ({allRows.Count} benchmarks)");
+			sb.AppendLine($"✅ No changes in memory, time or relative performance ({allRows.Count} benchmarks)");
 			sb.AppendLine();
 		}
 
@@ -172,6 +175,16 @@ partial class Build
 			sb.AppendLine("| Benchmark | main | PR | Δ |");
 			sb.AppendLine("|---|--:|--:|--:|");
 			memoryRows.ForEach(row => sb.AppendLine(row));
+			sb.AppendLine();
+		}
+
+		if (timeRows.Count > 0)
+		{
+			sb.AppendLine("**Time** (Awaiten, latest `main` run → PR)");
+			sb.AppendLine();
+			sb.AppendLine("| Benchmark | main | PR | Δ |");
+			sb.AppendLine("|---|--:|--:|--:|");
+			timeRows.ForEach(row => sb.AppendLine(row));
 			sb.AppendLine();
 		}
 
@@ -333,14 +346,12 @@ partial class Build
 				double[] otherTimes = DatasetValues(report, $"{library} time");
 				if (otherTimes.Length > 0)
 				{
-					// The libraries of a run are appended together, so the datasets align at their end.
-					ratios[library] = Median(times.Reverse().Zip(otherTimes.Reverse(), (a, o) => a / o)
-						.Take(BaselineRuns));
+					// The libraries of a run are appended together, so their last values belong to the same run.
+					ratios[library] = times[^1] / otherTimes[^1];
 				}
 			}
 
-			benchmarks.Add((report.Commits[^1].Sha, name,
-				new BaselineBenchmark(Median(times.TakeLast(BaselineRuns)), allocated[^1], ratios)));
+			benchmarks.Add((report.Commits[^1].Sha, name, new BaselineBenchmark(times[^1], allocated[^1], ratios)));
 		}
 
 		if (benchmarks.Count == 0)
@@ -356,13 +367,6 @@ partial class Build
 
 	static double[] DatasetValues(PageBenchmarkReportGenerator.PageReport report, string label)
 		=> report.Datasets.FirstOrDefault(dataset => dataset.Label == label)?.Data.ToArray() ?? [];
-
-	static double Median(IEnumerable<double> values)
-	{
-		double[] sorted = values.Order().ToArray();
-		int middle = sorted.Length / 2;
-		return sorted.Length % 2 == 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
-	}
 
 	static string JoinNames(string[] names)
 		=> names.Length <= 1
