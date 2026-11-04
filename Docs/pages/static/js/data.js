@@ -1086,6 +1086,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Wed Nov 4 18:30:12 2026 \u002B0100",
         "message": "docs: remove Jab, Pure.DI and the NuGet link from the docs site (#247)"
+      },
+      {
+        "sha": "8741c01e4eb8a4b20c7f4560b954b3c8aba0f80e",
+        "author": "Valentin Breu\u00DF",
+        "date": "Wed Nov 4 18:47:37 2026 \u002B0100",
+        "message": "ci: summarize the benchmark changes against main in the PR comment (#248)"
       }
     ],
     "labels": [
@@ -1269,7 +1275,8 @@ window.BENCHMARK_DATA = {
       "0f19f50e",
       "6d0508d4",
       "d7651068",
-      "9461c205"
+      "9461c205",
+      "8741c01e"
     ],
     "datasets": [
       {
@@ -1456,7 +1463,8 @@ window.BENCHMARK_DATA = {
           5.137713657816251,
           5.552549866835276,
           7.762645946194728,
-          7.149643907944362
+          7.149643907944362,
+          5.322520327568054
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -1468,6 +1476,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -1843,7 +1852,8 @@ window.BENCHMARK_DATA = {
           8.166216450241896,
           7.503006737147059,
           7.473508606354396,
-          9.158494738737742
+          9.158494738737742,
+          6.715461328625679
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -1855,6 +1865,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -2230,7 +2241,8 @@ window.BENCHMARK_DATA = {
           89.22451087144705,
           129.26154103279114,
           105.03466132481893,
-          114.05617818037669
+          114.05617818037669,
+          86.07262041018559
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -2242,6 +2254,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -2613,7 +2626,8 @@ window.BENCHMARK_DATA = {
           6.463912828763326,
           7.5010418261473,
           8.836166800061863,
-          9.017039952675502
+          9.017039952675502,
+          6.816527555031436
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -2625,6 +2639,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -2992,7 +3007,8 @@ window.BENCHMARK_DATA = {
           8.722112960049085,
           10.183451850499425,
           11.006330210963885,
-          10.949353192861263
+          10.949353192861263,
+          8.1456529039603
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -3004,6 +3020,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -4280,6 +4297,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Wed Nov 4 18:30:12 2026 \u002B0100",
         "message": "docs: remove Jab, Pure.DI and the NuGet link from the docs site (#247)"
+      },
+      {
+        "sha": "8741c01e4eb8a4b20c7f4560b954b3c8aba0f80e",
+        "author": "Valentin Breu\u00DF",
+        "date": "Wed Nov 4 18:47:37 2026 \u002B0100",
+        "message": "ci: summarize the benchmark changes against main in the PR comment (#248)"
       }
     ],
     "labels": [
@@ -4463,7 +4486,8 @@ window.BENCHMARK_DATA = {
       "0f19f50e",
       "6d0508d4",
       "d7651068",
-      "9461c205"
+      "9461c205",
+      "8741c01e"
     ],
     "datasets": [
       {
@@ -4650,7 +4674,8 @@ window.BENCHMARK_DATA = {
           5.972636700822757,
           6.716565352678299,
           8.403911831123489,
-          8.487805988926153
+          8.487805988926153,
+          5.99936413535705
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -4662,6 +4687,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -5037,7 +5063,8 @@ window.BENCHMARK_DATA = {
           6.714167223374049,
           7.4886628325496405,
           7.227567456662655,
-          8.249286541342736
+          8.249286541342736,
+          6.494943445920944
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -5049,6 +5076,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -5424,7 +5452,8 @@ window.BENCHMARK_DATA = {
           88.18475545247396,
           125.5729346593221,
           104.89045669351306,
-          117.98425749142964
+          117.98425749142964,
+          90.04734478791555
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -5436,6 +5465,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -5807,7 +5837,8 @@ window.BENCHMARK_DATA = {
           6.699241537849108,
           7.567087259143591,
           8.701000481843948,
-          8.934438926974932
+          8.934438926974932,
+          6.524759377042453
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -5819,6 +5850,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -6186,7 +6218,8 @@ window.BENCHMARK_DATA = {
           11.903095732132593,
           13.72410788933436,
           14.671893225113552,
-          14.654739752411842
+          14.654739752411842,
+          11.215700249259289
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -6198,6 +6231,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -7474,6 +7508,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Wed Nov 4 18:30:12 2026 \u002B0100",
         "message": "docs: remove Jab, Pure.DI and the NuGet link from the docs site (#247)"
+      },
+      {
+        "sha": "8741c01e4eb8a4b20c7f4560b954b3c8aba0f80e",
+        "author": "Valentin Breu\u00DF",
+        "date": "Wed Nov 4 18:47:37 2026 \u002B0100",
+        "message": "ci: summarize the benchmark changes against main in the PR comment (#248)"
       }
     ],
     "labels": [
@@ -7657,7 +7697,8 @@ window.BENCHMARK_DATA = {
       "0f19f50e",
       "6d0508d4",
       "d7651068",
-      "9461c205"
+      "9461c205",
+      "8741c01e"
     ],
     "datasets": [
       {
@@ -7844,7 +7885,8 @@ window.BENCHMARK_DATA = {
           15.294351984347616,
           12.08044043715511,
           23.484134445587795,
-          23.683645168940227
+          23.683645168940227,
+          10.936119579275449
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -8006,6 +8048,7 @@ window.BENCHMARK_DATA = {
           144,
           144,
           144,
+          208,
           208,
           208,
           208,
@@ -8231,7 +8274,8 @@ window.BENCHMARK_DATA = {
           1200.2248420715332,
           863.684740611485,
           1376.2998037338257,
-          1614.151515197754
+          1614.151515197754,
+          745.2699540683201
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -8243,6 +8287,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          5688,
           5688,
           5688,
           5688,
@@ -8618,7 +8663,8 @@ window.BENCHMARK_DATA = {
           26117.898049490792,
           18989.96118382045,
           19835.29683794294,
-          30803.78963797433
+          30803.78963797433,
+          17834.657283528646
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -8810,7 +8856,8 @@ window.BENCHMARK_DATA = {
           32478,
           32477,
           32474,
-          32482
+          32482,
+          32478
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -9001,7 +9048,8 @@ window.BENCHMARK_DATA = {
           593.3621552149455,
           434.0177838643392,
           558.2312021936689,
-          746.2986048062643
+          746.2986048062643,
+          389.1144668715341
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -9031,6 +9079,7 @@ window.BENCHMARK_DATA = {
           1472,
           1472,
           1472,
+          1528,
           1528,
           1528,
           1528,
@@ -9380,7 +9429,8 @@ window.BENCHMARK_DATA = {
           9046.533822631836,
           7404.145041910807,
           9632.620337350028,
-          12904.527733357747
+          12904.527733357747,
+          6644.338011169433
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -9565,6 +9615,7 @@ window.BENCHMARK_DATA = {
           24760,
           24761,
           24761,
+          24760,
           24760,
           24760,
           24760,
@@ -10668,6 +10719,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Wed Nov 4 18:30:12 2026 \u002B0100",
         "message": "docs: remove Jab, Pure.DI and the NuGet link from the docs site (#247)"
+      },
+      {
+        "sha": "8741c01e4eb8a4b20c7f4560b954b3c8aba0f80e",
+        "author": "Valentin Breu\u00DF",
+        "date": "Wed Nov 4 18:47:37 2026 \u002B0100",
+        "message": "ci: summarize the benchmark changes against main in the PR comment (#248)"
       }
     ],
     "labels": [
@@ -10851,7 +10908,8 @@ window.BENCHMARK_DATA = {
       "0f19f50e",
       "6d0508d4",
       "d7651068",
-      "9461c205"
+      "9461c205",
+      "8741c01e"
     ],
     "datasets": [
       {
@@ -11038,7 +11096,8 @@ window.BENCHMARK_DATA = {
           113.05510992209116,
           80.6167437846844,
           217.3606320222219,
-          224.67191376686097
+          224.67191376686097,
+          73.3378762465257
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -11200,6 +11259,7 @@ window.BENCHMARK_DATA = {
           2128,
           2128,
           2128,
+          4176,
           4176,
           4176,
           4176,
@@ -11425,7 +11485,8 @@ window.BENCHMARK_DATA = {
           10906.050315348308,
           7945.237515376164,
           11298.37360127767,
-          16781.166432698566
+          16781.166432698566,
+          7187.232365744455
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -11437,6 +11498,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          61016,
           61016,
           61016,
           61016,
@@ -11812,7 +11874,8 @@ window.BENCHMARK_DATA = {
           635725.8701171875,
           464453.9201096755,
           462812.1435872396,
-          763737.205485026
+          763737.205485026,
+          431494.51764322916
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -12004,7 +12067,8 @@ window.BENCHMARK_DATA = {
           740792,
           718369,
           718982,
-          739020
+          739020,
+          739750
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -12195,7 +12259,8 @@ window.BENCHMARK_DATA = {
           36620.402444022046,
           26941.687233479817,
           32108.122802734375,
-          45317.22958577474
+          45317.22958577474,
+          24935.814093956582
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -12383,7 +12448,8 @@ window.BENCHMARK_DATA = {
           80302,
           80349,
           80958,
-          80065
+          80065,
+          80005
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -12574,7 +12640,8 @@ window.BENCHMARK_DATA = {
           267101.3173828125,
           240093.6391950335,
           263480.0763811384,
-          387020.14490685094
+          387020.14490685094,
+          208506.69430338542
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -12762,7 +12829,8 @@ window.BENCHMARK_DATA = {
           573107,
           573133,
           571192,
-          573107
+          573107,
+          573072
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -13838,6 +13906,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Wed Nov 4 18:30:12 2026 \u002B0100",
         "message": "docs: remove Jab, Pure.DI and the NuGet link from the docs site (#247)"
+      },
+      {
+        "sha": "8741c01e4eb8a4b20c7f4560b954b3c8aba0f80e",
+        "author": "Valentin Breu\u00DF",
+        "date": "Wed Nov 4 18:47:37 2026 \u002B0100",
+        "message": "ci: summarize the benchmark changes against main in the PR comment (#248)"
       }
     ],
     "labels": [
@@ -14017,7 +14091,8 @@ window.BENCHMARK_DATA = {
       "0f19f50e",
       "6d0508d4",
       "d7651068",
-      "9461c205"
+      "9461c205",
+      "8741c01e"
     ],
     "datasets": [
       {
@@ -14200,7 +14275,8 @@ window.BENCHMARK_DATA = {
           204.60447363853456,
           278.4383316040039,
           266.4997080485026,
-          458.10905561447146
+          458.10905561447146,
+          204.23561312357586
         ],
         "borderColor": "#3949AB",
         "backgroundColor": "#3949AB",
@@ -14235,6 +14311,7 @@ window.BENCHMARK_DATA = {
           560,
           560,
           560,
+          568,
           568,
           568,
           568,
@@ -14579,7 +14656,8 @@ window.BENCHMARK_DATA = {
           456.0909945487976,
           717.4680744579861,
           595.0477149009705,
-          599.5031221934727
+          599.5031221934727,
+          467.12575062115985
         ],
         "borderColor": "#512BD4",
         "backgroundColor": "#512BD4",
@@ -14591,6 +14669,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          1104,
           1104,
           1104,
           1104,
@@ -14958,7 +15037,8 @@ window.BENCHMARK_DATA = {
           4904.391601816813,
           6444.416504414877,
           6831.577746073405,
-          6679.579651387533
+          6679.579651387533,
+          5107.285751342773
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -15042,6 +15122,7 @@ window.BENCHMARK_DATA = {
           13696,
           13696,
           13696,
+          10784,
           10784,
           10784,
           10784,
@@ -15337,7 +15418,8 @@ window.BENCHMARK_DATA = {
           336.78906582196555,
           446.63626788457236,
           433.37170356114706,
-          388.22634906035205
+          388.22634906035205,
+          353.3806939125061
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -15349,6 +15431,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          944,
           944,
           944,
           944,
@@ -15716,7 +15799,8 @@ window.BENCHMARK_DATA = {
           541.018697806767,
           777.5268675940378,
           693.5834440231323,
-          690.5911600112915
+          690.5911600112915,
+          588.9221775690714
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -15728,6 +15812,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          1096,
           1096,
           1096,
           1096,
