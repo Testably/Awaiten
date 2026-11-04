@@ -32,3 +32,22 @@ updates:
     # The analyzers and generators only load in compilers at least as new as the Roslyn they reference.
     ignore:
       - dependency-name: "Microsoft.CodeAnalysis*"
+
+  - package-ecosystem: "npm"
+    directory: "/Docs/site"
+    schedule:
+      interval: "weekly"
+      day: "thursday"
+      time: "23:00"
+      timezone: "Europe/Vienna"
+    commit-message:
+      prefix: chore
+    groups:
+      docusaurus:
+        patterns:
+          - "@docusaurus/*"
+      react:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react"
