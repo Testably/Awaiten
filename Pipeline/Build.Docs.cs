@@ -24,7 +24,7 @@ partial class Build
 	const int DocsBenchmarkHistoryLength = 16;
 
 	static readonly string[] DocsBenchmarkLibraries =
-		["Awaiten", "MsDI", "Autofac", "Jab", "PureDI", "DryIoc", "SimpleInjector",];
+		["Awaiten", "MsDI", "Autofac", "DryIoc", "SimpleInjector",];
 
 	/// <summary>
 	///     The release note categories in page order. Breaking changes of any type come first; other types

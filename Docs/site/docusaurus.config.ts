@@ -85,11 +85,6 @@ const config: Config = {
       },
       items: [
         {
-          href: 'https://www.nuget.org/packages/Awaiten',
-          label: 'NuGet',
-          position: 'right',
-        },
-        {
           href: 'https://github.com/awaiten-dev/Awaiten',
           label: 'GitHub',
           position: 'right',
