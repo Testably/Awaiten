@@ -1,0 +1,74 @@
+name: Pages
+
+on:
+    workflow_run:
+        workflows: [ "Build" ]
+        types: [ completed ]
+    workflow_dispatch:
+
+permissions:
+    contents: read
+    pages: write
+    id-token: write
+
+concurrency:
+    group: pages
+    cancel-in-progress: false
+
+jobs:
+    build:
+        if: (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && (github.event.workflow_run.head_branch == 'main' || startsWith(github.event.workflow_run.head_branch, 'v')))
+        name: Build documentation
+        runs-on: ubuntu-latest
+        steps:
+            -   name: Wait until the release is listed on NuGet
+                if: github.event_name == 'workflow_run' && startsWith(github.event.workflow_run.head_branch, 'v')
+                env:
+                    TAG: ${{ github.event.workflow_run.head_branch }}
+                run: |
+                    version="${TAG#v}"
+                    for attempt in $(seq 1 30); do
+                        if curl -fsS https://api.nuget.org/v3-flatcontainer/awaiten/index.json | grep -qi "\"$version\""; then
+                            exit 0
+                        fi
+                        sleep 30
+                    done
+                    echo "Awaiten $version is not listed on NuGet after 15 minutes."
+                    exit 1
+            -   uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+                with:
+                    fetch-depth: 0
+            -   name: Setup .NET SDKs
+                uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+                with:
+                    dotnet-version: |
+                        10.0.x
+            -   name: Refresh benchmarks and changelog
+                run: ./build.sh DocsData
+                env:
+                    GithubToken: ${{ secrets.GITHUB_TOKEN }}
+            -   uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+                with:
+                    node-version: 22
+                    cache: npm
+                    cache-dependency-path: ./Docs/site/package-lock.json
+            -   name: Install dependencies
+                working-directory: ./Docs/site
+                run: npm ci --ignore-scripts
+            -   name: Build website
+                working-directory: ./Docs/site
+                run: npm run build
+            -   uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+                with:
+                    path: ./Docs/site/build
+
+    deploy:
+        name: Deploy to GitHub Pages
+        needs: build
+        runs-on: ubuntu-latest
+        environment:
+            name: github-pages
+            url: ${{ steps.deployment.outputs.page_url }}
+        steps:
+            -   id: deployment
+                uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

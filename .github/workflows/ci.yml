@@ -128,6 +128,23 @@ jobs:
             -   name: Run the web sample's smoke test
                 run: ./build.sh WebSample
 
+    docs-site:
+        name: "Docs site"
+        runs-on: ubuntu-latest
+        steps:
+            -   uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+            -   uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+                with:
+                    node-version: 22
+                    cache: npm
+                    cache-dependency-path: ./Docs/site/package-lock.json
+            -   name: Install dependencies
+                working-directory: ./Docs/site
+                run: npm ci --ignore-scripts
+            -   name: Build the docs site
+                working-directory: ./Docs/site
+                run: npm run build
+
     static-code-analysis:
         name: "Static code analysis"
         if: ${{ github.actor != 'dependabot[bot]'&& github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name }}

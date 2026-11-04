@@ -1,10 +1,11 @@
 ---
+slug: /
 description: Awaiten is an async-first, compile-time dependency injection container for .NET that wires your object graph with a source generator.
 ---
 
 # Awaiten
 
-<img align="right" width="200" src="https://raw.githubusercontent.com/Testably/Awaiten/main/Docs/Awaiten_256x256.png" alt="Awaiten logo" />
+<img align="right" width="200" src="https://raw.githubusercontent.com/awaiten-dev/Awaiten/main/Docs/Awaiten_256x256.png" alt="Awaiten logo" />
 
 The async-first dependency injection container for .NET. Awaiten wires your object graph at build time and checks it with the compiler, including services that need asynchronous setup.
 

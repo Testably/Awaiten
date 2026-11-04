@@ -14,7 +14,7 @@ namespace Build;
 
 /// <summary>
 ///     Aggregates BenchmarkDotNet JSON reports into the <c>data.js</c> / <c>limited-data.js</c> files consumed
-///     by the documentation site (<see href="https://docs.testably.org/awaiten/benchmarks" />).
+///     by the documentation site (<see href="https://awaiten-dev.github.io/Awaiten/benchmarks" />).
 /// </summary>
 /// <remarks>
 ///     The structure intentionally mirrors aweXpect's PageBenchmarkReportGenerator so the same docs-site
@@ -28,7 +28,7 @@ namespace Build;
 /// </remarks>
 public class PageBenchmarkReportGenerator
 {
-	private const string FilePrefix = "window.BENCHMARK_DATA = ";
+	internal const string FilePrefix = "window.BENCHMARK_DATA = ";
 
 	internal const string BaselineLibrary = "Awaiten";
 

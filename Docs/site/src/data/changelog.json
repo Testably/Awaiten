@@ -1,0 +1,673 @@
+{
+  "releases": [
+    {
+      "version": "0.8.0",
+      "date": "2026-10-30",
+      "prerelease": false,
+      "url": "https://github.com/awaiten-dev/Awaiten/releases/tag/v0.8.0",
+      "commits": 87,
+      "items": [
+        {
+          "category": "breaking",
+          "text": "Name public types by role and rename `AwaitenLifetime` and `IExternalResolverHost`",
+          "number": 183,
+          "url": "https://github.com/Testably/Awaiten/pull/183"
+        },
+        {
+          "category": "breaking",
+          "text": "Keep disposing a scope after a release hook or Dispose throws",
+          "number": 200,
+          "url": "https://github.com/Testably/Awaiten/pull/200"
+        },
+        {
+          "category": "breaking",
+          "text": "Make IAwaitenScope async-disposable and return the concrete scope from CreateScopeAsync",
+          "number": 202,
+          "url": "https://github.com/Testably/Awaiten/pull/202"
+        },
+        {
+          "category": "breaking",
+          "text": "Make the external resolver settable without casts and set-once",
+          "number": 203,
+          "url": "https://github.com/Testably/Awaiten/pull/203"
+        },
+        {
+          "category": "breaking",
+          "text": "Merge container metadata into IAwaitenRoot, add GetResolvability and AWT205",
+          "number": 204,
+          "url": "https://github.com/Testably/Awaiten/pull/204"
+        },
+        {
+          "category": "breaking",
+          "text": "Align the MS.DI bridge API around AddAwaitenContainer and a container builder",
+          "number": 205,
+          "url": "https://github.com/Testably/Awaiten/pull/205"
+        },
+        {
+          "category": "breaking",
+          "text": "Reject [Arg] on properties at compile time and document the declaration rules",
+          "number": 206,
+          "url": "https://github.com/Testably/Awaiten/pull/206"
+        },
+        {
+          "category": "breaking",
+          "text": "Align the Lifetime values with MS.DI ServiceLifetime",
+          "number": 214,
+          "url": "https://github.com/Testably/Awaiten/pull/214"
+        },
+        {
+          "category": "breaking",
+          "text": "Replace SyncResolveAfterInit with an AsyncSafety enum",
+          "number": 218,
+          "url": "https://github.com/Testably/Awaiten/pull/218"
+        },
+        {
+          "category": "breaking",
+          "text": "Rename the MS.DI external resolver and make the resolver assignment explicit",
+          "number": 219,
+          "url": "https://github.com/Testably/Awaiten/pull/219"
+        },
+        {
+          "category": "breaking",
+          "text": "Dispose async-only services on netstandard2.0",
+          "number": 216,
+          "url": "https://github.com/Testably/Awaiten/pull/216"
+        },
+        {
+          "category": "breaking",
+          "text": "Reject projecting SuppressDisposal services into MS.DI",
+          "number": 222,
+          "url": "https://github.com/Testably/Awaiten/pull/222"
+        },
+        {
+          "category": "breaking",
+          "text": "Close open generic registrations for injected properties and hook parameters",
+          "number": 229,
+          "url": "https://github.com/Testably/Awaiten/pull/229"
+        },
+        {
+          "category": "feature",
+          "text": "Answer `IServiceProviderIsService` from the container metadata",
+          "number": 133,
+          "url": "https://github.com/Testably/Awaiten/pull/133"
+        },
+        {
+          "category": "feature",
+          "text": "Let a caller ask why a service is withheld, without throwing",
+          "number": 138,
+          "url": "https://github.com/Testably/Awaiten/pull/138"
+        },
+        {
+          "category": "feature",
+          "text": "Give the typeof registration attributes the options of the generic forms",
+          "number": 207,
+          "url": "https://github.com/Testably/Awaiten/pull/207"
+        },
+        {
+          "category": "feature",
+          "text": "Support keyed registrations in [Decorate] and [Composite]",
+          "number": 209,
+          "url": "https://github.com/Testably/Awaiten/pull/209"
+        },
+        {
+          "category": "feature",
+          "text": "Dispatch by runtime type through a generated IReadOnlyDictionary<Type, Func<TBase>>",
+          "number": 210,
+          "url": "https://github.com/Testably/Awaiten/pull/210"
+        },
+        {
+          "category": "feature",
+          "text": "Add unkeyed and generic GetResolvability overloads",
+          "number": 215,
+          "url": "https://github.com/Testably/Awaiten/pull/215"
+        },
+        {
+          "category": "feature",
+          "text": "Add a typeof form of [InjectProperty] with open generic support",
+          "number": 224,
+          "url": "https://github.com/Testably/Awaiten/pull/224"
+        },
+        {
+          "category": "feature",
+          "text": "Add a typeof form of [ImportService] with open generic support",
+          "number": 223,
+          "url": "https://github.com/Testably/Awaiten/pull/223"
+        },
+        {
+          "category": "fix",
+          "text": "Resolve IEnumerable<T> of an unregistered element type as an empty sequence",
+          "number": 137,
+          "url": "https://github.com/Testably/Awaiten/pull/137"
+        },
+        {
+          "category": "fix",
+          "text": "Capitalise the diagnostic messages that start lowercase",
+          "number": 182,
+          "url": "https://github.com/Testably/Awaiten/pull/182"
+        },
+        {
+          "category": "fix",
+          "text": "Dispose a half-warmed scope asynchronously when CreateScopeAsync fails",
+          "number": 199,
+          "url": "https://github.com/Testably/Awaiten/pull/199"
+        },
+        {
+          "category": "fix",
+          "text": "Dispose everything the MS.DI bridge builds with its scope and root",
+          "number": 201,
+          "url": "https://github.com/Testably/Awaiten/pull/201"
+        },
+        {
+          "category": "fix",
+          "text": "Stop AWT179 for deliberate per-closing [InjectProperty] overrides and report it from the analyzer",
+          "number": 226,
+          "url": "https://github.com/Testably/Awaiten/pull/226"
+        },
+        {
+          "category": "fix",
+          "text": "Stop AWT151 for a module that only imports services",
+          "number": 228,
+          "url": "https://github.com/Testably/Awaiten/pull/228"
+        },
+        {
+          "category": "performance",
+          "text": "Give ResolveAsync<T> a typed fast path with cached singleton tasks",
+          "number": 211,
+          "url": "https://github.com/Testably/Awaiten/pull/211"
+        }
+      ]
+    },
+    {
+      "version": "0.7.0",
+      "date": "2026-07-21",
+      "prerelease": false,
+      "url": "https://github.com/awaiten-dev/Awaiten/releases/tag/v0.7.0",
+      "commits": 14,
+      "items": [
+        {
+          "category": "feature",
+          "text": "Report scan matches whose type is inaccessible (AWT193)",
+          "number": 115,
+          "url": "https://github.com/Testably/Awaiten/pull/115"
+        },
+        {
+          "category": "feature",
+          "text": "Let a `[Module]` self-compile its own `[Scan]`",
+          "number": 117,
+          "url": "https://github.com/Testably/Awaiten/pull/117"
+        },
+        {
+          "category": "feature",
+          "text": "Support lifecycle hooks on [Scan], with generic dispatch",
+          "number": 118,
+          "url": "https://github.com/Testably/Awaiten/pull/118"
+        },
+        {
+          "category": "feature",
+          "text": "Support lifecycle hooks on a `[Module]`'s self-compiled `[Scan]`",
+          "number": 127,
+          "url": "https://github.com/Testably/Awaiten/pull/127"
+        },
+        {
+          "category": "fix",
+          "text": "Honor `InternalsVisibleTo` when checking constructor accessibility",
+          "number": 116,
+          "url": "https://github.com/Testably/Awaiten/pull/116"
+        }
+      ]
+    },
+    {
+      "version": "0.6.0",
+      "date": "2026-07-17",
+      "prerelease": false,
+      "url": "https://github.com/awaiten-dev/Awaiten/releases/tag/v0.6.0",
+      "commits": 2,
+      "items": [
+        {
+          "category": "feature",
+          "text": "Allow lifecycle hooks to take graph-resolved parameters",
+          "number": 110,
+          "url": "https://github.com/Testably/Awaiten/pull/110"
+        },
+        {
+          "category": "feature",
+          "text": "Add SuppressDisposal to opt out of container disposal",
+          "number": 111,
+          "url": "https://github.com/Testably/Awaiten/pull/111"
+        }
+      ]
+    },
+    {
+      "version": "0.5.0",
+      "date": "2026-07-15",
+      "prerelease": false,
+      "url": "https://github.com/awaiten-dev/Awaiten/releases/tag/v0.5.0",
+      "commits": 10,
+      "items": [
+        {
+          "category": "feature",
+          "text": "Add `ScanAs.MatchingInterface` and markerless `[Scan]`",
+          "number": 106,
+          "url": "https://github.com/Testably/Awaiten/pull/106"
+        },
+        {
+          "category": "feature",
+          "text": "Reject `Owned<T>` over a requesting-type factory (AWT186)",
+          "number": 108,
+          "url": "https://github.com/Testably/Awaiten/pull/108"
+        },
+        {
+          "category": "feature",
+          "text": "Report ambiguous and inaccessible `MatchingInterface` contracts",
+          "number": 109,
+          "url": "https://github.com/Testably/Awaiten/pull/109"
+        }
+      ]
+    },
+    {
+      "version": "0.4.0",
+      "date": "2026-07-08",
+      "prerelease": false,
+      "url": "https://github.com/awaiten-dev/Awaiten/releases/tag/v0.4.0",
+      "commits": 7,
+      "items": [
+        {
+          "category": "breaking",
+          "text": "Replace `[FromServices]` with container-side `[ImportService<T>]`",
+          "number": 94,
+          "url": "https://github.com/Testably/Awaiten/pull/94"
+        },
+        {
+          "category": "feature",
+          "text": "Add container-side `[InjectProperty<T>]` property injection",
+          "number": 93,
+          "url": "https://github.com/Testably/Awaiten/pull/93"
+        },
+        {
+          "category": "feature",
+          "text": "Add suppressible boundary analyzers AWT134 and AWT135",
+          "number": 98,
+          "url": "https://github.com/Testably/Awaiten/pull/98"
+        }
+      ]
+    },
+    {
+      "version": "0.3.0",
+      "date": "2026-07-06",
+      "prerelease": false,
+      "url": "https://github.com/awaiten-dev/Awaiten/releases/tag/v0.3.0",
+      "commits": 26,
+      "items": [
+        {
+          "category": "breaking",
+          "text": "Rename ScanAs.ImplementedInterfaces to Marker",
+          "number": 77,
+          "url": "https://github.com/Testably/Awaiten/pull/77"
+        },
+        {
+          "category": "breaking",
+          "text": "Replace `Default`/`TryAdd` bool flags with the `Fallback` enum",
+          "number": 84,
+          "url": "https://github.com/Testably/Awaiten/pull/84"
+        },
+        {
+          "category": "breaking",
+          "text": "Support non-string service keys (enum, Type)",
+          "number": 86,
+          "url": "https://github.com/Testably/Awaiten/pull/86"
+        },
+        {
+          "category": "breaking",
+          "text": "Imperative keyed resolution and IKeyedServiceProvider interop",
+          "number": 89,
+          "url": "https://github.com/Testably/Awaiten/pull/89"
+        },
+        {
+          "category": "feature",
+          "text": "Warn (AWT156) when a service is IAsyncDisposable but not IDisposable",
+          "number": 61,
+          "url": "https://github.com/Testably/Awaiten/pull/61"
+        },
+        {
+          "category": "feature",
+          "text": "Inject keyed registrations as `IReadOnlyDictionary<string, TService>`",
+          "number": 60,
+          "url": "https://github.com/Testably/Awaiten/pull/60"
+        },
+        {
+          "category": "feature",
+          "text": "`[Inject(Optional = true)]` leaves a property unset when its dependency is unregistered",
+          "number": 63,
+          "url": "https://github.com/Testably/Awaiten/pull/63"
+        },
+        {
+          "category": "feature",
+          "text": "Construct `[Singleton(Eager = true)]` services at container build time",
+          "number": 68,
+          "url": "https://github.com/Testably/Awaiten/pull/68"
+        },
+        {
+          "category": "feature",
+          "text": "Inject keyed registrations as awaited `Task<IReadOnlyDictionary<string, TService>>`",
+          "number": 65,
+          "url": "https://github.com/Testably/Awaiten/pull/65"
+        },
+        {
+          "category": "feature",
+          "text": "Pass the requesting type into a factory via `[RequestingType]`",
+          "number": 67,
+          "url": "https://github.com/Testably/Awaiten/pull/67"
+        },
+        {
+          "category": "feature",
+          "text": "Make the MS.DI bridge's async projection reflection-free and native-AOT clean",
+          "number": 72,
+          "url": "https://github.com/Testably/Awaiten/pull/72"
+        },
+        {
+          "category": "feature",
+          "text": "Run OnActivated/OnRelease lifecycle hooks around a registration's lifetime (AWT162)",
+          "number": 70,
+          "url": "https://github.com/Testably/Awaiten/pull/70"
+        },
+        {
+          "category": "feature",
+          "text": "Diagnose conflicting coalesced lifecycle/eager directives (AWT166)",
+          "number": 74,
+          "url": "https://github.com/Testably/Awaiten/pull/74"
+        },
+        {
+          "category": "feature",
+          "text": "Replace logo with the async-first Awaiten mark",
+          "number": 75,
+          "url": "https://github.com/Testably/Awaiten/pull/75"
+        },
+        {
+          "category": "feature",
+          "text": "Contextual binding via `WhenInjectedInto`",
+          "number": 76,
+          "url": "https://github.com/Testably/Awaiten/pull/76"
+        },
+        {
+          "category": "feature",
+          "text": "Support open-generic decorators and composites (#79)",
+          "number": 85,
+          "url": "https://github.com/Testably/Awaiten/pull/85"
+        },
+        {
+          "category": "feature",
+          "text": "Add name, namespace and exclusion filters to `[Scan]`",
+          "number": 90,
+          "url": "https://github.com/Testably/Awaiten/pull/90"
+        },
+        {
+          "category": "fix",
+          "text": "AWT156 per-owner filtering, precise report locations and cross-assembly bail-out",
+          "number": 64,
+          "url": "https://github.com/Testably/Awaiten/pull/64"
+        },
+        {
+          "category": "fix",
+          "text": "Dispose partially-built instances when async wiring or init fails",
+          "number": 71,
+          "url": "https://github.com/Testably/Awaiten/pull/71"
+        }
+      ]
+    },
+    {
+      "version": "0.2.0",
+      "date": "2026-07-04",
+      "prerelease": false,
+      "url": "https://github.com/awaiten-dev/Awaiten/releases/tag/v0.2.0",
+      "commits": 28,
+      "items": [
+        {
+          "category": "feature",
+          "text": "Add async initialization via `IAsyncInitializable` with compile-time taint safety (AWT119/AWT120)",
+          "number": 31,
+          "url": "https://github.com/Testably/Awaiten/pull/31"
+        },
+        {
+          "category": "feature",
+          "text": "Add async factory methods as a Task<T> async-init registration channel",
+          "number": 34,
+          "url": "https://github.com/Testably/Awaiten/pull/34"
+        },
+        {
+          "category": "feature",
+          "text": "Warn (AWT106) when a factory body hides an IAsyncInitializable/IDisposable capability behind its declared return type",
+          "number": 35,
+          "url": "https://github.com/Testably/Awaiten/pull/35"
+        },
+        {
+          "category": "feature",
+          "text": "Async relationship types and async/owned disposal",
+          "number": 37,
+          "url": "https://github.com/Testably/Awaiten/pull/37"
+        },
+        {
+          "category": "feature",
+          "text": "Resolve collection dependencies to every registration of a service",
+          "number": 39,
+          "url": "https://github.com/Testably/Awaiten/pull/39"
+        },
+        {
+          "category": "feature",
+          "text": "Wrap registered services in decorator chains via `[Decorate<TDecorator, TService>]`",
+          "number": 40,
+          "url": "https://github.com/Testably/Awaiten/pull/40"
+        },
+        {
+          "category": "feature",
+          "text": "Support open generic registration",
+          "number": 41,
+          "url": "https://github.com/Testably/Awaiten/pull/41"
+        },
+        {
+          "category": "feature",
+          "text": "Bridge a generated container to Microsoft.Extensions.DependencyInjection",
+          "number": 43,
+          "url": "https://github.com/Testably/Awaiten/pull/43"
+        },
+        {
+          "category": "feature",
+          "text": "Front a service's registrations with a single fan-out façade via `[Composite<TComposite, TService>]`",
+          "number": 46,
+          "url": "https://github.com/Testably/Awaiten/pull/46"
+        },
+        {
+          "category": "feature",
+          "text": "Resolve async-initialized collection members through `IAsyncEnumerable<T>`",
+          "number": 44,
+          "url": "https://github.com/Testably/Awaiten/pull/44"
+        },
+        {
+          "category": "feature",
+          "text": "Resolve external dependencies across the MS.DI seam via `[FromServices]`/`[ImportServices]`",
+          "number": 47,
+          "url": "https://github.com/Testably/Awaiten/pull/47"
+        },
+        {
+          "category": "feature",
+          "text": "Resolve awaited collection dependencies through `Task<C>`",
+          "number": 49,
+          "url": "https://github.com/Testably/Awaiten/pull/49"
+        },
+        {
+          "category": "feature",
+          "text": "Satisfy a differently-closed generic interface request through declared variance",
+          "number": 48,
+          "url": "https://github.com/Testably/Awaiten/pull/48"
+        },
+        {
+          "category": "feature",
+          "text": "Fill opt-in [Inject] properties after construction",
+          "number": 50,
+          "url": "https://github.com/Testably/Awaiten/pull/50"
+        },
+        {
+          "category": "feature",
+          "text": "Assembly scanning via `[Scan]`",
+          "number": 52,
+          "url": "https://github.com/Testably/Awaiten/pull/52"
+        },
+        {
+          "category": "feature",
+          "text": "Initialize Awaiten containers on host startup via `AddAwaitenInitialization`",
+          "number": 54,
+          "url": "https://github.com/Testably/Awaiten/pull/54"
+        },
+        {
+          "category": "feature",
+          "text": "Add VerifyAgainst startup safety check for external dependencies",
+          "number": 55,
+          "url": "https://github.com/Testably/Awaiten/pull/55"
+        },
+        {
+          "category": "feature",
+          "text": "Break mutual constructor cycles with `[Inject(Deferred = true)]` property injection",
+          "number": 51,
+          "url": "https://github.com/Testably/Awaiten/pull/51"
+        },
+        {
+          "category": "feature",
+          "text": "Modules: `[Module]` / `[Import]` with overridable defaults",
+          "number": 56,
+          "url": "https://github.com/Testably/Awaiten/pull/56"
+        },
+        {
+          "category": "fix",
+          "text": "Dispose factory outputs hidden behind a non-disposable return type",
+          "number": 33,
+          "url": "https://github.com/Testably/Awaiten/pull/33"
+        },
+        {
+          "category": "fix",
+          "text": "Report AWT102 for a dependency cycle closed only through a bare `Owned<T>` or `Task<T>`",
+          "number": 38,
+          "url": "https://github.com/Testably/Awaiten/pull/38"
+        },
+        {
+          "category": "performance",
+          "text": "Data-driven bucket-hash dispatch for by-type resolution",
+          "number": 42,
+          "url": "https://github.com/Testably/Awaiten/pull/42"
+        }
+      ]
+    },
+    {
+      "version": "0.1.0",
+      "date": "2026-06-28",
+      "prerelease": false,
+      "url": "https://github.com/awaiten-dev/Awaiten/releases/tag/v0.1.0",
+      "commits": 18,
+      "items": [
+        {
+          "category": "feature",
+          "text": "Add scopes and disposal with thread-safe singletons",
+          "number": 12,
+          "url": "https://github.com/Testably/Awaiten/pull/12"
+        },
+        {
+          "category": "feature",
+          "text": "Annotate resolver `TryResolve` with `[NotNullWhen]` and cover extensions",
+          "number": 13,
+          "url": "https://github.com/Testably/Awaiten/pull/13"
+        },
+        {
+          "category": "feature",
+          "text": "Add lifetime-safety diagnostics (AWT105 captive, AWT106 disposable transient, AWT107 conflicting lifetime)",
+          "number": 14,
+          "url": "https://github.com/Testably/Awaiten/pull/14"
+        },
+        {
+          "category": "feature",
+          "text": "Move AWT106 to a DiagnosticAnalyzer so it is suppressible in-source",
+          "number": 17,
+          "url": "https://github.com/Testably/Awaiten/pull/17"
+        },
+        {
+          "category": "feature",
+          "text": "Add resolution/build benchmarks vs other DI containers and report them in CI",
+          "number": 16,
+          "url": "https://github.com/Testably/Awaiten/pull/16"
+        },
+        {
+          "category": "feature",
+          "text": "Add `Func<T>` and `Lazy<T>` relationship types",
+          "number": 21,
+          "url": "https://github.com/Testably/Awaiten/pull/21"
+        },
+        {
+          "category": "feature",
+          "text": "Add realistic end-to-end resolution benchmark across DI containers",
+          "number": 23,
+          "url": "https://github.com/Testably/Awaiten/pull/23"
+        },
+        {
+          "category": "feature",
+          "text": "Add factory-method and pre-built instance registrations",
+          "number": 24,
+          "url": "https://github.com/Testably/Awaiten/pull/24"
+        },
+        {
+          "category": "feature",
+          "text": "Add runtime arguments via `[Arg]` and `Func<TArg…,T>`",
+          "number": 26,
+          "url": "https://github.com/Testably/Awaiten/pull/26"
+        },
+        {
+          "category": "feature",
+          "text": "Add keyed registration via `Key` and `[FromKey]` (AWT116)",
+          "number": 28,
+          "url": "https://github.com/Testably/Awaiten/pull/28"
+        },
+        {
+          "category": "feature",
+          "text": "Leak-free disposal — `Owned<T>`, flow-based AWT117, and strict-by-default `LifetimeSafety`",
+          "number": 29,
+          "url": "https://github.com/Testably/Awaiten/pull/29"
+        },
+        {
+          "category": "feature",
+          "text": "Allow scope-bound resolution of disposable transients under strict lifetime safety",
+          "number": 30,
+          "url": "https://github.com/Testably/Awaiten/pull/30"
+        },
+        {
+          "category": "fix",
+          "text": "Resolve benchmark marker types and guard report publishing",
+          "number": 19,
+          "url": "https://github.com/Testably/Awaiten/pull/19"
+        },
+        {
+          "category": "performance",
+          "text": "Dispatch resolution through a static Type table instead of a linear if-chain",
+          "number": 20,
+          "url": "https://github.com/Testably/Awaiten/pull/20"
+        }
+      ]
+    },
+    {
+      "version": "0.0.1",
+      "date": "2026-06-27",
+      "prerelease": false,
+      "url": "https://github.com/awaiten-dev/Awaiten/releases/tag/v0.0.1",
+      "commits": 5,
+      "items": [
+        {
+          "category": "feature",
+          "text": "Add MS.DI companion package, generator test harness, and analyzer wiring",
+          "number": 7,
+          "url": "https://github.com/Testably/Awaiten/pull/7"
+        },
+        {
+          "category": "feature",
+          "text": "Implement core resolution (Container, Singleton/Transient/Scoped, AWT101/AWT102)",
+          "number": 9,
+          "url": "https://github.com/Testably/Awaiten/pull/9"
+        }
+      ]
+    }
+  ]
+}
