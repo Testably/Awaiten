@@ -18,14 +18,11 @@ const LIBRARY_ORDER = [
   'Awaiten',
   'MsDI',
   'Autofac',
-  'Jab',
-  'PureDI',
   'DryIoc',
   'SimpleInjector',
 ] as const;
 const LIBRARY_DISPLAY_NAMES: Record<string, string> = {
   MsDI: 'MS.DI',
-  PureDI: 'Pure.DI',
   SimpleInjector: 'Simple Injector',
 };
 
