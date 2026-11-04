@@ -1068,6 +1068,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Wed Nov 4 18:03:05 2026 \u002B0100",
         "message": "chore: let Dependabot update the npm packages of the docs site (#245)"
+      },
+      {
+        "sha": "6d0508d4dc100d03c3ec7a5db4cd4c194b88ea0a",
+        "author": "dependabot[bot]",
+        "date": "Wed Nov 4 18:22:56 2026 \u002B0100",
+        "message": "chore: Bump typescript from 6.0.3 to 7.0.2 in /Docs/site (#246)"
       }
     ],
     "labels": [
@@ -1248,7 +1254,8 @@ window.BENCHMARK_DATA = {
       "20fe85a1",
       "42ebfdc1",
       "d414e954",
-      "0f19f50e"
+      "0f19f50e",
+      "6d0508d4"
     ],
     "datasets": [
       {
@@ -1432,7 +1439,8 @@ window.BENCHMARK_DATA = {
           4.333773547067092,
           7.14302912230293,
           4.215154405683279,
-          5.137713657816251
+          5.137713657816251,
+          5.552549866835276
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -1444,6 +1452,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -1813,7 +1822,8 @@ window.BENCHMARK_DATA = {
           4.264337435364723,
           8.01674353480339,
           3.875690248111884,
-          8.166216450241896
+          8.166216450241896,
+          7.503006737147059
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -1825,6 +1835,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -2194,7 +2205,8 @@ window.BENCHMARK_DATA = {
           70.93705562750499,
           126.60672596295674,
           59.84509944518407,
-          89.22451087144705
+          89.22451087144705,
+          129.26154103279114
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -2206,6 +2218,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -2571,7 +2584,8 @@ window.BENCHMARK_DATA = {
           4.572064952055613,
           8.784676281469208,
           4.6678718785444895,
-          6.463912828763326
+          6.463912828763326,
+          7.5010418261473
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -2583,6 +2597,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -2944,7 +2959,8 @@ window.BENCHMARK_DATA = {
           6.096964804331462,
           11.044007768233618,
           5.912013929088911,
-          8.722112960049085
+          8.722112960049085,
+          10.183451850499425
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -2956,6 +2972,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -4211,6 +4228,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Wed Nov 4 18:03:05 2026 \u002B0100",
         "message": "chore: let Dependabot update the npm packages of the docs site (#245)"
+      },
+      {
+        "sha": "6d0508d4dc100d03c3ec7a5db4cd4c194b88ea0a",
+        "author": "dependabot[bot]",
+        "date": "Wed Nov 4 18:22:56 2026 \u002B0100",
+        "message": "chore: Bump typescript from 6.0.3 to 7.0.2 in /Docs/site (#246)"
       }
     ],
     "labels": [
@@ -4391,7 +4414,8 @@ window.BENCHMARK_DATA = {
       "20fe85a1",
       "42ebfdc1",
       "d414e954",
-      "0f19f50e"
+      "0f19f50e",
+      "6d0508d4"
     ],
     "datasets": [
       {
@@ -4575,7 +4599,8 @@ window.BENCHMARK_DATA = {
           4.671954985459646,
           8.468214093574456,
           4.2292218288140635,
-          5.972636700822757
+          5.972636700822757,
+          6.716565352678299
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -4587,6 +4612,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -4956,7 +4982,8 @@ window.BENCHMARK_DATA = {
           3.996003957895132,
           7.807243731617928,
           3.9124948978424072,
-          6.714167223374049
+          6.714167223374049,
+          7.4886628325496405
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -4968,6 +4995,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -5337,7 +5365,8 @@ window.BENCHMARK_DATA = {
           60.03634014496436,
           120.36708203156789,
           58.81966981093089,
-          88.18475545247396
+          88.18475545247396,
+          125.5729346593221
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -5349,6 +5378,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -5714,7 +5744,8 @@ window.BENCHMARK_DATA = {
           4.850611983736356,
           8.787831749767065,
           4.637533284723759,
-          6.699241537849108
+          6.699241537849108,
+          7.567087259143591
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -5726,6 +5757,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -6087,7 +6119,8 @@ window.BENCHMARK_DATA = {
           6.275532152255376,
           14.633172113696734,
           5.844218065341313,
-          11.903095732132593
+          11.903095732132593,
+          13.72410788933436
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -6099,6 +6132,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -7354,6 +7388,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Wed Nov 4 18:03:05 2026 \u002B0100",
         "message": "chore: let Dependabot update the npm packages of the docs site (#245)"
+      },
+      {
+        "sha": "6d0508d4dc100d03c3ec7a5db4cd4c194b88ea0a",
+        "author": "dependabot[bot]",
+        "date": "Wed Nov 4 18:22:56 2026 \u002B0100",
+        "message": "chore: Bump typescript from 6.0.3 to 7.0.2 in /Docs/site (#246)"
       }
     ],
     "labels": [
@@ -7534,7 +7574,8 @@ window.BENCHMARK_DATA = {
       "20fe85a1",
       "42ebfdc1",
       "d414e954",
-      "0f19f50e"
+      "0f19f50e",
+      "6d0508d4"
     ],
     "datasets": [
       {
@@ -7718,7 +7759,8 @@ window.BENCHMARK_DATA = {
           27.573993015289307,
           23.6793565928936,
           15.586625031630199,
-          15.294351984347616
+          15.294351984347616,
+          12.08044043715511
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -7880,6 +7922,7 @@ window.BENCHMARK_DATA = {
           144,
           144,
           144,
+          208,
           208,
           208,
           208,
@@ -8099,7 +8142,8 @@ window.BENCHMARK_DATA = {
           1778.6053737640382,
           1615.2945438385009,
           1173.4060801097326,
-          1200.2248420715332
+          1200.2248420715332,
+          863.684740611485
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -8111,6 +8155,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          5688,
           5688,
           5688,
           5688,
@@ -8480,7 +8525,8 @@ window.BENCHMARK_DATA = {
           25508.396211896623,
           30330.74226597377,
           25860.29587402344,
-          26117.898049490792
+          26117.898049490792,
+          18989.96118382045
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -8669,7 +8715,8 @@ window.BENCHMARK_DATA = {
           32476,
           32482,
           32478,
-          32478
+          32478,
+          32477
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -8857,7 +8904,8 @@ window.BENCHMARK_DATA = {
           781.306055205209,
           761.1802495956421,
           561.6188453946795,
-          593.3621552149455
+          593.3621552149455,
+          434.0177838643392
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -8887,6 +8935,7 @@ window.BENCHMARK_DATA = {
           1472,
           1472,
           1472,
+          1528,
           1528,
           1528,
           1528,
@@ -9230,7 +9279,8 @@ window.BENCHMARK_DATA = {
           13109.729975773738,
           13465.788891601562,
           8948.914367675781,
-          9046.533822631836
+          9046.533822631836,
+          7404.145041910807
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -9415,6 +9465,7 @@ window.BENCHMARK_DATA = {
           24760,
           24761,
           24761,
+          24760,
           24760
         ],
         "borderColor": "#43A047",
@@ -10497,6 +10548,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Wed Nov 4 18:03:05 2026 \u002B0100",
         "message": "chore: let Dependabot update the npm packages of the docs site (#245)"
+      },
+      {
+        "sha": "6d0508d4dc100d03c3ec7a5db4cd4c194b88ea0a",
+        "author": "dependabot[bot]",
+        "date": "Wed Nov 4 18:22:56 2026 \u002B0100",
+        "message": "chore: Bump typescript from 6.0.3 to 7.0.2 in /Docs/site (#246)"
       }
     ],
     "labels": [
@@ -10677,7 +10734,8 @@ window.BENCHMARK_DATA = {
       "20fe85a1",
       "42ebfdc1",
       "d414e954",
-      "0f19f50e"
+      "0f19f50e",
+      "6d0508d4"
     ],
     "datasets": [
       {
@@ -10861,7 +10919,8 @@ window.BENCHMARK_DATA = {
           254.00867999394734,
           231.8163410504659,
           113.10505035718282,
-          113.05510992209116
+          113.05510992209116,
+          80.6167437846844
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -11023,6 +11082,7 @@ window.BENCHMARK_DATA = {
           2128,
           2128,
           2128,
+          4176,
           4176,
           4176,
           4176,
@@ -11242,7 +11302,8 @@ window.BENCHMARK_DATA = {
           15757.8271484375,
           15935.262278965542,
           10773.254559326171,
-          10906.050315348308
+          10906.050315348308,
+          7945.237515376164
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -11254,6 +11315,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          61016,
           61016,
           61016,
           61016,
@@ -11623,7 +11685,8 @@ window.BENCHMARK_DATA = {
           600647.5397786458,
           751709.5521484375,
           618252.7292829241,
-          635725.8701171875
+          635725.8701171875,
+          464453.9201096755
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -11812,7 +11875,8 @@ window.BENCHMARK_DATA = {
           736829,
           736979,
           719482,
-          740792
+          740792,
+          718369
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -12000,7 +12064,8 @@ window.BENCHMARK_DATA = {
           43901.6412222726,
           47838.73460693359,
           36068.219571940106,
-          36620.402444022046
+          36620.402444022046,
+          26941.687233479817
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -12185,7 +12250,8 @@ window.BENCHMARK_DATA = {
           80328,
           81572,
           80326,
-          80302
+          80302,
+          80349
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -12373,7 +12439,8 @@ window.BENCHMARK_DATA = {
           373330.4401855469,
           381385.1567871094,
           266557.538671875,
-          267101.3173828125
+          267101.3173828125,
+          240093.6391950335
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -12558,7 +12625,8 @@ window.BENCHMARK_DATA = {
           572263,
           573108,
           573040,
-          573107
+          573107,
+          573133
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -13616,6 +13684,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Wed Nov 4 18:03:05 2026 \u002B0100",
         "message": "chore: let Dependabot update the npm packages of the docs site (#245)"
+      },
+      {
+        "sha": "6d0508d4dc100d03c3ec7a5db4cd4c194b88ea0a",
+        "author": "dependabot[bot]",
+        "date": "Wed Nov 4 18:22:56 2026 \u002B0100",
+        "message": "chore: Bump typescript from 6.0.3 to 7.0.2 in /Docs/site (#246)"
       }
     ],
     "labels": [
@@ -13792,7 +13866,8 @@ window.BENCHMARK_DATA = {
       "20fe85a1",
       "42ebfdc1",
       "d414e954",
-      "0f19f50e"
+      "0f19f50e",
+      "6d0508d4"
     ],
     "datasets": [
       {
@@ -13972,7 +14047,8 @@ window.BENCHMARK_DATA = {
           169.95375445910864,
           439.20451154027666,
           167.28270382540566,
-          204.60447363853456
+          204.60447363853456,
+          278.4383316040039
         ],
         "borderColor": "#3949AB",
         "backgroundColor": "#3949AB",
@@ -14007,6 +14083,7 @@ window.BENCHMARK_DATA = {
           560,
           560,
           560,
+          568,
           568,
           568,
           568,
@@ -14345,7 +14422,8 @@ window.BENCHMARK_DATA = {
           405.0412059227626,
           623.0102205912273,
           451.3294880390167,
-          456.0909945487976
+          456.0909945487976,
+          717.4680744579861
         ],
         "borderColor": "#512BD4",
         "backgroundColor": "#512BD4",
@@ -14357,6 +14435,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          1104,
           1104,
           1104,
           1104,
@@ -14718,7 +14797,8 @@ window.BENCHMARK_DATA = {
           3486.1027246202743,
           6969.412118094308,
           3686.3983424050466,
-          4904.391601816813
+          4904.391601816813,
+          6444.416504414877
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -14802,6 +14882,7 @@ window.BENCHMARK_DATA = {
           13696,
           13696,
           13696,
+          10784,
           10784,
           10784,
           10784,
@@ -15091,7 +15172,8 @@ window.BENCHMARK_DATA = {
           249.27125559534346,
           416.0741336743037,
           272.30408056577045,
-          336.78906582196555
+          336.78906582196555,
+          446.63626788457236
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -15103,6 +15185,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          944,
           944,
           944,
           944,
@@ -15464,7 +15547,8 @@ window.BENCHMARK_DATA = {
           401.6462879547706,
           761.4379814147949,
           413.0524007161458,
-          541.018697806767
+          541.018697806767,
+          777.5268675940378
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -15476,6 +15560,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          1096,
           1096,
           1096,
           1096,
