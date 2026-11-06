@@ -269,8 +269,8 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     Expands open generic registrations to a fixpoint. Seeds from every closed generic service required by a
-	///     known implementation's constructor, by the injected members of a constructed one (<c>[Inject]</c> and
-	///     <c>[InjectProperty]</c>) and by the parameters of its lifecycle hooks, each including a collection element.
+	///     constructed implementation's constructor and injected members (<c>[Inject]</c> and <c>[InjectProperty]</c>),
+	///     by the parameters of a <c>Factory</c> and by those of its lifecycle hooks, each including a collection element.
 	///     For each, it expands every matching open registration in declaration order, constructs the closed
 	///     implementation through Roslyn, verifies its constraints (AWT126), and synthesizes a concrete
 	///     <see cref="RawRegistration" />. Synthesized registrations coalesce like hand-written duplicates, and each
@@ -350,8 +350,9 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     Seeds the expansion worklist at depth 0 from every surviving registration, deduped: an overridable
 	///     default that coalescing drops in full (see <see cref="DroppedOverridableDefaults" />) is skipped, so
-	///     its constructor, members and hooks never synthesize closed registrations the surviving graph does not need.
-	///     Only a constructed implementation is property-injected, so only its members are scanned.
+	///     its producer and hooks never synthesize closed registrations the surviving graph does not need. Each
+	///     registration is scanned through what produces it: a constructed implementation through its constructor and
+	///     injected members, a <c>Factory</c> through the factory's parameters, and an <c>Instance</c> not at all.
 	/// </summary>
 	private static void SeedExpansionWorklist(HashSet<int> droppedWeak, ExpansionContext context)
 	{
@@ -363,12 +364,36 @@ partial class AwaitenGenerator
 			}
 
 			RawRegistration registration = context.Raw[index];
-			ExpansionScan scan = registration.Production == ProductionKind.Constructor
-				? ExpansionScan.ConstructedInstance
-				: ExpansionScan.Constructor;
-			Enqueue(new ExpansionWork(registration.Implementation, null, 0, scan), context);
+			if (registration.Production == ProductionKind.Constructor)
+			{
+				Enqueue(new ExpansionWork(registration.Implementation, null, 0, ExpansionScan.ConstructedInstance), context);
+			}
+			else if (registration.Production == ProductionKind.Factory && SeedFactory(registration, context.Inputs) is { } factory)
+			{
+				Enqueue(new ExpansionWork(registration.Implementation, factory, 0, ExpansionScan.Factory), context);
+			}
+
 			EnqueueHooks(registration, 0, context);
 		}
+	}
+
+	/// <summary>
+	///     The factory method the container calls for an explicit <c>Factory</c> registration, picked like
+	///     <see cref="ResolveFactory" /> does, or <see langword="null" /> when that reports it missing, hidden from the
+	///     container or ambiguous (AWT108, AWT153, AWT112), which needs no closing.
+	/// </summary>
+	private static IMethodSymbol? SeedFactory(RawRegistration registration, ExpansionInputs inputs)
+	{
+		if (registration.ProductionMember is null)
+		{
+			return null;
+		}
+
+		List<IMethodSymbol> candidates = FindFactoryCandidates(
+				registration.Origin ?? inputs.ContainerSymbol, registration.ProductionMember, registration.Implementation, inputs.Compilation)
+			.Where(candidate => registration.Origin is null || inputs.Compilation.IsSymbolAccessibleWithin(candidate, inputs.ContainerSymbol))
+			.ToList();
+		return candidates.Count == 1 ? candidates[0] : null;
 	}
 
 	/// <summary>Enqueues <paramref name="work" /> unless its constructor, factory or hook was already enqueued.</summary>
@@ -603,25 +628,28 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     The service types one unit of expansion work depends on: a factory's parameters, a hook's parameters after
-	///     the instance, or an implementation's constructor, plus its injected members when the container constructs it.
+	///     the instance, or the constructor and injected members of an implementation the container constructs.
 	/// </summary>
 	private static IEnumerable<ITypeSymbol> ScannedServiceTypes(ExpansionWork work, HashSet<INamedTypeSymbol> openServices, ExpansionContext context)
 	{
 		ExpansionInputs inputs = context.Inputs;
-		switch (work.Scan)
+		return work.Scan switch
 		{
-			case ExpansionScan.Factory:
-				return work.Method!.Parameters.Select(parameter => RequiredServiceType(parameter.Type));
-			case ExpansionScan.Hook:
-				return work.Method!.Parameters.Skip(1).Select(parameter => RequiredServiceType(parameter.Type));
-			default:
-				IEnumerable<ITypeSymbol> constructorTypes = RequiredServiceTypes(
-					work.Implementation, inputs.ContainerSymbol, inputs.Compilation, context.Raw, openServices, inputs.External);
-				return work.Scan == ExpansionScan.ConstructedInstance
-					? constructorTypes.Concat(InjectedMemberServiceTypes(work.Implementation, inputs.InjectProperties))
-					: constructorTypes;
-		}
+			ExpansionScan.Factory => ParameterServiceTypes(work.Method!.Parameters),
+			ExpansionScan.Hook => ParameterServiceTypes(work.Method!.Parameters.Skip(1)),
+			_ => RequiredServiceTypes(work.Implementation, inputs.ContainerSymbol, inputs.Compilation, context.Raw, openServices, inputs.External)
+				.Concat(InjectedMemberServiceTypes(work.Implementation, inputs.InjectProperties)),
+		};
 	}
+
+	/// <summary>
+	///     The service types <paramref name="parameters" /> resolve from the graph. A runtime argument (<c>[Arg]</c>) is
+	///     supplied by the caller, so it needs no closing.
+	/// </summary>
+	private static IEnumerable<ITypeSymbol> ParameterServiceTypes(IEnumerable<IParameterSymbol> parameters)
+		=> parameters
+			.Where(parameter => !HasArgAttribute(parameter.GetAttributes()))
+			.Select(parameter => RequiredServiceType(parameter.Type));
 
 	/// <summary>
 	///     The service types the injected members of a container-constructed implementation depend on: its
@@ -687,18 +715,22 @@ partial class AwaitenGenerator
 
 		return constructor is null
 			? []
-			: constructor.Parameters.Select(p => RequiredServiceType(p.Type));
+			: ParameterServiceTypes(constructor.Parameters);
 	}
 
 	/// <summary>
 	///     The single service type a constructor parameter resolves, unwrapping one <c>Task</c>/<c>ValueTask</c>
-	///     layer, a collection element (<c>T[]</c> / <c>IEnumerable&lt;T&gt;</c> and friends), and a
+	///     layer, an <c>Owned&lt;T&gt;</c> handle, a collection element (<c>T[]</c> / <c>IEnumerable&lt;T&gt;</c> and
+	///     friends, <c>IAsyncEnumerable&lt;T&gt;</c>, a keyed <c>IReadOnlyDictionary&lt;TKey, T&gt;</c>), and a
 	///     <c>Lazy&lt;T&gt;</c> / <c>Func&lt;TArg…, T&gt;</c> relationship, so a closed generic reached through
 	///     any of them still seeds open generic expansion, and constructor selection sees the same underlying
 	///     service the seed scans.
 	/// </summary>
 	private static ITypeSymbol RequiredServiceType(ITypeSymbol type)
-		=> UnwrapElementOrRelationship(UnwrapAwaitable(type));
+	{
+		ITypeSymbol awaited = UnwrapAwaitable(type);
+		return IsOwned(awaited, out ITypeSymbol owned) ? owned : UnwrapElementOrRelationship(awaited);
+	}
 
 	/// <summary>
 	///     Unwraps one <c>Task&lt;…&gt;</c>/<c>ValueTask&lt;…&gt;</c> layer, so an awaited single service
@@ -713,9 +745,11 @@ partial class AwaitenGenerator
 			: type;
 
 	/// <summary>
-	///     Unwraps a collection element (<c>T[]</c> / <c>IEnumerable&lt;T&gt;</c> and friends) or a
-	///     <c>Lazy&lt;T&gt;</c> / <c>Func&lt;TArg…, T&gt;</c> relationship, so a closed generic reached through
-	///     any of them still seeds open generic expansion.
+	///     Unwraps a collection element (<c>T[]</c> / <c>IEnumerable&lt;T&gt;</c> and friends,
+	///     <c>IAsyncEnumerable&lt;T&gt;</c>, the value of a keyed <c>IReadOnlyDictionary&lt;TKey, T&gt;</c>) or a
+	///     <c>Lazy&lt;T&gt;</c> / <c>Func&lt;TArg…, T&gt;</c> relationship, including the <c>Task&lt;T&gt;</c> and
+	///     <c>Owned&lt;T&gt;</c> forms a relationship produces, so a closed generic reached through any of them still
+	///     seeds open generic expansion.
 	/// </summary>
 	private static ITypeSymbol UnwrapElementOrRelationship(ITypeSymbol type)
 	{
@@ -732,23 +766,34 @@ partial class AwaitenGenerator
 		string? container = generic.ContainingNamespace?.ToDisplayString();
 		if (container == "System.Collections.Generic"
 		    && generic.TypeArguments.Length == 1
-		    && generic.Name is "IEnumerable" or "IReadOnlyList" or "IReadOnlyCollection" or "IList" or "ICollection")
+		    && generic.Name is "IEnumerable" or "IReadOnlyList" or "IReadOnlyCollection" or "IList" or "ICollection" or "IAsyncEnumerable")
 		{
 			return generic.TypeArguments[0];
 		}
 
+		if (container == "System.Collections.Generic" && generic.Name == "IReadOnlyDictionary" && generic.TypeArguments.Length == 2)
+		{
+			return generic.TypeArguments[1];
+		}
+
 		if (container == "System" && generic.Name == "Lazy" && generic.TypeArguments.Length == 1)
 		{
-			return generic.TypeArguments[0];
+			return UnwrapProduced(generic.TypeArguments[0]);
 		}
 
 		// A Func<TArg…, T> resolves its last type argument.
 		if (container == "System" && generic.Name == "Func" && generic.TypeArguments.Length >= 1)
 		{
-			return generic.TypeArguments[generic.TypeArguments.Length - 1];
+			return UnwrapProduced(generic.TypeArguments[generic.TypeArguments.Length - 1]);
 		}
 
 		return type;
+
+		static ITypeSymbol UnwrapProduced(ITypeSymbol produced)
+		{
+			ITypeSymbol awaited = UnwrapAwaitable(produced);
+			return IsOwned(awaited, out ITypeSymbol owned) ? owned : awaited;
+		}
 	}
 
 	/// <summary>
@@ -935,13 +980,10 @@ partial class AwaitenGenerator
 	/// <summary>What one unit of expansion work scans for the closed generic services it requires.</summary>
 	private enum ExpansionScan
 	{
-		/// <summary>The implementation's constructor.</summary>
-		Constructor,
-
 		/// <summary>The constructor and the injected members of an implementation the container constructs.</summary>
 		ConstructedInstance,
 
-		/// <summary>The parameters of the closed generic factory that produces the implementation.</summary>
+		/// <summary>The parameters of the factory that produces the implementation.</summary>
 		Factory,
 
 		/// <summary>The parameters after the instance of a lifecycle hook.</summary>
@@ -949,7 +991,7 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     One unit of expansion work: the implementation it belongs to, the closed factory or hook method that
+	///     One unit of expansion work: the implementation it belongs to, the factory or hook method that
 	///     <see cref="Scan" /> names (<see langword="null" /> for a constructor), and the expansion depth that reached it.
 	/// </summary>
 	private readonly record struct ExpansionWork(INamedTypeSymbol Implementation, IMethodSymbol? Method, int Depth, ExpansionScan Scan);
