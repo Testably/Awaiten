@@ -190,6 +190,35 @@ public partial class DiagnosticTests
 		}
 
 		[Test]
+		public async Task ReportsAKeyedResolveUnderImportServices()
+		{
+			string[] diagnostics = await Analyzer.Run<AwaitenAnalyzer>("""
+			                                                          using Awaiten;
+
+			                                                          namespace MyCode;
+
+			                                                          public interface IClock;
+
+			                                                          [Container]
+			                                                          [ImportServices]
+			                                                          public static partial class HostedContainer;
+
+			                                                          public static class Usage
+			                                                          {
+			                                                          	public static void Use()
+			                                                          	{
+			                                                          		using HostedContainer.Root root = new();
+			                                                          		root.Resolve<IClock>();
+			                                                          		root.Resolve<IClock>("utc");
+			                                                          	}
+			                                                          }
+			                                                          """);
+
+			await That(diagnostics.Count(d => d.Contains("AWT218"))).IsEqualTo(1)
+				.Because("[ImportServices] routes only unkeyed requests to the host, so only the keyed resolve throws");
+		}
+
+		[Test]
 		public async Task ReportsASynchronousKeyedResolveOfAnAsyncInitializedService()
 		{
 			string[] diagnostics = await Run("""

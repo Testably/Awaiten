@@ -55,6 +55,7 @@ internal static partial class Sources
 			builder.AppendLine();
 		}
 
+		EmitImportedMiss(builder, depth + 1, context.Imports, "key");
 		Indent(builder, depth + 1).AppendLine(
 			"throw new global::System.InvalidOperationException($\"No registration for type '{serviceType}' with key '{key}' on this container.\");");
 		Indent(builder, depth).AppendLine("}");
@@ -89,8 +90,7 @@ internal static partial class Sources
 			builder.AppendLine();
 		}
 
-		Indent(builder, depth + 1).AppendLine("instance = null;");
-		Indent(builder, depth + 1).AppendLine("return false;");
+		EmitTryResolveMiss(builder, depth + 1, context.Imports, "key");
 		Indent(builder, depth).AppendLine("}");
 		builder.AppendLine();
 

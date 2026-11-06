@@ -87,6 +87,59 @@ public sealed partial class ExternalDependencyTests
 		await That(reporter.Report()).IsEqualTo("noon");
 	}
 
+	public interface IUnregistered;
+
+	public sealed class ResolvingAnImportedService
+	{
+		[Test]
+		public async Task FromTheRoot_ReturnsTheHostsInstance()
+		{
+			FixedClock clock = new();
+			ServiceCollection services = new();
+			services.AddSingleton<IClock>(clock);
+			services.AddAwaitenContainer<ExternalContainer.Root>();
+			using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
+			_ = provider.GetRequiredService<TimeReporter>();
+			ExternalContainer.Root root = provider.GetRequiredService<ExternalContainer.Root>();
+
+			await That(root.Resolve<IClock>()).IsSameAs(clock)
+				.Because("the bridge wires the root to the host provider, which a typed resolution of an imported type asks");
+		}
+
+		[Test]
+		public async Task ThroughAnAwaitenServiceProvider_ReturnsTheHostsInstance()
+		{
+			FixedClock clock = new();
+			ServiceCollection services = new();
+			services.AddSingleton<IClock>(clock);
+			services.AddAwaitenContainer<ExternalContainer.Root>();
+			using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
+			_ = provider.GetRequiredService<TimeReporter>();
+			using AwaitenServiceProvider awaiten = new(provider.GetRequiredService<ExternalContainer.Root>(), ownsContainer: false);
+
+			await That(awaiten.GetService(typeof(IClock))).IsSameAs(clock)
+				.Because("GetService reaches the host through the container's TryResolve");
+		}
+
+		[Test]
+		public async Task UnderImportServices_AnUnknownTypeDoesNotLoopBetweenTheProviders()
+		{
+			ServiceCollection services = new();
+			services.AddSingleton<IClock>(new FixedClock());
+			services.AddAwaitenContainer<ImportingContainer.Root>();
+			using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
+			_ = provider.GetRequiredService<ImplicitReporter>();
+			ImportingContainer.Root root = provider.GetRequiredService<ImportingContainer.Root>();
+			using AwaitenServiceProvider awaiten = new(root, ownsContainer: false);
+
+			await That(() => root.Resolve<IUnregistered>()).Throws<InvalidOperationException>()
+				.WithMessage("*external dependency*IUnregistered*is not available*").AsWildcard()
+				.Because("the host provider has no projection of an unregistered type, so it answers null instead of asking the container back");
+			await That(awaiten.GetService(typeof(IUnregistered))).IsNull();
+			await That(provider.GetService<IUnregistered>()).IsNull();
+		}
+	}
+
 	[Test]
 	public async Task MissingExternalRegistration_ThrowsWhenResolved()
 	{

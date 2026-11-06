@@ -65,13 +65,18 @@ internal static partial class Sources
 
 	/// <summary>
 	///     The context shared by the resolver emitters: the instance list, name table, service→index dispatch
-	///     map, and whether the container emits the <c>IAsyncDisposable</c> surface.
+	///     map, whether the container emits the <c>IAsyncDisposable</c> surface, and the container model for
+	///     the types it imports from the host (absent where the analyzer only reads the dispatch tables).
 	/// </summary>
 	private readonly record struct EmitContext(
 		InstanceModel[] Instances,
 		Names Names,
 		Dictionary<ServiceKey, int> ServiceToIndex,
-		bool AsyncDisposal);
+		bool AsyncDisposal,
+		ContainerModel? Model = null)
+	{
+		public bool Imports => Model is { Imports: true, };
+	}
 
 	/// <summary>
 	///     The three region buffers a resolution-API emitter routes into: its public <see cref="Members" />, the
@@ -81,7 +86,7 @@ internal static partial class Sources
 
 	private static void EmitContainerBody(StringBuilder builder, int depth, ContainerModel model, Names names, Dictionary<ServiceKey, int> serviceToIndex)
 	{
-		EmitContext context = new(model.Instances.AsArray(), names, serviceToIndex, model.HasAsyncDisposable);
+		EmitContext context = new(model.Instances.AsArray(), names, serviceToIndex, model.HasAsyncDisposable, model);
 
 		// The base Scope holds the dispatch table and scoped/transient logic and delegates singletons to the
 		// root; the sealed Root owns the singletons and is the usable instance (new MyContainer.Root()). Buffering
@@ -292,12 +297,17 @@ internal static partial class Sources
 			EmitOwnedHelper(helpers, body, HasExternalDependencies(instances));
 		}
 
-		// The __ResolveExternal helper is emitted only when the container has [ImportService<T>] / [ImportServices]
-		// dependencies, so a container without them carries no unused helper.
-		if (HasExternalDependencies(instances))
+		// The external-resolution helpers are emitted only when the container imports from the host, so a container
+		// without imports carries no unused helper and its by-type dispatch is unchanged.
+		if (context.Imports || HasExternalDependencies(instances))
 		{
 			Separate(helpers);
 			EmitResolveExternal(helpers, body);
+		}
+
+		if (context.Imports)
+		{
+			EmitIsImported(helpers, body, context.Model!, withheldTypes.Count > 0);
 		}
 
 		if (NeedsWiringSupport(instances))
