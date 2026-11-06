@@ -8,7 +8,7 @@ Correctness is a must. The other goals are strong defaults and win in this order
 
 ## Hard rules
 
-- Use the SDK pinned in `global.json` (10.0.400, `latestPatch`). Package versions live only in `Directory.Packages.props` (central package management); never put a version on a `PackageReference`.
+- Use the SDK pinned in `global.json` (10.0.403, `latestPatch`). Package versions live only in `Directory.Packages.props` (central package management); never put a version on a `PackageReference`.
 - `Source/Directory.Build.props` sets `TargetFrameworks` to `netstandard2.0;net8.0;net10.0`, `LangVersion` latest, nullable (annotations only on netstandard2.0) and `TreatWarningsAsErrors`. Test projects target `net10.0;net8.0;net48` unless they override it.
 - `Awaiten.SourceGenerators` targets only `netstandard2.0`, is not a package of its own and ships inside the `Awaiten` package under `analyzers/dotnet/cs`. Its models stay equatable (`EquatableArray<T>`, no Roslyn symbols or locations) so incremental caching works. Do not raise its `Microsoft.CodeAnalysis` versions: they set the oldest compiler that can load the generator.
 - No reflection on any runtime path. The generated code and both libraries stay trim-safe and native-AOT clean; do not add `MakeGenericType`, `Activator` or similar.
