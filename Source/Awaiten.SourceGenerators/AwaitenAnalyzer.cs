@@ -131,7 +131,15 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 		ContainerGraph built = CachedGraph(graphByContainer, type, compilation, cancellationToken);
 		bool strict = AwaitenGenerator.ReadStrict(type);
 
-		foreach (DiagnosticInfo diagnostic in Detect(built.Graph, strict))
+		List<DiagnosticInfo> detected = Detect(built.Graph, strict).ToList();
+
+		// A base reports its own problems; a container that extends it reports only what it changes.
+		if (AwaitenGenerator.ReadExtends(type) is { } baseContainer)
+		{
+			AwaitenGenerator.RemoveBaseDiagnostics(detected, Detect(CachedGraph(graphByContainer, baseContainer, compilation, cancellationToken).Graph, strict));
+		}
+
+		foreach (DiagnosticInfo diagnostic in detected)
 		{
 			report(ToDiagnostic(diagnostic, compilation));
 		}
@@ -449,8 +457,9 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 	// a [Container] class. The name check matters: a user-authored type nested in the container class can
 	// hand-implement the public IAwaitenScope, but it cannot coexist with the generated Root/Scope under their names.
 	// A container declared in a referenced assembly yields null (a documented false negative, like an interface-typed
-	// receiver): its graph cannot be rebuilt faithfully here, because BuildGraph expands a default [Scan] over the
-	// current compilation's assembly, not the container's. The generated code's runtime throw remains the backstop.
+	// receiver): its graph cannot be rebuilt faithfully here, because the members internal to its assembly are not
+	// imported into this compilation, so BuildGraph misses the factories and constructors its own build used. The
+	// generated code's runtime throw remains the backstop.
 	private static INamedTypeSymbol? GeneratedOwnerContainer(
 		ITypeSymbol type, INamedTypeSymbol containerAttribute, INamedTypeSymbol scopeInterface, Compilation compilation)
 		=> type is INamedTypeSymbol { Name: "Root" or "Scope", ContainingType: { } container, } owner

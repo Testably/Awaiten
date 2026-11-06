@@ -105,4 +105,5 @@ Importing a type that is not a `[Module]` is an error ([AWT149](../09-diagnostic
 ## Where to go next
 
 - [Scanning](./06-scanning.md) to register by convention instead of by hand.
+- [Extending containers](./08-extending-containers.md) to reuse a whole container in tests and replace any inherited registration, not only a `Fallback` default.
 - [Complete example](../02-complete-example.md) to see modules in a full container.

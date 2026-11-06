@@ -20,46 +20,44 @@ partial class AwaitenGenerator
 			: compilation.GetTypeByMetadataName("System.IAsyncDisposable");
 
 	/// <summary>
-	///     Reads the container's <c>LifetimeSafety</c> from its <c>[Container]</c> attribute. Strict (the
-	///     default, enum value 0) unless the attribute explicitly sets <c>Loose</c>.
+	///     Reads the container's <c>LifetimeSafety</c> from its <c>[Container]</c> attribute, or from its base's when it
+	///     extends one (see <see cref="ReadContainerOption" />). Strict (the default, enum value 0) unless the attribute
+	///     explicitly sets <c>Loose</c>.
 	/// </summary>
 	internal static bool ReadStrict(INamedTypeSymbol containerSymbol)
-	{
-		if (TryGetAwaitenAttribute(containerSymbol.GetAttributes(), "ContainerAttribute", out AttributeData? attribute))
-		{
-			foreach (KeyValuePair<string, TypedConstant> argument in attribute!.NamedArguments)
-			{
-				// LifetimeSafety is an enum; its TypedConstant value is the underlying int (Strict = 0, Loose = 1).
-				if (argument.Key == "LifetimeSafety" && argument.Value.Value is int value)
-				{
-					return value == 0;
-				}
-			}
-		}
-
-		return true;
-	}
+		// LifetimeSafety is an enum; its TypedConstant value is the underlying int (Strict = 0, Loose = 1).
+		=> ReadContainerOption(containerSymbol, "LifetimeSafety") is not { } value || value == 0;
 
 	/// <summary>
-	///     Reads the container's <c>AsyncSafety</c> from its <c>[Container]</c> attribute. Strict (the default,
-	///     enum value 0, where an async-tainted service is reachable only through <c>ResolveAsync</c>) unless the
-	///     attribute explicitly sets <c>SyncAfterInit</c>.
+	///     Reads the container's <c>AsyncSafety</c> from its <c>[Container]</c> attribute, or from its base's when it
+	///     extends one (see <see cref="ReadContainerOption" />). Strict (the default, enum value 0, where an
+	///     async-tainted service is reachable only through <c>ResolveAsync</c>) unless the attribute explicitly sets
+	///     <c>SyncAfterInit</c>.
 	/// </summary>
 	internal static bool ReadSyncAfterInit(INamedTypeSymbol containerSymbol)
+		// AsyncSafety is an enum; its TypedConstant value is the underlying int (Strict = 0, SyncAfterInit = 1).
+		=> ReadContainerOption(containerSymbol, "AsyncSafety") == 1;
+
+	/// <summary>
+	///     An enum option explicitly set on the <c>[Container]</c> that decides it, or <see langword="null" /> for the
+	///     default. A container that extends a base validates its graph exactly like the base, so the base decides; the
+	///     extending container's own setting is ignored and reported (AWT225).
+	/// </summary>
+	private static int? ReadContainerOption(INamedTypeSymbol containerSymbol, string name)
 	{
-		if (TryGetAwaitenAttribute(containerSymbol.GetAttributes(), "ContainerAttribute", out AttributeData? attribute))
+		INamedTypeSymbol owner = ReadExtends(containerSymbol) ?? containerSymbol;
+		if (TryGetAwaitenAttribute(owner.GetAttributes(), "ContainerAttribute", out AttributeData? attribute))
 		{
 			foreach (KeyValuePair<string, TypedConstant> argument in attribute!.NamedArguments)
 			{
-				// AsyncSafety is an enum; its TypedConstant value is the underlying int (Strict = 0, SyncAfterInit = 1).
-				if (argument.Key == "AsyncSafety" && argument.Value.Value is int value)
+				if (argument.Key == name && argument.Value.Value is int value)
 				{
-					return value == 1;
+					return value;
 				}
 			}
 		}
 
-		return false;
+		return null;
 	}
 
 	private static string? NamedArgument(AttributeData attribute, string name)

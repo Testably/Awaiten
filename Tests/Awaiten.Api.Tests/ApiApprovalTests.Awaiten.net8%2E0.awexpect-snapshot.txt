@@ -112,6 +112,7 @@ namespace Awaiten
     {
         public ContainerAttribute() { }
         public Awaiten.AsyncSafety AsyncSafety { get; set; }
+        public System.Type? Extends { get; set; }
         public Awaiten.LifetimeSafety LifetimeSafety { get; set; }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple = true, Inherited = false)]

@@ -57,14 +57,21 @@ internal sealed record RawRegistration(
 ///     pulled it in. The location doubles as the diagnostic fallback for module attributes read from a
 ///     referenced assembly, which carry no syntax.
 /// </summary>
-/// <remarks>An intermediate type carrying a live Roslyn <see cref="Location" />; see <see cref="RawRegistration" />.</remarks>
-internal sealed record ImportedModule(INamedTypeSymbol Symbol, Location? ImportLocation);
+/// <remarks>
+///     An intermediate type carrying a live Roslyn <see cref="Location" />; see <see cref="RawRegistration" />.
+///     <see cref="Inherited" /> marks a contribution of an extended base container (the base itself, flagged
+///     <see cref="IsBase" />, or one of its imports), which a registration declared directly on the extending
+///     container replaces. Their location is the container's <c>Extends</c> argument unless the base imports the
+///     module from source.
+/// </remarks>
+internal sealed record ImportedModule(INamedTypeSymbol Symbol, Location? ImportLocation, bool Inherited = false, bool IsBase = false);
 
 /// <summary>
 ///     A single <c>[Decorate&lt;TDecorator, TService&gt;]</c> registration: the decorated service, the service and
 ///     decorator symbols, the chain <see cref="Order" />, the declaration index breaking ties and the selected
 ///     <see cref="Keys" /> (a <see langword="null" /> entry is the unkeyed registration, a <see langword="null" />
-///     list is <c>AllKeys</c>). Expanded after coalescing into synthetic-keyed chain links.
+///     list is <c>AllKeys</c>). Expanded after coalescing into synthetic-keyed chain links. <see cref="Inherited" />
+///     marks a decorator of an extended base, which stays inside every decorator of the extending container.
 /// </summary>
 /// <remarks>An intermediate type carrying a live Roslyn <see cref="Location" />; see <see cref="RawRegistration" />.</remarks>
 internal sealed record DecorateRegistration(
@@ -74,7 +81,8 @@ internal sealed record DecorateRegistration(
 	int Order,
 	int DeclarationOrder,
 	Location? Location,
-	IReadOnlyList<string?>? Keys);
+	IReadOnlyList<string?>? Keys,
+	bool Inherited = false);
 
 /// <summary>
 ///     A single <c>[Composite&lt;TComposite, TService&gt;]</c> registration: the composed service, the service and
@@ -105,7 +113,8 @@ internal sealed record OpenDecorateRegistration(
 	int Order,
 	int DeclarationOrder,
 	Location? Location,
-	IReadOnlyList<string?>? Keys);
+	IReadOnlyList<string?>? Keys,
+	bool Inherited = false);
 
 /// <summary>
 ///     A single open generic <c>[Composite(typeof(C&lt;&gt;), typeof(IService&lt;&gt;))]</c> registration: the unbound

@@ -21,13 +21,16 @@ partial class AwaitenGenerator
 	///     resolution while every match still joins its collection. A scan's lifecycle hooks merge per slot across
 	///     scans in coalescing (<c>MergeScanHooks</c>, AWT199 when two scans contradict) and are resolved later in
 	///     <c>ResolveHook</c> like any other (AWT164/AWT190), where a generic hook bound by an open-generic marker may
-	///     also report AWT198 if more than one closed marker form could bind it.
+	///     also report AWT198 if more than one closed marker form could bind it. The container's own assembly, the one an
+	///     unset <c>InAssembliesOf</c> sweeps and the one accessibility is judged from, is the assembly that declares the
+	///     container, which differs from the compilation's for an extended base read from a referenced assembly.
 	/// </summary>
 	private static List<RawRegistration> CollectScans(
 		INamedTypeSymbol containerSymbol,
 		Compilation compilation,
 		List<DiagnosticInfo> diagnostics)
 	{
+		IAssemblySymbol viewpoint = containerSymbol.ContainingAssembly;
 		List<RawRegistration> result = new();
 
 		foreach (AttributeData attribute in containerSymbol.GetAttributes())
@@ -40,11 +43,11 @@ partial class AwaitenGenerator
 
 			if (ScanMarker(attribute, attributeClass) is { } marker)
 			{
-				ExpandScan(attribute, marker, compilation, result, diagnostics);
+				ExpandScan(attribute, marker, compilation, result, diagnostics, viewpoint);
 			}
 			else if (IsMarkerlessScan(attribute, attributeClass))
 			{
-				ExpandScan(attribute, null, compilation, result, diagnostics);
+				ExpandScan(attribute, null, compilation, result, diagnostics, viewpoint);
 			}
 		}
 
@@ -71,7 +74,8 @@ partial class AwaitenGenerator
 		INamedTypeSymbol? marker,
 		Compilation compilation,
 		List<RawRegistration> result,
-		List<DiagnosticInfo> diagnostics)
+		List<DiagnosticInfo> diagnostics,
+		IAssemblySymbol viewpoint)
 	{
 		Location? location = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation();
 
@@ -125,7 +129,7 @@ partial class AwaitenGenerator
 		int assignable = 0;
 		int registered = 0;
 		int produced = 0;
-		foreach (ScanCandidate candidate in ScanCandidates(assemblies, compilation, marker, location, diagnostics))
+		foreach (ScanCandidate candidate in ScanCandidates(assemblies, compilation, marker, location, diagnostics, viewpoint))
 		{
 			assignable++;
 			if (!PassesScanFilters(candidate.Type, filters, hits))
@@ -150,7 +154,7 @@ partial class AwaitenGenerator
 			}
 
 			IReadOnlyList<INamedTypeSymbol>? hookClosedMarkers = ScanHookMarkers(candidate.Type, match, openMarker, markerDefinition);
-			produced += RegisterScanMatch(candidate.Type, ScanContracts(candidate.Type, match, marker, openMarker, markerDefinition, compilation), markerDisplay, match, hookClosedMarkers, result, diagnostics);
+			produced += RegisterScanMatch(candidate.Type, ScanContracts(candidate.Type, match, marker, openMarker, markerDefinition, compilation, viewpoint), markerDisplay, match, hookClosedMarkers, result, diagnostics);
 		}
 
 		ReportScanFilterDiagnostics(filters, hits, new ScanFilterCounts(assignable, registered, produced), assemblies, markerDisplay, location, diagnostics);
@@ -172,7 +176,8 @@ partial class AwaitenGenerator
 		INamedTypeSymbol? marker,
 		bool openMarker,
 		INamedTypeSymbol? markerDefinition,
-		Compilation compilation)
+		Compilation compilation,
+		IAssemblySymbol viewpoint)
 	{
 		List<INamedTypeSymbol> contracts = new();
 		if (match.RegisterMarker && marker is not null)
@@ -190,7 +195,7 @@ partial class AwaitenGenerator
 		List<INamedTypeSymbol> inaccessible = new();
 		contracts.RemoveAll(contract =>
 		{
-			if (compilation.IsSymbolAccessibleWithin(contract, compilation.Assembly))
+			if (compilation.IsSymbolAccessibleWithin(contract, viewpoint))
 			{
 				return false;
 			}
@@ -204,7 +209,7 @@ partial class AwaitenGenerator
 
 		// The convention tie is ambiguous only when several same-named interfaces actually register: one dropped
 		// as inaccessible above cannot make the registration ambiguous (it is reported separately, as AWT188).
-		bool ambiguousMatching = matching.Count(contract => compilation.IsSymbolAccessibleWithin(contract, compilation.Assembly)) > 1;
+		bool ambiguousMatching = matching.Count(contract => compilation.IsSymbolAccessibleWithin(contract, viewpoint)) > 1;
 		return new ScanContractSet(contracts, inaccessible, ambiguousMatching);
 	}
 
@@ -461,31 +466,34 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     The concrete-type candidates a <c>[Scan]</c> enumerates: the container's own assembly when
-	///     <paramref name="assemblies" /> is <see langword="null" /> (<c>InAssembliesOf</c> unset), else the
-	///     listed assemblies. Filtered to concrete classes assignable to the marker (or every concrete class when
-	///     <paramref name="marker" /> is <see langword="null" />, a markerless scan) and sorted by fully-qualified
-	///     name so the registrations are reproducible. Reports AWT140 for any <c>InAssembliesOf</c> assembly that
-	///     holds no such type (a likely missing <c>ProjectReference</c>).
+	///     The concrete-type candidates a <c>[Scan]</c> enumerates: the <paramref name="viewpoint" /> assembly (the
+	///     scanning container's own, by default the compilation's) when <paramref name="assemblies" /> is
+	///     <see langword="null" /> (<c>InAssembliesOf</c> unset), else the listed assemblies. Filtered to concrete
+	///     classes assignable to the marker (or every concrete class when <paramref name="marker" /> is
+	///     <see langword="null" />, a markerless scan), flagged when the viewpoint cannot access them, and sorted by
+	///     fully-qualified name so the registrations are reproducible. Reports AWT140 for any <c>InAssembliesOf</c>
+	///     assembly that holds no such type (a likely missing <c>ProjectReference</c>).
 	/// </summary>
 	private static List<ScanCandidate> ScanCandidates(
 		List<IAssemblySymbol>? assemblies,
 		Compilation compilation,
 		INamedTypeSymbol? marker,
 		Location? location,
-		List<DiagnosticInfo> diagnostics)
+		List<DiagnosticInfo> diagnostics,
+		IAssemblySymbol? viewpoint = null)
 	{
 		List<ScanCandidate> candidates = new();
+		IAssemblySymbol scanner = viewpoint ?? compilation.Assembly;
 
 		if (assemblies is null)
 		{
-			candidates.AddRange(ScanCandidatesIn(compilation.Assembly.GlobalNamespace, marker, compilation));
+			candidates.AddRange(ScanCandidatesIn(scanner.GlobalNamespace, marker, compilation, scanner));
 		}
 		else
 		{
 			foreach (IAssemblySymbol assembly in assemblies)
 			{
-				AddAssemblyCandidates(assembly, marker, compilation, candidates, location, diagnostics);
+				AddAssemblyCandidates(assembly, marker, compilation, scanner, candidates, location, diagnostics);
 			}
 		}
 
@@ -503,10 +511,10 @@ partial class AwaitenGenerator
 	///     mirroring <see cref="ScanContractSet.Inaccessible" /> on the contract side, so that it is the caller (which
 	///     has applied the scan's filters) that decides between reporting AWT193 and staying silent.
 	/// </summary>
-	private static IEnumerable<ScanCandidate> ScanCandidatesIn(INamespaceSymbol ns, INamedTypeSymbol? marker, Compilation compilation)
+	private static IEnumerable<ScanCandidate> ScanCandidatesIn(INamespaceSymbol ns, INamedTypeSymbol? marker, Compilation compilation, IAssemblySymbol viewpoint)
 		=> EnumerateTypes(ns)
 			.Where(type => IsScanCandidate(type, marker, compilation))
-			.Select(type => new ScanCandidate(type, !compilation.IsSymbolAccessibleWithin(type, compilation.Assembly)));
+			.Select(type => new ScanCandidate(type, !compilation.IsSymbolAccessibleWithin(type, viewpoint)));
 
 	/// <summary>
 	///     One type a <c>[Scan]</c> matched, and whether it is inaccessible to the generated container (internal to
@@ -552,12 +560,13 @@ partial class AwaitenGenerator
 		IAssemblySymbol assembly,
 		INamedTypeSymbol? marker,
 		Compilation compilation,
+		IAssemblySymbol viewpoint,
 		List<ScanCandidate> candidates,
 		Location? location,
 		List<DiagnosticInfo> diagnostics)
 	{
 		int contributed = candidates.Count;
-		candidates.AddRange(ScanCandidatesIn(assembly.GlobalNamespace, marker, compilation));
+		candidates.AddRange(ScanCandidatesIn(assembly.GlobalNamespace, marker, compilation, viewpoint));
 
 		if (candidates.Count == contributed)
 		{

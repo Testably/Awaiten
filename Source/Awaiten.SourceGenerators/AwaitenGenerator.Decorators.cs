@@ -120,10 +120,11 @@ partial class AwaitenGenerator
 			targets.AddRange(TargetKeys(service, contextual: false));
 			List<string?> populated = targets.Where(key => TargetBaseImpls(service, key).Count > 0).ToList();
 
-			// Order the chain by (Order, declaration): innermost first, outermost last. A decorator with nothing to
-			// wrap under the keys it selects is reported (AWT123/AWT210) and left out.
+			// Order the chain by (Order, declaration): innermost first, outermost last, with the decorators inherited
+			// from an extended base inside the extending container's own, so a test wraps production. A decorator with
+			// nothing to wrap under the keys it selects is reported (AWT123/AWT210) and left out.
 			List<DecorateRegistration> ordered = new();
-			foreach (DecorateRegistration decorator in chain.OrderBy(d => d.Order).ThenBy(d => d.DeclarationOrder))
+			foreach (DecorateRegistration decorator in chain.OrderByDescending(d => d.Inherited).ThenBy(d => d.Order).ThenBy(d => d.DeclarationOrder))
 			{
 				if (HasSomethingToWrap(service, decorator, populated))
 				{

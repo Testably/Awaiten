@@ -1034,9 +1034,15 @@ partial class AwaitenGenerator
 	/// </summary>
 	private static string DescribeOwner(ImplInfo info) => DescribeOwner(info.Origin);
 
-	/// <summary>Names an owner in a diagnostic: the module, or the container when <paramref name="origin" /> is null.</summary>
+	/// <summary>
+	///     Names an owner in a diagnostic: the module, or the container when <paramref name="origin" /> is null or an
+	///     extended base container, so a problem of an inherited registration reads exactly like the base's own report
+	///     of it and is reported only once (see <c>RemoveBaseDiagnostics</c>).
+	/// </summary>
 	private static string DescribeOwner(INamedTypeSymbol? origin)
-		=> origin is { } owner ? $"the module '{Display(owner.ToDisplayString(FullyQualified))}'" : "the container";
+		=> origin is { } owner && !HasAwaitenAttribute(owner.GetAttributes(), "ContainerAttribute")
+			? $"the module '{Display(owner.ToDisplayString(FullyQualified))}'"
+			: "the container";
 
 	/// <summary>
 	///     A module's Factory/Instance member is emitted qualified with the module type (the generated container is

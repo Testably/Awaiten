@@ -2026,6 +2026,98 @@ The hook's parameters after the instance mirror onto the generated `public` wrap
 
 **Fix:** Remove the `[FromKey]` or `[Inject]` attribute and resolve the dependency plainly, or drop the hook.
 
+## Extending containers
+
+These concern a container that [extends](./04-registration/08-extending-containers.md) another with `[Container(Extends = typeof(...))]`. Each is reported on the `Extends` argument.
+
+### AWT222
+
+:::danger[Error]
+`Extends` names a type that is not a `[Container]`, or a generic one, so there is no single composition to start from and nothing is inherited. A `[Module]` is imported with `[Import]`, not extended.
+:::
+
+```csharp expect=AWT222
+[Module]
+[Singleton<Grinder>]
+public static class GrinderModule;
+
+[Container(Extends = typeof(GrinderModule))]   // a module, not a container
+public static partial class TestCoffeeShop;
+```
+
+**Fix:** Name a non-generic `[Container]` in `Extends`, or `[Import]` the module instead.
+
+### AWT223
+
+:::danger[Error]
+A container names itself in `Extends`, so it has no base to inherit from.
+:::
+
+```csharp expect=AWT223
+[Container(Extends = typeof(CoffeeShop))]
+[Singleton<Grinder>]
+public static partial class CoffeeShop;
+```
+
+**Fix:** Name the container whose composition this one starts from, or remove `Extends`.
+
+### AWT224
+
+:::danger[Error]
+The base named by `Extends` itself extends another container. Extending is one level deep, so the registrations of a container come only from its own declaration or from its one base. Nothing is inherited.
+:::
+
+```csharp expect=AWT224
+[Container]
+[Singleton<Grinder>]
+public static partial class CoffeeShop;
+
+[Container(Extends = typeof(CoffeeShop))]
+public static partial class TestCoffeeShop;
+
+[Container(Extends = typeof(TestCoffeeShop))]   // TestCoffeeShop extends CoffeeShop already
+public static partial class SlowTestCoffeeShop;
+```
+
+**Fix:** Extend the production container directly, and move what the middle container adds into a `[Module]` that both import.
+
+### AWT225
+
+:::danger[Error]
+A container with `Extends` sets `AsyncSafety` or `LifetimeSafety`. Both decide how the graph is validated, and the extending container inherits them from its base, so a test graph is checked exactly like the production graph it reuses. The setting is ignored.
+:::
+
+```csharp expect=AWT225
+[Container]
+[Singleton<Grinder>]
+public static partial class CoffeeShop;
+
+[Container(Extends = typeof(CoffeeShop), LifetimeSafety = LifetimeSafety.Loose)]   // inherited from CoffeeShop
+public static partial class TestCoffeeShop;
+```
+
+**Fix:** Remove the option from the extending container. Set it on the base if production needs it.
+
+### AWT226
+
+:::danger[Error]
+A factory, instance member, lifecycle hook, constructor or scanned type that a container inherits through `Extends` is not accessible from it, although the base reaches it: a private member of the base, or an internal one in another assembly that does not grant `InternalsVisibleTo`. The generated extending container calls inherited members from its own code, so it must see them; an inaccessible scan match would otherwise be silently missing from the test graph. The inherited declaration is ignored.
+:::
+
+```csharp expect=AWT226
+[Container]
+[Singleton<MenuBoard>(Factory = nameof(LoadMenu))]
+public static partial class CoffeeShop
+{
+    private static MenuBoard LoadMenu() => MenuBoard.Load();   // private: only CoffeeShop's own code reaches it
+}
+
+[Container(Extends = typeof(CoffeeShop))]
+public static partial class TestCoffeeShop;
+```
+
+**Fix:** Make the member or type public, or internal and grant the assembly of the extending container `[InternalsVisibleTo]`. Replacing the registration on the extending container also removes the need for it.
+
 ## Keyed collections
 
 ### AWT159

@@ -28,4 +28,17 @@ public sealed class ContainerAttribute : Attribute
 	///     <see cref="Awaiten.LifetimeSafety.Loose" /> for full Microsoft.Extensions.DependencyInjection interop.
 	/// </summary>
 	public LifetimeSafety LifetimeSafety { get; set; }
+
+	/// <summary>
+	///     Another <c>[Container]</c> whose composition this container starts from, typically a production container
+	///     that a test container reuses: its registrations, imports, scans, decorators, composites,
+	///     <c>[ImportService]</c> declarations, <c>[InjectProperty]</c> entries and options apply as if declared here.
+	///     A registration or <c>[ImportService]</c> declared directly on this container replaces every inherited
+	///     registration of the same service and key, collections included, and its decorators wrap the inherited ones.
+	///     The whole graph is validated again, with the options of the base, so this container does not set
+	///     <see cref="AsyncSafety" /> or <see cref="LifetimeSafety" /> itself. The base must not extend another
+	///     container, and the members it names (factories, instances, hooks, constructors) must be accessible from this
+	///     container. The generated container has no runtime link to the base's generated code.
+	/// </summary>
+	public Type? Extends { get; set; }
 }

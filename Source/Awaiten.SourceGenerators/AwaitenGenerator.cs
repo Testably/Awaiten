@@ -214,6 +214,66 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		// When absent the container is sync-dispose only.
 		bool hasAsyncDisposable = AsyncDisposableSupport(compilation) is not null;
 
+		(GraphModel graph, List<DiagnosticInfo> diagnostics) = Analyze(containerSymbol, compilation, cancellationToken);
+
+		// A base reports its own problems; the extending container re-checks the whole graph but reports only what it
+		// changes, so an unchanged base problem is not reported twice. A base with errors leaves the inherited graph
+		// broken, so the extending container then emits only its shell, like a container with errors of its own. A base
+		// in a referenced assembly compiled, so what fails it here is only what this assembly cannot see (AWT226).
+		bool hasBaseErrors = false;
+		if (ReadExtends(containerSymbol) is { } baseContainer)
+		{
+			List<DiagnosticInfo> baseDiagnostics = Analyze(baseContainer, compilation, cancellationToken).Diagnostics;
+			hasBaseErrors = SymbolEqualityComparer.Default.Equals(baseContainer.ContainingAssembly, containerSymbol.ContainingAssembly)
+			                && baseDiagnostics.Exists(diagnostic => diagnostic.EffectiveSeverity == DiagnosticSeverity.Error);
+			RemoveBaseDiagnostics(diagnostics, baseDiagnostics);
+		}
+
+		string? containerNamespace = containerSymbol.ContainingNamespace is { IsGlobalNamespace: false, } ns
+			? ns.ToDisplayString()
+			: null;
+
+		// Walk the enclosing types (outermost first) so the container can be a nested type.
+		List<TypeDeclaration> containingTypes = new();
+		for (INamedTypeSymbol? outer = containerSymbol.ContainingType; outer is not null; outer = outer.ContainingType)
+		{
+			containingTypes.Insert(0, new TypeDeclaration(KeywordOf(outer), outer.Name));
+		}
+
+		// Qualify the hint name with namespace and enclosing types so containers sharing a simple name do not
+		// collide. Nested types use '+' so 'Outer+Inner' cannot collide with a namespaced 'Outer.Inner'.
+		string typePath = containingTypes.Count > 0
+			? $"{string.Join("+", containingTypes.Select(t => t.Name))}+{containerSymbol.Name}"
+			: containerSymbol.Name;
+		string hintName = containerNamespace is null
+			? $"Awaiten.{typePath}.g.cs"
+			: $"Awaiten.{containerNamespace}.{typePath}.g.cs";
+
+		return new ContainerModel(
+			containerNamespace,
+			new EquatableArray<TypeDeclaration>(containingTypes.ToArray()),
+			containerSymbol.Name,
+			hintName,
+			new EquatableArray<InstanceModel>(graph.Instances.ToArray()),
+			new EquatableArray<DiagnosticInfo>(diagnostics.ToArray()),
+			strict,
+			syncAfterInit,
+			hasAsyncDisposable,
+			new EquatableArray<ServiceMembers>(graph.Collections.ToArray()),
+			new EquatableArray<string>(graph.VarianceCandidates.ToArray()),
+			new EquatableArray<KeyedServiceMembers>(graph.KeyedCollections.ToArray()),
+			hasBaseErrors);
+	}
+
+	/// <summary>
+	///     Builds the container's graph and runs every check the generator reports on it.
+	/// </summary>
+	private static (GraphModel Graph, List<DiagnosticInfo> Diagnostics) Analyze(
+		INamedTypeSymbol containerSymbol,
+		Compilation compilation,
+		CancellationToken cancellationToken)
+	{
+		bool syncAfterInit = ReadSyncAfterInit(containerSymbol);
 		List<DiagnosticInfo> diagnostics = new();
 
 		// The container must be a static class (a pure definition). A non-static class is AWT116; the emitter
@@ -260,39 +320,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			DetectEagerAsyncSingletons(graph.Instances, graph.InstanceLocations, diagnostics);
 		}
 
-		string? containerNamespace = containerSymbol.ContainingNamespace is { IsGlobalNamespace: false, } ns
-			? ns.ToDisplayString()
-			: null;
-
-		// Walk the enclosing types (outermost first) so the container can be a nested type.
-		List<TypeDeclaration> containingTypes = new();
-		for (INamedTypeSymbol? outer = containerSymbol.ContainingType; outer is not null; outer = outer.ContainingType)
-		{
-			containingTypes.Insert(0, new TypeDeclaration(KeywordOf(outer), outer.Name));
-		}
-
-		// Qualify the hint name with namespace and enclosing types so containers sharing a simple name do not
-		// collide. Nested types use '+' so 'Outer+Inner' cannot collide with a namespaced 'Outer.Inner'.
-		string typePath = containingTypes.Count > 0
-			? $"{string.Join("+", containingTypes.Select(t => t.Name))}+{containerSymbol.Name}"
-			: containerSymbol.Name;
-		string hintName = containerNamespace is null
-			? $"Awaiten.{typePath}.g.cs"
-			: $"Awaiten.{containerNamespace}.{typePath}.g.cs";
-
-		return new ContainerModel(
-			containerNamespace,
-			new EquatableArray<TypeDeclaration>(containingTypes.ToArray()),
-			containerSymbol.Name,
-			hintName,
-			new EquatableArray<InstanceModel>(graph.Instances.ToArray()),
-			new EquatableArray<DiagnosticInfo>(diagnostics.ToArray()),
-			strict,
-			syncAfterInit,
-			hasAsyncDisposable,
-			new EquatableArray<ServiceMembers>(graph.Collections.ToArray()),
-			new EquatableArray<string>(graph.VarianceCandidates.ToArray()),
-			new EquatableArray<KeyedServiceMembers>(graph.KeyedCollections.ToArray()));
+		return (graph, diagnostics);
 	}
 
 	/// <summary>
@@ -422,6 +450,15 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		// The imported modules, resolved once. Import validation (AWT149-152) is reported while collecting.
 		List<ImportedModule> modules = CollectImportedModules(containerSymbol, diagnostics);
 
+		// [Container(Extends = typeof(Base))]: the base and its imports join as inherited contributions, read like
+		// modules qualified on their owner, and the container's own registrations replace theirs (see ReplaceInherited).
+		Inheritance? inheritance = null;
+		if (ResolveExtends(containerSymbol, diagnostics) is { } extended)
+		{
+			modules = InheritBase(extended, modules);
+			inheritance = new Inheritance(containerSymbol, extended, modules, compilation);
+		}
+
 		// [ImportServices]: any otherwise-unresolved direct dependency falls through to the external provider
 		// instead of AWT101. Computed up front because it widens constructor selection everywhere. A module can
 		// contribute it too.
@@ -435,25 +472,37 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		// AWT101 check. Bundled with the blanket flag as the container's external-resolution surface, threaded through
 		// the coalescing phase that decides constructor satisfiability.
 		ExternalServiceTypes externalServiceTypes = CollectExternalServiceTypes(containerSymbol, modules, diagnostics);
+
+		// An extending container's own registration replaces an inherited [ImportService<T>] of that type, as it
+		// replaces an inherited registration (the reverse is in ReplaceInherited).
+		if (inheritance is not null)
+		{
+			ReplaceInheritedImportServices(containerSymbol, externalServiceTypes);
+		}
+
 		ExternalSurface external = new(importServices, externalServiceTypes);
 
 		// Container-side property injection: [InjectProperty<TImpl>] entries keyed by implementation type, so
 		// BuildInstance fills them wherever that implementation is constructed (including [Scan]-registered types).
 		// Read before Collect, since an injected property seeds open generic expansion like a constructor parameter.
 		Dictionary<string, List<InjectPropertyEntry>> injectProperties = CollectInjectProperties(containerSymbol, diagnostics);
+		if (inheritance is not null)
+		{
+			InheritInjectProperties(inheritance, injectProperties);
+		}
 
 		// Collect also expands [Scan]s into overridable registrations (IsScan), ordered after the explicit ones
 		// so an explicit registration wins single resolution while every match still joins its collection.
-		(List<RawRegistration> raw, HashSet<string> constraintRejected, Dictionary<string, (Lifetime Lifetime, string? Implementation)> openServices) = Collect(containerSymbol, modules, compilation, external, injectProperties, diagnostics);
+		(List<RawRegistration> raw, HashSet<string> constraintRejected, Dictionary<string, (Lifetime Lifetime, string? Implementation)> openServices) = Collect(containerSymbol, modules, compilation, external, injectProperties, inheritance, diagnostics);
 
 		// [Scan(SkipUnconstructable = true)] trades the AWT101 error for a skip-with-warning (AWT141) on matches
 		// the container cannot construct. Scans without the opt-in, and explicit registrations, keep the error.
 		PruneUnconstructableScanMatches(raw, containerSymbol, compilation, external, constraintRejected, diagnostics);
 
 		(List<DecorateRegistration> decorators, List<OpenDecorateRegistration> openDecorators) =
-			CollectDecorators(containerSymbol, modules, diagnostics);
+			CollectDecorators(containerSymbol, modules, inheritance, diagnostics);
 		(List<CompositeRegistration> composites, List<OpenCompositeRegistration> openComposites) =
-			CollectComposites(containerSymbol, modules, diagnostics);
+			CollectComposites(containerSymbol, modules, inheritance, diagnostics);
 
 		// Coalesce registrations by (service type, key): first per key wins, and registrations of the same
 		// implementation share one instance. Conflicting lifetimes are AWT107; a duplicate key is AWT117.
@@ -506,8 +555,10 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		VarianceState variance = new(varianceCandidates, compilation);
 
 		// Contextual (WhenInjectedInto) bindings recorded up front, plus the set of context keys a consumer
-		// dependency actually redirects to. A binding whose key stays absent is reported (AWT167) below.
-		List<ConditionalRegistration> conditionals = CollectConditionalRegistrations(raw);
+		// dependency actually redirects to. A binding whose key stays absent is reported (AWT167) below, unless it is
+		// inherited: the base reports its own, and one whose consumer the extending container replaced falls away.
+		List<ConditionalRegistration> conditionals = CollectConditionalRegistrations(
+			inheritance is null ? raw : raw.FindAll(registration => !inheritance.Owns(registration.Origin)));
 		HashSet<ServiceKey> consumedConditionals = new();
 
 		// AWT175: a closed type declared [ImportService] must not also be registered on the container - it is either
@@ -544,6 +595,10 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		(HashSet<string> consumedExternal, HashSet<string> routedExternal) = ExternalConsumption(instances);
 		ReportUnconsumedExternalServices(externalServiceTypes.Closed, serviceToImpl, consumedExternal, containerSymbol, diagnostics);
 		ReportOpenExternalServices(externalServiceTypes, serviceToImpl, consumedExternal, routedExternal, containerSymbol, diagnostics);
+		if (inheritance is not null)
+		{
+			RemoveInheritedUnconsumedExternalServices(inheritance, modules, diagnostics);
+		}
 
 		// AWT180: an [InjectProperty<TImpl>] entry whose implementation type matches no registration is never
 		// applied, reported now that every registered implementation has been seen.
