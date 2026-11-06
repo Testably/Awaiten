@@ -95,7 +95,20 @@ When another assembly cannot construct a registered implementation, because the 
 
 Because diagnostics are reported in the library's build, it is the library author who sees any problem. The module must be static ([AWT152](../09-diagnostics.md#awt152)), `partial` ([AWT194](../09-diagnostics.md#awt194)) and non-generic ([AWT201](../09-diagnostics.md#awt201)). The constructor's parameter types must be public ([AWT195](../09-diagnostics.md#awt195)), without `[Inject]`, `[Arg]` or `[FromKey]` metadata the factory could not mirror ([AWT200](../09-diagnostics.md#awt200)), and the same holds for a hook's parameters ([AWT203](../09-diagnostics.md#awt203), [AWT204](../09-diagnostics.md#awt204)). The factory returns one service, so an internal implementation is registered under one service, with any number of keys, and not also matched by one of the module's scans ([AWT197](../09-diagnostics.md#awt197)): a second service would split the instance a container shares. A public implementation with an internal constructor serves several services from one instance.
 
-A container in the module's own assembly constructs the implementation directly, through the same constructor the factory uses, so moving a module between projects never changes what it registers. Importing a module whose assembly was built without the Awaiten generator, or with a version predating this, is an error ([AWT154](../09-diagnostics.md#awt154)) instead of a missing constructor. Decorators, composites and open generic registrations are not self-compiled: a container in another assembly reports an internal one as [AWT230](../09-diagnostics.md#awt230).
+An implementation can also be a private nested type of the module itself. Then no container can construct it, not even one in the module's own assembly, so every container calls the module's factory, and its hooks may be private too: they run through the generated wrappers. Such a module self-compiles even when it is `internal`, so it must be `partial` as well. A type private to a class that encloses the module, but not the module, is out of every container's reach ([AWT216](../09-diagnostics.md#awt216)).
+
+```csharp
+[Module]
+[Singleton<Kettle, IKettle>(OnActivated = nameof(Preheat))]
+public static partial class TeaModule
+{
+    private sealed class Kettle(ITimeSystem time) : IKettle;
+
+    private static void Preheat(Kettle kettle) { }
+}
+```
+
+Any other implementation a container in the module's own assembly constructs directly, through the same constructor the factory uses, so moving a module between projects never changes what it registers. Importing a module whose assembly was built without the Awaiten generator, or with a version predating this, is an error ([AWT154](../09-diagnostics.md#awt154)) instead of a missing constructor. Decorators, composites and open generic registrations are not self-compiled: a container in another assembly reports an internal one as [AWT230](../09-diagnostics.md#awt230).
 
 ## Self-compiled scans
 

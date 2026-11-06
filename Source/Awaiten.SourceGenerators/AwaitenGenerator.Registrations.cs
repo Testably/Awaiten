@@ -55,7 +55,9 @@ internal sealed record RawRegistration(
 	IReadOnlyList<INamedTypeSymbol>? OnReleaseMarkers = null,
 	bool GenericFactory = false,
 	ImplementationTraits? Traits = null,
-	bool TraitsExact = false);
+	bool TraitsExact = false,
+	string? ConstructVia = null,
+	string? ConstructViaType = null);
 
 /// <summary>
 ///     An imported module: its symbol and the location of the container's <c>[Import]</c> attribute that
@@ -266,6 +268,16 @@ partial class AwaitenGenerator
 
 		/// <inheritdoc cref="RawRegistration" />
 		public bool TraitsExact { get; init; }
+
+		/// <summary>
+		///     The qualified generated factory of the module that declares this implementation privately, which a
+		///     same-compilation container calls instead of the constructor it cannot reach, or <see langword="null" />.
+		///     <see cref="ConstructViaType" /> is the service the factory returns.
+		/// </summary>
+		public string? ConstructVia { get; init; }
+
+		/// <inheritdoc cref="ConstructVia" />
+		public string? ConstructViaType { get; init; }
 
 		public List<ServiceKey> Services { get; }
 

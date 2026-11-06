@@ -136,7 +136,7 @@ internal static partial class Sources
 			if (instance.IsAsyncTainted)
 			{
 				usesAsTask = true;
-				resolution = $"__AsTask<{instance.ConstructedType}, {service}>({resolver}{names.AsyncResolver(index)}({owner}, cancellationToken))";
+				resolution = $"__AsTask<{instance.SurfaceType}, {service}>({resolver}{names.AsyncResolver(index)}({owner}, cancellationToken))";
 			}
 			else
 			{

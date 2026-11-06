@@ -211,30 +211,30 @@ public static partial class CoffeeShop;
 ### AWT216
 
 :::danger[Error]
-A registered implementation, or one of its `[Arg]` types, is a private or protected nested type, or contains one as a type argument. The generated `Root` and `Scope` are public classes, and their resolvers return the implementation and take the runtime arguments as `internal` members, which C# does not allow to expose a less accessible type. For a `Factory` or `Instance` registration the registered type counts as the implementation. A private service type is fine as long as its implementation is accessible.
+A registered implementation is, or contains, a private or protected nested type that the generated container cannot stand in for with an accessible type, or one of its `[Arg]` types is private or protected. The generated `Root` and `Scope` are public classes nested in the container: their resolver bodies may construct a private type, but their `internal` signatures cannot name it, which C# does not allow. For a `Factory` or `Instance` registration the registered type counts as the implementation.
 :::
+
+A private or protected implementation nested in the container, or in a class the container is nested in, is supported: the resolvers return an accessible type it converts to, while their bodies construct, initialize, hook and dispose it as its own type. That type is a registered service that covers its other services, else the most derived accessible base class that covers them, else the first such interface the implementation declares. An implementation nested privately in an imported module is built through the factory the module generates (see [internal implementations](./04-registration/07-modules.md#internal-implementations)). A private service type is fine as long as its implementation is accessible.
+
+AWT216 remains in these cases:
+
+- **Several services without a common type.** No accessible type the implementation converts to covers all of its services. Register it under one service, or give it an accessible base type that covers its services.
+- **A private service.** The implementation is registered as itself, or under another private service, so there is nothing accessible to return. Register it under an accessible service, or make it `internal`.
+- **A private type argument.** A closed generic such as `Box<Content>` or `Handler<Message> : IHandler<Message>` carries the private type into every type it converts to. Make the type argument `internal`.
+- **A private `[Arg]` type.** The parameterized resolvers and the `Func<TArg, T>` a consumer asks for take the runtime argument in their signatures. Make the argument type `internal`.
+- **A type the container cannot reach.** The type is private to a class the container is not nested in, for example one that encloses an imported module but not the container. Nest the container beside it, or make it `internal`.
 
 ```csharp expect=AWT216
 [Container]
-[Singleton<FakeTimeSystem, ITimeSystem>]   // the resolver would return a private type
+[Singleton<FakeTimeSystem, ITimeSystem>]
+[Singleton<FakeTimeSystem, IClock>]   // no accessible type converts to both services
 public static partial class CoffeeShop
 {
-    private sealed class FakeTimeSystem : ITimeSystem;
+    private sealed class FakeTimeSystem : ITimeSystem, IClock;
 }
 ```
 
-**Fix:** Make the type `internal` (or `public`), or produce it from a `Factory` or `Instance` member registered under its accessible service type, such as `[Singleton<ITimeSystem>(Factory = nameof(CreateFake))]`. A test double can also stay private when the container is nested privately beside it, because then the generated members are no more visible than the double:
-
-```csharp
-public partial class CoffeeShopTests
-{
-    private sealed class FakeTimeSystem : ITimeSystem;
-
-    [Container]
-    [Singleton<FakeTimeSystem, ITimeSystem>]
-    private static partial class TestShop;
-}
-```
+**Fix:** Follow the remedy the message names for its case. Here, give `FakeTimeSystem` an accessible base type that implements both services, register it under one service, or make it `internal`.
 
 ### AWT218
 

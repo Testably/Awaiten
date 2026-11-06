@@ -626,7 +626,7 @@ internal static partial class Sources
 		// volatile so the lock-free read cannot observe it before its writes are visible.
 		if (instance.IsAsyncTainted)
 		{
-			Indent(builder, depth).Append("private volatile global::System.Threading.Tasks.Task<").Append(instance.ConstructedType)
+			Indent(builder, depth).Append("private volatile global::System.Threading.Tasks.Task<").Append(instance.SurfaceType)
 				.Append(">? ").Append(names.AsyncField(i)).AppendLine(";");
 			return;
 		}

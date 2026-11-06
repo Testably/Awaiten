@@ -429,6 +429,7 @@ partial class AwaitenGenerator
 		ModuleScanContext context)
 	{
 		Compilation compilation = context.Compilation;
+		bool wrappedEverywhere = IsHiddenInModule(matchType, context.Module);
 		List<IMethodSymbol> matches = new();
 		List<IReadOnlyList<INamedTypeSymbol>> ambiguous = new();
 		foreach (ISymbol member in AccessibleMembers(context.Module, hookName, compilation))
@@ -436,9 +437,10 @@ partial class AwaitenGenerator
 			// A hook must be reachable from a separate type in the module's assembly - internal or wider. The wrapper
 			// sits in the module class and could call even a private hook, but a same-compilation container binds the
 			// hook directly, so a private hook usable one way and AWT164 the other would be inconsistent; a private
-			// method is not a usable hook, falling through to AWT164 in both.
+			// method is not a usable hook, falling through to AWT164 in both. A type nested privately in the module is
+			// the exception: every container runs its hooks through the wrapper, so a private hook is usable there.
 			if (member is not IMethodSymbol { MethodKind: MethodKind.Ordinary, IsStatic: true, ReturnsVoid: true, Parameters.Length: >= 1, } method
-			    || !compilation.IsSymbolAccessibleWithin(method, context.Module.ContainingAssembly)
+			    || (!wrappedEverywhere && !compilation.IsSymbolAccessibleWithin(method, context.Module.ContainingAssembly))
 			    || method.Parameters.Any(parameter => parameter.RefKind != RefKind.None))
 			{
 				continue;

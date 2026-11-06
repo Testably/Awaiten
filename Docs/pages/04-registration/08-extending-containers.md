@@ -45,6 +45,20 @@ public async Task Barista_ChargesThePrice()
 
 The `Barista` comes from the production composition, and its `IPaymentGateway` is the `FakeGateway`, so the test never reaches Stripe.
 
+A double can also stay private to the test: nest it in the extending container, or nest the container beside it in the test class. The generated resolvers hand it out as its service, so nothing outside the test sees the type.
+
+```csharp
+[Container(Extends = typeof(CoffeeShop))]
+[Singleton<FakeGateway, IPaymentGateway>]
+public static partial class TestCoffeeShop
+{
+    private sealed class FakeGateway : IPaymentGateway
+    {
+        public Receipt Charge(decimal amount) => new(amount);
+    }
+}
+```
+
 ## A replacement replaces in full
 
 A registration written directly on the extending container replaces every inherited registration of the same service and key, before anything else is decided. The replaced registration is gone: it is never constructed, it is missing from `IEnumerable<T>` and from keyed collections, and its `Eager` construction and lifecycle hooks go with it. Because it is gone, it does not collide with the replacement either: a replacement with another lifetime or another `Factory` is not a conflict.
@@ -119,7 +133,7 @@ The generated extending container calls the inherited factories, instance member
 [assembly: InternalsVisibleTo("CoffeeShop.Tests")]
 ```
 
-The same applies to the base's `[Scan]`: it sweeps the base's assembly and matches what the base sees, and a match the extending container cannot access is an error rather than a silently missing service. Anything inherited that the extending container cannot reach is reported on its `Extends` argument ([AWT226](../09-diagnostics.md#awt226)).
+The same applies to the base's `[Scan]`: it sweeps the base's assembly and matches what the base sees, and a match the extending container cannot access is an error rather than a silently missing service. It also applies to an implementation nested privately in the base: the extending container is not nested in the base, so it cannot construct it. A type nested privately in an imported module is fine, because every container builds it through the module's generated factory. Anything inherited that the extending container cannot reach is reported on its `Extends` argument ([AWT226](../09-diagnostics.md#awt226)).
 
 ## One level deep
 

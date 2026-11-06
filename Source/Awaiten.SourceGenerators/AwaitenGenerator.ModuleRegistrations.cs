@@ -1,6 +1,8 @@
 using Awaiten.SourceGenerators.Entities;
 using Awaiten.SourceGenerators.Internals;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace Awaiten.SourceGenerators;
 
@@ -17,15 +19,104 @@ partial class AwaitenGenerator
 	///     assembly, but the implementation cannot be constructed there, because it or every constructor is not
 	///     <c>public</c>. Its own build then emits a factory that constructs the implementation, so a container in
 	///     another assembly can import the module without <c>InternalsVisibleTo</c>. A module another assembly cannot
-	///     name, or a service it cannot name, never reaches such a container, so neither is self-compiled. The
+	///     name, or a service it cannot name, never reaches such a container, so neither is self-compiled. An
+	///     implementation nested privately in the module under a service outside it is self-compiled whatever the
+	///     module's accessibility, since no container can construct it, not even one in the module's own assembly. The
 	///     module's build and every importing container ask this same question.
 	/// </summary>
 	private static bool SelfCompilesRegistration(INamedTypeSymbol module, INamedTypeSymbol implementation, INamedTypeSymbol service)
-		=> IsExternallyAccessible(module)
-		   && IsExternallyAccessible(service)
-		   && implementation is { TypeKind: TypeKind.Class, IsAbstract: false, IsStatic: false, IsUnboundGenericType: false, }
-		   && !(IsExternallyAccessible(implementation)
-		        && implementation.InstanceConstructors.Any(constructor => constructor.DeclaredAccessibility == Accessibility.Public));
+		=> implementation is { TypeKind: TypeKind.Class, IsAbstract: false, IsStatic: false, IsUnboundGenericType: false, }
+		   && ((IsExternallyAccessible(module)
+		        && IsExternallyAccessible(service)
+		        && !(IsExternallyAccessible(implementation)
+		             && implementation.InstanceConstructors.Any(constructor => constructor.DeclaredAccessibility == Accessibility.Public)))
+		       || (IsHiddenInModule(implementation, module) && !IsHiddenInModule(service, module)));
+
+	/// <summary>
+	///     Whether <paramref name="type" /> is nested privately (or protected) within <paramref name="module" />, so no
+	///     container can construct it, not even one in the module's own assembly.
+	/// </summary>
+	private static bool IsHiddenInModule(INamedTypeSymbol type, INamedTypeSymbol module)
+	{
+		for (INamedTypeSymbol? current = type; current?.ContainingType is { } owner; current = owner)
+		{
+			if (current.DeclaredAccessibility is Accessibility.Private or Accessibility.Protected or Accessibility.ProtectedAndInternal)
+			{
+				for (INamedTypeSymbol? level = owner; level is not null; level = level.ContainingType)
+				{
+					if (SymbolEqualityComparer.Default.Equals(level, module))
+					{
+						return true;
+					}
+				}
+			}
+		}
+
+		return false;
+	}
+
+	/// <summary>
+	///     What the modules in a container's own assembly generate, which the container cannot see because it is output
+	///     of the same generator run: the matches of their scans and the factories of their self-compiled registrations.
+	///     Computed by the module pipeline's own logic, once per module and container build, with the diagnostics
+	///     discarded, since the module's own build reports them at the same locations.
+	/// </summary>
+	private sealed class SameCompilationModules
+	{
+		private readonly Compilation _compilation;
+		private readonly Dictionary<INamedTypeSymbol, List<ModuleScanExpansion>> _scans = new(SymbolEqualityComparer.Default);
+		private readonly Dictionary<INamedTypeSymbol, List<RegistrationFactory>> _registrations = new(SymbolEqualityComparer.Default);
+
+		public SameCompilationModules(Compilation compilation) => _compilation = compilation;
+
+		/// <summary>The matches of the module's scans (see <see cref="CollectModuleScanFactories" />).</summary>
+		public List<ModuleScanExpansion> Scans(INamedTypeSymbol module)
+		{
+			if (!_scans.TryGetValue(module, out List<ModuleScanExpansion>? scans))
+			{
+				_scans[module] = scans = CollectModuleScanFactories(module, _compilation, new List<DiagnosticInfo>(), CancellationToken.None);
+			}
+
+			return scans;
+		}
+
+		/// <summary>
+		///     The factory the module generates for <paramref name="implementation" /> (see
+		///     <see cref="CollectModuleRegistrationFactories" />), or <see langword="null" /> when it generates none, for a
+		///     reason its own build reports.
+		/// </summary>
+		public RegistrationFactory? Registration(INamedTypeSymbol module, INamedTypeSymbol implementation)
+		{
+			if (!_registrations.TryGetValue(module, out List<RegistrationFactory>? factories))
+			{
+				_registrations[module] = factories = ReceivesGeneratedMembers(module)
+					? CollectModuleRegistrationFactories(module, _compilation, new List<DiagnosticInfo>(), Scans(module).Select(expansion => expansion.Factory).ToList())
+					: new List<RegistrationFactory>();
+			}
+
+			string name = RegistrationFactoryName(implementation);
+			return factories.FirstOrDefault(factory => factory.FactoryName == name);
+		}
+	}
+
+	/// <summary>
+	///     Whether the module pipeline emits into <paramref name="module" />: a non-generic, static, <c>partial</c>
+	///     module whose enclosing types are <c>partial</c> too (see <c>BuildModuleModel</c>, which reports otherwise).
+	/// </summary>
+	private static bool ReceivesGeneratedMembers(INamedTypeSymbol module)
+		=> !HasOpenTypeParameters(module)
+		   && module.IsStatic
+		   && module.DeclaringSyntaxReferences.Any(reference => reference.GetSyntax() is ClassDeclarationSyntax declaration
+		                                                        && declaration.Modifiers.Any(SyntaxKind.PartialKeyword))
+		   && ContainingTypesArePartial(module);
+
+	/// <summary>
+	///     Whether the generated factory of <paramref name="implementation" /> carries a wrapper for the hook
+	///     <paramref name="hookName" /> in the given slot, which it lacks when the module's own build rejected the hook.
+	/// </summary>
+	private static bool HasHookWrapper(RegistrationFactory factory, INamedTypeSymbol implementation, string? hookName, bool release)
+		=> hookName is not null
+		   && factory.Hooks.AsArray().Any(hook => hook.Release == release && hook.Hook.WrapperName == RegistrationHookWrapperName(implementation, release, hookName));
 
 	/// <summary>
 	///     The module's closed lifetime registrations that the container constructs (no <c>Factory</c> or

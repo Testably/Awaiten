@@ -36,7 +36,8 @@ partial class AwaitenGenerator
 		// concrete closed registrations on demand (see ExpandOpenGenerics).
 		List<OpenRegistration> open = new();
 
-		CollectLifetimeRegistrations(new LifetimeCollectionContext(containerSymbol, null, null, compilation, open, diagnostics), result);
+		SameCompilationModules sameCompilationModules = new(compilation);
+		CollectLifetimeRegistrations(new LifetimeCollectionContext(containerSymbol, null, null, compilation, open, diagnostics, sameCompilationModules), result);
 
 		// The container's own registrations, which replace the inherited ones of an extended base (see ReplaceInherited).
 		List<RawRegistration> own = inheritance is null ? [] : new(result);
@@ -54,7 +55,7 @@ partial class AwaitenGenerator
 		{
 			bool sameCompilation = SymbolEqualityComparer.Default.Equals(module.Symbol.ContainingAssembly, containerSymbol.ContainingAssembly);
 			CollectLifetimeRegistrations(
-				new LifetimeCollectionContext(module.Symbol, module.Symbol, module.ImportLocation, compilation, open, module.Inherited ? new List<DiagnosticInfo>() : diagnostics, module.Inherited),
+				new LifetimeCollectionContext(module.Symbol, module.Symbol, module.ImportLocation, compilation, open, module.Inherited ? new List<DiagnosticInfo>() : diagnostics, sameCompilationModules, module.Inherited),
 				result,
 				skipGeneratedScanRegistrations: sameCompilation);
 		}
@@ -83,7 +84,7 @@ partial class AwaitenGenerator
 
 		result.AddRange(moduleScanRegistrations);
 
-		CollectSameCompilationModuleScans(containerSymbol, modules, compilation, result);
+		CollectSameCompilationModuleScans(containerSymbol, modules, sameCompilationModules, result);
 
 		if (inheritance is not null)
 		{
@@ -153,7 +154,7 @@ partial class AwaitenGenerator
 	private static void CollectSameCompilationModuleScans(
 		INamedTypeSymbol containerSymbol,
 		List<ImportedModule> modules,
-		Compilation compilation,
+		SameCompilationModules sameCompilationModules,
 		List<RawRegistration> result)
 	{
 		foreach (INamedTypeSymbol moduleSymbol in modules.Where(module => !module.IsBase).Select(module => module.Symbol))
@@ -163,7 +164,7 @@ partial class AwaitenGenerator
 				continue;
 			}
 
-			foreach (ModuleScanExpansion expansion in CollectModuleScanFactories(moduleSymbol, compilation, new List<DiagnosticInfo>(), CancellationToken.None))
+			foreach (ModuleScanExpansion expansion in sameCompilationModules.Scans(moduleSymbol))
 			{
 				result.Add(SameCompilationScanRegistration(expansion, moduleSymbol));
 			}
@@ -204,7 +205,8 @@ partial class AwaitenGenerator
 	///     resolves against the module. <see cref="FallbackLocation" /> is the container's <c>[Import]</c> location,
 	///     used for a referenced-assembly module whose attributes have no syntax. The open generic <c>typeof</c>-form
 	///     registrations go into <see cref="Open" />. <see cref="Inherited" /> marks a module or base inherited through
-	///     <c>Extends</c>, whose inaccessible declarations the inheritance reports (AWT226).
+	///     <c>Extends</c>, whose inaccessible declarations the inheritance reports (AWT226). <see cref="Modules" /> holds
+	///     what the modules of the container's own assembly generate.
 	/// </summary>
 	private readonly record struct LifetimeCollectionContext(
 		INamedTypeSymbol Owner,
@@ -213,6 +215,7 @@ partial class AwaitenGenerator
 		Compilation Compilation,
 		List<OpenRegistration> Open,
 		List<DiagnosticInfo> Diagnostics,
+		SameCompilationModules Modules,
 		bool Inherited = false);
 
 	/// <summary>
@@ -320,10 +323,12 @@ partial class AwaitenGenerator
 	///     Applies self-compilation (see <see cref="SelfCompilesRegistration" />) to a constructed registration read
 	///     off an imported module. A same-compilation container constructs the implementation directly, through the
 	///     greediest constructor the module's generated factory mirrors, so the module registers the same thing
-	///     wherever it lives. A container in another assembly that cannot construct the implementation calls the
-	///     generated factory instead and runs the generated hook wrappers, keeping every other option of the
-	///     registration, and reads the implementation's traits off its metadata, so it initializes, disposes and
-	///     shares it exactly as it would a type it constructs. A registration whose service this container cannot
+	///     wherever it lives. An implementation nested privately in the module it cannot construct either, so it calls
+	///     the factory the module generates in the same run, found by its deterministic name, and runs the hooks through
+	///     the generated wrappers; a hook the module's own build rejected (and reports) is dropped. A container in
+	///     another assembly that cannot construct the implementation calls the generated factory instead and runs the
+	///     generated hook wrappers, keeping every other option of the registration, and reads the implementation's
+	///     traits off its metadata, so it initializes, disposes and shares it exactly as it would a type it constructs. A registration whose service this container cannot
 	///     name either is dropped: nothing here can resolve or depend on it (a self-compiled constructor parameter
 	///     is accessible, AWT195). Returns <see langword="null" /> for a dropped registration, after reporting
 	///     AWT154 once per module when the module carries no generated factory for it. A module inherited through
@@ -348,6 +353,20 @@ partial class AwaitenGenerator
 			       && !CanConstruct(implementation, compilation)
 				? null
 				: registration;
+		}
+
+		if (sameCompilation && IsHiddenInModule(implementation, module))
+		{
+			return context.Modules.Registration(module, implementation) is { } generated
+				? registration with
+				{
+					GreedyConstructor = true,
+					ConstructVia = $"{module.ToDisplayString(FullyQualified)}.{generated.FactoryName}",
+					ConstructViaType = generated.ReturnType,
+					OnActivated = HasHookWrapper(generated, implementation, registration.OnActivated, release: false) ? registration.OnActivated : null,
+					OnRelease = HasHookWrapper(generated, implementation, registration.OnRelease, release: true) ? registration.OnRelease : null,
+				}
+				: null;
 		}
 
 		if (sameCompilation)

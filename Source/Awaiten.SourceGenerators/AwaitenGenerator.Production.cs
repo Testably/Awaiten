@@ -17,8 +17,12 @@ partial class AwaitenGenerator
 		WellKnownTypes wellKnown = context.WellKnown;
 		List<DiagnosticInfo> diagnostics = context.Diagnostics;
 
-		if (ReportLessAccessibleThanContainer(info, info.Symbol, containerSymbol, diagnostics))
+		string? resolverType = null;
+		if (info.ConstructVia is null
+		    && LessAccessibleThanContainer(info.Symbol, containerSymbol) is { } narrower
+		    && (resolverType = AccessibleResolverType(info, context)) is null)
 		{
+			ReportLessAccessibleImplementation(info, narrower, context);
 			return null;
 		}
 
@@ -34,7 +38,7 @@ partial class AwaitenGenerator
 		// is never async-initialized (InitializeAsync never runs). The caller owns construction and lifetime.
 		if (info.Production == ProductionKind.Instance)
 		{
-			return BuildPrebuiltInstance(info, containerSymbol, compilation, diagnostics);
+			return BuildPrebuiltInstance(info, containerSymbol, compilation, diagnostics) with { ResolverType = resolverType, };
 		}
 
 		// The producer is a container method (Factory) or the implementation's constructor (default). Null
@@ -46,7 +50,7 @@ partial class AwaitenGenerator
 		}
 
 		if (producer.Parameters.Any(parameter => HasArgAttribute(parameter.GetAttributes())
-		                                         && ReportLessAccessibleThanContainer(info, parameter.Type, containerSymbol, diagnostics)))
+		                                         && ReportLessAccessibleArg(info, parameter.Type, containerSymbol, diagnostics)))
 		{
 			return null;
 		}
@@ -110,6 +114,8 @@ partial class AwaitenGenerator
 		(string? onActivated, EquatableArray<ParameterModel> activationParameters) = ResolveHook(info, info.OnActivated, release: false, context);
 		(string? onRelease, EquatableArray<ParameterModel> releaseParameters) = ResolveHook(info, info.OnRelease, release: true, context);
 
+		// A module-private implementation is built through the module's generated factory, which returns its service.
+		bool viaModuleFactory = info.ConstructVia is not null;
 		return new InstanceModel(
 			info.ImplementationType,
 			info.Symbol.Name,
@@ -118,13 +124,13 @@ partial class AwaitenGenerator
 			new EquatableArray<ParameterModel>(parameters.ToArray()),
 			disposable,
 			info.Symbol.IsReferenceType,
-			info.Production,
-			ProducerCall(info, producer),
+			viaModuleFactory ? ProductionKind.Factory : info.Production,
+			viaModuleFactory ? info.ConstructVia : ProducerCall(info, producer),
 			asyncInit,
 			IsAsyncFactory: asyncFactory,
 			RuntimeDisposalCheck: runtimeDisposalCheck,
 			IsAsyncDisposable: asyncDisposable,
-			EmitType: EmitTypeOf(info),
+			EmitType: viaModuleFactory ? info.ConstructViaType : EmitTypeOf(info),
 			InjectedMembers: new EquatableArray<MemberModel>(members.ToArray()),
 			// Eager build-time construction is the sync analog of InitializeAsync warming singletons, so it
 			// applies to a singleton only. The attribute exposes Eager on [Singleton<…>] alone, but the flag
@@ -135,7 +141,8 @@ partial class AwaitenGenerator
 			ActivationParameters: activationParameters,
 			ReleaseParameters: releaseParameters,
 			SuppressDisposal: info.SuppressDisposal,
-			PrivateServices: PrivateServices(info, containerSymbol));
+			PrivateServices: PrivateServices(info, containerSymbol),
+			ResolverType: resolverType);
 
 		static bool ImplementsInterface(ITypeSymbol type, INamedTypeSymbol @interface)
 		{
@@ -324,11 +331,11 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     Reports <see cref="Diagnostics.RegisteredTypeLessAccessible">AWT216</see> and returns
-	///     <see langword="true" /> when <paramref name="type" />, the registration's implementation or one of its
-	///     <c>[Arg]</c> types, is a private or protected nested type the generated resolvers cannot expose.
+	///     Reports <see cref="Diagnostics.RegisteredArgTypeLessAccessible">AWT216</see> and returns
+	///     <see langword="true" /> when the <c>[Arg]</c> type <paramref name="type" /> is a private or protected nested
+	///     type the parameterized resolvers cannot take.
 	/// </summary>
-	private static bool ReportLessAccessibleThanContainer(ImplInfo info, ITypeSymbol type, INamedTypeSymbol containerSymbol, List<DiagnosticInfo> diagnostics)
+	private static bool ReportLessAccessibleArg(ImplInfo info, ITypeSymbol type, INamedTypeSymbol containerSymbol, List<DiagnosticInfo> diagnostics)
 	{
 		if (LessAccessibleThanContainer(type, containerSymbol) is not { } narrower)
 		{
@@ -336,10 +343,166 @@ partial class AwaitenGenerator
 		}
 
 		diagnostics.Add(new DiagnosticInfo(
-			Diagnostics.RegisteredTypeLessAccessible,
+			Diagnostics.RegisteredArgTypeLessAccessible,
 			info.Location,
 			new EquatableArray<string>([Display(info.Symbol.ToDisplayString(FullyQualified)), Display(narrower.ToDisplayString(FullyQualified)),])));
 		return true;
+	}
+
+	/// <summary>
+	///     Reports <see cref="Diagnostics.RegisteredTypeLessAccessible">AWT216</see> for an implementation that is, or
+	///     contains, the private or protected <paramref name="narrower" /> and has no accessible resolver type (see
+	///     <see cref="AccessibleResolverType" />), naming the first reason that applies: the container cannot reach the
+	///     type, the type is a type argument every service carries, a service is itself private, or no accessible type
+	///     covers all of the services.
+	/// </summary>
+	private static void ReportLessAccessibleImplementation(ImplInfo info, INamedTypeSymbol narrower, BuildContext context)
+	{
+		string implementation = Display(info.Symbol.ToDisplayString(FullyQualified));
+		string type = Display(narrower.ToDisplayString(FullyQualified));
+		(string reason, string remedy) = MissingResolverTypeReason(info, narrower, context) switch
+		{
+			{ Unreachable: true, } => ("the generated container cannot reach it", $"nest the container beside it, or make '{type}' internal"),
+			{ TypeArgument: true, } => ($"'{implementation}' carries it as a type argument into every type it converts to", $"make '{type}' internal or public"),
+			{ PrivateService: { } service, } => ($"it is registered as the private service '{Display(service)}'", $"register it under an accessible service, or make '{type}' internal or public"),
+			_ => ("no accessible type it converts to covers all of its services", "register it under one service, or give it an accessible base type that covers its services"),
+		};
+
+		context.Diagnostics.Add(new DiagnosticInfo(
+			Diagnostics.RegisteredTypeLessAccessible,
+			info.Location,
+			new EquatableArray<string>([implementation, type, reason, remedy,])));
+	}
+
+	private static (bool Unreachable, bool TypeArgument, string? PrivateService) MissingResolverTypeReason(ImplInfo info, INamedTypeSymbol narrower, BuildContext context)
+	{
+		if (!context.Compilation.IsSymbolAccessibleWithin(info.Symbol, context.ContainerSymbol))
+		{
+			return (true, false, null);
+		}
+
+		bool nestingLevel = false;
+		for (INamedTypeSymbol? level = info.Symbol; level is not null; level = level.ContainingType)
+		{
+			nestingLevel |= SymbolEqualityComparer.Default.Equals(level, narrower);
+		}
+
+		if (!nestingLevel)
+		{
+			return (false, true, null);
+		}
+
+		HashSet<string> services = ServicesOf(info, context);
+		INamedTypeSymbol? privateService = ServableTypes(info.Symbol)
+			.Prepend(info.Symbol)
+			.FirstOrDefault(candidate => services.Contains(candidate.ToDisplayString(FullyQualified))
+			                             && LessAccessibleThanContainer(candidate, context.ContainerSymbol) is not null);
+		return (false, false, privateService?.ToDisplayString(FullyQualified));
+	}
+
+	/// <summary>
+	///     The accessible type the generated resolvers return for an implementation that is private or protected to the
+	///     container, or <see langword="null" /> when there is none. The resolver bodies sit inside the container, so they
+	///     may construct and hold the implementation; only their signatures must not name it. The type converts to every
+	///     service and collection the implementation serves, so all of them still resolve without a cast. In a fixed
+	///     order, so the generated code is the same for every build: a registered service that covers the others, else
+	///     the most derived accessible base class that covers them, else the first covering interface in the order the
+	///     implementation declares its interfaces.
+	/// </summary>
+	private static string? AccessibleResolverType(ImplInfo info, BuildContext context)
+	{
+		INamedTypeSymbol containerSymbol = context.ContainerSymbol;
+		Compilation compilation = context.Compilation;
+		HashSet<string> services = ServicesOf(info, context);
+		if (services.Count == 0 || !compilation.IsSymbolAccessibleWithin(info.Symbol, containerSymbol))
+		{
+			return null;
+		}
+
+		List<INamedTypeSymbol> candidates = ServableTypes(info.Symbol)
+			.Where(candidate => LessAccessibleThanContainer(candidate, containerSymbol) is null)
+			.ToList();
+		return candidates
+			.Where(candidate => services.Contains(candidate.ToDisplayString(FullyQualified)))
+			.Concat(candidates)
+			.FirstOrDefault(candidate => services.All(service => Covers(candidate, service)))
+			?.ToDisplayString(FullyQualified);
+
+		bool Covers(INamedTypeSymbol candidate, string service)
+			=> context.ServedTypes.Symbols.TryGetValue(service, out INamedTypeSymbol? symbol)
+				? SatisfiesConstraintType(candidate, symbol, compilation)
+				: candidate.ToDisplayString(FullyQualified) == service;
+	}
+
+	/// <summary>
+	///     What <see cref="AccessibleResolverType" /> needs beyond an implementation's won services: the services of the
+	///     collections and keyed collections each implementation is a member of, by implementation, and the symbol of
+	///     each registered service, so a service the implementation reaches only through variance still counts as covered.
+	/// </summary>
+	private sealed record ServedTypes(Dictionary<string, HashSet<string>> Members, Dictionary<string, INamedTypeSymbol> Symbols);
+
+	private static ServedTypes ServedTypesOf(
+		List<RawRegistration> raw,
+		Dictionary<ServiceKey, List<string>> serviceMembers,
+		Dictionary<string, List<KeyedMember>> keyedMembers)
+	{
+		Dictionary<string, HashSet<string>> members = new(StringComparer.Ordinal);
+		foreach ((string service, IEnumerable<string> implementations) in serviceMembers.Select(entry => (entry.Key.Service, (IEnumerable<string>)entry.Value))
+			         .Concat(keyedMembers.Select(entry => (entry.Key, entry.Value.Select(member => member.Implementation)))))
+		{
+			foreach (string implementation in implementations)
+			{
+				if (!members.TryGetValue(implementation, out HashSet<string>? services))
+				{
+					members[implementation] = services = new HashSet<string>(StringComparer.Ordinal);
+				}
+
+				services.Add(service);
+			}
+		}
+
+		Dictionary<string, INamedTypeSymbol> symbols = new(StringComparer.Ordinal);
+		foreach (RawRegistration registration in raw)
+		{
+			if (registration.ServiceSymbol is { } symbol)
+			{
+				symbols[registration.ServiceType] = symbol;
+			}
+		}
+
+		return new ServedTypes(members, symbols);
+	}
+
+	/// <summary>
+	///     The types an implementation converts to without a cast, in a fixed order: its base classes from the most
+	///     derived, then its interfaces in declaration order.
+	/// </summary>
+	private static IEnumerable<INamedTypeSymbol> ServableTypes(INamedTypeSymbol implementation)
+	{
+		for (INamedTypeSymbol? type = implementation.BaseType; type is not null; type = type.BaseType)
+		{
+			yield return type;
+		}
+
+		foreach (INamedTypeSymbol @interface in implementation.AllInterfaces)
+		{
+			yield return @interface;
+		}
+	}
+
+	/// <summary>
+	///     Every service an implementation resolves as: the ones it won and the collections and keyed collections it is
+	///     a member of.
+	/// </summary>
+	private static HashSet<string> ServicesOf(ImplInfo info, BuildContext context)
+	{
+		HashSet<string> services = new(info.Services.Select(service => service.Service), StringComparer.Ordinal);
+		if (context.ServedTypes.Members.TryGetValue(info.ImplementationType, out HashSet<string>? memberServices))
+		{
+			services.UnionWith(memberServices);
+		}
+
+		return services;
 	}
 
 	/// <summary>
@@ -388,7 +551,7 @@ partial class AwaitenGenerator
 		// module's generated factory mirrors - so the match constructs identically wherever the module is
 		// imported from, instead of quietly falling back to a smaller constructor the local graph happens to satisfy.
 		IMethodSymbol? constructor = SelectConstructor(
-			info.Symbol, containerSymbol, compilation, serviceToImpl.Keys.Select(k => k.Service), external,
+			info.Symbol, info.ConstructVia is null ? containerSymbol : info.Origin!, compilation, serviceToImpl.Keys.Select(k => k.Service), external,
 			info.GreedyConstructor ? _ => true : null);
 		if (constructor is null)
 		{
@@ -443,6 +606,17 @@ partial class AwaitenGenerator
 		// The hook's own origin (the registration that named it), not the implementation's winning Origin: two
 		// scan registrations with different origins can fill the two slots, and each name binds only on its owner.
 		INamedTypeSymbol? origin = release ? info.OnReleaseOrigin : info.OnActivatedOrigin;
+
+		// A module-private implementation keeps a hook only when its module generated the wrapper (see
+		// SelfCompiledRegistration), so the module's own resolution found exactly one hook; the container runs that
+		// hook's wrapper, which takes the factory's return type and passes the module's private type on.
+		if (info.ConstructVia is not null && origin is not null)
+		{
+			IMethodSymbol hook = CollectModuleHookOverloads(
+				info.Symbol, hookName, null, new ModuleScanContext(origin, context.Compilation, new List<DiagnosticInfo>(), new HashSet<string>(StringComparer.Ordinal))).Matches[0];
+			return ($"{origin.ToDisplayString(FullyQualified)}.{RegistrationHookWrapperName(info.Symbol, release, hookName)}", ClassifyHookParameters(hook, info, release, context));
+		}
+
 		(List<IMethodSymbol> matches, List<IReadOnlyList<INamedTypeSymbol>> ambiguousMethods) = CollectHookOverloads(
 			info.Symbol,
 			hookName,
