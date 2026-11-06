@@ -87,11 +87,6 @@ partial class AwaitenGenerator
 			ReportFactoryHidingAsyncInitialization(producer, compilation, wellKnown.AsyncInitializable, diagnostics);
 		}
 
-		// A decorator chain link carries a synthetic ImplementationType identity (so one decorator type can be
-		// several distinct instances); the real type to construct is its symbol, kept apart in EmitType.
-		string realType = info.Symbol.ToDisplayString(FullyQualified);
-		string? emitType = info.ImplementationType == realType ? null : realType;
-
 		// Lifecycle hooks (AWT164 when a named member is not a usable static void M(TImplementation, …)). Applied to
 		// constructed and factory-produced instances - the ones the container owns; a pre-built Instance returns
 		// above (the caller owns it, so activation/release do not apply). A hook's parameters after the instance are
@@ -114,7 +109,7 @@ partial class AwaitenGenerator
 			IsAsyncFactory: asyncFactory,
 			RuntimeDisposalCheck: runtimeDisposalCheck,
 			IsAsyncDisposable: asyncDisposable,
-			EmitType: emitType,
+			EmitType: EmitTypeOf(info),
 			InjectedMembers: new EquatableArray<MemberModel>(members.ToArray()),
 			// Eager build-time construction is the sync analog of InitializeAsync warming singletons, so it
 			// applies to a singleton only. The attribute exposes Eager on [Singleton<…>] alone, but the flag
@@ -153,7 +148,7 @@ partial class AwaitenGenerator
 	private static List<MemberModel> BuildInjectedMembers(ImplInfo info, BuildContext context)
 	{
 		List<InjectPropertyEntry> injectProperties =
-			context.InjectProperties.TryGetValue(info.ImplementationType, out List<InjectPropertyEntry>? entries)
+			context.InjectProperties.TryGetValue(RegisteredType(info.ImplementationType), out List<InjectPropertyEntry>? entries)
 				? entries
 				: new List<InjectPropertyEntry>();
 
@@ -194,7 +189,7 @@ partial class AwaitenGenerator
 	/// </summary>
 	private static string? OpenInjectPropertyKey(ImplInfo info)
 		=> !SymbolEqualityComparer.Default.Equals(info.Symbol, info.Symbol.OriginalDefinition)
-		   && info.ImplementationType == info.Symbol.ToDisplayString(FullyQualified)
+		   && RegisteredType(info.ImplementationType) == info.Symbol.ToDisplayString(FullyQualified)
 			? info.Symbol.OriginalDefinition.ToDisplayString(FullyQualified)
 			: null;
 
@@ -275,7 +270,19 @@ partial class AwaitenGenerator
 			info.Symbol.IsReferenceType,
 			ProductionKind.Instance,
 			QualifiedProductionMember(info),
+			EmitType: EmitTypeOf(info),
 			Eager: info.Eager && info.Lifetime == Lifetime.Singleton);
+	}
+
+	/// <summary>
+	///     The real type of an instance whose <c>ImplementationType</c> is a synthetic identity (a decorator chain link,
+	///     so one decorator type can be several distinct instances, or a member-identified <c>Factory</c>/<c>Instance</c>
+	///     registration, see <see cref="AssignMemberIdentities" />), or <see langword="null" /> when the identity is the type.
+	/// </summary>
+	private static string? EmitTypeOf(ImplInfo info)
+	{
+		string realType = info.Symbol.ToDisplayString(FullyQualified);
+		return info.ImplementationType == realType ? null : realType;
 	}
 
 	/// <summary>

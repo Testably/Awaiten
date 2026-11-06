@@ -38,8 +38,58 @@ partial class AwaitenGenerator
 		}
 	}
 
+	/// <summary>
+	///     The marker inside the implementation identity of a <c>Factory</c> or <c>Instance</c> registration that names
+	///     only its service (<c>&lt;service&gt;@member:&lt;owner&gt;.&lt;member&gt;</c>, see
+	///     <see cref="AssignMemberIdentities" />). <c>DisplayInstance</c> and <see cref="RegisteredType" /> trim it.
+	/// </summary>
+	private const string MemberKeyMarker = "@member:";
+
+	/// <summary>
+	///     Gives every <c>Factory</c> or <c>Instance</c> registration that names only its service an implementation
+	///     identity of its own: the service plus the owner-qualified member. Two producers of one service are then two
+	///     implementations, as two constructed classes are, so precedence decides the single resolution and both stay
+	///     collection members, while registrations naming the same member still share one instance. A type that another
+	///     registration names as its implementation keeps its type identity, so a factory and a constructor of that one
+	///     implementation still conflict (AWT111). Scan matches and open generic closings keep their own identities.
+	/// </summary>
+	private static void AssignMemberIdentities(List<RawRegistration> raw, INamedTypeSymbol containerSymbol)
+	{
+		HashSet<string> implementations = new(
+			raw.Where(registration => !NamesOnlyItsService(registration)).Select(registration => registration.ImplementationType),
+			StringComparer.Ordinal);
+		for (int index = 0; index < raw.Count; index++)
+		{
+			RawRegistration registration = raw[index];
+			if (NamesOnlyItsService(registration) && !implementations.Contains(registration.ImplementationType))
+			{
+				raw[index] = registration with
+				{
+					ImplementationType = $"{registration.ImplementationType}{MemberKeyMarker}{QualifiedMember(registration.Origin ?? containerSymbol, registration.ProductionMember)}",
+				};
+			}
+		}
+
+		static bool NamesOnlyItsService(RawRegistration registration)
+			=> registration is { Production: not ProductionKind.Constructor, IsScan: false, IsSynthesized: false, }
+			   && registration.ImplementationType == registration.ServiceType;
+	}
+
+	/// <summary>
+	///     The type a registration names, without the member suffix <see cref="AssignMemberIdentities" /> adds: what an
+	///     <c>[InjectProperty]</c> target or a <c>WhenInjectedInto</c> consumer is matched against.
+	/// </summary>
+	private static string RegisteredType(string implementationType)
+	{
+		int marker = implementationType.IndexOf(MemberKeyMarker, StringComparison.Ordinal);
+		return marker < 0 ? implementationType : implementationType.Substring(0, marker);
+	}
+
+	private static string QualifiedMember(INamedTypeSymbol owner, string? member) => $"{owner.ToDisplayString(FullyQualified)}.{member}";
+
 	private static (List<ImplInfo> Order, Dictionary<ServiceKey, string> ServiceToImpl, Dictionary<ServiceKey, List<string>> Members, List<ServiceKey> MemberOrder, List<(string ServiceType, INamedTypeSymbol Symbol)> VarianceCandidates, Dictionary<string, List<KeyedMember>> KeyedMembers, List<string> KeyedMemberOrder) CoalesceByImplementation(
 		List<RawRegistration> raw,
+		INamedTypeSymbol containerSymbol,
 		List<DiagnosticInfo> diagnostics)
 	{
 		List<ImplInfo> implOrder = new();
@@ -116,7 +166,7 @@ partial class AwaitenGenerator
 			// other default is checked like an explicit registration.
 			if (!registration.IsScan && (!registration.Weak || !alreadyChosen || winner!.Weak))
 			{
-				ReportCoalescingConflicts(info, registration, reportedConflicts, reportedProductionConflicts, reportedDirectiveConflicts, diagnostics);
+				ReportCoalescingConflicts(info, registration, containerSymbol, reportedConflicts, reportedProductionConflicts, reportedDirectiveConflicts, diagnostics);
 			}
 			else if (registration.IsScan && info is { IsScan: true, } && info.Lifetime != registration.Lifetime
 			         && reportedConflicts.Add(registration.ImplementationType))
@@ -586,6 +636,7 @@ partial class AwaitenGenerator
 	private static void ReportCoalescingConflicts(
 		ImplInfo? info,
 		RawRegistration registration,
+		INamedTypeSymbol containerSymbol,
 		HashSet<string> reportedConflicts,
 		HashSet<string> reportedProductionConflicts,
 		HashSet<string> reportedDirectiveConflicts,
@@ -602,7 +653,7 @@ partial class AwaitenGenerator
 				Diagnostics.ConflictingLifetime,
 				LocationInfo.From(registration.Location),
 				new EquatableArray<string>([
-					Display(registration.ImplementationType),
+					DisplayInstance(registration.ImplementationType),
 					info.Lifetime.ToString(),
 					registration.Lifetime.ToString(),
 				])));
@@ -614,9 +665,9 @@ partial class AwaitenGenerator
 				Diagnostics.ConflictingProduction,
 				LocationInfo.From(registration.Location),
 				new EquatableArray<string>([
-					Display(registration.ImplementationType),
-					DescribeProduction(info.Production, info.ProductionMember),
-					DescribeProduction(registration.Production, registration.ProductionMember),
+					DisplayInstance(registration.ImplementationType),
+					DescribeProduction(info.Production, info.ProductionMember, info.Origin ?? containerSymbol),
+					DescribeProduction(registration.Production, registration.ProductionMember, registration.Origin ?? containerSymbol),
 				])));
 		}
 
@@ -632,7 +683,7 @@ partial class AwaitenGenerator
 				Diagnostics.ConflictingLifecycleDirectives,
 				LocationInfo.From(registration.Location),
 				new EquatableArray<string>([
-					Display(registration.ImplementationType),
+					DisplayInstance(registration.ImplementationType),
 					directive.Directive,
 					directive.Winner,
 					directive.Loser,
@@ -800,11 +851,15 @@ partial class AwaitenGenerator
 		   || (registration.Production != ProductionKind.Constructor
 		       && !SymbolEqualityComparer.Default.Equals(info.Origin, registration.Origin));
 
-	private static string DescribeProduction(ProductionKind production, string? member)
+	/// <summary>
+	///     Names a production strategy in the AWT111 message, qualifying a member with its owner so two members of the
+	///     same name on different owners read as the different members they are.
+	/// </summary>
+	private static string DescribeProduction(ProductionKind production, string? member, INamedTypeSymbol owner)
 		=> production switch
 		{
-			ProductionKind.Factory => $"factory '{member}'",
-			ProductionKind.Instance => $"instance '{member}'",
+			ProductionKind.Factory => $"factory '{Display(QualifiedMember(owner, member))}'",
+			ProductionKind.Instance => $"instance '{Display(QualifiedMember(owner, member))}'",
 			_ => "a constructor",
 		};
 }

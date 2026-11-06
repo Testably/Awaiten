@@ -281,7 +281,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 			string remedy;
 			if (dispatch)
 			{
-				remedy = $"register '{AwaitenGenerator.Display(holder.ImplementationType)}' as Scoped so each scope disposes what its dispatch dictionary builds";
+				remedy = $"register '{AwaitenGenerator.DisplayInstance(holder.ImplementationType)}' as Scoped so each scope disposes what its dispatch dictionary builds";
 			}
 			else
 			{
@@ -295,7 +295,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 				parameter.Location ?? graph.InstanceLocations[node],
 				new EquatableArray<string>([
 					service,
-					AwaitenGenerator.Display(holder.ImplementationType),
+					AwaitenGenerator.DisplayInstance(holder.ImplementationType),
 					remedy,
 				]),
 				severity));

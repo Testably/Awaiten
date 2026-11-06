@@ -60,7 +60,7 @@ public static partial class CoffeeShop;
 
 ## Factories and instances in modules
 
-A module can use `Factory` and `Instance` too. Awaiten calls the members qualified by the module type, so this works across assemblies.
+A module can use `Factory` and `Instance` too. Awaiten calls the members qualified by the module type, so this works across assemblies. A container registration of the same service, its own `Factory` or `Instance` included, wins over the module's, which stays a member of the collection (see [several producers of one service](./01-factories-and-instances.md#several-producers-of-one-service)).
 
 ```csharp
 [Module]

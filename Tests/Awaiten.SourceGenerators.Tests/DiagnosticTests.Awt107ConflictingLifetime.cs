@@ -159,5 +159,81 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).Contains("*AWT107*").AsWildcard()
 				.Because("re-registering the same service with a different lifetime is still a conflict, not a silent drop");
 		}
+
+		[Test]
+		public async Task ReportsWhenTheContainerRegistersAModulesImplementationWithAnotherLifetime()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IClock { }
+			                                       public sealed class SystemClock : IClock { }
+
+			                                       [Module]
+			                                       [Singleton<SystemClock, IClock>]
+			                                       public static class ClockModule { }
+
+			                                       [Container]
+			                                       [Import(typeof(ClockModule))]
+			                                       [Transient<SystemClock, IClock>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT107*").AsWildcard()
+				.Because("both registrations name SystemClock as the implementation, and the losing module registration stays a collection member, so there is no single lifetime for it");
+		}
+
+		[Test]
+		public async Task DoesNotReportForFactoriesWithoutAnImplementationTypeNamingDifferentMembers()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IClock { }
+			                                       public sealed class SystemClock : IClock { }
+
+			                                       [Container]
+			                                       [Singleton<IClock>(Factory = nameof(CreateA))]
+			                                       [Transient<IClock>(Factory = nameof(CreateB))]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       	public static IClock CreateA() => new SystemClock();
+			                                       	public static IClock CreateB() => new SystemClock();
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("each factory is its own implementation, so each keeps its own lifetime");
+		}
+
+		[Test]
+		public async Task ReportsForFactoriesWithoutAnImplementationTypeNamingTheSameMember()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IClock { }
+			                                       public sealed class SystemClock : IClock { }
+
+			                                       [Container]
+			                                       [Singleton<IClock>(Factory = nameof(Create))]
+			                                       [Transient<IClock>(Factory = nameof(Create), Key = "k")]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       	public static IClock Create() => new SystemClock();
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT107*'MyCode.IClock'*").AsWildcard()
+				.Because("registrations naming the same factory are one implementation, which has a single lifetime, and the message names the service rather than an internal identity");
+		}
 	}
 }

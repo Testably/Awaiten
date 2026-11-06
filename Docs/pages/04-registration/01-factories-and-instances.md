@@ -42,6 +42,10 @@ public static partial class CoffeeShop
 
 Use this for configuration objects or anything with a lifetime you manage yourself.
 
+## Several producers of one service
+
+A `Factory` or `Instance` registration that names only the service, like `[Singleton<IBrewer>(Factory = nameof(MakeBrewer))]`, is identified by its member. Two such registrations of one service with different members are two implementations, just like two classes: the first registration (or the container's over a module's) wins single resolution, and both are members of the collection. Registrations that name the same member share one instance. When another registration names the type as its implementation, as in `[Singleton<Grinder>]`, every registration of it is that one implementation and must produce it the same way ([AWT111](../09-diagnostics.md#awt111)).
+
 ## Disposal follows the real type
 
 A factory can return an interface that hides a disposable concrete type. Awaiten still disposes it, because it tracks the actual object it got back, and it disposes it exactly once with its owner.

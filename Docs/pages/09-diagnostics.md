@@ -153,6 +153,8 @@ public static partial class CoffeeShop
 }
 ```
 
+Registrations that name the same implementation type are one implementation. A `Factory` or `Instance` registration that names only the service is its own implementation, identified by its member, unless another registration names that type as its implementation, as `[Singleton<Grinder>]` does here.
+
 **Fix:** Produce the implementation one way only: keep either the `Factory` registration or the constructor registration, or name the same `Factory` on both.
 
 ### AWT116
