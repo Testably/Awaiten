@@ -36,7 +36,7 @@ namespace Awaiten.Extensions.DependencyInjection;
 ///     </para>
 /// </remarks>
 [SuppressMessage("Awaiten", "AWT135:Service locator: a resolver interface is injected into a service", Justification = "This is the MS.DI bridge adapter: holding the IAwaitenScope is the adaptation itself, not a hidden run-time dependency.")]
-public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScopeFactory,
+public sealed class AwaitenServiceProvider : IKeyedServiceProvider, ISupportRequiredService, IServiceScopeFactory,
 	IServiceProviderIsKeyedService, IDisposable, IAsyncDisposable
 {
 	private readonly IAwaitenScope _container;
@@ -196,17 +196,49 @@ public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScop
 	}
 
 	/// <inheritdoc />
-	/// <exception cref="InvalidOperationException">No service is registered for <paramref name="serviceType" /> under <paramref name="serviceKey" />.</exception>
+	/// <remarks>
+	///     A service <see cref="GetService" /> answers with <see langword="null" /> is resolved through the container's
+	///     own <c>Resolve</c>, so the exception names the cause: an imported service the host does not provide, or no
+	///     registration at all.
+	/// </remarks>
+	/// <exception cref="ArgumentNullException"><paramref name="serviceType" /> is <see langword="null" />.</exception>
+	/// <exception cref="InvalidOperationException">
+	///     The container cannot resolve <paramref name="serviceType" /> here, and the exception carries the reason.
+	/// </exception>
+	public object GetRequiredService(Type serviceType)
+		=> GetService(serviceType) ?? _container.Resolve(serviceType);
+
+	/// <inheritdoc />
+	/// <remarks>
+	///     A <see langword="null" /> <paramref name="serviceKey" /> asks for the unkeyed registration, exactly like
+	///     <see cref="GetRequiredService" />. Otherwise a miss is resolved through the container's keyed <c>Resolve</c>,
+	///     so the exception names the cause, except for <see cref="KeyedService.AnyKey" />, which the provider declines.
+	/// </remarks>
+	/// <exception cref="ArgumentNullException"><paramref name="serviceType" /> is <see langword="null" />.</exception>
+	/// <exception cref="InvalidOperationException">
+	///     The container cannot resolve <paramref name="serviceType" /> under <paramref name="serviceKey" /> here, and
+	///     the exception carries the reason.
+	/// </exception>
 	public object GetRequiredKeyedService(Type serviceType, object? serviceKey)
 	{
+		if (serviceKey is null)
+		{
+			return GetRequiredService(serviceType);
+		}
+
 		object? service = GetKeyedService(serviceType, serviceKey);
-		if (service is null)
+		if (service is not null)
+		{
+			return service;
+		}
+
+		if (ReferenceEquals(serviceKey, KeyedService.AnyKey))
 		{
 			throw new InvalidOperationException(
 				$"No service for type '{serviceType}' with key '{serviceKey}' has been registered.");
 		}
 
-		return service;
+		return _container.Resolve(serviceType, serviceKey);
 	}
 
 	/// <inheritdoc />
