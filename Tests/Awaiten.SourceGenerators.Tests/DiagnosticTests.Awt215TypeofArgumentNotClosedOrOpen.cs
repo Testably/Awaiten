@@ -16,7 +16,7 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).DoesNotContain("*error CS*").AsWildcard()
 				.Because("C# accepts a type nested in an unbound generic, so AWT215 is the only error");
 			await That(result.Diagnostics).DoesNotContain("*AWT1*").AsWildcard()
-				.Because("the declaration is ignored, so no follow-up diagnostic such as AWT176 or AWT180 is reported");
+				.Because("the declaration is ignored, so no follow-up diagnostic such as AWT180 is reported");
 		}
 
 		[Test]
@@ -35,7 +35,7 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).Contains("*error CS7003*").AsWildcard()
 				.Because("C# rejects a partially open type as well, and the generator still runs over it");
 			await That(result.Diagnostics).DoesNotContain("*AWT1*").AsWildcard()
-				.Because("the declaration is ignored, so no follow-up diagnostic such as AWT176 or AWT180 is reported");
+				.Because("the declaration is ignored, so no follow-up diagnostic such as AWT180 is reported");
 		}
 
 		[Test]
@@ -107,8 +107,8 @@ public partial class DiagnosticTests
 
 			await That(result.Diagnostics).DoesNotContain("*AWT215*").AsWildcard()
 				.Because("a closed type and an unbound generic definition are the two forms [ImportService(typeof(...))] accepts");
-			await That(result.Diagnostics).DoesNotContain("*AWT176*").AsWildcard()
-				.Because("each declaration matches a consumed dependency, which proves it was read as intended");
+			await That(result.Sources["Awaiten.MyCode.MyContainer.g.cs"]).Contains("private static bool __IsDeclaredImport(global::System.Type serviceType)")
+				.Because("only a declaration the generator read routes a direct resolve on top of [ImportServices]");
 		}
 
 		[Test]

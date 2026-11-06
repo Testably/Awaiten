@@ -435,50 +435,13 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     AWT176: a closed type declared <c>[ImportService]</c> that no dependency in the graph consumes with a shape
-	///     that either routes it or gives its own diagnostic is a dead declaration. Reported once every instance is built
-	///     (so every dependency has had the chance to route), at the container's location. A type is treated as consumed
-	///     when it is either routed externally (an <c>External</c> direct dependency) or reached through a relationship
-	///     over it (<c>Func&lt;T&gt;</c>, <c>Lazy&lt;T&gt;</c>, <c>Owned&lt;T&gt;</c>, their Task forms) - the latter is
-	///     not routed but surfaces its own AWT101, so a second diagnostic for the one root cause is avoided. A collection
-	///     element reference (<c>IEnumerable&lt;T&gt;</c> and friends) does <em>not</em> count: the resolver never yields
-	///     collection elements, so such a declaration is genuinely inert and stays reported. A type flagged AWT175
-	///     (registered, so resolved from the graph) is excluded, its contradiction the root cause.
-	/// </summary>
-	private static void ReportUnconsumedExternalServices(
-		HashSet<string> externalServiceTypes,
-		Dictionary<ServiceKey, string> serviceToImpl,
-		HashSet<string> consumed,
-		INamedTypeSymbol containerSymbol,
-		List<DiagnosticInfo> diagnostics)
-	{
-		if (externalServiceTypes.Count == 0)
-		{
-			return;
-		}
-
-		LocationInfo? location = LocationInfo.From(containerSymbol.Locations.FirstOrDefault());
-		foreach (string externalType in externalServiceTypes
-			         .Where(type => !consumed.Contains(type) && !IsRegisteredService(type, serviceToImpl))
-			         .OrderBy(type => type, StringComparer.Ordinal))
-		{
-			diagnostics.Add(new DiagnosticInfo(
-				Diagnostics.UnconsumedExternalService,
-				location,
-				new EquatableArray<string>([Display(externalType),])));
-		}
-	}
-
-	/// <summary>
-	///     AWT175 and AWT176 for the open generic definitions declared <c>[ImportService(typeof(…&lt;&gt;))]</c>, at the
-	///     container's location. A routed closing the container also registers is contradictory (AWT175), unless a closed
-	///     declaration of that closing already reports it. A definition none of whose closings is consumed, by the rules
-	///     of <see cref="ReportUnconsumedExternalServices" />, is dead (AWT176).
+	///     AWT175 for the open generic definitions declared <c>[ImportService(typeof(…&lt;&gt;))]</c>, at the container's
+	///     location: a routed closing the container also registers is contradictory, unless a closed declaration of that
+	///     closing already reports it.
 	/// </summary>
 	private static void ReportOpenExternalServices(
 		ExternalServiceTypes externalServiceTypes,
 		Dictionary<ServiceKey, string> serviceToImpl,
-		HashSet<string> consumed,
 		HashSet<string> routed,
 		INamedTypeSymbol containerSymbol,
 		List<DiagnosticInfo> diagnostics)
@@ -500,74 +463,16 @@ partial class AwaitenGenerator
 				location,
 				new EquatableArray<string>([Display(closing),])));
 		}
-
-		HashSet<string> consumedDefinitions = new(
-			consumed.Where(externalServiceTypes.Closings.ContainsKey).Select(type => externalServiceTypes.Closings[type]),
-			StringComparer.Ordinal);
-		foreach (string definition in externalServiceTypes.Open
-			         .Where(definition => !consumedDefinitions.Contains(definition))
-			         .OrderBy(definition => definition, StringComparer.Ordinal))
-		{
-			diagnostics.Add(new DiagnosticInfo(
-				Diagnostics.UnconsumedExternalService,
-				location,
-				new EquatableArray<string>([Display(definition),])));
-		}
 	}
 
 	/// <summary>
-	///     The service types the built instances consume through an external declaration (see
-	///     <see cref="RecordExternalConsumption" />) and the subset they route externally, across constructor and
-	///     factory parameters, injected members and lifecycle hook parameters.
+	///     The service types the built instances route externally, across constructor and factory parameters,
+	///     injected members and lifecycle hook parameters.
 	/// </summary>
-	private static (HashSet<string> Consumed, HashSet<string> Routed) ExternalConsumption(List<InstanceModel> instances)
-	{
-		HashSet<string> consumed = new(StringComparer.Ordinal);
-		HashSet<string> routed = new(StringComparer.Ordinal);
-		foreach (InstanceModel instance in instances)
-		{
-			foreach (ParameterModel parameter in instance.ConstructorParameters.AsArray())
-			{
-				RecordExternalConsumption(parameter, consumed, routed);
-			}
-
-			foreach (MemberModel member in instance.InjectedMembers.AsArray())
-			{
-				RecordExternalConsumption(member.Dependency, consumed, routed);
-			}
-
-			// A lifecycle hook parameter consumes an external dependency too, so an import used only by a hook is
-			// not unconsumed (AWT176 would otherwise wrongly advise removing it).
-			foreach (ParameterModel parameter in instance.HookParameters())
-			{
-				RecordExternalConsumption(parameter, consumed, routed);
-			}
-		}
-
-		return (consumed, routed);
-	}
-
-	/// <summary>
-	///     Records a dependency's service type as consuming its <c>[ImportService]</c> declaration (for AWT176)
-	///     when the shape either routes the type externally (<c>External</c>) or resolves it from the graph through a
-	///     relationship that surfaces its own AWT101 (<c>Func</c>/<c>Lazy</c>/<c>Owned</c>/<c>Task</c> and their forms),
-	///     and as routed when it is <c>External</c>. A collection element reference is deliberately not recorded: it is
-	///     never routed, so the declaration stays inert.
-	/// </summary>
-	private static void RecordExternalConsumption(ParameterModel dependency, HashSet<string> consumed, HashSet<string> routed)
-	{
-		if (dependency.Kind is DependencyKind.External
-		    or DependencyKind.Func or DependencyKind.Lazy or DependencyKind.Owned
-		    or DependencyKind.Task or DependencyKind.FuncTask or DependencyKind.LazyTask)
-		{
-			consumed.Add(dependency.ServiceType);
-		}
-
-		if (dependency.Kind == DependencyKind.External)
-		{
-			routed.Add(dependency.ServiceType);
-		}
-	}
+	private static HashSet<string> RoutedExternal(List<InstanceModel> instances)
+		=> new(instances.SelectMany(instance => instance.WalkedDependencies())
+			.Where(dependency => dependency.Kind == DependencyKind.External)
+			.Select(dependency => dependency.ServiceType), StringComparer.Ordinal);
 
 	/// <summary>Whether any registration (of any key) provides the service type, so a declared external type contradicts it.</summary>
 	private static bool IsRegisteredService(string serviceType, Dictionary<ServiceKey, string> serviceToImpl)

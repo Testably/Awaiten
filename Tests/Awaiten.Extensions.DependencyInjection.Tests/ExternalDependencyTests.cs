@@ -140,6 +140,76 @@ public sealed partial class ExternalDependencyTests
 		}
 	}
 
+	public sealed class Menu;
+
+	[Container]
+	[ImportService<IClock>]
+	[Singleton<Menu>]
+	public static partial class UninjectedImportContainer;
+
+	[Container]
+	[ImportServices]
+	[Singleton<Menu>]
+	public static partial class UninjectedImportServicesContainer;
+
+	public sealed class ResolvingAnImportNothingInjects
+	{
+		[Test]
+		public async Task FromTheRoot_ReturnsTheHostsInstance()
+		{
+			FixedClock clock = new();
+			ServiceCollection services = new();
+			services.AddSingleton<IClock>(clock);
+			services.AddAwaitenContainer<UninjectedImportContainer.Root>();
+			using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
+			_ = provider.GetRequiredService<Menu>();
+			UninjectedImportContainer.Root root = provider.GetRequiredService<UninjectedImportContainer.Root>();
+
+			await That(root.Resolve<IClock>()).IsSameAs(clock)
+				.Because("a declared import is reachable through a direct resolve, so the bridge wires the root to the host even though nothing in the graph injects it");
+		}
+
+		[Test]
+		public async Task ThroughAnAwaitenServiceProvider_ReturnsTheHostsInstance()
+		{
+			FixedClock clock = new();
+			ServiceCollection services = new();
+			services.AddSingleton<IClock>(clock);
+			services.AddAwaitenContainer<UninjectedImportContainer.Root>();
+			using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
+			_ = provider.GetRequiredService<Menu>();
+			using AwaitenServiceProvider awaiten = new(provider.GetRequiredService<UninjectedImportContainer.Root>(), ownsContainer: false);
+
+			await That(awaiten.GetService(typeof(IClock))).IsSameAs(clock)
+				.Because("GetService reaches the host through the root the bridge wired");
+		}
+
+		[Test]
+		public async Task UnderImportServices_FromTheRoot_ReturnsTheHostsInstance()
+		{
+			FixedClock clock = new();
+			ServiceCollection services = new();
+			services.AddSingleton<IClock>(clock);
+			services.AddAwaitenContainer<UninjectedImportServicesContainer.Root>();
+			using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
+			_ = provider.GetRequiredService<Menu>();
+			UninjectedImportServicesContainer.Root root = provider.GetRequiredService<UninjectedImportServicesContainer.Root>();
+
+			await That(root.Resolve<IClock>()).IsSameAs(clock)
+				.Because("[ImportServices] routes a direct resolve of an unregistered type to the host, so the bridge wires the root although no dependency is imported");
+		}
+
+		[Test]
+		public async Task IsAdvertisedAsAnExternalDependency()
+		{
+			using UninjectedImportContainer.Root container = new();
+
+			await That(((IAwaitenRoot)container).ExternalDependencies)
+				.IsEqualTo([new AwaitenExternalDependency(typeof(IClock)),])
+				.Because("declaring the import is the contract that the host provides it, so startup verification checks it");
+		}
+	}
+
 	[Test]
 	public async Task MissingExternalRegistration_ThrowsWhenResolved()
 	{

@@ -76,7 +76,6 @@
  AWT173  | Awaiten   | Warning  | A [Scan] exclusion (an Exclude type or a !-prefixed name/namespace pattern) matched no candidate and is likely stale
  AWT174  | Awaiten   | Warning  | A [Scan] include pattern (* for a name, ** for a namespace) matches every candidate and does not narrow the scan
  AWT175  | Awaiten   | Error    | A type declared [ImportService], or a routed closing of an open generic one, is also registered on the container
- AWT176  | Awaiten   | Warning  | A type declared [ImportService] (or every closing of an open generic one) is never consumed by any dependency in the graph
  AWT177  | Awaiten   | Error    | An [InjectProperty<TImplementation>] names a member that is not a settable property on TImplementation
  AWT178  | Awaiten   | Error    | An [InjectProperty<TImplementation>] targets a TImplementation produced by a Factory or Instance registration
  AWT179  | Awaiten   | Warning  | Two [InjectProperty] entries name the same property of the same implementation, or a closed entry repeats an open-generic one on a closing
@@ -128,3 +127,4 @@
 
 ; AWT137 (an injected property marked [Arg]) is retired: [Arg] targets only parameters, so the compiler rejects it on a property. The id stays reserved and is never reused.
 ; AWT217 (a partially open [InjectProperty(typeof(...), name)] target) is retired before it shipped: AWT215 covers the typeof argument of [InjectProperty] and [ImportService] alike. The id stays reserved and is never reused.
+; AWT176 (an [ImportService] no dependency in the graph consumes) is retired: a direct Resolve<T>() of an imported type asks the host, so every declared import is reachable without an injecting consumer. The id stays reserved and is never reused.

@@ -892,6 +892,54 @@ public class GeneralTests
 		await That(source).Contains("typeof(global::MyCode.ILogger)");
 	}
 
+	public sealed class AdvertisedExternalDependencies
+	{
+		[Test]
+		public async Task ADeclaredImportNothingInjects_IsAdvertised()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface ILogger { }
+			                                       public sealed class Service { }
+
+			                                       [Container]
+			                                       [ImportService<ILogger>]
+			                                       [Singleton<Service>]
+			                                       public static partial class MyContainer;
+			                                       """);
+
+			string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+			await That(source).Contains("new global::Awaiten.AwaitenExternalDependency(typeof(global::MyCode.ILogger), null),")
+				.Because("a direct resolve reaches a declared import, so the host has to provide it although nothing injects it");
+		}
+
+		[Test]
+		public async Task ADeclaredImportInjectedOnlyUnderAKey_IsNotAlsoAdvertisedUnkeyed()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface ILogger { }
+			                                       public sealed class Service { public Service([FromKey("audit")] ILogger logger) { } }
+
+			                                       [Container]
+			                                       [ImportService<ILogger>]
+			                                       [Singleton<Service>]
+			                                       public static partial class MyContainer;
+			                                       """);
+
+			string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+			await That(source).Contains("new global::Awaiten.AwaitenExternalDependency(typeof(global::MyCode.ILogger), \"audit\"),");
+			await That(source).DoesNotContain("new global::Awaiten.AwaitenExternalDependency(typeof(global::MyCode.ILogger), null),")
+				.Because("the host already has to provide the keyed import, and demanding an unkeyed one too would fail verification of a host that registers it only under its key");
+		}
+	}
+
 	public sealed class ImportedByTypeDispatch
 	{
 		[Test]
@@ -1038,8 +1086,6 @@ public class GeneralTests
 		await That(result.Diagnostics).Contains("*AWT101*").AsWildcard()
 			.And.Contains("*ILogger*").AsWildcard()
 			.Because("[ImportService<T>] routes only the direct dependency of T; a Func<T>/Lazy<T> relationship over it resolves from the graph and is AWT101 when unregistered");
-		await That(result.Diagnostics).DoesNotContain("*AWT176*").AsWildcard()
-			.Because("the external type is still referenced through the relationship, so it is not an unconsumed (dead) declaration");
 	}
 
 	[Test]

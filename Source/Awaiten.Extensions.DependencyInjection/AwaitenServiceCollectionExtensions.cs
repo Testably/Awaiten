@@ -120,25 +120,20 @@ public static class AwaitenServiceCollectionExtensions
 		services.AddSingleton(_ => new AwaitenRootOwner<TRoot>(root, ownsRoot));
 		services.TryAddSingleton(sp => new AwaitenRootProviderProbe(sp));
 
-		// If the container draws on external (host-owned) services, wire its external resolvers to the host's
-		// providers on first resolution below: the root to the root provider (so externally-resolved singletons
-		// stay valid for the app's lifetime), and each Awaiten scope to its aligned MS.DI scope's provider.
-		bool hasExternal = root.ExternalDependencies.Count > 0;
-
+		// Wire the container's external resolvers to the host's providers on first resolution below: the root to the
+		// root provider (so externally-resolved singletons stay valid for the app's lifetime), and each Awaiten scope
+		// to its aligned MS.DI scope's provider. Even with no ExternalDependencies: a direct resolve of an
+		// [ImportServices] type or of a closing of an open import asks the host, and ExternalDependencies lists neither.
 		services.AddScoped(sp =>
 		{
 			IAwaitenScope scope = sp.GetRequiredService<AwaitenRootOwner<TRoot>>().Root.CreateScope();
-			if (hasExternal)
-			{
-				((IAwaitenExternalResolverHost)scope).SetExternalResolver(new AwaitenServiceProviderExternalResolver(sp));
-			}
-
+			((IAwaitenExternalResolverHost)scope).SetExternalResolver(new AwaitenServiceProviderExternalResolver(sp));
 			return new AwaitenScopeHolder<TRoot>(scope);
 		});
 
 		foreach (AwaitenRegistration registration in root.Registrations)
 		{
-			ProjectRegistration(services, root, registration, hasExternal);
+			ProjectRegistration(services, root, registration);
 		}
 
 		return new AwaitenContainerBuilder<TRoot>(services);
@@ -171,7 +166,7 @@ public static class AwaitenServiceCollectionExtensions
 		}
 	}
 
-	private static void ProjectRegistration<TRoot>(IServiceCollection services, TRoot root, AwaitenRegistration registration, bool hasExternal)
+	private static void ProjectRegistration<TRoot>(IServiceCollection services, TRoot root, AwaitenRegistration registration)
 		where TRoot : class, IAwaitenRoot
 	{
 		Type serviceType = registration.ServiceType;
@@ -201,7 +196,7 @@ public static class AwaitenServiceCollectionExtensions
 					taskType,
 					sp =>
 					{
-						EnsureExternalWired(sp, root, hasExternal);
+						EnsureExternalWired(sp, root);
 						return asTypedTask(ScopeFor<TRoot>(sp, lifetime).ResolveAsync(serviceType, key));
 					},
 					ToServiceLifetime(lifetime))
@@ -210,7 +205,7 @@ public static class AwaitenServiceCollectionExtensions
 					key,
 					(sp, _) =>
 					{
-						EnsureExternalWired(sp, root, hasExternal);
+						EnsureExternalWired(sp, root);
 						return asTypedTask(ScopeFor<TRoot>(sp, lifetime).ResolveAsync(serviceType, key));
 					},
 					ToServiceLifetime(lifetime)));
@@ -222,7 +217,7 @@ public static class AwaitenServiceCollectionExtensions
 				serviceType,
 				sp =>
 				{
-					EnsureExternalWired(sp, root, hasExternal);
+					EnsureExternalWired(sp, root);
 					return ScopeFor<TRoot>(sp, lifetime).Resolve(serviceType, key);
 				},
 				ToServiceLifetime(lifetime))
@@ -231,7 +226,7 @@ public static class AwaitenServiceCollectionExtensions
 				key,
 				(sp, _) =>
 				{
-					EnsureExternalWired(sp, root, hasExternal);
+					EnsureExternalWired(sp, root);
 					return ScopeFor<TRoot>(sp, lifetime).Resolve(serviceType, key);
 				},
 				ToServiceLifetime(lifetime)));
@@ -264,10 +259,10 @@ public static class AwaitenServiceCollectionExtensions
 	///     factory above). A resolver a caller wired explicitly is left untouched. Guarded by a double-checked lock
 	///     on the internal probe singleton so concurrent first resolutions wire it exactly once.
 	/// </summary>
-	private static void EnsureExternalWired<TRoot>(IServiceProvider provider, TRoot root, bool hasExternal)
+	private static void EnsureExternalWired<TRoot>(IServiceProvider provider, TRoot root)
 		where TRoot : class, IAwaitenRoot
 	{
-		if (!hasExternal || root.ExternalResolver is not null)
+		if (root.ExternalResolver is not null)
 		{
 			return;
 		}

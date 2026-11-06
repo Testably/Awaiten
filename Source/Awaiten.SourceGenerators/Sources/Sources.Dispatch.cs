@@ -357,11 +357,24 @@ internal static partial class Sources
 	///     requires. The <c>ExternalResolver</c> the container routes those dependencies through is emitted on the
 	///     base <c>Scope</c> (inherited by the Root), so a host can wire each scope independently.
 	/// </summary>
-	private static void EmitExternalMetadata(StringBuilder fields, StringBuilder members, int depth, InstanceModel[] instances)
+	/// <remarks>
+	///     A declared closed import no dependency names is advertised unkeyed, because a direct resolve reaches it
+	///     just the same. One the graph already consumes, under any key, is not advertised a second time, so a host
+	///     that registers it only under the key the graph asks for still passes verification.
+	/// </remarks>
+	private static void EmitExternalMetadata(StringBuilder fields, StringBuilder members, int depth, InstanceModel[] instances, ContainerModel? model)
 	{
-		(string Type, string? Key)[] external = ExternalDependencies(instances);
+		List<(string Type, string? Key)> external = new(ExternalDependencies(instances));
+		if (model is not null)
+		{
+			HashSet<string> consumed = new(external.Select(dependency => dependency.Type), StringComparer.Ordinal);
+			external.AddRange(model.ImportedServices.AsArray()
+				.Where(consumed.Add)
+				.Select(service => (service, (string?)null)));
+		}
+
 		Separate(members);
-		if (external.Length == 0)
+		if (external.Count == 0)
 		{
 			Indent(members, depth).AppendLine(
 				"global::System.Collections.Generic.IReadOnlyList<global::Awaiten.AwaitenExternalDependency> global::Awaiten.IAwaitenRoot.ExternalDependencies => global::System.Array.Empty<global::Awaiten.AwaitenExternalDependency>();");

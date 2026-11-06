@@ -1,5 +1,3 @@
-using System.Linq;
-
 namespace Awaiten.SourceGenerators.Tests;
 
 public partial class DiagnosticTests
@@ -7,7 +5,7 @@ public partial class DiagnosticTests
 	public class Awt176UnconsumedExternalService
 	{
 		[Test]
-		public async Task ReportsWhenADeclaredExternalTypeIsNeverConsumed()
+		public async Task IsNotReportedForAClosedImportNothingInjects()
 		{
 			GeneratorResult result = Generator.Run("""
 			                                       using Awaiten;
@@ -15,7 +13,6 @@ public partial class DiagnosticTests
 			                                       namespace MyCode;
 
 			                                       public interface ILogger { }
-			                                       // Nothing in the graph depends on ILogger, so the declaration is dead.
 			                                       public sealed class Service { }
 
 			                                       [Container]
@@ -26,13 +23,12 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics).Contains("*AWT176*").AsWildcard()
-				.And.Contains("*ILogger*").AsWildcard()
-				.Because("a declared [ImportService<T>] no dependency consumes is dead");
+			await That(result.Diagnostics).IsEmpty()
+				.Because("AWT176 is retired: a direct Resolve<ILogger>() asks the host, so a declared import is live without an injecting consumer");
 		}
 
 		[Test]
-		public async Task ReportsWhenTheExternalTypeIsReferencedOnlyThroughACollection_WhichIsInertNotRouted()
+		public async Task IsNotReportedForAClosedImportReferencedOnlyThroughACollection()
 		{
 			GeneratorResult result = Generator.Run("""
 			                                       using System.Collections.Generic;
@@ -41,8 +37,6 @@ public partial class DiagnosticTests
 			                                       namespace MyCode;
 
 			                                       public interface IExternal { }
-			                                       // IEnumerable<IExternal> is a collection over the external type: the resolver never yields
-			                                       // collection elements, so the declaration routes nothing and yields an empty collection - inert.
 			                                       public sealed class Service { public Service(IEnumerable<IExternal> items) { } }
 
 			                                       [Container]
@@ -53,89 +47,12 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics).Contains("*AWT176*").AsWildcard()
-				.And.Contains("*IExternal*").AsWildcard()
-				.Because("a collection element reference is not routed and gives no signal, so the [ImportService<T>] declaration is genuinely dead");
+			await That(result.Diagnostics).IsEmpty()
+				.Because("the collection is not routed, but a direct resolve of the import still is");
 		}
 
 		[Test]
-		public async Task DoesNotReportWhenTheExternalTypeIsReferencedOnlyThroughARelationship_TheAwt101IsTheOneSignal()
-		{
-			GeneratorResult result = Generator.Run("""
-			                                       using System;
-			                                       using Awaiten;
-
-			                                       namespace MyCode;
-
-			                                       public interface IExternal { }
-			                                       // Func<IExternal> is a relationship over the external type, which [ImportService<T>]
-			                                       // does not route: it resolves from the graph and, unregistered, is AWT101.
-			                                       public sealed class Service { public Service(Func<IExternal> factory) { } }
-
-			                                       [Container]
-			                                       [ImportService<IExternal>]
-			                                       [Singleton<Service>]
-			                                       public static partial class MyContainer
-			                                       {
-			                                       }
-			                                       """);
-
-			await That(result.Diagnostics).Contains("*AWT101*").AsWildcard()
-				.And.Contains("*IExternal*").AsWildcard()
-				.Because("a relationship over the external type is not routed, so the missing registration is AWT101");
-			await That(result.Diagnostics).DoesNotContain("*AWT176*").AsWildcard()
-				.Because("the external type is referenced (via the relationship), so it is not a dead declaration - the AWT101 is the one signal");
-		}
-
-		[Test]
-		public async Task DoesNotReportWhenTheExternalTypeIsConsumed()
-		{
-			GeneratorResult result = Generator.Run("""
-			                                       using Awaiten;
-
-			                                       namespace MyCode;
-
-			                                       public interface ILogger { }
-			                                       public sealed class Service { public Service(ILogger logger) { } }
-
-			                                       [Container]
-			                                       [ImportService<ILogger>]
-			                                       [Singleton<Service>]
-			                                       public static partial class MyContainer
-			                                       {
-			                                       }
-			                                       """);
-
-			await That(result.Diagnostics).DoesNotContain("*AWT176*").AsWildcard()
-				.Because("a consumed [ImportService<T>] declaration is live");
-		}
-
-		[Test]
-		public async Task DoesNotReportWhenTheExternalTypeIsConsumedByALifecycleHookParameter()
-		{
-			GeneratorResult result = Generator.Run("""
-			                                       using Awaiten;
-
-			                                       namespace MyCode;
-
-			                                       public interface ILogger { }
-			                                       public sealed class Service { }
-
-			                                       [Container]
-			                                       [ImportService<ILogger>]
-			                                       [Singleton<Service>(OnActivated = nameof(Started))]
-			                                       public static partial class MyContainer
-			                                       {
-			                                       	private static void Started(Service service, ILogger logger) { }
-			                                       }
-			                                       """);
-
-			await That(result.Diagnostics).DoesNotContain("*AWT176*").AsWildcard()
-				.Because("an [ImportService<T>] consumed only by a lifecycle hook parameter is still live");
-		}
-
-		[Test]
-		public async Task ReportsWhenNoClosingOfAnOpenImportIsConsumed()
+		public async Task IsNotReportedForAnOpenImportNoClosingOfWhichIsInjected()
 		{
 			GeneratorResult result = Generator.Run("""
 			                                       using Awaiten;
@@ -144,79 +61,6 @@ public partial class DiagnosticTests
 
 			                                       public interface ILog<T> { }
 			                                       public sealed class Service { }
-
-			                                       [Container]
-			                                       [ImportService(typeof(ILog<>))]
-			                                       [Singleton<Service>]
-			                                       public static partial class MyContainer
-			                                       {
-			                                       }
-			                                       """);
-
-			await That(result.Diagnostics).Contains("*AWT176*ILog<>*").AsWildcard()
-				.Because("an open import none of whose closings is consumed is dead");
-		}
-
-		[Test]
-		public async Task ReportsWhenAClosingOfAnOpenImportIsReferencedOnlyThroughACollection()
-		{
-			GeneratorResult result = Generator.Run("""
-			                                       using System.Collections.Generic;
-			                                       using Awaiten;
-
-			                                       namespace MyCode;
-
-			                                       public interface ILog<T> { }
-			                                       public sealed class Service { public Service(IEnumerable<ILog<Service>> logs) { } }
-
-			                                       [Container]
-			                                       [ImportService(typeof(ILog<>))]
-			                                       [Singleton<Service>]
-			                                       public static partial class MyContainer
-			                                       {
-			                                       }
-			                                       """);
-
-			await That(result.Diagnostics).Contains("*AWT176*ILog<>*").AsWildcard()
-				.Because("a collection over a closing is not routed, so the open import stays inert");
-		}
-
-		[Test]
-		public async Task DoesNotReportWhenAClosingOfAnOpenImportIsReferencedOnlyThroughARelationship()
-		{
-			GeneratorResult result = Generator.Run("""
-			                                       using System;
-			                                       using Awaiten;
-
-			                                       namespace MyCode;
-
-			                                       public interface ILog<T> { }
-			                                       public sealed class Service { public Service(Func<ILog<Service>> factory) { } }
-
-			                                       [Container]
-			                                       [ImportService(typeof(ILog<>))]
-			                                       [Singleton<Service>]
-			                                       public static partial class MyContainer
-			                                       {
-			                                       }
-			                                       """);
-
-			await That(result.Diagnostics).Contains("*AWT101*ILog<MyCode.Service>*").AsWildcard()
-				.Because("a relationship over a closing is not routed, so the missing registration is AWT101");
-			await That(result.Diagnostics).DoesNotContain("*AWT176*").AsWildcard()
-				.Because("the closing is referenced through the relationship, so the AWT101 is the one signal, as for the closed form");
-		}
-
-		[Test]
-		public async Task DoesNotReportWhenAClosingOfAnOpenImportIsConsumed()
-		{
-			GeneratorResult result = Generator.Run("""
-			                                       using Awaiten;
-
-			                                       namespace MyCode;
-
-			                                       public interface ILog<T> { }
-			                                       public sealed class Service { public Service(ILog<Service> log) { } }
 
 			                                       [Container]
 			                                       [ImportService(typeof(ILog<>))]
@@ -227,11 +71,11 @@ public partial class DiagnosticTests
 			                                       """);
 
 			await That(result.Diagnostics).IsEmpty()
-				.Because("a consumed closing makes the open import live and needs no registration");
+				.Because("a direct resolve of any closing of an open import asks the host, so no closing has to be injected");
 		}
 
 		[Test]
-		public async Task ReportsAnUnconsumedOpenImportDeclaredOnAModule()
+		public async Task IsNotReportedForAnOpenImportDeclaredOnAModule()
 		{
 			GeneratorResult result = Generator.Run("""
 			                                       using Awaiten;
@@ -253,8 +97,8 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics).Contains("*AWT176*ILog<>*").AsWildcard()
-				.Because("a module's open import is honored for the importing container, so it is checked there too");
+			await That(result.Diagnostics).IsEmpty()
+				.Because("a module's import is honored for the importing container's direct resolves too");
 		}
 	}
 }
