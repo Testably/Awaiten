@@ -361,12 +361,12 @@ partial class AwaitenGenerator
 	{
 		string implementation = Display(info.Symbol.ToDisplayString(FullyQualified));
 		string type = Display(narrower.ToDisplayString(FullyQualified));
-		(string reason, string remedy) = MissingResolverTypeReason(info, narrower, context) switch
+		(string reason, string remedy) = MissingResolverTypeReason(info.Symbol, narrower, ServicesOf(info, context), context.ContainerSymbol, context.Compilation, info.Origin is not null) switch
 		{
 			{ Unreachable: true, } when info.Origin is null => ("the generated container cannot reach it", $"nest the container beside it, or make '{type}' internal"),
 			{ Unreachable: true, } => ("the generated container cannot reach it", $"make '{type}' internal"),
 			{ TypeArgument: true, } => ($"'{implementation}' carries it as a type argument into every type it converts to", $"make '{type}' internal or public"),
-			{ PrivateService: { } service, } => ($"it is registered as the private service '{Display(service)}'", $"register it under an accessible service, or make '{type}' internal or public"),
+			{ PrivateService: { } service, } => (RegisteredAsPrivateService(info.Symbol, service), $"register it under an accessible service, or make '{type}' internal or public"),
 			_ => ("no accessible type it converts to covers all of its services", "register it under one service, or give it an accessible base type that covers its services"),
 		};
 
@@ -376,16 +376,40 @@ partial class AwaitenGenerator
 			new EquatableArray<string>([implementation, type, reason, remedy,])));
 	}
 
-	private static (bool Unreachable, bool TypeArgument, string? PrivateService) MissingResolverTypeReason(ImplInfo info, INamedTypeSymbol narrower, BuildContext context)
+	/// <summary>
+	///     The reason fragment for an implementation registered under the private <paramref name="service" />, which
+	///     names the service only when it is not the implementation itself.
+	/// </summary>
+	private static string RegisteredAsPrivateService(INamedTypeSymbol implementation, INamedTypeSymbol service)
+		=> SymbolEqualityComparer.Default.Equals(implementation, service)
+			? "it is registered as itself"
+			: $"it is registered as the private service '{Display(service.ToDisplayString(FullyQualified))}'";
+
+	/// <summary>
+	///     Why <paramref name="implementation" />, which is or contains the private or protected
+	///     <paramref name="narrower" />, has no accessible type to stand in for it under <paramref name="services" />
+	///     (see <see cref="CoveringResolverType" />): the container cannot reach it, the private type is a type argument
+	///     every type it converts to carries, or one of the services is itself private. All three unset means no
+	///     accessible type covers all of the services. For a <paramref name="moduleRegistered" /> implementation, a
+	///     private service wins over the container's reach, since the module builds the type for the container unless
+	///     its factory cannot return the service.
+	/// </summary>
+	private static (bool Unreachable, bool TypeArgument, INamedTypeSymbol? PrivateService) MissingResolverTypeReason(
+		INamedTypeSymbol implementation,
+		INamedTypeSymbol narrower,
+		HashSet<string> services,
+		INamedTypeSymbol containerSymbol,
+		Compilation compilation,
+		bool moduleRegistered)
 	{
-		bool reachable = context.Compilation.IsSymbolAccessibleWithin(info.Symbol, context.ContainerSymbol);
-		if (!reachable && info.Origin is null)
+		bool reachable = compilation.IsSymbolAccessibleWithin(implementation, containerSymbol);
+		if (!reachable && !moduleRegistered)
 		{
 			return (true, false, null);
 		}
 
 		bool nestingLevel = false;
-		for (INamedTypeSymbol? level = info.Symbol; level is not null; level = level.ContainingType)
+		for (INamedTypeSymbol? level = implementation; level is not null; level = level.ContainingType)
 		{
 			nestingLevel |= SymbolEqualityComparer.Default.Equals(level, narrower);
 		}
@@ -395,12 +419,11 @@ partial class AwaitenGenerator
 			return (false, true, null);
 		}
 
-		HashSet<string> services = ServicesOf(info, context);
-		INamedTypeSymbol? privateService = ServableTypes(info.Symbol)
-			.Prepend(info.Symbol)
+		INamedTypeSymbol? privateService = ServableTypes(implementation)
+			.Prepend(implementation)
 			.FirstOrDefault(candidate => services.Contains(candidate.ToDisplayString(FullyQualified))
-			                             && LessAccessibleThanContainer(candidate, context.ContainerSymbol) is not null);
-		return (!reachable && privateService is null, false, privateService?.ToDisplayString(FullyQualified));
+			                             && LessAccessibleThanContainer(candidate, containerSymbol) is not null);
+		return (!reachable && privateService is null, false, privateService);
 	}
 
 	/// <summary>
@@ -413,16 +436,27 @@ partial class AwaitenGenerator
 	///     implementation declares its interfaces.
 	/// </summary>
 	private static string? AccessibleResolverType(ImplInfo info, BuildContext context)
+		=> CoveringResolverType(info.Symbol, ServicesOf(info, context), context.ServedTypes.Symbols, context.ContainerSymbol, context.Compilation);
+
+	/// <summary>
+	///     The accessible type <paramref name="implementation" /> converts to that covers all of
+	///     <paramref name="services" />, in the order <see cref="AccessibleResolverType" /> describes, or
+	///     <see langword="null" />. <paramref name="symbols" /> maps a registered service to its symbol, so a service the
+	///     implementation reaches only through variance still counts as covered.
+	/// </summary>
+	private static string? CoveringResolverType(
+		INamedTypeSymbol implementation,
+		HashSet<string> services,
+		Dictionary<string, INamedTypeSymbol> symbols,
+		INamedTypeSymbol containerSymbol,
+		Compilation compilation)
 	{
-		INamedTypeSymbol containerSymbol = context.ContainerSymbol;
-		Compilation compilation = context.Compilation;
-		HashSet<string> services = ServicesOf(info, context);
-		if (services.Count == 0 || !compilation.IsSymbolAccessibleWithin(info.Symbol, containerSymbol))
+		if (services.Count == 0 || !compilation.IsSymbolAccessibleWithin(implementation, containerSymbol))
 		{
 			return null;
 		}
 
-		List<INamedTypeSymbol> candidates = ServableTypes(info.Symbol)
+		List<INamedTypeSymbol> candidates = ServableTypes(implementation)
 			.Where(candidate => LessAccessibleThanContainer(candidate, containerSymbol) is null)
 			.ToList();
 		return candidates
@@ -432,7 +466,7 @@ partial class AwaitenGenerator
 			?.ToDisplayString(FullyQualified);
 
 		bool Covers(INamedTypeSymbol candidate, string service)
-			=> context.ServedTypes.Symbols.TryGetValue(service, out INamedTypeSymbol? symbol)
+			=> symbols.TryGetValue(service, out INamedTypeSymbol? symbol)
 				? SatisfiesConstraintType(candidate, symbol, compilation)
 				: candidate.ToDisplayString(FullyQualified) == service;
 	}
@@ -464,6 +498,12 @@ partial class AwaitenGenerator
 			}
 		}
 
+		return new ServedTypes(members, ServiceSymbolsOf(raw));
+	}
+
+	/// <summary>The symbol of each registered service, by its fully-qualified name.</summary>
+	private static Dictionary<string, INamedTypeSymbol> ServiceSymbolsOf(List<RawRegistration> raw)
+	{
 		Dictionary<string, INamedTypeSymbol> symbols = new(StringComparer.Ordinal);
 		foreach (RawRegistration registration in raw)
 		{
@@ -473,7 +513,7 @@ partial class AwaitenGenerator
 			}
 		}
 
-		return new ServedTypes(members, symbols);
+		return symbols;
 	}
 
 	/// <summary>
@@ -611,13 +651,21 @@ partial class AwaitenGenerator
 		INamedTypeSymbol? origin = release ? info.OnReleaseOrigin : info.OnActivatedOrigin;
 
 		// An implementation hidden in its module keeps a hook only when its module generated the wrapper (see
-		// SelfCompiledRegistration), so the module's own resolution found exactly one hook; the container runs that
-		// hook's wrapper, which takes the factory's return type and passes the module's private type on.
+		// SelfCompiledRegistration and SameCompilationScanRegistration), so the module's own resolution found exactly
+		// one hook; the container runs that hook's wrapper, which takes the factory's return type and passes the
+		// module's private type on.
 		if (info.ConstructVia is not null && origin is not null)
 		{
+			List<INamedTypeSymbol>? markers = null;
+			if (info.IsScan)
+			{
+				markers = release ? info.OnReleaseMarkers : info.OnActivatedMarkers;
+			}
+
 			IMethodSymbol hook = CollectModuleHookOverloads(
-				info.Symbol, hookName, null, new ModuleScanContext(origin, context.Compilation, new List<DiagnosticInfo>(), new HashSet<string>(StringComparer.Ordinal))).Matches[0];
-			return ($"{origin.ToDisplayString(FullyQualified)}.{RegistrationHookWrapperName(info.Symbol, release, hookName)}", ClassifyHookParameters(hook, info, release, context));
+				info.Symbol, hookName, markers, new ModuleScanContext(origin, context.Compilation, new List<DiagnosticInfo>(), new HashSet<string>(StringComparer.Ordinal))).Matches[0];
+			string wrapper = info.IsScan ? ModuleHookWrapperName(info.Symbol, release) : RegistrationHookWrapperName(info.Symbol, release, hookName);
+			return ($"{origin.ToDisplayString(FullyQualified)}.{wrapper}", ClassifyHookParameters(hook, info, release, context));
 		}
 
 		(List<IMethodSymbol> matches, List<IReadOnlyList<INamedTypeSymbol>> ambiguousMethods) = CollectHookOverloads(

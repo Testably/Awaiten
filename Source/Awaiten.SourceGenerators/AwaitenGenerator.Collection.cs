@@ -146,7 +146,10 @@ partial class AwaitenGenerator
 	///     module lives - one accessible exposure per match, matches the module build skipped (AWT196) stay skipped,
 	///     and construction goes through the greediest accessible constructor, the one the generated factory mirrors -
 	///     except that with no assembly boundary the container constructs the match directly instead of through the
-	///     factory it cannot resolve. A referenced-assembly module is excluded: its metadata carries the self-compiled
+	///     factory it cannot resolve. A match nested privately in the module it cannot construct either, so it calls the
+	///     factory the module generates in the same run, by its deterministic name, and runs the hooks through the
+	///     generated wrappers; a module that cannot receive the factory (AWT194) contributes no such match. A
+	///     referenced-assembly module is excluded: its metadata carries the self-compiled
 	///     expansion instead, and re-running its scan here would double-register every match. The expansion's
 	///     diagnostics are discarded: the module pipeline (BuildModuleModel) already reports on the same <c>[Scan]</c>
 	///     at the same location, and reporting here too would double every scan-level warning.
@@ -166,7 +169,18 @@ partial class AwaitenGenerator
 
 			foreach (ModuleScanExpansion expansion in sameCompilationModules.Scans(moduleSymbol))
 			{
-				result.Add(SameCompilationScanRegistration(expansion, moduleSymbol));
+				if (!IsHiddenInModule(expansion.Implementation, moduleSymbol))
+				{
+					result.Add(SameCompilationScanRegistration(expansion, moduleSymbol));
+				}
+				else if (ReceivesGeneratedMembers(moduleSymbol))
+				{
+					result.Add(SameCompilationScanRegistration(expansion, moduleSymbol) with
+					{
+						ConstructVia = $"{moduleSymbol.ToDisplayString(FullyQualified)}.{expansion.Factory.FactoryName}",
+						ConstructViaType = expansion.Factory.ServiceType,
+					});
+				}
 			}
 		}
 	}

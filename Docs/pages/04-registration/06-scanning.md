@@ -20,7 +20,20 @@ Every concrete, public, non-generic type assignable to `IDrink` is registered. T
 [Scan(typeof(IDrink))]
 ```
 
-A type the container cannot name is skipped rather than registered: an implementation that is `internal` to another assembly (with no `InternalsVisibleTo`), or a private nested class. Since a match quietly vanishing from the container is almost never what you meant, the scan reports the skip as [AWT193](../09-diagnostics.md#awt193). Widening the type to `public` brings it back. Only a type your scan actually asked for is reported, so the internal plumbing of a scanned assembly stays quiet, as does anything you filtered out. Whether the *interfaces* a match is exposed under are accessible is a separate question, covered below.
+A type the container cannot name is skipped rather than registered: an implementation that is `internal` to another assembly (with no `InternalsVisibleTo`), or a class nested privately in a type the container is not part of. Since a match quietly vanishing from the container is almost never what you meant, the scan reports the skip as [AWT193](../09-diagnostics.md#awt193). Widening the type to `public` brings it back. Only a type your scan actually asked for is reported, so the internal plumbing of a scanned assembly stays quiet, as does anything you filtered out. Whether the *interfaces* a match is exposed under are accessible is a separate question, covered below.
+
+A class nested privately in the container itself, such as a test double, is a match like any other, as long as the scan registers it under an accessible interface: the generated container hands it out as that interface, just as it does for an [explicit registration](./08-extending-containers.md) of a private type.
+
+```csharp
+[Container]
+[Scan<IPlugin>(As = ScanAs.Marker)]
+public static partial class TestCoffeeShop
+{
+    private sealed class FakePlugin : IPlugin;
+}
+```
+
+Registered as itself (`ScanAs.Self`, the default), the private type would be its own service, which the container cannot expose. The scan skips such a match with [AWT193](../09-diagnostics.md#awt193), naming the reason, instead of failing the build, and it does the same when no accessible type the match converts to covers all the interfaces it is registered under.
 
 ## Choose how they register
 

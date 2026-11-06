@@ -747,4 +747,176 @@ public class SelfCompiledModuleScanTests
 		await That(consumer.Sources["Awaiten.MyCode.MyContainer.g.cs"]).Contains(FactoryName("global::Lib.Roaster"))
 			.Because("only the unexposable match was dropped; the one with an accessible exposure interface still registers");
 	}
+
+	public class PrivateNestedMatches
+	{
+		private const string PrivateLibrarySource = """
+		                                            using Awaiten;
+
+		                                            namespace Lib;
+
+		                                            public interface IClock { }
+		                                            public sealed class SystemClock : IClock { }
+		                                            public interface IPlugin { }
+
+		                                            [Module]
+		                                            [Scan<IPlugin>(As = ScanAs.Marker, OnActivated = nameof(Start))]
+		                                            public static partial class PluginModule
+		                                            {
+		                                                private sealed class FakePlugin : IPlugin
+		                                                {
+		                                                    public FakePlugin(IClock clock) { }
+		                                                }
+
+		                                                private static void Start(FakePlugin plugin) { }
+		                                            }
+		                                            """;
+
+		[Test]
+		public async Task ModuleSelfCompilesAMatchNestedPrivatelyInIt()
+		{
+			(_, Microsoft.CodeAnalysis.GeneratorDriverRunResult run) = Generator.RunGenerator(PrivateLibrarySource, [], []);
+			string module = run.Results
+				.SelectMany(r => r.GeneratedSources)
+				.Single(s => s.HintName.Contains("ModuleScan"))
+				.SourceText.ToString();
+
+			await That(module).Contains($"public static global::Lib.IPlugin {FactoryName("global::Lib.PluginModule.FakePlugin")}(global::Lib.IClock @clock) => new global::Lib.PluginModule.FakePlugin(@clock);")
+				.Because("the factory sits in the module, so it may construct the module's private type and return its accessible marker");
+		}
+
+		[Test]
+		public async Task SameAssemblyContainer_CallsTheGeneratedFactory()
+		{
+			GeneratorResult result = Generator.Run(PrivateLibrarySource + """
+
+			                                                              [Container]
+			                                                              [Import(typeof(PluginModule))]
+			                                                              [Singleton<SystemClock, IClock>]
+			                                                              public static partial class Shop
+			                                                              {
+			                                                              }
+			                                                              """);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("the container builds the module's private match through the factory and runs its private hook through the wrapper");
+			string source = result.Sources["Awaiten.Lib.Shop.g.cs"];
+			await That(source).Contains($"global::Lib.PluginModule.{FactoryName("global::Lib.PluginModule.FakePlugin")}(")
+				.Because("the container cannot construct a type nested privately in the module, not even in the module's own assembly");
+			await That(source).DoesNotContain("new global::Lib.PluginModule.FakePlugin");
+		}
+
+		[Test]
+		public async Task ContainerInAnotherAssembly_CallsTheGeneratedFactory()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(PrivateLibrarySource, """
+				using Awaiten;
+				using Lib;
+
+				namespace MyCode;
+
+				[Container]
+				[Import(typeof(PluginModule))]
+				[Singleton<SystemClock, IClock>]
+				public static partial class Shop
+				{
+				}
+				""");
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("another assembly reads the generated scan registration, exactly as for an internal match");
+			await That(result.Sources["Awaiten.MyCode.Shop.g.cs"]).Contains($"global::Lib.PluginModule.{FactoryName("global::Lib.PluginModule.FakePlugin")}(");
+		}
+
+		[Test]
+		public async Task GenericHookOfAnOpenMarker_RunsThroughTheWrapper()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace Lib;
+
+			                                       public interface IView<T> { }
+			                                       public sealed class ViewModel { }
+
+			                                       [Module]
+			                                       [Scan(typeof(IView<>), As = ScanAs.Marker, OnActivated = nameof(Wire))]
+			                                       public static partial class ViewModule
+			                                       {
+			                                           private sealed class MainView : IView<ViewModel> { }
+
+			                                           private static void Wire<T>(IView<T> view, T model) { }
+			                                       }
+
+			                                       [Container]
+			                                       [Import(typeof(ViewModule))]
+			                                       [Singleton<ViewModel>]
+			                                       public static partial class Shop
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("the container binds the generic hook over the match's closed marker form, as the module's build did");
+			await That(result.Sources["Awaiten.Lib.Shop.g.cs"]).Contains("global::Lib.ViewModule.Awaiten__ScanHook_OnActivated_MainView_")
+				.Because("the container cannot call a hook that takes the private match, so it runs the generated wrapper");
+		}
+
+		[Test]
+		public async Task MatchScannedAsSelf_ReportsAwt196()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace Lib;
+
+			                                       public interface IPlugin { }
+
+			                                       [Module]
+			                                       [Scan<IPlugin>]
+			                                       public static partial class PluginModule
+			                                       {
+			                                           private sealed class FakePlugin : IPlugin { }
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).HasSingle().Matching(diagnostic => diagnostic.Contains("warning AWT196") && diagnostic.Contains("FakePlugin"))
+				.Because("a consumer could not name the private type a Self exposure registers, so the match is skipped with a warning, not an error");
+		}
+
+		[Test]
+		public async Task SkipUnconstructableMatch_IsPrunedThroughTheFactoryItWouldCall()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace Lib;
+
+			                                       public interface IClock { }
+			                                       public sealed class SystemClock : IClock { }
+			                                       public interface IPlugin { }
+
+			                                       [Module]
+			                                       [Scan<IPlugin>(As = ScanAs.Marker, SkipUnconstructable = true)]
+			                                       public static partial class PluginModule
+			                                       {
+			                                           private sealed class FakePlugin : IPlugin
+			                                           {
+			                                               public FakePlugin(IClock clock) { }
+			                                           }
+			                                       }
+
+			                                       [Container]
+			                                       [Import(typeof(PluginModule))]
+			                                       [Singleton<SystemClock, IClock>]
+			                                       public static partial class Shop
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("the prune asks about the constructor the module's factory mirrors, which the module can reach although the container cannot");
+			await That(result.Sources["Awaiten.Lib.Shop.g.cs"]).Contains(FactoryName("global::Lib.PluginModule.FakePlugin"));
+		}
+	}
 }

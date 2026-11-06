@@ -234,5 +234,210 @@ public partial class DiagnosticTests
 			await That(result.Sources["Awaiten.MyCode.MyContainer.g.cs"]).Contains("new global::Lib.Roaster()")
 				.Because("an internal type the container can see is registered like a public one");
 		}
+
+		public class PrivateNestedMatches
+		{
+			[Test]
+			public async Task MatchExposedUnderItsMarker_IsRegistered()
+			{
+				GeneratorResult result = Generator.Run("""
+				                                       using Awaiten;
+
+				                                       namespace MyCode;
+
+				                                       public interface IPlugin { }
+
+				                                       [Container]
+				                                       [Scan<IPlugin>(As = ScanAs.Marker)]
+				                                       public static partial class Shop
+				                                       {
+				                                           private sealed class FakePlugin : IPlugin { }
+				                                       }
+				                                       """);
+
+				await That(result.Diagnostics).IsEmpty()
+					.Because("the resolvers return the accessible marker, and only their bodies, nested in the container, name the private type");
+				await That(result.Sources["Awaiten.MyCode.Shop.g.cs"]).Contains("new global::MyCode.Shop.FakePlugin()");
+			}
+
+			[Test]
+			public async Task MatchScannedAsSelf_ReportsTheReason()
+			{
+				GeneratorResult result = Generator.Run("""
+				                                       using Awaiten;
+
+				                                       namespace MyCode;
+
+				                                       public interface IPlugin { }
+
+				                                       [Container]
+				                                       [Scan<IPlugin>]
+				                                       public static partial class Shop
+				                                       {
+				                                           private sealed class FakePlugin : IPlugin { }
+				                                       }
+				                                       """);
+
+				await That(result.Diagnostics).Contains("*warning AWT193*'MyCode.Shop.FakePlugin' matched the scan, but 'MyCode.Shop.FakePlugin' is private or protected and the scan registers it as itself, so it is not registered; expose it through ScanAs.Marker or ScanAs.MatchingInterface instead of ScanAs.Self*").AsWildcard()
+					.Because("a resolver returning the private type itself would expose it, so the scan skips the match with a warning instead of the AWT216 error");
+				await That(result.Diagnostics).DoesNotContain("*error*").AsWildcard();
+			}
+
+			[Test]
+			public async Task MatchWithoutACommonAccessibleType_ReportsTheReason()
+			{
+				GeneratorResult result = Generator.Run("""
+				                                       using Awaiten;
+
+				                                       namespace MyCode;
+
+				                                       public interface IPlugin { }
+				                                       public interface IFakePlugin { }
+
+				                                       [Container]
+				                                       [Scan<IPlugin>(As = ScanAs.Marker | ScanAs.MatchingInterface)]
+				                                       public static partial class Shop
+				                                       {
+				                                           private sealed class FakePlugin : IPlugin, IFakePlugin { }
+				                                       }
+				                                       """);
+
+				await That(result.Diagnostics).Contains("*warning AWT193*'MyCode.Shop.FakePlugin'*no accessible type it converts to covers all of its services*narrow the scan to one interface*").AsWildcard()
+					.Because("no accessible type converts to both interfaces, so one resolver cannot serve the shared instance");
+				await That(result.Diagnostics).DoesNotContain("*error*").AsWildcard();
+			}
+
+			[Test]
+			public async Task MatchAlsoRegisteredExplicitly_LeavesTheExplicitRegistration()
+			{
+				GeneratorResult result = Generator.Run("""
+				                                       using Awaiten;
+
+				                                       namespace MyCode;
+
+				                                       public interface IPlugin { }
+				                                       public interface IClock { }
+
+				                                       [Container]
+				                                       [Singleton<FakeClock, IClock>]
+				                                       [Scan<IPlugin>(As = ScanAs.Marker)]
+				                                       public static partial class Shop
+				                                       {
+				                                           private sealed class FakeClock : IClock, IPlugin { }
+				                                       }
+				                                       """);
+
+				await That(result.Diagnostics).HasCount(1);
+				await That(result.Diagnostics).Contains("*warning AWT193*'MyCode.Shop.FakeClock'*no accessible type it converts to covers*").AsWildcard()
+					.Because("only the scan turns the registration into one no accessible type covers, so only the scan is dropped");
+				await That(result.Sources["Awaiten.MyCode.Shop.g.cs"]).Contains("new global::MyCode.Shop.FakeClock()")
+					.Because("the explicit registration stays exactly what it was without the scan");
+			}
+
+			[Test]
+			public async Task MarkerPrivateToTheContainer_RegistersAnAccessibleMatch()
+			{
+				GeneratorResult result = Generator.Run("""
+				                                       using Awaiten;
+
+				                                       namespace MyCode;
+
+				                                       [Container]
+				                                       [Scan<IPlugin>(As = ScanAs.Marker)]
+				                                       public static partial class Shop
+				                                       {
+				                                           private interface IPlugin { }
+
+				                                           internal sealed class Plugin : IPlugin { }
+				                                       }
+				                                       """);
+
+				await That(result.Diagnostics).IsEmpty()
+					.Because("a private service is fine as long as its implementation is accessible, so the marker is judged from the container, not its assembly");
+				await That(result.Sources["Awaiten.MyCode.Shop.g.cs"]).Contains("new global::MyCode.Shop.Plugin()");
+			}
+
+			[Test]
+			public async Task ContainerNestedPrivatelyBesideTheMatch_RegistersItAsItself()
+			{
+				GeneratorResult result = Generator.Run("""
+				                                       using Awaiten;
+
+				                                       namespace MyCode;
+
+				                                       public interface IPlugin { }
+
+				                                       public partial class ShopTests
+				                                       {
+				                                           private sealed class FakePlugin : IPlugin { }
+
+				                                           [Container]
+				                                           [Scan<IPlugin>]
+				                                           private static partial class Shop
+				                                           {
+				                                           }
+				                                       }
+				                                       """);
+
+				await That(result.Diagnostics).IsEmpty()
+					.Because("the container is no more visible than the private type, so its resolvers may return it");
+				await That(result.Sources.Single(source => source.Key.Contains("Shop")).Value).Contains("new global::MyCode.ShopTests.FakePlugin()");
+			}
+
+			[Test]
+			public async Task MatchPrivateToAnExtendedBase_IsAWarningInTheExtendingContainer()
+			{
+				GeneratorResult result = Generator.Run("""
+				                                       using Awaiten;
+
+				                                       namespace MyCode;
+
+				                                       public interface IPlugin { }
+
+				                                       [Container]
+				                                       [Scan<IPlugin>(As = ScanAs.Marker)]
+				                                       public static partial class Shop
+				                                       {
+				                                           private sealed class FakePlugin : IPlugin { }
+				                                       }
+
+				                                       [Container(Extends = typeof(Shop))]
+				                                       public static partial class TestShop
+				                                       {
+				                                       }
+				                                       """);
+
+				await That(result.Diagnostics).HasCount(1);
+				await That(result.Diagnostics).Contains("*warning AWT193*'MyCode.Shop.FakePlugin'*the extending container 'MyCode.TestShop' cannot reach it*make 'MyCode.Shop.FakePlugin' internal*").AsWildcard()
+					.Because("the base registers its private match, which the extending container cannot construct, and a scan never turns its former skip into the AWT226 error");
+				await That(result.Sources["Awaiten.MyCode.Shop.g.cs"]).Contains("new global::MyCode.Shop.FakePlugin()");
+			}
+
+			[Test]
+			public async Task MatchTheContainerCannotReach_KeepsTheInaccessibleMessage()
+			{
+				GeneratorResult result = Generator.Run("""
+				                                       using Awaiten;
+
+				                                       namespace MyCode;
+
+				                                       public interface IPlugin { }
+
+				                                       public sealed class Host
+				                                       {
+				                                           private sealed class HiddenPlugin : IPlugin { }
+				                                       }
+
+				                                       [Container]
+				                                       [Scan<IPlugin>(As = ScanAs.Marker)]
+				                                       public static partial class Shop
+				                                       {
+				                                       }
+				                                       """);
+
+				await That(result.Diagnostics).Contains("*warning AWT193*'MyCode.Host.HiddenPlugin'*not accessible to the generated container*").AsWildcard()
+					.Because("the type is private to another class, so not even the container's own members can name it");
+			}
+		}
 	}
 }

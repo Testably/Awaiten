@@ -279,10 +279,41 @@ partial class AwaitenGenerator
 				return false;
 			}
 
-			inheritance.Report(subject, diagnostics);
+			if (registration.IsScan && PrivateToBase(registration) is { } hidden)
+			{
+				ReportPrivateScanMatch(registration, hidden);
+			}
+			else
+			{
+				inheritance.Report(subject, diagnostics);
+			}
+
 			constraintRejected.Add(registration.ServiceType);
 			return true;
 		});
+
+		// A base's scan reaches the types nested privately in the base, which a scan judged from the base's assembly
+		// skipped, so the extending container skips them with a warning (AWT193) instead of the AWT226 error.
+		INamedTypeSymbol? PrivateToBase(RawRegistration registration)
+			=> new[] { registration.Implementation, registration.ServiceSymbol, }
+				.FirstOrDefault(type => type is not null && !inheritance.AccessibleInBaseAssembly(type));
+
+		void ReportPrivateScanMatch(RawRegistration registration, INamedTypeSymbol hidden)
+		{
+			string type = Display((LessAccessibleThanContainer(hidden, inheritance.Base) ?? hidden).ToDisplayString(FullyQualified));
+			DiagnosticInfo diagnostic = new(
+				Diagnostics.ScanTypePrivate,
+				LocationInfo.From(inheritance.Location),
+				new EquatableArray<string>([
+					Display(registration.ImplementationType),
+					$"'{type}' is private or protected and the extending container '{Display(inheritance.Container.ToDisplayString(FullyQualified))}' cannot reach it",
+					$"make '{type}' internal",
+				]));
+			if (!diagnostics.Contains(diagnostic))
+			{
+				diagnostics.Add(diagnostic);
+			}
+		}
 
 		string? InaccessiblePart(RawRegistration registration)
 		{
@@ -364,6 +395,9 @@ partial class AwaitenGenerator
 
 		/// <summary>Whether <paramref name="origin" /> is the base or a module the base imports.</summary>
 		public bool Owns(INamedTypeSymbol? origin) => origin is not null && _origins.Contains(origin);
+
+		/// <summary>Whether the base's assembly, not only the base itself, can access <paramref name="type" />.</summary>
+		public bool AccessibleInBaseAssembly(INamedTypeSymbol type) => _compilation.IsSymbolAccessibleWithin(type, Base.ContainingAssembly);
 
 		/// <summary>Reports AWT226 for <paramref name="subject" />, once.</summary>
 		public void Report(string subject, List<DiagnosticInfo> diagnostics)

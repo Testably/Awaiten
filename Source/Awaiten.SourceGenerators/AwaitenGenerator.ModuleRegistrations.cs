@@ -43,6 +43,19 @@ partial class AwaitenGenerator
 		   && compilation.IsSymbolAccessibleWithin(type, module);
 
 	/// <summary>
+	///     The type nested privately in <paramref name="module" /> (see <see cref="IsHiddenInModule" />) that
+	///     <paramref name="type" /> is, or carries as an array element or type argument, or <see langword="null" />.
+	/// </summary>
+	private static INamedTypeSymbol? TypeHiddenInModule(ITypeSymbol type, INamedTypeSymbol module)
+		=> type switch
+		{
+			IArrayTypeSymbol array => TypeHiddenInModule(array.ElementType, module),
+			INamedTypeSymbol named when IsHiddenInModule(named, module) => named,
+			INamedTypeSymbol named => named.TypeArguments.Select(argument => TypeHiddenInModule(argument, module)).FirstOrDefault(hidden => hidden is not null),
+			_ => null,
+		};
+
+	/// <summary>
 	///     What the modules in a container's own assembly generate, which the container cannot see because it is output
 	///     of the same generator run: the matches of their scans and the factories of their self-compiled registrations.
 	///     Computed by the module pipeline's own logic, once per module and container build, with the diagnostics

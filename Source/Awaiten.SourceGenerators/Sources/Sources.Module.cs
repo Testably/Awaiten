@@ -141,12 +141,13 @@ internal static partial class Sources
 
 	/// <summary>
 	///     Emits the factory of a self-compiled module registration: it constructs the implementation, which only
-	///     the module's own assembly may, and returns it as an accessible type a consumer names in its stead.
+	///     the module's own assembly (or, for a type nested privately in it, only the module) may, and returns it as an
+	///     accessible type a consumer names in its stead.
 	/// </summary>
 	private static void EmitRegistrationFactory(StringBuilder builder, int depth, RegistrationFactory factory)
 	{
 		AppendXmlSummary(builder, depth,
-			"Generated from a module registration: constructs an implementation another assembly cannot construct and",
+			"Generated from a module registration: constructs an implementation a consuming container cannot construct and",
 			"returns it as an accessible type, so a consuming container resolves it without naming the implementation.");
 
 		FactoryParameter[] parameters = factory.Parameters.AsArray();

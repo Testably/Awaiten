@@ -214,7 +214,7 @@ public static partial class CoffeeShop;
 A registered implementation is, or contains, a private or protected nested type that the generated container cannot stand in for with an accessible type, or one of its `[Arg]` types is private or protected. The generated `Root` and `Scope` are public classes nested in the container: their resolver bodies may construct a private type, but their `internal` signatures cannot name it, which C# does not allow. For a `Factory` or `Instance` registration the registered type counts as the implementation.
 :::
 
-A private or protected implementation nested in the container, or in a class the container is nested in, is supported: the resolvers return an accessible type it converts to, while their bodies construct, initialize, hook and dispose it as its own type. That type is a registered service that covers its other services, else the most derived accessible base class that covers them, else the first such interface the implementation declares. An implementation nested privately in an imported module, or in a class that contains the module, is built through the factory the module generates (see [internal implementations](./04-registration/07-modules.md#internal-implementations)). A private service type is fine as long as its implementation is accessible.
+A private or protected implementation nested in the container, or in a class the container is nested in, is supported: the resolvers return an accessible type it converts to, while their bodies construct, initialize, hook and dispose it as its own type. That type is a registered service that covers its other services, else the most derived accessible base class that covers them, else the first such interface the implementation declares. An implementation nested privately in an imported module, or in a class that contains the module, is built through the factory the module generates (see [internal implementations](./04-registration/07-modules.md#internal-implementations)). A private service type is fine as long as its implementation is accessible. A `[Scan]` never reports AWT216: it skips a match in one of the cases below with [AWT193](#awt193).
 
 AWT216 remains in these cases:
 
@@ -1671,7 +1671,7 @@ public static partial class CoffeeShop;
 ### AWT193
 
 :::warning[Warning]
-A `[Scan]` matched a type that is inaccessible to the generated container, so it is not registered.
+A `[Scan]` matched a type that is inaccessible to the generated container, or a private nested type it cannot stand in for with an accessible type, so it is not registered.
 :::
 
 ```csharp no-compile
@@ -1688,6 +1688,23 @@ public static partial class CoffeeShop;
 Where [AWT188](#awt188) is about an interface the match cannot be exposed under, this one is about the match itself, so no `ScanAs` flag rescues it: every registration has to name the implementation. Make the type public, grant the container's assembly `InternalsVisibleTo`, or exclude it with a `NamePatterns`/`NamespacePatterns` entry (the `Exclude` type list cannot name an inaccessible type). Reported only for a type the marker matched and the scan's filters kept, so an unrelated internal type in a scanned assembly stays silent, as does one you already excluded.
 
 **Fix:** Make the type public, grant the container's assembly `InternalsVisibleTo`, or exclude it with a `NamePatterns` or `NamespacePatterns` entry.
+
+A type nested privately in the container is a match like any other: the generated resolvers return an accessible type it converts to (see [AWT216](#awt216)). The scan skips it with this warning, and names the reason, only where no such type exists, so a private type never turns a scan into an error:
+
+- **Registered as itself.** `ScanAs.Self` would make the private type its own service. Expose it through `ScanAs.Marker` or `ScanAs.MatchingInterface` instead.
+- **Several services without a common type.** No accessible type the match converts to covers all the interfaces it is registered under, including those of an explicit registration of the same type. Narrow the scan to one interface, or give the type an accessible base type that covers them. An explicit registration of the type stays as it is without the scan.
+- **Out of an extending container's reach.** A base container's scan registers a type nested privately in the base, which a container that [extends](./04-registration/08-extending-containers.md) it cannot construct. Make the type `internal`.
+- **Registered by its module.** A module scan matched a type nested privately in the module that the module also registers, and the type's single generated factory serves that registration.
+
+```csharp expect=AWT193
+[Container]
+[Scan<IPlugin>]   // ScanAs.Self: AWT193, the private type would be its own service
+[Scan<IPlugin>(As = ScanAs.Marker)]   // registered under IPlugin
+public static partial class CoffeeShop
+{
+    private sealed class FakePlugin : IPlugin;
+}
+```
 
 ### AWT198
 
@@ -1924,6 +1941,20 @@ public static partial class PluginModule;
 The generated factory is a `public` method whose parameters are resolved from the *consuming* container's graph, so each parameter type has to be nameable by the consumer. The same holds for the factory of an [internal implementation](./04-registration/07-modules.md#internal-implementations) a module registers. Widen the parameter type's accessibility, or keep the type out of self-compilation. (A v1 limitation: a self-compiled factory cannot construct through an inaccessible parameter.)
 
 **Fix:** Make the parameter type public, or exclude the match from the scan, or make a registered implementation and its constructor public.
+
+A parameter type nested privately in the module has a message of its own, because widening it is not the remedy for a type that is meant to stay private. No container can name such a type, so none can register a service of it or resolve the parameter, and the factory cannot build it either without bypassing the lifetime and disposal the graph gives it. Depend on an accessible service the private type implements, and register the type under that service:
+
+```csharp expect=AWT195
+[Module]
+[Singleton<Grinder, IGrinder>]
+[Singleton<Espresso, IDrink>]
+public static partial class BarModule
+{
+    private sealed class Grinder : IGrinder;
+
+    private sealed class Espresso(Grinder grinder) : IDrink;   // depend on IGrinder instead
+}
+```
 
 ### AWT196
 

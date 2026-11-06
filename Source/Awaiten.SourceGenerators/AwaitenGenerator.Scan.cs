@@ -14,7 +14,8 @@ partial class AwaitenGenerator
 	///     <c>InAssembliesOf</c>, sorted by name for reproducibility, then narrowed by the optional
 	///     <c>NamePatterns</c>/<c>NamespacePatterns</c>/<c>Exclude</c> filters. Abstract/static classes, generic
 	///     definitions and the marker itself are skipped; a match the generated container cannot name is reported as
-	///     AWT193 and then dropped. A markerless scan (the parameterless <c>[Scan]</c>) matches every concrete type
+	///     AWT193 and then dropped, while a private nested type the container can reach is registered (see
+	///     <see cref="DropUnsupportedPrivateScanMatches" /> for the ones it cannot stand in for). A markerless scan (the parameterless <c>[Scan]</c>) matches every concrete type
 	///     instead, narrowed by those same filters. Reports
 	///     AWT138/AWT139/AWT140/AWT143/AWT172/AWT173/AWT174/AWT182/AWT183/AWT184/AWT185/AWT187/AWT188/AWT193. The synthesized
 	///     registrations are <see cref="RawRegistration.IsScan" />, so an explicit registration wins single
@@ -43,11 +44,11 @@ partial class AwaitenGenerator
 
 			if (ScanMarker(attribute, attributeClass) is { } marker)
 			{
-				ExpandScan(attribute, marker, compilation, result, diagnostics, viewpoint);
+				ExpandScan(attribute, marker, compilation, result, diagnostics, containerSymbol);
 			}
 			else if (IsMarkerlessScan(attribute, attributeClass))
 			{
-				ExpandScan(attribute, null, compilation, result, diagnostics, viewpoint);
+				ExpandScan(attribute, null, compilation, result, diagnostics, containerSymbol);
 			}
 		}
 
@@ -75,8 +76,9 @@ partial class AwaitenGenerator
 		Compilation compilation,
 		List<RawRegistration> result,
 		List<DiagnosticInfo> diagnostics,
-		IAssemblySymbol viewpoint)
+		INamedTypeSymbol containerSymbol)
 	{
+		IAssemblySymbol viewpoint = containerSymbol.ContainingAssembly;
 		Location? location = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation();
 
 		// AWT143: an InAssembliesOf that resolves to no assembly (an empty array, or entries naming no type)
@@ -143,8 +145,9 @@ partial class AwaitenGenerator
 			// container cannot name the type and no registration could reference it. Reported here rather than
 			// during gathering, where it would fire once per internal type in every scanned assembly, and unlike
 			// the other per-match warnings also for a markerless scan: AWT183 forces one to narrow its candidates,
-			// so a match reaching this point was asked for either way.
-			if (candidate.Inaccessible)
+			// so a match reaching this point was asked for either way. A private nested type the container itself can
+			// reach is registered: its resolver bodies may construct it (see DropUnsupportedPrivateScanMatches).
+			if (candidate.Inaccessible && !compilation.IsSymbolAccessibleWithin(candidate.Type, containerSymbol))
 			{
 				diagnostics.Add(new DiagnosticInfo(
 					Diagnostics.ScanTypeInaccessible,
@@ -154,7 +157,7 @@ partial class AwaitenGenerator
 			}
 
 			IReadOnlyList<INamedTypeSymbol>? hookClosedMarkers = ScanHookMarkers(candidate.Type, match, openMarker, markerDefinition);
-			produced += RegisterScanMatch(candidate.Type, ScanContracts(candidate.Type, match, marker, openMarker, markerDefinition, compilation, viewpoint), markerDisplay, match, hookClosedMarkers, result, diagnostics);
+			produced += RegisterScanMatch(candidate.Type, ScanContracts(candidate.Type, match, marker, openMarker, markerDefinition, compilation, containerSymbol), markerDisplay, match, hookClosedMarkers, result, diagnostics);
 		}
 
 		ReportScanFilterDiagnostics(filters, hits, new ScanFilterCounts(assignable, registered, produced), assemblies, markerDisplay, location, diagnostics);
@@ -177,7 +180,7 @@ partial class AwaitenGenerator
 		bool openMarker,
 		INamedTypeSymbol? markerDefinition,
 		Compilation compilation,
-		IAssemblySymbol viewpoint)
+		INamedTypeSymbol containerSymbol)
 	{
 		List<INamedTypeSymbol> contracts = new();
 		if (match.RegisterMarker && marker is not null)
@@ -195,7 +198,7 @@ partial class AwaitenGenerator
 		List<INamedTypeSymbol> inaccessible = new();
 		contracts.RemoveAll(contract =>
 		{
-			if (compilation.IsSymbolAccessibleWithin(contract, viewpoint))
+			if (compilation.IsSymbolAccessibleWithin(contract, containerSymbol))
 			{
 				return false;
 			}
@@ -209,7 +212,7 @@ partial class AwaitenGenerator
 
 		// The convention tie is ambiguous only when several same-named interfaces actually register: one dropped
 		// as inaccessible above cannot make the registration ambiguous (it is reported separately, as AWT188).
-		bool ambiguousMatching = matching.Count(contract => compilation.IsSymbolAccessibleWithin(contract, viewpoint)) > 1;
+		bool ambiguousMatching = matching.Count(contract => compilation.IsSymbolAccessibleWithin(contract, containerSymbol)) > 1;
 		return new ScanContractSet(contracts, inaccessible, ambiguousMatching);
 	}
 
@@ -517,8 +520,9 @@ partial class AwaitenGenerator
 			.Select(type => new ScanCandidate(type, !compilation.IsSymbolAccessibleWithin(type, viewpoint)));
 
 	/// <summary>
-	///     One type a <c>[Scan]</c> matched, and whether it is inaccessible to the generated container (internal to
-	///     another assembly, or a private/protected nested type), in which case nothing can be registered for it.
+	///     One type a <c>[Scan]</c> matched, and whether the scanning assembly cannot access it (internal to another
+	///     assembly, or a private/protected nested type). Such a type is registered only when the scanning container or
+	///     module itself can reach it, because it is nested privately within it.
 	/// </summary>
 	private readonly record struct ScanCandidate(INamedTypeSymbol Type, bool Inaccessible);
 
@@ -1134,6 +1138,65 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
+	///     Drops the scan registrations of a private or protected nested implementation that the generated resolvers
+	///     could not stand in for with an accessible type (the shapes of
+	///     <see cref="Diagnostics.RegisteredTypeLessAccessible">AWT216</see>), reporting the
+	///     <see cref="Diagnostics.ScanTypePrivate">AWT193</see> warning with the reason instead of the error. The
+	///     question is asked over every registration of the implementation, so a match whose services cannot share one
+	///     resolver with an explicit registration of the same type is dropped too, leaving that registration as it was
+	///     without the scan.
+	/// </summary>
+	private static void DropUnsupportedPrivateScanMatches(
+		List<RawRegistration> raw,
+		INamedTypeSymbol containerSymbol,
+		Compilation compilation,
+		List<DiagnosticInfo> diagnostics)
+	{
+		List<RawRegistration> privateMatches = raw.FindAll(registration => registration is { IsScan: true, Production: ProductionKind.Constructor, ConstructVia: null, }
+		                                                                   && LessAccessibleThanContainer(registration.Implementation, containerSymbol) is not null);
+		if (privateMatches.Count == 0)
+		{
+			return;
+		}
+
+		Dictionary<string, INamedTypeSymbol> symbols = ServiceSymbolsOf(raw);
+		HashSet<string> checkedImplementations = new(StringComparer.Ordinal);
+		foreach (RawRegistration match in privateMatches)
+		{
+			string implementationType = match.ImplementationType;
+			if (!checkedImplementations.Add(implementationType))
+			{
+				continue;
+			}
+
+			List<RawRegistration> registrations = raw.FindAll(registration => registration.ImplementationType == implementationType);
+			HashSet<string> services = new(registrations.Select(registration => registration.ServiceType), StringComparer.Ordinal);
+			if (CoveringResolverType(match.Implementation, services, symbols, containerSymbol, compilation) is not null)
+			{
+				continue;
+			}
+
+			INamedTypeSymbol narrower = LessAccessibleThanContainer(match.Implementation, containerSymbol)!;
+			string type = Display(narrower.ToDisplayString(FullyQualified));
+			bool scannedAsItself = registrations.Any(registration => registration.IsScan && registration.ServiceType == implementationType);
+			(string reason, string remedy) = MissingResolverTypeReason(match.Implementation, narrower, services, containerSymbol, compilation, moduleRegistered: false).PrivateService switch
+			{
+				not null when scannedAsItself => ("the scan registers it as itself", "expose it through ScanAs.Marker or ScanAs.MatchingInterface instead of ScanAs.Self"),
+				{ } service => (RegisteredAsPrivateService(match.Implementation, service), "register it under an accessible service"),
+				null => ("no accessible type it converts to covers all of its services", "narrow the scan to one interface, or give it an accessible base type that covers its services"),
+			};
+
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.ScanTypePrivate,
+				LocationInfo.From(match.Location),
+				new EquatableArray<string>([Display(implementationType), $"'{type}' is private or protected and {reason}", remedy,])));
+			raw.RemoveAll(registration => registration.IsScan && registration.ImplementationType == implementationType);
+			diagnostics.RemoveAll(diagnostic => diagnostic.Descriptor == Diagnostics.ScanAmbiguousMatchingInterfaces
+			                                    && diagnostic.MessageArgs.AsArray()[0] == Display(implementationType));
+		}
+	}
+
+	/// <summary>
 	///     Drops every implementation from a <c>[Scan(SkipUnconstructable = true)]</c> that the container cannot
 	///     construct, reporting AWT141 where the default keeps the AWT101 error, so an incidentally-matched helper
 	///     type does not break the build. An implementation also registered explicitly, or by a scan without the
@@ -1252,7 +1315,8 @@ partial class AwaitenGenerator
 	///     module factory, not by a constructor this container can see (the implementation is internal to the
 	///     module's assembly), so its satisfiability is the factory's parameters, which mirror that constructor's. A
 	///     same-compilation module-scan match is constructed directly, but through the same greedy constructor pick
-	///     the factory would mirror, so its prune asks about that constructor too.
+	///     the factory would mirror, so its prune asks about that constructor too, from the module for a match nested
+	///     privately in it, which the container builds through that factory.
 	/// </summary>
 	private static string? UnconstructableScanMatchReason(
 		RawRegistration registration,
@@ -1261,7 +1325,7 @@ partial class AwaitenGenerator
 		ScanSatisfiability surface)
 		=> registration is { Production: ProductionKind.Factory, Origin: not null, ProductionMember: not null, }
 			? FirstUnsatisfiableFactoryReason(registration, surface)
-			: FirstUnconstructableReason(registration.Implementation, containerSymbol, compilation, surface, registration.GreedyConstructor);
+			: FirstUnconstructableReason(registration.Implementation, registration.ConstructVia is null ? containerSymbol : registration.Origin!, compilation, surface, registration.GreedyConstructor);
 
 	/// <summary>
 	///     The reason a scanned implementation cannot be constructed (an AWT141 fragment), or <see langword="null" />

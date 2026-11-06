@@ -1366,7 +1366,8 @@ internal static class Diagnostics
 
 	/// <summary>
 	///     A <c>[Scan]</c> matched a type the generated container cannot name: it is internal to another assembly
-	///     (with no <c>InternalsVisibleTo</c>), or a private/protected nested type. No exposure can save it, because
+	///     (with no <c>InternalsVisibleTo</c>), or a private/protected nested type of a class the container is not
+	///     nested in (one the container can reach is registered, see <see cref="ScanTypePrivate" />). No exposure can save it, because
 	///     every registration has to name the implementation in order to construct it. That is what separates this
 	///     from <see cref="ScanInterfaceInaccessible">AWT188</see>, where only the interface is out of reach and
 	///     <c>ScanAs.Self</c> still registers the type. Without this warning the match would vanish silently on a
@@ -1380,6 +1381,24 @@ internal static class Diagnostics
 		"AWT193",
 		"Scan matched an inaccessible type",
 		"'{0}' matched the scan, but the type itself is not accessible to the generated container, so it is not registered; widen the type's accessibility (or grant the container's assembly InternalsVisibleTo), or exclude it from the scan with a NamePatterns/NamespacePatterns entry",
+		"Awaiten",
+		DiagnosticSeverity.Warning,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     The private form of <see cref="ScanTypeInaccessible">AWT193</see>: a <c>[Scan]</c> matched a private or
+	///     protected nested type the scanning container can reach, but the registration would need an accessible type
+	///     to stand in for it that does not exist (the shapes of <see cref="RegisteredTypeLessAccessible">AWT216</see>),
+	///     for example because <c>ScanAs.Self</c> registers it as itself, or a container extending the scanning base
+	///     cannot reach it (where an explicit registration is <see cref="InheritedMemberInaccessible">AWT226</see>).
+	///     <c>{1}</c> names the reason and <c>{2}</c> the remedy. A scan skips such a match with this warning rather
+	///     than failing, and also drops it when only its combination with another registration of the same type has no
+	///     accessible stand-in, so the other registration keeps its meaning.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ScanTypePrivate = new(
+		"AWT193",
+		ScanTypeInaccessible.Title,
+		"'{0}' matched the scan, but {1}, so it is not registered; {2}, or exclude it from the scan",
 		"Awaiten",
 		DiagnosticSeverity.Warning,
 		isEnabledByDefault: true);
@@ -1410,6 +1429,20 @@ internal static class Diagnostics
 		"AWT195",
 		"Self-compiled implementation has an inaccessible constructor parameter",
 		"{0}, but its constructor parameter of type '{1}' is not accessible outside the module's assembly, so the generated factory cannot expose it; widen the parameter type's accessibility or {2}",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     The module-private form of <see cref="ModuleScanParameterInaccessible">AWT195</see>: the constructor
+	///     parameter's type is nested privately in the module. No container can name that type, so none can register a
+	///     service of it or resolve the parameter, and the factory can neither take it nor build it itself without
+	///     bypassing the graph's lifetimes and disposal. Depend on an accessible service the type implements instead.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ModuleParameterHiddenInModule = new(
+		"AWT195",
+		ModuleScanParameterInaccessible.Title,
+		"{0}, but its constructor parameter '{1}' needs '{2}', which is nested privately in the module, so no container can register or resolve it; depend on an accessible service that '{2}' implements instead, and register '{2}' under that service",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
