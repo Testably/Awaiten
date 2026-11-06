@@ -294,5 +294,163 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).Contains("*AWT166*'MyCode.IClock'*SuppressDisposal*").AsWildcard()
 				.Because("registrations naming the same factory are one implementation, which is disposed one way only");
 		}
+
+		public class HookIdentity
+		{
+			[Test]
+			public async Task ReportsWhenAModuleAndTheContainerNameHooksOfTheSameName()
+			{
+				GeneratorResult result = Generator.Run("""
+				                                       using Awaiten;
+
+				                                       namespace MyCode;
+
+				                                       public sealed class Grinder { }
+
+				                                       [Module]
+				                                       [Singleton<Grinder>(OnActivated = nameof(Init))]
+				                                       public static class GrinderModule
+				                                       {
+				                                       	public static void Init(Grinder grinder) { }
+				                                       }
+
+				                                       [Container]
+				                                       [Import(typeof(GrinderModule))]
+				                                       [Singleton<Grinder>(OnActivated = nameof(Init))]
+				                                       public static partial class CoffeeShop
+				                                       {
+				                                       	private static void Init(Grinder grinder) { }
+				                                       }
+				                                       """);
+
+				await That(result.Diagnostics).Contains("*AWT166*'MyCode.Grinder'*OnActivated*('MyCode.CoffeeShop.Init' and 'MyCode.GrinderModule.Init')*").AsWildcard()
+					.Because("the two hooks share a name but are declared on different types, so coalescing would silently drop one of them");
+			}
+
+			[Test]
+			public async Task ReportsWhenTwoModulesNameReleaseHooksOfTheSameName()
+			{
+				GeneratorResult result = Generator.Run("""
+				                                       using Awaiten;
+
+				                                       namespace MyCode;
+
+				                                       public interface IRead { }
+				                                       public interface IWrite { }
+				                                       public sealed class Store : IRead, IWrite { }
+
+				                                       [Module]
+				                                       [Singleton<Store, IRead>(OnRelease = nameof(Close))]
+				                                       public static class ReadModule
+				                                       {
+				                                       	public static void Close(Store store) { }
+				                                       }
+
+				                                       [Module]
+				                                       [Singleton<Store, IWrite>(OnRelease = nameof(Close))]
+				                                       public static class WriteModule
+				                                       {
+				                                       	public static void Close(Store store) { }
+				                                       }
+
+				                                       [Container]
+				                                       [Import(typeof(ReadModule))]
+				                                       [Import(typeof(WriteModule))]
+				                                       public static partial class MyContainer
+				                                       {
+				                                       }
+				                                       """);
+
+				await That(result.Diagnostics).Contains("*AWT166*'MyCode.Store'*OnRelease*('MyCode.ReadModule.Close' and 'MyCode.WriteModule.Close')*").AsWildcard()
+					.Because("each module's Close is a different method, and the coalesced instance runs only one of them");
+			}
+
+			[Test]
+			public async Task QualifiesDifferentHooksOfOneContainerWithTheContainer()
+			{
+				GeneratorResult result = Generator.Run("""
+				                                       using Awaiten;
+
+				                                       namespace MyCode;
+
+				                                       public interface IRead { }
+				                                       public interface IWrite { }
+				                                       public sealed class Store : IRead, IWrite { }
+
+				                                       [Container]
+				                                       [Singleton<Store, IRead>(OnActivated = nameof(Started))]
+				                                       [Singleton<Store, IWrite>(OnActivated = nameof(Woken))]
+				                                       public static partial class MyContainer
+				                                       {
+				                                       	private static void Started(Store store) { }
+				                                       	private static void Woken(Store store) { }
+				                                       }
+				                                       """);
+
+				await That(result.Diagnostics).Contains("*AWT166*('MyCode.MyContainer.Started' and 'MyCode.MyContainer.Woken')*").AsWildcard()
+					.Because("each hook is named with its declaring type");
+			}
+
+			[Test]
+			public async Task DoesNotReportWhenRegistrationsNameTheSameModuleHook()
+			{
+				GeneratorResult result = Generator.Run("""
+				                                       using Awaiten;
+
+				                                       namespace MyCode;
+
+				                                       public interface IRead { }
+				                                       public interface IWrite { }
+				                                       public sealed class Store : IRead, IWrite { }
+
+				                                       [Module]
+				                                       [Singleton<Store, IRead>(OnActivated = nameof(Init))]
+				                                       [Singleton<Store, IWrite>(OnActivated = nameof(Init))]
+				                                       public static class StoreModule
+				                                       {
+				                                       	public static void Init(Store store) { }
+				                                       }
+
+				                                       [Container]
+				                                       [Import(typeof(StoreModule))]
+				                                       public static partial class MyContainer
+				                                       {
+				                                       }
+				                                       """);
+
+				await That(result.Diagnostics).IsEmpty()
+					.Because("both registrations name the same member of the same module, so nothing is dropped");
+			}
+
+			[Test]
+			public async Task DoesNotReportWhenTheContainerReplacesAFallbackModuleHookOfTheSameName()
+			{
+				GeneratorResult result = Generator.Run("""
+				                                       using Awaiten;
+
+				                                       namespace MyCode;
+
+				                                       public sealed class Grinder { }
+
+				                                       [Module]
+				                                       [Singleton<Grinder>(OnActivated = nameof(Init), Fallback = Fallback.Silent)]
+				                                       public static class GrinderModule
+				                                       {
+				                                       	public static void Init(Grinder grinder) { }
+				                                       }
+
+				                                       [Container]
+				                                       [Import(typeof(GrinderModule))]
+				                                       [Singleton<Grinder>(OnActivated = nameof(Init))]
+				                                       public static partial class CoffeeShop
+				                                       {
+				                                       	private static void Init(Grinder grinder) { }
+				                                       }
+				                                       """);
+
+				await That(result.Diagnostics).IsEmpty()
+					.Because("a Fallback registration is replaced in full by the container's registration, hook included");
+			}
+		}
 	}
 }

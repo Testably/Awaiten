@@ -36,6 +36,19 @@ public partial class LifecycleHookTests
 	}
 
 	[Test]
+	public async Task ContainerHook_ReplacesAFallbackModuleHookOfTheSameName()
+	{
+		Probe.Log.Clear();
+		using (FallbackHookContainer.Root container = new())
+		{
+			container.Resolve<Alpha>();
+		}
+
+		await That(Probe.Log).IsEqualTo(["container:activated", "container:released",])
+			.Because("the container's registration replaces the module's Fallback registration in full, so only the container's hooks run");
+	}
+
+	[Test]
 	public async Task OnRelease_RunsBeforeTheInstancesOwnDisposal()
 	{
 		Probe.Log.Clear();
@@ -475,6 +488,25 @@ public partial class LifecycleHookTests
 		private static void Activated(object instance) => Probe.Log.Add("activated:" + instance.GetType().Name);
 
 		private static void Released(object instance) => Probe.Log.Add("released:" + instance.GetType().Name);
+	}
+
+	[Module]
+	[Singleton<Alpha>(OnActivated = nameof(Activated), OnRelease = nameof(Released), Fallback = Fallback.Silent)]
+	public static class FallbackHookModule
+	{
+		public static void Activated(Alpha instance) => Probe.Log.Add("module:activated");
+
+		public static void Released(Alpha instance) => Probe.Log.Add("module:released");
+	}
+
+	[Container]
+	[Import(typeof(FallbackHookModule))]
+	[Singleton<Alpha>(OnActivated = nameof(Activated), OnRelease = nameof(Released))]
+	public static partial class FallbackHookContainer
+	{
+		private static void Activated(Alpha instance) => Probe.Log.Add("container:activated");
+
+		private static void Released(Alpha instance) => Probe.Log.Add("container:released");
 	}
 
 	[Container]
