@@ -38,7 +38,7 @@ One rule follows from this, and it is the most important rule on the page:
 
 Not everything deserves an abstraction and a registration. Deciding what does is the judgment the container cannot make for you.
 
-A dependency is **volatile** when it does something you cannot control from a test or reproduce on demand: it talks to the outside world, has side effects, or gives different answers at different times. The clock, randomness, the filesystem, a database, an HTTP call, configuration read at startup. In the coffee shop, the espresso machine and the payment terminal are volatile: one touches hardware, the other calls the bank. These are exactly the things you want behind an abstraction so a test can stand in a fake, and exactly the things that belong in the container.
+A dependency is **volatile** when it does something you cannot control from a test or reproduce on demand: it talks to the outside world, has side effects, or gives different answers at different times. The clock, randomness, the filesystem, a database, an HTTP call, configuration read at startup. In the coffee shop, the espresso machine and the payment terminal are volatile: one touches hardware, the other calls the bank. These are exactly the things you want behind an abstraction so a test can stand in a fake, and exactly the things that belong in the container. A test that wants the whole graph can [extend](./04-registration/08-extending-containers.md) the production container and replace only these.
 
 A dependency is **stable** when it is deterministic and self-contained: a value type, a pure helper, a piece of data with no I/O behind it. A coffee `Recipe` that holds a list of steps is stable. Abstracting it buys you nothing, and registering it just adds noise to the root.
 
@@ -161,4 +161,5 @@ Each of those feature pages carries a **"When not to reach for this"** note that
 - [Getting started](./01-getting-started.md) if you have not built a container yet.
 - [Keyed services](./04-registration/04-keyed-services.md) and [scanning](./04-registration/06-scanning.md) for the registration features to use sparingly.
 - [Property injection](./05-resolution/05-property-injection.md) and [context-aware factories](./05-resolution/07-context-aware-factories.md) for the resolution features to use sparingly.
+- [Extending containers](./04-registration/08-extending-containers.md) for a test composition root that reuses the production one.
 - [Diagnostics](./09-diagnostics.md) for the mechanics Awaiten *does* enforce.

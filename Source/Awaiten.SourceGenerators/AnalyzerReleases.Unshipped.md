@@ -119,6 +119,11 @@
  AWT216  | Awaiten   | Error    | A registered implementation or [Arg] type is a private or protected nested type the generated container cannot expose
  AWT218  | Awaiten   | Warning  | A typed Resolve<T>()/ResolveAsync<T>() on a generated Root/Scope names a service the container has no unkeyed registration for, such as a closing of an open generic the graph never injects
  AWT219  | Awaiten   | Warning  | A typed Resolve<T>()/ResolveAsync<T>() on a generated Root/Scope names a service the container withholds from that call (async-only on a synchronous Resolve, or withheld on the Root)
+ AWT222  | Awaiten   | Error    | [Container(Extends = typeof(...))] names a type that is not a non-generic [Container]
+ AWT223  | Awaiten   | Error    | A container names itself in Extends
+ AWT224  | Awaiten   | Error    | The base named by Extends itself extends another container
+ AWT225  | Awaiten   | Error    | A container with Extends sets AsyncSafety or LifetimeSafety, which it inherits from its base
+ AWT226  | Awaiten   | Error    | A type or member a container inherits through Extends is not accessible from it
 
 ; AWT137 (an injected property marked [Arg]) is retired: [Arg] targets only parameters, so the compiler rejects it on a property. The id stays reserved and is never reused.
 ; AWT217 (a partially open [InjectProperty(typeof(...), name)] target) is retired before it shipped: AWT215 covers the typeof argument of [InjectProperty] and [ImportService] alike. The id stays reserved and is never reused.

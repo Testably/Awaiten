@@ -1773,4 +1773,69 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Warning,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     <c>[Container(Extends = typeof(…))]</c> names a type that is not a usable base: it is not a <c>[Container]</c>,
+	///     or it is generic (or nested in a generic type), so there is no single composition to start from. Nothing is
+	///     inherited.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ExtendsNotAContainer = new(
+		"AWT222",
+		"Extends target is not a container",
+		"'{0}' extends '{1}', but {2}, so nothing is inherited; Extends must name a non-generic [Container]",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     <c>[Container(Extends = typeof(…))]</c> names the container itself. Nothing is inherited.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ExtendsItself = new(
+		"AWT223",
+		"Container extends itself",
+		"'{0}' names itself in Extends; Extends names another [Container] whose composition this one starts from",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     The base named by <c>Extends</c> itself extends another container. Extending is one level deep, so a chain of
+	///     containers cannot grow into an inheritance hierarchy whose registrations come from anywhere along it. Nothing
+	///     is inherited.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ExtendsChain = new(
+		"AWT224",
+		"Base container extends another container",
+		"'{0}' extends '{1}', which itself extends '{2}'; a container can extend only a container without Extends, so extend '{2}' directly or move what '{1}' adds into a [Module]",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A container with <c>Extends</c> sets a <c>[Container]</c> option that decides how its graph is validated
+	///     (<c>AsyncSafety</c>, <c>LifetimeSafety</c>). These options are inherited from the base unchanged, so the
+	///     extending container is validated exactly like the composition it reuses. The setting is ignored.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ExtendsOverridesOption = new(
+		"AWT225",
+		"Container with Extends sets an inherited option",
+		"'{0}' sets {1}, but a container with Extends inherits {1} from its base '{2}', so its graph is validated exactly like the base's; remove {1} from '{0}'",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A declaration a container inherits through <c>Extends</c> needs a type or member that the extending container
+	///     cannot access, although the base can: a private member of the base, or an internal one in another assembly
+	///     that does not grant <c>InternalsVisibleTo</c>. The generated container calls inherited factories, instance
+	///     members, hooks and constructors directly, so it must see them; without the error the extending container would
+	///     silently drop a scan match or fail to build what the base builds. The inherited declaration is ignored.
+	/// </summary>
+	public static readonly DiagnosticDescriptor InheritedMemberInaccessible = new(
+		"AWT226",
+		"Inherited member is not accessible",
+		"{0} is not accessible from '{1}', which inherits it from '{2}' through Extends; make it public, or internal and grant the assembly of '{1}' [InternalsVisibleTo]",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

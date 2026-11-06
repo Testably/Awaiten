@@ -22,6 +22,7 @@ partial class AwaitenGenerator
 		Compilation compilation,
 		ExternalSurface external,
 		Dictionary<string, List<InjectPropertyEntry>> injectProperties,
+		Inheritance? inheritance,
 		List<DiagnosticInfo> diagnostics)
 	{
 		List<RawRegistration> result = new();
@@ -36,17 +37,23 @@ partial class AwaitenGenerator
 
 		CollectLifetimeRegistrations(new LifetimeCollectionContext(containerSymbol, null, null, compilation, open, diagnostics), result);
 
+		// The container's own registrations, which replace the inherited ones of an extended base (see ReplaceInherited).
+		List<RawRegistration> own = inheritance is null ? [] : new(result);
+		List<OpenRegistration> ownOpen = inheritance is null ? [] : new(open);
+
 		// [Import(typeof(Module))] pulls a module's registrations in after the container's own, so the container
 		// wins ties and a module's overridable defaults (Fallback.Warn/Silent) only fill the gaps it leaves. Resolved
-		// one level deep; a module's own [Import] is not followed. A same-compilation module's
-		// [GeneratedScanRegistration] attributes are skipped: the generator itself never sees them (its own output),
-		// but an analyzer running over the post-generation compilation does, and collecting them alongside the
-		// direct scan expansion below would double every match in its graph.
+		// one level deep; a module's own [Import] is not followed. An extended base and its imports come first among
+		// the modules (see InheritBase), read like modules qualified on their own type; what is wrong with one of their
+		// attributes is the base's to report. A same-compilation module's [GeneratedScanRegistration] attributes are
+		// skipped: the generator itself never sees them (its own output), but an analyzer running over the
+		// post-generation compilation does, and collecting them alongside the direct scan expansion below would
+		// double every match in its graph.
 		foreach (ImportedModule module in modules)
 		{
 			bool sameCompilation = SymbolEqualityComparer.Default.Equals(module.Symbol.ContainingAssembly, containerSymbol.ContainingAssembly);
 			CollectLifetimeRegistrations(
-				new LifetimeCollectionContext(module.Symbol, module.Symbol, module.ImportLocation, compilation, open, diagnostics),
+				new LifetimeCollectionContext(module.Symbol, module.Symbol, module.ImportLocation, compilation, open, module.Inherited ? new List<DiagnosticInfo>() : diagnostics),
 				result,
 				skipGeneratedScanRegistrations: sameCompilation);
 		}
@@ -63,9 +70,24 @@ partial class AwaitenGenerator
 		// constructors may require closed generics only an open registration can provide.
 		List<RawRegistration> scans = CollectScans(containerSymbol, compilation, diagnostics);
 		result.AddRange(scans);
+
+		// An extended base's [Scan] keeps its container semantics: it sweeps the base's own assembly and matches what
+		// the base sees, so a match the extending container cannot access is reported below rather than silently
+		// missing. It ranks after the container's own scans and is owned by the base, so its hooks bind there.
+		if (inheritance is not null)
+		{
+			result.AddRange(CollectScans(inheritance.Base, compilation, new List<DiagnosticInfo>())
+				.Select(registration => registration with { Origin = inheritance.Base, }));
+		}
+
 		result.AddRange(moduleScanRegistrations);
 
 		CollectSameCompilationModuleScans(containerSymbol, modules, compilation, result);
+
+		if (inheritance is not null)
+		{
+			ReplaceInherited(inheritance, own, ownOpen, result, open);
+		}
 
 		// Expand open generic registrations: for every closed generic service required from the graph
 		// whose open form is registered but which has no concrete registration, synthesize the closed
@@ -73,6 +95,11 @@ partial class AwaitenGenerator
 		if (open.Count > 0)
 		{
 			ExpandOpenGenerics(result, open, new ExpansionInputs(containerSymbol, compilation, external, injectProperties), diagnostics, constraintRejected);
+		}
+
+		if (inheritance is not null)
+		{
+			DropInaccessibleInherited(inheritance, result, constraintRejected, diagnostics);
 		}
 
 		// ...then moved back to the end: coalescing is first-wins per service, so the explicit registrations and
@@ -128,7 +155,7 @@ partial class AwaitenGenerator
 		Compilation compilation,
 		List<RawRegistration> result)
 	{
-		foreach (INamedTypeSymbol moduleSymbol in modules.Select(module => module.Symbol))
+		foreach (INamedTypeSymbol moduleSymbol in modules.Where(module => !module.IsBase).Select(module => module.Symbol))
 		{
 			if (!SymbolEqualityComparer.Default.Equals(moduleSymbol.ContainingAssembly, containerSymbol.ContainingAssembly))
 			{
@@ -596,21 +623,22 @@ partial class AwaitenGenerator
 	///     shared enumeration for readers that accept module contributions (<c>[Decorate]</c>,
 	///     <c>[Composite]</c>), so the container's declarations always precede a module's and an earlier
 	///     import's precede a later one's. Each attribute is paired with a fallback location (the module's
-	///     <c>[Import]</c>) for attributes read from a referenced assembly, which have no syntax of their own.
+	///     <c>[Import]</c>) for attributes read from a referenced assembly, which have no syntax of their own, and
+	///     whether it is inherited from an extended base (see <see cref="InheritBase" />).
 	/// </summary>
-	private static IEnumerable<(AttributeData Attribute, Location? FallbackLocation)> AttributesOf(
+	private static IEnumerable<(AttributeData Attribute, Location? FallbackLocation, bool Inherited)> AttributesOf(
 		INamedTypeSymbol containerSymbol, List<ImportedModule> modules)
 	{
 		foreach (AttributeData attribute in containerSymbol.GetAttributes())
 		{
-			yield return (attribute, null);
+			yield return (attribute, null, false);
 		}
 
 		foreach (ImportedModule module in modules)
 		{
 			foreach (AttributeData attribute in module.Symbol.GetAttributes())
 			{
-				yield return (attribute, module.ImportLocation);
+				yield return (attribute, module.ImportLocation, module.Inherited);
 			}
 		}
 	}
@@ -656,19 +684,27 @@ partial class AwaitenGenerator
 	///     <c>[Decorate(typeof(D&lt;&gt;), typeof(IService&lt;&gt;))]</c> form. Both share one declaration counter so
 	///     that, once the open form is expanded per closing, open and closed decorators of the same closed service
 	///     interleave by equal <c>Order</c> then declaration order. Collected apart from lifetime registrations
-	///     because a decorator wraps an existing registration after coalescing.
+	///     because a decorator wraps an existing registration after coalescing. A decorator inherited from an extended
+	///     base is marked so it stays inside the extending container's own decorators; one the extending container
+	///     cannot construct is AWT226 and skipped.
 	/// </summary>
 	private static (List<DecorateRegistration> Closed, List<OpenDecorateRegistration> Open) CollectDecorators(
-		INamedTypeSymbol containerSymbol, List<ImportedModule> modules, List<DiagnosticInfo> diagnostics)
+		INamedTypeSymbol containerSymbol, List<ImportedModule> modules, Inheritance? inheritance, List<DiagnosticInfo> diagnostics)
 	{
 		List<DecorateRegistration> closed = new();
 		List<OpenDecorateRegistration> open = new();
 		int declarationOrder = 0;
-		foreach ((AttributeData attribute, Location? fallbackLocation) in AttributesOf(containerSymbol, modules))
+		foreach ((AttributeData attribute, Location? fallbackLocation, bool inherited) in AttributesOf(containerSymbol, modules))
 		{
 			if (attribute.AttributeClass is not { Name: "DecorateAttribute", } attributeClass
 			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace)
 			{
+				continue;
+			}
+
+			if (inherited && InaccessibleInheritedType(attribute, attributeClass, inheritance!, diagnostics))
+			{
+				declarationOrder++;
 				continue;
 			}
 
@@ -695,7 +731,7 @@ partial class AwaitenGenerator
 				    && attributeClass.TypeArguments[1] is INamedTypeSymbol service)
 				{
 					closed.Add(new DecorateRegistration(
-						service.ToDisplayString(FullyQualified), service, decorator, order, declarationOrder, location, keys));
+						service.ToDisplayString(FullyQualified), service, decorator, order, declarationOrder, location, keys, inherited));
 				}
 			}
 			else if (attribute.ConstructorArguments.Length == 2
@@ -703,7 +739,7 @@ partial class AwaitenGenerator
 			         && attribute.ConstructorArguments[1].Value is INamedTypeSymbol openService
 			         && TryReadOpenGenericPair(openDecorator, openService, LocationInfo.From(location), diagnostics) is { } pair)
 			{
-				open.Add(new OpenDecorateRegistration(pair.Service, pair.Mapped, order, declarationOrder, location, keys));
+				open.Add(new OpenDecorateRegistration(pair.Service, pair.Mapped, order, declarationOrder, location, keys, inherited));
 			}
 
 			// One slot per [Decorate] attribute (well-formed or not), so open and closed decorators keep their
@@ -800,17 +836,19 @@ partial class AwaitenGenerator
 	///     <c>[Composite&lt;TComposite, TService&gt;]</c> form and the open generic
 	///     <c>[Composite(typeof(C&lt;&gt;), typeof(IService&lt;&gt;))]</c> form, each carrying the composed service,
 	///     the composite and its lifetime (default <see cref="Lifetime.Transient" />). Collected apart from lifetime
-	///     registrations because a composite fronts an existing service after coalescing.
+	///     registrations because a composite fronts an existing service after coalescing. A composite inherited from
+	///     an extended base that the extending container cannot construct is AWT226 and skipped.
 	/// </summary>
 	private static (List<CompositeRegistration> Closed, List<OpenCompositeRegistration> Open) CollectComposites(
-		INamedTypeSymbol containerSymbol, List<ImportedModule> modules, List<DiagnosticInfo> diagnostics)
+		INamedTypeSymbol containerSymbol, List<ImportedModule> modules, Inheritance? inheritance, List<DiagnosticInfo> diagnostics)
 	{
 		List<CompositeRegistration> closed = new();
 		List<OpenCompositeRegistration> open = new();
-		foreach ((AttributeData attribute, Location? fallbackLocation) in AttributesOf(containerSymbol, modules))
+		foreach ((AttributeData attribute, Location? fallbackLocation, bool inherited) in AttributesOf(containerSymbol, modules))
 		{
 			if (attribute.AttributeClass is not { Name: "CompositeAttribute", } attributeClass
-			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace)
+			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace
+			    || (inherited && InaccessibleInheritedType(attribute, attributeClass, inheritance!, diagnostics)))
 			{
 				continue;
 			}
@@ -857,9 +895,10 @@ partial class AwaitenGenerator
 	///     One <c>[InjectProperty&lt;TImplementation&gt;(name)]</c> entry on the container: the property of the
 	///     implementation to fill, plus the same per-property flags an <c>[Inject]</c> attribute carries. The
 	///     container-side counterpart of an <c>[Inject]</c> property, matched to a registration by its
-	///     implementation type (see <see cref="CollectInjectProperties" />).
+	///     implementation type (see <see cref="CollectInjectProperties" />). <see cref="Inherited" /> marks an entry of
+	///     an extended base (see <see cref="InheritInjectProperties" />).
 	/// </summary>
-	private sealed record InjectPropertyEntry(string PropertyName, bool Optional, bool Deferred, string? Key, LocationInfo? Location);
+	private sealed record InjectPropertyEntry(string PropertyName, bool Optional, bool Deferred, string? Key, LocationInfo? Location, bool Inherited = false);
 
 	/// <summary>
 	///     Reads the container's <c>[InjectProperty&lt;TImplementation&gt;(name)]</c> and
@@ -1052,7 +1091,9 @@ partial class AwaitenGenerator
 	///     <c>Type@__dec:…</c> identity, so keying only on that would misreport an entry targeting the decorator type
 	///     as unmatched. (Property injection is not applied to a decorator wrapper; see the <c>[InjectProperty]</c>
 	///     XML doc.) It also carries each impl's generic definition, the key of an open-generic entry, so such an
-	///     entry is unmatched only when no closing of its definition is constructed.
+	///     entry is unmatched only when no closing of its definition is constructed. An entry inherited from an
+	///     extended base is not reported: the base reports its own, and one whose implementation the extending
+	///     container replaced is meant to fall away.
 	/// </summary>
 	private static void ReportUnmatchedInjectProperties(
 		Dictionary<string, List<InjectPropertyEntry>> injectProperties,
@@ -1079,7 +1120,7 @@ partial class AwaitenGenerator
 				continue;
 			}
 
-			foreach (InjectPropertyEntry entry in implementation.Value)
+			foreach (InjectPropertyEntry entry in implementation.Value.Where(entry => !entry.Inherited))
 			{
 				diagnostics.Add(new DiagnosticInfo(
 					Diagnostics.InjectPropertyImplementationNotRegistered,

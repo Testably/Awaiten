@@ -763,6 +763,7 @@ partial class AwaitenGenerator
 		    || registration.Weak
 		    || registration.Origin is null
 		    || winner.Origin is null
+		    || HasAwaitenAttribute(winner.Origin.GetAttributes(), "ContainerAttribute")
 		    || PrecedenceRank(registration) != PrecedenceRank(winner)
 		    || SymbolEqualityComparer.Default.Equals(registration.Origin, winner.Origin)
 		    || winner.ImplementationType == registration.ImplementationType)

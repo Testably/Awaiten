@@ -52,7 +52,8 @@ partial class AwaitenGenerator
 					decorator.Order,
 					decorator.DeclarationOrder,
 					decorator.Location,
-					keys));
+					keys,
+					decorator.Inherited));
 			}
 		}
 	}
