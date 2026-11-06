@@ -1110,6 +1110,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Nov 6 17:26:14 2026 \u002B0100",
         "message": "fix: build the decorators of an eager singleton at startup (#259)"
+      },
+      {
+        "sha": "67a74870105e653822450592666400641229971e",
+        "author": "Valentin Breu\u00DF",
+        "date": "Fri Nov 6 17:33:12 2026 \u002B0100",
+        "message": "fix: close open generics for factory parameters and every wrapped parameter shape (#260)"
       }
     ],
     "labels": [
@@ -1297,7 +1303,8 @@ window.BENCHMARK_DATA = {
       "8741c01e",
       "0d10add3",
       "c85bfe33",
-      "b2992bc1"
+      "b2992bc1",
+      "67a74870"
     ],
     "datasets": [
       {
@@ -1488,7 +1495,8 @@ window.BENCHMARK_DATA = {
           5.322520327568054,
           5.919094953153815,
           7.149265371263027,
-          7.1467096988971415
+          7.1467096988971415,
+          4.027318933109442
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -1500,6 +1508,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -1883,7 +1892,8 @@ window.BENCHMARK_DATA = {
           6.715461328625679,
           7.735501890735967,
           7.846037404877799,
-          7.357836919526259
+          7.357836919526259,
+          3.8525967294206986
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -1895,6 +1905,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -2278,7 +2289,8 @@ window.BENCHMARK_DATA = {
           86.07262041018559,
           86.50491321086884,
           118.18540322780609,
-          112.61676113605499
+          112.61676113605499,
+          57.424207830429076
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -2290,6 +2302,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -2669,7 +2682,8 @@ window.BENCHMARK_DATA = {
           6.816527555031436,
           7.103269259134929,
           8.786670414110025,
-          8.783459560147353
+          8.783459560147353,
+          5.0659731688598795
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -2681,6 +2695,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -3056,7 +3071,8 @@ window.BENCHMARK_DATA = {
           8.1456529039603,
           8.470036530150818,
           11.294705616576332,
-          11.041453904830492
+          11.041453904830492,
+          6.33736432393392
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -3068,6 +3084,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -4372,6 +4389,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Nov 6 17:26:14 2026 \u002B0100",
         "message": "fix: build the decorators of an eager singleton at startup (#259)"
+      },
+      {
+        "sha": "67a74870105e653822450592666400641229971e",
+        "author": "Valentin Breu\u00DF",
+        "date": "Fri Nov 6 17:33:12 2026 \u002B0100",
+        "message": "fix: close open generics for factory parameters and every wrapped parameter shape (#260)"
       }
     ],
     "labels": [
@@ -4559,7 +4582,8 @@ window.BENCHMARK_DATA = {
       "8741c01e",
       "0d10add3",
       "c85bfe33",
-      "b2992bc1"
+      "b2992bc1",
+      "67a74870"
     ],
     "datasets": [
       {
@@ -4750,7 +4774,8 @@ window.BENCHMARK_DATA = {
           5.99936413535705,
           6.54257314079083,
           8.473264307777088,
-          8.15651134188686
+          8.15651134188686,
+          4.384597300418785
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -4762,6 +4787,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -5145,7 +5171,8 @@ window.BENCHMARK_DATA = {
           6.494943445920944,
           6.713623075435559,
           7.865316231335912,
-          7.327872008085251
+          7.327872008085251,
+          3.9434146006902058
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -5157,6 +5184,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -5540,7 +5568,8 @@ window.BENCHMARK_DATA = {
           90.04734478791555,
           85.37257970174154,
           128.47439767519634,
-          111.68168466885885
+          111.68168466885885,
+          58.11596295038859
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -5552,6 +5581,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -5931,7 +5961,8 @@ window.BENCHMARK_DATA = {
           6.524759377042453,
           7.305729911228021,
           8.787011313896913,
-          8.777322170138358
+          8.777322170138358,
+          5.018166161541428
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -5943,6 +5974,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -6318,7 +6350,8 @@ window.BENCHMARK_DATA = {
           11.215700249259289,
           11.656738718350729,
           14.895720315972964,
-          14.394175056081552
+          14.394175056081552,
+          6.108885458111763
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -6330,6 +6363,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -7634,6 +7668,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Nov 6 17:26:14 2026 \u002B0100",
         "message": "fix: build the decorators of an eager singleton at startup (#259)"
+      },
+      {
+        "sha": "67a74870105e653822450592666400641229971e",
+        "author": "Valentin Breu\u00DF",
+        "date": "Fri Nov 6 17:33:12 2026 \u002B0100",
+        "message": "fix: close open generics for factory parameters and every wrapped parameter shape (#260)"
       }
     ],
     "labels": [
@@ -7821,7 +7861,8 @@ window.BENCHMARK_DATA = {
       "8741c01e",
       "0d10add3",
       "c85bfe33",
-      "b2992bc1"
+      "b2992bc1",
+      "67a74870"
     ],
     "datasets": [
       {
@@ -8012,7 +8053,8 @@ window.BENCHMARK_DATA = {
           10.936119579275449,
           12.697218151887258,
           20.82326717376709,
-          19.38378887091364
+          19.38378887091364,
+          20.735196258624395
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -8174,6 +8216,7 @@ window.BENCHMARK_DATA = {
           144,
           144,
           144,
+          208,
           208,
           208,
           208,
@@ -8407,7 +8450,8 @@ window.BENCHMARK_DATA = {
           745.2699540683201,
           860.4983755258413,
           1518.1924101511638,
-          1531.993517303467
+          1531.993517303467,
+          1444.0473514284406
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -8419,6 +8463,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          5688,
           5688,
           5688,
           5688,
@@ -8802,7 +8847,8 @@ window.BENCHMARK_DATA = {
           17834.657283528646,
           18526.842742919922,
           30397.926521809895,
-          30321.697208658854
+          30321.697208658854,
+          29176.010803222656
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -8997,6 +9043,7 @@ window.BENCHMARK_DATA = {
           32482,
           32478,
           32476,
+          32482,
           32482,
           32482
         ],
@@ -9193,7 +9240,8 @@ window.BENCHMARK_DATA = {
           389.1144668715341,
           407.30850866862704,
           744.4267992655437,
-          738.6509047826131
+          738.6509047826131,
+          810.2909317697797
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -9223,6 +9271,7 @@ window.BENCHMARK_DATA = {
           1472,
           1472,
           1472,
+          1528,
           1528,
           1528,
           1528,
@@ -9580,7 +9629,8 @@ window.BENCHMARK_DATA = {
           6644.338011169433,
           6960.590747833252,
           11966.580804007393,
-          12667.364973958332
+          12667.364973958332,
+          11751.22953578404
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -9772,7 +9822,8 @@ window.BENCHMARK_DATA = {
           24760,
           24761,
           24760,
-          24761
+          24761,
+          24760
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -10896,6 +10947,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Nov 6 17:26:14 2026 \u002B0100",
         "message": "fix: build the decorators of an eager singleton at startup (#259)"
+      },
+      {
+        "sha": "67a74870105e653822450592666400641229971e",
+        "author": "Valentin Breu\u00DF",
+        "date": "Fri Nov 6 17:33:12 2026 \u002B0100",
+        "message": "fix: close open generics for factory parameters and every wrapped parameter shape (#260)"
       }
     ],
     "labels": [
@@ -11083,7 +11140,8 @@ window.BENCHMARK_DATA = {
       "8741c01e",
       "0d10add3",
       "c85bfe33",
-      "b2992bc1"
+      "b2992bc1",
+      "67a74870"
     ],
     "datasets": [
       {
@@ -11274,7 +11332,8 @@ window.BENCHMARK_DATA = {
           73.3378762465257,
           79.68939711252848,
           200.91515800158183,
-          172.91725888619055
+          172.91725888619055,
+          184.97494855948858
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -11436,6 +11495,7 @@ window.BENCHMARK_DATA = {
           2128,
           2128,
           2128,
+          4176,
           4176,
           4176,
           4176,
@@ -11669,7 +11729,8 @@ window.BENCHMARK_DATA = {
           7187.232365744455,
           7510.431163242885,
           15382.337182617188,
-          15225.666879272461
+          15225.666879272461,
+          14083.104546683175
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -11681,6 +11742,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          61016,
           61016,
           61016,
           61016,
@@ -12064,7 +12126,8 @@ window.BENCHMARK_DATA = {
           431494.51764322916,
           455638.4208658854,
           739987.4873046875,
-          751881.5854166667
+          751881.5854166667,
+          723492.9206054688
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -12260,7 +12323,8 @@ window.BENCHMARK_DATA = {
           739750,
           735271,
           739095,
-          720259
+          720259,
+          740461
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -12455,7 +12519,8 @@ window.BENCHMARK_DATA = {
           24935.814093956582,
           24333.139021653395,
           45353.320286342074,
-          44006.25772705078
+          44006.25772705078,
+          44796.06200299944
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -12647,7 +12712,8 @@ window.BENCHMARK_DATA = {
           80005,
           79669,
           80060,
-          80639
+          80639,
+          80009
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -12842,7 +12908,8 @@ window.BENCHMARK_DATA = {
           208506.69430338542,
           204315.4891531808,
           352361.0487234933,
-          385009.0983072917
+          385009.0983072917,
+          365904.99155970983
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -13034,7 +13101,8 @@ window.BENCHMARK_DATA = {
           573072,
           573057,
           573042,
-          573136
+          573136,
+          573041
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -14134,6 +14202,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Nov 6 17:26:14 2026 \u002B0100",
         "message": "fix: build the decorators of an eager singleton at startup (#259)"
+      },
+      {
+        "sha": "67a74870105e653822450592666400641229971e",
+        "author": "Valentin Breu\u00DF",
+        "date": "Fri Nov 6 17:33:12 2026 \u002B0100",
+        "message": "fix: close open generics for factory parameters and every wrapped parameter shape (#260)"
       }
     ],
     "labels": [
@@ -14317,7 +14391,8 @@ window.BENCHMARK_DATA = {
       "8741c01e",
       "0d10add3",
       "c85bfe33",
-      "b2992bc1"
+      "b2992bc1",
+      "67a74870"
     ],
     "datasets": [
       {
@@ -14504,7 +14579,8 @@ window.BENCHMARK_DATA = {
           204.23561312357586,
           271.4857806818826,
           422.6834803899129,
-          236.67422411991998
+          236.67422411991998,
+          245.2122559914222
         ],
         "borderColor": "#3949AB",
         "backgroundColor": "#3949AB",
@@ -14539,6 +14615,7 @@ window.BENCHMARK_DATA = {
           560,
           560,
           560,
+          568,
           568,
           568,
           568,
@@ -14891,7 +14968,8 @@ window.BENCHMARK_DATA = {
           467.12575062115985,
           468.0973227183024,
           628.0927245457967,
-          587.6709549086435
+          587.6709549086435,
+          557.1769501822336
         ],
         "borderColor": "#512BD4",
         "backgroundColor": "#512BD4",
@@ -14903,6 +14981,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          1104,
           1104,
           1104,
           1104,
@@ -15278,7 +15357,8 @@ window.BENCHMARK_DATA = {
           5107.285751342773,
           4637.310643122746,
           6572.194600241525,
-          6745.773671076848
+          6745.773671076848,
+          4071.286595662435
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -15362,6 +15442,7 @@ window.BENCHMARK_DATA = {
           13696,
           13696,
           13696,
+          10784,
           10784,
           10784,
           10784,
@@ -15665,7 +15746,8 @@ window.BENCHMARK_DATA = {
           353.3806939125061,
           340.04315315882366,
           422.8361163139343,
-          401.11271953582764
+          401.11271953582764,
+          362.3488632348868
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -15677,6 +15759,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          944,
           944,
           944,
           944,
@@ -16052,7 +16135,8 @@ window.BENCHMARK_DATA = {
           588.9221775690714,
           568.9445431391398,
           780.9252309799194,
-          719.9401533762614
+          719.9401533762614,
+          544.7228569189707
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -16064,6 +16148,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          1096,
           1096,
           1096,
           1096,
