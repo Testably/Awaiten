@@ -18,7 +18,7 @@ public static partial class CoffeeShop;
 
 ## Resolve a closed type
 
-Awaiten works out which closed forms you need at compile time from what the graph actually asks for: constructor and factory parameters, [injected properties](../05-resolution/05-property-injection.md) and the parameters of [lifecycle hooks](../06-lifetime/03-lifecycle-hooks.md), also when the closed service sits inside a collection, a keyed dictionary, a `Lazy<T>`, a `Func<T>`, a `Task<T>` or an `Owned<T>`. Each of those type arguments gets its own closed implementation, and each keeps the declared lifetime. You resolve a closing the graph asks for like any other service.
+Awaiten works out which closed forms you need at compile time from what the graph actually asks for: constructor and factory parameters, including those of [decorators](02-decorators.md) and [composites](03-composites.md), [injected properties](../05-resolution/05-property-injection.md) and the parameters of [lifecycle hooks](../06-lifetime/03-lifecycle-hooks.md), also when the closed service sits inside a collection, a keyed dictionary, a `Lazy<T>`, a `Func<T>`, a `Task<T>` or an `Owned<T>`. Each of those type arguments gets its own closed implementation, and each keeps the declared lifetime. You resolve a closing the graph asks for like any other service.
 
 ```csharp
 IRepository<Order> orders = shop.Resolve<IRepository<Order>>();

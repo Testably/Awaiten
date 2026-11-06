@@ -491,18 +491,23 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			InheritInjectProperties(inheritance, injectProperties);
 		}
 
+		// Decorators and composites are read before Collect, since their parameters seed open generic expansion;
+		// their diagnostics still follow the registrations'.
+		List<DiagnosticInfo> wrapperDiagnostics = new();
+		(List<DecorateRegistration> decorators, List<OpenDecorateRegistration> openDecorators) =
+			CollectDecorators(containerSymbol, modules, inheritance, wrapperDiagnostics);
+		(List<CompositeRegistration> composites, List<OpenCompositeRegistration> openComposites) =
+			CollectComposites(containerSymbol, modules, inheritance, wrapperDiagnostics);
+
 		// Collect also expands [Scan]s into overridable registrations (IsScan), ordered after the explicit ones
 		// so an explicit registration wins single resolution while every match still joins its collection.
-		(List<RawRegistration> raw, HashSet<string> constraintRejected, Dictionary<string, (Lifetime Lifetime, string? Implementation)> openServices) = Collect(containerSymbol, modules, compilation, external, injectProperties, inheritance, diagnostics);
+		(List<RawRegistration> raw, HashSet<string> constraintRejected, Dictionary<string, (Lifetime Lifetime, string? Implementation)> openServices) = Collect(
+			containerSymbol, modules, compilation, external, injectProperties, inheritance, new WrapperRegistrations(decorators, openDecorators, composites, openComposites), diagnostics);
 
 		// [Scan(SkipUnconstructable = true)] trades the AWT101 error for a skip-with-warning (AWT141) on matches
 		// the container cannot construct. Scans without the opt-in, and explicit registrations, keep the error.
 		PruneUnconstructableScanMatches(raw, containerSymbol, compilation, external, constraintRejected, diagnostics);
-
-		(List<DecorateRegistration> decorators, List<OpenDecorateRegistration> openDecorators) =
-			CollectDecorators(containerSymbol, modules, inheritance, diagnostics);
-		(List<CompositeRegistration> composites, List<OpenCompositeRegistration> openComposites) =
-			CollectComposites(containerSymbol, modules, inheritance, diagnostics);
+		diagnostics.AddRange(wrapperDiagnostics);
 
 		// Coalesce registrations by (service type, key): first per key wins, and registrations of the same
 		// implementation share one instance. Conflicting lifetimes are AWT107; a duplicate key is AWT117.

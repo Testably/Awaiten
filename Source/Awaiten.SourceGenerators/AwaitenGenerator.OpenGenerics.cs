@@ -270,11 +270,13 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     Expands open generic registrations to a fixpoint. Seeds from every closed generic service required by a
 	///     constructed implementation's constructor and injected members (<c>[Inject]</c> and <c>[InjectProperty]</c>),
-	///     by the parameters of a <c>Factory</c> and by those of its lifecycle hooks, each including a collection element.
+	///     by the parameters of a <c>Factory</c> and by those of its lifecycle hooks, each including a collection element,
+	///     and likewise by every decorator and composite: a closed one directly, an open one per closing it expands onto.
 	///     For each, it expands every matching open registration in declaration order, constructs the closed
 	///     implementation through Roslyn, verifies its constraints (AWT126), and synthesizes a concrete
 	///     <see cref="RawRegistration" />. Synthesized registrations coalesce like hand-written duplicates, and each
-	///     synthesized impl's own dependencies expand in turn.
+	///     synthesized impl's own dependencies, and those of the open decorators and composites closed onto it, expand in
+	///     turn.
 	/// </summary>
 	private static void ExpandOpenGenerics(
 		List<RawRegistration> raw,
@@ -307,10 +309,11 @@ partial class AwaitenGenerator
 		HashSet<int> droppedWeak = DroppedOverridableDefaults(raw);
 
 		// The constructors, members, factories and hooks to scan for closed generic dependencies, each carried with
-		// the expansion depth that reached it. Seeded from every known surviving registration at depth 0; grows as
-		// closed impls are synthesized, each one depth deeper than the closed service that produced it.
+		// the expansion depth that reached it. Seeded from every known surviving registration, decorator and composite
+		// at depth 0; grows as closed impls are synthesized, each one depth deeper than the closed service that
+		// produced it.
 		Queue<ExpansionWork> worklist = new();
-		ExpansionContext context = new(raw, open, worklist, new HashSet<ISymbol>(SymbolEqualityComparer.Default), inputs, diagnostics, constraintRejected);
+		ExpansionContext context = new(raw, open, openServices, worklist, new HashSet<ISymbol>(SymbolEqualityComparer.Default), inputs, diagnostics, constraintRejected);
 		SeedExpansionWorklist(droppedWeak, context);
 
 		while (worklist.Count > 0)
@@ -336,7 +339,7 @@ partial class AwaitenGenerator
 				continue;
 			}
 
-			foreach (ITypeSymbol required in ScannedServiceTypes(work, openServices, context))
+			foreach (ITypeSymbol required in ScannedServiceTypes(work, context))
 			{
 				if (required is INamedTypeSymbol { IsGenericType: true, IsUnboundGenericType: false, } closed
 				    && expandedServices.Add(closed.ToDisplayString(FullyQualified)))
@@ -352,7 +355,8 @@ partial class AwaitenGenerator
 	///     default that coalescing drops in full (see <see cref="DroppedOverridableDefaults" />) is skipped, so
 	///     its producer and hooks never synthesize closed registrations the surviving graph does not need. Each
 	///     registration is scanned through what produces it: a constructed implementation through its constructor and
-	///     injected members, a <c>Factory</c> through the factory's parameters, and an <c>Instance</c> not at all.
+	///     injected members, a <c>Factory</c> through the factory's parameters, and an <c>Instance</c> not at all. Every
+	///     closed decorator and composite is seeded too, and each registration closes the open ones that apply to it.
 	/// </summary>
 	private static void SeedExpansionWorklist(HashSet<int> droppedWeak, ExpansionContext context)
 	{
@@ -374,6 +378,67 @@ partial class AwaitenGenerator
 			}
 
 			EnqueueHooks(registration, 0, context);
+			EnqueueOpenWrappers(registration, 0, context);
+		}
+
+		foreach (DecorateRegistration decorator in context.Inputs.Wrappers.Decorators)
+		{
+			EnqueueDecorator(decorator.Decorator, decorator.ServiceSymbol, 0, context);
+		}
+
+		foreach (CompositeRegistration composite in context.Inputs.Wrappers.Composites)
+		{
+			Enqueue(new ExpansionWork(composite.Composite, null, 0, ExpansionScan.ConstructedInstance), context);
+		}
+	}
+
+	/// <summary>
+	///     Enqueues the closing of every open decorator and composite that <see cref="ExpandOpenDecorators" /> and
+	///     <see cref="ExpandOpenComposites" /> will expand onto <paramref name="registration" />'s closed service: the
+	///     same open service, a key the decorator selects or the composite's key, and type arguments that satisfy its
+	///     constraints (otherwise AWT171 skips the closing). A contextual registration is reached only from its consumer,
+	///     so it closes none.
+	/// </summary>
+	private static void EnqueueOpenWrappers(RawRegistration registration, int depth, ExpansionContext context)
+	{
+		if (registration is not { ServiceSymbol: { IsGenericType: true, IsUnboundGenericType: false, } closed, WhenInjectedInto: null, })
+		{
+			return;
+		}
+
+		WrapperRegistrations wrappers = context.Inputs.Wrappers;
+		ITypeSymbol[] typeArguments = closed.TypeArguments.ToArray();
+		foreach (OpenDecorateRegistration decorator in wrappers.OpenDecorators)
+		{
+			if (SymbolEqualityComparer.Default.Equals(decorator.Service, closed.ConstructedFrom)
+			    && (decorator.Keys is null || decorator.Keys.Contains(registration.Key))
+			    && ConstraintsSatisfied(decorator.Decorator, typeArguments))
+			{
+				EnqueueDecorator(decorator.Decorator.Construct(typeArguments), closed, depth, context);
+			}
+		}
+
+		foreach (OpenCompositeRegistration composite in wrappers.OpenComposites)
+		{
+			if (SymbolEqualityComparer.Default.Equals(composite.Service, closed.ConstructedFrom)
+			    && composite.Key == registration.Key
+			    && ConstraintsSatisfied(composite.Composite, typeArguments))
+			{
+				Enqueue(new ExpansionWork(composite.Composite.Construct(typeArguments), null, depth, ExpansionScan.ConstructedInstance), context);
+			}
+		}
+	}
+
+	/// <summary>
+	///     Enqueues a decorator of <paramref name="service" /> through the constructor the container builds it with,
+	///     unless it has no single inner parameter (AWT124), which leaves the whole chain unbuilt.
+	/// </summary>
+	private static void EnqueueDecorator(INamedTypeSymbol decorator, INamedTypeSymbol service, int depth, ExpansionContext context)
+	{
+		if (SelectExpansionConstructor(decorator, context) is { } constructor
+		    && InnerParameter(constructor, service, context.Inputs.Compilation) is { } inner)
+		{
+			Enqueue(new ExpansionWork(decorator, constructor, depth, ExpansionScan.Decorator, inner), context);
 		}
 	}
 
@@ -503,6 +568,7 @@ partial class AwaitenGenerator
 			}
 
 			EnqueueHooks(registration, depth + 1, context);
+			EnqueueOpenWrappers(registration, depth + 1, context);
 		}
 	}
 
@@ -629,19 +695,20 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     The service types one unit of expansion work depends on: a factory's parameters, a hook's parameters after
-	///     the instance, or the constructor and injected members of an implementation the container constructs.
+	///     the instance, a decorator's constructor parameters but the inner one plus its <c>[Inject]</c> properties
+	///     (an <c>[InjectProperty]</c> entry does not reach a chain link), or the constructor and injected members of an
+	///     implementation the container constructs.
 	/// </summary>
-	private static IEnumerable<ITypeSymbol> ScannedServiceTypes(ExpansionWork work, HashSet<INamedTypeSymbol> openServices, ExpansionContext context)
-	{
-		ExpansionInputs inputs = context.Inputs;
-		return work.Scan switch
+	private static IEnumerable<ITypeSymbol> ScannedServiceTypes(ExpansionWork work, ExpansionContext context)
+		=> work.Scan switch
 		{
 			ExpansionScan.Factory => ParameterServiceTypes(work.Method!.Parameters),
 			ExpansionScan.Hook => ParameterServiceTypes(work.Method!.Parameters.Skip(1)),
-			_ => RequiredServiceTypes(work.Implementation, inputs.ContainerSymbol, inputs.Compilation, context.Raw, openServices, inputs.External)
-				.Concat(InjectedMemberServiceTypes(work.Implementation, inputs.InjectProperties)),
+			ExpansionScan.Decorator => ParameterServiceTypes(work.Method!.Parameters.Where(parameter => !SymbolEqualityComparer.Default.Equals(parameter, work.Inner)))
+				.Concat(InjectedProperties(work.Implementation).Select(property => RequiredServiceType(property.Type))),
+			_ => (SelectExpansionConstructor(work.Implementation, context) is { } constructor ? ParameterServiceTypes(constructor.Parameters) : [])
+				.Concat(InjectedMemberServiceTypes(work.Implementation, context.Inputs.InjectProperties)),
 		};
-	}
 
 	/// <summary>
 	///     The service types <paramref name="parameters" /> resolve from the graph. A runtime argument (<c>[Arg]</c>) is
@@ -692,32 +759,18 @@ partial class AwaitenGenerator
 			.Select(entry => entry.PropertyName);
 
 	/// <summary>
-	///     The service types an implementation's constructor depends on, unwrapping relationship and collection
-	///     shapes so a closed generic reached through them still seeds expansion. Uses the same
-	///     <see cref="AwaitenGenerator.SelectConstructor" /> the container builds through, treating an
-	///     open-generic-satisfiable parameter as satisfiable before expansion, so the seed scans exactly the
-	///     parameters the emitted container resolves.
+	///     The constructor the container builds <paramref name="implementation" /> through, picked by the same
+	///     <see cref="AwaitenGenerator.SelectConstructor" /> but treating an open-generic-satisfiable parameter as
+	///     satisfiable before expansion, so the seed scans exactly the parameters the emitted container resolves.
 	/// </summary>
-	private static IEnumerable<ITypeSymbol> RequiredServiceTypes(
-		INamedTypeSymbol implementation,
-		INamedTypeSymbol containerSymbol,
-		Compilation compilation,
-		List<RawRegistration> raw,
-		HashSet<INamedTypeSymbol> openServices,
-		ExternalSurface external)
-	{
-		IMethodSymbol? constructor = AwaitenGenerator.SelectConstructor(
+	private static IMethodSymbol? SelectExpansionConstructor(INamedTypeSymbol implementation, ExpansionContext context)
+		=> AwaitenGenerator.SelectConstructor(
 			implementation,
-			containerSymbol,
-			compilation,
-			raw.Select(r => r.ServiceType),
-			external,
-			p => IsOpenGenericSatisfiable(p.Type, openServices));
-
-		return constructor is null
-			? []
-			: ParameterServiceTypes(constructor.Parameters);
-	}
+			context.Inputs.ContainerSymbol,
+			context.Inputs.Compilation,
+			context.Raw.Select(r => r.ServiceType),
+			context.Inputs.External,
+			p => IsOpenGenericSatisfiable(p.Type, context.OpenServices));
 
 	/// <summary>
 	///     The single service type a constructor parameter resolves, unwrapping one <c>Task</c>/<c>ValueTask</c>
@@ -989,34 +1042,48 @@ partial class AwaitenGenerator
 
 		/// <summary>The parameters after the instance of a lifecycle hook.</summary>
 		Hook,
+
+		/// <summary>The constructor parameters but the inner one and the <c>[Inject]</c> properties of a decorator.</summary>
+		Decorator,
 	}
 
 	/// <summary>
-	///     One unit of expansion work: the implementation it belongs to, the factory or hook method that
-	///     <see cref="Scan" /> names (<see langword="null" /> for a constructor), and the expansion depth that reached it.
+	///     One unit of expansion work: the implementation it belongs to, the factory, hook or decorator constructor that
+	///     <see cref="Scan" /> names (<see langword="null" /> for a constructed implementation), the expansion depth that
+	///     reached it and, for a decorator, the inner parameter that receives the decorated service and closes nothing.
 	/// </summary>
-	private readonly record struct ExpansionWork(INamedTypeSymbol Implementation, IMethodSymbol? Method, int Depth, ExpansionScan Scan);
+	private readonly record struct ExpansionWork(INamedTypeSymbol Implementation, IMethodSymbol? Method, int Depth, ExpansionScan Scan, IParameterSymbol? Inner = null);
 
 	/// <summary>
 	///     The container-wide inputs open generic expansion reads but never changes: the container, the compilation,
-	///     the external-resolution surface constructor selection honours, and the <c>[InjectProperty]</c> entries whose
-	///     properties seed expansion like constructor parameters.
+	///     the external-resolution surface constructor selection honours, the <c>[InjectProperty]</c> entries whose
+	///     properties seed expansion like constructor parameters, and the decorators and composites whose dependencies
+	///     seed it too.
 	/// </summary>
 	private sealed record ExpansionInputs(
 		INamedTypeSymbol ContainerSymbol,
 		Compilation Compilation,
 		ExternalSurface External,
-		Dictionary<string, List<InjectPropertyEntry>> InjectProperties);
+		Dictionary<string, List<InjectPropertyEntry>> InjectProperties,
+		WrapperRegistrations Wrappers);
+
+	/// <summary>The closed and open <c>[Decorate]</c> and <c>[Composite]</c> registrations of a container and its modules.</summary>
+	private sealed record WrapperRegistrations(
+		List<DecorateRegistration> Decorators,
+		List<OpenDecorateRegistration> OpenDecorators,
+		List<CompositeRegistration> Composites,
+		List<OpenCompositeRegistration> OpenComposites);
 
 	/// <summary>
 	///     The mutable state threaded through open generic expansion: the growing registration list and worklist,
-	///     the constructors, factories and hooks already enqueued, and the diagnostics sink.
-	///     <see cref="ReportedConstraints" /> also dedups the depth-limit report (AWT129) under a <c>depth:</c> prefix
-	///     so each cause is reported once.
+	///     the open service definitions, the constructors, factories and hooks already enqueued, and the diagnostics
+	///     sink. <see cref="ReportedConstraints" /> also dedups the depth-limit report (AWT129) under a <c>depth:</c>
+	///     prefix so each cause is reported once.
 	/// </summary>
 	private sealed record ExpansionContext(
 		List<RawRegistration> Raw,
 		List<OpenRegistration> Open,
+		HashSet<INamedTypeSymbol> OpenServices,
 		Queue<ExpansionWork> Worklist,
 		HashSet<ISymbol> Seen,
 		ExpansionInputs Inputs,
