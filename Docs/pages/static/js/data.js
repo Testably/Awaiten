@@ -1134,6 +1134,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Nov 6 18:00:07 2026 \u002B0100",
         "message": "fix: report private nested registrations as AWT216 instead of emitting code that fails with CS0050. (#261)"
+      },
+      {
+        "sha": "01274877499c9191e88a7f12042bbd177489f92e",
+        "author": "Valentin Breu\u00DF",
+        "date": "Fri Nov 6 18:23:26 2026 \u002B0100",
+        "message": "feat: let a container extend another container with [Container(Extends = typeof(...))] (#265)"
       }
     ],
     "labels": [
@@ -1325,7 +1331,8 @@ window.BENCHMARK_DATA = {
       "67a74870",
       "3517285b",
       "399f3788",
-      "c28d5fc4"
+      "c28d5fc4",
+      "01274877"
     ],
     "datasets": [
       {
@@ -1520,7 +1527,8 @@ window.BENCHMARK_DATA = {
           4.027318933109442,
           7.148781747619311,
           7.779047201459225,
-          3.9138488242668763
+          3.9138488242668763,
+          4.06382804736495
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -1532,6 +1540,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -1923,7 +1932,8 @@ window.BENCHMARK_DATA = {
           3.8525967294206986,
           7.964115836222967,
           8.648057089402126,
-          4.122521755787043
+          4.122521755787043,
+          3.8649295861167565
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -1935,6 +1945,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -2326,7 +2337,8 @@ window.BENCHMARK_DATA = {
           57.424207830429076,
           121.11641037464142,
           111.53714952468872,
-          67.03393669128418
+          67.03393669128418,
+          58.32888073580606
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -2338,6 +2350,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -2725,7 +2738,8 @@ window.BENCHMARK_DATA = {
           5.0659731688598795,
           8.954647744695345,
           9.095837113757929,
-          5.402243302336761
+          5.402243302336761,
+          4.416724820931752
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -2737,6 +2751,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -3120,7 +3135,8 @@ window.BENCHMARK_DATA = {
           6.33736432393392,
           11.013765429074947,
           11.28126844863097,
-          6.187681942184766
+          6.187681942184766,
+          6.023496770858765
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -3132,6 +3148,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -4464,6 +4481,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Nov 6 18:00:07 2026 \u002B0100",
         "message": "fix: report private nested registrations as AWT216 instead of emitting code that fails with CS0050. (#261)"
+      },
+      {
+        "sha": "01274877499c9191e88a7f12042bbd177489f92e",
+        "author": "Valentin Breu\u00DF",
+        "date": "Fri Nov 6 18:23:26 2026 \u002B0100",
+        "message": "feat: let a container extend another container with [Container(Extends = typeof(...))] (#265)"
       }
     ],
     "labels": [
@@ -4655,7 +4678,8 @@ window.BENCHMARK_DATA = {
       "67a74870",
       "3517285b",
       "399f3788",
-      "c28d5fc4"
+      "c28d5fc4",
+      "01274877"
     ],
     "datasets": [
       {
@@ -4850,7 +4874,8 @@ window.BENCHMARK_DATA = {
           4.384597300418785,
           8.167922201965537,
           8.47164814280612,
-          4.246934479475021
+          4.246934479475021,
+          4.443036908904712
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -4862,6 +4887,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -5253,7 +5279,8 @@ window.BENCHMARK_DATA = {
           3.9434146006902058,
           7.909197246799102,
           7.267903965253097,
-          3.9009058667080745
+          3.9009058667080745,
+          3.872767288486163
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -5265,6 +5292,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -5656,7 +5684,8 @@ window.BENCHMARK_DATA = {
           58.11596295038859,
           123.30088030497232,
           115.06470832824706,
-          62.69130005155291
+          62.69130005155291,
+          59.2032755613327
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -5668,6 +5697,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -6055,7 +6085,8 @@ window.BENCHMARK_DATA = {
           5.018166161541428,
           8.936301365494728,
           9.05369158834219,
-          5.154809019962946
+          5.154809019962946,
+          4.300022271963266
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -6067,6 +6098,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -6450,7 +6482,8 @@ window.BENCHMARK_DATA = {
           6.108885458111763,
           14.664560900202819,
           14.96816924115022,
-          5.9874735581023355
+          5.9874735581023355,
+          6.0454882393280664
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -6462,6 +6495,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -7794,6 +7828,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Nov 6 18:00:07 2026 \u002B0100",
         "message": "fix: report private nested registrations as AWT216 instead of emitting code that fails with CS0050. (#261)"
+      },
+      {
+        "sha": "01274877499c9191e88a7f12042bbd177489f92e",
+        "author": "Valentin Breu\u00DF",
+        "date": "Fri Nov 6 18:23:26 2026 \u002B0100",
+        "message": "feat: let a container extend another container with [Container(Extends = typeof(...))] (#265)"
       }
     ],
     "labels": [
@@ -7985,7 +8025,8 @@ window.BENCHMARK_DATA = {
       "67a74870",
       "3517285b",
       "399f3788",
-      "c28d5fc4"
+      "c28d5fc4",
+      "01274877"
     ],
     "datasets": [
       {
@@ -8180,7 +8221,8 @@ window.BENCHMARK_DATA = {
           20.735196258624395,
           19.3731257127864,
           16.597019741932552,
-          20.192882947127025
+          20.192882947127025,
+          15.45836308172771
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -8342,6 +8384,7 @@ window.BENCHMARK_DATA = {
           144,
           144,
           144,
+          208,
           208,
           208,
           208,
@@ -8583,7 +8626,8 @@ window.BENCHMARK_DATA = {
           1444.0473514284406,
           1431.4303059895833,
           1332.5311132158552,
-          1492.0894629405095
+          1492.0894629405095,
+          1107.0178822108678
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -8595,6 +8639,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          5688,
           5688,
           5688,
           5688,
@@ -8986,7 +9031,8 @@ window.BENCHMARK_DATA = {
           29176.010803222656,
           32756.13457845052,
           26579.86005859375,
-          29743.794799804688
+          29743.794799804688,
+          25282.053873697918
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -9186,7 +9232,8 @@ window.BENCHMARK_DATA = {
           32482,
           32482,
           32478,
-          32482
+          32482,
+          32478
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -9385,7 +9432,8 @@ window.BENCHMARK_DATA = {
           810.2909317697797,
           731.5222300211589,
           599.0573064804078,
-          728.961513859885
+          728.961513859885,
+          563.6114712397258
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -9415,6 +9463,7 @@ window.BENCHMARK_DATA = {
           1472,
           1472,
           1472,
+          1528,
           1528,
           1528,
           1528,
@@ -9780,7 +9829,8 @@ window.BENCHMARK_DATA = {
           11751.22953578404,
           10995.146268572125,
           9702.425100708007,
-          11524.62707226093
+          11524.62707226093,
+          9127.12437286377
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -9973,6 +10023,7 @@ window.BENCHMARK_DATA = {
           24761,
           24760,
           24761,
+          24760,
           24760,
           24760,
           24760,
@@ -11124,6 +11175,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Nov 6 18:00:07 2026 \u002B0100",
         "message": "fix: report private nested registrations as AWT216 instead of emitting code that fails with CS0050. (#261)"
+      },
+      {
+        "sha": "01274877499c9191e88a7f12042bbd177489f92e",
+        "author": "Valentin Breu\u00DF",
+        "date": "Fri Nov 6 18:23:26 2026 \u002B0100",
+        "message": "feat: let a container extend another container with [Container(Extends = typeof(...))] (#265)"
       }
     ],
     "labels": [
@@ -11315,7 +11372,8 @@ window.BENCHMARK_DATA = {
       "67a74870",
       "3517285b",
       "399f3788",
-      "c28d5fc4"
+      "c28d5fc4",
+      "01274877"
     ],
     "datasets": [
       {
@@ -11510,7 +11568,8 @@ window.BENCHMARK_DATA = {
           184.97494855948858,
           141.5902172235342,
           121.54320859114328,
-          187.90442861829484
+          187.90442861829484,
+          114.13320194880167
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -11672,6 +11731,7 @@ window.BENCHMARK_DATA = {
           2128,
           2128,
           2128,
+          4176,
           4176,
           4176,
           4176,
@@ -11913,7 +11973,8 @@ window.BENCHMARK_DATA = {
           14083.104546683175,
           13468.998053995769,
           11500.47121887207,
-          14507.841972351074
+          14507.841972351074,
+          10599.747447087215
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -11925,6 +11986,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          61016,
           61016,
           61016,
           61016,
@@ -12316,7 +12378,8 @@ window.BENCHMARK_DATA = {
           723492.9206054688,
           814499.2859235491,
           647503.65078125,
-          729229.351702009
+          729229.351702009,
+          636733.8500279018
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -12516,7 +12579,8 @@ window.BENCHMARK_DATA = {
           740461,
           741805,
           741802,
-          740463
+          740463,
+          738350
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -12715,7 +12779,8 @@ window.BENCHMARK_DATA = {
           44796.06200299944,
           44829.646536690845,
           36101.34147542318,
-          43948.82917198768
+          43948.82917198768,
+          35186.19420572917
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -12911,7 +12976,8 @@ window.BENCHMARK_DATA = {
           80009,
           80304,
           80303,
-          80011
+          80011,
+          80645
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -13110,7 +13176,8 @@ window.BENCHMARK_DATA = {
           365904.99155970983,
           337225.419921875,
           269358.11376953125,
-          349931.8738839286
+          349931.8738839286,
+          275073.1239257812
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -13306,7 +13373,8 @@ window.BENCHMARK_DATA = {
           573041,
           573187,
           573089,
-          573061
+          573061,
+          573121
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -14430,6 +14498,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Nov 6 18:00:07 2026 \u002B0100",
         "message": "fix: report private nested registrations as AWT216 instead of emitting code that fails with CS0050. (#261)"
+      },
+      {
+        "sha": "01274877499c9191e88a7f12042bbd177489f92e",
+        "author": "Valentin Breu\u00DF",
+        "date": "Fri Nov 6 18:23:26 2026 \u002B0100",
+        "message": "feat: let a container extend another container with [Container(Extends = typeof(...))] (#265)"
       }
     ],
     "labels": [
@@ -14617,7 +14691,8 @@ window.BENCHMARK_DATA = {
       "67a74870",
       "3517285b",
       "399f3788",
-      "c28d5fc4"
+      "c28d5fc4",
+      "01274877"
     ],
     "datasets": [
       {
@@ -14808,7 +14883,8 @@ window.BENCHMARK_DATA = {
           245.2122559914222,
           271.3745162010193,
           317.22167095771204,
-          172.10794307635382
+          172.10794307635382,
+          148.96236533778054
         ],
         "borderColor": "#3949AB",
         "backgroundColor": "#3949AB",
@@ -14843,6 +14919,7 @@ window.BENCHMARK_DATA = {
           560,
           560,
           560,
+          568,
           568,
           568,
           568,
@@ -15203,7 +15280,8 @@ window.BENCHMARK_DATA = {
           557.1769501822336,
           631.3937287648519,
           699.5715747833252,
-          423.27726995944977
+          423.27726995944977,
+          362.17469607080733
         ],
         "borderColor": "#512BD4",
         "backgroundColor": "#512BD4",
@@ -15215,6 +15293,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          1104,
           1104,
           1104,
           1104,
@@ -15598,7 +15677,8 @@ window.BENCHMARK_DATA = {
           4071.286595662435,
           6518.1974538167315,
           6395.158506266276,
-          3607.6374247624326
+          3607.6374247624326,
+          3240.3264604296005
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -15682,6 +15762,7 @@ window.BENCHMARK_DATA = {
           13696,
           13696,
           13696,
+          10784,
           10784,
           10784,
           10784,
@@ -15993,7 +16074,8 @@ window.BENCHMARK_DATA = {
           362.3488632348868,
           404.05719493230185,
           420.58357960383097,
-          258.899635887146
+          258.899635887146,
+          233.3401374083299
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -16005,6 +16087,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          944,
           944,
           944,
           944,
@@ -16388,7 +16471,8 @@ window.BENCHMARK_DATA = {
           544.7228569189707,
           747.6039306004842,
           763.8069590159824,
-          394.5443860934331
+          394.5443860934331,
+          370.0536003112793
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -16400,6 +16484,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          1096,
           1096,
           1096,
           1096,
