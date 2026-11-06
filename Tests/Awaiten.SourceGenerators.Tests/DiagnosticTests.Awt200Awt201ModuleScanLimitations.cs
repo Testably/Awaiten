@@ -59,6 +59,32 @@ public partial class DiagnosticTests
 		}
 
 		[Test]
+		public async Task Awt200_ReportsWhenAMatchConstructorParameterIsMarkedFromKey()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace Lib;
+
+			                                       public interface IClock { }
+			                                       public interface IPlugin { }
+			                                       public interface IRoaster { }
+
+			                                       internal sealed class Roaster : IPlugin, IRoaster
+			                                       {
+			                                           public Roaster([FromKey("utc")] IClock clock) { }
+			                                       }
+
+			                                       [Module]
+			                                       [Scan<IPlugin>(As = ScanAs.MatchingInterface)]
+			                                       public static partial class PluginModule { }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT200*Roaster*clock*[FromKey]*").AsWildcard()
+				.Because("the factory's bare parameter would resolve the unkeyed service in another assembly while a container of the module's own assembly honors the key");
+		}
+
+		[Test]
 		public async Task Awt201_ReportsForAGenericModuleWithAScan()
 		{
 			GeneratorResult result = Generator.Run("""

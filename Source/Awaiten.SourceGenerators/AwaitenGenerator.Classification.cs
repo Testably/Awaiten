@@ -1113,7 +1113,7 @@ partial class AwaitenGenerator
 	private static ExternalServiceTypes CollectExternalServiceTypes(INamedTypeSymbol containerSymbol, List<ImportedModule> modules, List<DiagnosticInfo> diagnostics)
 	{
 		ExternalServiceTypes types = new();
-		foreach ((AttributeData attribute, Location? fallbackLocation, _) in AttributesOf(containerSymbol, modules))
+		foreach ((AttributeData attribute, Location? fallbackLocation, _, _) in AttributesOf(containerSymbol, modules))
 		{
 			if (attribute.AttributeClass is not { Name: "ImportServiceAttribute", } attributeClass
 			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace)

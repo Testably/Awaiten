@@ -231,8 +231,9 @@ partial class AwaitenGenerator
 				Diagnostics.ModuleScanMultipleExposures,
 				LocationInfo.From(match.Location),
 				new EquatableArray<string>([
-					Display(typeName),
+					ScanSubject(typeName).Subject,
 					string.Join(", ", distinct.Select(exposure => Display(exposure.ToDisplayString(FullyQualified)))),
+					ScanSingleExposureRemedy,
 				])));
 			return 0;
 		}
@@ -247,7 +248,7 @@ partial class AwaitenGenerator
 			return 0;
 		}
 
-		if (!TryMirrorFactoryParameters(type, context.Module, context.Compilation, match, typeName, diagnostics, out EquatableArray<FactoryParameter> parameters))
+		if (!TryMirrorFactoryParameters(type, context, match.Location, ScanSubject(typeName), out EquatableArray<FactoryParameter> parameters))
 		{
 			return 0;
 		}
@@ -271,7 +272,8 @@ partial class AwaitenGenerator
 				match.SkipUnconstructable,
 				parameters,
 				onActivated?.Wrapper,
-				onRelease?.Wrapper),
+				onRelease?.Wrapper,
+				TraitsOf(type)),
 			service,
 			type,
 			match.Location,
@@ -323,7 +325,9 @@ partial class AwaitenGenerator
 		// record: the reported failure no longer describes the slot, so a still-later failure over a further
 		// widened union is a new outcome and must report, not hide behind the stale entry.
 		string attempt = matchType.ToDisplayString(FullyQualified) + "\0" + (release ? "OnRelease" : "OnActivated") + "\0" + hookName;
-		ResolvedModuleHook? resolved = ResolveModuleHookCore(matchType, hookName, match.Location, release, closedMarkers,
+		ResolvedModuleHook? resolved = ResolveModuleHookCore(
+			new ModuleHookRequest(matchType, hookName, match.Location, release, ModuleHookWrapperName(matchType, release), ScanSubject(matchType.ToDisplayString(FullyQualified))),
+			closedMarkers,
 			context.FailedHooks.Contains(attempt) ? context with { Diagnostics = new List<DiagnosticInfo>(), } : context);
 		if (resolved is null)
 		{
@@ -338,17 +342,28 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
+	///     One hook a module self-compiles: the implementation it runs on, the user hook's name, the location to
+	///     report at, the slot, the name of the wrapper to emit and the subject that names the implementation in a
+	///     diagnostic.
+	/// </summary>
+	private readonly record struct ModuleHookRequest(
+		INamedTypeSymbol MatchType,
+		string HookName,
+		Location? Location,
+		bool Release,
+		string WrapperName,
+		SelfCompiledSubject Subject);
+
+	/// <summary>
 	///     The resolution behind <see cref="ResolveModuleHook" />, reporting every failure into the context's sink;
 	///     the wrapper dedupes repeated failures of one already-reported attempt across overlapping scans.
 	/// </summary>
 	private static ResolvedModuleHook? ResolveModuleHookCore(
-		INamedTypeSymbol matchType,
-		string hookName,
-		Location? location,
-		bool release,
+		ModuleHookRequest request,
 		IReadOnlyList<INamedTypeSymbol>? closedMarkers,
 		ModuleScanContext context)
 	{
+		(INamedTypeSymbol matchType, string hookName, Location? location, bool release, _, _) = request;
 		string typeName = matchType.ToDisplayString(FullyQualified);
 		(List<IMethodSymbol> matches, List<IReadOnlyList<INamedTypeSymbol>> ambiguous) =
 			CollectModuleHookOverloads(matchType, hookName, closedMarkers, context);
@@ -380,7 +395,7 @@ partial class AwaitenGenerator
 		}
 
 		IMethodSymbol hook = matches[0];
-		if (!TryMirrorHookParameters(typeName, hook, release, location, context.Diagnostics, out EquatableArray<FactoryParameter> parameters))
+		if (!TryMirrorHookParameters(request.Subject, hook, release, location, context.Diagnostics, out EquatableArray<FactoryParameter> parameters))
 		{
 			return null;
 		}
@@ -392,7 +407,7 @@ partial class AwaitenGenerator
 		string target = hook.TypeArguments.Length == 0
 			? hookName
 			: $"{hookName}<{string.Join(", ", hook.TypeArguments.Select(argument => argument.ToDisplayString(FullyQualified)))}>";
-		return new ResolvedModuleHook(hookName, new ModuleHook(ModuleHookWrapperName(matchType, release), target, instanceCast, parameters));
+		return new ResolvedModuleHook(hookName, new ModuleHook(request.WrapperName, target, instanceCast, parameters));
 	}
 
 	/// <summary>
@@ -468,7 +483,7 @@ partial class AwaitenGenerator
 	///     inside the module.
 	/// </summary>
 	private static bool TryMirrorHookParameters(
-		string typeName,
+		SelfCompiledSubject subject,
 		IMethodSymbol hook,
 		bool release,
 		Location? location,
@@ -479,7 +494,7 @@ partial class AwaitenGenerator
 		List<FactoryParameter> mirrored = new();
 		foreach (IParameterSymbol parameter in hook.Parameters.Skip(1))
 		{
-			if (HookParameterMirrorError(typeName, parameter, release, location) is { } error)
+			if (HookParameterMirrorError(subject, parameter, release, location) is { } error)
 			{
 				diagnostics.Add(error);
 				return false;
@@ -496,8 +511,9 @@ partial class AwaitenGenerator
 	///     Why one hook parameter cannot be mirrored onto the public wrapper (see
 	///     <see cref="TryMirrorHookParameters" />), or <see langword="null" /> when it can.
 	/// </summary>
-	private static DiagnosticInfo? HookParameterMirrorError(string typeName, IParameterSymbol parameter, bool release, Location? location)
+	private static DiagnosticInfo? HookParameterMirrorError(SelfCompiledSubject subject, IParameterSymbol parameter, bool release, Location? location)
 	{
+		string typeName = subject.TypeName;
 		ImmutableArray<AttributeData> attributes = parameter.GetAttributes();
 		if (HasArgAttribute(attributes))
 		{
@@ -517,7 +533,7 @@ partial class AwaitenGenerator
 				Diagnostics.ModuleScanHookInjectionMetadata,
 				LocationInfo.From(location),
 				new EquatableArray<string>([
-					Display(typeName),
+					subject.Subject,
 					release ? "OnRelease" : "OnActivated",
 					parameter.Name,
 					HasInject(attributes) ? "[Inject]" : "[FromKey]",
@@ -539,7 +555,7 @@ partial class AwaitenGenerator
 			return new DiagnosticInfo(
 				Diagnostics.ModuleScanHookParameterInaccessible,
 				LocationInfo.From(location),
-				new EquatableArray<string>([Display(typeName), release ? "OnRelease" : "OnActivated", Display(parameter.Type.ToDisplayString(FullyQualified)),]));
+				new EquatableArray<string>([subject.Subject, release ? "OnRelease" : "OnActivated", Display(parameter.Type.ToDisplayString(FullyQualified)),]));
 		}
 
 		return null;
@@ -625,8 +641,9 @@ partial class AwaitenGenerator
 				Diagnostics.ModuleScanMultipleExposures,
 				LocationInfo.From(match.Location),
 				new EquatableArray<string>([
-					Display(typeName),
+					ScanSubject(typeName).Subject,
 					$"{Display(overlapping.Factory.ServiceType)}, {Display(serviceName)}",
+					ScanSingleExposureRemedy,
 				])));
 			return overlapping;
 		}
@@ -759,40 +776,39 @@ partial class AwaitenGenerator
 	///     asked against the module (it emits the <c>new</c>), so an internal constructor in the module's own
 	///     assembly qualifies, and a greediest-fallback keeps a type with no satisfiable-here constructor building
 	///     (its parameters are resolved by the consumer, not us). An <c>[Inject]</c> property or an <c>[Inject]</c>/
-	///     <c>[Arg]</c> parameter carries per-dependency semantics (keys, optionality, deferral, resolution
-	///     arguments) a mirrored factory signature cannot express, so it is AWT200 rather than silently dropped. A
-	///     parameter whose type is not nameable outside the assembly is AWT195, the v1 limitation, because it
-	///     appears on the <c>public</c> factory signature and is resolved from the consumer's graph.
+	///     <c>[Arg]</c>/<c>[FromKey]</c> parameter carries per-dependency semantics (keys, optionality, deferral,
+	///     resolution arguments) a mirrored factory signature cannot express, so it is AWT200 rather than silently
+	///     dropped. A parameter whose type is not nameable outside the assembly is AWT195, the v1 limitation, because
+	///     it appears on the <c>public</c> factory signature and is resolved from the consumer's graph.
 	/// </summary>
 	private static bool TryMirrorFactoryParameters(
 		INamedTypeSymbol type,
-		INamedTypeSymbol module,
-		Compilation compilation,
-		ScanMatch match,
-		string typeName,
-		List<DiagnosticInfo> diagnostics,
+		ModuleScanContext context,
+		Location? location,
+		SelfCompiledSubject subject,
 		out EquatableArray<FactoryParameter> parameters)
 	{
 		parameters = default;
+		List<DiagnosticInfo> diagnostics = context.Diagnostics;
 
 		IPropertySymbol? injectedProperty = InjectedProperties(type).FirstOrDefault();
 		if (injectedProperty is not null)
 		{
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.ModuleScanInjectionMetadata,
-				LocationInfo.From(match.Location),
-				new EquatableArray<string>([Display(typeName), $"its property '{injectedProperty.Name}' is marked [Inject]",])));
+				LocationInfo.From(location),
+				new EquatableArray<string>([subject.Subject, $"its property '{injectedProperty.Name}' is marked [Inject]", subject.Remedy,])));
 			return false;
 		}
 
 		IMethodSymbol? constructor = SelectConstructor(
-			type, module, compilation, Array.Empty<string>(), new ExternalSurface(false, new ExternalServiceTypes()), _ => true);
+			type, context.Module, context.Compilation, Array.Empty<string>(), new ExternalSurface(false, new ExternalServiceTypes()), _ => true);
 		if (constructor is null)
 		{
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.NoAccessibleConstructor,
-				LocationInfo.From(match.Location),
-				new EquatableArray<string>([Display(typeName),])));
+				LocationInfo.From(location),
+				new EquatableArray<string>([Display(subject.TypeName),])));
 			return false;
 		}
 
@@ -800,13 +816,12 @@ partial class AwaitenGenerator
 		foreach (IParameterSymbol parameter in constructor.Parameters)
 		{
 			ImmutableArray<AttributeData> parameterAttributes = parameter.GetAttributes();
-			if (HasInject(parameterAttributes) || HasArgAttribute(parameterAttributes))
+			if (MirroredAwayAttribute(parameterAttributes) is { } attributeName)
 			{
-				string attributeName = HasInject(parameterAttributes) ? "[Inject]" : "[Arg]";
 				diagnostics.Add(new DiagnosticInfo(
 					Diagnostics.ModuleScanInjectionMetadata,
-					LocationInfo.From(match.Location),
-					new EquatableArray<string>([Display(typeName), $"its constructor parameter '{parameter.Name}' is marked {attributeName}",])));
+					LocationInfo.From(location),
+					new EquatableArray<string>([subject.Subject, $"its constructor parameter '{parameter.Name}' is marked {attributeName}", subject.Remedy,])));
 				return false;
 			}
 
@@ -814,8 +829,8 @@ partial class AwaitenGenerator
 			{
 				diagnostics.Add(new DiagnosticInfo(
 					Diagnostics.ModuleScanParameterInaccessible,
-					LocationInfo.From(match.Location),
-					new EquatableArray<string>([Display(typeName), Display(parameter.Type.ToDisplayString(FullyQualified)),])));
+					LocationInfo.From(location),
+					new EquatableArray<string>([subject.Subject, Display(parameter.Type.ToDisplayString(FullyQualified)), subject.Remedy,])));
 				return false;
 			}
 
@@ -843,6 +858,52 @@ partial class AwaitenGenerator
 		}
 
 		return $"Awaiten__Scan_{type.Name}_{hash:x8}";
+	}
+
+	/// <summary>
+	///     How a self-compilation diagnostic names the implementation it is about: its fully-qualified
+	///     <see cref="TypeName" />, the <see cref="Subject" /> phrase a message opens with, and the
+	///     <see cref="Remedy" /> that keeps the implementation out of self-compilation.
+	/// </summary>
+	private readonly record struct SelfCompiledSubject(string TypeName, string Subject, string Remedy);
+
+	/// <summary>The remedy of AWT197 for a scan match exposed under several interfaces.</summary>
+	private const string ScanSingleExposureRemedy = "narrow the As to one interface or exclude the type from the scan";
+
+	/// <summary>The subject of a self-compilation diagnostic about a module <c>[Scan]</c> match.</summary>
+	private static SelfCompiledSubject ScanSubject(string typeName)
+		=> new(typeName, $"'{Display(typeName)}' matched the module scan", "exclude the type from the scan");
+
+	/// <summary>
+	///     The <c>[Inject]</c>, <c>[Arg]</c> or <c>[FromKey]</c> attribute on a constructor parameter that a
+	///     generated factory's bare parameter would drop, or <see langword="null" /> when there is none.
+	/// </summary>
+	private static string? MirroredAwayAttribute(ImmutableArray<AttributeData> attributes)
+	{
+		if (HasInject(attributes))
+		{
+			return "[Inject]";
+		}
+
+		if (HasArgAttribute(attributes))
+		{
+			return "[Arg]";
+		}
+
+		return HasAwaitenAttribute(attributes, "FromKeyAttribute") ? "[FromKey]" : null;
+	}
+
+	/// <summary>
+	///     What a consumer in another assembly must know about a self-compiled implementation it cannot see: whether
+	///     it is initialized asynchronously and how it is disposed. Read off the implementation in the module's build.
+	/// </summary>
+	private static ImplementationTraits TraitsOf(INamedTypeSymbol type)
+	{
+		bool Implements(string name) => type.AllInterfaces.Any(contract => contract.ToDisplayString(FullyQualified) == name);
+		return new ImplementationTraits(
+			Implements("global::Awaiten.IAsyncInitializable"),
+			Implements("global::System.IDisposable"),
+			Implements("global::System.IAsyncDisposable"));
 	}
 
 	/// <summary>

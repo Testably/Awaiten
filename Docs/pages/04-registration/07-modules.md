@@ -1,5 +1,5 @@
 ---
-description: Bundle registrations into reusable modules, import them into a container and ship self-compiled scans from a library.
+description: Bundle registrations into reusable modules, import them into a container and ship internal implementations and self-compiled scans from a library.
 ---
 
 # Modules
@@ -71,9 +71,35 @@ public static class ProductionModule
 }
 ```
 
+## Internal implementations
+
+A library often keeps its implementations `internal` and exposes only interfaces. Its module registers them like any other type, and a container in another assembly imports the module without the library granting `InternalsVisibleTo`.
+
+```csharp
+public interface IKettle;
+internal sealed class Kettle(ITimeSystem time) : IKettle;   // stays internal
+
+[Module]
+[Singleton<Kettle, IKettle>]
+public static partial class KettleModule;   // partial, so the generator can add the factory
+```
+
+```csharp
+[Container]
+[Import(typeof(KettleModule))]
+[Singleton<RealTimeSystem, ITimeSystem>]
+public static partial class CoffeeShop;
+```
+
+When another assembly cannot construct a registered implementation, because the type or every constructor of it is not public, the module compiles the registration **in its own build**: it emits a public factory that constructs the implementation and returns the registered service, or the implementation itself when it is public. A container in another assembly calls that factory instead of the constructor it cannot reach, and keeps everything else the registration declares: the lifetime, `Eager`, `Key`, `WhenInjectedInto`, `Fallback`, `SuppressDisposal`, its place in collections, and the decorators the container adds. It reads from the implementation's metadata whether it is async-initialized or disposable, so it initializes, disposes and shares the implementation exactly as one it constructs itself. An `OnActivated` or `OnRelease` hook may take the internal type: the module emits a public wrapper for it. A module or service another assembly cannot name never reaches such a container, so it self-compiles nothing.
+
+Because diagnostics are reported in the library's build, it is the library author who sees any problem. The module must be static ([AWT152](../09-diagnostics.md#awt152)), `partial` ([AWT194](../09-diagnostics.md#awt194)) and non-generic ([AWT201](../09-diagnostics.md#awt201)). The constructor's parameter types must be public ([AWT195](../09-diagnostics.md#awt195)), without `[Inject]`, `[Arg]` or `[FromKey]` metadata the factory could not mirror ([AWT200](../09-diagnostics.md#awt200)), and the same holds for a hook's parameters ([AWT203](../09-diagnostics.md#awt203), [AWT204](../09-diagnostics.md#awt204)). The factory returns one service, so an internal implementation is registered under one service, with any number of keys, and not also matched by one of the module's scans ([AWT197](../09-diagnostics.md#awt197)): a second service would split the instance a container shares. A public implementation with an internal constructor serves several services from one instance.
+
+A container in the module's own assembly constructs the implementation directly, through the same constructor the factory uses, so moving a module between projects never changes what it registers. Importing a module whose assembly was built without the Awaiten generator, or with a version predating this, is an error ([AWT154](../09-diagnostics.md#awt154)) instead of a missing constructor. Decorators, composites and open generic registrations are not self-compiled: a container in another assembly reports an internal one as [AWT230](../09-diagnostics.md#awt230).
+
 ## Self-compiled scans
 
-A library often keeps its implementations `internal` and exposes only interfaces. A consuming container cannot construct an inaccessible type, so without a hand-written factory per type it could never register one. A `[Scan]` on a `[Module]` closes that gap: the module compiles its own scan **in its own build**, emitting a factory per match that constructs the implementation (which its own assembly can see) and returns the accessible interface. A consuming container reads each match like a container [`[Scan]`](./06-scanning.md) match, so a self-compiled scan behaves as close to a container scan as the assembly boundary allows.
+A `[Scan]` on a `[Module]` reaches internal implementations the same way: the module compiles its own scan **in its own build**, emitting a factory per match that constructs the implementation (which its own assembly can see) and returns the accessible interface. A consuming container reads each match like a container [`[Scan]`](./06-scanning.md) match, so a self-compiled scan behaves as close to a container scan as the assembly boundary allows, including the async initialization and disposal of a match it cannot see.
 
 ```csharp
 public interface IClock;
@@ -88,7 +114,7 @@ public static partial class PluginModule;   // partial, so the generator can add
 
 A consuming container `[Import]`s the module and resolves `IRoaster` without ever naming `Roaster`. Each match is registered like a container scan match: an explicit registration of the same service in the container (or another module) **overrides** it, as does the container's own `[Scan]`, and when several matches expose the **same** interface they **collect**: a `[Scan<IPlugin>(As = ScanAs.Marker)]` over two internal plug-ins resolves as `IEnumerable<IPlugin>`, exactly as it would on a container. Because diagnostics are reported in the *library's* build, it is the library author who sees any problem, not the consumer.
 
-The module must be static ([AWT152](../09-diagnostics.md#awt152)), `partial` ([AWT194](../09-diagnostics.md#awt194)) and non-generic ([AWT201](../09-diagnostics.md#awt201)), and its scan sweeps the module's own assembly only ([AWT202](../09-diagnostics.md#awt202)). A few v1 limitations apply, each reported at the library's source. A match registers through exactly one accessible interface: a match with none is skipped with a warning ([AWT196](../09-diagnostics.md#awt196)), and one that would expose several is rejected ([AWT197](../09-diagnostics.md#awt197)), even when the exposures come from two different scans of the same module. Several matches under one interface still collect; what a self-compiled match cannot do is share a single instance across several interfaces the way a container scan can. A match's constructor parameters must be types a consumer can name ([AWT195](../09-diagnostics.md#awt195)), without `[Inject]`/`[Arg]` metadata the factory could not mirror ([AWT200](../09-diagnostics.md#awt200)). `SkipUnconstructable` works as on a container scan: it travels with each generated registration, so a consumer that cannot satisfy a match's dependencies drops the match with a warning ([AWT141](../09-diagnostics.md#awt141)) instead of failing the build.
+The module must be static ([AWT152](../09-diagnostics.md#awt152)), `partial` ([AWT194](../09-diagnostics.md#awt194)) and non-generic ([AWT201](../09-diagnostics.md#awt201)), and its scan sweeps the module's own assembly only ([AWT202](../09-diagnostics.md#awt202)). A few v1 limitations apply, each reported at the library's source. A match registers through exactly one accessible interface: a match with none is skipped with a warning ([AWT196](../09-diagnostics.md#awt196)), and one that would expose several is rejected ([AWT197](../09-diagnostics.md#awt197)), even when the exposures come from two different scans of the same module. Several matches under one interface still collect; what a self-compiled match cannot do is share a single instance across several interfaces the way a container scan can. A match's constructor parameters must be types a consumer can name ([AWT195](../09-diagnostics.md#awt195)), without `[Inject]`, `[Arg]` or `[FromKey]` metadata the factory could not mirror ([AWT200](../09-diagnostics.md#awt200)). `SkipUnconstructable` works as on a container scan: it travels with each generated registration, so a consumer that cannot satisfy a match's dependencies drops the match with a warning ([AWT141](../09-diagnostics.md#awt141)) instead of failing the build.
 
 The expansion also stamps the module with a generated marker, present even when the scan matched nothing. A consuming container uses it as a version guard: importing a module whose metadata carries a `[Scan]` but no expansion, because the library was built without the Awaiten generator or with a version predating this feature, is an error ([AWT154](../09-diagnostics.md#awt154)) rather than a silent drop.
 

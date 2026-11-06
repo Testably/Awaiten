@@ -54,7 +54,7 @@ partial class AwaitenGenerator
 		{
 			bool sameCompilation = SymbolEqualityComparer.Default.Equals(module.Symbol.ContainingAssembly, containerSymbol.ContainingAssembly);
 			CollectLifetimeRegistrations(
-				new LifetimeCollectionContext(module.Symbol, module.Symbol, module.ImportLocation, compilation, open, module.Inherited ? new List<DiagnosticInfo>() : diagnostics),
+				new LifetimeCollectionContext(module.Symbol, module.Symbol, module.ImportLocation, compilation, open, module.Inherited ? new List<DiagnosticInfo>() : diagnostics, module.Inherited),
 				result,
 				skipGeneratedScanRegistrations: sameCompilation);
 		}
@@ -203,7 +203,8 @@ partial class AwaitenGenerator
 	///     (<see langword="null" /> for the container), recorded so a module's <c>Factory</c>/<c>Instance</c> member
 	///     resolves against the module. <see cref="FallbackLocation" /> is the container's <c>[Import]</c> location,
 	///     used for a referenced-assembly module whose attributes have no syntax. The open generic <c>typeof</c>-form
-	///     registrations go into <see cref="Open" />.
+	///     registrations go into <see cref="Open" />. <see cref="Inherited" /> marks a module or base inherited through
+	///     <c>Extends</c>, whose inaccessible declarations the inheritance reports (AWT226).
 	/// </summary>
 	private readonly record struct LifetimeCollectionContext(
 		INamedTypeSymbol Owner,
@@ -211,7 +212,8 @@ partial class AwaitenGenerator
 		Location? FallbackLocation,
 		Compilation Compilation,
 		List<OpenRegistration> Open,
-		List<DiagnosticInfo> Diagnostics);
+		List<DiagnosticInfo> Diagnostics,
+		bool Inherited = false);
 
 	/// <summary>
 	///     Reads the <c>[Singleton]</c>/<c>[Transient]</c>/<c>[Scoped]</c> registrations declared on the context's
@@ -227,6 +229,8 @@ partial class AwaitenGenerator
 		INamedTypeSymbol? origin = context.Origin;
 		Location? fallbackLocation = context.FallbackLocation;
 		List<DiagnosticInfo> diagnostics = context.Diagnostics;
+		bool reportedNotSelfCompiled = false;
+		bool fromModule = origin is not null && HasAwaitenAttribute(context.Owner.GetAttributes(), "ModuleAttribute");
 		foreach (AttributeData attribute in context.Owner.GetAttributes())
 		{
 			if (attribute.AttributeClass is not { } attributeClass
@@ -280,7 +284,7 @@ partial class AwaitenGenerator
 			ReportContextualBindingWithKey(key, whenInjectedInto, implementation, location, diagnostics);
 			ReportUnsupportedRegistrationKey(attribute, LocationInfo.From(location), Display(implementation.ToDisplayString(FullyQualified)), diagnostics);
 
-			result.Add(new RawRegistration(
+			RawRegistration registration = new(
 				service.ToDisplayString(FullyQualified),
 				implementation.ToDisplayString(FullyQualified),
 				lifetime.Value,
@@ -300,8 +304,94 @@ partial class AwaitenGenerator
 				OnActivated: NamedArgument(attribute, "OnActivated"),
 				OnRelease: NamedArgument(attribute, "OnRelease"),
 				SuppressDisposal: NamedFlag(attribute, "SuppressDisposal"),
-				WhenInjectedInto: whenInjectedInto));
+				WhenInjectedInto: whenInjectedInto);
+
+			RawRegistration? collected = fromModule && production == ProductionKind.Constructor && !conflictingDirectives
+				? SelfCompiledRegistration(registration, context, skipGeneratedScanRegistrations, ref reportedNotSelfCompiled)
+				: registration;
+			if (collected is not null)
+			{
+				result.Add(collected);
+			}
 		}
+	}
+
+	/// <summary>
+	///     Applies self-compilation (see <see cref="SelfCompilesRegistration" />) to a constructed registration read
+	///     off an imported module. A same-compilation container constructs the implementation directly, through the
+	///     greediest constructor the module's generated factory mirrors, so the module registers the same thing
+	///     wherever it lives. A container in another assembly that cannot construct the implementation calls the
+	///     generated factory instead and runs the generated hook wrappers, keeping every other option of the
+	///     registration, and reads the implementation's traits off its metadata, so it initializes, disposes and
+	///     shares it exactly as it would a type it constructs. A registration whose service this container cannot
+	///     name either is dropped: nothing here can resolve or depend on it (a self-compiled constructor parameter
+	///     is accessible, AWT195). Returns <see langword="null" /> for a dropped registration, after reporting
+	///     AWT154 once per module when the module carries no generated factory for it. A module inherited through
+	///     <c>Extends</c> keeps such a registration instead, which the inheritance reports as inaccessible (AWT226).
+	/// </summary>
+	private static RawRegistration? SelfCompiledRegistration(
+		RawRegistration registration,
+		LifetimeCollectionContext context,
+		bool sameCompilation,
+		ref bool reportedNotSelfCompiled)
+	{
+		INamedTypeSymbol module = registration.Origin!;
+		INamedTypeSymbol implementation = registration.Implementation;
+		Compilation compilation = context.Compilation;
+		if (registration.ServiceSymbol is not { } service || !SelfCompilesRegistration(module, implementation, service))
+		{
+			return !sameCompilation
+			       && !context.Inherited
+			       && registration.ServiceSymbol is { } inaccessible
+			       && !compilation.IsSymbolAccessibleWithin(inaccessible, compilation.Assembly)
+			       && implementation is { TypeKind: TypeKind.Class, IsAbstract: false, }
+			       && !CanConstruct(implementation, compilation)
+				? null
+				: registration;
+		}
+
+		if (sameCompilation)
+		{
+			return registration with { GreedyConstructor = true, };
+		}
+
+		if (CanConstruct(implementation, compilation))
+		{
+			return registration;
+		}
+
+		if (SelfCompiledFactory(module, implementation) is not { ReturnType: INamedTypeSymbol returnType, } factory)
+		{
+			if (context.Inherited)
+			{
+				return registration;
+			}
+
+			if (!reportedNotSelfCompiled)
+			{
+				reportedNotSelfCompiled = true;
+				context.Diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.ModuleScanNotExpanded,
+					LocationInfo.From(context.FallbackLocation ?? registration.Location),
+					new EquatableArray<string>([
+						Display(module.ToDisplayString(FullyQualified)),
+						$"registers '{Display(registration.ImplementationType)}', which this container cannot construct",
+					])));
+			}
+
+			return null;
+		}
+
+		return registration with
+		{
+			Implementation = returnType,
+			Production = ProductionKind.Factory,
+			ProductionMember = factory.Name,
+			OnActivated = registration.OnActivated is { } activation ? RegistrationHookWrapperName(implementation, release: false, activation) : null,
+			OnRelease = registration.OnRelease is { } release ? RegistrationHookWrapperName(implementation, release: true, release) : null,
+			Traits = TraitsOf(implementation),
+			TraitsExact = true,
+		};
 	}
 
 	/// <summary>
@@ -338,7 +428,15 @@ partial class AwaitenGenerator
 
 		if (typeofImplementation.IsUnboundGenericType || typeofService.IsUnboundGenericType)
 		{
-			CollectOpenRegistration(attribute, lifetime, typeofImplementation, typeofService, context);
+			if (ReadProduction(attribute).Production != ProductionKind.Constructor
+			    || context.Inherited
+			    || !IsUnconstructibleModuleContribution(
+				    context.Origin, typeofImplementation, "the open generic registration of",
+				    attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? context.FallbackLocation, context.Compilation, context.Diagnostics))
+			{
+				CollectOpenRegistration(attribute, lifetime, typeofImplementation, typeofService, context);
+			}
+
 			return false;
 		}
 
@@ -420,6 +518,13 @@ partial class AwaitenGenerator
 			}
 		}
 
+		// A library built before the generator reported these leaves them all unset: the traits stay unknown then,
+		// and the factory's return type decides as for any factory.
+		ImplementationTraits traits = new(
+			NamedFlag(attribute, "AsyncInitializable"),
+			NamedFlag(attribute, "Disposable"),
+			NamedFlag(attribute, "AsyncDisposable"));
+
 		string serviceType = service.ToDisplayString(FullyQualified);
 		Location? location = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? fallbackLocation;
 		string qualifiedFactory = origin is null ? factory : $"{origin.ToDisplayString(FullyQualified)}.{factory}";
@@ -440,7 +545,8 @@ partial class AwaitenGenerator
 			// wrapper is a plain public static method, so ResolveHook binds it directly and ClassifyHookParameters
 			// resolves its post-instance parameters from this container's graph.
 			OnActivated: onActivated,
-			OnRelease: onRelease));
+			OnRelease: onRelease,
+			Traits: traits.IsEmpty ? null : traits));
 		return true;
 	}
 
@@ -577,7 +683,7 @@ partial class AwaitenGenerator
 		if (!sameCompilation && declaresScan && !HasAwaitenAttribute(moduleAttributes, "GeneratedScanExpansionAttribute"))
 		{
 			diagnostics.Add(new DiagnosticInfo(
-				Diagnostics.ModuleScanNotExpanded, location, new EquatableArray<string>([moduleName,])));
+				Diagnostics.ModuleScanNotExpanded, location, new EquatableArray<string>([moduleName, "declares a [Scan]",])));
 		}
 
 		// AWT151: a module that declares nothing to contribute imports nothing useful. A module with a [Scan]
@@ -625,24 +731,68 @@ partial class AwaitenGenerator
 	///     <c>[Composite]</c>), so the container's declarations always precede a module's and an earlier
 	///     import's precede a later one's. Each attribute is paired with a fallback location (the module's
 	///     <c>[Import]</c>) for attributes read from a referenced assembly, which have no syntax of their own, and
-	///     whether it is inherited from an extended base (see <see cref="InheritBase" />).
+	///     whether it is inherited from an extended base (see <see cref="InheritBase" />), and with the module that
+	///     declares it (<see langword="null" /> for the container's own).
 	/// </summary>
-	private static IEnumerable<(AttributeData Attribute, Location? FallbackLocation, bool Inherited)> AttributesOf(
+	private static IEnumerable<(AttributeData Attribute, Location? FallbackLocation, bool Inherited, INamedTypeSymbol? Module)> AttributesOf(
 		INamedTypeSymbol containerSymbol, List<ImportedModule> modules)
 	{
 		foreach (AttributeData attribute in containerSymbol.GetAttributes())
 		{
-			yield return (attribute, null, false);
+			yield return (attribute, null, false, null);
 		}
 
 		foreach (ImportedModule module in modules)
 		{
 			foreach (AttributeData attribute in module.Symbol.GetAttributes())
 			{
-				yield return (attribute, module.ImportLocation, module.Inherited);
+				yield return (attribute, module.ImportLocation, module.Inherited, module.Symbol);
 			}
 		}
 	}
+
+	/// <summary>
+	///     Reports <see cref="Diagnostics.ModuleContributionNotSelfCompiled">AWT230</see> and returns
+	///     <see langword="true" /> when a decorator, composite or open generic registration of an imported module of
+	///     another assembly names a type this container cannot construct: a module self-compiles only its scans and
+	///     closed registrations, so the contribution is skipped rather than failing as a misleading constructor
+	///     diagnostic.
+	/// </summary>
+	private static bool IsUnconstructibleModuleContribution(
+		INamedTypeSymbol? module,
+		INamedTypeSymbol type,
+		string kind,
+		Location? location,
+		Compilation compilation,
+		List<DiagnosticInfo> diagnostics)
+	{
+		if (module is null
+		    || SymbolEqualityComparer.Default.Equals(module.ContainingAssembly, compilation.Assembly)
+		    || type is not { TypeKind: TypeKind.Class, IsAbstract: false, }
+		    || CanConstruct(type.OriginalDefinition, compilation))
+		{
+			return false;
+		}
+
+		diagnostics.Add(new DiagnosticInfo(
+			Diagnostics.ModuleContributionNotSelfCompiled,
+			LocationInfo.From(location),
+			new EquatableArray<string>([
+				Display(module.ToDisplayString(FullyQualified)),
+				kind,
+				Display(type.OriginalDefinition.ToDisplayString(FullyQualified)),
+			])));
+		return true;
+	}
+
+	/// <summary>
+	///     The decorator or composite type a <c>[Decorate]</c>/<c>[Composite]</c> names: the first type argument of the
+	///     generic form, or the first <c>typeof</c> argument.
+	/// </summary>
+	private static INamedTypeSymbol? ContributedType(AttributeData attribute, INamedTypeSymbol attributeClass)
+		=> attributeClass.IsGenericType
+			? attributeClass.TypeArguments.FirstOrDefault() as INamedTypeSymbol
+			: attribute.ConstructorArguments.FirstOrDefault().Value as INamedTypeSymbol;
 
 	/// <summary>
 	///     Reads a boolean named argument off an attribute, treating anything but an explicit <c>true</c>
@@ -690,12 +840,12 @@ partial class AwaitenGenerator
 	///     cannot construct is AWT226 and skipped.
 	/// </summary>
 	private static (List<DecorateRegistration> Closed, List<OpenDecorateRegistration> Open) CollectDecorators(
-		INamedTypeSymbol containerSymbol, List<ImportedModule> modules, Inheritance? inheritance, List<DiagnosticInfo> diagnostics)
+		INamedTypeSymbol containerSymbol, List<ImportedModule> modules, Inheritance? inheritance, Compilation compilation, List<DiagnosticInfo> diagnostics)
 	{
 		List<DecorateRegistration> closed = new();
 		List<OpenDecorateRegistration> open = new();
 		int declarationOrder = 0;
-		foreach ((AttributeData attribute, Location? fallbackLocation, bool inherited) in AttributesOf(containerSymbol, modules))
+		foreach ((AttributeData attribute, Location? fallbackLocation, bool inherited, INamedTypeSymbol? module) in AttributesOf(containerSymbol, modules))
 		{
 			if (attribute.AttributeClass is not { Name: "DecorateAttribute", } attributeClass
 			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace)
@@ -719,7 +869,9 @@ partial class AwaitenGenerator
 			}
 
 			Location? location = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? fallbackLocation;
-			if (!TryReadDecoratorKeys(attribute, attributeClass, LocationInfo.From(location), diagnostics, out IReadOnlyList<string?>? keys))
+			if (!TryReadDecoratorKeys(attribute, attributeClass, LocationInfo.From(location), diagnostics, out IReadOnlyList<string?>? keys)
+			    || (ContributedType(attribute, attributeClass) is { } decoratorType
+			        && IsUnconstructibleModuleContribution(module, decoratorType, "the decorator", location, compilation, diagnostics)))
 			{
 				declarationOrder++;
 				continue;
@@ -841,11 +993,11 @@ partial class AwaitenGenerator
 	///     an extended base that the extending container cannot construct is AWT226 and skipped.
 	/// </summary>
 	private static (List<CompositeRegistration> Closed, List<OpenCompositeRegistration> Open) CollectComposites(
-		INamedTypeSymbol containerSymbol, List<ImportedModule> modules, Inheritance? inheritance, List<DiagnosticInfo> diagnostics)
+		INamedTypeSymbol containerSymbol, List<ImportedModule> modules, Inheritance? inheritance, Compilation compilation, List<DiagnosticInfo> diagnostics)
 	{
 		List<CompositeRegistration> closed = new();
 		List<OpenCompositeRegistration> open = new();
-		foreach ((AttributeData attribute, Location? fallbackLocation, bool inherited) in AttributesOf(containerSymbol, modules))
+		foreach ((AttributeData attribute, Location? fallbackLocation, bool inherited, INamedTypeSymbol? module) in AttributesOf(containerSymbol, modules))
 		{
 			if (attribute.AttributeClass is not { Name: "CompositeAttribute", } attributeClass
 			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace
@@ -869,6 +1021,12 @@ partial class AwaitenGenerator
 			Location? location = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? fallbackLocation;
 			ReportUnsupportedRegistrationKey(attribute, LocationInfo.From(location), AttributeTypeArgument(attribute, attributeClass, 0), diagnostics);
 			string? key = NamedKeyArgument(attribute);
+
+			if (ContributedType(attribute, attributeClass) is { } compositeType
+			    && IsUnconstructibleModuleContribution(module, compositeType, "the composite", location, compilation, diagnostics))
+			{
+				continue;
+			}
 
 			if (attributeClass.IsGenericType)
 			{

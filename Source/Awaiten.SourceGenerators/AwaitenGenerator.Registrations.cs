@@ -19,6 +19,9 @@ namespace Awaiten.SourceGenerators;
 ///     registered-services-aware pick, so the match constructs identically wherever the module is imported from.
 ///     <c>GenericFactory</c> marks a closing of an open generic <c>typeof</c> registration whose <c>Factory</c> is a
 ///     generic method, closed with the implementation's type arguments when it is resolved.
+///     <c>Traits</c> describes a self-compiled implementation produced by a module's generated factory, which the
+///     factory's return type hides: <c>TraitsExact</c> when read off the implementation itself (a module
+///     registration), else only the interfaces a module scan reported, so a hidden disposable is still checked at run time.
 /// </summary>
 /// <remarks>
 ///     <see cref="Location" /> is the live Roslyn location (with its syntax tree), not an equatable
@@ -50,7 +53,9 @@ internal sealed record RawRegistration(
 	bool GreedyConstructor = false,
 	IReadOnlyList<INamedTypeSymbol>? OnActivatedMarkers = null,
 	IReadOnlyList<INamedTypeSymbol>? OnReleaseMarkers = null,
-	bool GenericFactory = false);
+	bool GenericFactory = false,
+	ImplementationTraits? Traits = null,
+	bool TraitsExact = false);
 
 /// <summary>
 ///     An imported module: its symbol and the location of the container's <c>[Import]</c> attribute that
@@ -251,6 +256,16 @@ partial class AwaitenGenerator
 		///     registration, closed with <see cref="Symbol" />'s type arguments (see <c>ResolveFactory</c>).
 		/// </summary>
 		public bool GenericFactory { get; init; }
+
+		/// <summary>
+		///     How a self-compiled implementation behind a module's generated factory is initialized and disposed,
+		///     which the factory's return type hides, or <see langword="null" /> for any other implementation. See
+		///     <see cref="RawRegistration" />.
+		/// </summary>
+		public ImplementationTraits? Traits { get; init; }
+
+		/// <inheritdoc cref="RawRegistration" />
+		public bool TraitsExact { get; init; }
 
 		public List<ServiceKey> Services { get; }
 

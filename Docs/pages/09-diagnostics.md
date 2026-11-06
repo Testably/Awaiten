@@ -1837,7 +1837,7 @@ public static partial class CoffeeShop;
 ### AWT154
 
 :::danger[Error]
-An imported module declares a `[Scan]`, but its assembly carries no generated expansion.
+An imported module declares a `[Scan]`, or registers an implementation the container cannot construct, but its assembly carries no code generated for it.
 :::
 
 ```csharp no-compile
@@ -1855,9 +1855,9 @@ public static partial class CoffeeShop;
 This id previously rejected any `[Scan]` on a module.
 :::
 
-A `[Scan]` on a `[Module]` is [self-compiled in the module's own build](./04-registration/07-modules.md#self-compiled-scans), which stamps the module with a generated marker even when the scan matched nothing. A module whose metadata carries a `[Scan]` but no marker was compiled without the Awaiten generator, or with a version predating self-compiled scans, so its scan would silently contribute nothing. Rebuild the library with the Awaiten generator referenced. Reported at the consumer's `[Import]`. The self-compilation constraints themselves are reported as [AWT194](#awt194) to [AWT197](#awt197) and [AWT200](#awt200) to [AWT202](#awt202).
+A `[Scan]` on a `[Module]` is [self-compiled in the module's own build](./04-registration/07-modules.md#self-compiled-scans), which stamps the module with a generated marker even when the scan matched nothing. A module whose metadata carries a `[Scan]` but no marker was compiled without the Awaiten generator, or with a version predating self-compiled scans, so its scan would silently contribute nothing. A registration of an [internal implementation](./04-registration/07-modules.md#internal-implementations) is self-compiled into a factory the same way, and a module that carries none for an implementation this container cannot construct was built the same way. Rebuild the library with the Awaiten generator referenced. Reported at the consumer's `[Import]`. The self-compilation constraints themselves are reported as [AWT194](#awt194) to [AWT197](#awt197) and [AWT200](#awt200) to [AWT204](#awt204).
 
-**Fix:** Rebuild the module's assembly with the Awaiten package referenced, so its generator expands the scan.
+**Fix:** Rebuild the module's assembly with the Awaiten package referenced, so its generator self-compiles the scan and the registrations.
 
 ### AWT155
 
@@ -1885,7 +1885,7 @@ public static partial class CoffeeShop;
 ### AWT194
 
 :::danger[Error]
-A `[Module]` that declares a `[Scan]` is not `partial` (or is nested in a type that is not), so its scan cannot be self-compiled.
+A `[Module]` that declares a `[Scan]`, or a registration of an implementation another assembly cannot construct, is not `partial` (or is nested in a type that is not), so it cannot be self-compiled.
 :::
 
 ```csharp expect=AWT194
@@ -1894,14 +1894,22 @@ A `[Module]` that declares a `[Scan]` is not `partial` (or is nested in a type t
 public static class PluginModule;   // must be partial to receive the generated factories
 ```
 
-A [self-compiled module scan](./04-registration/07-modules.md#self-compiled-scans) emits a factory method and a registration attribute into the module's partial, re-opening the whole nesting chain of a nested module. Add the `partial` modifier to the module class and every type containing it. Reported in the module's own build.
+```csharp expect=AWT194
+internal sealed class Roaster : IRoaster;
+
+[Module]
+[Singleton<Roaster, IRoaster>]   // another assembly cannot construct the internal Roaster
+public static class RoastingModule;
+```
+
+A [self-compiled module scan](./04-registration/07-modules.md#self-compiled-scans) emits a factory method and a registration attribute into the module's partial, and a registration of an [internal implementation](./04-registration/07-modules.md#internal-implementations) a factory method, re-opening the whole nesting chain of a nested module. Add the `partial` modifier to the module class and every type containing it. A module whose registrations another assembly can construct, or that another assembly cannot name, needs no generated code and need not be partial. Reported in the module's own build.
 
 **Fix:** Add `partial` to the module and every type that contains it: `public static partial class PluginModule;`.
 
 ### AWT195
 
 :::danger[Error]
-A self-compiled module `[Scan]` match has a constructor parameter of a type inaccessible outside the module's assembly.
+A self-compiled module `[Scan]` match or registration has a constructor parameter of a type inaccessible outside the module's assembly.
 :::
 
 ```csharp expect=AWT195
@@ -1913,9 +1921,9 @@ internal sealed class Roaster(Secret secret) : IRoaster;   // Secret is internal
 public static partial class PluginModule;
 ```
 
-The generated factory is a `public` method whose parameters are resolved from the *consuming* container's graph, so each parameter type has to be nameable by the consumer. Widen the parameter type's accessibility, or exclude the match. (A v1 limitation: a self-compiled scan cannot construct a match through an inaccessible parameter.)
+The generated factory is a `public` method whose parameters are resolved from the *consuming* container's graph, so each parameter type has to be nameable by the consumer. The same holds for the factory of an [internal implementation](./04-registration/07-modules.md#internal-implementations) a module registers. Widen the parameter type's accessibility, or keep the type out of self-compilation. (A v1 limitation: a self-compiled factory cannot construct through an inaccessible parameter.)
 
-**Fix:** Make the parameter type public, or exclude the match from the scan.
+**Fix:** Make the parameter type public, or exclude the match from the scan, or make a registered implementation and its constructor public.
 
 ### AWT196
 
@@ -1938,7 +1946,7 @@ A consumer resolves a self-compiled match only through an accessible interface. 
 ### AWT197
 
 :::danger[Error]
-A self-compiled module `[Scan]` match would be exposed under more than one interface.
+A self-compiled module `[Scan]` match or registered internal implementation would be exposed under more than one interface.
 :::
 
 ```csharp expect=AWT197
@@ -1949,14 +1957,23 @@ internal sealed class Roaster : IPlugin, IRoaster;
 public static partial class PluginModule;
 ```
 
-A self-compiled match is reached through a generated factory that returns a single accessible interface, so a shared instance across several interfaces cannot be expressed (unlike a container `[Scan]`, whose matches coalesce on the concrete type). The same applies across scans: two `[Scan]`s on one module that expose the same type under two different interfaces would emit two factories and silently split the instance, so that overlap is also rejected. Narrow the exposure to a single interface (typically `ScanAs.MatchingInterface`), or exclude the match. This is a v1 limitation.
+```csharp expect=AWT197
+internal sealed class Roaster : IPlugin, IRoaster;
 
-**Fix:** Narrow `As` to a single interface, typically `As = ScanAs.MatchingInterface`, or exclude the match.
+[Module]
+[Singleton<Roaster, IRoaster>]
+[Singleton<Roaster, IPlugin>]   // a second service of the internal Roaster
+public static partial class RoastingModule;
+```
+
+A self-compiled implementation is reached through a generated factory that returns a single accessible interface, so a shared instance across several interfaces cannot be expressed (unlike a container, whose registrations coalesce on the concrete type). The same applies across scans: two `[Scan]`s on one module that expose the same type under two different interfaces would emit two factories and silently split the instance, so that overlap is also rejected, as are an [internal implementation](./04-registration/07-modules.md#internal-implementations) registered under two services and one that a scan of the same module matches too. Several keys of one service share the factory and stay one instance, and a public implementation with an internal constructor is returned as itself, so it serves several services. Narrow the exposure to a single interface (typically `ScanAs.MatchingInterface`), or exclude the match. This is a v1 limitation.
+
+**Fix:** Narrow `As` to a single interface, typically `As = ScanAs.MatchingInterface`, or exclude the match; register an internal implementation under a single service, or make it public.
 
 ### AWT200
 
 :::danger[Error]
-A self-compiled module `[Scan]` match carries injection metadata the generated factory cannot mirror.
+A self-compiled module `[Scan]` match or registration carries injection metadata the generated factory cannot mirror.
 :::
 
 ```csharp expect=AWT200
@@ -1973,14 +1990,14 @@ internal sealed class Roaster : IRoaster
 public static partial class PluginModule;
 ```
 
-The generated factory reduces a match to a plain parameter list resolved from the consuming container's graph. An `[Inject]` property, or a constructor parameter marked `[Inject]` or `[Arg]`, carries per-dependency semantics that plain parameters cannot express, so the consumer would silently construct the match differently than a container `[Scan]` would. Remove the attribute, exclude the match, or register the type through a hand-written module factory.
+The generated factory reduces a match, or a registered [internal implementation](./04-registration/07-modules.md#internal-implementations), to a plain parameter list resolved from the consuming container's graph. An `[Inject]` property, or a constructor parameter marked `[Inject]`, `[Arg]` or `[FromKey]`, carries per-dependency semantics that plain parameters cannot express, so the consumer would silently construct the type differently than a container in the module's own assembly would. Remove the attribute, keep the type out of self-compilation, or register it through a hand-written module factory.
 
-**Fix:** Remove the `[Inject]` or `[Arg]` attribute, exclude the match from the scan, or register the type through a hand-written module factory.
+**Fix:** Remove the `[Inject]`, `[Arg]` or `[FromKey]` attribute, exclude the match from the scan or make a registered implementation public, or register the type through a hand-written module factory.
 
 ### AWT201
 
 :::danger[Error]
-A generic `[Module]` (or one nested in a generic type) declares a `[Scan]`.
+A generic `[Module]` (or one nested in a generic type) declares a `[Scan]`, or a registration of an implementation another assembly cannot construct.
 :::
 
 ```csharp expect=AWT201
@@ -1989,9 +2006,9 @@ A generic `[Module]` (or one nested in a generic type) declares a `[Scan]`.
 public static partial class PluginModule<T>;   // no closed PluginModule<T> exists to [Import]
 ```
 
-A consumer imports a module by `typeof`, so there is no single closed module type to import from a generic declaration, and the generated partial could not re-open it by its bare name. Move the `[Scan]` onto a non-generic module.
+A consumer imports a module by `typeof`, so there is no single closed module type to import from a generic declaration, and the generated partial could not re-open it by its bare name. Move the `[Scan]`, or the registration of the [internal implementation](./04-registration/07-modules.md#internal-implementations), onto a non-generic module.
 
-**Fix:** Move the `[Scan]` onto a non-generic module.
+**Fix:** Move the `[Scan]` or the registration onto a non-generic module.
 
 ### AWT202
 
@@ -2012,7 +2029,7 @@ A self-compiled scan exists to reach the module's own `internal` types. Sweeping
 ### AWT203
 
 :::danger[Error]
-A self-compiled module `[Scan]` hook has a parameter, after the instance, whose type is not accessible outside the module's assembly.
+A self-compiled module `[Scan]` or registration hook has a parameter, after the instance, whose type is not accessible outside the module's assembly.
 :::
 
 ```csharp expect=AWT203
@@ -2027,14 +2044,14 @@ public static partial class PluginModule
 }
 ```
 
-The module emits a `public` wrapper for the hook, and that wrapper's parameters after the instance are resolved from the consuming container's graph, so each type has to be nameable by the consumer, the same rule a self-compiled factory parameter gets ([AWT195](#awt195)). The instance parameter itself is exempt: it is the accessible exposure interface, cast back to the internal implementation inside the module. Widen the parameter type's accessibility, resolve a different dependency, or drop the hook.
+The module emits a `public` wrapper for the hook of a scan or of a registered [internal implementation](./04-registration/07-modules.md#internal-implementations), and that wrapper's parameters after the instance are resolved from the consuming container's graph, so each type has to be nameable by the consumer, the same rule a self-compiled factory parameter gets ([AWT195](#awt195)). The instance parameter itself is exempt: it is the accessible exposure interface, cast back to the internal implementation inside the module. Widen the parameter type's accessibility, resolve a different dependency, or drop the hook.
 
 **Fix:** Make the parameter type public, take a different dependency, or drop the hook.
 
 ### AWT204
 
 :::danger[Error]
-A self-compiled module `[Scan]` hook has a parameter, after the instance, marked `[FromKey]` or `[Inject]`.
+A self-compiled module `[Scan]` or registration hook has a parameter, after the instance, marked `[FromKey]` or `[Inject]`.
 :::
 
 ```csharp expect=AWT204
@@ -2051,6 +2068,31 @@ public static partial class PluginModule
 The hook's parameters after the instance mirror onto the generated `public` wrapper as a bare type-and-name signature, so the attribute's per-dependency semantics (a key, optionality, deferral) would be silently dropped: a cross-assembly consumer would resolve the plain type while a same-compilation container, binding the module's own hook directly, honored the attribute, so the same source would inject different instances depending on which side of the assembly boundary the consumer sits. This is the hook-parameter twin of the factory's [AWT200](#awt200), rejected rather than silently degraded. Remove the attribute, resolve the dependency plainly, or drop the hook.
 
 **Fix:** Remove the `[FromKey]` or `[Inject]` attribute and resolve the dependency plainly, or drop the hook.
+
+### AWT230
+
+:::danger[Error]
+An imported module of another assembly declares a decorator, a composite or an open generic registration whose type the container cannot construct.
+:::
+
+```csharp no-compile
+// In a referenced library:
+internal sealed class LoggingGrinder(IGrinder inner) : IGrinder;
+
+[Module]
+[Singleton<Grinder, IGrinder>]
+[Decorate<LoggingGrinder, IGrinder>]   // internal, and a module does not self-compile a decorator
+public static class EquipmentModule;
+
+// In the application:
+[Container]
+[Import(typeof(EquipmentModule))]
+public static partial class CoffeeShop;
+```
+
+A module self-compiles its scans and its closed registrations of [internal implementations](./04-registration/07-modules.md#internal-implementations), but not a decorator, a composite or an open generic registration. When such a type, or every constructor of it, is not accessible to a container in another assembly, nothing can construct it there, so the container reports it at its `[Import]` and leaves the contribution out. A container in the module's own assembly, or one the library grants `InternalsVisibleTo`, constructs the type itself.
+
+**Fix:** Make the type and its constructor public, or grant the container's assembly `InternalsVisibleTo`.
 
 ## Extending containers
 

@@ -8,7 +8,8 @@ namespace Awaiten.SourceGenerators;
 ///     re-opened as <c>partial</c>, carrying one <c>[GeneratedScanRegistration]</c> per match and one
 ///     <c>public static</c> factory method that constructs the match and returns its accessible exposure interface.
 ///     The factory body <c>new</c>s the (possibly <c>internal</c>) implementation - legal because this code compiles
-///     in the module's own assembly - while the consumer only ever names the interface and calls the factory.
+///     in the module's own assembly - while the consumer only ever names the interface and calls the factory. A
+///     self-compiled registration gets a factory of the same shape, without an attribute: the consumer finds it by name.
 /// </summary>
 internal static partial class Sources
 {
@@ -38,7 +39,10 @@ internal static partial class Sources
 		// The expansion marker: proof the module's [Scan] passed through the generator, emitted even when the
 		// scan matched nothing, so a consuming container can tell "matched nothing" from "never expanded" and
 		// report AWT154 only for the latter (a module assembly built without the Awaiten generator).
-		Indent(builder, depth).AppendLine("[global::Awaiten.GeneratedScanExpansionAttribute]");
+		if (model.DeclaresScan)
+		{
+			Indent(builder, depth).AppendLine("[global::Awaiten.GeneratedScanExpansionAttribute]");
+		}
 
 		// One [GeneratedScanRegistration] per generated factory, applied to the re-opened partial module. The
 		// consuming container reads these like a container [Scan]'s matches (collection-eligible and overridable).
@@ -66,13 +70,29 @@ internal static partial class Sources
 			if (factory.OnActivated is { } activation)
 			{
 				builder.AppendLine();
-				EmitModuleHook(builder, depth + 1, factory, activation, release: false);
+				EmitModuleHook(builder, depth + 1, factory.ServiceType, activation, release: false, ScanOrigin);
 			}
 
 			if (factory.OnRelease is { } release)
 			{
 				builder.AppendLine();
-				EmitModuleHook(builder, depth + 1, factory, release, release: true);
+				EmitModuleHook(builder, depth + 1, factory.ServiceType, release, release: true, ScanOrigin);
+			}
+		}
+
+		foreach (RegistrationFactory registration in model.Registrations.AsArray())
+		{
+			if (!first)
+			{
+				builder.AppendLine();
+			}
+
+			first = false;
+			EmitRegistrationFactory(builder, depth + 1, registration);
+			foreach (RegistrationHook hook in registration.Hooks.AsArray())
+			{
+				builder.AppendLine();
+				EmitModuleHook(builder, depth + 1, registration.ReturnType, hook.Hook, hook.Release, RegistrationOrigin);
 			}
 		}
 
@@ -107,7 +127,36 @@ internal static partial class Sources
 		// pipeline, exactly like OnActivated/OnRelease on a container [Scan].
 		string onActivated = factory.OnActivated is { } activation ? $", OnActivated = \"{activation.WrapperName}\"" : string.Empty;
 		string onRelease = factory.OnRelease is { } release ? $", OnRelease = \"{release.WrapperName}\"" : string.Empty;
-		return $"global::Awaiten.GeneratedScanRegistrationAttribute<{factory.ServiceType}>(\"{factory.FactoryName}\", Lifetime = global::Awaiten.Lifetime.{factory.Lifetime}{skip}{onActivated}{onRelease})";
+
+		// What the consumer cannot read off the match it never sees: async initialization and disposal.
+		string asyncInitializable = factory.Traits.AsyncInitializable ? ", AsyncInitializable = true" : string.Empty;
+		string disposable = factory.Traits.Disposable ? ", Disposable = true" : string.Empty;
+		string asyncDisposable = factory.Traits.AsyncDisposable ? ", AsyncDisposable = true" : string.Empty;
+		return $"global::Awaiten.GeneratedScanRegistrationAttribute<{factory.ServiceType}>(\"{factory.FactoryName}\", Lifetime = global::Awaiten.Lifetime.{factory.Lifetime}{skip}{onActivated}{onRelease}{asyncInitializable}{disposable}{asyncDisposable})";
+	}
+
+	private const string ScanOrigin = "a module [Scan]";
+
+	private const string RegistrationOrigin = "a module registration";
+
+	/// <summary>
+	///     Emits the factory of a self-compiled module registration: it constructs the implementation, which only
+	///     the module's own assembly may, and returns it as an accessible type a consumer names in its stead.
+	/// </summary>
+	private static void EmitRegistrationFactory(StringBuilder builder, int depth, RegistrationFactory factory)
+	{
+		AppendXmlSummary(builder, depth,
+			"Generated from a module registration: constructs an implementation another assembly cannot construct and",
+			"returns it as an accessible type, so a consuming container resolves it without naming the implementation.");
+
+		FactoryParameter[] parameters = factory.Parameters.AsArray();
+		string signature = string.Join(", ", parameters.Select(parameter => $"{parameter.Type} @{parameter.Name}"));
+		string arguments = string.Join(", ", parameters.Select(parameter => $"@{parameter.Name}"));
+
+		Indent(builder, depth)
+			.Append("public static ").Append(factory.ReturnType).Append(' ').Append(factory.FactoryName)
+			.Append('(').Append(signature).Append(") => new ").Append(factory.ImplementationType)
+			.Append('(').Append(arguments).AppendLine(");");
 	}
 
 	private static void EmitModuleFactory(StringBuilder builder, int depth, ModuleFactory factory)
@@ -136,10 +185,10 @@ internal static partial class Sources
 	///     cast and the call compile because the wrapper body sits in the module's own assembly, while the
 	///     <c>public</c> signature is all a consumer needs to run it.
 	/// </summary>
-	private static void EmitModuleHook(StringBuilder builder, int depth, ModuleFactory factory, ModuleHook hook, bool release)
+	private static void EmitModuleHook(StringBuilder builder, int depth, string instanceType, ModuleHook hook, bool release, string origin)
 	{
 		AppendXmlSummary(builder, depth,
-			$"Generated from a module [Scan]: the {(release ? "OnRelease" : "OnActivated")} lifecycle wrapper, casting the exposure",
+			$"Generated from {origin}: the {(release ? "OnRelease" : "OnActivated")} lifecycle wrapper, casting the exposure",
 			"interface to the hook's own instance parameter type and forwarding to the module's own hook, so a consumer runs it without naming the internal hook.");
 
 		FactoryParameter[] parameters = hook.Parameters.AsArray();
@@ -159,7 +208,7 @@ internal static partial class Sources
 
 		Indent(builder, depth)
 			.Append("public static void ").Append(hook.WrapperName)
-			.Append('(').Append(factory.ServiceType).Append(" @").Append(instance).Append(signature).Append(") => ")
+			.Append('(').Append(instanceType).Append(" @").Append(instance).Append(signature).Append(") => ")
 			.Append(hook.Target).Append("((").Append(hook.InstanceCast).Append(")@").Append(instance).Append(arguments).AppendLine(");");
 	}
 }

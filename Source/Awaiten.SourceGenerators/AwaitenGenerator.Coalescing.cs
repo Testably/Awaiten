@@ -242,6 +242,8 @@ partial class AwaitenGenerator
 					OnReleaseOrigin = reg.OnRelease is null ? null : reg.Origin,
 					SuppressDisposal = reg.SuppressDisposal,
 					GenericFactory = reg.GenericFactory,
+					Traits = reg.Traits,
+					TraitsExact = reg.TraitsExact,
 				};
 				info.OnActivatedMarkers.AddRange(reg.OnActivatedMarkers ?? []);
 				info.OnReleaseMarkers.AddRange(reg.OnReleaseMarkers ?? []);
