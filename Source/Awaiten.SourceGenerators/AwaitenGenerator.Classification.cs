@@ -733,7 +733,7 @@ partial class AwaitenGenerator
 			return model;
 		}
 
-		ServiceKey contextKey = new(model.ServiceType, ContextKey(info.ImplementationType));
+		ServiceKey contextKey = new(model.ServiceType, ContextKey(RegisteredType(info.ImplementationType)));
 		if (!serviceToImpl.ContainsKey(contextKey))
 		{
 			return model;

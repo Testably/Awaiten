@@ -239,5 +239,60 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).Contains("*AWT166*Eager*").AsWildcard()
 				.Because("the winner is not eager, so the later Eager = true is a second, separately dropped directive");
 		}
+
+		[Test]
+		public async Task DoesNotReportForFactoriesWithoutAnImplementationTypeThatDifferInSuppressDisposal()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IClock { }
+			                                       public sealed class SystemClock : IClock { }
+
+			                                       [Module]
+			                                       [Singleton<IClock>(Factory = nameof(Create))]
+			                                       public static class ClockModule
+			                                       {
+			                                       	public static IClock Create() => new SystemClock();
+			                                       }
+
+			                                       [Container]
+			                                       [Import(typeof(ClockModule))]
+			                                       [Singleton<IClock>(Factory = nameof(Create), SuppressDisposal = true)]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       	public static IClock Create() => new SystemClock();
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("the two factories are different implementations, so each keeps its own SuppressDisposal");
+		}
+
+		[Test]
+		public async Task ReportsForFactoriesWithoutAnImplementationTypeNamingTheSameMemberWithDifferentDirectives()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IClock { }
+			                                       public sealed class SystemClock : IClock { }
+
+			                                       [Container]
+			                                       [Singleton<IClock>(Factory = nameof(Create))]
+			                                       [Singleton<IClock>(Factory = nameof(Create), Key = "k", SuppressDisposal = true)]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       	public static IClock Create() => new SystemClock();
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT166*'MyCode.IClock'*SuppressDisposal*").AsWildcard()
+				.Because("registrations naming the same factory are one implementation, which is disposed one way only");
+		}
 	}
 }

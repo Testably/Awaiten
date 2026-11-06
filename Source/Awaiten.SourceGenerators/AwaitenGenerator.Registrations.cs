@@ -250,6 +250,6 @@ partial class AwaitenGenerator
 		///     implementation type itself when it won none (a collection member reached only through the
 		///     collection), so the message still identifies it rather than crashing on an empty service list.
 		/// </summary>
-		public string OwningServiceOrImpl => Services.Count > 0 ? Services[0].Service : ImplementationType;
+		public string OwningServiceOrImpl => Services.Count > 0 ? Services[0].Service : RegisteredType(ImplementationType);
 	}
 }

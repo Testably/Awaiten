@@ -709,7 +709,7 @@ partial class AwaitenGenerator
 				diagnostics.Add(new DiagnosticInfo(
 					Diagnostics.ParameterizedLifetime,
 					location,
-					new EquatableArray<string>([Display(instance.ImplementationType), instance.Lifetime.ToString(),])));
+					new EquatableArray<string>([DisplayInstance(instance.ImplementationType), instance.Lifetime.ToString(),])));
 			}
 
 			// A parameterized async service is built fresh per call AND must await initialization, so its path is
@@ -862,7 +862,7 @@ partial class AwaitenGenerator
 				}
 			}
 
-			return dependencyServices.Length > 0 ? dependencyServices[0] : new ServiceKey(dependency.ImplementationType, null);
+			return dependencyServices.Length > 0 ? dependencyServices[0] : new ServiceKey(dependency.ConstructedType, null);
 		}
 	}
 
@@ -1305,7 +1305,8 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     Renders an instance identity for diagnostics. A decorator chain link carries a synthetic
 	///     <c>&lt;type&gt;@__dec:…</c> identity and a keyed composite a <c>&lt;type&gt;@__cmp:…</c> one; trim the
-	///     synthetic suffix so an error names the real decorator or composite type.
+	///     synthetic suffix so an error names the real decorator or composite type. A <c>Factory</c> or <c>Instance</c>
+	///     registration naming only its service carries a <c>&lt;service&gt;@member:…</c> one, trimmed to the service.
 	/// </summary>
 	internal static string DisplayInstance(string implementationType)
 	{
@@ -1320,6 +1321,11 @@ partial class AwaitenGenerator
 			// A self-compiled module-scan match carries a synthetic '<service>@scan:<factory>' identity (see
 			// CollectGeneratedScanRegistration); trim it so a diagnostic names the registered service.
 			marker = implementationType.IndexOf(ScanKeyMarker, StringComparison.Ordinal);
+		}
+
+		if (marker < 0)
+		{
+			marker = implementationType.IndexOf(MemberKeyMarker, StringComparison.Ordinal);
 		}
 
 		return Display(marker >= 0 ? implementationType.Substring(0, marker) : implementationType);
