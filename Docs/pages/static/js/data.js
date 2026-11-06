@@ -1164,6 +1164,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Nov 6 18:38:26 2026 \u002B0100",
         "message": "fix: close open generics for decorator and composite constructor parameters (#268)"
+      },
+      {
+        "sha": "edcf7d85cbdd8bf995b58dd0a1803a87cabd22d9",
+        "author": "Valentin Breu\u00DF",
+        "date": "Fri Nov 6 18:54:55 2026 \u002B0100",
+        "message": "feat!: self-compile module registrations of implementations another assembly cannot construct (#270)"
       }
     ],
     "labels": [
@@ -1360,7 +1366,8 @@ window.BENCHMARK_DATA = {
       "61649014",
       "86508f12",
       "71852278",
-      "3d9f796b"
+      "3d9f796b",
+      "edcf7d85"
     ],
     "datasets": [
       {
@@ -1560,7 +1567,8 @@ window.BENCHMARK_DATA = {
           6.199716582894325,
           4.096216455101967,
           4.190374634166559,
-          7.018871400218743
+          7.018871400218743,
+          6.267832472920418
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -1572,6 +1580,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -1973,7 +1982,8 @@ window.BENCHMARK_DATA = {
           7.47846611818442,
           4.799329062125513,
           4.311801718175412,
-          10.0166758703334
+          10.0166758703334,
+          6.866493446486337
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -1985,6 +1995,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -2386,7 +2397,8 @@ window.BENCHMARK_DATA = {
           83.48026393254598,
           60.174884955088295,
           58.95604624918529,
-          126.20132921536764
+          126.20132921536764,
+          81.33027567068736
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -2398,6 +2410,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -2795,7 +2808,8 @@ window.BENCHMARK_DATA = {
           6.946967905759811,
           4.847503466407458,
           5.382517385482788,
-          9.044105278452237
+          9.044105278452237,
+          6.141371520360311
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -2807,6 +2821,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -3200,7 +3215,8 @@ window.BENCHMARK_DATA = {
           8.786115583280722,
           5.846790118941239,
           6.215128369629383,
-          11.01135744502147
+          11.01135744502147,
+          8.626320712268353
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -3212,6 +3228,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -4579,6 +4596,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Nov 6 18:38:26 2026 \u002B0100",
         "message": "fix: close open generics for decorator and composite constructor parameters (#268)"
+      },
+      {
+        "sha": "edcf7d85cbdd8bf995b58dd0a1803a87cabd22d9",
+        "author": "Valentin Breu\u00DF",
+        "date": "Fri Nov 6 18:54:55 2026 \u002B0100",
+        "message": "feat!: self-compile module registrations of implementations another assembly cannot construct (#270)"
       }
     ],
     "labels": [
@@ -4775,7 +4798,8 @@ window.BENCHMARK_DATA = {
       "61649014",
       "86508f12",
       "71852278",
-      "3d9f796b"
+      "3d9f796b",
+      "edcf7d85"
     ],
     "datasets": [
       {
@@ -4975,7 +4999,8 @@ window.BENCHMARK_DATA = {
           6.276840024938186,
           4.108922117522785,
           4.789262322584788,
-          7.7817118402038306
+          7.7817118402038306,
+          6.440045844515165
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -4987,6 +5012,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -5388,7 +5414,8 @@ window.BENCHMARK_DATA = {
           6.459800585040024,
           3.9265352796230997,
           4.111585878981994,
-          8.678368679114751
+          8.678368679114751,
+          6.4959253668785095
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -5400,6 +5427,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -5801,7 +5829,8 @@ window.BENCHMARK_DATA = {
           83.83738593260448,
           56.024146224061646,
           59.37385236299955,
-          113.28979624907176
+          113.28979624907176,
+          81.893008406957
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -5813,6 +5842,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -6210,7 +6240,8 @@ window.BENCHMARK_DATA = {
           6.8188843211302395,
           4.804639453334468,
           5.361355293255586,
-          8.82715161373982
+          8.82715161373982,
+          6.279686126325812
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -6222,6 +6253,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -6615,7 +6647,8 @@ window.BENCHMARK_DATA = {
           11.466074849168459,
           5.74636126940067,
           6.08868593616145,
-          15.096653266747792
+          15.096653266747792,
+          11.735946902384361
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -6627,6 +6660,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -7994,6 +8028,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Nov 6 18:38:26 2026 \u002B0100",
         "message": "fix: close open generics for decorator and composite constructor parameters (#268)"
+      },
+      {
+        "sha": "edcf7d85cbdd8bf995b58dd0a1803a87cabd22d9",
+        "author": "Valentin Breu\u00DF",
+        "date": "Fri Nov 6 18:54:55 2026 \u002B0100",
+        "message": "feat!: self-compile module registrations of implementations another assembly cannot construct (#270)"
       }
     ],
     "labels": [
@@ -8190,7 +8230,8 @@ window.BENCHMARK_DATA = {
       "61649014",
       "86508f12",
       "71852278",
-      "3d9f796b"
+      "3d9f796b",
+      "edcf7d85"
     ],
     "datasets": [
       {
@@ -8390,7 +8431,8 @@ window.BENCHMARK_DATA = {
           21.990469272931417,
           15.324243867397309,
           20.339622539281844,
-          22.490938959519067
+          22.490938959519067,
+          21.868636444211006
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -8552,6 +8594,7 @@ window.BENCHMARK_DATA = {
           144,
           144,
           144,
+          208,
           208,
           208,
           208,
@@ -8803,7 +8846,8 @@ window.BENCHMARK_DATA = {
           1560.0190416971843,
           1124.1462353297643,
           1491.1470606486002,
-          1594.301356379191
+          1594.301356379191,
+          1662.7283014933269
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -8815,6 +8859,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          5688,
           5688,
           5688,
           5688,
@@ -9216,7 +9261,8 @@ window.BENCHMARK_DATA = {
           30320.282799353965,
           25672.642049153645,
           29951.50077311198,
-          30271.95821707589
+          30271.95821707589,
+          24604.612188720705
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -9421,7 +9467,8 @@ window.BENCHMARK_DATA = {
           32482,
           32478,
           32482,
-          32478
+          32478,
+          32476
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -9625,7 +9672,8 @@ window.BENCHMARK_DATA = {
           800.4945475714547,
           580.0662468501499,
           723.2821314493815,
-          738.3558861187527
+          738.3558861187527,
+          713.899149831136
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -9655,6 +9703,7 @@ window.BENCHMARK_DATA = {
           1472,
           1472,
           1472,
+          1528,
           1528,
           1528,
           1528,
@@ -10030,7 +10079,8 @@ window.BENCHMARK_DATA = {
           12424.925637817383,
           9071.197733561197,
           12127.908008282002,
-          12333.0137163798
+          12333.0137163798,
+          13036.762233479818
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -10231,7 +10281,8 @@ window.BENCHMARK_DATA = {
           24760,
           24760,
           24761,
-          24760
+          24760,
+          24761
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -11409,6 +11460,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Nov 6 18:38:26 2026 \u002B0100",
         "message": "fix: close open generics for decorator and composite constructor parameters (#268)"
+      },
+      {
+        "sha": "edcf7d85cbdd8bf995b58dd0a1803a87cabd22d9",
+        "author": "Valentin Breu\u00DF",
+        "date": "Fri Nov 6 18:54:55 2026 \u002B0100",
+        "message": "feat!: self-compile module registrations of implementations another assembly cannot construct (#270)"
       }
     ],
     "labels": [
@@ -11605,7 +11662,8 @@ window.BENCHMARK_DATA = {
       "61649014",
       "86508f12",
       "71852278",
-      "3d9f796b"
+      "3d9f796b",
+      "edcf7d85"
     ],
     "datasets": [
       {
@@ -11805,7 +11863,8 @@ window.BENCHMARK_DATA = {
           207.4572127205985,
           111.8780504831901,
           187.77133825847082,
-          175.30598220458398
+          175.30598220458398,
+          305.46560497283934
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -11967,6 +12026,7 @@ window.BENCHMARK_DATA = {
           2128,
           2128,
           2128,
+          4176,
           4176,
           4176,
           4176,
@@ -12218,7 +12278,8 @@ window.BENCHMARK_DATA = {
           15961.319938151042,
           10538.103849283854,
           14765.001742045084,
-          15297.2802734375
+          15297.2802734375,
+          15666.077026367188
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -12230,6 +12291,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          61016,
           61016,
           61016,
           61016,
@@ -12631,7 +12693,8 @@ window.BENCHMARK_DATA = {
           738006.2626953125,
           629016.7353515625,
           735180.4439174107,
-          741659.4263392857
+          741659.4263392857,
+          587804.5231770833
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -12836,7 +12899,8 @@ window.BENCHMARK_DATA = {
           741779,
           735984,
           738539,
-          721168
+          721168,
+          721081
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -13040,7 +13104,8 @@ window.BENCHMARK_DATA = {
           46317.73463134766,
           35522.505271402995,
           43556.41055733817,
-          46138.00498860677
+          46138.00498860677,
+          44385.010729980466
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -13241,7 +13306,8 @@ window.BENCHMARK_DATA = {
           80305,
           79668,
           80082,
-          80965
+          80965,
+          80512
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -13445,7 +13511,8 @@ window.BENCHMARK_DATA = {
           366103.8740234375,
           288122.0902669271,
           361112.0828776042,
-          383271.23287760414
+          383271.23287760414,
+          387293.8643624442
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -13646,7 +13713,8 @@ window.BENCHMARK_DATA = {
           573090,
           573010,
           573091,
-          573043
+          573043,
+          572305
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -14800,6 +14868,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Nov 6 18:38:26 2026 \u002B0100",
         "message": "fix: close open generics for decorator and composite constructor parameters (#268)"
+      },
+      {
+        "sha": "edcf7d85cbdd8bf995b58dd0a1803a87cabd22d9",
+        "author": "Valentin Breu\u00DF",
+        "date": "Fri Nov 6 18:54:55 2026 \u002B0100",
+        "message": "feat!: self-compile module registrations of implementations another assembly cannot construct (#270)"
       }
     ],
     "labels": [
@@ -14992,7 +15066,8 @@ window.BENCHMARK_DATA = {
       "61649014",
       "86508f12",
       "71852278",
-      "3d9f796b"
+      "3d9f796b",
+      "edcf7d85"
     ],
     "datasets": [
       {
@@ -15188,7 +15263,8 @@ window.BENCHMARK_DATA = {
           203.3919696887334,
           158.13426406566913,
           251.99277124404907,
-          178.5564998626709
+          178.5564998626709,
+          212.9970986286799
         ],
         "borderColor": "#3949AB",
         "backgroundColor": "#3949AB",
@@ -15223,6 +15299,7 @@ window.BENCHMARK_DATA = {
           560,
           560,
           560,
+          568,
           568,
           568,
           568,
@@ -15593,7 +15670,8 @@ window.BENCHMARK_DATA = {
           449.5531337077801,
           382.13979148864746,
           575.1411103521075,
-          435.16855506896974
+          435.16855506896974,
+          459.0480000019073
         ],
         "borderColor": "#512BD4",
         "backgroundColor": "#512BD4",
@@ -15605,6 +15683,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          1104,
           1104,
           1104,
           1104,
@@ -15998,7 +16077,8 @@ window.BENCHMARK_DATA = {
           4955.841657765706,
           3361.88171971639,
           6597.27106148856,
-          3776.9160035940317
+          3776.9160035940317,
+          4869.625035967146
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -16082,6 +16162,7 @@ window.BENCHMARK_DATA = {
           13696,
           13696,
           13696,
+          10784,
           10784,
           10784,
           10784,
@@ -16403,7 +16484,8 @@ window.BENCHMARK_DATA = {
           345.59174187978107,
           237.26480391820272,
           392.9153316497803,
-          281.724204158783
+          281.724204158783,
+          344.043853298823
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -16415,6 +16497,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          944,
           944,
           944,
           944,
@@ -16808,7 +16891,8 @@ window.BENCHMARK_DATA = {
           561.0646890640259,
           367.4679842631022,
           713.3435066086905,
-          442.15090864045277
+          442.15090864045277,
+          553.62123973029
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -16820,6 +16904,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          1096,
           1096,
           1096,
           1096,
