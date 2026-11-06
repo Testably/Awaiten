@@ -1140,6 +1140,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Nov 6 18:23:26 2026 \u002B0100",
         "message": "feat: let a container extend another container with [Container(Extends = typeof(...))] (#265)"
+      },
+      {
+        "sha": "616490144eff664eee49cfe7231aabf10cfaefa0",
+        "author": "Valentin Breu\u00DF",
+        "date": "Fri Nov 6 18:29:38 2026 \u002B0100",
+        "message": "fix!: identify a lifecycle hook by its declaring type when registrations of one implementation coalesce (#266)"
       }
     ],
     "labels": [
@@ -1332,7 +1338,8 @@ window.BENCHMARK_DATA = {
       "3517285b",
       "399f3788",
       "c28d5fc4",
-      "01274877"
+      "01274877",
+      "61649014"
     ],
     "datasets": [
       {
@@ -1528,7 +1535,8 @@ window.BENCHMARK_DATA = {
           7.148781747619311,
           7.779047201459225,
           3.9138488242668763,
-          4.06382804736495
+          4.06382804736495,
+          6.199716582894325
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -1540,6 +1548,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -1933,7 +1942,8 @@ window.BENCHMARK_DATA = {
           7.964115836222967,
           8.648057089402126,
           4.122521755787043,
-          3.8649295861167565
+          3.8649295861167565,
+          7.47846611818442
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -1945,6 +1955,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -2338,7 +2349,8 @@ window.BENCHMARK_DATA = {
           121.11641037464142,
           111.53714952468872,
           67.03393669128418,
-          58.32888073580606
+          58.32888073580606,
+          83.48026393254598
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -2350,6 +2362,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -2739,7 +2752,8 @@ window.BENCHMARK_DATA = {
           8.954647744695345,
           9.095837113757929,
           5.402243302336761,
-          4.416724820931752
+          4.416724820931752,
+          6.946967905759811
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -2751,6 +2765,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -3136,7 +3151,8 @@ window.BENCHMARK_DATA = {
           11.013765429074947,
           11.28126844863097,
           6.187681942184766,
-          6.023496770858765
+          6.023496770858765,
+          8.786115583280722
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -3148,6 +3164,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -4487,6 +4504,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Nov 6 18:23:26 2026 \u002B0100",
         "message": "feat: let a container extend another container with [Container(Extends = typeof(...))] (#265)"
+      },
+      {
+        "sha": "616490144eff664eee49cfe7231aabf10cfaefa0",
+        "author": "Valentin Breu\u00DF",
+        "date": "Fri Nov 6 18:29:38 2026 \u002B0100",
+        "message": "fix!: identify a lifecycle hook by its declaring type when registrations of one implementation coalesce (#266)"
       }
     ],
     "labels": [
@@ -4679,7 +4702,8 @@ window.BENCHMARK_DATA = {
       "3517285b",
       "399f3788",
       "c28d5fc4",
-      "01274877"
+      "01274877",
+      "61649014"
     ],
     "datasets": [
       {
@@ -4875,7 +4899,8 @@ window.BENCHMARK_DATA = {
           8.167922201965537,
           8.47164814280612,
           4.246934479475021,
-          4.443036908904712
+          4.443036908904712,
+          6.276840024938186
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -4887,6 +4912,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -5280,7 +5306,8 @@ window.BENCHMARK_DATA = {
           7.909197246799102,
           7.267903965253097,
           3.9009058667080745,
-          3.872767288486163
+          3.872767288486163,
+          6.459800585040024
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -5292,6 +5319,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -5685,7 +5713,8 @@ window.BENCHMARK_DATA = {
           123.30088030497232,
           115.06470832824706,
           62.69130005155291,
-          59.2032755613327
+          59.2032755613327,
+          83.83738593260448
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -5697,6 +5726,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -6086,7 +6116,8 @@ window.BENCHMARK_DATA = {
           8.936301365494728,
           9.05369158834219,
           5.154809019962946,
-          4.300022271963266
+          4.300022271963266,
+          6.8188843211302395
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -6098,6 +6129,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -6483,7 +6515,8 @@ window.BENCHMARK_DATA = {
           14.664560900202819,
           14.96816924115022,
           5.9874735581023355,
-          6.0454882393280664
+          6.0454882393280664,
+          11.466074849168459
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -6495,6 +6528,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -7834,6 +7868,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Nov 6 18:23:26 2026 \u002B0100",
         "message": "feat: let a container extend another container with [Container(Extends = typeof(...))] (#265)"
+      },
+      {
+        "sha": "616490144eff664eee49cfe7231aabf10cfaefa0",
+        "author": "Valentin Breu\u00DF",
+        "date": "Fri Nov 6 18:29:38 2026 \u002B0100",
+        "message": "fix!: identify a lifecycle hook by its declaring type when registrations of one implementation coalesce (#266)"
       }
     ],
     "labels": [
@@ -8026,7 +8066,8 @@ window.BENCHMARK_DATA = {
       "3517285b",
       "399f3788",
       "c28d5fc4",
-      "01274877"
+      "01274877",
+      "61649014"
     ],
     "datasets": [
       {
@@ -8222,7 +8263,8 @@ window.BENCHMARK_DATA = {
           19.3731257127864,
           16.597019741932552,
           20.192882947127025,
-          15.45836308172771
+          15.45836308172771,
+          21.990469272931417
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -8384,6 +8426,7 @@ window.BENCHMARK_DATA = {
           144,
           144,
           144,
+          208,
           208,
           208,
           208,
@@ -8627,7 +8670,8 @@ window.BENCHMARK_DATA = {
           1431.4303059895833,
           1332.5311132158552,
           1492.0894629405095,
-          1107.0178822108678
+          1107.0178822108678,
+          1560.0190416971843
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -8639,6 +8683,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          5688,
           5688,
           5688,
           5688,
@@ -9032,7 +9077,8 @@ window.BENCHMARK_DATA = {
           32756.13457845052,
           26579.86005859375,
           29743.794799804688,
-          25282.053873697918
+          25282.053873697918,
+          30320.282799353965
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -9233,7 +9279,8 @@ window.BENCHMARK_DATA = {
           32482,
           32478,
           32482,
-          32478
+          32478,
+          32482
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -9433,7 +9480,8 @@ window.BENCHMARK_DATA = {
           731.5222300211589,
           599.0573064804078,
           728.961513859885,
-          563.6114712397258
+          563.6114712397258,
+          800.4945475714547
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -9463,6 +9511,7 @@ window.BENCHMARK_DATA = {
           1472,
           1472,
           1472,
+          1528,
           1528,
           1528,
           1528,
@@ -9830,7 +9879,8 @@ window.BENCHMARK_DATA = {
           10995.146268572125,
           9702.425100708007,
           11524.62707226093,
-          9127.12437286377
+          9127.12437286377,
+          12424.925637817383
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -10023,6 +10073,7 @@ window.BENCHMARK_DATA = {
           24761,
           24760,
           24761,
+          24760,
           24760,
           24760,
           24760,
@@ -11181,6 +11232,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Nov 6 18:23:26 2026 \u002B0100",
         "message": "feat: let a container extend another container with [Container(Extends = typeof(...))] (#265)"
+      },
+      {
+        "sha": "616490144eff664eee49cfe7231aabf10cfaefa0",
+        "author": "Valentin Breu\u00DF",
+        "date": "Fri Nov 6 18:29:38 2026 \u002B0100",
+        "message": "fix!: identify a lifecycle hook by its declaring type when registrations of one implementation coalesce (#266)"
       }
     ],
     "labels": [
@@ -11373,7 +11430,8 @@ window.BENCHMARK_DATA = {
       "3517285b",
       "399f3788",
       "c28d5fc4",
-      "01274877"
+      "01274877",
+      "61649014"
     ],
     "datasets": [
       {
@@ -11569,7 +11627,8 @@ window.BENCHMARK_DATA = {
           141.5902172235342,
           121.54320859114328,
           187.90442861829484,
-          114.13320194880167
+          114.13320194880167,
+          207.4572127205985
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -11731,6 +11790,7 @@ window.BENCHMARK_DATA = {
           2128,
           2128,
           2128,
+          4176,
           4176,
           4176,
           4176,
@@ -11974,7 +12034,8 @@ window.BENCHMARK_DATA = {
           13468.998053995769,
           11500.47121887207,
           14507.841972351074,
-          10599.747447087215
+          10599.747447087215,
+          15961.319938151042
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -11986,6 +12047,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          61016,
           61016,
           61016,
           61016,
@@ -12379,7 +12441,8 @@ window.BENCHMARK_DATA = {
           814499.2859235491,
           647503.65078125,
           729229.351702009,
-          636733.8500279018
+          636733.8500279018,
+          738006.2626953125
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -12580,7 +12643,8 @@ window.BENCHMARK_DATA = {
           741805,
           741802,
           740463,
-          738350
+          738350,
+          741779
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -12780,7 +12844,8 @@ window.BENCHMARK_DATA = {
           44829.646536690845,
           36101.34147542318,
           43948.82917198768,
-          35186.19420572917
+          35186.19420572917,
+          46317.73463134766
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -12977,7 +13042,8 @@ window.BENCHMARK_DATA = {
           80304,
           80303,
           80011,
-          80645
+          80645,
+          80305
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -13177,7 +13243,8 @@ window.BENCHMARK_DATA = {
           337225.419921875,
           269358.11376953125,
           349931.8738839286,
-          275073.1239257812
+          275073.1239257812,
+          366103.8740234375
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -13374,7 +13441,8 @@ window.BENCHMARK_DATA = {
           573187,
           573089,
           573061,
-          573121
+          573121,
+          573090
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -14504,6 +14572,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Nov 6 18:23:26 2026 \u002B0100",
         "message": "feat: let a container extend another container with [Container(Extends = typeof(...))] (#265)"
+      },
+      {
+        "sha": "616490144eff664eee49cfe7231aabf10cfaefa0",
+        "author": "Valentin Breu\u00DF",
+        "date": "Fri Nov 6 18:29:38 2026 \u002B0100",
+        "message": "fix!: identify a lifecycle hook by its declaring type when registrations of one implementation coalesce (#266)"
       }
     ],
     "labels": [
@@ -14692,7 +14766,8 @@ window.BENCHMARK_DATA = {
       "3517285b",
       "399f3788",
       "c28d5fc4",
-      "01274877"
+      "01274877",
+      "61649014"
     ],
     "datasets": [
       {
@@ -14884,7 +14959,8 @@ window.BENCHMARK_DATA = {
           271.3745162010193,
           317.22167095771204,
           172.10794307635382,
-          148.96236533778054
+          148.96236533778054,
+          203.3919696887334
         ],
         "borderColor": "#3949AB",
         "backgroundColor": "#3949AB",
@@ -14919,6 +14995,7 @@ window.BENCHMARK_DATA = {
           560,
           560,
           560,
+          568,
           568,
           568,
           568,
@@ -15281,7 +15358,8 @@ window.BENCHMARK_DATA = {
           631.3937287648519,
           699.5715747833252,
           423.27726995944977,
-          362.17469607080733
+          362.17469607080733,
+          449.5531337077801
         ],
         "borderColor": "#512BD4",
         "backgroundColor": "#512BD4",
@@ -15293,6 +15371,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          1104,
           1104,
           1104,
           1104,
@@ -15678,7 +15757,8 @@ window.BENCHMARK_DATA = {
           6518.1974538167315,
           6395.158506266276,
           3607.6374247624326,
-          3240.3264604296005
+          3240.3264604296005,
+          4955.841657765706
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -15762,6 +15842,7 @@ window.BENCHMARK_DATA = {
           13696,
           13696,
           13696,
+          10784,
           10784,
           10784,
           10784,
@@ -16075,7 +16156,8 @@ window.BENCHMARK_DATA = {
           404.05719493230185,
           420.58357960383097,
           258.899635887146,
-          233.3401374083299
+          233.3401374083299,
+          345.59174187978107
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -16087,6 +16169,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          944,
           944,
           944,
           944,
@@ -16472,7 +16555,8 @@ window.BENCHMARK_DATA = {
           747.6039306004842,
           763.8069590159824,
           394.5443860934331,
-          370.0536003112793
+          370.0536003112793,
+          561.0646890640259
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -16484,6 +16568,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          1096,
           1096,
           1096,
           1096,
