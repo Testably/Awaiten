@@ -156,6 +156,18 @@ Register register = shop.Resolve<Register>();   // its IPaymentGateway comes fro
 
 The `key` argument carries the `[FromKey]` value for a keyed external dependency. A child scope, and the throwaway scope behind an `Owned<T>`, inherit the resolver from the scope that created them, so passing it once to the root is enough.
 
+## Resolving an imported service directly
+
+Resolving an imported type from the container asks the host too, just like a dependency of that type. This covers `Resolve<T>()`, `ResolveAsync<T>()`, `TryResolve<T>()` and their `Type` and keyed forms. Each call asks the external resolver again, and the container neither caches nor disposes what the host hands back.
+
+```csharp
+using CoffeeShop.Root shop = new(new HostResolver());
+
+IPaymentGateway gateway = shop.Resolve<IPaymentGateway>();   // asks HostResolver
+```
+
+If the host has no instance, `Resolve` throws the same error as a missing dependency, and `TryResolve` returns `false`. A closed `[ImportService]` type and every closing of an open one are routed with or without a key. Under `[ImportServices]`, any type the container has no registration for is routed when you resolve it without a key.
+
 A scope's resolver is set once. Hosts that wire a resolver later, as the MS.DI bridge does for each scope, call `IAwaitenExternalResolverHost.SetExternalResolver`. Setting the resolver a scope already holds again does nothing; setting a different one throws an `InvalidOperationException`, because the scope would then mix instances from two providers.
 
 ## Verifying the wiring

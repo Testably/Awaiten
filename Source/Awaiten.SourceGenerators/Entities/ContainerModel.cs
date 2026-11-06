@@ -6,7 +6,10 @@ namespace Awaiten.SourceGenerators.Entities;
 /// <summary>
 ///     The fully-resolved, equatable model of a single <c>[Container]</c> partial class, ready for
 ///     emission. <see cref="HasBaseErrors" /> marks a container whose extended base has an error that only the
-///     base reports, so the graph is still broken and only its shell is emitted.
+///     base reports, so the graph is still broken and only its shell is emitted. <see cref="ImportServices" />,
+///     <see cref="ImportedServices" /> and <see cref="ImportedDefinitions" /> are the types the container leaves to
+///     the host: <c>[ImportServices]</c>, the closed <c>[ImportService]</c> types and the unbound generic
+///     definitions of the open ones.
 /// </summary>
 internal sealed record ContainerModel(
 	string? Namespace,
@@ -21,8 +24,13 @@ internal sealed record ContainerModel(
 	EquatableArray<ServiceMembers> Collections = default,
 	EquatableArray<string> VarianceCandidates = default,
 	EquatableArray<KeyedServiceMembers> KeyedCollections = default,
-	bool HasBaseErrors = false)
+	bool HasBaseErrors = false,
+	bool ImportServices = false,
+	EquatableArray<string> ImportedServices = default,
+	EquatableArray<string> ImportedDefinitions = default)
 {
+	public bool Imports => ImportServices || ImportedServices.Count > 0 || ImportedDefinitions.Count > 0;
+
 	public bool HasErrors
 	{
 		get

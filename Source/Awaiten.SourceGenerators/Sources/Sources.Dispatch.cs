@@ -402,6 +402,7 @@ internal static partial class Sources
 		Dictionary<ServiceKey, int> serviceToIndex = context.ServiceToIndex;
 		StringBuilder builder = members;
 		Separate(members);
+		bool imports = context.Imports;
 
 		List<DispatchEntry> entries = BuildDispatchEntries(instances, names, serviceToIndex, strict, syncAfterInit);
 		// The runtime variance-fallback candidates: the registered variant closed-generic-interface service
@@ -435,6 +436,7 @@ internal static partial class Sources
 			builder.AppendLine();
 		}
 
+		EmitImportedMiss(builder, depth + 1, imports, "null");
 		Indent(builder, depth + 1).AppendLine(
 			"throw new global::System.InvalidOperationException($\"No registration for type '{serviceType}' on this container.\");");
 		Indent(builder, depth).AppendLine("}");
@@ -450,8 +452,7 @@ internal static partial class Sources
 		EmitDisposedGuard(builder, depth + 1);
 		if (entries.Count == 0)
 		{
-			Indent(builder, depth + 1).AppendLine("instance = null;");
-			Indent(builder, depth + 1).AppendLine("return false;");
+			EmitTryResolveMiss(builder, depth + 1, imports, "null");
 			Indent(builder, depth).AppendLine("}");
 			return new DispatchShape(false, false, hasWithheld, false);
 		}
@@ -499,14 +500,15 @@ internal static partial class Sources
 			// differently-closed generic interface request through a variance-compatible registration. The
 			// exact-match fast path above is untouched. The fallback only ever runs on what would otherwise
 			// be a failed resolution.
-			Indent(builder, depth + 1).AppendLine("return __TryResolveVariant(serviceType, out instance);");
+			Indent(builder, depth + 1).Append("return __TryResolveVariant(serviceType, out instance)").AppendLine(imports
+				? " || (__IsImported(serviceType, null) && __TryResolveExternal(serviceType, null, out instance));"
+				: ";");
 			Indent(builder, depth).AppendLine("}");
-			EmitVarianceFallback(fields, helpers, depth, varianceEntries, hasWithheld);
+			EmitVarianceFallback(fields, helpers, depth, varianceEntries, hasWithheld, HasDeclaredImports(context.Model));
 			return new DispatchShape(true, true, hasWithheld, hasRootWithheld);
 		}
 
-		Indent(builder, depth + 1).AppendLine("instance = null;");
-		Indent(builder, depth + 1).AppendLine("return false;");
+		EmitTryResolveMiss(builder, depth + 1, imports, "null");
 		Indent(builder, depth).AppendLine("}");
 		return new DispatchShape(true, false, hasWithheld, hasRootWithheld);
 	}
@@ -694,7 +696,7 @@ internal static partial class Sources
 	///     matching itself lives in the static <c>__FindVariantMatch</c>, shared with the resolvability probe that
 	///     <c>Resolve</c> and <c>GetResolvability</c> read, so every consumer picks the same candidate.
 	/// </summary>
-	private static void EmitVarianceFallback(StringBuilder fields, StringBuilder helpers, int depth, List<string> candidates, bool hasWithheld)
+	private static void EmitVarianceFallback(StringBuilder fields, StringBuilder helpers, int depth, List<string> candidates, bool hasWithheld, bool hasDeclaredImports)
 	{
 		// The candidate service types, in registration order, mirroring the compile-time candidate order so
 		// the registration-order tie-break picks the same target at runtime.
@@ -735,9 +737,11 @@ internal static partial class Sources
 		Indent(builder, depth).AppendLine("private static global::System.Type? __FindVariantMatch(global::System.Type serviceType)");
 		Indent(builder, depth).AppendLine("{");
 		// Only a constructed generic interface can be variance-satisfied. A type with withheld guidance (a
-		// root-withheld disposable on the Root, an async-only service) keeps its targeted error from Resolve.
+		// root-withheld disposable on the Root, an async-only service) keeps its targeted error from Resolve, and a
+		// declared import goes to the host, as injection routes it.
 		Indent(builder, depth + 1).Append("if (!serviceType.IsConstructedGenericType || !serviceType.IsInterface")
-			.AppendLine(hasWithheld ? " || __withheld.ContainsKey(serviceType))" : ")");
+			.Append(hasWithheld ? " || __withheld.ContainsKey(serviceType)" : string.Empty)
+			.AppendLine(hasDeclaredImports ? " || __IsDeclaredImport(serviceType))" : ")");
 		Indent(builder, depth + 1).AppendLine("{");
 		Indent(builder, depth + 2).AppendLine("return null;");
 		Indent(builder, depth + 1).AppendLine("}");
@@ -1398,23 +1402,118 @@ internal static partial class Sources
 	///     message when no resolver is wired or the service is unavailable. Emitted on the base <c>Scope</c> and
 	///     inherited by the <c>Root</c>. It prefers this scope's own <c>ExternalResolver</c> (a host wires each
 	///     scope to its aligned provider, so a scoped external dependency resolves per scope) and falls back to
-	///     the root's (<c>__root.ExternalResolver</c>; on the Root the two are the same).
+	///     the root's (<c>__root.ExternalResolver</c>; on the Root the two are the same). The by-type dispatch shares
+	///     its non-throwing <c>__TryResolveExternal</c> and its <c>__ExternalUnavailable</c> guidance.
 	/// </summary>
 	private static void EmitResolveExternal(StringBuilder builder, int depth)
 	{
 		Indent(builder, depth).AppendLine("protected object __ResolveExternal(global::System.Type serviceType, object? serviceKey)");
 		Indent(builder, depth).AppendLine("{");
-		Indent(builder, depth + 1).AppendLine("global::Awaiten.IExternalResolver? resolver = __externalResolver ?? __root.__externalResolver;");
-		Indent(builder, depth + 1).AppendLine("if (resolver != null && resolver.TryResolve(serviceType, serviceKey, out object? instance) && instance != null)");
+		Indent(builder, depth + 1).AppendLine("if (__TryResolveExternal(serviceType, serviceKey, out object? instance))");
 		Indent(builder, depth + 1).AppendLine("{");
-		Indent(builder, depth + 2).AppendLine("return instance;");
+		Indent(builder, depth + 2).AppendLine("return instance!;");
 		Indent(builder, depth + 1).AppendLine("}");
 		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("throw __ExternalUnavailable(serviceType, serviceKey);");
+		Indent(builder, depth).AppendLine("}");
+		builder.AppendLine();
+
+		Indent(builder, depth).AppendLine("private bool __TryResolveExternal(global::System.Type serviceType, object? serviceKey, out object? instance)");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).AppendLine("global::Awaiten.IExternalResolver? resolver = __externalResolver ?? __root.__externalResolver;");
+		Indent(builder, depth + 1).AppendLine("if (resolver != null && resolver.TryResolve(serviceType, serviceKey, out instance) && instance != null)");
+		Indent(builder, depth + 1).AppendLine("{");
+		Indent(builder, depth + 2).AppendLine("return true;");
+		Indent(builder, depth + 1).AppendLine("}");
+		builder.AppendLine();
+		Indent(builder, depth + 1).AppendLine("instance = null;");
+		Indent(builder, depth + 1).AppendLine("return false;");
+		Indent(builder, depth).AppendLine("}");
+		builder.AppendLine();
+
 		// Name the [FromKey] key in the message when there is one, so a keyed miss is not mistaken for a
 		// missing unkeyed registration.
+		Indent(builder, depth).AppendLine("private static global::System.InvalidOperationException __ExternalUnavailable(global::System.Type serviceType, object? serviceKey)");
 		Indent(builder, depth + 1).AppendLine(
-			"throw new global::System.InvalidOperationException($\"Awaiten: the external dependency '{serviceType}'{(serviceKey == null ? \"\" : $\" (key: {serviceKey})\")} is not available; register it in the host provider, or pass an IExternalResolver that provides it to the Root constructor.\");");
+			"=> new global::System.InvalidOperationException($\"Awaiten: the external dependency '{serviceType}'{(serviceKey == null ? \"\" : $\" (key: {serviceKey})\")} is not available; register it in the host provider, or pass an IExternalResolver that provides it to the Root constructor.\");");
+	}
+
+	/// <summary>
+	///     Emits the <c>__IsImported</c> test the by-type dispatch consults once a request found no registration:
+	///     whether the host provides <c>serviceType</c> under <c>serviceKey</c>, exactly as injection routes a
+	///     dependency of that type. A declared import (<c>__IsDeclaredImport</c>: a closed <c>[ImportService]</c> type or
+	///     a closing of an open one) routes keyed or not; <c>[ImportServices]</c> routes any other unkeyed type, except
+	///     one the container has but withholds from synchronous resolution, which keeps its guidance.
+	/// </summary>
+	private static void EmitIsImported(StringBuilder builder, int depth, ContainerModel model, bool hasWithheld)
+	{
+		List<string> conditions = new();
+		if (model.ImportServices)
+		{
+			conditions.Add(hasWithheld ? "(serviceKey == null && !__withheld.ContainsKey(serviceType))" : "serviceKey == null");
+		}
+
+		if (HasDeclaredImports(model))
+		{
+			conditions.Add("__IsDeclaredImport(serviceType)");
+			EmitDisjunction(builder, depth, "private static bool __IsDeclaredImport(global::System.Type serviceType)", model.ImportedServices.AsArray()
+				.Select(service => $"(object)serviceType == (object)typeof({service})")
+				.Concat(model.ImportedDefinitions.AsArray().Select(definition =>
+					$"(serviceType.IsConstructedGenericType && (object)serviceType.GetGenericTypeDefinition() == (object)typeof({definition}))"))
+				.ToList());
+		}
+
+		EmitDisjunction(builder, depth, "private static bool __IsImported(global::System.Type serviceType, object? serviceKey)", conditions);
+	}
+
+	/// <summary>
+	///     Whether the container declares <c>[ImportService]</c> types, which injection routes to the host ahead of a
+	///     variance-compatible registration, so the by-type variance fallback leaves them to the host too.
+	/// </summary>
+	private static bool HasDeclaredImports(ContainerModel? model) => model is not null && (model.ImportedServices.Count > 0 || model.ImportedDefinitions.Count > 0);
+
+	private static void EmitDisjunction(StringBuilder builder, int depth, string signature, List<string> conditions)
+	{
+		Separate(builder);
+		Indent(builder, depth).AppendLine(signature);
+		Indent(builder, depth + 1).Append("=> ").Append(conditions[0]);
+		for (int i = 1; i < conditions.Count; i++)
+		{
+			builder.AppendLine();
+			Indent(builder, depth + 1).Append("|| ").Append(conditions[i]);
+		}
+
+		builder.AppendLine(";");
+	}
+
+	/// <summary>
+	///     Emits the end of a <c>TryResolve</c> that found no registration: an imported type is asked of the host,
+	///     anything else is not resolvable.
+	/// </summary>
+	private static void EmitTryResolveMiss(StringBuilder builder, int depth, bool imports, string key)
+	{
+		Indent(builder, depth).AppendLine("instance = null;");
+		Indent(builder, depth).AppendLine(imports
+			? $"return __IsImported(serviceType, {key}) && __TryResolveExternal(serviceType, {key}, out instance);"
+			: "return false;");
+	}
+
+	/// <summary>
+	///     Emits the throw of a <c>Resolve</c> whose <c>TryResolve</c> missed an imported type: the host did not provide
+	///     it, which gets the guidance an injected dependency of that type gets.
+	/// </summary>
+	private static void EmitImportedMiss(StringBuilder builder, int depth, bool imports, string key)
+	{
+		if (!imports)
+		{
+			return;
+		}
+
+		Indent(builder, depth).Append("if (__IsImported(serviceType, ").Append(key).AppendLine("))");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).Append("throw __ExternalUnavailable(serviceType, ").Append(key).AppendLine(");");
 		Indent(builder, depth).AppendLine("}");
+		builder.AppendLine();
 	}
 
 	/// <summary>

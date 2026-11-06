@@ -892,6 +892,100 @@ public class GeneralTests
 		await That(source).Contains("typeof(global::MyCode.ILogger)");
 	}
 
+	public sealed class ImportedByTypeDispatch
+	{
+		[Test]
+		public async Task EveryImportForm_FallsBackToTheHostAfterTheDispatch()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IClock { }
+			                                       public interface ILog<T> { }
+			                                       public interface IHandler<in T> { }
+			                                       public sealed class Handler : IHandler<object> { }
+			                                       public sealed class Service { public Service(IClock clock, ILog<Service> log, IPayment payment) { } }
+			                                       public interface IPayment { }
+
+			                                       [Container]
+			                                       [ImportServices]
+			                                       [ImportService<IClock>]
+			                                       [ImportService(typeof(ILog<>))]
+			                                       [Singleton<Handler, IHandler<object>>]
+			                                       [Singleton<Service>]
+			                                       public static partial class MyContainer;
+			                                       """);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("the host fallback compiles next to the variance fallback and the keyed dispatch");
+			string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+			await That(source).Contains("private static bool __IsImported(global::System.Type serviceType, object? serviceKey)");
+			await That(source).Contains("(object)serviceType == (object)typeof(global::MyCode.IClock)");
+			await That(source).Contains("(object)serviceType.GetGenericTypeDefinition() == (object)typeof(global::MyCode.ILog<>)");
+			await That(source).Contains("return __IsImported(serviceType, key) && __TryResolveExternal(serviceType, key, out instance);")
+				.Because("a keyed resolution of an imported type asks the host too");
+		}
+
+		[Test]
+		public async Task ContainerWithoutImports_EmitsNoHostFallback()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public sealed class Service { }
+
+			                                       [Container]
+			                                       [Singleton<Service>]
+			                                       public static partial class MyContainer;
+			                                       """);
+
+			string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+			await That(source).DoesNotContain("__IsImported")
+				.Because("a container that imports nothing keeps its by-type dispatch exactly as it was");
+			await That(source).DoesNotContain("__TryResolveExternal");
+		}
+
+		[Test]
+		public async Task ImportOfATypeTheContainerCannotName_IsNotDispatched()
+		{
+			GeneratorResult result = Generator.RunWithReferencedAssembly(
+				"""
+				using Awaiten;
+
+				namespace Library;
+
+				internal interface IInternalClock { }
+				public interface IClock { }
+				public sealed class Consumer { public Consumer(IClock clock) { } }
+
+				[Module]
+				[ImportService<IInternalClock>]
+				[ImportService<IClock>]
+				[Singleton<Consumer>]
+				public static class HostModule { }
+				""",
+				"""
+				using Awaiten;
+
+				namespace MyCode;
+
+				[Container]
+				[Import(typeof(Library.HostModule))]
+				public static partial class MyContainer;
+				""");
+
+			await That(result.Diagnostics.Where(d => d.Contains("error"))).IsEmpty()
+				.Because("the dispatch cannot name an internal type of another assembly, so it does not route it");
+			string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+			await That(source).DoesNotContain("IInternalClock");
+			await That(source).Contains("(object)serviceType == (object)typeof(global::Library.IClock)");
+		}
+	}
+
 	[Test]
 	public async Task ImportService_IsPerType_ADifferentUnregisteredDependencyStillReportsAwt101()
 	{

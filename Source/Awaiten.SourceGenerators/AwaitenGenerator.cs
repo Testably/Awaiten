@@ -278,7 +278,10 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			new EquatableArray<ServiceMembers>(graph.Collections.ToArray()),
 			new EquatableArray<string>(graph.VarianceCandidates.ToArray()),
 			new EquatableArray<KeyedServiceMembers>(graph.KeyedCollections.ToArray()),
-			hasBaseErrors);
+			hasBaseErrors,
+			graph.External.ImportServices,
+			Dispatchable(graph.External.ServiceTypes, graph.External.ServiceTypes.Closed),
+			Dispatchable(graph.External.ServiceTypes, graph.External.ServiceTypes.Open));
 	}
 
 	/// <summary>
@@ -339,6 +342,9 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		return (graph, diagnostics);
 	}
 
+	private static EquatableArray<string> Dispatchable(ExternalServiceTypes serviceTypes, HashSet<string> types)
+		=> new(types.Where(type => !serviceTypes.Inaccessible.Contains(type)).OrderBy(type => type, StringComparer.Ordinal).ToArray());
+
 	/// <summary>
 	///     The framework/Awaiten interface symbols an instance is matched against, looked up once:
 	///     <c>System.IDisposable</c>, the async-disposal symbol (non-null only when the runtime exposes it)
@@ -375,6 +381,13 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 
 		/// <summary>The unbound generic definitions, routing every closing a dependency names.</summary>
 		public HashSet<string> Open { get; } = new(StringComparer.Ordinal);
+
+		/// <summary>
+		///     The <see cref="Closed" /> types and <see cref="Open" /> definitions the container cannot name, such as an
+		///     internal type an imported module from another assembly declares, which its by-type dispatch therefore
+		///     cannot route.
+		/// </summary>
+		public HashSet<string> Inaccessible { get; } = new(StringComparer.Ordinal);
 
 		/// <summary>Each closing of an <see cref="Open" /> definition met during classification, mapped to that definition.</summary>
 		public Dictionary<string, string> Closings { get; } = new(StringComparer.Ordinal);
@@ -487,7 +500,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		// parameter or [Inject] property - to the external provider, while every other unresolved dependency keeps the
 		// AWT101 check. Bundled with the blanket flag as the container's external-resolution surface, threaded through
 		// the coalescing phase that decides constructor satisfiability.
-		ExternalServiceTypes externalServiceTypes = CollectExternalServiceTypes(containerSymbol, modules, diagnostics);
+		ExternalServiceTypes externalServiceTypes = CollectExternalServiceTypes(containerSymbol, modules, compilation, diagnostics);
 
 		// An extending container's own registration replaces an inherited [ImportService<T>] of that type, as it
 		// replaces an inherited registration (the reverse is in ReplaceInherited).
@@ -618,7 +631,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		ReportOpenExternalServices(externalServiceTypes, serviceToImpl, consumedExternal, routedExternal, containerSymbol, diagnostics);
 		if (inheritance is not null)
 		{
-			RemoveInheritedUnconsumedExternalServices(inheritance, modules, diagnostics);
+			RemoveInheritedUnconsumedExternalServices(inheritance, modules, compilation, diagnostics);
 		}
 
 		// AWT180: an [InjectProperty<TImpl>] entry whose implementation type matches no registration is never

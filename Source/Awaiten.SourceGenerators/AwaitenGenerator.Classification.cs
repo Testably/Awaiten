@@ -1110,7 +1110,7 @@ partial class AwaitenGenerator
 	///     <c>IExternalResolver</c>, forwarding any <c>[FromKey]</c> key. A <c>typeof</c> argument that is neither a
 	///     closed type nor an unbound generic definition is AWT215.
 	/// </summary>
-	private static ExternalServiceTypes CollectExternalServiceTypes(INamedTypeSymbol containerSymbol, List<ImportedModule> modules, List<DiagnosticInfo> diagnostics)
+	private static ExternalServiceTypes CollectExternalServiceTypes(INamedTypeSymbol containerSymbol, List<ImportedModule> modules, Compilation compilation, List<DiagnosticInfo> diagnostics)
 	{
 		ExternalServiceTypes types = new();
 		foreach ((AttributeData attribute, Location? fallbackLocation, _, _) in AttributesOf(containerSymbol, modules))
@@ -1123,7 +1123,7 @@ partial class AwaitenGenerator
 
 			if (attributeClass is { IsGenericType: true, TypeArguments.Length: 1, })
 			{
-				types.Closed.Add(attributeClass.TypeArguments[0].ToDisplayString(FullyQualified));
+				Add(types.Closed, attributeClass.TypeArguments[0], attributeClass.TypeArguments[0].ToDisplayString(FullyQualified));
 				continue;
 			}
 
@@ -1135,15 +1135,24 @@ partial class AwaitenGenerator
 			}
 			else if (service is INamedTypeSymbol named && IsOpenGenericDefinition(named))
 			{
-				types.Open.Add(UnboundDisplay(named));
+				Add(types.Open, named, UnboundDisplay(named));
 			}
 			else
 			{
-				types.Closed.Add(service.ToDisplayString(FullyQualified));
+				Add(types.Closed, service, service.ToDisplayString(FullyQualified));
 			}
 		}
 
 		return types;
+
+		void Add(HashSet<string> set, ITypeSymbol type, string display)
+		{
+			set.Add(display);
+			if (!compilation.IsSymbolAccessibleWithin(type, containerSymbol))
+			{
+				types.Inaccessible.Add(display);
+			}
+		}
 	}
 
 	/// <summary>

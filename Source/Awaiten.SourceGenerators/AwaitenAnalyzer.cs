@@ -522,7 +522,8 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 		}
 
 		GraphModel graph = CachedGraph(graphByContainer, container, compilation, context.CancellationToken).Graph;
-		if (!graph.External.ImportServices && !graph.External.ServiceTypes.Routes(service, display))
+		// [ImportServices] routes only unkeyed requests to the host, as it does unkeyed dependencies.
+		if ((key is not null || !graph.External.ImportServices) && !graph.External.ServiceTypes.Routes(service, display))
 		{
 			context.ReportDiagnostic(Diagnostic.Create(
 				Diagnostics.TypedResolveOfUnprovidedService, invocation.Syntax.GetLocation(), AwaitenGenerator.Display(display),
