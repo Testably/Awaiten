@@ -415,43 +415,9 @@ partial class AwaitenGenerator
 		private string? SingleInnerParameterType(INamedTypeSymbol decorator, INamedTypeSymbol service)
 		{
 			IMethodSymbol? constructor = SelectConstructor(decorator, _containerSymbol, _compilation, _serviceToImpl.Keys.Select(k => k.Service), _external);
-			if (constructor is null)
-			{
-				return null;
-			}
-
-			// The inner parameter must accept the decorated service (implicitly convertible from it). A [FromKey]
-			// parameter is excluded, since it selects a separate keyed dependency. When several parameters are
-			// assignable, the inner is the most-derived one (every other is a base of it); a tie is ambiguous and
-			// reported as AWT124.
-			List<IParameterSymbol> assignable = constructor.Parameters
-				.Where(p => FromKey(p.GetAttributes()) is null && _compilation.HasImplicitConversion(service, p.Type))
-				.ToList();
-
-			if (assignable.Count == 0)
-			{
-				return null;
-			}
-
-			IParameterSymbol? inner = null;
-			foreach (IParameterSymbol candidate in assignable)
-			{
-				bool isMaximum = assignable.All(other =>
-					ReferenceEquals(other, candidate) || _compilation.HasImplicitConversion(candidate.Type, other.Type));
-				if (!isMaximum)
-				{
-					continue;
-				}
-
-				if (inner is not null)
-				{
-					return null;
-				}
-
-				inner = candidate;
-			}
-
-			return inner?.Type.ToDisplayString(FullyQualified);
+			return constructor is null
+				? null
+				: InnerParameter(constructor, service, _compilation)?.Type.ToDisplayString(FullyQualified);
 		}
 
 		private static string DecoratorKey(string service, int baseIndex, int link)
@@ -459,6 +425,41 @@ partial class AwaitenGenerator
 
 		private static string DecoratorIdentity(string decoratorType, string service, int baseIndex, int link)
 			=> $"{decoratorType}@{DecoratorKeyPrefix}{service}:{baseIndex}:{link}";
+	}
+
+	/// <summary>
+	///     The parameter of a decorator's <paramref name="constructor" /> that receives the inner instance of the
+	///     decorated <paramref name="service" />, or <see langword="null" /> when there is none or it is ambiguous (AWT124).
+	/// </summary>
+	private static IParameterSymbol? InnerParameter(IMethodSymbol constructor, ITypeSymbol service, Compilation compilation)
+	{
+		// The inner parameter must accept the decorated service (implicitly convertible from it). A [FromKey]
+		// parameter is excluded, since it selects a separate keyed dependency. When several parameters are
+		// assignable, the inner is the most-derived one (every other is a base of it); a tie is ambiguous and
+		// reported as AWT124.
+		List<IParameterSymbol> assignable = constructor.Parameters
+			.Where(p => FromKey(p.GetAttributes()) is null && compilation.HasImplicitConversion(service, p.Type))
+			.ToList();
+
+		IParameterSymbol? inner = null;
+		foreach (IParameterSymbol candidate in assignable)
+		{
+			bool isMaximum = assignable.All(other =>
+				ReferenceEquals(other, candidate) || compilation.HasImplicitConversion(candidate.Type, other.Type));
+			if (!isMaximum)
+			{
+				continue;
+			}
+
+			if (inner is not null)
+			{
+				return null;
+			}
+
+			inner = candidate;
+		}
+
+		return inner;
 	}
 
 	/// <summary>

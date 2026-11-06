@@ -23,6 +23,7 @@ partial class AwaitenGenerator
 		ExternalSurface external,
 		Dictionary<string, List<InjectPropertyEntry>> injectProperties,
 		Inheritance? inheritance,
+		WrapperRegistrations wrappers,
 		List<DiagnosticInfo> diagnostics)
 	{
 		List<RawRegistration> result = new();
@@ -94,7 +95,7 @@ partial class AwaitenGenerator
 		// implementation (iterating to a fixpoint over its own generic dependencies).
 		if (open.Count > 0)
 		{
-			ExpandOpenGenerics(result, open, new ExpansionInputs(containerSymbol, compilation, external, injectProperties), diagnostics, constraintRejected);
+			ExpandOpenGenerics(result, open, new ExpansionInputs(containerSymbol, compilation, external, injectProperties, wrappers), diagnostics, constraintRejected);
 		}
 
 		if (inheritance is not null)
