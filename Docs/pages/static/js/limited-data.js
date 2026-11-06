@@ -2,12 +2,6 @@ window.BENCHMARK_DATA = {
   "Resolve (Size=8)": {
     "commits": [
       {
-        "sha": "b77b7c4122e15e3e5bfba9581458379cdd7f5faf",
-        "author": "dependabot[bot]",
-        "date": "Mon Oct 26 12:35:39 2026 \u002B0000",
-        "message": "chore: Bump Microsoft.Extensions.DependencyInjection and Microsoft.Extensions.Hosting (#189)"
-      },
-      {
         "sha": "b5d562d5f26a5ce18dd4084a11b9a57989a5c5ed",
         "author": "dependabot[bot]",
         "date": "Mon Oct 26 13:36:54 2026 \u002B0000",
@@ -300,10 +294,15 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Nov 6 18:29:38 2026 \u002B0100",
         "message": "fix!: identify a lifecycle hook by its declaring type when registrations of one implementation coalesce (#266)"
+      },
+      {
+        "sha": "86508f12853380af1ff9f8efe31c4394b9d66e4f",
+        "author": "Valentin Breu\u00DF",
+        "date": "Fri Nov 6 18:34:36 2026 \u002B0100",
+        "message": "build: pin the SDK to 10.0.403 so native AOT pulls the patched ILCompiler (#269)"
       }
     ],
     "labels": [
-      "b77b7c41",
       "b5d562d5",
       "b8a78cca",
       "feb8a6f6",
@@ -352,14 +351,14 @@ window.BENCHMARK_DATA = {
       "399f3788",
       "c28d5fc4",
       "01274877",
-      "61649014"
+      "61649014",
+      "86508f12"
     ],
     "datasets": [
       {
         "label": "Awaiten time",
         "unit": "ns",
         "data": [
-          7.177181430734121,
           7.171364422027882,
           4.135234444269112,
           7.881793139236314,
@@ -408,7 +407,8 @@ window.BENCHMARK_DATA = {
           7.779047201459225,
           3.9138488242668763,
           4.06382804736495,
-          6.199716582894325
+          6.199716582894325,
+          4.096216455101967
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -484,7 +484,6 @@ window.BENCHMARK_DATA = {
         "label": "MsDI time",
         "unit": "ns",
         "data": [
-          7.893212752682822,
           7.714667311736515,
           4.4318576350808145,
           7.9427622226732115,
@@ -533,7 +532,8 @@ window.BENCHMARK_DATA = {
           8.648057089402126,
           4.122521755787043,
           3.8649295861167565,
-          7.47846611818442
+          7.47846611818442,
+          4.799329062125513
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -609,7 +609,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac time",
         "unit": "ns",
         "data": [
-          124.36131013234457,
           108.63042004903157,
           55.6396475315094,
           131.44965109825134,
@@ -658,7 +657,8 @@ window.BENCHMARK_DATA = {
           111.53714952468872,
           67.03393669128418,
           58.32888073580606,
-          83.48026393254598
+          83.48026393254598,
+          60.174884955088295
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -734,7 +734,6 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc time",
         "unit": "ns",
         "data": [
-          8.777278408408165,
           8.757807531704506,
           4.673345954716206,
           9.396280262332697,
@@ -783,7 +782,8 @@ window.BENCHMARK_DATA = {
           9.095837113757929,
           5.402243302336761,
           4.416724820931752,
-          6.946967905759811
+          6.946967905759811,
+          4.847503466407458
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -859,7 +859,6 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector time",
         "unit": "ns",
         "data": [
-          11.319992621357624,
           11.076066897383757,
           5.8285311588219235,
           11.218414008617401,
@@ -908,7 +907,8 @@ window.BENCHMARK_DATA = {
           11.28126844863097,
           6.187681942184766,
           6.023496770858765,
-          8.786115583280722
+          8.786115583280722,
+          5.846790118941239
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -985,12 +985,6 @@ window.BENCHMARK_DATA = {
   "Resolve (Size=256)": {
     "commits": [
       {
-        "sha": "b77b7c4122e15e3e5bfba9581458379cdd7f5faf",
-        "author": "dependabot[bot]",
-        "date": "Mon Oct 26 12:35:39 2026 \u002B0000",
-        "message": "chore: Bump Microsoft.Extensions.DependencyInjection and Microsoft.Extensions.Hosting (#189)"
-      },
-      {
         "sha": "b5d562d5f26a5ce18dd4084a11b9a57989a5c5ed",
         "author": "dependabot[bot]",
         "date": "Mon Oct 26 13:36:54 2026 \u002B0000",
@@ -1283,10 +1277,15 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Nov 6 18:29:38 2026 \u002B0100",
         "message": "fix!: identify a lifecycle hook by its declaring type when registrations of one implementation coalesce (#266)"
+      },
+      {
+        "sha": "86508f12853380af1ff9f8efe31c4394b9d66e4f",
+        "author": "Valentin Breu\u00DF",
+        "date": "Fri Nov 6 18:34:36 2026 \u002B0100",
+        "message": "build: pin the SDK to 10.0.403 so native AOT pulls the patched ILCompiler (#269)"
       }
     ],
     "labels": [
-      "b77b7c41",
       "b5d562d5",
       "b8a78cca",
       "feb8a6f6",
@@ -1335,14 +1334,14 @@ window.BENCHMARK_DATA = {
       "399f3788",
       "c28d5fc4",
       "01274877",
-      "61649014"
+      "61649014",
+      "86508f12"
     ],
     "datasets": [
       {
         "label": "Awaiten time",
         "unit": "ns",
         "data": [
-          8.449471159623219,
           8.128723983253751,
           4.520834118624529,
           8.443899318575859,
@@ -1391,7 +1390,8 @@ window.BENCHMARK_DATA = {
           8.47164814280612,
           4.246934479475021,
           4.443036908904712,
-          6.276840024938186
+          6.276840024938186,
+          4.108922117522785
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -1467,7 +1467,6 @@ window.BENCHMARK_DATA = {
         "label": "MsDI time",
         "unit": "ns",
         "data": [
-          8.019318903131145,
           7.701287487378488,
           4.0358682011564575,
           7.810636168079717,
@@ -1516,7 +1515,8 @@ window.BENCHMARK_DATA = {
           7.267903965253097,
           3.9009058667080745,
           3.872767288486163,
-          6.459800585040024
+          6.459800585040024,
+          3.9265352796230997
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -1592,7 +1592,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac time",
         "unit": "ns",
         "data": [
-          125.04559892874498,
           114.45787112529462,
           57.92995533148448,
           134.4810616493225,
@@ -1641,7 +1640,8 @@ window.BENCHMARK_DATA = {
           115.06470832824706,
           62.69130005155291,
           59.2032755613327,
-          83.83738593260448
+          83.83738593260448,
+          56.024146224061646
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -1717,7 +1717,6 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc time",
         "unit": "ns",
         "data": [
-          8.908218381660324,
           8.721628668216558,
           4.474433716138204,
           9.353117510676384,
@@ -1766,7 +1765,8 @@ window.BENCHMARK_DATA = {
           9.05369158834219,
           5.154809019962946,
           4.300022271963266,
-          6.8188843211302395
+          6.8188843211302395,
+          4.804639453334468
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -1842,7 +1842,6 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector time",
         "unit": "ns",
         "data": [
-          14.961013766435476,
           14.344619115957848,
           5.938476597269376,
           14.703579764281,
@@ -1891,7 +1890,8 @@ window.BENCHMARK_DATA = {
           14.96816924115022,
           5.9874735581023355,
           6.0454882393280664,
-          11.466074849168459
+          11.466074849168459,
+          5.74636126940067
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -1968,12 +1968,6 @@ window.BENCHMARK_DATA = {
   "Build (Size=8)": {
     "commits": [
       {
-        "sha": "b77b7c4122e15e3e5bfba9581458379cdd7f5faf",
-        "author": "dependabot[bot]",
-        "date": "Mon Oct 26 12:35:39 2026 \u002B0000",
-        "message": "chore: Bump Microsoft.Extensions.DependencyInjection and Microsoft.Extensions.Hosting (#189)"
-      },
-      {
         "sha": "b5d562d5f26a5ce18dd4084a11b9a57989a5c5ed",
         "author": "dependabot[bot]",
         "date": "Mon Oct 26 13:36:54 2026 \u002B0000",
@@ -2266,10 +2260,15 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Nov 6 18:29:38 2026 \u002B0100",
         "message": "fix!: identify a lifecycle hook by its declaring type when registrations of one implementation coalesce (#266)"
+      },
+      {
+        "sha": "86508f12853380af1ff9f8efe31c4394b9d66e4f",
+        "author": "Valentin Breu\u00DF",
+        "date": "Fri Nov 6 18:34:36 2026 \u002B0100",
+        "message": "build: pin the SDK to 10.0.403 so native AOT pulls the patched ILCompiler (#269)"
       }
     ],
     "labels": [
-      "b77b7c41",
       "b5d562d5",
       "b8a78cca",
       "feb8a6f6",
@@ -2318,14 +2317,14 @@ window.BENCHMARK_DATA = {
       "399f3788",
       "c28d5fc4",
       "01274877",
-      "61649014"
+      "61649014",
+      "86508f12"
     ],
     "datasets": [
       {
         "label": "Awaiten time",
         "unit": "ns",
         "data": [
-          17.89507238141128,
           17.2154914690898,
           17.111226362983384,
           19.84843249122302,
@@ -2374,7 +2373,8 @@ window.BENCHMARK_DATA = {
           16.597019741932552,
           20.192882947127025,
           15.45836308172771,
-          21.990469272931417
+          21.990469272931417,
+          15.324243867397309
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -2394,7 +2394,7 @@ window.BENCHMARK_DATA = {
           144,
           144,
           144,
-          144,
+          208,
           208,
           208,
           208,
@@ -2450,7 +2450,6 @@ window.BENCHMARK_DATA = {
         "label": "MsDI time",
         "unit": "ns",
         "data": [
-          1705.6541861125402,
           1584.7753540039062,
           1523.4568078358968,
           1521.0335316975911,
@@ -2499,7 +2498,8 @@ window.BENCHMARK_DATA = {
           1332.5311132158552,
           1492.0894629405095,
           1107.0178822108678,
-          1560.0190416971843
+          1560.0190416971843,
+          1124.1462353297643
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -2575,7 +2575,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac time",
         "unit": "ns",
         "data": [
-          34299.93449707031,
           30690.199080403647,
           33430.457364908856,
           30976.20291341146,
@@ -2624,7 +2623,8 @@ window.BENCHMARK_DATA = {
           26579.86005859375,
           29743.794799804688,
           25282.053873697918,
-          30320.282799353965
+          30320.282799353965,
+          25672.642049153645
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -2641,7 +2641,6 @@ window.BENCHMARK_DATA = {
           32482,
           32482,
           32482,
-          32482,
           32474,
           32478,
           32482,
@@ -2685,7 +2684,8 @@ window.BENCHMARK_DATA = {
           32478,
           32482,
           32478,
-          32482
+          32482,
+          32478
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -2700,7 +2700,6 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc time",
         "unit": "ns",
         "data": [
-          764.4652362823487,
           765.6902906417847,
           745.0996383666992,
           743.2372658411662,
@@ -2749,7 +2748,8 @@ window.BENCHMARK_DATA = {
           599.0573064804078,
           728.961513859885,
           563.6114712397258,
-          800.4945475714547
+          800.4945475714547,
+          580.0662468501499
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -2825,7 +2825,6 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector time",
         "unit": "ns",
         "data": [
-          13174.106508527484,
           12792.55585043771,
           11732.66327718099,
           12483.13924967448,
@@ -2874,7 +2873,8 @@ window.BENCHMARK_DATA = {
           9702.425100708007,
           11524.62707226093,
           9127.12437286377,
-          12424.925637817383
+          12424.925637817383,
+          9071.197733561197
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -2890,7 +2890,6 @@ window.BENCHMARK_DATA = {
           24760,
           24760,
           24760,
-          24760,
           24761,
           24760,
           24760,
@@ -2930,6 +2929,7 @@ window.BENCHMARK_DATA = {
           24761,
           24760,
           24761,
+          24760,
           24760,
           24760,
           24760,
@@ -2950,12 +2950,6 @@ window.BENCHMARK_DATA = {
   },
   "Build (Size=256)": {
     "commits": [
-      {
-        "sha": "b77b7c4122e15e3e5bfba9581458379cdd7f5faf",
-        "author": "dependabot[bot]",
-        "date": "Mon Oct 26 12:35:39 2026 \u002B0000",
-        "message": "chore: Bump Microsoft.Extensions.DependencyInjection and Microsoft.Extensions.Hosting (#189)"
-      },
       {
         "sha": "b5d562d5f26a5ce18dd4084a11b9a57989a5c5ed",
         "author": "dependabot[bot]",
@@ -3249,10 +3243,15 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Nov 6 18:29:38 2026 \u002B0100",
         "message": "fix!: identify a lifecycle hook by its declaring type when registrations of one implementation coalesce (#266)"
+      },
+      {
+        "sha": "86508f12853380af1ff9f8efe31c4394b9d66e4f",
+        "author": "Valentin Breu\u00DF",
+        "date": "Fri Nov 6 18:34:36 2026 \u002B0100",
+        "message": "build: pin the SDK to 10.0.403 so native AOT pulls the patched ILCompiler (#269)"
       }
     ],
     "labels": [
-      "b77b7c41",
       "b5d562d5",
       "b8a78cca",
       "feb8a6f6",
@@ -3301,14 +3300,14 @@ window.BENCHMARK_DATA = {
       "399f3788",
       "c28d5fc4",
       "01274877",
-      "61649014"
+      "61649014",
+      "86508f12"
     ],
     "datasets": [
       {
         "label": "Awaiten time",
         "unit": "ns",
         "data": [
-          81.46251352344241,
           101.15683197975159,
           75.81465017795563,
           96.13021420637766,
@@ -3357,7 +3356,8 @@ window.BENCHMARK_DATA = {
           121.54320859114328,
           187.90442861829484,
           114.13320194880167,
-          207.4572127205985
+          207.4572127205985,
+          111.8780504831901
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -3377,7 +3377,7 @@ window.BENCHMARK_DATA = {
           2128,
           2128,
           2128,
-          2128,
+          4176,
           4176,
           4176,
           4176,
@@ -3433,7 +3433,6 @@ window.BENCHMARK_DATA = {
         "label": "MsDI time",
         "unit": "ns",
         "data": [
-          15736.362196858723,
           16130.907391357421,
           13648.244413103375,
           15639.013834635416,
@@ -3482,7 +3481,8 @@ window.BENCHMARK_DATA = {
           11500.47121887207,
           14507.841972351074,
           10599.747447087215,
-          15961.319938151042
+          15961.319938151042,
+          10538.103849283854
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -3558,7 +3558,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac time",
         "unit": "ns",
         "data": [
-          830086.1204176683,
           769656.5996844952,
           841165.9263997396,
           736849.9696614583,
@@ -3607,7 +3606,8 @@ window.BENCHMARK_DATA = {
           647503.65078125,
           729229.351702009,
           636733.8500279018,
-          738006.2626953125
+          738006.2626953125,
+          629016.7353515625
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -3619,7 +3619,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
-          720300,
           736758,
           740992,
           738329,
@@ -3668,7 +3667,8 @@ window.BENCHMARK_DATA = {
           741802,
           740463,
           738350,
-          741779
+          741779,
+          735984
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -3683,7 +3683,6 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc time",
         "unit": "ns",
         "data": [
-          47228.266392299105,
           44833.13641560872,
           45763.52492675781,
           45342.23566545759,
@@ -3732,7 +3731,8 @@ window.BENCHMARK_DATA = {
           36101.34147542318,
           43948.82917198768,
           35186.19420572917,
-          46317.73463134766
+          46317.73463134766,
+          35522.505271402995
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -3744,7 +3744,6 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
-          80106,
           81174,
           80673,
           80637,
@@ -3793,7 +3792,8 @@ window.BENCHMARK_DATA = {
           80303,
           80011,
           80645,
-          80305
+          80305,
+          79668
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -3808,7 +3808,6 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector time",
         "unit": "ns",
         "data": [
-          369989.5744140625,
           385996.4745047433,
           348767.17107282364,
           380785.8152994792,
@@ -3857,7 +3856,8 @@ window.BENCHMARK_DATA = {
           269358.11376953125,
           349931.8738839286,
           275073.1239257812,
-          366103.8740234375
+          366103.8740234375,
+          288122.0902669271
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -3869,7 +3869,6 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
-          573038,
           573135,
           573073,
           573040,
@@ -3918,7 +3917,8 @@ window.BENCHMARK_DATA = {
           573089,
           573061,
           573121,
-          573090
+          573090,
+          573010
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -3933,12 +3933,6 @@ window.BENCHMARK_DATA = {
   },
   "Realistic": {
     "commits": [
-      {
-        "sha": "b77b7c4122e15e3e5bfba9581458379cdd7f5faf",
-        "author": "dependabot[bot]",
-        "date": "Mon Oct 26 12:35:39 2026 \u002B0000",
-        "message": "chore: Bump Microsoft.Extensions.DependencyInjection and Microsoft.Extensions.Hosting (#189)"
-      },
       {
         "sha": "b5d562d5f26a5ce18dd4084a11b9a57989a5c5ed",
         "author": "dependabot[bot]",
@@ -4232,10 +4226,15 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Nov 6 18:29:38 2026 \u002B0100",
         "message": "fix!: identify a lifecycle hook by its declaring type when registrations of one implementation coalesce (#266)"
+      },
+      {
+        "sha": "86508f12853380af1ff9f8efe31c4394b9d66e4f",
+        "author": "Valentin Breu\u00DF",
+        "date": "Fri Nov 6 18:34:36 2026 \u002B0100",
+        "message": "build: pin the SDK to 10.0.403 so native AOT pulls the patched ILCompiler (#269)"
       }
     ],
     "labels": [
-      "b77b7c41",
       "b5d562d5",
       "b8a78cca",
       "feb8a6f6",
@@ -4284,14 +4283,14 @@ window.BENCHMARK_DATA = {
       "399f3788",
       "c28d5fc4",
       "01274877",
-      "61649014"
+      "61649014",
+      "86508f12"
     ],
     "datasets": [
       {
         "label": "Awaiten time",
         "unit": "ns",
         "data": [
-          164.4742999235789,
           177.12260665893555,
           236.8736451625824,
           237.74358568191528,
@@ -4340,7 +4339,8 @@ window.BENCHMARK_DATA = {
           317.22167095771204,
           172.10794307635382,
           148.96236533778054,
-          203.3919696887334
+          203.3919696887334,
+          158.13426406566913
         ],
         "borderColor": "#3949AB",
         "backgroundColor": "#3949AB",
@@ -4416,7 +4416,6 @@ window.BENCHMARK_DATA = {
         "label": "MsDI time",
         "unit": "ns",
         "data": [
-          393.88162167867023,
           411.17795126778736,
           616.6467247009277,
           605.4310500281198,
@@ -4465,7 +4464,8 @@ window.BENCHMARK_DATA = {
           699.5715747833252,
           423.27726995944977,
           362.17469607080733,
-          449.5531337077801
+          449.5531337077801,
+          382.13979148864746
         ],
         "borderColor": "#512BD4",
         "backgroundColor": "#512BD4",
@@ -4541,7 +4541,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac time",
         "unit": "ns",
         "data": [
-          3693.9845378875734,
           3815.709795815604,
           6370.957256862095,
           6808.064358011881,
@@ -4590,7 +4589,8 @@ window.BENCHMARK_DATA = {
           6395.158506266276,
           3607.6374247624326,
           3240.3264604296005,
-          4955.841657765706
+          4955.841657765706,
+          3361.88171971639
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -4666,7 +4666,6 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc time",
         "unit": "ns",
         "data": [
-          242.73013582229615,
           246.46093044281005,
           394.7258677823203,
           382.32723357127264,
@@ -4715,7 +4714,8 @@ window.BENCHMARK_DATA = {
           420.58357960383097,
           258.899635887146,
           233.3401374083299,
-          345.59174187978107
+          345.59174187978107,
+          237.26480391820272
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -4791,7 +4791,6 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector time",
         "unit": "ns",
         "data": [
-          397.65129369099935,
           419.0270145856417,
           772.9235379536947,
           732.9140258516584,
@@ -4840,7 +4839,8 @@ window.BENCHMARK_DATA = {
           763.8069590159824,
           394.5443860934331,
           370.0536003112793,
-          561.0646890640259
+          561.0646890640259,
+          367.4679842631022
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
