@@ -247,24 +247,6 @@ public partial class DiagnosticTests
 		}
 
 		[Test]
-		public async Task DoesNotReportAKeyedResolve()
-		{
-			string[] diagnostics = await Run("""
-			                                 public static class Usage
-			                                 {
-			                                 	public static void Use()
-			                                 	{
-			                                 		using MyContainer.Root root = new();
-			                                 		root.Resolve<IGen<string>>("primary");
-			                                 	}
-			                                 }
-			                                 """);
-
-			await That(diagnostics.Any(d => d.Contains("AWT218"))).IsFalse()
-				.Because("a keyed resolve is answered by the keyed registrations, which this diagnostic does not check");
-		}
-
-		[Test]
 		public async Task DoesNotReportWhenSuppressedInSource()
 		{
 			string[] diagnostics = await Run("""

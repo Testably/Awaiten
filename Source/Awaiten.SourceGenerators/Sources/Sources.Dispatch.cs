@@ -1482,8 +1482,8 @@ internal static partial class Sources
 
 	/// <summary>
 	///     The by-type resolution surface of an emitted container, built from the same dispatch tables its
-	///     <c>Resolve(Type)</c> and <c>ResolveAsync(Type)</c> probe, so <c>AwaitenAnalyzer</c> can tell at a typed
-	///     call site whether the call fails at run time (AWT218, AWT219).
+	///     <c>Resolve(Type)</c>, <c>ResolveAsync(Type)</c> and their keyed overloads probe, so <c>AwaitenAnalyzer</c>
+	///     can tell at a typed call site whether the call fails at run time (AWT218, AWT219).
 	/// </summary>
 	internal sealed class ByTypeSurface
 	{
@@ -1492,6 +1492,7 @@ internal static partial class Sources
 		private readonly Dictionary<string, string?> _sync = new(StringComparer.Ordinal);
 		private readonly Dictionary<string, string?> _async = new(StringComparer.Ordinal);
 		private readonly Dictionary<string, string> _asyncOnly = new(StringComparer.Ordinal);
+		private readonly Dictionary<(string Service, string KeyLiteral), KeyedDispatchEntry> _keyed = new();
 		private readonly bool _hasVariance;
 
 		public ByTypeSurface(GraphModel graph, bool strict, bool syncAfterInit)
@@ -1514,6 +1515,11 @@ internal static partial class Sources
 			foreach ((string type, string guidance) in AsyncWithheldServices(instances, syncAfterInit).Concat(AsyncWithheldCollections(names, serviceToIndex, syncAfterInit)))
 			{
 				_asyncOnly[type] = guidance;
+			}
+
+			foreach (KeyedDispatchEntry entry in BuildKeyedEntries(new EmitContext(instances, names, serviceToIndex, AsyncDisposal: false), strict, syncAfterInit))
+			{
+				_keyed[(entry.Type, entry.KeyLiteral)] = entry;
 			}
 
 			_hasVariance = VarianceDispatchTypes(graph.VarianceCandidates.ToArray(), entries).Count > 0;
@@ -1539,13 +1545,35 @@ internal static partial class Sources
 				return !(mayBeVariant && _hasVariance);
 			}
 
-			if (literal is null)
+			return Withheld(literal, out guidance);
+		}
+
+		/// <summary>
+		///     Whether a keyed <c>Resolve</c>, or <c>ResolveAsync</c> when <paramref name="asynchronous" />, of
+		///     <paramref name="service" /> under the key emitted as <paramref name="keyLiteral" /> throws, with the
+		///     <paramref name="guidance" /> it throws, or <see langword="null" /> when nothing is registered under that key.
+		///     The keyed table has no variance fallback, and a slot withheld on the Root fails only <paramref name="onRoot" />.
+		/// </summary>
+		public bool FailsKeyed(string service, string keyLiteral, bool onRoot, bool asynchronous, out string? guidance)
+		{
+			guidance = null;
+			if (!_keyed.TryGetValue((service, keyLiteral), out KeyedDispatchEntry entry))
 			{
-				return false;
+				return true;
 			}
 
-			guidance = literal.Substring(GuidancePrefix.Length, literal.Length - GuidancePrefix.Length - 1);
-			return true;
+			if (asynchronous && entry.Async is not null)
+			{
+				return Withheld(onRoot ? entry.AsyncRootGuidance : null, out guidance);
+			}
+
+			return Withheld(entry.Sync is null || (entry.RootWithheld && onRoot) ? entry.Guidance : null, out guidance);
+		}
+
+		private static bool Withheld(string? literal, out string? guidance)
+		{
+			guidance = literal?.Substring(GuidancePrefix.Length, literal.Length - GuidancePrefix.Length - 1);
+			return guidance is not null;
 		}
 	}
 }

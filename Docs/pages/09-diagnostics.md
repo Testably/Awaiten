@@ -239,7 +239,7 @@ public partial class CoffeeShopTests
 ### AWT218
 
 :::warning[Warning]
-A typed `Resolve<T>()` or `ResolveAsync<T>()` on a generated `Root` or `Scope` names a service the container has no unkeyed registration for, so the call throws at run time. The common case is a closing of an open generic that nothing in the graph injects: Awaiten closes an open generic only for the closings the graph asks for. Only a call on the generated `Root` or `Scope` with a closed type argument is checked. A call through `IAwaitenRoot` or with a type parameter, `TryResolve`, a keyed resolve and a service the host provides stay run-time checks.
+A typed `Resolve<T>()` or `ResolveAsync<T>()`, or a `Resolve(typeof(T))` or `ResolveAsync(typeof(T))`, on a generated `Root` or `Scope` names a service the container has no registration for, so the call throws at run time. A keyed call with a constant key is checked against the registrations under that key. The common case is a closing of an open generic that nothing in the graph injects: Awaiten closes an open generic only for the closings the graph asks for.
 :::
 
 ```csharp expect=AWT218
@@ -262,6 +262,28 @@ root.Resolve<IRepository<Customer>>();   // the graph only asks for IRepository<
 [Transient<Repository<Customer>, IRepository<Customer>>]
 public static partial class CoffeeShop;
 ```
+
+A keyed resolve with a key that no registration declares is reported the same way. Keys match by type and value, so the string `"Whole"` does not select a registration keyed with `MilkKind.Whole`.
+
+```csharp expect=AWT218
+[Container]
+[Singleton<OatMilk, IMilk>(Key = "Oat")]
+public static partial class CoffeeShop;
+
+CoffeeShop.Root root = new();
+root.Resolve<IMilk>("Soy");   // nothing is registered under "Soy"
+```
+
+**Fix:** Register the service under that key, such as `[Singleton<SoyMilk, IMilk>(Key = "Soy")]`, or pass a key a registration declares.
+
+Only a call on the generated `Root` or `Scope` that names a closed type in source is checked. These stay run-time checks:
+
+- a call through `IAwaitenRoot` or another interface, because the receiver does not reveal which container answers,
+- a type parameter as the type argument, a `Type` other than a `typeof(...)` argument, or a key other than a constant string, `enum` value or `typeof(...)`,
+- `TryResolve`, which reports a missing service by returning `false`,
+- a service the host provides (`[ImportService]`, `[ImportServices]`),
+- a closed variant generic interface, such as `IHandler<Cat>`, when the container registers a variant interface that the run-time variance fallback may route it to,
+- a container declared in a referenced assembly.
 
 ## Async safety
 
@@ -409,8 +431,10 @@ public static partial class CoffeeShop;
 ### AWT219
 
 :::warning[Warning]
-A typed `Resolve<T>()` or `ResolveAsync<T>()` on a generated `Root` or `Scope` names a service the container has but does not hand out through that call, so the call throws at run time: a synchronous `Resolve` of an async-initialized service, or a resolve on the `Root` of a service that [lifetime safety](./06-lifetime/02-lifetime-safety.md) withholds there, such as a disposable transient. The warning carries the guidance the exception would. It follows the rules of [AWT218](#awt218), and a receiver typed as `Scope` may be the `Root` itself, so only a `Root` receiver is checked for what the `Root` withholds.
+A typed `Resolve<T>()` or `ResolveAsync<T>()` on a generated `Root` or `Scope` names a service the container has but does not hand out through that call, so the call throws at run time: a synchronous `Resolve` of an async-initialized service, or a resolve on the `Root` of a service that [lifetime safety](./06-lifetime/02-lifetime-safety.md) withholds there, such as a disposable transient. The warning carries the guidance the exception would. It checks the same calls as [AWT218](#awt218), keyed ones included, and leaves the same calls to run time.
 :::
+
+A receiver typed as `Scope` may hold the `Root` itself, because the `Root` derives from `Scope`, or a child scope, which serves what the `Root` withholds. So only a receiver typed as `Root` is checked for what the `Root` withholds, and a `Scope` variable that holds the `Root` throws at run time without a warning.
 
 ```csharp expect=AWT219
 public sealed class EspressoMachine : IAsyncInitializable

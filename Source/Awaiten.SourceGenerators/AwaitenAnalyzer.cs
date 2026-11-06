@@ -31,8 +31,9 @@ namespace Awaiten.SourceGenerators;
 ///     <see cref="Diagnostics.DuplicateInjectProperty">AWT179</see>, which the graph build detects and the generator
 ///     leaves to the analyzer so that it can be suppressed in source. Also reports
 ///     <see cref="Diagnostics.TypedResolveOfUnprovidedService">AWT218</see> and
-///     <see cref="Diagnostics.TypedResolveOfWithheldService">AWT219</see> at a typed <c>Resolve&lt;T&gt;()</c> or
-///     <c>ResolveAsync&lt;T&gt;()</c> on a generated <c>Root</c> or <c>Scope</c> that throws at run time.
+///     <see cref="Diagnostics.TypedResolveOfWithheldService">AWT219</see> at a typed <c>Resolve&lt;T&gt;()</c>,
+///     <c>ResolveAsync&lt;T&gt;()</c> or <c>Resolve(typeof(T))</c>, keyed or not, on a generated <c>Root</c> or
+///     <c>Scope</c> that throws at run time.
 /// </summary>
 /// <remarks>
 ///     AWT118 is an analyzer (rather than a generator) diagnostic so that, under loose lifetime safety where
@@ -469,11 +470,11 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 			? container
 			: null;
 
-	// AWT218/AWT219: a typed Resolve<T>() or ResolveAsync<T>() on a receiver statically typed as a generated Root/Scope,
-	// with a closed T the container does not hand out through that call. A Root/Scope receiver binds Resolve<T>() to
-	// the generated Scope's own method and ResolveAsync<T>() to the AwaitenResolverExtensions member. TryResolve<T>
-	// reports absence by design, and a keyed overload is answered by keys this check does not model, so neither is
-	// checked.
+	// AWT218/AWT219: a Resolve or ResolveAsync on a receiver statically typed as a generated Root/Scope that names a
+	// closed service, as a type argument or a typeof argument, and optionally a constant key, which the container does
+	// not hand out through that call. A Root/Scope receiver binds Resolve<T>() and the Type overloads to the generated
+	// Scope's own methods, and ResolveAsync<T>() and the keyed Resolve<T>(key) to the AwaitenResolverExtensions members.
+	// TryResolve reports absence by design, and a Type or key only known at run time stays a run-time check.
 	private static void AnalyzeTypedResolve(
 		OperationAnalysisContext context,
 		INamedTypeSymbol containerAttribute,
@@ -486,12 +487,12 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 		IMethodSymbol method = invocation.TargetMethod;
 		bool asynchronous = method.Name == "ResolveAsync";
 		if ((!asynchronous && method.Name != "Resolve")
-		    || method.TypeArguments.Length != 1
-		    || method.TypeArguments[0] is not { } service
+		    || RequestedService(invocation) is not { } service
 		    || IsOpenOrUnknown(service)
+		    || !TryReadKey(invocation, out string? key)
 		    || ReceiverType(invocation) is not { } receiver
 		    || GeneratedOwnerContainer(receiver, containerAttribute, scopeInterface, compilation) is not { } container
-		    || !(asynchronous ? IsUnkeyedResolveAsyncExtension(method) : IsGeneratedResolve(method, container)))
+		    || !(IsResolverExtension(method) || SymbolEqualityComparer.Default.Equals(method.ContainingType.ContainingType, container)))
 		{
 			return;
 		}
@@ -502,12 +503,17 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 				() => BuildSurface(c, CachedGraph(graphByContainer, c, compilation, context.CancellationToken)),
 				LazyThreadSafetyMode.ExecutionAndPublication)).Value;
 		string display = service.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-		if (surface is null || !surface.Fails(display, receiver.Name == "Root", asynchronous, MayBeVariant(service), out string? guidance))
+		bool onRoot = receiver.Name == "Root";
+		string? guidance = null;
+		if (surface is null
+		    || !(key is null
+			    ? surface.Fails(display, onRoot, asynchronous, MayBeVariant(service), out guidance)
+			    : surface.FailsKeyed(display, AwaitenGenerator.KeyLiteral(key), onRoot, asynchronous, out guidance)))
 		{
 			return;
 		}
 
-		string call = $"{method.Name}<{AwaitenGenerator.Display(display)}>()";
+		string call = CallDisplay(method, display, key);
 		if (guidance is not null)
 		{
 			context.ReportDiagnostic(Diagnostic.Create(
@@ -519,16 +525,68 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 		if (!graph.External.ImportServices && !graph.External.ServiceTypes.Routes(service, display))
 		{
 			context.ReportDiagnostic(Diagnostic.Create(
-				Diagnostics.TypedResolveOfUnprovidedService, invocation.Syntax.GetLocation(), AwaitenGenerator.Display(display), container.ToDisplayString(), call,
-				UnprovidedRemedy(service, display, graph)));
+				Diagnostics.TypedResolveOfUnprovidedService, invocation.Syntax.GetLocation(), AwaitenGenerator.Display(display),
+				key is null ? "unkeyed registration" : $"registration under the key {AwaitenGenerator.KeyArgumentDisplay(key)}",
+				container.ToDisplayString(), call, UnprovidedRemedy(service, display, key, graph)));
 		}
+	}
+
+	// The service a resolve names: the type argument of a generic overload, or the typeof argument of a Type overload.
+	private static ITypeSymbol? RequestedService(IInvocationOperation invocation)
+		=> invocation.TargetMethod.TypeArguments.Length switch
+		{
+			1 => invocation.TargetMethod.TypeArguments[0],
+			0 => Argument(invocation, "serviceType") is ITypeOfOperation typeOf ? typeOf.TypeOperand : null,
+			_ => null,
+		};
+
+	// The encoded key of a keyed overload, null for an unkeyed one; false when the key is not a constant of a supported
+	// key type, which only run time can match. A key no registration can declare never matches either, but it is left
+	// to run time rather than guessed at.
+	private static bool TryReadKey(IInvocationOperation invocation, out string? key)
+	{
+		key = null;
+		if (Argument(invocation, "key") is not { } value)
+		{
+			return true;
+		}
+
+		while (value is IConversionOperation { IsImplicit: true, } conversion)
+		{
+			value = conversion.Operand;
+		}
+
+		key = value switch
+		{
+			ITypeOfOperation typeOf when !IsOpenOrUnknown(typeOf.TypeOperand) => AwaitenGenerator.EncodeKey(null, typeOf.TypeOperand),
+			{ ConstantValue: { HasValue: true, Value: { } constant, }, } => AwaitenGenerator.EncodeKey(value.Type, constant),
+			_ => null,
+		};
+		return key is not null;
+	}
+
+	private static IOperation? Argument(IInvocationOperation invocation, string parameter)
+		=> invocation.Arguments.FirstOrDefault(argument => argument.Parameter?.Name == parameter)?.Value;
+
+	private static string CallDisplay(IMethodSymbol method, string display, string? key)
+	{
+		string service = AwaitenGenerator.Display(display);
+		string keyArgument = key is null ? string.Empty : AwaitenGenerator.KeyArgumentDisplay(key);
+		return method.IsGenericMethod
+			? $"{method.Name}<{service}>({keyArgument})"
+			: $"{method.Name}(typeof({service}){(key is null ? string.Empty : $", {keyArgument}")})";
 	}
 
 	// A closing of an open generic registration gets the explicit closed registration it needs, with the open
 	// registration's lifetime and its implementation closed over the same type arguments, which AWT128 keeps in
 	// declaration order.
-	private static string UnprovidedRemedy(ITypeSymbol service, string display, GraphModel graph)
+	private static string UnprovidedRemedy(ITypeSymbol service, string display, string? key, GraphModel graph)
 	{
+		if (key is not null)
+		{
+			return "register it under that key on the [Container], or call TryResolve if it is optional";
+		}
+
 		if (service is not INamedTypeSymbol { IsGenericType: true, } named
 		    || !graph.OpenServices.TryGetValue(AwaitenGenerator.UnboundDisplay(named), out (Lifetime Lifetime, string? Implementation) open))
 		{
@@ -566,14 +624,10 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 		return receiver?.Type;
 	}
 
-	private static bool IsGeneratedResolve(IMethodSymbol method, INamedTypeSymbol container)
-		=> method.Parameters.Length == 0 && SymbolEqualityComparer.Default.Equals(method.ContainingType.ContainingType, container);
-
-	private static bool IsUnkeyedResolveAsyncExtension(IMethodSymbol method)
+	private static bool IsResolverExtension(IMethodSymbol method)
 		=> (method.ContainingType.Name == "AwaitenResolverExtensions" ? method.ContainingType : method.ContainingType.ContainingType)
 		   is { Name: "AwaitenResolverExtensions", } extensions
-		   && extensions.ContainingNamespace.ToDisplayString() == "Awaiten"
-		   && !method.Parameters.Any(parameter => parameter.Type.SpecialType == SpecialType.System_Object);
+		   && extensions.ContainingNamespace.ToDisplayString() == "Awaiten";
 
 	private static bool IsOpenOrUnknown(ITypeSymbol type) => type switch
 	{

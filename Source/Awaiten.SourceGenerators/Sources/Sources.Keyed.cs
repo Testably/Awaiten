@@ -194,10 +194,11 @@ internal static partial class Sources
 		bool withheld = IsWithheld(instance, strict);
 
 		string? sync = KeyedSyncCall(emitsSync, rootOwned, resolver);
-		string? asyncArm = KeyedAsyncArm(instance, context.Names, index, rootOwned, withheld, service);
+		string? asyncRootGuidance = instance.IsAsyncTainted && withheld ? AsyncRootWithheldMessage(service) : null;
+		string? asyncArm = KeyedAsyncArm(instance, context.Names, index, rootOwned, asyncRootGuidance);
 		string? guidance = KeyedGuidance(emitsSync, withheld, service);
 
-		return new KeyedDispatchEntry(service, AwaitenGenerator.KeyLiteral(serviceKey.Key!), sync, asyncArm, emitsSync && withheld, guidance);
+		return new KeyedDispatchEntry(service, AwaitenGenerator.KeyLiteral(serviceKey.Key!), sync, asyncArm, emitsSync && withheld, guidance, asyncRootGuidance);
 	}
 
 	/// <summary>
@@ -218,9 +219,10 @@ internal static partial class Sources
 	/// <summary>
 	///     The async arm of an async-tainted keyed service (null otherwise): its memoizing async resolver adapted to
 	///     <c>Task&lt;object&gt;</c>. A disposable async transient is withheld from by-type resolution on the Root (an
-	///     unbounded leak), mirroring the unkeyed async arm; a child scope still resolves it.
+	///     unbounded leak) with <paramref name="rootGuidance" />, mirroring the unkeyed async arm; a child scope still
+	///     resolves it.
 	/// </summary>
-	private static string? KeyedAsyncArm(InstanceModel instance, Names names, int index, bool rootOwned, bool withheld, string service)
+	private static string? KeyedAsyncArm(InstanceModel instance, Names names, int index, bool rootOwned, string? rootGuidance)
 	{
 		if (!instance.IsAsyncTainted)
 		{
@@ -229,8 +231,8 @@ internal static partial class Sources
 
 		string asyncResolver = names.AsyncResolver(index);
 		string call = rootOwned ? $"Root.{asyncResolver}(__s.__root, __ct)" : $"{asyncResolver}(__s, __ct)";
-		return withheld
-			? $"__s is Root ? throw new global::System.InvalidOperationException({AsyncRootWithheldMessage(service)}) : __AsObject({call})"
+		return rootGuidance is not null
+			? $"__s is Root ? throw new global::System.InvalidOperationException({rootGuidance}) : __AsObject({call})"
 			: $"__AsObject({call})";
 	}
 
@@ -314,10 +316,11 @@ internal static partial class Sources
 	///     A single keyed dispatch case: the service <see cref="Type" /> and its user-declared <see cref="KeyLiteral" />,
 	///     the <see cref="Sync" /> resolver expression over <c>__s</c> (null when async-only), the <see cref="Async" />
 	///     resolver expression over <c>__s</c>/<c>__ct</c> producing a <c>Task&lt;object&gt;</c> (null when synchronous),
-	///     whether it is <see cref="RootWithheld" /> from synchronous by-type resolution on the Root, and the
-	///     <see cref="Guidance" /> a synchronous miss throws (null when it resolves synchronously).
+	///     whether it is <see cref="RootWithheld" /> from synchronous by-type resolution on the Root, the
+	///     <see cref="Guidance" /> a synchronous miss throws (null when it resolves synchronously), and the
+	///     <see cref="AsyncRootGuidance" /> its async arm throws on the Root (null when the Root serves it).
 	/// </summary>
-	private readonly struct KeyedDispatchEntry(string type, string keyLiteral, string? sync, string? asyncArm, bool rootWithheld, string? guidance)
+	private readonly struct KeyedDispatchEntry(string type, string keyLiteral, string? sync, string? asyncArm, bool rootWithheld, string? guidance, string? asyncRootGuidance)
 	{
 		public string Type { get; } = type;
 
@@ -330,5 +333,7 @@ internal static partial class Sources
 		public bool RootWithheld { get; } = rootWithheld;
 
 		public string? Guidance { get; } = guidance;
+
+		public string? AsyncRootGuidance { get; } = asyncRootGuidance;
 	}
 }
