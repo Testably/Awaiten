@@ -334,6 +334,8 @@ using (CoffeeShop.Root shop = new()) { }   // sync dispose cannot tear down Boil
 An eager singleton is async-initialized and cannot be constructed synchronously at container build time.
 :::
 
+An eager singleton is built with its decorators, so an async-initialized decorator reports it too.
+
 ```csharp expect=AWT161
 public sealed class EspressoMachine : IAsyncInitializable
 {

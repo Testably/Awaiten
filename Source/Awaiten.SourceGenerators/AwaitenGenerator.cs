@@ -529,6 +529,8 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			}
 		}
 
+		LinkOutermostDecorators(implOrder, instances, implToIndex);
+
 		// AWT167: a contextual registration whose named consumer never redirected to its context key (no unkeyed
 		// direct dependency on the service) is never reached, so report it now that every instance is built.
 		ReportUnappliedContextualBindings(conditionals, consumedConditionals, diagnostics);
@@ -602,6 +604,28 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		}
 
 		return new GraphModel(instances, dependencies, constructionDependencies, combinedDependencies, serviceToImpl, implToIndex, instanceLocations, collections, varianceCandidateTypes, keyedCollections);
+	}
+
+	/// <summary>
+	///     Records on each decorated instance the indices of the outermost decorator links that wrap it, once every
+	///     instance has its index. A link that failed to build is left out.
+	/// </summary>
+	private static void LinkOutermostDecorators(
+		List<ImplInfo> implOrder,
+		List<InstanceModel> instances,
+		Dictionary<string, int> implToIndex)
+	{
+		foreach (ImplInfo info in implOrder)
+		{
+			if (info.OutermostDecorators.Count > 0 && implToIndex.TryGetValue(info.ImplementationType, out int index))
+			{
+				int[] decorators = info.OutermostDecorators
+					.Where(implToIndex.ContainsKey)
+					.Select(identity => implToIndex[identity])
+					.ToArray();
+				instances[index] = instances[index] with { OutermostDecorators = new EquatableArray<int>(decorators), };
+			}
+		}
 	}
 
 	/// <summary>

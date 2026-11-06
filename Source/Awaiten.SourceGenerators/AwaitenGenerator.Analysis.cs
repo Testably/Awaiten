@@ -869,7 +869,9 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     Reports <see cref="Diagnostics.EagerAsyncSingleton">AWT161</see> for an async-tainted <c>Eager</c>
 	///     singleton: it has no synchronous construction path, so it cannot be built in the root's synchronous
-	///     constructor. Strict default only; <c>AsyncSafety.SyncAfterInit</c> emits a blocking resolver and allows it.
+	///     constructor. A decorated eager singleton is built through its outermost decorators, so an async-tainted
+	///     decorator is reported too. Strict default only; <c>AsyncSafety.SyncAfterInit</c> emits a blocking resolver
+	///     and allows it.
 	/// </summary>
 	private static void DetectEagerAsyncSingletons(
 		List<InstanceModel> instances,
@@ -878,12 +880,20 @@ partial class AwaitenGenerator
 	{
 		for (int i = 0; i < instances.Count; i++)
 		{
-			if (instances[i].Eager && instances[i].IsAsyncTainted)
+			if (!instances[i].Eager)
+			{
+				continue;
+			}
+
+			InstanceModel? asyncInstance = instances[i].IsAsyncTainted
+				? instances[i]
+				: instances[i].OutermostDecorators.AsArray().Select(decorator => instances[decorator]).FirstOrDefault(decorator => decorator.IsAsyncTainted);
+			if (asyncInstance is not null)
 			{
 				diagnostics.Add(new DiagnosticInfo(
 					Diagnostics.EagerAsyncSingleton,
 					instanceLocations[i],
-					new EquatableArray<string>([DisplayInstance(instances[i].ImplementationType),])));
+					new EquatableArray<string>([DisplayInstance(asyncInstance.ImplementationType),])));
 			}
 		}
 	}

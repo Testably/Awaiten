@@ -175,6 +175,12 @@ partial class AwaitenGenerator
 		public bool Eager { get; init; }
 
 		/// <summary>
+		///     The identities of the outermost decorator chain links wrapping this implementation, one per decorated
+		///     slot (see <c>DecoratorChainBuilder</c>). Empty when it is not decorated.
+		/// </summary>
+		public List<string> OutermostDecorators { get; } = new();
+
+		/// <summary>
 		///     The imported module that declared the winning registration, or <see langword="null" /> for the
 		///     container's own (or a scan's). A module's <c>Factory</c>/<c>Instance</c> member is resolved
 		///     against and emitted qualified with this type rather than the container.

@@ -274,7 +274,8 @@ partial class AwaitenGenerator
 			false,
 			info.Symbol.IsReferenceType,
 			ProductionKind.Instance,
-			QualifiedProductionMember(info));
+			QualifiedProductionMember(info),
+			Eager: info.Eager && info.Lifetime == Lifetime.Singleton);
 	}
 
 	/// <summary>
