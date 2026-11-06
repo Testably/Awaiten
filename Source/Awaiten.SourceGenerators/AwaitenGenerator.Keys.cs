@@ -28,23 +28,31 @@ partial class AwaitenGenerator
 	///     <c>typeof(...)</c> are supported.
 	/// </summary>
 	private static string? EncodeKeyConstant(TypedConstant constant)
-	{
-		if (constant.IsNull)
-		{
-			return null;
-		}
+		=> constant.IsNull || constant.Kind == TypedConstantKind.Array ? null : EncodeKey(constant.Type, constant.Value);
 
-		switch (constant.Kind)
+	/// <summary>
+	///     Encodes a key constant of <paramref name="type" /> with <paramref name="value" /> (the underlying value of an
+	///     enum constant, or the type symbol of a <c>typeof(...)</c>) like <see cref="EncodeKeyConstant" />, so
+	///     <see cref="AwaitenAnalyzer" /> can match a key argument against the keys the registrations declare.
+	/// </summary>
+	internal static string? EncodeKey(ITypeSymbol? type, object? value)
+	{
+		switch (value)
 		{
-			case TypedConstantKind.Primitive when constant.Value is string value:
-				return StringKeyPrefix + value;
-			case TypedConstantKind.Enum when constant.Type is INamedTypeSymbol enumType:
-				string enumTypeName = enumType.ToDisplayString(FullyQualified);
-				string memberName = EnumMemberName(enumType, constant.Value);
-				return $"{EnumKeyPrefix}{enumTypeName}|{constant.Value}|{memberName}";
-			case TypedConstantKind.Type when constant.Value is INamedTypeSymbol typeValue:
+			case null:
+				return null;
+			case string text:
+				return StringKeyPrefix + text;
+			case INamedTypeSymbol typeValue:
 				return TypeKeyPrefix + typeValue.ToDisplayString(FullyQualified);
 			default:
+				if (type is INamedTypeSymbol { TypeKind: TypeKind.Enum, } enumType)
+				{
+					string enumTypeName = enumType.ToDisplayString(FullyQualified);
+					string memberName = EnumMemberName(enumType, value);
+					return $"{EnumKeyPrefix}{enumTypeName}|{value}|{memberName}";
+				}
+
 				return null;
 		}
 	}
@@ -192,7 +200,7 @@ partial class AwaitenGenerator
 	///     access or <c>typeof(...)</c>). Used where a diagnostic reproduces the attribute syntax, so a string key keeps
 	///     its quotes while a typed key does not gain misleading ones.
 	/// </summary>
-	private static string KeyArgumentDisplay(string key)
+	internal static string KeyArgumentDisplay(string key)
 		=> IsStringKey(key)
 			? SymbolDisplay.FormatLiteral(key.Substring(StringKeyPrefix.Length), quote: true)
 			: KeyDisplay(key);

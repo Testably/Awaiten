@@ -1740,27 +1740,28 @@ internal static class Diagnostics
 		isEnabledByDefault: true);
 
 	/// <summary>
-	///     A typed <c>Resolve&lt;T&gt;()</c> or <c>ResolveAsync&lt;T&gt;()</c> on a generated <c>Root</c> or
-	///     <c>Scope</c> names a closed service the container has no unkeyed registration for, so the call throws at
+	///     A typed <c>Resolve&lt;T&gt;()</c>, <c>ResolveAsync&lt;T&gt;()</c>, <c>Resolve(typeof(T))</c> or
+	///     <c>ResolveAsync(typeof(T))</c> on a generated <c>Root</c> or <c>Scope</c> names a closed service the
+	///     container has no registration for, unkeyed or under the constant key the call passes, so the call throws at
 	///     run time. The common case is a closing of an open generic registration that nothing in the graph injects:
 	///     the generator closes an open generic only over the closings the graph asks for. Reported by
 	///     <see cref="AwaitenAnalyzer" /> at the call so a deliberate call can be suppressed in source. A receiver typed
-	///     as an Awaiten interface, a type argument that is a type parameter, <c>TryResolve</c>, a keyed resolve, a
-	///     service left to the host (<c>[ImportService]</c>, <c>[ImportServices]</c>) and a container from a referenced
-	///     assembly are not checked.
+	///     as an Awaiten interface, a type argument that is a type parameter, a <c>Type</c> other than a
+	///     <c>typeof</c> argument, a key other than a constant, <c>TryResolve</c>, a service left to the host
+	///     (<c>[ImportService]</c>, <c>[ImportServices]</c>) and a container from a referenced assembly are not checked.
 	/// </summary>
 	public static readonly DiagnosticDescriptor TypedResolveOfUnprovidedService = new(
 		"AWT218",
 		"A typed resolve names a service the container does not provide",
-		"'{0}' has no unkeyed registration on '{1}', so this {2} throws at run time; {3}",
+		"'{0}' has no {1} on '{2}', so this {3} throws at run time; {4}",
 		"Awaiten",
 		DiagnosticSeverity.Warning,
 		isEnabledByDefault: true);
 
 	/// <summary>
-	///     A typed <c>Resolve&lt;T&gt;()</c> or <c>ResolveAsync&lt;T&gt;()</c> on a generated <c>Root</c> or
-	///     <c>Scope</c> names a service the container has but does not hand out through that call, so the call throws
-	///     the container's guidance at run time: a synchronous <c>Resolve</c> of an async-initialized service in the
+	///     A typed resolve on a generated <c>Root</c> or <c>Scope</c> names a service the container has, unkeyed or
+	///     under the constant key the call passes, but does not hand out through that call, so the call throws the
+	///     container's guidance at run time: a synchronous <c>Resolve</c> of an async-initialized service in the
 	///     strict default, or a resolve on the <c>Root</c> of a service strict lifetime safety withholds there. The
 	///     message carries that guidance. Reported by <see cref="AwaitenAnalyzer" /> under the same rules as
 	///     <see cref="TypedResolveOfUnprovidedService">AWT218</see>; a receiver typed as the base <c>Scope</c> may be

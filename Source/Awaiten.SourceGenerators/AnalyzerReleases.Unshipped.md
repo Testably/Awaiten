@@ -117,8 +117,8 @@
  AWT214  | Awaiten   | Error    | A container that suppresses the disposal of a possibly disposable service is projected into Microsoft.Extensions.DependencyInjection, which would dispose it anyway
  AWT215  | Awaiten   | Error    | The typeof argument of an [ImportService(typeof(...))] or [InjectProperty(typeof(...), name)] is neither a closed type nor an unbound generic definition
  AWT216  | Awaiten   | Error    | A registered implementation or [Arg] type is a private or protected nested type the generated container cannot expose
- AWT218  | Awaiten   | Warning  | A typed Resolve<T>()/ResolveAsync<T>() on a generated Root/Scope names a service the container has no unkeyed registration for, such as a closing of an open generic the graph never injects
- AWT219  | Awaiten   | Warning  | A typed Resolve<T>()/ResolveAsync<T>() on a generated Root/Scope names a service the container withholds from that call (async-only on a synchronous Resolve, or withheld on the Root)
+ AWT218  | Awaiten   | Warning  | A typed Resolve<T>()/ResolveAsync<T>() or Resolve(typeof(T))/ResolveAsync(typeof(T)) on a generated Root/Scope names a service the container has no registration for, unkeyed or under the constant key it passes, such as a closing of an open generic the graph never injects
+ AWT219  | Awaiten   | Warning  | A typed Resolve<T>()/ResolveAsync<T>() or Resolve(typeof(T))/ResolveAsync(typeof(T)) on a generated Root/Scope names a service the container withholds from that call (async-only on a synchronous Resolve, or withheld on the Root)
  AWT222  | Awaiten   | Error    | [Container(Extends = typeof(...))] names a type that is not a non-generic [Container]
  AWT223  | Awaiten   | Error    | A container names itself in Extends
  AWT224  | Awaiten   | Error    | The base named by Extends itself extends another container
