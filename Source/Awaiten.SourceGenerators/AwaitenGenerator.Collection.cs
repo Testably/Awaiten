@@ -16,7 +16,7 @@ partial class AwaitenGenerator
 	/// </summary>
 	private const string ScanKeyMarker = "@scan:";
 
-	private static (List<RawRegistration> Raw, HashSet<string> ConstraintRejectedServices) Collect(
+	private static (List<RawRegistration> Raw, HashSet<string> ConstraintRejectedServices, Dictionary<string, (Lifetime Lifetime, string? Implementation)> OpenServices) Collect(
 		INamedTypeSymbol containerSymbol,
 		List<ImportedModule> modules,
 		Compilation compilation,
@@ -85,7 +85,28 @@ partial class AwaitenGenerator
 			result.AddRange(scanMatches);
 		}
 
-		return (result, constraintRejected);
+		return (result, constraintRejected, OpenServices(open));
+	}
+
+	/// <summary>
+	///     Each unkeyed open generic service definition (<c>global::Ns.IRepository&lt;&gt;</c>) mapped to the lifetime
+	///     and implementation definition of its first registration, the implementation <see langword="null" /> for a
+	///     generic factory, so <see cref="AwaitenAnalyzer" /> can name the explicit closed registration a closing the
+	///     graph never asks for needs (AWT218).
+	/// </summary>
+	private static Dictionary<string, (Lifetime Lifetime, string? Implementation)> OpenServices(List<OpenRegistration> open)
+	{
+		Dictionary<string, (Lifetime, string?)> services = new(StringComparer.Ordinal);
+		foreach (OpenRegistration registration in open.Where(registration => registration.Key is null))
+		{
+			string service = UnboundDisplay(registration.Service);
+			if (!services.ContainsKey(service))
+			{
+				services[service] = (registration.Lifetime, registration.Factory is null ? UnboundDisplay(registration.Implementation) : null);
+			}
+		}
+
+		return services;
 	}
 
 	/// <summary>

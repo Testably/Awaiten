@@ -18,14 +18,20 @@ public static partial class CoffeeShop;
 
 ## Resolve a closed type
 
-Ask for any closed form and Awaiten builds the matching implementation.
+Awaiten works out which closed forms you need at compile time from what the graph actually asks for: constructor and factory parameters, [injected properties](../05-resolution/05-property-injection.md) and the parameters of [lifecycle hooks](../06-lifetime/03-lifecycle-hooks.md), also when the closed service sits inside a collection, a keyed dictionary, a `Lazy<T>`, a `Func<T>`, a `Task<T>` or an `Owned<T>`. Each of those type arguments gets its own closed implementation, and each keeps the declared lifetime. You resolve a closing the graph asks for like any other service.
 
 ```csharp
 IRepository<Order> orders = shop.Resolve<IRepository<Order>>();
-IRepository<Customer> customers = shop.Resolve<IRepository<Customer>>();
 ```
 
-Each type argument gets its own closed implementation, and each keeps the declared lifetime. Awaiten works out which closed forms you need at compile time from what the graph actually asks for: constructor and factory parameters, [injected properties](../05-resolution/05-property-injection.md) and the parameters of [lifecycle hooks](../06-lifetime/03-lifecycle-hooks.md), also when the closed service sits inside a collection, a keyed dictionary, a `Lazy<T>`, a `Func<T>`, a `Task<T>` or an `Owned<T>`.
+A closing that nothing in the graph asks for is not generated, so resolving it throws at run time. Awaiten warns about a typed resolve of such a closing on the generated `Root` or `Scope` ([AWT218](../09-diagnostics.md#awt218)). When you resolve a closing directly, for example from a test, register it explicitly next to the open registration:
+
+```csharp
+[Container]
+[Transient(typeof(Repository<>), typeof(IRepository<>))]
+[Transient<Repository<Customer>, IRepository<Customer>>]   // resolved directly, never injected
+public static partial class CoffeeShop;
+```
 
 ## Self-registration
 

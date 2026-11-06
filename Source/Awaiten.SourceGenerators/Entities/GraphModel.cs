@@ -21,7 +21,9 @@ namespace Awaiten.SourceGenerators.Entities;
 ///     can be satisfied by, which the emitter bakes into the runtime variance fallback of the by-type dispatch.
 ///     <see cref="KeyedCollections" /> is the keyed-collection-resolvable membership (each service type and its
 ///     keyed implementations, in registration order), which the emitter materializes as
-///     <c>IReadOnlyDictionary&lt;string, T&gt;</c>.
+///     <c>IReadOnlyDictionary&lt;string, T&gt;</c>. <see cref="External" /> is the container's external-resolution
+///     surface, the services it leaves to the host, and <see cref="OpenServices" /> its unkeyed open generic
+///     services with the lifetime and implementation definition they close over.
 ///     Produced by <c>AwaitenGenerator.BuildGraph</c> and shared by the generator (which emits the container
 ///     from it) and <c>AwaitenAnalyzer</c> (which walks it for AWT118).
 /// </summary>
@@ -35,4 +37,6 @@ internal sealed record GraphModel(
 	List<LocationInfo?> InstanceLocations,
 	List<ServiceMembers> Collections,
 	List<string> VarianceCandidates,
-	List<KeyedServiceMembers> KeyedCollections);
+	List<KeyedServiceMembers> KeyedCollections,
+	AwaitenGenerator.ExternalSurface External,
+	Dictionary<string, (Lifetime Lifetime, string? Implementation)> OpenServices);
