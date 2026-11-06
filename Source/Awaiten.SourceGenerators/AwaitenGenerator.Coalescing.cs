@@ -676,7 +676,7 @@ partial class AwaitenGenerator
 		// Eager) drops each independently, so each is reported once - mirroring how AWT107 and AWT111 keep
 		// separate reported sets rather than collapsing a lifetime and a production conflict into one. The
 		// Add doubles as the dedup filter, the same short-circuiting guard the AWT107/AWT111 reports use above.
-		foreach ((string Directive, string Winner, string Loser) directive in ConflictingDirectives(info, registration)
+		foreach ((string Directive, string Winner, string Loser) directive in ConflictingDirectives(info, registration, containerSymbol)
 			         .Where(directive => reportedDirectiveConflicts.Add(registration.ImplementationType + "\0" + directive.Directive)))
 		{
 			diagnostics.Add(new DiagnosticInfo(
@@ -699,17 +699,19 @@ partial class AwaitenGenerator
 	///     or SuppressDisposal the winner did not. A registration that leaves a directive unset (a null hook, or a
 	///     bool flag left at its default false) states no opinion and merges with the winner rather than conflicting,
 	///     so the winner's own directives, which this registration inherits, are never a conflict against themselves.
+	///     A hook is identified by its name and the type that declares it, so the same name on a module and on the
+	///     container (or on two modules) is a different hook.
 	/// </summary>
-	private static IEnumerable<(string Directive, string Winner, string Loser)> ConflictingDirectives(ImplInfo info, RawRegistration registration)
+	private static IEnumerable<(string Directive, string Winner, string Loser)> ConflictingDirectives(ImplInfo info, RawRegistration registration, INamedTypeSymbol containerSymbol)
 	{
-		if (registration.OnActivated is not null && !string.Equals(registration.OnActivated, info.OnActivated, StringComparison.Ordinal))
+		if (IsDifferentHook(registration.OnActivated, info.OnActivated, info.OnActivatedOrigin))
 		{
-			yield return ("OnActivated", DescribeHook(info.OnActivated), $"'{registration.OnActivated}'");
+			yield return ("OnActivated", DescribeHook(info.OnActivated, info.OnActivatedOrigin), DescribeHook(registration.OnActivated, registration.Origin));
 		}
 
-		if (registration.OnRelease is not null && !string.Equals(registration.OnRelease, info.OnRelease, StringComparison.Ordinal))
+		if (IsDifferentHook(registration.OnRelease, info.OnRelease, info.OnReleaseOrigin))
 		{
-			yield return ("OnRelease", DescribeHook(info.OnRelease), $"'{registration.OnRelease}'");
+			yield return ("OnRelease", DescribeHook(info.OnRelease, info.OnReleaseOrigin), DescribeHook(registration.OnRelease, registration.Origin));
 		}
 
 		if (registration.Eager && !info.Eager)
@@ -721,9 +723,15 @@ partial class AwaitenGenerator
 		{
 			yield return ("SuppressDisposal", "false", "true");
 		}
-	}
 
-	private static string DescribeHook(string? hook) => hook is null ? "unset" : $"'{hook}'";
+		bool IsDifferentHook(string? hook, string? winnerHook, INamedTypeSymbol? winnerOrigin)
+			=> hook is not null
+			   && (!string.Equals(hook, winnerHook, StringComparison.Ordinal)
+			       || !SymbolEqualityComparer.Default.Equals(registration.Origin, winnerOrigin));
+
+		string DescribeHook(string? hook, INamedTypeSymbol? origin)
+			=> hook is null ? "unset" : $"'{Display(QualifiedMember(origin ?? containerSymbol, hook))}'";
+	}
 
 	/// <summary>
 	///     Records a registration's implementation as a member of the collection for its (service type, key), in

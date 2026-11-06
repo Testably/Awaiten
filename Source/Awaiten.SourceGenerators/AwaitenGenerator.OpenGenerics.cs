@@ -582,7 +582,8 @@ partial class AwaitenGenerator
 
 	private static void ReportFactoryConstraintViolation(OpenRegistration candidate, string closedService, ExpansionContext context)
 	{
-		if (!context.ReportedConstraints.Add("factory:" + closedService + "\0" + candidate.Factory))
+		string factory = QualifiedMember(candidate.Origin ?? context.Inputs.ContainerSymbol, candidate.Factory);
+		if (!context.ReportedConstraints.Add("factory:" + closedService + "\0" + factory))
 		{
 			return;
 		}
@@ -590,7 +591,7 @@ partial class AwaitenGenerator
 		context.Diagnostics.Add(new DiagnosticInfo(
 			Diagnostics.GenericFactoryConstraintViolation,
 			candidate.Location,
-			new EquatableArray<string>([AwaitenGenerator.Display(closedService), candidate.Factory!,])));
+			new EquatableArray<string>([AwaitenGenerator.Display(closedService), AwaitenGenerator.Display(factory),])));
 	}
 
 	private static void ReportConstraintViolation(OpenRegistration candidate, string closedImplName, ExpansionContext context)
