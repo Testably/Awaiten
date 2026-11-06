@@ -297,6 +297,8 @@ partial class AwaitenGenerator
 				innerKey = DecoratorKey(service, baseIndex, i + 1);
 			}
 
+			baseInfo?.OutermostDecorators.Add(outermostIdentity);
+
 			// Collection membership is unbypassable: replace the base impl with the chain's outermost decorator
 			// identity, so a collection view yields the full chain as a single element rather than the bare impl.
 			RewriteCollectionMembership(chain.Members, baseImpl, outermostIdentity);

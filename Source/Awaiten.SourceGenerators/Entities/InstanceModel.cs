@@ -25,6 +25,9 @@ namespace Awaiten.SourceGenerators.Entities;
 ///     dependency captured by value into the queued closure). <see cref="SuppressDisposal" /> opts the instance
 ///     out of the container's built-in disposal entirely (teardown is left to an <see cref="OnRelease" /> hook or
 ///     an owner outside the container), so a suppressed instance is never tracked for teardown.
+///     <see cref="OutermostDecorators" /> holds the instance indices of the outermost decorator chain links wrapping
+///     this instance, one per decorated slot; an <see cref="Eager" /> instance is activated through them, so it is
+///     built as its consumers see it.
 /// </summary>
 internal sealed record InstanceModel(
 	string ImplementationType,
@@ -48,7 +51,8 @@ internal sealed record InstanceModel(
 	string? OnRelease = null,
 	EquatableArray<ParameterModel> ActivationParameters = default,
 	EquatableArray<ParameterModel> ReleaseParameters = default,
-	bool SuppressDisposal = false)
+	bool SuppressDisposal = false,
+	EquatableArray<int> OutermostDecorators = default)
 {
 	/// <summary>
 	///     The concrete type to construct and to use for cache fields and resolver return types. Normally the same

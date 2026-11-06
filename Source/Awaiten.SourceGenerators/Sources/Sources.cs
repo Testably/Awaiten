@@ -549,16 +549,29 @@ internal static partial class Sources
 	/// <summary>
 	///     Emits the <c>Root</c> constructor body: each <c>Eager</c> singleton is constructed at build time, in
 	///     registration order, through its caching static resolver (so it is cached and a disposable one tracked).
-	///     The synchronous analog of <c>InitializeAsync</c>. An async-tainted eager singleton in the strict default
-	///     is AWT161 (the throwing error body is emitted instead), so the call here is always valid.
+	///     A decorated one is built through its outermost decorators instead, so its decorators are built with it;
+	///     an undecorated pre-built <c>Instance</c> has nothing to build.
+	///     The synchronous analog of <c>InitializeAsync</c>. An async-tainted eager singleton or decorator in the
+	///     strict default is AWT161 (the throwing error body is emitted instead), so the call here is always valid.
 	/// </summary>
 	private static void EmitEagerActivation(StringBuilder builder, int depth, InstanceModel[] instances, Names names)
 	{
 		for (int i = 0; i < instances.Length; i++)
 		{
-			if (instances[i].Eager)
+			if (!instances[i].Eager)
+			{
+				continue;
+			}
+
+			int[] decorators = instances[i].OutermostDecorators.AsArray();
+			if (decorators.Length == 0 && instances[i].Production != ProductionKind.Instance)
 			{
 				Indent(builder, depth).Append(names.Resolver(i)).AppendLine("(this);");
+			}
+
+			foreach (int decorator in decorators)
+			{
+				Indent(builder, depth).Append(names.Resolver(decorator)).AppendLine("(this);");
 			}
 		}
 	}
