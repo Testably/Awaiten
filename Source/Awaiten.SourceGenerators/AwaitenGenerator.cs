@@ -444,7 +444,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 
 		// Collect also expands [Scan]s into overridable registrations (IsScan), ordered after the explicit ones
 		// so an explicit registration wins single resolution while every match still joins its collection.
-		(List<RawRegistration> raw, HashSet<string> constraintRejected) = Collect(containerSymbol, modules, compilation, external, injectProperties, diagnostics);
+		(List<RawRegistration> raw, HashSet<string> constraintRejected, Dictionary<string, (Lifetime Lifetime, string? Implementation)> openServices) = Collect(containerSymbol, modules, compilation, external, injectProperties, diagnostics);
 
 		// [Scan(SkipUnconstructable = true)] trades the AWT101 error for a skip-with-warning (AWT141) on matches
 		// the container cannot construct. Scans without the opt-in, and explicit registrations, keep the error.
@@ -604,7 +604,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			varianceCandidateTypes.Add(serviceType);
 		}
 
-		return new GraphModel(instances, dependencies, constructionDependencies, combinedDependencies, serviceToImpl, implToIndex, instanceLocations, collections, varianceCandidateTypes, keyedCollections);
+		return new GraphModel(instances, dependencies, constructionDependencies, combinedDependencies, serviceToImpl, implToIndex, instanceLocations, collections, varianceCandidateTypes, keyedCollections, external, openServices);
 	}
 
 	/// <summary>

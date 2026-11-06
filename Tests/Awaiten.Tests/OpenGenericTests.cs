@@ -66,6 +66,20 @@ public partial class OpenGenericTests
 		await That(ReferenceEquals(first, second)).IsFalse();
 	}
 
+	[Test]
+	public async Task ExplicitClosedRegistration_ProvidesAClosingTheGraphDoesNotAskFor()
+	{
+		using ExplicitClosingContainer.Root container = new();
+
+		IRepository<Customer> customers = container.Resolve<IRepository<Customer>>();
+		IRepository<Order> orders = container.Resolve<IRepository<Order>>();
+
+		await That(customers.Describe()).IsEqualTo("Repository<Customer>")
+			.Because("the explicit closed registration provides the closing that nothing injects, which is the remedy AWT218 names");
+		await That(orders.Describe()).IsEqualTo("Repository<Order>")
+			.Because("the open registration next to it still closes over what the graph asks for");
+	}
+
 	public sealed class Order;
 
 	public sealed class Customer;
@@ -114,4 +128,17 @@ public partial class OpenGenericTests
 	[Singleton(typeof(Cache<>), typeof(ICache<>))]
 	[Transient<App>]
 	public static partial class OpenGenericContainer;
+
+	public sealed class OrderDesk
+	{
+		public OrderDesk(IRepository<Order> orders)
+		{
+		}
+	}
+
+	[Container]
+	[Transient(typeof(Repository<>), typeof(IRepository<>))]
+	[Transient<Repository<Customer>, IRepository<Customer>>]
+	[Transient<OrderDesk>]
+	public static partial class ExplicitClosingContainer;
 }

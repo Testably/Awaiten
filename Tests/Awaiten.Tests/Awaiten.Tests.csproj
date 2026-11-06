@@ -7,6 +7,9 @@
 		     skipped, which is exactly what these scans exist to prove is not the case: it is the accessibility that
 		     skips it. Suppressed project-wide because AWT193 is emitted by the source generator. -->
 		<NoWarn>$(NoWarn);AWT193</NoWarn>
+		<!-- AWT218, AWT219: several tests resolve a service the container does not hand out through that typed call,
+		     to pin the run-time exception and its guidance that untyped callers still get. -->
+		<NoWarn>$(NoWarn);AWT218;AWT219</NoWarn>
 	</PropertyGroup>
 
 	<ItemGroup>

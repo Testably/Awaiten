@@ -29,7 +29,10 @@ namespace Awaiten.SourceGenerators;
 ///     where a container that suppresses the disposal of a possibly disposable service is projected into
 ///     Microsoft.Extensions.DependencyInjection, which would dispose it anyway. Also reports
 ///     <see cref="Diagnostics.DuplicateInjectProperty">AWT179</see>, which the graph build detects and the generator
-///     leaves to the analyzer so that it can be suppressed in source.
+///     leaves to the analyzer so that it can be suppressed in source. Also reports
+///     <see cref="Diagnostics.TypedResolveOfUnprovidedService">AWT218</see> and
+///     <see cref="Diagnostics.TypedResolveOfWithheldService">AWT219</see> at a typed <c>Resolve&lt;T&gt;()</c> or
+///     <c>ResolveAsync&lt;T&gt;()</c> on a generated <c>Root</c> or <c>Scope</c> that throws at run time.
 /// </summary>
 /// <remarks>
 ///     AWT118 is an analyzer (rather than a generator) diagnostic so that, under loose lifetime safety where
@@ -53,7 +56,8 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 	/// <inheritdoc />
 	public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
 		ImmutableArray.Create(Diagnostics.RootAccumulatingFactory, Diagnostics.RootAccumulatingFactoryStrict, Diagnostics.AsyncOnlyDisposal,
-			Diagnostics.SuppressedDisposalProjected, Diagnostics.DuplicateInjectProperty);
+			Diagnostics.SuppressedDisposalProjected, Diagnostics.DuplicateInjectProperty, Diagnostics.TypedResolveOfUnprovidedService,
+			Diagnostics.TypedResolveOfWithheldService);
 
 	/// <inheritdoc />
 	public override void Initialize(AnalysisContext context)
@@ -99,6 +103,11 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 				OperationKind.Using, OperationKind.UsingDeclaration);
 			start.RegisterOperationAction(
 				ctx => AnalyzeSynchronousDisposeCall(ctx, containerAttribute, scopeInterface, start.Compilation, graphByContainer),
+				OperationKind.Invocation);
+
+			ConcurrentDictionary<INamedTypeSymbol, Lazy<Sources.ByTypeSurface?>> surfaceByContainer = new(SymbolEqualityComparer.Default);
+			start.RegisterOperationAction(
+				ctx => AnalyzeTypedResolve(ctx, containerAttribute, scopeInterface, start.Compilation, graphByContainer, surfaceByContainer),
 				OperationKind.Invocation);
 		});
 	}
@@ -403,25 +412,13 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 		Compilation compilation,
 		ConcurrentDictionary<INamedTypeSymbol, Lazy<ContainerGraph>> graphByContainer)
 	{
-		if (disposedType is not INamedTypeSymbol { Name: "Root" or "Scope", } named
-		    || named.ContainingType is not { } container
-		    || !named.AllInterfaces.Contains(scopeInterface, SymbolEqualityComparer.Default)
-		    || !container.GetAttributes().Any(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass, containerAttribute)))
-		{
-			return;
-		}
-
-		// A container declared in a referenced assembly stays invisible to this check (a documented false
-		// negative, like an interface-typed receiver): its graph cannot be rebuilt faithfully here, because
-		// BuildGraph expands a default [Scan] over the current compilation's assembly, not the container's.
-		// The runtime throw in the generated synchronous drain remains the backstop.
-		if (!SymbolEqualityComparer.Default.Equals(container.ContainingAssembly, compilation.Assembly))
+		if (disposedType is null || GeneratedOwnerContainer(disposedType, containerAttribute, scopeInterface, compilation) is not { } container)
 		{
 			return;
 		}
 
 		GraphModel graph = CachedGraph(graphByContainer, container, compilation, context.CancellationToken).Graph;
-		ImmutableArray<string> asyncOnly = AsyncOnlyDisposables(graph, includeRootOwned: named.Name == "Root");
+		ImmutableArray<string> asyncOnly = AsyncOnlyDisposables(graph, includeRootOwned: disposedType.Name == "Root");
 		if (asyncOnly.IsEmpty)
 		{
 			return;
@@ -430,7 +427,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 		context.ReportDiagnostic(Diagnostic.Create(
 			Diagnostics.AsyncOnlyDisposal,
 			reportSyntax.GetLocation(),
-			named.ToDisplayString(),
+			disposedType.ToDisplayString(),
 			string.Join("', '", asyncOnly)));
 	}
 
@@ -447,6 +444,141 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 			.Select(instance => AwaitenGenerator.DisplayInstance(instance.ImplementationType))
 			.Distinct(StringComparer.Ordinal)
 			.ToImmutableArray();
+
+	// The [Container] of a generated Root or Scope: a type named Root or Scope, implementing IAwaitenScope, nested in
+	// a [Container] class. The name check matters: a user-authored type nested in the container class can
+	// hand-implement the public IAwaitenScope, but it cannot coexist with the generated Root/Scope under their names.
+	// A container declared in a referenced assembly yields null (a documented false negative, like an interface-typed
+	// receiver): its graph cannot be rebuilt faithfully here, because BuildGraph expands a default [Scan] over the
+	// current compilation's assembly, not the container's. The generated code's runtime throw remains the backstop.
+	private static INamedTypeSymbol? GeneratedOwnerContainer(
+		ITypeSymbol type, INamedTypeSymbol containerAttribute, INamedTypeSymbol scopeInterface, Compilation compilation)
+		=> type is INamedTypeSymbol { Name: "Root" or "Scope", ContainingType: { } container, } owner
+		   && owner.AllInterfaces.Contains(scopeInterface, SymbolEqualityComparer.Default)
+		   && container.GetAttributes().Any(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass, containerAttribute))
+		   && SymbolEqualityComparer.Default.Equals(container.ContainingAssembly, compilation.Assembly)
+			? container
+			: null;
+
+	// AWT218/AWT219: a typed Resolve<T>() or ResolveAsync<T>() on a receiver statically typed as a generated Root/Scope,
+	// with a closed T the container does not hand out through that call. A Root/Scope receiver binds Resolve<T>() to
+	// the generated Scope's own method and ResolveAsync<T>() to the AwaitenResolverExtensions member. TryResolve<T>
+	// reports absence by design, and a keyed overload is answered by keys this check does not model, so neither is
+	// checked.
+	private static void AnalyzeTypedResolve(
+		OperationAnalysisContext context,
+		INamedTypeSymbol containerAttribute,
+		INamedTypeSymbol scopeInterface,
+		Compilation compilation,
+		ConcurrentDictionary<INamedTypeSymbol, Lazy<ContainerGraph>> graphByContainer,
+		ConcurrentDictionary<INamedTypeSymbol, Lazy<Sources.ByTypeSurface?>> surfaceByContainer)
+	{
+		IInvocationOperation invocation = (IInvocationOperation)context.Operation;
+		IMethodSymbol method = invocation.TargetMethod;
+		bool asynchronous = method.Name == "ResolveAsync";
+		if ((!asynchronous && method.Name != "Resolve")
+		    || method.TypeArguments.Length != 1
+		    || method.TypeArguments[0] is not { } service
+		    || IsOpenOrUnknown(service)
+		    || ReceiverType(invocation) is not { } receiver
+		    || GeneratedOwnerContainer(receiver, containerAttribute, scopeInterface, compilation) is not { } container
+		    || !(asynchronous ? IsUnkeyedResolveAsyncExtension(method) : IsGeneratedResolve(method, container)))
+		{
+			return;
+		}
+
+		Sources.ByTypeSurface? surface = surfaceByContainer.GetOrAdd(
+			container,
+			c => new Lazy<Sources.ByTypeSurface?>(
+				() => BuildSurface(c, CachedGraph(graphByContainer, c, compilation, context.CancellationToken)),
+				LazyThreadSafetyMode.ExecutionAndPublication)).Value;
+		string display = service.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+		if (surface is null || !surface.Fails(display, receiver.Name == "Root", asynchronous, MayBeVariant(service), out string? guidance))
+		{
+			return;
+		}
+
+		string call = $"{method.Name}<{AwaitenGenerator.Display(display)}>()";
+		if (guidance is not null)
+		{
+			context.ReportDiagnostic(Diagnostic.Create(
+				Diagnostics.TypedResolveOfWithheldService, invocation.Syntax.GetLocation(), call, receiver.ToDisplayString(), guidance));
+			return;
+		}
+
+		GraphModel graph = CachedGraph(graphByContainer, container, compilation, context.CancellationToken).Graph;
+		if (!graph.External.ImportServices && !graph.External.ServiceTypes.Routes(service, display))
+		{
+			context.ReportDiagnostic(Diagnostic.Create(
+				Diagnostics.TypedResolveOfUnprovidedService, invocation.Syntax.GetLocation(), AwaitenGenerator.Display(display), container.ToDisplayString(), call,
+				UnprovidedRemedy(service, display, graph)));
+		}
+	}
+
+	// A closing of an open generic registration gets the explicit closed registration it needs, with the open
+	// registration's lifetime and its implementation closed over the same type arguments, which AWT128 keeps in
+	// declaration order.
+	private static string UnprovidedRemedy(ITypeSymbol service, string display, GraphModel graph)
+	{
+		if (service is not INamedTypeSymbol { IsGenericType: true, } named
+		    || !graph.OpenServices.TryGetValue(AwaitenGenerator.UnboundDisplay(named), out (Lifetime Lifetime, string? Implementation) open))
+		{
+			return "register it on the [Container], or call TryResolve if it is optional";
+		}
+
+		const string reason = "because an open generic registration only provides the closings the graph injects";
+		if (open.Implementation is not { } implementation)
+		{
+			return $"register this closing explicitly next to the open generic registration, {reason}";
+		}
+
+		string arguments = string.Join(", ", named.TypeArguments.Select(argument => argument.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)));
+		string closed = AwaitenGenerator.Display($"{implementation.Substring(0, implementation.LastIndexOf('<'))}<{arguments}>");
+		string serviceDisplay = AwaitenGenerator.Display(display);
+		string registration = closed == serviceDisplay ? $"[{open.Lifetime}<{closed}>]" : $"[{open.Lifetime}<{closed}, {serviceDisplay}>]";
+		return $"register this closing explicitly next to the open generic registration, such as {registration}, {reason}";
+	}
+
+	// A container with errors emits a shell that throws on every call, and its build fails anyway, so it is not checked.
+	private static Sources.ByTypeSurface? BuildSurface(INamedTypeSymbol container, ContainerGraph built)
+		=> container.IsStatic && !built.Diagnostics.Any(d => (d.Severity ?? d.Descriptor.DefaultSeverity) == DiagnosticSeverity.Error)
+			? new Sources.ByTypeSurface(built.Graph, AwaitenGenerator.ReadStrict(container), AwaitenGenerator.ReadSyncAfterInit(container))
+			: null;
+
+	private static ITypeSymbol? ReceiverType(IInvocationOperation invocation)
+	{
+		IOperation? receiver = invocation.Instance
+		                       ?? (invocation.TargetMethod.IsExtensionMethod && invocation.Arguments.Length > 0 ? invocation.Arguments[0].Value : null);
+		while (receiver is IConversionOperation { IsImplicit: true, } conversion)
+		{
+			receiver = conversion.Operand;
+		}
+
+		return receiver?.Type;
+	}
+
+	private static bool IsGeneratedResolve(IMethodSymbol method, INamedTypeSymbol container)
+		=> method.Parameters.Length == 0 && SymbolEqualityComparer.Default.Equals(method.ContainingType.ContainingType, container);
+
+	private static bool IsUnkeyedResolveAsyncExtension(IMethodSymbol method)
+		=> (method.ContainingType.Name == "AwaitenResolverExtensions" ? method.ContainingType : method.ContainingType.ContainingType)
+		   is { Name: "AwaitenResolverExtensions", } extensions
+		   && extensions.ContainingNamespace.ToDisplayString() == "Awaiten"
+		   && !method.Parameters.Any(parameter => parameter.Type.SpecialType == SpecialType.System_Object);
+
+	private static bool IsOpenOrUnknown(ITypeSymbol type) => type switch
+	{
+		{ TypeKind: TypeKind.Error, } or ITypeParameterSymbol => true,
+		IArrayTypeSymbol array => IsOpenOrUnknown(array.ElementType),
+		INamedTypeSymbol named => named.TypeArguments.Any(IsOpenOrUnknown) || (named.ContainingType is { } outer && IsOpenOrUnknown(outer)),
+		_ => false,
+	};
+
+	// The run-time variance fallback may route a closed variant generic interface to a compatible registration, which
+	// is not modeled here, so such a request is left to run time.
+	private static bool MayBeVariant(ITypeSymbol type)
+		=> type is INamedTypeSymbol { TypeKind: TypeKind.Interface, IsGenericType: true, } named
+		   && named.OriginalDefinition.TypeParameters.Any(parameter => parameter.Variance != VarianceKind.None);
 
 	private static void PushTransientDependencies(int node, GraphModel graph, Stack<int> stack)
 	{

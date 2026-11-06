@@ -16,6 +16,8 @@ using CoffeeShop.Root shop = new();
 Cup cup = shop.Resolve<Cup>();
 ```
 
+When the receiver is the generated `Root` or `Scope`, Awaiten knows at compile time which container answers, so it warns about a call that would throw: a service the container does not provide ([AWT218](../09-diagnostics.md#awt218)), or one it does not hand out through that call, such as an async-initialized service on a synchronous `Resolve` ([AWT219](../09-diagnostics.md#awt219)). A call through `IAwaitenRoot` or with a type parameter is checked at run time only.
+
 There is a `Type`-based overload for when you do not know the type at compile time.
 
 ```csharp

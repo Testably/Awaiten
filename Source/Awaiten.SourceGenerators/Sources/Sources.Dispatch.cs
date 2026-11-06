@@ -5,10 +5,9 @@ namespace Awaiten.SourceGenerators;
 
 internal static partial class Sources
 {
-	private static Dictionary<ServiceKey, int> BuildServiceMap(ContainerModel model)
+	private static Dictionary<ServiceKey, int> BuildServiceMap(InstanceModel[] instances)
 	{
 		Dictionary<ServiceKey, int> serviceToIndex = new();
-		InstanceModel[] instances = model.Instances.AsArray();
 		for (int i = 0; i < instances.Length; i++)
 		{
 			foreach (ServiceKey service in instances[i].Services.AsArray())
@@ -1472,5 +1471,74 @@ internal static partial class Sources
 		public bool RootOwnedDirect { get; } = rootOwnedDirect;
 
 		public bool RootWithheld => Guidance is not null;
+	}
+
+	/// <summary>
+	///     The by-type resolution surface of an emitted container, built from the same dispatch tables its
+	///     <c>Resolve(Type)</c> and <c>ResolveAsync(Type)</c> probe, so <c>AwaitenAnalyzer</c> can tell at a typed
+	///     call site whether the call fails at run time (AWT218, AWT219).
+	/// </summary>
+	internal sealed class ByTypeSurface
+	{
+		private const string GuidancePrefix = "\"Awaiten: ";
+
+		private readonly Dictionary<string, string?> _sync = new(StringComparer.Ordinal);
+		private readonly Dictionary<string, string?> _async = new(StringComparer.Ordinal);
+		private readonly Dictionary<string, string> _asyncOnly = new(StringComparer.Ordinal);
+		private readonly bool _hasVariance;
+
+		public ByTypeSurface(GraphModel graph, bool strict, bool syncAfterInit)
+		{
+			InstanceModel[] instances = graph.Instances.ToArray();
+			Names names = Names.Build(instances, graph.Collections.ToArray(), graph.KeyedCollections.ToArray(), syncAfterInit);
+			Dictionary<ServiceKey, int> serviceToIndex = BuildServiceMap(instances);
+
+			List<DispatchEntry> entries = BuildDispatchEntries(instances, names, serviceToIndex, strict, syncAfterInit);
+			foreach (DispatchEntry entry in entries)
+			{
+				_sync[entry.Type] = entry.Guidance;
+			}
+
+			foreach ((string service, string _, bool _, bool _, string? rootWithheldMessage) in BuildAsyncArms(instances, names, serviceToIndex, strict, syncAfterInit))
+			{
+				_async[service] = rootWithheldMessage;
+			}
+
+			foreach ((string type, string guidance) in AsyncWithheldServices(instances, syncAfterInit).Concat(AsyncWithheldCollections(names, serviceToIndex, syncAfterInit)))
+			{
+				_asyncOnly[type] = guidance;
+			}
+
+			_hasVariance = VarianceDispatchTypes(graph.VarianceCandidates.ToArray(), entries).Count > 0;
+		}
+
+		/// <summary>
+		///     Whether a typed <c>Resolve&lt;T&gt;()</c>, or <c>ResolveAsync&lt;T&gt;()</c> when
+		///     <paramref name="asynchronous" />, of <paramref name="service" /> throws, with the <paramref name="guidance" />
+		///     it throws, or <see langword="null" /> when nothing provides the service. A slot withheld on the Root fails
+		///     only <paramref name="onRoot" />, and a <paramref name="mayBeVariant" /> request is left to the run-time
+		///     variance fallback.
+		/// </summary>
+		public bool Fails(string service, bool onRoot, bool asynchronous, bool mayBeVariant, out string? guidance)
+		{
+			guidance = null;
+			string? literal;
+			if ((asynchronous && _async.TryGetValue(service, out string? rootGuidance)) || _sync.TryGetValue(service, out rootGuidance))
+			{
+				literal = onRoot ? rootGuidance : null;
+			}
+			else if (!_asyncOnly.TryGetValue(service, out literal))
+			{
+				return !(mayBeVariant && _hasVariance);
+			}
+
+			if (literal is null)
+			{
+				return false;
+			}
+
+			guidance = literal.Substring(GuidancePrefix.Length, literal.Length - GuidancePrefix.Length - 1);
+			return true;
+		}
 	}
 }

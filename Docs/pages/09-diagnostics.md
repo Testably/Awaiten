@@ -208,6 +208,33 @@ public static partial class CoffeeShop;
 
 **Fix:** Decide the winner with a strong registration of the service on the container (one without `Fallback`), or set `Fallback = Fallback.Silent` on a default to accept that the first declared one wins.
 
+### AWT218
+
+:::warning[Warning]
+A typed `Resolve<T>()` or `ResolveAsync<T>()` on a generated `Root` or `Scope` names a service the container has no unkeyed registration for, so the call throws at run time. The common case is a closing of an open generic that nothing in the graph injects: Awaiten closes an open generic only for the closings the graph asks for. Only a call on the generated `Root` or `Scope` with a closed type argument is checked. A call through `IAwaitenRoot` or with a type parameter, `TryResolve`, a keyed resolve and a service the host provides stay run-time checks.
+:::
+
+```csharp expect=AWT218
+public sealed class OrderDesk(IRepository<Order> orders);
+
+[Container]
+[Transient(typeof(Repository<>), typeof(IRepository<>))]
+[Transient<OrderDesk>]
+public static partial class CoffeeShop;
+
+CoffeeShop.Root root = new();
+root.Resolve<IRepository<Customer>>();   // the graph only asks for IRepository<Order>
+```
+
+**Fix:** Register the closing explicitly next to the open registration, or register the missing service. If the call is meant to probe, use `TryResolve`.
+
+```csharp
+[Container]
+[Transient(typeof(Repository<>), typeof(IRepository<>))]
+[Transient<Repository<Customer>, IRepository<Customer>>]
+public static partial class CoffeeShop;
+```
+
 ## Async safety
 
 These keep async-initialized services from being reached before they are ready.
@@ -350,6 +377,28 @@ public static partial class CoffeeShop;
 ```
 
 **Fix:** Remove `Eager = true`: `InitializeAsync` on the root already warms every async singleton. If it must be built at construction, opt into `[Container(AsyncSafety = AsyncSafety.SyncAfterInit)]`.
+
+### AWT219
+
+:::warning[Warning]
+A typed `Resolve<T>()` or `ResolveAsync<T>()` on a generated `Root` or `Scope` names a service the container has but does not hand out through that call, so the call throws at run time: a synchronous `Resolve` of an async-initialized service, or a resolve on the `Root` of a service that [lifetime safety](./06-lifetime/02-lifetime-safety.md) withholds there, such as a disposable transient. The warning carries the guidance the exception would. It follows the rules of [AWT218](#awt218), and a receiver typed as `Scope` may be the `Root` itself, so only a `Root` receiver is checked for what the `Root` withholds.
+:::
+
+```csharp expect=AWT219
+public sealed class EspressoMachine : IAsyncInitializable
+{
+    public Task InitializeAsync(CancellationToken ct) => Task.CompletedTask;
+}
+
+[Container]
+[Singleton<EspressoMachine>]
+public static partial class CoffeeShop;
+
+CoffeeShop.Root root = new();
+root.Resolve<EspressoMachine>();   // async-initialized, so only ResolveAsync hands it out
+```
+
+**Fix:** Follow the guidance in the message: resolve an async-initialized service with `await root.ResolveAsync<EspressoMachine>(cancellationToken)`, and a withheld transient through `Owned<T>` or from a child scope. Alternatively opt into `AsyncSafety.SyncAfterInit` or `LifetimeSafety.Loose` on the `[Container]`.
 
 ## Factories and instances
 

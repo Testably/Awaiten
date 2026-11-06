@@ -116,6 +116,8 @@
  AWT213  | Awaiten   | Error    | A Type-keyed dispatch dictionary is not Func<TBase> over a non-generic interface, carries [FromKey], or its closings are not of one single-parameter generic
  AWT214  | Awaiten   | Error    | A container that suppresses the disposal of a possibly disposable service is projected into Microsoft.Extensions.DependencyInjection, which would dispose it anyway
  AWT215  | Awaiten   | Error    | The typeof argument of an [ImportService(typeof(...))] or [InjectProperty(typeof(...), name)] is neither a closed type nor an unbound generic definition
+ AWT218  | Awaiten   | Warning  | A typed Resolve<T>()/ResolveAsync<T>() on a generated Root/Scope names a service the container has no unkeyed registration for, such as a closing of an open generic the graph never injects
+ AWT219  | Awaiten   | Warning  | A typed Resolve<T>()/ResolveAsync<T>() on a generated Root/Scope names a service the container withholds from that call (async-only on a synchronous Resolve, or withheld on the Root)
 
 ; AWT137 (an injected property marked [Arg]) is retired: [Arg] targets only parameters, so the compiler rejects it on a property. The id stays reserved and is never reused.
 ; AWT217 (a partially open [InjectProperty(typeof(...), name)] target) is retired before it shipped: AWT215 covers the typeof argument of [InjectProperty] and [ImportService] alike. The id stays reserved and is never reused.
