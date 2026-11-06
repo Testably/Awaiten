@@ -28,6 +28,8 @@ namespace Awaiten.SourceGenerators.Entities;
 ///     <see cref="OutermostDecorators" /> holds the instance indices of the outermost decorator chain links wrapping
 ///     this instance, one per decorated slot; an <see cref="Eager" /> instance is activated through them, so it is
 ///     built as its consumers see it.
+///     <see cref="PrivateServices" /> are the service types that are private or protected nested types, which the
+///     generated <c>Root</c> cannot hold in an <c>internal</c> field, so their typed async resolution is not cached.
 /// </summary>
 internal sealed record InstanceModel(
 	string ImplementationType,
@@ -52,7 +54,8 @@ internal sealed record InstanceModel(
 	EquatableArray<ParameterModel> ActivationParameters = default,
 	EquatableArray<ParameterModel> ReleaseParameters = default,
 	bool SuppressDisposal = false,
-	EquatableArray<int> OutermostDecorators = default)
+	EquatableArray<int> OutermostDecorators = default,
+	EquatableArray<string> PrivateServices = default)
 {
 	/// <summary>
 	///     The concrete type to construct and to use for cache fields and resolver return types. Normally the same

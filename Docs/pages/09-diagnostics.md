@@ -208,6 +208,34 @@ public static partial class CoffeeShop;
 
 **Fix:** Decide the winner with a strong registration of the service on the container (one without `Fallback`), or set `Fallback = Fallback.Silent` on a default to accept that the first declared one wins.
 
+### AWT216
+
+:::danger[Error]
+A registered implementation, or one of its `[Arg]` types, is a private or protected nested type, or contains one as a type argument. The generated `Root` and `Scope` are public classes, and their resolvers return the implementation and take the runtime arguments as `internal` members, which C# does not allow to expose a less accessible type. For a `Factory` or `Instance` registration the registered type counts as the implementation. A private service type is fine as long as its implementation is accessible.
+:::
+
+```csharp expect=AWT216
+[Container]
+[Singleton<FakeTimeSystem, ITimeSystem>]   // the resolver would return a private type
+public static partial class CoffeeShop
+{
+    private sealed class FakeTimeSystem : ITimeSystem;
+}
+```
+
+**Fix:** Make the type `internal` (or `public`), or produce it from a `Factory` or `Instance` member registered under its accessible service type, such as `[Singleton<ITimeSystem>(Factory = nameof(CreateFake))]`. A test double can also stay private when the container is nested privately beside it, because then the generated members are no more visible than the double:
+
+```csharp
+public partial class CoffeeShopTests
+{
+    private sealed class FakeTimeSystem : ITimeSystem;
+
+    [Container]
+    [Singleton<FakeTimeSystem, ITimeSystem>]
+    private static partial class TestShop;
+}
+```
+
 ### AWT218
 
 :::warning[Warning]

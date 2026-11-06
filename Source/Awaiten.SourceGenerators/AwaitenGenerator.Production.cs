@@ -17,6 +17,11 @@ partial class AwaitenGenerator
 		WellKnownTypes wellKnown = context.WellKnown;
 		List<DiagnosticInfo> diagnostics = context.Diagnostics;
 
+		if (ReportLessAccessibleThanContainer(info, info.Symbol, containerSymbol, diagnostics))
+		{
+			return null;
+		}
+
 		// Property injection: after the constructor, fill the opt-in [Inject] and container-side [InjectProperty]
 		// members through an object initializer. Only a constructed instance is filled; a factory or pre-built
 		// instance is produced whole by its source (an [InjectProperty] on it is AWT178). Each member edge is
@@ -36,6 +41,12 @@ partial class AwaitenGenerator
 		// means the registration is unusable and a diagnostic was already reported.
 		IMethodSymbol? producer = SelectProducer(info, containerSymbol, compilation, serviceToImpl, context.External, diagnostics);
 		if (producer is null)
+		{
+			return null;
+		}
+
+		if (producer.Parameters.Any(parameter => HasArgAttribute(parameter.GetAttributes())
+		                                         && ReportLessAccessibleThanContainer(info, parameter.Type, containerSymbol, diagnostics)))
 		{
 			return null;
 		}
@@ -119,7 +130,8 @@ partial class AwaitenGenerator
 			OnRelease: onRelease,
 			ActivationParameters: activationParameters,
 			ReleaseParameters: releaseParameters,
-			SuppressDisposal: info.SuppressDisposal);
+			SuppressDisposal: info.SuppressDisposal,
+			PrivateServices: PrivateServices(info, containerSymbol));
 
 		static bool ImplementsInterface(ITypeSymbol type, INamedTypeSymbol @interface)
 		{
@@ -271,7 +283,59 @@ partial class AwaitenGenerator
 			ProductionKind.Instance,
 			QualifiedProductionMember(info),
 			EmitType: EmitTypeOf(info),
-			Eager: info.Eager && info.Lifetime == Lifetime.Singleton);
+			Eager: info.Eager && info.Lifetime == Lifetime.Singleton,
+			PrivateServices: PrivateServices(info, containerSymbol));
+	}
+
+	/// <summary>
+	///     The service types of <paramref name="info" /> that are private or protected nested types the generated
+	///     <c>Root</c> cannot expose (see <see cref="InstanceModel.PrivateServices" />), found among the
+	///     implementation's own type, base types and interfaces.
+	/// </summary>
+	private static EquatableArray<string> PrivateServices(ImplInfo info, INamedTypeSymbol containerSymbol)
+	{
+		HashSet<string> services = new(info.Services.Select(service => service.Service), StringComparer.Ordinal);
+		List<string> privateServices = new();
+		for (INamedTypeSymbol? type = info.Symbol; type is not null; type = type.BaseType)
+		{
+			Add(type);
+		}
+
+		foreach (INamedTypeSymbol @interface in info.Symbol.AllInterfaces)
+		{
+			Add(@interface);
+		}
+
+		return new EquatableArray<string>(privateServices.ToArray());
+
+		void Add(INamedTypeSymbol type)
+		{
+			if (LessAccessibleThanContainer(type, containerSymbol) is not null
+			    && type.ToDisplayString(FullyQualified) is { } display
+			    && services.Contains(display))
+			{
+				privateServices.Add(display);
+			}
+		}
+	}
+
+	/// <summary>
+	///     Reports <see cref="Diagnostics.RegisteredTypeLessAccessible">AWT216</see> and returns
+	///     <see langword="true" /> when <paramref name="type" />, the registration's implementation or one of its
+	///     <c>[Arg]</c> types, is a private or protected nested type the generated resolvers cannot expose.
+	/// </summary>
+	private static bool ReportLessAccessibleThanContainer(ImplInfo info, ITypeSymbol type, INamedTypeSymbol containerSymbol, List<DiagnosticInfo> diagnostics)
+	{
+		if (LessAccessibleThanContainer(type, containerSymbol) is not { } narrower)
+		{
+			return false;
+		}
+
+		diagnostics.Add(new DiagnosticInfo(
+			Diagnostics.RegisteredTypeLessAccessible,
+			info.Location,
+			new EquatableArray<string>([Display(info.Symbol.ToDisplayString(FullyQualified)), Display(narrower.ToDisplayString(FullyQualified)),])));
+		return true;
 	}
 
 	/// <summary>
