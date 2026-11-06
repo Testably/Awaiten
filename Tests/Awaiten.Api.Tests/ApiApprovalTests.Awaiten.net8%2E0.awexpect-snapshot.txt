@@ -157,6 +157,9 @@ namespace Awaiten
     public sealed class GeneratedScanRegistrationAttribute<TService> : System.Attribute where TService : class
     {
         public GeneratedScanRegistrationAttribute(string factory) { }
+        public bool AsyncDisposable { get; set; }
+        public bool AsyncInitializable { get; set; }
+        public bool Disposable { get; set; }
         public string Factory { get; }
         public Awaiten.Lifetime Lifetime { get; set; }
         public string? OnActivated { get; set; }

@@ -49,7 +49,8 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		});
 
 		// A second root: a [Module] that declares a [Scan] self-compiles it, emitting a factory + registration per
-		// match into its own partial (BuildModuleModel returns null for a plain module, which emits nothing).
+		// match into its own partial, and a factory per registration another assembly cannot construct
+		// (BuildModuleModel returns null for a plain module, which emits nothing).
 		IncrementalValuesProvider<ModuleScanModel> moduleModels = context.SyntaxProvider
 			.ForAttributeWithMetadataName(
 				ModuleAttributeName,
@@ -77,11 +78,13 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 	}
 
 	/// <summary>
-	///     Builds the <see cref="ModuleScanModel" /> for a <c>[Module]</c> that declares a <c>[Scan]</c> (returning
-	///     <see langword="null" /> for a module without one, which self-compiles nothing). The module must be
+	///     Builds the <see cref="ModuleScanModel" /> for a <c>[Module]</c> that declares a <c>[Scan]</c> or a
+	///     self-compiled registration (see <see cref="SelfCompilesRegistration" />), returning
+	///     <see langword="null" /> for any other module, which self-compiles nothing. The module must be
 	///     non-generic (AWT201) and <c>partial</c>, as must every type enclosing a nested module, to receive the
-	///     generated factories and registration attributes (AWT194); when it is, its scans are expanded into
-	///     factories in its own build (see <see cref="CollectModuleScanFactories" />).
+	///     generated factories and registration attributes (AWT194); when it is, its scans and registrations are
+	///     expanded into factories in its own build (see <see cref="CollectModuleScanFactories" /> and
+	///     <see cref="CollectModuleRegistrationFactories" />).
 	/// </summary>
 	private static ModuleScanModel? BuildModuleModel(GeneratorAttributeSyntaxContext context, CancellationToken cancellationToken)
 	{
@@ -90,14 +93,19 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			return null;
 		}
 
-		// Only a module that declares a [Scan] self-compiles; a plain [Module] carries no generated code (and pays
-		// no analysis cost beyond this check).
-		if (!HasAwaitenAttribute(moduleSymbol.GetAttributes(), "ScanAttribute"))
+		// Only a module that declares a [Scan] or a registration another assembly cannot construct self-compiles; any
+		// other [Module] carries no generated code (and pays no analysis cost beyond this check).
+		Compilation compilation = context.SemanticModel.Compilation;
+		bool declaresScan = HasAwaitenAttribute(moduleSymbol.GetAttributes(), "ScanAttribute");
+		ModuleRegistration? selfCompiled = declaresScan ? null : FirstSelfCompiledRegistration(moduleSymbol, compilation);
+		if (!declaresScan && selfCompiled is null)
 		{
 			return null;
 		}
 
-		Compilation compilation = context.SemanticModel.Compilation;
+		string reason = selfCompiled is null
+			? "declares a [Scan]"
+			: $"registers '{Display(selfCompiled.Implementation.ToDisplayString(FullyQualified))}', which another assembly cannot construct,";
 		List<DiagnosticInfo> diagnostics = new();
 
 		// The module must be partial for the generator to add the factories and registration attributes. Every part
@@ -109,6 +117,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		                 && ContainingTypesArePartial(moduleSymbol);
 
 		List<ModuleFactory> factories = new();
+		List<RegistrationFactory> registrations = new();
 		bool expanded = false;
 		if (HasOpenTypeParameters(moduleSymbol))
 		{
@@ -117,7 +126,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.GenericModuleScan,
 				LocationInfo.From(moduleSymbol.Locations.FirstOrDefault()),
-				new EquatableArray<string>([Display(moduleSymbol.ToDisplayString(FullyQualified)),])));
+				new EquatableArray<string>([Display(moduleSymbol.ToDisplayString(FullyQualified)), reason,])));
 		}
 		else if (!moduleSymbol.IsStatic)
 		{
@@ -134,13 +143,18 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.NonPartialModuleScan,
 				LocationInfo.From(moduleSymbol.Locations.FirstOrDefault()),
-				new EquatableArray<string>([Display(moduleSymbol.ToDisplayString(FullyQualified)),])));
+				new EquatableArray<string>([Display(moduleSymbol.ToDisplayString(FullyQualified)), reason,])));
 		}
 		else
 		{
-			factories = CollectModuleScanFactories(moduleSymbol, compilation, diagnostics, cancellationToken)
-				.Select(expansion => expansion.Factory)
-				.ToList();
+			if (declaresScan)
+			{
+				factories = CollectModuleScanFactories(moduleSymbol, compilation, diagnostics, cancellationToken)
+					.Select(expansion => expansion.Factory)
+					.ToList();
+			}
+
+			registrations = CollectModuleRegistrationFactories(moduleSymbol, compilation, diagnostics, factories);
 			expanded = true;
 		}
 
@@ -168,7 +182,9 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			hintName,
 			expanded,
 			new EquatableArray<ModuleFactory>(factories.ToArray()),
-			new EquatableArray<DiagnosticInfo>(diagnostics.ToArray()));
+			new EquatableArray<DiagnosticInfo>(diagnostics.ToArray()),
+			declaresScan,
+			new EquatableArray<RegistrationFactory>(registrations.ToArray()));
 	}
 
 	/// <summary>
@@ -495,9 +511,9 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		// their diagnostics still follow the registrations'.
 		List<DiagnosticInfo> wrapperDiagnostics = new();
 		(List<DecorateRegistration> decorators, List<OpenDecorateRegistration> openDecorators) =
-			CollectDecorators(containerSymbol, modules, inheritance, wrapperDiagnostics);
+			CollectDecorators(containerSymbol, modules, inheritance, compilation, wrapperDiagnostics);
 		(List<CompositeRegistration> composites, List<OpenCompositeRegistration> openComposites) =
-			CollectComposites(containerSymbol, modules, inheritance, wrapperDiagnostics);
+			CollectComposites(containerSymbol, modules, inheritance, compilation, wrapperDiagnostics);
 
 		// Collect also expands [Scan]s into overridable registrations (IsScan), ordered after the explicit ones
 		// so an explicit registration wins single resolution while every match still joins its collection.

@@ -4,13 +4,15 @@ using Microsoft.CodeAnalysis;
 namespace Awaiten.SourceGenerators.Entities;
 
 /// <summary>
-///     The equatable model of a <c>[Module]</c> that compiles its own <c>[Scan]</c>: the partial class to
-///     re-open and the factories to emit into it, one per scan match. The generator adds a partial declaration
-///     carrying a generated <c>public static</c> factory per match (which <c>new</c>s the — possibly
-///     <c>internal</c> — implementation and returns its accessible exposure interface) plus a
-///     <c>[GeneratedScanRegistration]</c> referencing that factory. A consuming container reads that attribute
-///     like a container <c>[Scan]</c> match, so the matches collect and are overridable, as close to a container
-///     scan as the assembly boundary allows.
+///     The equatable model of a <c>[Module]</c> that compiles its own <c>[Scan]</c> or its registrations of
+///     implementations another assembly cannot construct: the partial class to re-open and the factories to emit
+///     into it. The generator adds a partial declaration carrying a generated <c>public static</c> factory per scan
+///     match (which <c>new</c>s the — possibly <c>internal</c> — implementation and returns its accessible exposure
+///     interface) plus a <c>[GeneratedScanRegistration]</c> referencing that factory. A consuming container reads
+///     that attribute like a container <c>[Scan]</c> match, so the matches collect and are overridable, as close to
+///     a container scan as the assembly boundary allows. Each self-compiled registration gets a factory of its own
+///     (<see cref="Registrations" />), which a consumer finds by name from the module's own registration attribute.
+///     <see cref="DeclaresScan" /> decides whether the <c>[GeneratedScanExpansion]</c> marker is emitted.
 /// </summary>
 internal sealed record ModuleScanModel(
 	string? Namespace,
@@ -19,14 +21,43 @@ internal sealed record ModuleScanModel(
 	string HintName,
 	bool Expanded,
 	EquatableArray<ModuleFactory> Factories,
-	EquatableArray<DiagnosticInfo> Diagnostics);
+	EquatableArray<DiagnosticInfo> Diagnostics,
+	bool DeclaresScan = true,
+	EquatableArray<RegistrationFactory> Registrations = default);
+
+/// <summary>
+///     The generated factory of a self-compiled module registration: the emitted method name, the accessible type it
+///     returns (the implementation when another assembly can name it, else the registered service), the
+///     implementation it constructs, the constructor parameters mirrored onto its signature and the lifecycle-hook
+///     wrappers emitted beside it, one per hook a registration of the implementation names.
+/// </summary>
+internal sealed record RegistrationFactory(
+	string FactoryName,
+	string ReturnType,
+	string ImplementationType,
+	EquatableArray<FactoryParameter> Parameters,
+	EquatableArray<RegistrationHook> Hooks);
+
+/// <summary>One lifecycle-hook wrapper of a self-compiled module registration and whether it is the release hook.</summary>
+internal sealed record RegistrationHook(ModuleHook Hook, bool Release);
+
+/// <summary>
+///     What a consumer in another assembly must know about a self-compiled implementation it cannot see: whether it
+///     implements <c>IAsyncInitializable</c>, <c>IDisposable</c> and <c>IAsyncDisposable</c>.
+/// </summary>
+internal readonly record struct ImplementationTraits(bool AsyncInitializable, bool Disposable, bool AsyncDisposable)
+{
+	/// <summary>Whether the implementation implements none of the interfaces.</summary>
+	public bool IsEmpty => !AsyncInitializable && !Disposable && !AsyncDisposable;
+}
 
 /// <summary>
 ///     One generated module-scan factory: the emitted method name, the accessible exposure interface it returns
 ///     (also the service the registration exposes), the concrete implementation it constructs, the lifetime and
 ///     <c>SkipUnconstructable</c> opt-in the scan declared, and the constructor parameters mirrored onto the
 ///     factory signature (resolved from the consuming container's graph, exactly like a hand-written module
-///     factory's parameters).
+///     factory's parameters). <see cref="Traits" /> tells the consumer how the match it cannot see is initialized
+///     and disposed.
 /// </summary>
 internal sealed record ModuleFactory(
 	string FactoryName,
@@ -36,7 +67,8 @@ internal sealed record ModuleFactory(
 	bool SkipUnconstructable,
 	EquatableArray<FactoryParameter> Parameters,
 	ModuleHook? OnActivated = null,
-	ModuleHook? OnRelease = null);
+	ModuleHook? OnRelease = null,
+	ImplementationTraits Traits = default);
 
 /// <summary>A mirrored constructor parameter on a generated factory: its fully-qualified type and its name.</summary>
 internal readonly record struct FactoryParameter(string Type, string Name);

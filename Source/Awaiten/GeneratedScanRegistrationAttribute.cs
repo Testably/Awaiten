@@ -60,6 +60,24 @@ public sealed class GeneratedScanRegistrationAttribute<TService> : Attribute
 	///     Null when the scan declared no release hook.
 	/// </summary>
 	public string? OnRelease { get; set; }
+
+	/// <summary>
+	///     Whether the match implements <see cref="IAsyncInitializable" />, which the consumer cannot read off
+	///     <typeparamref name="TService" />, so it initializes the match asynchronously after construction.
+	/// </summary>
+	public bool AsyncInitializable { get; set; }
+
+	/// <summary>
+	///     Whether the match implements <see cref="IDisposable" />, so the consumer owns its disposal like that of a
+	///     constructed type.
+	/// </summary>
+	public bool Disposable { get; set; }
+
+	/// <summary>
+	///     Whether the match implements <c>IAsyncDisposable</c>, so the consumer owns its asynchronous disposal like
+	///     that of a constructed type.
+	/// </summary>
+	public bool AsyncDisposable { get; set; }
 }
 
 #pragma warning restore S2326

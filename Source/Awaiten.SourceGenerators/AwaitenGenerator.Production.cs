@@ -66,12 +66,15 @@ partial class AwaitenGenerator
 		ITypeSymbol disposalType = info.Production == ProductionKind.Factory
 			? ProducedType(producer.ReturnType, compilation)
 			: info.Symbol;
-		bool disposable = wellKnown.Disposable is not null && ImplementsInterface(disposalType, wellKnown.Disposable);
+		// A self-compiled implementation hides behind the accessible type its module's generated factory returns, so
+		// its traits come from the module instead, as if the container constructed the implementation itself.
+		ImplementationTraits? traits = info.Traits;
+		bool disposable = wellKnown.Disposable is not null && (traits?.Disposable ?? ImplementsInterface(disposalType, wellKnown.Disposable));
 
 		// Async disposal mirrors sync disposal: the drain awaits DisposeAsync, preferring it over IDisposable
 		// when a type is both. Recognized only when the runtime exposes async disposal; otherwise the generated
 		// container stays sync-dispose only.
-		bool asyncDisposable = wellKnown.AsyncDisposable is not null && ImplementsInterface(disposalType, wellKnown.AsyncDisposable);
+		bool asyncDisposable = wellKnown.AsyncDisposable is not null && (traits?.AsyncDisposable ?? ImplementsInterface(disposalType, wellKnown.AsyncDisposable));
 
 		// A factory's declared return type can hide a concrete IDisposable (or IAsyncDisposable) behind a
 		// non-disposable service interface or base class, which the static flags above miss. When a subtype
@@ -80,6 +83,7 @@ partial class AwaitenGenerator
 		// that is neither cannot hide one, and the runtime test would not compile. Constructed and pre-built
 		// Instance production never lie: info.Symbol is the concrete type, and an Instance is not owned.
 		bool runtimeDisposalCheck = info.Production == ProductionKind.Factory
+		                            && !info.TraitsExact
 		                            && !disposable
 		                            && !asyncDisposable
 		                            && CouldHideDisposable(disposalType);
@@ -87,13 +91,13 @@ partial class AwaitenGenerator
 		// Async initialization follows the owned type (a factory's concrete return type or the constructed impl),
 		// mirroring the disposal-type choice above. When it is IAsyncInitializable, the container awaits its
 		// InitializeAsync after construction. (An async factory is async-tainted regardless; see PropagateAsyncTaint.)
-		bool asyncInit = wellKnown.AsyncInitializable is not null && ImplementsInterface(disposalType, wellKnown.AsyncInitializable);
+		bool asyncInit = wellKnown.AsyncInitializable is not null && (traits?.AsyncInitializable ?? ImplementsInterface(disposalType, wellKnown.AsyncInitializable));
 
 		// Best-effort lint (AWT106): a sync factory whose declared return type hides the async initialization
 		// its body provably produces. Async-init taint is read off producer.ReturnType (above), so a concrete
 		// IAsyncInitializable returned behind a plainer interface is never initialized. Not reported for an
 		// async factory (it awaits its own initialization) nor a hidden IDisposable (disposed via RuntimeDisposalCheck).
-		if (info.Production == ProductionKind.Factory && !asyncFactory)
+		if (info.Production == ProductionKind.Factory && !asyncFactory && traits is null)
 		{
 			ReportFactoryHidingAsyncInitialization(producer, compilation, wellKnown.AsyncInitializable, diagnostics);
 		}
