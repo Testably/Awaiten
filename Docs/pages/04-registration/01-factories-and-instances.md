@@ -46,6 +46,8 @@ Use this for configuration objects or anything with a lifetime you manage yourse
 
 A `Factory` or `Instance` registration that names only the service, like `[Singleton<IBrewer>(Factory = nameof(MakeBrewer))]`, is identified by its member. Two such registrations of one service with different members are two implementations, just like two classes: the first registration (or the container's over a module's) wins single resolution, and both are members of the collection. Registrations that name the same member share one instance. When another registration names the type as its implementation, as in `[Singleton<Grinder>]`, every registration of it is that one implementation and must produce it the same way ([AWT111](../09-diagnostics.md#awt111)).
 
+An open generic `Factory` that names only its service, like `[Transient(typeof(IRepository<>), Factory = nameof(CreateRepository))]`, is identified by its member for every closing (see [Generic factories](./05-open-generics.md#generic-factories)). Two of them with different members both join `IEnumerable<IRepository<Order>>`, and the first (or the container's over a module's) wins `IRepository<Order>`. Open registrations that close into one implementation, such as the same factory or the same implementation type registered twice, share one instance and must agree on its lifetime and lifecycle directives, like closed registrations of it ([AWT107](../09-diagnostics.md#awt107), [AWT166](../09-diagnostics.md#awt166)).
+
 ## Disposal follows the real type
 
 A factory can return an interface that hides a disposable concrete type. Awaiten still disposes it, because it tracks the actual object it got back, and it disposes it exactly once with its owner.

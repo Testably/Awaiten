@@ -375,6 +375,216 @@ public partial class DiagnosticTests
 				await That(result.Diagnostics).Contains("*AWT111*").AsWildcard()
 					.Because("both registrations name the same member, so they are one implementation produced two ways");
 			}
+
+			public class OpenGeneric
+			{
+				[Test]
+				public async Task DoesNotReportForTwoOpenFactoriesInOneContainer()
+				{
+					GeneratorResult result = Generator.Run("""
+					                                       using Awaiten;
+
+					                                       namespace MyCode;
+
+					                                       public interface IRepo<T> { }
+					                                       public sealed class Repo<T> : IRepo<T> { }
+					                                       public sealed class Order { }
+					                                       public sealed class Consumer
+					                                       {
+					                                       	public Consumer(IRepo<Order>[] repos) { }
+					                                       }
+
+					                                       [Container]
+					                                       [Singleton(typeof(IRepo<>), Factory = nameof(MakeA))]
+					                                       [Singleton(typeof(IRepo<>), Factory = nameof(MakeB))]
+					                                       [Transient<Consumer>]
+					                                       public static partial class MyContainer
+					                                       {
+					                                       	public static IRepo<T> MakeA<T>() => new Repo<T>();
+					                                       	public static IRepo<T> MakeB<T>() => new Repo<T>();
+					                                       }
+					                                       """);
+
+					await That(result.Diagnostics).IsEmpty()
+						.Because("each open factory's closing is its own implementation, as for the closed form");
+					string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+					await That(source).Contains("MakeA<global::MyCode.Order>()");
+					await That(source).Contains("MakeB<global::MyCode.Order>()")
+						.Because("the second open factory is not dropped from the closing's collection");
+				}
+
+				[Test]
+				public async Task DoesNotReportForKeyedOpenFactoriesNamingDifferentMembers()
+				{
+					GeneratorResult result = Generator.Run("""
+					                                       using Awaiten;
+
+					                                       namespace MyCode;
+
+					                                       public interface IRepo<T> { }
+					                                       public sealed class Repo<T> : IRepo<T> { }
+					                                       public sealed class Order { }
+					                                       public sealed class Consumer
+					                                       {
+					                                       	public Consumer([FromKey("a")] IRepo<Order> a, [FromKey("b")] IRepo<Order> b) { }
+					                                       }
+
+					                                       [Container]
+					                                       [Singleton(typeof(IRepo<>), Factory = nameof(MakeA), Key = "a")]
+					                                       [Singleton(typeof(IRepo<>), Factory = nameof(MakeB), Key = "b")]
+					                                       [Transient<Consumer>]
+					                                       public static partial class MyContainer
+					                                       {
+					                                       	public static IRepo<T> MakeA<T>() => new Repo<T>();
+					                                       	public static IRepo<T> MakeB<T>() => new Repo<T>();
+					                                       }
+					                                       """);
+
+					await That(result.Diagnostics).IsEmpty()
+						.Because("each key's closing is produced by its own open factory, so they are different implementations");
+				}
+
+				[Test]
+				public async Task DoesNotReportForAContextualOpenFactoryBesideTheUnconditionalOne()
+				{
+					GeneratorResult result = Generator.Run("""
+					                                       using Awaiten;
+
+					                                       namespace MyCode;
+
+					                                       public interface IRepo<T> { }
+					                                       public sealed class Repo<T> : IRepo<T> { }
+					                                       public sealed class Order { }
+					                                       public sealed class Report
+					                                       {
+					                                       	public Report(IRepo<Order> repo) { }
+					                                       }
+					                                       public sealed class Consumer
+					                                       {
+					                                       	public Consumer(IRepo<Order> repo) { }
+					                                       }
+
+					                                       [Container]
+					                                       [Singleton(typeof(IRepo<>), Factory = nameof(MakeA))]
+					                                       [Singleton(typeof(IRepo<>), Factory = nameof(MakeB), WhenInjectedInto = typeof(Report))]
+					                                       [Transient<Report>]
+					                                       [Transient<Consumer>]
+					                                       public static partial class MyContainer
+					                                       {
+					                                       	public static IRepo<T> MakeA<T>() => new Repo<T>();
+					                                       	public static IRepo<T> MakeB<T>() => new Repo<T>();
+					                                       }
+					                                       """);
+
+					await That(result.Diagnostics).IsEmpty()
+						.Because("the contextual open factory names a different member, so its closing is a different implementation");
+				}
+
+				[Test]
+				public async Task ReportsDuplicateKeyInsteadForTwoOpenFactoriesUnderTheSameKey()
+				{
+					GeneratorResult result = Generator.Run("""
+					                                       using Awaiten;
+
+					                                       namespace MyCode;
+
+					                                       public interface IRepo<T> { }
+					                                       public sealed class Repo<T> : IRepo<T> { }
+					                                       public sealed class Order { }
+					                                       public sealed class Consumer
+					                                       {
+					                                       	public Consumer([FromKey("a")] IRepo<Order> repo) { }
+					                                       }
+
+					                                       [Container]
+					                                       [Singleton(typeof(IRepo<>), Factory = nameof(MakeA), Key = "a")]
+					                                       [Singleton(typeof(IRepo<>), Factory = nameof(MakeB), Key = "a")]
+					                                       [Transient<Consumer>]
+					                                       public static partial class MyContainer
+					                                       {
+					                                       	public static IRepo<T> MakeA<T>() => new Repo<T>();
+					                                       	public static IRepo<T> MakeB<T>() => new Repo<T>();
+					                                       }
+					                                       """);
+
+					await That(result.Diagnostics).Contains("*AWT117*").AsWildcard()
+						.Because("two open factories claim one key of the closing, which is the ambiguity AWT117 names, as for the closed form");
+					await That(result.Diagnostics).DoesNotContain("*AWT111*").AsWildcard()
+						.Because("the two closings are different implementations, not one implementation produced two ways");
+				}
+
+				[Test]
+				public async Task ReportsCrossModuleDuplicateInsteadForOpenFactoriesInTwoModules()
+				{
+					GeneratorResult result = Generator.Run("""
+					                                       using Awaiten;
+
+					                                       namespace MyCode;
+
+					                                       public interface IRepo<T> { }
+					                                       public sealed class Repo<T> : IRepo<T> { }
+					                                       public sealed class Order { }
+					                                       public sealed class Consumer
+					                                       {
+					                                       	public Consumer(IRepo<Order> repo) { }
+					                                       }
+
+					                                       [Module]
+					                                       [Singleton(typeof(IRepo<>), Factory = nameof(Make))]
+					                                       public static class ModuleA
+					                                       {
+					                                       	public static IRepo<T> Make<T>() => new Repo<T>();
+					                                       }
+
+					                                       [Module]
+					                                       [Singleton(typeof(IRepo<>), Factory = nameof(Make))]
+					                                       public static class ModuleB
+					                                       {
+					                                       	public static IRepo<T> Make<T>() => new Repo<T>();
+					                                       }
+
+					                                       [Container]
+					                                       [Import(typeof(ModuleA))]
+					                                       [Import(typeof(ModuleB))]
+					                                       [Transient<Consumer>]
+					                                       public static partial class MyContainer
+					                                       {
+					                                       }
+					                                       """);
+
+					await That(result.Diagnostics).Contains("*AWT155*IRepo*ModuleA*ModuleB*").AsWildcard()
+						.Because("two modules' open factories of the same name are different implementations of the closing, decided only by [Import] order");
+				}
+
+				[Test]
+				public async Task ReportsForAnOpenFactoryAndAnOpenConstructorOfTheSameImplementation()
+				{
+					GeneratorResult result = Generator.Run("""
+					                                       using Awaiten;
+
+					                                       namespace MyCode;
+
+					                                       public sealed class Repo<T> { }
+					                                       public sealed class Order { }
+					                                       public sealed class Consumer
+					                                       {
+					                                       	public Consumer(Repo<Order> repo) { }
+					                                       }
+
+					                                       [Container]
+					                                       [Singleton(typeof(Repo<>))]
+					                                       [Singleton(typeof(Repo<>), Factory = nameof(Make))]
+					                                       [Transient<Consumer>]
+					                                       public static partial class MyContainer
+					                                       {
+					                                       	public static Repo<T> Make<T>() => new Repo<T>();
+					                                       }
+					                                       """);
+
+					await That(result.Diagnostics).Contains("*AWT111*'MyCode.Repo<MyCode.Order>'*a constructor*factory 'MyCode.MyContainer.Make'*").AsWildcard()
+						.Because("the constructor registration names Repo<Order> as its implementation, so the factory's closing is that one implementation produced a second way, as for the closed form");
+				}
+			}
 		}
 
 		[Test]

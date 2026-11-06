@@ -51,7 +51,8 @@ partial class AwaitenGenerator
 	///     implementations, as two constructed classes are, so precedence decides the single resolution and both stay
 	///     collection members, while registrations naming the same member still share one instance. A type that another
 	///     registration names as its implementation keeps its type identity, so a factory and a constructor of that one
-	///     implementation still conflict (AWT111). Scan matches and open generic closings keep their own identities.
+	///     implementation still conflict (AWT111). An open generic factory's closing is identified the same way, per
+	///     closing. Scan matches keep their own identities.
 	/// </summary>
 	private static void AssignMemberIdentities(List<RawRegistration> raw, INamedTypeSymbol containerSymbol)
 	{
@@ -71,7 +72,7 @@ partial class AwaitenGenerator
 		}
 
 		static bool NamesOnlyItsService(RawRegistration registration)
-			=> registration is { Production: not ProductionKind.Constructor, IsScan: false, IsSynthesized: false, }
+			=> registration is { Production: not ProductionKind.Constructor, IsScan: false, }
 			   && registration.ImplementationType == registration.ServiceType;
 	}
 
