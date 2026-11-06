@@ -418,4 +418,52 @@ public sealed partial class ExternalServiceResolveTests
 			await That(host.Requests).IsEmpty();
 		}
 	}
+
+	public sealed class Resolvability
+	{
+		[Test]
+		public async Task OfADeclaredImport_IsExternal()
+		{
+			using ImportingContainer.Root root = new();
+
+			await That(root.GetResolvability<IClock>().Status).IsEqualTo(AwaitenResolvabilityStatus.External)
+				.Because("resolving a declared import asks the host");
+			await That(root.GetResolvability(typeof(IClock), "utc").Status).IsEqualTo(AwaitenResolvabilityStatus.External)
+				.Because("a declared import is routed with a key too");
+			await That(root.GetResolvability<Reporter>().Status).IsEqualTo(AwaitenResolvabilityStatus.Resolvable);
+			await That(root.GetResolvability<IUnknown>().Status).IsEqualTo(AwaitenResolvabilityStatus.NotRegistered)
+				.Because("a type that is neither registered nor imported is not routed");
+		}
+
+		[Test]
+		public async Task OfAClosingOfAnOpenImport_IsExternal()
+		{
+			using OpenImportingContainer.Root root = new();
+
+			await That(root.GetResolvability<ILog<Order>>().Status).IsEqualTo(AwaitenResolvabilityStatus.External)
+				.Because("every closing of an open import is routed, also one the graph does not consume");
+		}
+
+		[Test]
+		public async Task OfADeclaredImportAVariantRegistrationCouldServe_IsExternal()
+		{
+			using VariantImportingContainer.Root root = new();
+
+			await That(root.GetResolvability<IHandler<Order>>().Status).IsEqualTo(AwaitenResolvabilityStatus.External)
+				.Because("a declared import goes to the host ahead of the variance fallback");
+		}
+
+		[Test]
+		public async Task UnderImportServices_FollowsTheRouting()
+		{
+			using ImportingEverythingContainer.Root root = new();
+
+			await That(root.GetResolvability<IClock>().Status).IsEqualTo(AwaitenResolvabilityStatus.External)
+				.Because("[ImportServices] routes an unregistered unkeyed type to the host");
+			await That(root.GetResolvability(typeof(IClock), "utc").Status).IsEqualTo(AwaitenResolvabilityStatus.NotRegistered)
+				.Because("[ImportServices] does not route a keyed resolution");
+			await That(root.GetResolvability<SlowService>().Status).IsEqualTo(AwaitenResolvabilityStatus.AsyncOnly)
+				.Because("a registered async-only service keeps its guidance");
+		}
+	}
 }

@@ -2455,7 +2455,8 @@ internal sealed class AwaitenServiceLocator(IAwaitenRoot container, IAwaitenScop
 
         Type elementType = type.GenericTypeArguments[0];
         return elementType.IsValueType
-               || container.GetResolvability(elementType, null).Status != AwaitenResolvabilityStatus.NotRegistered
+               || container.GetResolvability(elementType, null).Status
+                   is not (AwaitenResolvabilityStatus.NotRegistered or AwaitenResolvabilityStatus.External)
             ? null
             : elementType;
     }

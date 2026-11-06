@@ -33,4 +33,18 @@ public sealed class AwaitenServiceProviderExternalResolver : IExternalResolver
 			: (_provider as IKeyedServiceProvider)?.GetKeyedService(serviceType, key);
 		return instance is not null;
 	}
+
+	/// <summary>
+	///     Whether the provider reports <paramref name="serviceType" /> under <paramref name="key" /> as a service,
+	///     through its own <see cref="IServiceProviderIsService" /> or <see cref="IServiceProviderIsKeyedService" />,
+	///     or <see langword="false" /> when it does not offer the probe, because only the provider can tell. A keyed
+	///     service also needs an <see cref="IKeyedServiceProvider" />, as <see cref="TryResolve" /> does.
+	/// </summary>
+	internal bool IsService(Type serviceType, object? key)
+		=> key is null
+			? _provider.GetService(typeof(IServiceProviderIsService)) is IServiceProviderIsService probe
+			  && probe.IsService(serviceType)
+			: _provider is IKeyedServiceProvider
+			  && _provider.GetService(typeof(IServiceProviderIsKeyedService)) is IServiceProviderIsKeyedService keyedProbe
+			  && keyedProbe.IsKeyedService(serviceType, key);
 }

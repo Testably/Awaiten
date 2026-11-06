@@ -97,6 +97,19 @@ public partial class AdapterConventionTests
 		}
 
 		[Test]
+		public async Task EnumeratesEmptyForAnImportedElementType()
+		{
+			using ImportingContainer.Root container = new();
+			AwaitenServiceLocator locator = new(container, container);
+
+			object? resolved = locator.Resolve(typeof(IEnumerable<IChannel>));
+
+			await That(resolved).IsNotNull()
+				.Because("the container routes the imported element to the host but has no members of it, so its collection is empty");
+			await That(((IEnumerable<IChannel>)resolved!).Any()).IsFalse();
+		}
+
+		[Test]
 		public async Task AnswersNullForAValueElementType()
 		{
 			using LocatorContainer.Root container = new();
@@ -197,4 +210,14 @@ public partial class AdapterConventionTests
 	[Singleton<SyncHandler, IHandler>]
 	[Singleton<HandlerBag, IReadOnlyList<IHandler>>]
 	public static partial class SuppressedCollectionContainer;
+
+	public sealed class Switchboard(IChannel channel)
+	{
+		public IChannel Channel { get; } = channel;
+	}
+
+	[Container]
+	[ImportService<IChannel>]
+	[Transient<Switchboard>]
+	public static partial class ImportingContainer;
 }
