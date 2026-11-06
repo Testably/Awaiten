@@ -80,6 +80,13 @@ internal static partial class Sources
 		=> UniqueServices(instances, strict, syncAfterInit: true);
 
 	/// <summary>
+	///     Whether the typed async fast path caches the task of <paramref name="service" /> on the Root: for a
+	///     singleton, unless the service is a private nested type an <c>internal</c> field cannot hold.
+	/// </summary>
+	private static bool CachesTypedTask(InstanceModel instance, string service)
+		=> IsRootOwned(instance) && !instance.PrivateServices.AsArray().Contains(service);
+
+	/// <summary>
 	///     Emits the Root's <c>__typedTask</c> field for each singleton of the typed async fast path: the completed
 	///     <c>Task&lt;S&gt;</c> that <c>IAwaitenAsyncResolver&lt;S&gt;.ResolveAsync</c> hands out again once the
 	///     singleton is available.
@@ -91,7 +98,7 @@ internal static partial class Sources
 		foreach ((string service, int index) in TypedAsyncServices(instances, strict))
 		{
 			position++;
-			if (IsRootOwned(instances[index]))
+			if (CachesTypedTask(instances[index], service))
 			{
 				if (!separated)
 				{
@@ -142,7 +149,7 @@ internal static partial class Sources
 			Indent(builder, depth).AppendLine("{");
 			// Guard synchronously, like the Type-based ResolveAsync, before an async resolver could fault its task.
 			EmitDisposedGuard(builder, depth + 1);
-			if (!rootOwned)
+			if (!CachesTypedTask(instance, service))
 			{
 				Indent(builder, depth + 1).Append("return ").Append(resolution).AppendLine(";");
 				Indent(builder, depth).AppendLine("}");

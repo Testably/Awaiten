@@ -45,7 +45,7 @@ internal static partial class Sources
 		ServiceKey collectionKey = new(collection.Service, collection.Key);
 		AppendXmlSummary(builder, depth,
 			$"Asynchronously materializes the {XmlTypeRef(collection.Service)} collection, awaiting each member.");
-		Indent(builder, depth).Append("internal static async global::System.Threading.Tasks.Task<global::System.Collections.Generic.IAsyncEnumerable<")
+		Indent(builder, depth).Append("private static async global::System.Threading.Tasks.Task<global::System.Collections.Generic.IAsyncEnumerable<")
 			.Append(collection.Service).Append(">> ").Append(method).AppendLine("(Scope __s, global::System.Threading.CancellationToken cancellationToken)");
 		Indent(builder, depth).AppendLine("{");
 		Indent(builder, depth + 1).Append("return ").Append(AsyncCollectionExpression(collectionKey, names, instances, asynchronous: true)).AppendLine(";");

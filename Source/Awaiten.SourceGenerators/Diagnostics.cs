@@ -1724,6 +1724,22 @@ internal static class Diagnostics
 		isEnabledByDefault: true);
 
 	/// <summary>
+	///     A registration's implementation (for a <c>Factory</c> or <c>Instance</c> registration its registered type) or
+	///     one of its <c>[Arg]</c> types is, or contains, a private or protected nested type. The generated
+	///     <c>Root</c> and <c>Scope</c> are public classes nested in the container, and their resolvers return the
+	///     implementation and take the runtime arguments as <c>internal</c> members, which C# does not allow to expose a
+	///     less accessible type (CS0050/CS0051). A private type is fine when the container itself is nested privately
+	///     beside it, because then the generated members are no more visible than the type. The registration is skipped.
+	/// </summary>
+	public static readonly DiagnosticDescriptor RegisteredTypeLessAccessible = new(
+		"AWT216",
+		"A registered type is less accessible than the generated container",
+		"'{0}' cannot be registered: '{1}' is private or protected, but the generated container exposes it from internal resolver members of its Root and Scope, which would not compile; make '{1}' internal or public",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
 	///     A typed <c>Resolve&lt;T&gt;()</c> or <c>ResolveAsync&lt;T&gt;()</c> on a generated <c>Root</c> or
 	///     <c>Scope</c> names a closed service the container has no unkeyed registration for, so the call throws at
 	///     run time. The common case is a closing of an open generic registration that nothing in the graph injects:

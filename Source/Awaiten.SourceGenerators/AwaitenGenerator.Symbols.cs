@@ -92,6 +92,86 @@ partial class AwaitenGenerator
 		return null;
 	}
 
+	/// <summary>
+	///     The private or protected type within <paramref name="type" /> (the type itself, a containing type or a type
+	///     argument) that an <c>internal</c> member of the generated <c>Root</c> or <c>Scope</c> cannot expose, or
+	///     <see langword="null" /> when there is none. Those members are as visible as the container, so a narrower
+	///     type fits only when the container is itself nested privately within its reach; this mirrors the compiler's
+	///     consistent-accessibility rule (CS0050, CS0051, CS0052).
+	/// </summary>
+	private static INamedTypeSymbol? LessAccessibleThanContainer(ITypeSymbol type, INamedTypeSymbol containerSymbol)
+	{
+		if (type is IArrayTypeSymbol array)
+		{
+			return LessAccessibleThanContainer(array.ElementType, containerSymbol);
+		}
+
+		for (INamedTypeSymbol? current = type as INamedTypeSymbol; current is not null; current = current.ContainingType)
+		{
+			if (current.DeclaredAccessibility is Accessibility.Private or Accessibility.Protected or Accessibility.ProtectedAndInternal
+			    && !ContainerIsAsRestricted(current, containerSymbol))
+			{
+				return current;
+			}
+
+			foreach (ITypeSymbol argument in current.TypeArguments)
+			{
+				if (LessAccessibleThanContainer(argument, containerSymbol) is { } narrower)
+				{
+					return narrower;
+				}
+			}
+		}
+
+		return null;
+	}
+
+	/// <summary>
+	///     Whether the container is nested within the reach of the private or protected nested <paramref name="type" />
+	///     behind a private (or, for a protected type, protected) level, so the generated members are no more visible
+	///     than the type.
+	/// </summary>
+	private static bool ContainerIsAsRestricted(INamedTypeSymbol type, INamedTypeSymbol containerSymbol)
+	{
+		INamedTypeSymbol owner = type.ContainingType.OriginalDefinition;
+		bool isPrivate = type.DeclaredAccessibility == Accessibility.Private;
+		for (INamedTypeSymbol? level = containerSymbol; level is not null; level = level.ContainingType)
+		{
+			if (level.DeclaredAccessibility == Accessibility.Private)
+			{
+				for (INamedTypeSymbol? outer = level.ContainingType; outer is not null; outer = outer.ContainingType)
+				{
+					if (isPrivate ? SymbolEqualityComparer.Default.Equals(outer.OriginalDefinition, owner) : DerivesFrom(outer, owner))
+					{
+						return true;
+					}
+				}
+			}
+			else if (!isPrivate
+			         && level.DeclaredAccessibility is Accessibility.Protected or Accessibility.ProtectedAndInternal
+			         && level.ContainingType is { } parent
+			         && DerivesFrom(parent, owner))
+			{
+				return true;
+			}
+		}
+
+		return false;
+
+		static bool DerivesFrom(INamedTypeSymbol type, INamedTypeSymbol baseType)
+		{
+			for (INamedTypeSymbol? current = type; current is not null; current = current.BaseType)
+			{
+				if (SymbolEqualityComparer.Default.Equals(current.OriginalDefinition, baseType))
+				{
+					return true;
+				}
+			}
+
+			return false;
+		}
+	}
+
 	private static void ImmutableArrayGuard(
 		ImmutableArray<ITypeSymbol> typeArguments,
 		out ITypeSymbol? implementation,
