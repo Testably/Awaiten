@@ -313,7 +313,7 @@ internal static partial class Sources
 			// The async ctor carries the closed generics the bridge projects with, so it never
 			// constructs Task<TService> or the Task<object>->Task<T> converter reflectively.
 			builder.Append(", typeof(global::System.Threading.Tasks.Task<").Append(service.Service).Append(">), ")
-				.Append("__t => global::Awaiten.AwaitenTaskProjection.AsTask<").Append(service.Service).Append(">(__t)");
+				.Append("global::Awaiten.AwaitenTaskProjection.AsTask<").Append(service.Service).Append('>');
 		}
 		else if (disposalSuppressed)
 		{
@@ -1300,8 +1300,9 @@ internal static partial class Sources
 			}
 			else
 			{
-				// A compound value routes through a static __R forwarder over the resolving scope.
-				resolve = $"static __s => __R{forwarderOf[entries[i].Value]}(__s)";
+				// A compound value binds its static __R forwarder as a method group, not a lambda: the trim analyzer
+				// is quadratic in the number of lambdas in one method (#264).
+				resolve = $"__R{forwarderOf[entries[i].Value]}";
 			}
 
 			Indent(fields, depth + 2).Append("new __Bucket(typeof(").Append(entries[i].Type).Append("), ")

@@ -42,6 +42,41 @@ public class GeneralTests
 	}
 
 	[Test]
+	public async Task Container_BindsTableDelegatesAsMethodGroups_SoTheTrimAnalyzerStaysLinear()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Threading;
+		                                       using System.Threading.Tasks;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class A { }
+		                                       public sealed class B : IAsyncInitializable
+		                                       {
+		                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+		                                       }
+
+		                                       [Container]
+		                                       [Singleton<A>]
+		                                       [Singleton<B>]
+		                                       public static partial class MyContainer
+		                                       {
+		                                       }
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(source).Contains("new __Bucket(typeof(global::System.Func<global::MyCode.A>), __R")
+			.Because("a compound dispatch entry binds its forwarder as a method group, since the trim analyzer is quadratic in the lambdas of one method");
+		await That(source).DoesNotContain("static __s => __R")
+			.Because("no compound dispatch entry wraps its forwarder in a lambda");
+		await That(source).Contains("typeof(global::System.Threading.Tasks.Task<global::MyCode.B>), global::Awaiten.AwaitenTaskProjection.AsTask<global::MyCode.B>)")
+			.Because("the async projection of a registration is bound as a method group, not one lambda per registration");
+	}
+
+	[Test]
 	public async Task EmptyContainer_EmitsAPartialImplementationWithoutDiagnostics()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -1908,7 +1943,7 @@ public class GeneralTests
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
 		// Even when a keyed member is async-tainted (withholding the synchronous shape), the awaited Task<…> view is always synchronously obtainable and gets its own dispatch slot.
-		await That(source).Contains("typeof(global::System.Threading.Tasks.Task<global::System.Collections.Generic.IReadOnlyDictionary<string, global::MyCode.IChannel>>), static __s => __R")
+		await That(source).Contains("typeof(global::System.Threading.Tasks.Task<global::System.Collections.Generic.IReadOnlyDictionary<string, global::MyCode.IChannel>>), __R")
 			.Because("the awaited keyed dictionary joins the synchronous by-type dispatch even when a member is async-tainted");
 	}
 

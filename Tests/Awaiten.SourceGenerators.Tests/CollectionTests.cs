@@ -1079,7 +1079,7 @@ public class CollectionTests
 		// Unlike the synchronous shapes and IAsyncEnumerable<T>, the awaited collection stays on the synchronous
 		// by-type dispatch even with an async-tainted member: its forwarder hands back an already-started task
 		// (default token) that awaits the async member behind it.
-		await That(source).Contains("typeof(global::System.Threading.Tasks.Task<global::System.Collections.Generic.IReadOnlyList<global::MyCode.IPlugin>>), static __s => __R")
+		await That(source).Contains("typeof(global::System.Threading.Tasks.Task<global::System.Collections.Generic.IReadOnlyList<global::MyCode.IPlugin>>), __R")
 			.Because("the awaited collection is a synchronous by-type dispatch entry even with an async member");
 		await That(source).Contains("await Root.ResolveAsyncPluginAsync(__s.__root, default).ConfigureAwait(false)")
 			.Because("the by-type awaited collection awaits its async member with the default token");
