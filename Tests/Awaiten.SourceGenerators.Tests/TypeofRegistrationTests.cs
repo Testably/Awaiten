@@ -576,5 +576,117 @@ public class TypeofRegistrationTests
 			await That(result.Diagnostics).Contains("*AWT168*").AsWildcard()
 				.Because("the contextual key overrides the explicit Key on an open generic too");
 		}
+
+		[Test]
+		public async Task TwoFactories_AreTwoImplementationsOfTheClosing()
+		{
+			GeneratorResult result = Generator.Run($$"""
+			                                         using Awaiten;
+
+			                                         namespace MyCode;
+
+			                                         {{Model}}
+			                                         public sealed class Root { public Root(IRepository<Order> order, IRepository<Order>[] orders) { } }
+
+			                                         [Container]
+			                                         [Singleton(typeof(IRepository<>), Factory = nameof(MakeA))]
+			                                         [Singleton(typeof(IRepository<>), Factory = nameof(MakeB))]
+			                                         [Transient<Root>]
+			                                         public static partial class MyContainer
+			                                         {
+			                                         	private static IRepository<T> MakeA<T>() => new Repository<T>();
+			                                         	private static IRepository<T> MakeB<T>() => new AuditedRepository<T>();
+			                                         }
+			                                         """);
+
+			await That(result.Diagnostics).IsEmpty();
+			string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+			await That(source).Contains("MakeA<global::MyCode.Order>()");
+			await That(source).Contains("MakeB<global::MyCode.Order>()")
+				.Because("the second open factory is not dropped from the closing");
+		}
+
+		[Test]
+		public async Task TheSameFactoryTwice_IsOneImplementationOfTheClosing()
+		{
+			GeneratorResult result = Generator.Run($$"""
+			                                         using Awaiten;
+
+			                                         namespace MyCode;
+
+			                                         {{Model}}
+			                                         public sealed class Root { public Root(IRepository<Order>[] orders) { } }
+
+			                                         [Container]
+			                                         [Singleton(typeof(IRepository<>), Factory = nameof(Make))]
+			                                         [Singleton(typeof(IRepository<>), Factory = nameof(Make))]
+			                                         [Transient<Root>]
+			                                         public static partial class MyContainer
+			                                         {
+			                                         	private static IRepository<T> Make<T>() => new Repository<T>();
+			                                         }
+			                                         """);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("registrations naming the same member of the same type close into one implementation without a conflict");
+			string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+			await That(source.Split(["Make<global::MyCode.Order>()"], System.StringSplitOptions.None)).HasCount(2)
+				.Because("the one implementation is built at a single call site");
+		}
+
+		[Test]
+		public async Task FallbackFactory_YieldsToAStrongerOpenFactory()
+		{
+			GeneratorResult result = Generator.Run($$"""
+			                                         using Awaiten;
+
+			                                         namespace MyCode;
+
+			                                         {{Model}}
+			                                         public sealed class Root { public Root(IRepository<Order>[] orders) { } }
+
+			                                         [Container]
+			                                         [Transient(typeof(IRepository<>), Factory = nameof(MakeDefault), Fallback = Fallback.Warn)]
+			                                         [Transient(typeof(IRepository<>), Factory = nameof(Make))]
+			                                         [Transient<Root>]
+			                                         public static partial class MyContainer
+			                                         {
+			                                         	private static IRepository<T> MakeDefault<T>() => new Repository<T>();
+			                                         	private static IRepository<T> Make<T>() => new AuditedRepository<T>();
+			                                         }
+			                                         """);
+
+			await That(result.Diagnostics).IsEmpty();
+			string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+			await That(source).Contains("Make<global::MyCode.Order>()");
+			await That(source).DoesNotContain("MakeDefault<global::MyCode.Order>()")
+				.Because("the overridable default factory's closing is dropped in full, even from the collection");
+		}
+
+		[Test]
+		public async Task TwoWarnFallbackFactories_ReportAwt148()
+		{
+			GeneratorResult result = Generator.Run($$"""
+			                                         using Awaiten;
+
+			                                         namespace MyCode;
+
+			                                         {{Model}}
+			                                         public sealed class Root { public Root(IRepository<Order> orders) { } }
+
+			                                         [Container]
+			                                         [Transient(typeof(IRepository<>), Factory = nameof(MakeA), Fallback = Fallback.Warn)]
+			                                         [Transient(typeof(IRepository<>), Factory = nameof(MakeB), Fallback = Fallback.Warn)]
+			                                         [Transient<Root>]
+			                                         public static partial class MyContainer
+			                                         {
+			                                         	private static IRepository<T> MakeA<T>() => new Repository<T>();
+			                                         	private static IRepository<T> MakeB<T>() => new AuditedRepository<T>();
+			                                         }
+			                                         """);
+
+			await That(result.Diagnostics).Contains("*AWT148*").AsWildcard()
+				.Because("two overridable default factories compete for the closing with nothing stronger to decide");
+		}
 	}
 }

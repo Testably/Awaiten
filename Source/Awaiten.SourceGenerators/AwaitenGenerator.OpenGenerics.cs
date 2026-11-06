@@ -508,20 +508,16 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     Synthesizes a closed <see cref="RawRegistration" /> for every open registration whose open form matches
-	///     <paramref name="closed" />'s open form (exact arity, v1), in declaration order, deduped by (closed
-	///     implementation, key). A single match yields the single-dispatch registration; several yield the members
-	///     of a closed-generic collection. Each synthesized implementation is enqueued one depth deeper so its own
-	///     closed generic dependencies expand in turn.
+	///     <paramref name="closed" />'s open form (exact arity, v1), in declaration order. A single match yields the
+	///     single-dispatch registration; several yield the members of a closed-generic collection. Two closings of one
+	///     implementation are left to coalescing, which shares or rejects them as it does closed registrations. Each
+	///     synthesized implementation is enqueued one depth deeper so its own closed generic dependencies expand in turn.
 	/// </summary>
 	private static void ExpandClosedService(INamedTypeSymbol closed, int depth, ExpansionContext context)
 	{
 		INamedTypeSymbol openForm = closed.ConstructedFrom;
 		string closedService = closed.ToDisplayString(FullyQualified);
 		ITypeSymbol[] typeArguments = closed.TypeArguments.ToArray();
-
-		// Dedup by (implementation, key, consumer): two open registrations that produce the same closed implementation
-		// under different keys (or contextual consumers) must both survive as distinct registrations.
-		HashSet<string> synthesized = new(StringComparer.Ordinal);
 
 		// Strong templates first (OrderBy is stable, so declaration order holds within each group), so a Fallback
 		// template can tell below whether a stronger registration already claims this closing.
@@ -535,11 +531,6 @@ partial class AwaitenGenerator
 			string closedImplName = closedImpl.ToDisplayString(FullyQualified);
 
 			if (!TryAcceptClosing(candidate, closed, closedService, closedImplName, context, out List<IMethodSymbol> factories))
-			{
-				continue;
-			}
-
-			if (!synthesized.Add(closedImplName + "\0" + candidate.Key + "\0" + candidate.WhenInjectedInto))
 			{
 				continue;
 			}

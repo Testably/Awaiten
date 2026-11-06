@@ -452,5 +452,72 @@ public partial class DiagnosticTests
 					.Because("a Fallback registration is replaced in full by the container's registration, hook included");
 			}
 		}
+
+		[Test]
+		public async Task DoesNotReportForOpenFactoriesOfTheSameNameThatDifferInSuppressDisposal()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IRepo<T> { }
+			                                       public sealed class Repo<T> : IRepo<T> { }
+			                                       public sealed class Order { }
+			                                       public sealed class Consumer
+			                                       {
+			                                       	public Consumer(IRepo<Order> repo) { }
+			                                       }
+
+			                                       [Module]
+			                                       [Singleton(typeof(IRepo<>), Factory = nameof(Make))]
+			                                       public static class RepoModule
+			                                       {
+			                                       	public static IRepo<T> Make<T>() => new Repo<T>();
+			                                       }
+
+			                                       [Container]
+			                                       [Import(typeof(RepoModule))]
+			                                       [Singleton(typeof(IRepo<>), Factory = nameof(Make), SuppressDisposal = true)]
+			                                       [Transient<Consumer>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       	public static IRepo<T> Make<T>() => new Repo<T>();
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("the module's and the container's open factories are different implementations of the closing, so each keeps its own SuppressDisposal");
+		}
+
+		[Test]
+		public async Task ReportsForOpenFactoriesNamingTheSameMemberWithDifferentDirectives()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IRepo<T> { }
+			                                       public sealed class Repo<T> : IRepo<T> { }
+			                                       public sealed class Order { }
+			                                       public sealed class Consumer
+			                                       {
+			                                       	public Consumer(IRepo<Order> repo) { }
+			                                       }
+
+			                                       [Container]
+			                                       [Singleton(typeof(IRepo<>), Factory = nameof(Make))]
+			                                       [Singleton(typeof(IRepo<>), Factory = nameof(Make), SuppressDisposal = true)]
+			                                       [Transient<Consumer>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       	public static IRepo<T> Make<T>() => new Repo<T>();
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT166*'MyCode.IRepo<MyCode.Order>'*SuppressDisposal*").AsWildcard()
+				.Because("open registrations naming the same factory close into one implementation, which is disposed one way only");
+		}
 	}
 }

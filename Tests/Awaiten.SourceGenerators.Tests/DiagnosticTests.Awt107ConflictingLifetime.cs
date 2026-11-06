@@ -235,5 +235,95 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).Contains("*AWT107*'MyCode.IClock'*").AsWildcard()
 				.Because("registrations naming the same factory are one implementation, which has a single lifetime, and the message names the service rather than an internal identity");
 		}
+
+		[Test]
+		public async Task DoesNotReportForOpenFactoriesNamingDifferentMembers()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IRepo<T> { }
+			                                       public sealed class Repo<T> : IRepo<T> { }
+			                                       public sealed class Order { }
+			                                       public sealed class Consumer
+			                                       {
+			                                       	public Consumer(IRepo<Order>[] repos) { }
+			                                       }
+
+			                                       [Container]
+			                                       [Singleton(typeof(IRepo<>), Factory = nameof(MakeA))]
+			                                       [Transient(typeof(IRepo<>), Factory = nameof(MakeB))]
+			                                       [Transient<Consumer>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       	public static IRepo<T> MakeA<T>() => new Repo<T>();
+			                                       	public static IRepo<T> MakeB<T>() => new Repo<T>();
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("each open factory's closing is its own implementation, so each keeps its own lifetime");
+		}
+
+		[Test]
+		public async Task ReportsForOpenFactoriesNamingTheSameMember()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IRepo<T> { }
+			                                       public sealed class Repo<T> : IRepo<T> { }
+			                                       public sealed class Order { }
+			                                       public sealed class Consumer
+			                                       {
+			                                       	public Consumer(IRepo<Order> repo) { }
+			                                       }
+
+			                                       [Container]
+			                                       [Singleton(typeof(IRepo<>), Factory = nameof(Make))]
+			                                       [Transient(typeof(IRepo<>), Factory = nameof(Make))]
+			                                       [Transient<Consumer>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       	public static IRepo<T> Make<T>() => new Repo<T>();
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT107*'MyCode.IRepo<MyCode.Order>'*Singleton*Transient*").AsWildcard()
+				.Because("open registrations naming the same factory close into one implementation, which has a single lifetime, as for the closed form");
+		}
+
+		[Test]
+		public async Task ReportsForTwoOpenRegistrationsOfOneImplementation()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IRepo<T> { }
+			                                       public sealed class Repo<T> : IRepo<T> { }
+			                                       public sealed class Order { }
+			                                       public sealed class Consumer
+			                                       {
+			                                       	public Consumer(IRepo<Order> repo) { }
+			                                       }
+
+			                                       [Container]
+			                                       [Singleton(typeof(Repo<>), typeof(IRepo<>))]
+			                                       [Transient(typeof(Repo<>), typeof(IRepo<>))]
+			                                       [Transient<Consumer>]
+			                                       public static partial class MyContainer
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT107*'MyCode.Repo<MyCode.Order>'*Singleton*Transient*").AsWildcard()
+				.Because("both open registrations close into Repo<Order>, which has a single lifetime, as two closed registrations of it would");
+		}
 	}
 }
