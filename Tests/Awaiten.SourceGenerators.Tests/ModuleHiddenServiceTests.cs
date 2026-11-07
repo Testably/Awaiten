@@ -1429,6 +1429,48 @@ public class ModuleHiddenServiceTests
 			await That(result.Diagnostics).Contains("*AWT166*'Lib.Store'*OnActivated*").AsWildcard()
 				.And.Contains("*AWT166*'Lib.Store'*SuppressDisposal*").AsWildcard()
 				.Because("the first import wins and the later one sets directives it does not, as in a container of the modules' own assembly");
+			await That(result.Diagnostics).Contains("*AWT166*'Lib.BModule.Activate'*").AsWildcard()
+				.And.DoesNotContain("*Hook_*").AsWildcard()
+				.Because("the message names the hook the module declares, not its generated wrapper");
+		}
+
+		[Test]
+		public async Task HookOfASelfCompiledRegistrationOfALaterImport_IsNamedInAwt166()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly("""
+				using Awaiten;
+
+				namespace Lib;
+
+				public interface IFront { }
+				public interface IBack { }
+				internal sealed class Impl : IFront, IBack { }
+
+				[Module]
+				[Singleton<Impl, IFront>]
+				public static partial class AModule { }
+
+				[Module]
+				[Singleton<Impl, IBack>(OnActivated = nameof(Activate))]
+				public static partial class BModule
+				{
+				    internal static void Activate(Impl impl) { }
+				}
+				""", """
+				using Awaiten;
+				using Lib;
+
+				namespace MyCode;
+
+				[Container]
+				[Import(typeof(AModule))]
+				[Import(typeof(BModule))]
+				public static partial class MyContainer;
+				""");
+
+			await That(result.Diagnostics).Contains("*AWT166*'Lib.Impl'*OnActivated*'Lib.BModule.Activate'*").AsWildcard()
+				.And.DoesNotContain("*Hook_*").AsWildcard()
+				.Because("the message names the hook the module declares, not its generated wrapper");
 		}
 
 		[Test]

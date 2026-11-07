@@ -25,7 +25,8 @@ partial class AwaitenGenerator
 	///     Rewrites each diagnostic argument that names a generated handle of an imported module of another assembly to the
 	///     internal service it holds, as <c>Lib.BeanStore (internal to module Lib.CoffeeModule)</c>, which the message
 	///     quotes like any other type, so a message never names a type the user did not write. A handle inside a longer
-	///     argument, such as a type argument, is named by the service alone.
+	///     argument, such as a type argument, is named by the service alone. A generated hook wrapper is named by the
+	///     hook the module declares.
 	/// </summary>
 	private static void NameHiddenServices(INamedTypeSymbol container, Compilation compilation, List<DiagnosticInfo> diagnostics)
 	{
@@ -47,11 +48,21 @@ partial class AwaitenGenerator
 		}
 
 		Dictionary<string, (string Service, string Module)> handles = new(StringComparer.Ordinal);
+		Dictionary<string, string> hooks = new(StringComparer.Ordinal);
 		foreach (INamedTypeSymbol module in modules.Concat(providers))
 		{
 			string moduleName = Display(module.ToDisplayString(FullyQualified));
 			foreach (ModuleRegistration registration in ConstructedModuleRegistrations(module, compilation, members: true))
 			{
+				foreach (bool release in new[] { false, true, })
+				{
+					if (NamedArgument(registration.Attribute, release ? "OnRelease" : "OnActivated") is { } hook)
+					{
+						hooks[$"{moduleName}.{InternalsClass}.{HiddenHookName(registration.Implementation, release, hook)}"] = $"{moduleName}.{hook}";
+						hooks[$"{moduleName}.{InternalsClass}.{RegistrationHookWrapperName(registration.Implementation, release, hook)}"] = $"{moduleName}.{hook}";
+					}
+				}
+
 				string service = Display(registration.Service.ToDisplayString(FullyQualified));
 				handles[$"{moduleName}.{InternalsClass}.{HiddenHandleName(registration.Service)}"] = (service, moduleName);
 				if (HiddenProducer(module, HiddenFactoryName(registration.Implementation), compilation) is { Handle: { } instance, })
@@ -61,7 +72,7 @@ partial class AwaitenGenerator
 			}
 		}
 
-		if (handles.Count == 0)
+		if (handles.Count == 0 && hooks.Count == 0)
 		{
 			return;
 		}
@@ -70,7 +81,7 @@ partial class AwaitenGenerator
 		{
 			DiagnosticInfo diagnostic = diagnostics[index];
 			string[] arguments = diagnostic.MessageArgs.AsArray();
-			string[] renamed = arguments.Select(Rename).ToArray();
+			string[] renamed = arguments.Select(argument => Rename(hooks.Where(hook => argument.Contains(hook.Key)).Aggregate(argument, (named, hook) => named.Replace(hook.Key, hook.Value)))).ToArray();
 			if (!renamed.SequenceEqual(arguments))
 			{
 				diagnostics[index] = diagnostic with { MessageArgs = new EquatableArray<string>(renamed), };
