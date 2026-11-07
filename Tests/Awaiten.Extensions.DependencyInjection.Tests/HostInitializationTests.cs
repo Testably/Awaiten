@@ -108,6 +108,33 @@ public sealed partial class HostInitializationTests
 		await host.StopAsync(TestContext.Current!.Execution.CancellationToken);
 	}
 
+	public sealed class Menu;
+
+	[Container]
+	[ImportServices]
+	[Singleton<Menu>]
+	public static partial class ImportingHostContainer;
+
+	[Test]
+	public async Task WithInitialization_WiresTheResolverOfAContainerThatInjectsNoImport()
+	{
+		FixedClock clock = new();
+		using IHost host = new HostBuilder()
+			.ConfigureServices(services =>
+			{
+				services.AddSingleton<IClock>(clock);
+				services.AddAwaitenContainer<ImportingHostContainer.Root>().WithInitialization();
+			})
+			.Build();
+
+		await host.StartAsync(TestContext.Current!.Execution.CancellationToken);
+
+		await That(host.Services.GetRequiredService<ImportingHostContainer.Root>().Resolve<IClock>()).IsSameAs(clock)
+			.Because("warm-up wires the root to the host although its graph injects no import, so a direct resolve under [ImportServices] reaches the host");
+
+		await host.StopAsync(TestContext.Current!.Execution.CancellationToken);
+	}
+
 	[Container]
 	[Singleton<AsyncResource>]
 	public static partial class DoubleContainer;

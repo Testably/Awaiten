@@ -32,8 +32,10 @@ public interface IAwaitenRoot : IAwaitenScope, IAwaitenExternalResolverHost
 
 	/// <summary>
 	///     The <c>[ImportService&lt;T&gt;]</c> / <c>[ImportServices]</c> dependencies the container expects from an external
-	///     provider, each carrying its service type and optional <c>[FromKey]</c> resolution key. A host satisfies
-	///     these through <see cref="IAwaitenExternalResolverHost.ExternalResolver" />. Empty when there are none.
+	///     provider, each carrying its service type and optional <c>[FromKey]</c> resolution key: every imported type its
+	///     graph injects, and every closed <c>[ImportService&lt;T&gt;]</c> type it declares, which a direct resolve reaches
+	///     even when nothing injects it. A host satisfies these through
+	///     <see cref="IAwaitenExternalResolverHost.ExternalResolver" />. Empty when there are none.
 	/// </summary>
 	IReadOnlyList<AwaitenExternalDependency> ExternalDependencies { get; }
 

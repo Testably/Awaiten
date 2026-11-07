@@ -1130,19 +1130,6 @@ internal static class Diagnostics
 		isEnabledByDefault: true);
 
 	/// <summary>
-	///     A type declared <c>[ImportService]</c> is never consumed by any dependency in the graph (for an open generic
-	///     import, no closing of it is), so the declaration is dead - most often a mistyped or stale
-	///     <c>[ImportService]</c> left after a refactor.
-	/// </summary>
-	public static readonly DiagnosticDescriptor UnconsumedExternalService = new(
-		"AWT176",
-		"External service is never consumed",
-		"'{0}' is declared [ImportService] but no dependency in the container consumes it, so the declaration has no effect. Remove it or add the consuming dependency.",
-		"Awaiten",
-		DiagnosticSeverity.Warning,
-		isEnabledByDefault: true);
-
-	/// <summary>
 	///     An <c>[InjectProperty&lt;TImplementation&gt;]</c> targets a <c>TImplementation</c> produced by a
 	///     <c>Factory</c> or <c>Instance</c> registration. Property injection fills a container-constructed
 	///     instance through its object initializer; a factory or pre-built instance is produced whole by its

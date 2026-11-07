@@ -21,6 +21,27 @@ public sealed partial class OpenGenericImportTests
 	[Singleton<PaymentService>]
 	public static partial class LoggingContainer;
 
+	public sealed class Menu;
+
+	[Container]
+	[ImportService(typeof(ILogger<>))]
+	[Singleton<Menu>]
+	public static partial class UninjectedLoggingContainer;
+
+	[Test]
+	public async Task OpenImportNothingInjects_ResolvesAClosingFromTheRoot()
+	{
+		ServiceCollection services = new();
+		services.AddLogging();
+		services.AddAwaitenContainer<UninjectedLoggingContainer.Root>();
+		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
+		_ = provider.GetRequiredService<Menu>();
+		UninjectedLoggingContainer.Root root = provider.GetRequiredService<UninjectedLoggingContainer.Root>();
+
+		await That(root.Resolve<ILogger<Menu>>()).IsSameAs(provider.GetRequiredService<ILogger<Menu>>())
+			.Because("a direct resolve of any closing of an open import asks the host, so the bridge wires the root although no closing is injected");
+	}
+
 	[Test]
 	public async Task OpenImport_ResolvesEachClosingFromTheHostProvider()
 	{

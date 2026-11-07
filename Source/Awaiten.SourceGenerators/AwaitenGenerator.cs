@@ -372,7 +372,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 	/// <remarks>
 	///     Lives only inside one graph build and never reaches a model. <see cref="Closings" /> is filled while
 	///     dependencies are classified, because the model's service type strings no longer carry the generic definition
-	///     that AWT175 and AWT176 group the closings of an open import by.
+	///     that AWT175 matches the closings of an open import by.
 	/// </remarks>
 	internal sealed class ExternalServiceTypes
 	{
@@ -398,8 +398,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 
 		/// <summary>
 		///     Records every closing of an <see cref="Open" /> definition within <paramref name="type" /> (the type itself
-		///     and its type arguments, recursively), so a closing reached only through a relationship such as
-		///     <c>Func&lt;ILogger&lt;T&gt;&gt;</c> still counts as consuming its import.
+		///     and its type arguments, recursively).
 		/// </summary>
 		public void RecordClosings(ITypeSymbol type)
 		{
@@ -621,18 +620,9 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		// direct dependency on the service) is never reached, so report it now that every instance is built.
 		ReportUnappliedContextualBindings(conditionals, consumedConditionals, diagnostics);
 
-		// AWT176: a declared [ImportService<T>] whose type no graph edge ever routed externally is dead - a mistyped
-		// or stale declaration. Reported once every instance is built, so every dependency has had the chance to
-		// route. A type flagged AWT175 (registered, so resolved from the graph rather than externally) is excluded.
-		// An open import is dead when no closing of it is consumed, and contradictory (AWT175) for each routed closing
-		// the container also registers.
-		(HashSet<string> consumedExternal, HashSet<string> routedExternal) = ExternalConsumption(instances);
-		ReportUnconsumedExternalServices(externalServiceTypes.Closed, serviceToImpl, consumedExternal, containerSymbol, diagnostics);
-		ReportOpenExternalServices(externalServiceTypes, serviceToImpl, consumedExternal, routedExternal, containerSymbol, diagnostics);
-		if (inheritance is not null)
-		{
-			RemoveInheritedUnconsumedExternalServices(inheritance, modules, compilation, diagnostics);
-		}
+		// AWT175 for an open import: each routed closing the container also registers is contradictory. Reported once
+		// every instance is built, so every dependency has had the chance to route.
+		ReportOpenExternalServices(externalServiceTypes, serviceToImpl, RoutedExternal(instances), containerSymbol, diagnostics);
 
 		// AWT180: an [InjectProperty<TImpl>] entry whose implementation type matches no registration is never
 		// applied, reported now that every registered implementation has been seen.

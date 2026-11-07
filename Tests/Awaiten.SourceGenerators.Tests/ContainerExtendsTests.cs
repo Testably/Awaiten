@@ -316,7 +316,7 @@ public class ContainerExtendsTests
 			                                       """);
 
 			await That(result.Diagnostics).IsEmpty()
-				.Because("an [ImportService] (AWT176), a contextual binding (AWT167) and an [InjectProperty] (AWT180) that only the replaced production clock used fall away with it");
+				.Because("a contextual binding (AWT167) and an [InjectProperty] (AWT180) that only the replaced production clock used fall away with it");
 		}
 
 		[Test]

@@ -2334,18 +2334,20 @@ public static partial class CoffeeShop;
 
 ### AWT176
 
-:::warning[Warning]
-A type declared `[ImportService]` is never consumed by any dependency in the graph, so the declaration is dead. For an open generic import, no closing of it is consumed. This is most often a stale or mistyped `[ImportService]`.
+:::note[Retired]
+No longer reported. Resolving an imported type directly from the container asks the host, so a declared `[ImportService]` is live even when nothing in the graph injects it. The id stays reserved and is never reused.
 :::
 
-```csharp expect=AWT176
+```csharp
 [Container]
 [ImportService<IPaymentGateway>]   // nothing in the graph depends on IPaymentGateway
 [Singleton<Menu>]
 public static partial class CoffeeShop;
+
+// shop.Resolve<IPaymentGateway>() asks the host
 ```
 
-**Fix:** Remove the declaration, or add the dependency that should consume it.
+The import is listed in the container's external dependencies, so [startup verification](./07-hosting/01-msdi-bridge.md#verify-external-dependencies-at-startup) still reports a host that does not provide it.
 
 ### AWT215
 

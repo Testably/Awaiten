@@ -499,7 +499,7 @@ internal static partial class Sources
 		EmitRegistrations(fields, members, body, instances, syncAfterInit);
 		// The external-dependency metadata: the advertised list (fields region when non-empty) and its getter
 		// (members region); the getter returns an empty array when the container has no external dependencies.
-		EmitExternalMetadata(fields, members, body, instances);
+		EmitExternalMetadata(fields, members, body, instances, context.Model);
 		Separate(members);
 		EmitResolvabilityMember(members, body, hasResolvabilityProbe);
 

@@ -32,7 +32,7 @@ public sealed class AwaitenContainerBuilder<TRoot>
 	/// <remarks>
 	///     The warm-up resolves the container root directly rather than through a bridged registration, which
 	///     is where a container's external (<c>[ImportService&lt;T&gt;]</c> / <c>[ImportServices]</c>) dependencies are
-	///     normally wired to the host's provider. So when the container has external dependencies and its
+	///     normally wired to the host's provider. So when the container's
 	///     <see cref="IAwaitenExternalResolverHost.ExternalResolver" /> was not wired explicitly, the hosted service
 	///     wires it to the host's (root) provider before warming, so an async-initialized singleton that draws
 	///     on an external service can be constructed during startup. Calling this more than once is a no-op.
@@ -66,7 +66,7 @@ public sealed class AwaitenContainerBuilder<TRoot>
 			// singleton external resolution, so wire it here unless a resolver was set explicitly. The resolver is
 			// set-once, so this takes the bridge's wiring lock (the probe) to not race a concurrent first bridged
 			// resolution into setting a second one.
-			if (_container.ExternalDependencies.Count > 0 && _container.ExternalResolver is null)
+			if (_container.ExternalResolver is null)
 			{
 				lock (_provider.GetRequiredService<AwaitenRootProviderProbe>())
 				{

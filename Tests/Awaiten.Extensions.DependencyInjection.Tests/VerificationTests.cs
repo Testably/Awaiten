@@ -149,6 +149,29 @@ public sealed partial class VerificationTests
 	}
 
 	[Test]
+	public async Task VerifyAwaitenContainers_PassesWhenAnImportNothingInjectsIsRegistered()
+	{
+		ServiceCollection services = new();
+		services.AddSingleton<ExternalDependencyTests.IClock>(new ExternalDependencyTests.FixedClock());
+		services.AddAwaitenContainer<ExternalDependencyTests.UninjectedImportContainer.Root>();
+		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
+
+		await That(() => provider.VerifyAwaitenContainers()).DoesNotThrow();
+	}
+
+	[Test]
+	public async Task VerifyAwaitenContainers_ThrowsWhenAnImportNothingInjectsIsMissing()
+	{
+		ServiceCollection services = new();
+		services.AddAwaitenContainer<ExternalDependencyTests.UninjectedImportContainer.Root>();
+		using ServiceProvider provider = services.BuildServiceProvider(validateScopes: true);
+
+		await That(() => provider.VerifyAwaitenContainers()).Throws<InvalidOperationException>()
+			.WithMessage("*IClock*").AsWildcard()
+			.Because("a declared import is a contract that the host provides the type, whether the graph injects it or a direct resolve asks for it");
+	}
+
+	[Test]
 	public async Task VerifyAwaitenContainers_PassesWhenScopedExternalDependencyIsRegistered()
 	{
 		// A scoped external dependency is a registration like any other; the check runs against the root

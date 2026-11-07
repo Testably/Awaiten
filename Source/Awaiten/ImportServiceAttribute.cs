@@ -34,8 +34,12 @@ namespace Awaiten;
 ///         symmetric with <see cref="ImportServicesAttribute" />. Combine with <see cref="FromKeyAttribute" /> at the
 ///         dependency to resolve a keyed external service; the key is forwarded to the resolver. Declaring a type both
 ///         <c>[ImportService&lt;T&gt;]</c> and registering it on the container is contradictory (AWT175), since a type
-///         is either host-owned or Awaiten-owned, not both; declaring a type external that no dependency in the graph
-///         consumes is a dead declaration (AWT176).
+///         is either host-owned or Awaiten-owned, not both.
+///     </para>
+///     <para>
+///         A direct <c>Resolve&lt;TService&gt;()</c> on the generated container asks the external resolver too, so the
+///         declaration is live even when no dependency in the graph injects <typeparamref name="TService" />, and
+///         <typeparamref name="TService" /> is listed in <see cref="IAwaitenRoot.ExternalDependencies" />.
 ///     </para>
 /// </remarks>
 /// <typeparam name="TService">The service type the container draws from the external provider.</typeparam>
@@ -59,14 +63,14 @@ public sealed class ImportServiceAttribute<TService> : Attribute
 ///         parameter, or an injected property, is satisfied from the container's <see cref="IExternalResolver" />,
 ///         forwarding any <see cref="FromKeyAttribute">[FromKey]</see> key. A relationship or collection over a matching
 ///         type (<c>Func&lt;T&gt;</c>, <c>Lazy&lt;T&gt;</c>, <c>Task&lt;T&gt;</c>, <c>IEnumerable&lt;T&gt;</c> and the
-///         like) is not routed. Each concrete closing the graph consumes is listed in
-///         <see cref="IAwaitenRoot.ExternalDependencies" />.
+///         like) is not routed. A direct resolve of a matching type asks the external resolver too. A closed type is
+///         listed in <see cref="IAwaitenRoot.ExternalDependencies" />, and of an unbound generic definition each
+///         concrete closing the graph consumes.
 ///     </para>
 ///     <para>
 ///         Honored on the <see cref="ContainerAttribute">container</see> and on any imported <c>[Module]</c>. A routed
-///         type that is also registered on the container is contradictory (AWT175), a declaration no dependency
-///         consumes is dead (AWT176), and a type that is neither closed nor an unbound generic definition is rejected
-///         (AWT215).
+///         type that is also registered on the container is contradictory (AWT175), and a type that is neither closed
+///         nor an unbound generic definition is rejected (AWT215).
 ///     </para>
 /// </remarks>
 /// <example><c>[ImportService(typeof(ILogger&lt;&gt;))]</c></example>

@@ -302,18 +302,6 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     Removes AWT176 for an <c>[ImportService]</c> only the base declares: the base reports its own unconsumed
-	///     declarations, and one whose consumer the extending container replaced is meant to fall away.
-	/// </summary>
-	private static void RemoveInheritedUnconsumedExternalServices(Inheritance inheritance, List<ImportedModule> modules, Compilation compilation, List<DiagnosticInfo> diagnostics)
-	{
-		ExternalServiceTypes own = CollectExternalServiceTypes(inheritance.Container, modules.FindAll(module => !module.Inherited), compilation, new List<DiagnosticInfo>());
-		HashSet<string> declared = new(own.Closed.Concat(own.Open).Select(Display), StringComparer.Ordinal);
-		diagnostics.RemoveAll(diagnostic => ReferenceEquals(diagnostic.Descriptor, Diagnostics.UnconsumedExternalService)
-		                                    && !declared.Contains(diagnostic.MessageArgs.AsArray()[0]));
-	}
-
-	/// <summary>
 	///     Whether the decorator or composite an inherited <c>[Decorate]</c>/<c>[Composite]</c> names (its first type,
 	///     generic or <c>typeof</c> form) cannot be constructed from the extending container, reporting AWT226 if so.
 	/// </summary>
