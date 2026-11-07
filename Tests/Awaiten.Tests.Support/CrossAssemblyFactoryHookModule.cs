@@ -1,7 +1,26 @@
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace Awaiten.Tests.Support;
+
+/// <summary>A heater the module builds through a public factory, preheats in an internal hook and starts by its convention.</summary>
+public sealed class FactoryHookedHeater : ISelfCompiledStartable
+{
+	internal FactoryHookedHeater()
+	{
+	}
+
+	/// <summary>The steps that ran on the heater, in order.</summary>
+	public List<string> Steps { get; } = new();
+
+	/// <inheritdoc />
+	public Task StartAsync(CancellationToken cancellationToken)
+	{
+		Steps.Add("convention");
+		return Task.CompletedTask;
+	}
+}
 
 /// <summary>A lamp the module builds through a public factory and lights in an internal activation hook.</summary>
 public interface IFactoryHookedLamp
@@ -32,10 +51,17 @@ internal sealed class FactoryHookedRouter : IFactoryHookedRouter
 ///     another assembly without <c>InternalsVisibleTo</c> runs them through the public wrappers the module generates.
 /// </summary>
 [Module]
+[AsyncInitializer<ISelfCompiledStartable>(nameof(ISelfCompiledStartable.StartAsync))]
 [Singleton<IFactoryHookedLamp>(Factory = nameof(CreateLamp), OnActivated = nameof(Light))]
 [Singleton<IFactoryHookedRouter>(Factory = nameof(CreateRouter), OnActivated = nameof(ConnectAsync))]
+[Singleton<FactoryHookedHeater>(Factory = nameof(CreateHeater), OnActivated = nameof(Preheat))]
 public static partial class FactoryHookModule
 {
+	/// <summary>Creates the heater.</summary>
+	public static FactoryHookedHeater CreateHeater() => new();
+
+	internal static void Preheat(FactoryHookedHeater heater) => heater.Steps.Add("hook");
+
 	/// <summary>Creates the lamp.</summary>
 	public static IFactoryHookedLamp CreateLamp() => new FactoryHookedLamp();
 

@@ -124,8 +124,12 @@ public partial class FriendModuleTests
 	{
 		using InternalPluginContainer.Root container = new();
 
-		await That(container.Resolve<IFriendInternalPlugin>().Wired).IsTrue()
+		IFriendInternalPlugin plugin = await container.ResolveAsync<IFriendInternalPlugin>();
+
+		await That(plugin.Wired).IsTrue()
 			.Because("the internal module's factory exposes the match under its internal interface and its wrapper takes the internal log");
+		await That(plugin.Started).IsTrue()
+			.Because("the container runs the internal module's internal convention, whose parameter takes the internal log, on the match the factory builds");
 	}
 
 	[Container]

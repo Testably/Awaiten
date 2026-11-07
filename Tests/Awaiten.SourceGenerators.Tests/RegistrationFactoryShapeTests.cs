@@ -1173,6 +1173,55 @@ public class RegistrationFactoryShapeTests
 			await That(result.Diagnostics).Contains("*AWT196*Lib.Roaster*").AsWildcard()
 				.Because("a container in another assembly could not name the internal interface");
 		}
+
+		private const string InternalConventionModule = """
+		                                                using System.Threading;
+		                                                using System.Threading.Tasks;
+		                                                using Awaiten;
+
+		                                                namespace Lib;
+
+		                                                internal interface IPlugin { }
+		                                                internal interface ILog { }
+		                                                internal interface IStartable { Task StartAsync(ILog log, CancellationToken cancellationToken); }
+		                                                internal sealed class Log : ILog { }
+		                                                internal sealed class Roaster : IPlugin, IStartable
+		                                                {
+		                                                    public Task StartAsync(ILog log, CancellationToken cancellationToken) => Task.CompletedTask;
+		                                                }
+
+		                                                [Module]
+		                                                [AsyncInitializer<IStartable>(nameof(IStartable.StartAsync))]
+		                                                [Singleton<Log, ILog>]
+		                                                [Scan<IPlugin>(As = ScanAs.Marker)]
+		                                                internal static partial class PluginModule;
+		                                                """;
+
+		[Test]
+		public async Task AnInternalModule_InitializesItsMatchesWithAnInternalConvention()
+		{
+			GeneratorResult result = Generator.Run(InternalConventionModule + """
+
+			                                                                  [Container]
+			                                                                  [Import(typeof(PluginModule))]
+			                                                                  internal static partial class AppContainer { }
+			                                                                  """);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("an internal module is imported only where its internal convention and the convention's parameter types can be named, so they are no reason for AWT234");
+			await That(result.Sources.Single(source => source.Key.Contains("AppContainer")).Value).Contains("await ((global::Lib.IStartable)");
+		}
+
+		[Test]
+		public async Task AnInternalModule_WithAnInternalConvention_IsImportedByAnAssemblyGrantedInternalsVisibleTo()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Granted(InternalConventionModule), InternalConsumer);
+
+			await That(result.Diagnostics).IsEmpty();
+			await That(result.Sources.Single(source => source.Key.Contains("AppContainer")).Value)
+				.Contains("global::Lib.PluginModule.Awaiten__Scan_Roaster_").And.Contains("await ((global::Lib.IStartable)")
+				.Because("the module builds the match through its factory instead of leaving it to the friend, which runs the internal convention on it");
+		}
 	}
 
 	public class FactoryMemberHooks
@@ -1326,6 +1375,115 @@ public class RegistrationFactoryShapeTests
 			await That(result.Diagnostics).IsEmpty();
 			await That(result.Sources.Single(source => source.Key.Contains("AppContainer")).Value)
 				.Contains("await global::Lib.GreetingModule.Awaiten__Hook_OnActivated_IKettle_*(*, cancellationToken)").AsWildcard();
+		}
+
+		private const string ConventionFactoryModule = """
+		                                               using System.Threading;
+		                                               using System.Threading.Tasks;
+		                                               using Awaiten;
+
+		                                               namespace Lib;
+
+		                                               public interface IClock { }
+		                                               public abstract class Appliance { public virtual Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask; }
+		                                               public sealed class Kettle : Appliance { internal Kettle() { } }
+
+		                                               [Module]
+		                                               [AsyncInitializer<Appliance>(nameof(Appliance.StartAsync))]
+		                                               [Singleton<Kettle>(Factory = nameof(CreateKettle), OnActivated = nameof(Boil))]
+		                                               public static partial class GreetingModule
+		                                               {
+		                                                   public static Kettle CreateKettle() => new Kettle();
+
+		                                                   internal static void Boil(Kettle kettle, IClock clock) { }
+		                                               }
+		                                               """;
+
+		[Test]
+		public async Task AModuleInAnotherAssembly_InitializesAFactoryRegistrationWithItsConvention()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(ConventionFactoryModule.Replace(", OnActivated = nameof(Boil)", ""), ClockConsumer);
+
+			await That(result.Diagnostics).IsEmpty();
+			await That(result.Sources.Single(source => source.Key.Contains("AppContainer")).Value).Contains("await ((global::Lib.Appliance)")
+				.Because("the module's convention judges what the module's factory declares it returns");
+		}
+
+		[Test]
+		public async Task AModuleInAnotherAssembly_InitializesAFactoryRegistrationWithItsConventionAfterTheWrappedHook()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(ConventionFactoryModule, ClockConsumer);
+
+			await That(result.Diagnostics).IsEmpty();
+			string source = result.Sources.Single(source => source.Key.Contains("AppContainer")).Value;
+			int hook = source.IndexOf("global::Lib.GreetingModule.Awaiten__Hook_OnActivated_Kettle_", StringComparison.Ordinal);
+			int convention = source.IndexOf("await ((global::Lib.Appliance)", StringComparison.Ordinal);
+			await That(hook).IsGreaterThan(-1)
+				.Because("the consumer runs the internal hook through the module's wrapper");
+			await That(convention).IsGreaterThan(hook)
+				.Because("the module's convention still initializes the registration, after its wrapped hook");
+		}
+
+		[Test]
+		public async Task AnInternalConventionOfAFactoryRegistrationWithAWrappedHook_ReportsAwt234AtTheContainer()
+		{
+			string library = ConventionFactoryModule.Replace("public virtual Task StartAsync", "internal virtual Task StartAsync");
+			GeneratorResult own = Generator.Run(library);
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(library, ClockConsumer);
+
+			await That(own.Diagnostics).IsEmpty()
+				.Because("the container constructs a Factory registration itself, so the container judges the convention, as for any registration it builds");
+			await That(ModuleSource(own)).Contains("Awaiten__Hook_OnActivated_Kettle_");
+			await That(result.Diagnostics).HasSingle().Matching(diagnostic => diagnostic.Contains("AWT234") && diagnostic.Contains("not accessible from the container"))
+				.Because("the hook wrapper makes the hook callable, but the container still cannot call the internal convention");
+		}
+
+		private const string SkippedHookConventionModule = """
+		                                                   using System.Threading;
+		                                                   using System.Threading.Tasks;
+		                                                   using Awaiten;
+
+		                                                   namespace Lib;
+
+		                                                   public abstract class Appliance { internal virtual Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask; }
+		                                                   public sealed class Kettle : Appliance { internal Kettle() { } }
+		                                                   internal sealed class Log { }
+
+		                                                   [Module]
+		                                                   [AsyncInitializer<Appliance>(nameof(Appliance.StartAsync))]
+		                                                   [Singleton<Log>]
+		                                                   [Singleton<Kettle>(Factory = nameof(CreateKettle), OnActivated = nameof(Boil))]
+		                                                   public static partial class GreetingModule
+		                                                   {
+		                                                       public static Kettle CreateKettle() => new Kettle();
+
+		                                                       internal static void Boil(Kettle kettle, Log log) { }
+		                                                   }
+		                                                   """;
+
+		[Test]
+		public async Task AnInternalConventionOfAFactoryRegistrationWithASkippedHook_IsCalledByAnAssemblyGrantedInternalsVisibleTo()
+		{
+			GeneratorResult library = Generator.Run(Granted(SkippedHookConventionModule));
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Granted(SkippedHookConventionModule), Consumer);
+
+			await That(library.Diagnostics).IsEmpty();
+			await That(ModuleSource(library)).Contains("Awaiten__HookSkipped_OnActivated_Kettle_");
+			await That(result.Diagnostics).IsEmpty()
+				.Because("an assembly granted InternalsVisibleTo calls both the internal hook and the internal convention directly");
+			await That(result.Sources.Single(source => source.Key.Contains("AppContainer")).Value)
+				.Contains("global::Lib.GreetingModule.Boil(").And.Contains("await ((global::Lib.Appliance)");
+		}
+
+		[Test]
+		public async Task AnInternalConventionOfAFactoryRegistrationWithASkippedHook_ReportsOnlyAwt231ToAnAssemblyNotGrantedInternalsVisibleTo()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(
+				Granted(SkippedHookConventionModule).Replace("\"TestAssembly\"", "\"OtherAssembly\""), Consumer);
+
+			await That(result.Diagnostics).Contains("*AWT231*Lib.GreetingModule*OnActivated hook 'Boil'*").AsWildcard();
+			await That(result.Diagnostics).DoesNotContain("*AWT234*").AsWildcard()
+				.Because("the container leaves out the registration whose hook it cannot call, so it never judges the registration's convention");
 		}
 	}
 

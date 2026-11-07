@@ -146,6 +146,17 @@ public sealed partial class RegistrationFactoryShapeTests
 			await That(container.GetResolvability<IFactoryHookedRouter>().Status).IsEqualTo(AwaitenResolvabilityStatus.AsyncOnly)
 				.Because("the wrapped asynchronous hook makes the router async-initialized");
 		}
+
+		[Test]
+		public async Task AFactoryRegistrationWithAWrappedHook_IsInitializedByTheModulesConvention()
+		{
+			using FactoryHookContainer.Root container = new();
+
+			FactoryHookedHeater heater = await container.ResolveAsync<FactoryHookedHeater>();
+
+			await That(heater.Steps).IsEqualTo(["hook", "convention",])
+				.Because("the container runs the internal hook through its wrapper and then the module's convention on what the factory returns");
+		}
 	}
 
 	public sealed class ModuleHidingTheImplementation

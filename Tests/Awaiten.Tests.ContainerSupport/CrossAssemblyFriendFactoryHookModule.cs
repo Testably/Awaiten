@@ -1,3 +1,6 @@
+using System.Threading;
+using System.Threading.Tasks;
+
 namespace Awaiten.Tests.ContainerSupport;
 
 /// <summary>A lamp the module builds through a public factory and lights in a hook that takes an internal dependency.</summary>
@@ -33,23 +36,39 @@ public static partial class SupportFriendFactoryHookModule
 internal interface IFriendInternalPlugin
 {
 	bool Wired { get; }
+
+	bool Started { get; }
 }
 
 internal interface IFriendInternalLog;
 
+internal interface IFriendInternalStartable
+{
+	Task StartAsync(IFriendInternalLog log, CancellationToken cancellationToken);
+}
+
 internal sealed class FriendInternalLog : IFriendInternalLog;
 
-internal sealed class FriendInternalPlugin : IFriendInternalPlugin
+internal sealed class FriendInternalPlugin : IFriendInternalPlugin, IFriendInternalStartable
 {
 	public bool Wired { get; set; }
+
+	public bool Started { get; private set; }
+
+	public Task StartAsync(IFriendInternalLog log, CancellationToken cancellationToken)
+	{
+		Started = log is not null;
+		return Task.CompletedTask;
+	}
 }
 
 /// <summary>
-///     An <c>internal</c> <c>[Module]</c> whose scan exposes its match under an internal interface and whose hook takes
-///     an internal dependency. Only this assembly and Awaiten.Tests, which it grants <c>InternalsVisibleTo</c>, can
-///     import it, so its factory and hook wrapper may name internal types.
+///     An <c>internal</c> <c>[Module]</c> whose scan exposes its match under an internal interface and whose hook and
+///     convention take an internal dependency. Only this assembly and Awaiten.Tests, which it grants
+///     <c>InternalsVisibleTo</c>, can import it, so its factory, hook wrapper and convention may name internal types.
 /// </summary>
 [Module]
+[AsyncInitializer<IFriendInternalStartable>(nameof(IFriendInternalStartable.StartAsync))]
 [Singleton<FriendInternalLog, IFriendInternalLog>]
 [Scan<IFriendInternalPlugin>(As = ScanAs.Marker, Lifetime = Lifetime.Singleton, OnActivated = nameof(Wire))]
 internal static partial class SupportInternalPluginModule
