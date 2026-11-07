@@ -373,6 +373,11 @@ partial class AwaitenGenerator
 		List<DiagnosticInfo> diagnostics)
 	{
 		INamedTypeSymbol module = hidden.Module;
+		foreach (HiddenImplementation candidate in hidden.Implementations)
+		{
+			ReportHandledConflicts(candidate.Implementation, module, compilation, diagnostics);
+		}
+
 		List<AsyncInitializerConvention> conventions = DeclaredAsyncInitializers(module, compilation, null);
 		List<HiddenImplementation> pending = hidden.Implementations
 			.Where(candidate => candidate.Viable
@@ -462,6 +467,70 @@ partial class AwaitenGenerator
 			=> MatchingAsyncInitializers(conventions, candidate.Implementation, convention => IsOfConventionType(candidate.Implementation, convention.Type)).Count > 0
 			   || candidate.Registrations.Any(registration => NamedArgument(registration.Attribute, "OnActivated") is { } hook
 			                                                  && AccessibleMembers(module, hook, compilation).OfType<IMethodSymbol>().Any(method => IsAsyncHookReturn(method.ReturnType, compilation)));
+	}
+
+	/// <summary>
+	///     Reports what a container in the module's own assembly reports when the registrations of an implementation the
+	///     module builds through a handle contradict each other: a different lifetime (AWT107), a different production
+	///     (AWT111), or a later registration that sets a directive the first one does not (AWT166). A container in another
+	///     assembly serves every registration from one instance handle with the lifetime and directives of the first one,
+	///     so it would silently differ instead. An overridable default is left out, since only the importing container
+	///     knows whether it yields.
+	/// </summary>
+	private static void ReportHandledConflicts(INamedTypeSymbol implementation, INamedTypeSymbol module, Compilation compilation, List<DiagnosticInfo> diagnostics)
+	{
+		List<ModuleRegistration> registrations = ConstructedModuleRegistrations(module, compilation, members: true)
+			.Where(registration => SymbolEqualityComparer.Default.Equals(registration.Implementation, implementation) && NamedFallback(registration.Attribute) == 0)
+			.ToList();
+		if (registrations.Count < 2)
+		{
+			return;
+		}
+
+		ModuleRegistration first = registrations[0];
+		string subject = Display(implementation.ToDisplayString(FullyQualified));
+		bool lifetimeReported = false;
+		bool productionReported = false;
+		HashSet<string> directivesReported = new(StringComparer.Ordinal);
+		foreach (ModuleRegistration registration in registrations.Skip(1))
+		{
+			if (!lifetimeReported && LifetimeOf(registration) != LifetimeOf(first))
+			{
+				lifetimeReported = true;
+				Report(Diagnostics.ConflictingLifetime, registration, LifetimeOf(first), LifetimeOf(registration));
+			}
+
+			if (!productionReported && (registration.Production != first.Production || registration.Member != first.Member))
+			{
+				productionReported = true;
+				Report(Diagnostics.ConflictingProduction, registration, DescribeProduction(first.Production, first.Member, module), DescribeProduction(registration.Production, registration.Member, module));
+			}
+
+			foreach (string hook in new[] { "OnActivated", "OnRelease", })
+			{
+				if (NamedArgument(registration.Attribute, hook) is { } named && named != NamedArgument(first.Attribute, hook) && directivesReported.Add(hook))
+				{
+					Report(Diagnostics.ConflictingLifecycleDirectives, registration, hook, DescribeHook(NamedArgument(first.Attribute, hook)), DescribeHook(named));
+				}
+			}
+
+			foreach (string flag in new[] { "Eager", "SuppressDisposal", })
+			{
+				if (NamedFlag(registration.Attribute, flag) && !NamedFlag(first.Attribute, flag) && directivesReported.Add(flag))
+				{
+					Report(Diagnostics.ConflictingLifecycleDirectives, registration, flag, "false", "true");
+				}
+			}
+		}
+
+		void Report(DiagnosticDescriptor descriptor, ModuleRegistration registration, params string[] arguments)
+			=> diagnostics.Add(new DiagnosticInfo(descriptor, LocationInfo.From(registration.Location), new EquatableArray<string>([subject, ..arguments,])));
+
+		string DescribeHook(string? hook)
+			=> hook is null ? "unset" : $"'{Display(QualifiedMember(module, hook))}'";
+
+		static string LifetimeOf(ModuleRegistration registration)
+			=> registration.Attribute.AttributeClass!.Name.Substring(0, registration.Attribute.AttributeClass.Name.Length - "Attribute".Length);
 	}
 
 	/// <summary>

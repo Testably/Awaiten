@@ -897,6 +897,106 @@ public class ModuleHiddenServiceTests
 		}
 	}
 
+	public class Conflicts
+	{
+		private static string Library(string registrations) => $$"""
+			using Awaiten;
+
+			namespace Lib;
+
+			public interface IPublic { }
+			public interface IUser { }
+			internal interface IInternal { }
+			internal sealed class Impl : IInternal, IPublic { }
+			internal sealed class User : IUser { public User(IInternal value) { } }
+
+			[Module]
+			{{registrations}}
+			[Singleton<User, IUser>]
+			public static partial class CoffeeModule
+			{
+			    internal static Impl Create() => new();
+			    internal static void Activate(Impl impl) { }
+			}
+			""";
+
+		[Test]
+		public async Task LifetimeConflict_ReportsAwt107InTheLibrary()
+		{
+			GeneratorResult result = RunLibrary(Library("[Singleton<Impl, IInternal>]\n[Transient<Impl, IPublic>]"));
+
+			await That(result.Diagnostics).Contains("*AWT107*'Lib.Impl'*Singleton*Transient*").AsWildcard()
+				.Because("a container in the module's own assembly reports the conflict, while one in another assembly serves every service from one instance handle");
+		}
+
+		[Test]
+		public async Task ProductionConflict_ReportsAwt111InTheLibrary()
+		{
+			GeneratorResult result = RunLibrary(Library("[Singleton<Impl, IInternal>]\n[Singleton<Impl, IPublic>(Factory = nameof(Create))]"));
+
+			await That(result.Diagnostics).Contains("*AWT111*'Lib.Impl'*a constructor*factory 'Lib.CoffeeModule.Create'*").AsWildcard()
+				.Because("the handle builds the implementation one way, so a second production would silently go its own way in another assembly");
+		}
+
+		[Test]
+		[Arguments("[Singleton<Impl, IInternal>]\n[Singleton<Impl, IPublic>(SuppressDisposal = true)]", "SuppressDisposal")]
+		[Arguments("[Singleton<Impl, IInternal>]\n[Singleton<Impl, IPublic>(Eager = true)]", "Eager")]
+		[Arguments("[Singleton<Impl, IInternal>]\n[Singleton<Impl, IPublic>(OnActivated = nameof(Activate))]", "OnActivated")]
+		public async Task DirectiveOnALaterRegistration_ReportsAwt166InTheLibrary(string registrations, string directive)
+		{
+			GeneratorResult result = RunLibrary(Library(registrations));
+
+			await That(result.Diagnostics).Contains($"*AWT166*'Lib.Impl'*{directive}*").AsWildcard()
+				.Because("the instance handle takes the directives of the first registration, as a container in the module's own assembly does, which reports the later one");
+		}
+
+		[Test]
+		public async Task ConsistentRegistrations_DoNotReportAConflict()
+		{
+			GeneratorResult result = RunLibrary(Library("[Singleton<Impl, IInternal>(SuppressDisposal = true, OnActivated = nameof(Activate))]\n[Singleton<Impl, IPublic>]"));
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("a later registration that leaves a directive unset merges with the first one");
+		}
+
+		[Test]
+		public async Task LifetimeConflictAcrossModules_ReportsAwt107InTheConsumer()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly("""
+				using Awaiten;
+
+				namespace Lib;
+
+				public interface IFront { }
+				public interface IBack { }
+				internal interface IInternal { }
+				internal sealed class Impl : IInternal, IFront, IBack { }
+
+				[Module]
+				[Singleton<Impl, IInternal>]
+				[Singleton<Impl, IFront>]
+				public static partial class CoffeeModule { }
+
+				[Module]
+				[Transient<Impl, IBack>]
+				public static partial class RoastingModule { }
+				""", """
+				using Awaiten;
+				using Lib;
+
+				namespace MyCode;
+
+				[Container]
+				[Import(typeof(CoffeeModule))]
+				[Import(typeof(RoastingModule))]
+				public static partial class MyContainer;
+				""");
+
+			await That(result.Diagnostics).Contains("*AWT107*'Lib.Impl'*Singleton*Transient*").AsWildcard()
+				.Because("the modules build the implementation into one instance handle, whose registrations the container checks like any other");
+		}
+	}
+
 	public class Diagnostics
 	{
 		[Test]

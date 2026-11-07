@@ -135,6 +135,8 @@ An implementation is registered with conflicting lifetimes.
 public static partial class CoffeeShop;
 ```
 
+The library's build reports this too for an implementation a module builds through a [generated handle](./04-registration/07-modules.md#services-only-the-module-uses), since a container in another assembly serves all its registrations from one instance.
+
 **Fix:** Register the implementation with a single lifetime attribute and remove the other.
 
 ### AWT111
@@ -154,6 +156,8 @@ public static partial class CoffeeShop
 ```
 
 Registrations that name the same implementation type are one implementation. A `Factory` or `Instance` registration that names only the service is its own implementation, identified by its member, unless another registration names that type as its implementation, as `[Singleton<Grinder>]` does here.
+
+The library's build reports this too for an implementation a module builds through a [generated handle](./04-registration/07-modules.md#services-only-the-module-uses), since a container in another assembly serves all its registrations from one instance.
 
 **Fix:** Produce the implementation one way only: keep either the `Factory` registration or the constructor registration, or name the same `Factory` on both.
 
@@ -667,6 +671,8 @@ public static partial class CoffeeShop
 ```
 
 A hook is identified by its declaring type and its name, so methods of the same name on a module and on the container, or on two modules, are different hooks and conflict. Registrations naming the same method of the same type share it.
+
+The library's build reports this too for an implementation a module builds through a [generated handle](./04-registration/07-modules.md#services-only-the-module-uses), since a container in another assembly serves all its registrations from one instance.
 
 **Fix:** Declare one hook for the implementation: set it on one registration and leave it unset on the others (an unset directive merges with the winner's), or name the same method on all of them. To let the container replace a module's registration, hooks included, mark the module's registration `Fallback`.
 
