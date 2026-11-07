@@ -59,11 +59,10 @@
 }
 
 .barRow {
-  /* Columns: library label, bar, value, ratio, sparkline. The ratio sits between
-     the value and the sparkline so the visual flow is "what" → "how much" →
-     "vs Awaiten" → "trend." */
+  /* Columns: library label, bar, value, trend, change. The change comes last
+     because it is the newest point of the trend. */
   display: grid;
-  grid-template-columns: 9rem 1fr 5.5rem 4rem 6rem;
+  grid-template-columns: 9rem 1fr 5.5rem 6rem 4.5rem;
   align-items: center;
   column-gap: 0.5rem;
   font-variant-numeric: tabular-nums;
@@ -156,9 +155,21 @@ button.barRow:focus-visible {
 }
 
 .ratio {
+  /* Rows without a trend still keep the change in the last column. */
+  grid-column-end: -1;
   text-align: right;
   font-size: 0.85rem;
   color: var(--ifm-color-emphasis-600);
+}
+
+.ratioBetter {
+  font-weight: 600;
+  color: var(--ifm-color-success);
+}
+
+.ratioWorse {
+  font-weight: 600;
+  color: var(--ifm-color-danger);
 }
 
 .barRowBaseline .ratio {
@@ -171,10 +182,6 @@ button.barRow:focus-visible {
   display: block;
   justify-self: end;
   color: var(--ifm-color-emphasis-500);
-}
-
-.sparklineBaseline {
-  color: var(--ifm-color-primary);
 }
 
 .caption {
@@ -205,7 +212,7 @@ button.barRow:focus-visible {
    area. */
 @media (max-width: 1200px) {
   .barRow {
-    grid-template-columns: 9rem 1fr 5.5rem 4rem;
+    grid-template-columns: 9rem 1fr 5.5rem 4.5rem;
   }
   .sparkline {
     display: none;

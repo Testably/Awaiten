@@ -1093,5 +1093,11 @@
         }
       }
     }
+  },
+  "versions": {
+    "MsDI": "10.0.14",
+    "Autofac": "9.3.4",
+    "DryIoc": "5.4.3",
+    "SimpleInjector": "5.6.0"
   }
 }
