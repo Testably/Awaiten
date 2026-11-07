@@ -69,6 +69,15 @@ public class ModuleHandleSharingTests
 	}
 
 	[Test]
+	public async Task InternalImplementationTwoModulesRegisterUnderOnePublicServiceEach_IsOneInstance()
+	{
+		using GrillContainer.Root container = new();
+
+		await That((object)container.Resolve<IGrillFront>()).IsSameAs(container.Resolve<IGrillBack>())
+			.Because("both modules build the grill into one instance handle, as a container in their own assembly builds one grill");
+	}
+
+	[Test]
 	public async Task ContextualEagerDefaultBesideAnOverrideOfItsService_IsBuiltEagerly()
 	{
 		int before = ContextualClockCounter.Constructed;
@@ -100,6 +109,11 @@ public sealed class LocalClock : IOverriddenClock;
 
 /// <summary>The clock this assembly registers for every consumer but the watch of <see cref="CrossAssemblyContextualEagerModule" />.</summary>
 public sealed class LocalContextualClock : IContextualClock;
+
+[Container]
+[Import(typeof(CrossAssemblyGrillFrontModule))]
+[Import(typeof(CrossAssemblyGrillBackModule))]
+public static partial class GrillContainer;
 
 [Container]
 [Import(typeof(CrossAssemblyContextualEagerModule))]

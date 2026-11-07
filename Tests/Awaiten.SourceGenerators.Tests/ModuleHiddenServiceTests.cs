@@ -1220,6 +1220,47 @@ public class ModuleHiddenServiceTests
 		}
 	}
 
+	public class InternalImplementationOfSeveralModules
+	{
+		private const string Library = """
+			using Awaiten;
+
+			namespace Lib;
+
+			public interface IA { }
+			public interface IB { }
+			internal sealed class Impl : IA, IB { }
+
+			[Module]
+			[Singleton<Impl, IA>]
+			public static partial class AModule { }
+
+			[Module]
+			[Singleton<Impl, IB>]
+			public static partial class BModule { }
+			""";
+
+		private const string Container = """
+			[Container]
+			[Import(typeof(AModule))]
+			[Import(typeof(BModule))]
+			public static partial class MyContainer;
+			""";
+
+		[Test]
+		public async Task RegisteredUnderOnePublicServiceEach_IsOneInstanceInAContainerOfAnotherAssembly()
+		{
+			GeneratorResult same = Generator.Run(Library + Container);
+			GeneratorResult cross = Generator.RunWithGeneratedReferencedAssembly(Library, "using Awaiten;\nusing Lib;\n\nnamespace MyCode;\n\n" + Container);
+
+			await That(same.Diagnostics).IsEmpty();
+			await That(cross.Diagnostics).IsEmpty()
+				.Because("both modules build the implementation into one instance handle, as a container in their own assembly builds one instance");
+			await That(cross.Sources["Awaiten.MyCode.MyContainer.g.cs"]).Contains(HiddenFactory("global::Lib.Impl"))
+				.And.DoesNotContain("Internals." + Factory("global::Lib.Impl"));
+		}
+	}
+
 	public class PrivateImplementationTakingAnInternalService
 	{
 		private static string Library(bool grant) => $$"""

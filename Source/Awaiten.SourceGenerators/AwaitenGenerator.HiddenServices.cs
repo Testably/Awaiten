@@ -216,6 +216,24 @@ partial class AwaitenGenerator
 					}
 				}
 			}
+
+			// An implementation that several modules construct for a consumer that cannot is one instance in the modules'
+			// own assembly, so each of them builds it into the shared instance handle instead of a factory of its own.
+			foreach (IGrouping<INamedTypeSymbol, INamedTypeSymbol> shared in Modules
+				         .SelectMany(module => Registrations[module]
+					         .GroupBy<ModuleRegistration, INamedTypeSymbol>(registration => registration.Implementation, SymbolEqualityComparer.Default)
+					         .Where(group => SelfCompiledTogether(module, group.Key, HandledTogether(group), compilation))
+					         .Select(group => (Implementation: group.Key, Module: module)))
+				         .GroupBy<(INamedTypeSymbol Implementation, INamedTypeSymbol Module), INamedTypeSymbol, INamedTypeSymbol>(entry => entry.Implementation, entry => entry.Module, SymbolEqualityComparer.Default)
+				         .Where(group => group.Count() > 1))
+			{
+				if (!HandledBy.TryGetValue(shared.Key, out List<INamedTypeSymbol>? handling))
+				{
+					HandledBy[shared.Key] = handling = new List<INamedTypeSymbol>();
+				}
+
+				handling.AddRange(shared.Where(module => !handling.Contains(module, SymbolEqualityComparer.Default)).ToList());
+			}
 		}
 
 		/// <summary>Every <c>[Module]</c> of the assembly with its closed lifetime registrations, members included.</summary>
@@ -404,6 +422,17 @@ partial class AwaitenGenerator
 		       && registrations.All(registration => SelfCompilesRegistration(module, implementation, registration.Service, compilation))
 		       && FactoryReturnType(implementation, services, new ModuleScanContext(module, compilation, new List<DiagnosticInfo>(), new HashSet<string>(StringComparer.Ordinal))) is null;
 	}
+
+	/// <summary>
+	///     Whether the module constructs <paramref name="implementation" /> for a consuming container that cannot: every
+	///     one of its <paramref name="registrations" /> is self-compiled (see <see cref="SelfCompilesRegistration" />), and
+	///     the module can build it through its constructor.
+	/// </summary>
+	private static bool SelfCompiledTogether(INamedTypeSymbol module, INamedTypeSymbol implementation, List<ModuleRegistration> registrations, Compilation compilation)
+		=> Buildable(module, implementation, registrations, compilation)
+		   && registrations[0].Production == ProductionKind.Constructor
+		   && !IsHiddenInModule(implementation, module, compilation)
+		   && registrations.All(registration => SelfCompilesRegistration(module, implementation, registration.Service, compilation));
 
 	/// <summary>
 	///     Whether <paramref name="service" /> is a service type no other assembly can name but the module's own

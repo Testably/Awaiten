@@ -101,6 +101,24 @@ internal sealed class OverriddenClock : IOverriddenClock, IOverriddenTick
 [Singleton<OverriddenClock, IOverriddenTick>]
 public static partial class CrossAssemblyOverriddenEagerModule;
 
+/// <summary>A front service of the internal grill that <see cref="CrossAssemblyGrillFrontModule" /> registers.</summary>
+public interface IGrillFront;
+
+/// <summary>A back service of the internal grill that <see cref="CrossAssemblyGrillBackModule" /> registers.</summary>
+public interface IGrillBack;
+
+internal sealed class Grill : IGrillFront, IGrillBack;
+
+/// <summary>A <c>[Module]</c> that registers the internal grill under one public service.</summary>
+[Module]
+[Singleton<Grill, IGrillFront>]
+public static partial class CrossAssemblyGrillFrontModule;
+
+/// <summary>A <c>[Module]</c> that registers the same internal grill under another public service.</summary>
+[Module]
+[Singleton<Grill, IGrillBack>]
+public static partial class CrossAssemblyGrillBackModule;
+
 /// <summary>A clock <see cref="CrossAssemblyContextualEagerModule" /> registers as an eager overridable default for <see cref="ContextualWatch" />.</summary>
 public interface IContextualClock;
 
