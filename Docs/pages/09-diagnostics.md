@@ -1919,7 +1919,7 @@ internal sealed class Roaster : IRoaster;
 public static class RoastingModule;
 ```
 
-A [self-compiled module scan](./04-registration/07-modules.md#self-compiled-scans) emits a factory method and a registration attribute into the module's partial, and a registration of an [internal implementation](./04-registration/07-modules.md#internal-implementations) a factory method, re-opening the whole nesting chain of a nested module. Add the `partial` modifier to the module class and every type containing it. A module whose registrations another assembly can construct, or that another assembly cannot name, needs no generated code and need not be partial. Reported in the module's own build.
+A [self-compiled module scan](./04-registration/07-modules.md#self-compiled-scans) emits a factory method and a registration attribute into the module's partial, and a registration of an [internal implementation](./04-registration/07-modules.md#internal-implementations) a factory method, re-opening the whole nesting chain of a nested module. Add the `partial` modifier to the module class and every type containing it. A module whose registrations another assembly can construct, or that another assembly cannot name, needs no generated code and need not be partial. A module without a `[Scan]` is reported only when its assembly grants `InternalsVisibleTo` to no assembly. Otherwise the module builds, and a container that can't construct the implementation reports [AWT231](#awt231). A registration of a type private to the module keeps the error. Reported in the module's own build.
 
 **Fix:** Add `partial` to the module and every type that contains it: `public static partial class PluginModule;`.
 
@@ -2037,7 +2037,7 @@ A generic `[Module]` (or one nested in a generic type) declares a `[Scan]`, or a
 public static partial class PluginModule<T>;   // no closed PluginModule<T> exists to [Import]
 ```
 
-A consumer imports a module by `typeof`, so there is no single closed module type to import from a generic declaration, and the generated partial could not re-open it by its bare name. Move the `[Scan]`, or the registration of the [internal implementation](./04-registration/07-modules.md#internal-implementations), onto a non-generic module.
+A consumer imports a module by `typeof`, so there is no single closed module type to import from a generic declaration, and the generated partial could not re-open it by its bare name. Move the `[Scan]`, or the registration of the [internal implementation](./04-registration/07-modules.md#internal-implementations), onto a non-generic module. A module without a `[Scan]` is reported only when its assembly grants `InternalsVisibleTo` to no assembly. Otherwise the module builds, and a container that can't construct the implementation reports [AWT231](#awt231).
 
 **Fix:** Move the `[Scan]` or the registration onto a non-generic module.
 
@@ -2145,7 +2145,7 @@ public static partial class EquipmentModule;
 public static partial class CoffeeShop;
 ```
 
-A module generates a factory for each [internal implementation](./04-registration/07-modules.md#internal-implementations) it registers. Some registrations are beyond what the factory supports: a constructor parameter type that isn't public ([AWT195](#awt195)), `[Inject]`, `[Arg]` or `[FromKey]` metadata ([AWT200](#awt200)), or one implementation under several services ([AWT197](#awt197)). The same holds for a match of the module's [`[Scan]`](./04-registration/07-modules.md#self-compiled-scans). When the library grants `InternalsVisibleTo` to any assembly, the module generates no factory for such a registration or match and records why. An assembly the library grants `InternalsVisibleTo` constructs the implementation itself. Any other container can't construct it, so it reports this error at its `[Import]`, names the reason, and leaves the registration out.
+A module generates a factory for each [internal implementation](./04-registration/07-modules.md#internal-implementations) it registers. Some registrations are beyond what the factory supports: a constructor parameter type that isn't public ([AWT195](#awt195)), `[Inject]`, `[Arg]` or `[FromKey]` metadata ([AWT200](#awt200)), or one implementation under several services ([AWT197](#awt197)). The same holds for a match of the module's [`[Scan]`](./04-registration/07-modules.md#self-compiled-scans), and for every registration of a module that can't carry a factory at all, because it is generic ([AWT201](#awt201)) or not `partial` ([AWT194](#awt194)). When the library grants `InternalsVisibleTo` to any assembly, the module generates no factory for such a registration or match and records why. An assembly the library grants `InternalsVisibleTo` constructs the implementation itself. Any other container can't construct it, so it reports this error at its `[Import]`, names the reason, and leaves the registration out.
 
 **Fix:** Grant the container's assembly `InternalsVisibleTo` in the library. Or make the implementation, its constructor and the constructor's parameter types public, or, for a scan match, fix the reason the message names.
 

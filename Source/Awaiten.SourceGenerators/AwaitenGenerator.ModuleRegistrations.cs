@@ -337,6 +337,49 @@ partial class AwaitenGenerator
 			: null;
 	}
 
+	/// <summary>
+	///     Whether an assembly granted <c>InternalsVisibleTo</c> can construct every self-compiled registration of
+	///     <paramref name="module" /> itself: the module's assembly grants it to any assembly, and no such registration
+	///     is hidden in the module (see <see cref="TypeHiddenInModule" />).
+	/// </summary>
+	private static bool FriendsConstructEveryRegistration(INamedTypeSymbol module, Compilation compilation)
+		=> GrantsInternalsVisibleTo(compilation.Assembly)
+		   && !ConstructedModuleRegistrations(module, compilation).Any(registration =>
+			   SelfCompilesRegistration(module, registration.Implementation, registration.Service, compilation)
+			   && TypeHiddenInModule(registration.Implementation, module, compilation) is not null);
+
+	/// <summary>
+	///     A deterministic name for the internal type, in the module's namespace, that records a module the generator
+	///     left to the assemblies granted <c>InternalsVisibleTo</c> because it is not partial. Its presence tells a
+	///     consumer that the module skipped its factories on purpose (AWT231), not built without the generator (AWT154).
+	/// </summary>
+	private static string ModuleNotPartialName(INamedTypeSymbol module)
+		=> $"Awaiten__ModuleNotPartial_{module.Name}_{Fnv1a(module.ToDisplayString(FullyQualified)):x8}";
+
+	/// <summary>
+	///     Why the imported module of another assembly can carry no generated factory, read from its metadata: it is
+	///     generic, or it recorded that it is not partial (see <see cref="ModuleNotPartialName" />). Otherwise
+	///     <see langword="null" />.
+	/// </summary>
+	private static string? ModuleShapeReason(INamedTypeSymbol module)
+	{
+		for (INamedTypeSymbol? type = module; type is not null; type = type.ContainingType)
+		{
+			if (type.IsGenericType)
+			{
+				return "the module is generic";
+			}
+		}
+
+		INamedTypeSymbol definition = module.OriginalDefinition;
+		string name = definition.ContainingNamespace is { IsGlobalNamespace: false, } ns
+			? $"{ns.ToDisplayString()}.{ModuleNotPartialName(definition)}"
+			: ModuleNotPartialName(definition);
+		return module.ContainingAssembly.GetTypeByMetadataName(name) is not null
+			? "the module, or a class that contains it, is not partial"
+			: null;
+	}
+
 	/// <summary>Whether <paramref name="assembly" /> grants <c>InternalsVisibleTo</c> to any assembly.</summary>
 	private static bool GrantsInternalsVisibleTo(IAssemblySymbol assembly)
 		=> assembly.GetAttributes().Any(attribute => attribute.AttributeClass?.ToDisplayString() == "System.Runtime.CompilerServices.InternalsVisibleToAttribute");

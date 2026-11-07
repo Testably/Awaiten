@@ -356,7 +356,8 @@ partial class AwaitenGenerator
 	///     traits off its metadata, so it initializes, disposes and shares it exactly as it would a type it constructs. A registration whose service this container cannot
 	///     name either is dropped: nothing here can resolve or depend on it (a self-compiled constructor parameter
 	///     is accessible, AWT195). Returns <see langword="null" /> for a dropped registration, after reporting
-	///     AWT231 once per implementation when the module recorded why it generated no factory for it, else AWT154
+	///     AWT231 once per implementation when the module recorded why it generated no factory for it or cannot carry
+	///     one (see <see cref="ModuleShapeReason" />), else AWT154
 	///     once per module when the module carries no generated factory for it. A module inherited through
 	///     <c>Extends</c> keeps such a registration instead, which the inheritance reports as inaccessible (AWT226).
 	/// </summary>
@@ -408,6 +409,10 @@ partial class AwaitenGenerator
 			if (SkippedRegistrationReason(module, implementation) is { } reason)
 			{
 				ReportNotSelfCompiled(context, module, implementation, "factory", reason, $"make '{Display(registration.ImplementationType)}', its constructor and the constructor's parameter types public");
+			}
+			else if (ModuleShapeReason(module) is { } shape)
+			{
+				ReportNotSelfCompiled(context, module, implementation, "factory", shape, $"make '{Display(registration.ImplementationType)}', its constructor and the constructor's parameter types public");
 			}
 			else if (!reportedNotSelfCompiled)
 			{

@@ -65,9 +65,35 @@ public partial class FriendModuleTests
 		await That((object)container.Resolve<IFriendRoaster>()).IsSameAs(plugins.Single(plugin => plugin is IFriendRoaster));
 	}
 
+	[Test]
+	public async Task ConstructsTheImplementationOfAModuleThatIsNotPartial()
+	{
+		using FriendShapeContainer.Root container = new();
+
+		await That(container.Resolve<IFriendWelcome>().GetType().Name).IsEqualTo("FriendWelcome")
+			.Because("the container constructs the internal implementation of a module that cannot carry a factory");
+	}
+
+	[Test]
+	public async Task ConstructsTheImplementationOfAGenericModule()
+	{
+		using FriendGenericContainer.Root container = new();
+
+		await That(container.Resolve<IFriendWelcome>().GetType().Name).IsEqualTo("FriendWelcome")
+			.Because("the container constructs the internal implementation of a generic module itself");
+	}
+
 	[Container]
 	[Import(typeof(SupportFriendModule))]
 	public static partial class FriendContainer;
+
+	[Container]
+	[Import(typeof(SupportFriendNotPartialModule))]
+	public static partial class FriendShapeContainer;
+
+	[Container]
+	[Import(typeof(SupportFriendGenericModule<int>))]
+	public static partial class FriendGenericContainer;
 
 	[Container]
 	[Import(typeof(SupportFriendScanModule))]

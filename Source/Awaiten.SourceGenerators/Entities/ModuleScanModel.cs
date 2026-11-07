@@ -14,6 +14,8 @@ namespace Awaiten.SourceGenerators.Entities;
 ///     (<see cref="Registrations" />), which a consumer finds by name from the module's own registration attribute.
 ///     <see cref="DeclaresScan" /> decides whether the <c>[GeneratedScanExpansion]</c> marker is emitted.
 ///     <see cref="Skipped" /> records each implementation whose factory the module leaves out.
+///     <see cref="NotPartialMarker" /> names the internal type that records a module left to the assemblies granted
+///     <c>InternalsVisibleTo</c> because it is not partial.
 /// </summary>
 internal sealed record ModuleScanModel(
 	string? Namespace,
@@ -25,7 +27,8 @@ internal sealed record ModuleScanModel(
 	EquatableArray<DiagnosticInfo> Diagnostics,
 	bool DeclaresScan = true,
 	EquatableArray<RegistrationFactory> Registrations = default,
-	EquatableArray<SkippedRegistration> Skipped = default);
+	EquatableArray<SkippedRegistration> Skipped = default,
+	string? NotPartialMarker = null);
 
 /// <summary>
 ///     An implementation the module generates no factory for, because an assembly granted <c>InternalsVisibleTo</c>
