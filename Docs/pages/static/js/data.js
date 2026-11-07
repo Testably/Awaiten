@@ -1344,6 +1344,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 18:36:35 2026 \u002B0100",
         "message": "docs: add a start page and move the documentation under /docs (#305)"
+      },
+      {
+        "sha": "370b625ea57213ef37c09f678a61c4bcc76b50b7",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 20:03:17 2026 \u002B0100",
+        "message": "feat!: let a container in another assembly use services a module registers under internal types (#293)"
       }
     ],
     "labels": [
@@ -1570,7 +1576,8 @@ window.BENCHMARK_DATA = {
       "ccf58c56",
       "2a2d7fcf",
       "2b142d5c",
-      "a3653614"
+      "a3653614",
+      "370b625e"
     ],
     "datasets": [
       {
@@ -1800,7 +1807,8 @@ window.BENCHMARK_DATA = {
           7.152551202901772,
           6.22518953787429,
           5.990023606098616,
-          5.6568721224864325
+          5.6568721224864325,
+          7.796339565267165
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -1812,6 +1820,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -2273,7 +2282,8 @@ window.BENCHMARK_DATA = {
           7.686421884940221,
           6.607575004654271,
           8.048060488487993,
-          5.304618752002716
+          5.304618752002716,
+          8.697762619990568
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -2285,6 +2295,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -2746,7 +2757,8 @@ window.BENCHMARK_DATA = {
           136.54314168294272,
           80.97903691927591,
           85.84115645090739,
-          91.2033970441137
+          91.2033970441137,
+          111.14538760185242
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -2758,6 +2770,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -3215,7 +3228,8 @@ window.BENCHMARK_DATA = {
           8.46698340658958,
           7.370255270351966,
           7.127158185201032,
-          7.721382867296537
+          7.721382867296537,
+          9.030579051146141
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -3227,6 +3241,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -3680,7 +3695,8 @@ window.BENCHMARK_DATA = {
           10.814559342769476,
           8.588356546064217,
           9.987180081861359,
-          10.4060402320964
+          10.4060402320964,
+          11.213501382332582
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -3692,6 +3708,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -5269,6 +5286,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 18:36:35 2026 \u002B0100",
         "message": "docs: add a start page and move the documentation under /docs (#305)"
+      },
+      {
+        "sha": "370b625ea57213ef37c09f678a61c4bcc76b50b7",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 20:03:17 2026 \u002B0100",
+        "message": "feat!: let a container in another assembly use services a module registers under internal types (#293)"
       }
     ],
     "labels": [
@@ -5495,7 +5518,8 @@ window.BENCHMARK_DATA = {
       "ccf58c56",
       "2a2d7fcf",
       "2b142d5c",
-      "a3653614"
+      "a3653614",
+      "370b625e"
     ],
     "datasets": [
       {
@@ -5725,7 +5749,8 @@ window.BENCHMARK_DATA = {
           8.1625124546034,
           6.307027402733054,
           6.276053121456733,
-          6.767882611070361
+          6.767882611070361,
+          8.386247757290091
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -5737,6 +5762,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -6198,7 +6224,8 @@ window.BENCHMARK_DATA = {
           8.013456351558368,
           6.5010578873065805,
           6.473943101508277,
-          5.5266898820797605
+          5.5266898820797605,
+          7.240685649789297
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -6210,6 +6237,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -6671,7 +6699,8 @@ window.BENCHMARK_DATA = {
           141.78986191749573,
           80.69127450670514,
           86.28255980014801,
-          96.9563953450748
+          96.9563953450748,
+          107.40489029884338
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -6683,6 +6712,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -7140,7 +7170,8 @@ window.BENCHMARK_DATA = {
           9.337876484862395,
           7.1331194788217545,
           7.1081315040588375,
-          8.095845530430475
+          8.095845530430475,
+          9.225028793017069
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -7152,6 +7183,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -7605,7 +7637,8 @@ window.BENCHMARK_DATA = {
           14.069668560073925,
           11.427632818264621,
           11.369449884692829,
-          10.922918966412544
+          10.922918966412544,
+          15.215904714663823
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -7617,6 +7650,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -9194,6 +9228,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 18:36:35 2026 \u002B0100",
         "message": "docs: add a start page and move the documentation under /docs (#305)"
+      },
+      {
+        "sha": "370b625ea57213ef37c09f678a61c4bcc76b50b7",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 20:03:17 2026 \u002B0100",
+        "message": "feat!: let a container in another assembly use services a module registers under internal types (#293)"
       }
     ],
     "labels": [
@@ -9420,7 +9460,8 @@ window.BENCHMARK_DATA = {
       "ccf58c56",
       "2a2d7fcf",
       "2b142d5c",
-      "a3653614"
+      "a3653614",
+      "370b625e"
     ],
     "datasets": [
       {
@@ -9650,7 +9691,8 @@ window.BENCHMARK_DATA = {
           15.677066132426262,
           16.406379848718643,
           23.68210225701332,
-          16.236739282097137
+          16.236739282097137,
+          17.331699498494466
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -9812,6 +9854,7 @@ window.BENCHMARK_DATA = {
           144,
           144,
           144,
+          208,
           208,
           208,
           208,
@@ -10123,7 +10166,8 @@ window.BENCHMARK_DATA = {
           1308.6835789998372,
           1286.1200045176915,
           1666.2849545796712,
-          1200.0716029575892
+          1200.0716029575892,
+          1238.0439668382917
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -10135,6 +10179,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          5688,
           5688,
           5688,
           5688,
@@ -10596,7 +10641,8 @@ window.BENCHMARK_DATA = {
           26508.70210484096,
           26349.615421840124,
           31544.145802815754,
-          26396.858467610677
+          26396.858467610677,
+          20687.157112630208
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -10831,7 +10877,8 @@ window.BENCHMARK_DATA = {
           32478,
           32478,
           32482,
-          32478
+          32478,
+          32476
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -11065,7 +11112,8 @@ window.BENCHMARK_DATA = {
           588.7318829854329,
           622.9590184529623,
           775.5524712880452,
-          589.8228967984518
+          589.8228967984518,
+          568.2726034751305
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -11095,6 +11143,7 @@ window.BENCHMARK_DATA = {
           1472,
           1472,
           1472,
+          1528,
           1528,
           1528,
           1528,
@@ -11530,7 +11579,8 @@ window.BENCHMARK_DATA = {
           9932.408028157552,
           9703.552462259928,
           13089.775373331706,
-          9373.086362398588
+          9373.086362398588,
+          9533.815707906087
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -11761,6 +11811,7 @@ window.BENCHMARK_DATA = {
           24760,
           24760,
           24761,
+          24760,
           24760
         ],
         "borderColor": "#43A047",
@@ -13119,6 +13170,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 18:36:35 2026 \u002B0100",
         "message": "docs: add a start page and move the documentation under /docs (#305)"
+      },
+      {
+        "sha": "370b625ea57213ef37c09f678a61c4bcc76b50b7",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 20:03:17 2026 \u002B0100",
+        "message": "feat!: let a container in another assembly use services a module registers under internal types (#293)"
       }
     ],
     "labels": [
@@ -13345,7 +13402,8 @@ window.BENCHMARK_DATA = {
       "ccf58c56",
       "2a2d7fcf",
       "2b142d5c",
-      "a3653614"
+      "a3653614",
+      "370b625e"
     ],
     "datasets": [
       {
@@ -13575,7 +13633,8 @@ window.BENCHMARK_DATA = {
           117.44301011562348,
           119.22174943288168,
           177.0146333694458,
-          116.15712831815084
+          116.15712831815084,
+          175.78983709017436
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -13737,6 +13796,7 @@ window.BENCHMARK_DATA = {
           2128,
           2128,
           2128,
+          4176,
           4176,
           4176,
           4176,
@@ -14048,7 +14108,8 @@ window.BENCHMARK_DATA = {
           11012.183235168457,
           12003.559396362305,
           15366.220078531902,
-          11098.153425089518
+          11098.153425089518,
+          10740.553206380207
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -14060,6 +14121,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          61016,
           61016,
           61016,
           61016,
@@ -14521,7 +14583,8 @@ window.BENCHMARK_DATA = {
           642654.7808919271,
           646329.7504185268,
           769742.7905273438,
-          657602.3051757812
+          657602.3051757812,
+          520693.158984375
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -14756,7 +14819,8 @@ window.BENCHMARK_DATA = {
           719096,
           721169,
           741735,
-          741801
+          741801,
+          740392
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -14990,7 +15054,8 @@ window.BENCHMARK_DATA = {
           36076.742358398435,
           36986.69571940104,
           45223.80165921725,
-          37129.964998372394
+          37129.964998372394,
+          34152.92017211914
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -15221,7 +15286,8 @@ window.BENCHMARK_DATA = {
           80351,
           80971,
           80307,
-          80313
+          80313,
+          79997
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -15455,7 +15521,8 @@ window.BENCHMARK_DATA = {
           271205.96350097656,
           305479.79811197915,
           396440.4999674479,
-          281903.87361653644
+          281903.87361653644,
+          303288.9976074219
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -15686,7 +15753,8 @@ window.BENCHMARK_DATA = {
           573044,
           573075,
           573119,
-          573110
+          573110,
+          571193
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -17020,6 +17088,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 18:36:35 2026 \u002B0100",
         "message": "docs: add a start page and move the documentation under /docs (#305)"
+      },
+      {
+        "sha": "370b625ea57213ef37c09f678a61c4bcc76b50b7",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 20:03:17 2026 \u002B0100",
+        "message": "feat!: let a container in another assembly use services a module registers under internal types (#293)"
       }
     ],
     "labels": [
@@ -17242,7 +17316,8 @@ window.BENCHMARK_DATA = {
       "ccf58c56",
       "2a2d7fcf",
       "2b142d5c",
-      "a3653614"
+      "a3653614",
+      "370b625e"
     ],
     "datasets": [
       {
@@ -17468,7 +17543,8 @@ window.BENCHMARK_DATA = {
           297.06142603556316,
           166.57418851852418,
           207.37625492413838,
-          220.58188829421997
+          220.58188829421997,
+          250.3774986607688
         ],
         "borderColor": "#3949AB",
         "backgroundColor": "#3949AB",
@@ -17503,6 +17579,7 @@ window.BENCHMARK_DATA = {
           560,
           560,
           560,
+          568,
           568,
           568,
           568,
@@ -17933,7 +18010,8 @@ window.BENCHMARK_DATA = {
           658.1334022680918,
           403.36327799161273,
           472.92447985921586,
-          483.41390975316364
+          483.41390975316364,
+          590.6739802360535
         ],
         "borderColor": "#512BD4",
         "backgroundColor": "#512BD4",
@@ -17945,6 +18023,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          1104,
           1104,
           1104,
           1104,
@@ -18398,7 +18477,8 @@ window.BENCHMARK_DATA = {
           5197.812123616536,
           3638.01783396403,
           5099.211953989665,
-          5082.806159337361
+          5082.806159337361,
+          6347.971502176921
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -18482,6 +18562,7 @@ window.BENCHMARK_DATA = {
           13696,
           13696,
           13696,
+          10784,
           10784,
           10784,
           10784,
@@ -18863,7 +18944,8 @@ window.BENCHMARK_DATA = {
           426.95728039741516,
           248.0403185571943,
           362.7832593282064,
-          361.03914145060946
+          361.03914145060946,
+          401.7365409533183
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -18875,6 +18957,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          944,
           944,
           944,
           944,
@@ -19328,7 +19411,8 @@ window.BENCHMARK_DATA = {
           732.3823932647705,
           394.29474479811535,
           585.9068884849548,
-          561.3177251815796
+          561.3177251815796,
+          700.3314395904541
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -19340,6 +19424,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          1096,
           1096,
           1096,
           1096,
