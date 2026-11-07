@@ -132,7 +132,7 @@ partial class AwaitenGenerator
 			disposable,
 			info.Symbol.IsReferenceType,
 			viaModuleFactory ? ProductionKind.Factory : info.Production,
-			viaModuleFactory ? info.ConstructVia : ProducerCall(info, producer),
+			viaModuleFactory ? info.ConstructVia : ProducerCall(info, producer, compilation),
 			asyncInitializers,
 			IsAsyncFactory: asyncFactory,
 			RuntimeDisposalCheck: runtimeDisposalCheck,
@@ -345,7 +345,7 @@ partial class AwaitenGenerator
 			false,
 			info.Symbol.IsReferenceType,
 			ProductionKind.Instance,
-			QualifiedProductionMember(info),
+			QualifiedProductionMember(info, compilation),
 			EmitType: EmitTypeOf(info),
 			Eager: info.Eager && info.Lifetime == Lifetime.Singleton,
 			PrivateServices: PrivateServices(info, containerSymbol));
@@ -1291,13 +1291,13 @@ partial class AwaitenGenerator
 			List<IMethodSymbol> accessible = candidates
 				.Where(candidate => compilation.IsSymbolAccessibleWithin(candidate, containerSymbol))
 				.ToList();
-			if (accessible.Count == 0)
+			if (accessible.Count == 0 && SameCompilationMemberWrapper(info, compilation) is null)
 			{
 				ReportInaccessibleModuleMember(info, diagnostics);
 				return null;
 			}
 
-			candidates = accessible;
+			candidates = accessible.Count == 0 ? candidates : accessible;
 		}
 
 		if (candidates.Count == 1)
@@ -1337,7 +1337,7 @@ partial class AwaitenGenerator
 			};
 			if (memberType is not null && compilation.HasImplicitConversion(memberType, info.Symbol))
 			{
-				if (info.Origin is null || compilation.IsSymbolAccessibleWithin(member, containerSymbol))
+				if (info.Origin is null || compilation.IsSymbolAccessibleWithin(member, containerSymbol) || SameCompilationMemberWrapper(info, compilation) is not null)
 				{
 					return;
 				}
@@ -1392,21 +1392,46 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     A module's Factory/Instance member is emitted qualified with the module type (the generated container is
 	///     another class, so the simple name would not bind); the container's own members stay unqualified, being
-	///     in scope inside the generated partial.
+	///     in scope inside the generated partial. A private member of a module in the same assembly is called through the
+	///     internal wrapper the module generates for it (see <see cref="SameCompilationMemberWrapper" />).
 	/// </summary>
-	private static string? QualifiedProductionMember(ImplInfo info)
+	private static string? QualifiedProductionMember(ImplInfo info, Compilation compilation)
 		=> info.ProductionMember is null || info.Origin is null
 			? info.ProductionMember
-			: $"{info.Origin.ToDisplayString(FullyQualified)}.{info.ProductionMember}";
+			: $"{info.Origin.ToDisplayString(FullyQualified)}.{SameCompilationMemberWrapper(info, compilation) ?? info.ProductionMember}";
+
+	/// <summary>
+	///     The internal wrapper that the module of <paramref name="info" />, in the container's own assembly, generates in
+	///     the same run for the private <c>Factory</c> or <c>Instance</c> member of a registration under an internal service
+	///     (see <see cref="CollectModuleMemberWrappers" />), relative to the module, or <see langword="null" /> when the
+	///     container reaches the member itself or the module generates no such wrapper.
+	/// </summary>
+	private static string? SameCompilationMemberWrapper(ImplInfo info, Compilation compilation)
+	{
+		if (info is not { Origin: { } module, ProductionMember: { } member, Production: ProductionKind.Factory or ProductionKind.Instance, }
+		    || !SymbolEqualityComparer.Default.Equals(module.ContainingAssembly, compilation.Assembly)
+		    || !HasAwaitenAttribute(module.GetAttributes(), "ModuleAttribute")
+		    || AccessibleMembers(module, member, compilation).Any(candidate => compilation.IsSymbolAccessibleWithin(candidate, compilation.Assembly))
+		    || !ReceivesGeneratedMembers(module))
+		{
+			return null;
+		}
+
+		string name = MemberWrapperName(info.Production == ProductionKind.Factory ? "Factory" : "Instance", member, info.Symbol);
+		return CollectModuleMemberWrappers(module, compilation, new List<DiagnosticInfo>(), new List<SkippedRegistration>())
+			.Any(wrapper => wrapper.IsInternal && wrapper.Name == name)
+			? InInternals(name)
+			: null;
+	}
 
 	/// <summary>
 	///     The <see cref="QualifiedProductionMember" /> the generated code calls, carrying the bound type arguments of a
 	///     generic factory (<c>Create&lt;global::App.Order&gt;</c>) so the emitter, which writes the name verbatim, needs
 	///     no generic awareness.
 	/// </summary>
-	private static string? ProducerCall(ImplInfo info, IMethodSymbol producer)
+	private static string? ProducerCall(ImplInfo info, IMethodSymbol producer, Compilation compilation)
 	{
-		string? member = QualifiedProductionMember(info);
+		string? member = QualifiedProductionMember(info, compilation);
 		if (info.Production != ProductionKind.Factory || !producer.IsGenericMethod)
 		{
 			return member;

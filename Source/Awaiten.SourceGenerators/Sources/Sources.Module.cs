@@ -164,9 +164,18 @@ internal static partial class Sources
 			}
 
 			first = false;
-			EmitMemberWrapper(builder, depth + 2, wrapper, "public",
-				"Generated from a module registration: forwards to the module's own member, which a consuming container in",
-				"another assembly cannot call.");
+			if (wrapper.IsInternal)
+			{
+				EmitMemberWrapper(builder, depth + 2, wrapper, "internal",
+					"Generated from a module registration: forwards to the module's own private member, which a container that",
+					"builds the internal service itself cannot call.");
+			}
+			else
+			{
+				EmitMemberWrapper(builder, depth + 2, wrapper, "public",
+					"Generated from a module registration: forwards to the module's own member, which a consuming container in",
+					"another assembly cannot call.");
+			}
 		}
 
 		foreach (SkippedRegistration skipped in model.Skipped.AsArray())

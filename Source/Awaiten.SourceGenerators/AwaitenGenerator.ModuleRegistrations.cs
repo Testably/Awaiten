@@ -217,7 +217,10 @@ partial class AwaitenGenerator
 	///     registration that is not public gets a public wrapper too, resolved and checked like the hook of a
 	///     self-compiled registration (AWT203, AWT204), unless the registered type is not public. When the module's
 	///     assembly grants <c>InternalsVisibleTo</c> to any assembly, a hook whose wrapper fails only with AWT203 or
-	///     AWT204 lands in <paramref name="skipped" /> instead, since such an assembly calls it directly.
+	///     AWT204 lands in <paramref name="skipped" /> instead, since such an assembly calls it directly. A private member
+	///     of a registration under an internal service, which a container in another assembly reaches through the
+	///     service's handle, gets an internal wrapper (see <see cref="MemberWrapper.IsInternal" />) when its signature is
+	///     internal or public throughout, so a container in the module's assembly or in a friend calls it too.
 	/// </summary>
 	private static List<MemberWrapper> CollectModuleMemberWrappers(
 		INamedTypeSymbol module,
@@ -259,7 +262,48 @@ partial class AwaitenGenerator
 			}
 		}
 
+		foreach (ModuleRegistration registration in ConstructedModuleRegistrations(module, compilation, members: true))
+		{
+			if (registration.Member is { } member && !IsExternallyAccessible(registration.Service))
+			{
+				Add(InternalWrapper(registration.Production, member, registration.Implementation));
+			}
+		}
+
 		return wrappers;
+
+		MemberWrapper? InternalWrapper(ProductionKind production, string member, INamedTypeSymbol produced)
+		{
+			if (AccessibleMembers(module, member, compilation).Any(candidate => compilation.IsSymbolAccessibleWithin(candidate, module.ContainingAssembly)))
+			{
+				return null;
+			}
+
+			if (production == ProductionKind.Factory)
+			{
+				List<IMethodSymbol> candidates = FindFactoryCandidates(module, member, produced, compilation);
+				return candidates.Count == 1
+				       && candidates[0] is { IsStatic: true, IsGenericMethod: false, } method
+				       && FitsAssembly(method.ReturnType)
+				       && method.Parameters.All(parameter => FitsAssembly(parameter.Type) && parameter.RefKind == RefKind.None && UnmirroredAttribute(parameter.GetAttributes()) is null)
+					? new MemberWrapper(MemberWrapperName("Factory", member, produced), method.ReturnType.ToDisplayString(FullyQualifiedWithNullability), member, MirroredParameters(method.Parameters), IsInternal: true)
+					: null;
+			}
+
+			return AccessibleMembers(module, member, compilation)
+				.Select(candidate => candidate switch
+				{
+					IFieldSymbol { IsStatic: true, } field => field.Type,
+					IPropertySymbol { IsStatic: true, GetMethod: not null, } property => property.Type,
+					_ => null,
+				})
+				.FirstOrDefault(type => type is not null && compilation.HasImplicitConversion(type, produced) && FitsAssembly(type)) is { } instanceType
+				? new MemberWrapper(MemberWrapperName("Instance", member, produced), instanceType.ToDisplayString(FullyQualifiedWithNullability), member, default, IsProperty: true, IsInternal: true)
+				: null;
+		}
+
+		bool FitsAssembly(ITypeSymbol type)
+			=> compilation.IsSymbolAccessibleWithin(type, module.ContainingAssembly);
 
 		void Add(MemberWrapper? wrapper)
 		{
@@ -618,10 +662,14 @@ partial class AwaitenGenerator
 		INamedTypeSymbol? returnType = FactoryReturnType(implementation, all.Select(registration => registration.Service).ToList(), context);
 		if (returnType is null)
 		{
+			// No container can name a private type, so none can hold the one instance and serve every service from it.
+			bool hidden = IsHiddenInModule(implementation, context.Module, context.Compilation);
 			ReportRegistrationExposures(
-				subject,
+				hidden ? subject with { Subject = $"'{Display(typeName)}' is private to the module, so every container builds it through the module's one factory" } : subject,
 				string.Join(", ", services.Select(Display)),
-				"register it under a single service, give it a public base type or interface that covers its services, or make the implementation public",
+				hidden
+					? "give it a base type or interface that covers its services, register it under a single service, or make it internal to share one instance through a generated handle"
+					: "register it under a single service, give it a public base type or interface that covers its services, or make the implementation public",
 				all.First(registration => !SymbolEqualityComparer.Default.Equals(registration.Service, first.Service)).Location,
 				rejections);
 		}
