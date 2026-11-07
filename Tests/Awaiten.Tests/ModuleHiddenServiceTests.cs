@@ -189,6 +189,48 @@ public class ModuleHiddenServiceTests
 	}
 
 	[Test]
+	public async Task FactoryMember_BuildsTheInternalServiceAndTheContainerDisposesIt()
+	{
+		IHiddenWeigher weigher;
+		using (HiddenServiceContainer.Root container = new())
+		{
+			weigher = container.Resolve<IHiddenWeigher>();
+			await That(weigher.ScaleSilo).IsSameAs(container.Resolve<IHiddenGrinder>().Silo)
+				.Because("the factory member takes the internal silo singleton through its handle");
+			await That(weigher.ScaleDisposed).IsFalse();
+		}
+
+		await That(weigher.ScaleDisposed).IsTrue()
+			.Because("the handle picks the disposable variant from the subtype the factory returned, so the container disposes it");
+	}
+
+	[Test]
+	public async Task InstanceMember_IsInjectedAndNotDisposed()
+	{
+		IHiddenWeigher weigher;
+		using (HiddenServiceContainer.Root container = new())
+		{
+			weigher = container.Resolve<IHiddenWeigher>();
+			await That(weigher.RecipeBook).IsSameAs(HiddenRecipeBookAccess.RecipeBook);
+		}
+
+		await That(weigher.RecipeBookDisposed).IsFalse()
+			.Because("a container never owns a pre-built instance, also not through a handle");
+	}
+
+	[Test]
+	public async Task AsyncFactoryMember_IsAwaitedBeforeItsDependents()
+	{
+		await using HiddenServiceContainer.Root container = new();
+
+		IHiddenGaugeReader reader = await container.ResolveAsync<IHiddenGaugeReader>();
+
+		await That(reader.GaugeCalibrated).IsTrue();
+		await That(() => container.Resolve<IHiddenGaugeReader>()).Throws<InvalidOperationException>()
+			.Because("an async factory member taints its dependents like any async factory");
+	}
+
+	[Test]
 	public async Task EagerInternalSingleton_IsBuiltWithTheContainer()
 	{
 		int before = HiddenEagerCounter.Constructed;

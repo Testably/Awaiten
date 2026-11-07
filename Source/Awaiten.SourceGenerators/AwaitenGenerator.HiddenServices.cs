@@ -78,6 +78,11 @@ partial class AwaitenGenerator
 
 		public INamedTypeSymbol Owner { get; } = owner;
 
+		/// <summary>How the instance is produced: through the constructor, or the module's <c>Factory</c> or <c>Instance</c> <see cref="Member" />.</summary>
+		public ProductionKind Production => Registrations[0].Production;
+
+		public string? Member => Registrations[0].Member;
+
 		/// <summary>Whether the implementation is registered under accessible services only, which its own handle shares.</summary>
 		public bool Shared { get; init; }
 
@@ -117,6 +122,20 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
+	///     The registrations of one implementation that one handle builds: all of them when they are produced the same
+	///     way (the constructor, or one <c>Factory</c> or <c>Instance</c> member), else only the constructed ones, since
+	///     a container keeps a constructor and a member of one implementation apart (AWT111). The module's build and a
+	///     consuming container ask this same question.
+	/// </summary>
+	private static List<ModuleRegistration> HandledTogether(IEnumerable<ModuleRegistration> registrations)
+	{
+		List<ModuleRegistration> all = registrations.ToList();
+		return all.All(registration => registration.Production == all[0].Production && registration.Member == all[0].Member)
+			? all
+			: all.Where(registration => registration.Production == ProductionKind.Constructor).ToList();
+	}
+
+	/// <summary>
 	///     Whether <paramref name="service" /> is a service type no other assembly can name but the module's own
 	///     assembly can, so a container in another assembly reaches it only through a handle.
 	/// </summary>
@@ -144,13 +163,16 @@ partial class AwaitenGenerator
 
 		HiddenServices hidden = new(module, GrantsInternalsVisibleTo(compilation.Assembly));
 		ModuleScanContext context = new(module, compilation, new List<DiagnosticInfo>(), new HashSet<string>(StringComparer.Ordinal), hidden);
-		foreach (IGrouping<INamedTypeSymbol, ModuleRegistration> group in ConstructedModuleRegistrations(module, compilation)
+		foreach (IGrouping<INamedTypeSymbol, ModuleRegistration> group in ConstructedModuleRegistrations(module, compilation, members: true)
 			         .GroupBy<ModuleRegistration, INamedTypeSymbol>(registration => registration.Implementation, SymbolEqualityComparer.Default))
 		{
 			INamedTypeSymbol implementation = group.Key;
-			List<ModuleRegistration> registrations = group.ToList();
-			if (implementation is not { TypeKind: TypeKind.Class, IsAbstract: false, IsStatic: false, IsUnboundGenericType: false, }
-			    || !implementation.InstanceConstructors.Any(constructor => compilation.IsSymbolAccessibleWithin(constructor, module)))
+			List<ModuleRegistration> registrations = HandledTogether(group);
+			bool constructed = registrations.Count > 0 && registrations[0].Production == ProductionKind.Constructor;
+			if (registrations.Count == 0
+			    || implementation.IsUnboundGenericType
+			    || (constructed && (implementation is not { TypeKind: TypeKind.Class, IsAbstract: false, IsStatic: false, }
+			                        || !implementation.InstanceConstructors.Any(constructor => compilation.IsSymbolAccessibleWithin(constructor, module)))))
 			{
 				continue;
 			}
@@ -159,7 +181,8 @@ partial class AwaitenGenerator
 			if (owner is null)
 			{
 				List<INamedTypeSymbol> services = registrations.Select(registration => registration.Service).Distinct<INamedTypeSymbol>(SymbolEqualityComparer.Default).ToList();
-				if (services.Count < 2
+				if (!constructed
+				    || services.Count < 2
 				    || IsHiddenInModule(implementation, module, compilation)
 				    || !registrations.All(registration => SelfCompilesRegistration(module, implementation, registration.Service, compilation))
 				    || FactoryReturnType(implementation, services, context) is not null)
@@ -278,16 +301,19 @@ partial class AwaitenGenerator
 		List<HiddenHandle> handles = hidden.Used
 			.Select(service =>
 			{
-				ImplementationTraits[] traits = built
-					.Where(candidate => SymbolEqualityComparer.Default.Equals(candidate.Owner, service))
+				List<HiddenImplementation> owned = built.Where(candidate => SymbolEqualityComparer.Default.Equals(candidate.Owner, service)).ToList();
+				ImplementationTraits[] traits = owned
+					.Where(candidate => candidate.Production == ProductionKind.Constructor)
 					.Select(candidate => TraitsOf(candidate.Implementation, []))
 					.ToArray();
+				bool wrap = owned.Any(candidate => candidate.Production == ProductionKind.Factory);
 				return new HiddenHandle(
 					HiddenHandleName(service),
 					service.ToDisplayString(FullyQualified),
-					traits.Any(trait => trait is { Disposable: true, AsyncDisposable: false, }),
-					traits.Any(trait => trait is { Disposable: false, AsyncDisposable: true, }),
-					traits.Any(trait => trait is { Disposable: true, AsyncDisposable: true, }));
+					wrap || traits.Any(trait => trait is { Disposable: true, AsyncDisposable: false, }),
+					wrap || traits.Any(trait => trait is { Disposable: false, AsyncDisposable: true, }),
+					wrap || traits.Any(trait => trait is { Disposable: true, AsyncDisposable: true, }),
+					wrap);
 			})
 			.ToList();
 		return (factories, handles, aliases, initializers);
@@ -310,8 +336,15 @@ partial class AwaitenGenerator
 			? new SelfCompiledSubject(typeName, $"'{Display(typeName)}' is registered under several services no accessible type covers, which a consuming container shares through a generated handle", "register it in the module")
 			: new SelfCompiledSubject(typeName, $"'{Display(typeName)}' is registered under the internal service '{Display(candidate.Owner.ToDisplayString(FullyQualified))}', which a consuming container reaches through a generated handle", "register it in the module");
 		Location? location = candidate.Registrations[0].Location;
-		if (!TryMirrorFactoryParameters(implementation, context, location, subject, out EquatableArray<FactoryParameter> parameters, mirrorProperties: true)
-		    || !TryMirrorInjectedProperties(implementation, context, location, subject, ref parameters, out EquatableArray<string> members))
+		EquatableArray<FactoryParameter> parameters;
+		EquatableArray<string> members = default;
+		string? awaited = null;
+		bool instance = candidate.Production == ProductionKind.Instance;
+		bool built = candidate.Production == ProductionKind.Constructor
+			? TryMirrorFactoryParameters(implementation, context, location, subject, out parameters, mirrorProperties: true)
+			  && TryMirrorInjectedProperties(implementation, context, location, subject, ref parameters, out members)
+			: TryMirrorProducingMember(candidate, context, location, subject, out parameters, out awaited);
+		if (!built)
 		{
 			return null;
 		}
@@ -319,7 +352,7 @@ partial class AwaitenGenerator
 		string handle = hidden.HandleType(candidate.Owner);
 		List<RegistrationHook> hooks = new();
 		HashSet<string> seen = new(StringComparer.Ordinal);
-		foreach (ModuleRegistration registration in candidate.Registrations)
+		foreach (ModuleRegistration registration in instance ? [] : candidate.Registrations)
 		{
 			foreach (bool release in new[] { false, true, })
 			{
@@ -339,7 +372,7 @@ partial class AwaitenGenerator
 			}
 		}
 
-		foreach (AsyncInitializerConvention convention in MatchingAsyncInitializers(DeclaredAsyncInitializers(context.Module, context.Compilation, null), implementation, convention => IsOfConventionType(implementation, convention.Type)))
+		foreach (AsyncInitializerConvention convention in instance ? [] : MatchingAsyncInitializers(DeclaredAsyncInitializers(context.Module, context.Compilation, null), implementation, convention => IsOfConventionType(implementation, convention.Type)))
 		{
 			List<FactoryParameter> mirrored = new();
 			foreach (IParameterSymbol parameter in convention.Method.Parameters)
@@ -383,6 +416,21 @@ partial class AwaitenGenerator
 				new EquatableArray<FactoryParameter>(mirrored.ToArray())));
 		}
 
+		if (candidate.Production != ProductionKind.Constructor)
+		{
+			return new RegistrationFactory(
+				HiddenFactoryName(implementation),
+				handle,
+				typeName,
+				parameters,
+				new EquatableArray<RegistrationHook>(hooks.ToArray()),
+				default,
+				instance ? $"new {handle}" : $"{handle}.Wrap",
+				candidate.Member,
+				awaited,
+				instance);
+		}
+
 		ImplementationTraits traits = TraitsOf(implementation, []);
 		string variant = (traits.Disposable, traits.AsyncDisposable) switch
 		{
@@ -399,6 +447,64 @@ partial class AwaitenGenerator
 			new EquatableArray<RegistrationHook>(hooks.ToArray()),
 			members,
 			handle + variant);
+	}
+
+	/// <summary>
+	///     Mirrors the <c>Factory</c> or <c>Instance</c> member that produces <paramref name="candidate" /> onto the
+	///     wrapper that puts its result into the handle: a static field or property converting to the implementation, or
+	///     one static, non-generic method, whose parameters the wrapper mirrors like a constructor's, and which may return
+	///     <c>Task&lt;T&gt;</c> or <c>ValueTask&lt;T&gt;</c> (<paramref name="awaited" />). Returns <see langword="false" />
+	///     for a member the wrapper cannot call, after reporting why a parameter cannot be mirrored.
+	/// </summary>
+	private static bool TryMirrorProducingMember(
+		HiddenImplementation candidate,
+		ModuleScanContext context,
+		Location? location,
+		SelfCompiledSubject subject,
+		out EquatableArray<FactoryParameter> parameters,
+		out string? awaited)
+	{
+		parameters = default;
+		awaited = null;
+		INamedTypeSymbol module = context.Module;
+		Compilation compilation = context.Compilation;
+		string member = candidate.Member!;
+		if (candidate.Production == ProductionKind.Instance)
+		{
+			return AccessibleMembers(module, member, compilation).Any(symbol => symbol switch
+			{
+				IFieldSymbol { IsStatic: true, } field => compilation.HasImplicitConversion(field.Type, candidate.Implementation),
+				IPropertySymbol { IsStatic: true, GetMethod: not null, } property => compilation.HasImplicitConversion(property.Type, candidate.Implementation),
+				_ => false,
+			});
+		}
+
+		List<IMethodSymbol> methods = FindFactoryCandidates(module, member, candidate.Implementation, compilation)
+			.Where(method => compilation.IsSymbolAccessibleWithin(method, module))
+			.ToList();
+		if (methods.Count != 1 || methods[0] is not { IsStatic: true, IsGenericMethod: false, } factory || factory.Parameters.Any(parameter => parameter.RefKind != RefKind.None))
+		{
+			return false;
+		}
+
+		if (IsAsyncFactoryReturn(factory.ReturnType, compilation, out _))
+		{
+			awaited = ((INamedTypeSymbol)factory.ReturnType).ConstructedFrom.ContainingNamespace.ToDisplayString(FullyQualified) + "." + factory.ReturnType.Name;
+		}
+
+		List<FactoryParameter> mirrored = new();
+		foreach (IParameterSymbol parameter in factory.Parameters)
+		{
+			if (!TryMirrorParameter(parameter, context, location, subject, $"the parameter '{parameter.Name}' of its factory '{member}'", out FactoryParameter mirror))
+			{
+				return false;
+			}
+
+			mirrored.Add(mirror);
+		}
+
+		parameters = new EquatableArray<FactoryParameter>(mirrored.ToArray());
+		return true;
 	}
 
 	/// <summary>
@@ -542,7 +648,7 @@ partial class AwaitenGenerator
 			.ToList();
 		foreach (INamedTypeSymbol other in hidden.OtherModules)
 		{
-			if (ConstructedModuleRegistrations(other, context.Compilation).Any(registration => SymbolEqualityComparer.Default.Equals(registration.Service, service)))
+			if (ConstructedModuleRegistrations(other, context.Compilation, members: true).Any(registration => SymbolEqualityComparer.Default.Equals(registration.Service, service)))
 			{
 				return new PendingDiagnostic(Diagnostics.ModuleHiddenServiceInOtherModule, [
 					Display(service.ToDisplayString(FullyQualified)),

@@ -10,10 +10,17 @@ namespace Awaiten.SourceGenerators;
 partial class AwaitenGenerator
 {
 	/// <summary>
-	///     One closed constructor-produced lifetime registration declared on a <c>[Module]</c>: the attribute, its
-	///     implementation and service, and where it is declared.
+	///     One closed lifetime registration declared on a <c>[Module]</c>: the attribute, its implementation and service,
+	///     and where it is declared. <see cref="Production" /> and <see cref="Member" /> name the <c>Factory</c> or
+	///     <c>Instance</c> member that produces it, if any.
 	/// </summary>
-	private sealed record ModuleRegistration(AttributeData Attribute, INamedTypeSymbol Implementation, INamedTypeSymbol Service, Location? Location);
+	private sealed record ModuleRegistration(
+		AttributeData Attribute,
+		INamedTypeSymbol Implementation,
+		INamedTypeSymbol Service,
+		Location? Location,
+		ProductionKind Production = ProductionKind.Constructor,
+		string? Member = null);
 
 	/// <summary>
 	///     Whether a module registration is self-compiled: the module and the service can be named from another
@@ -141,16 +148,18 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     The module's closed lifetime registrations that the container constructs (no <c>Factory</c> or
-	///     <c>Instance</c>), from the generic form or a closed <c>typeof</c> pair. Malformed and open generic forms
-	///     are left to the container, which reports them.
+	///     <c>Instance</c>), from the generic form or a closed <c>typeof</c> pair, and with <paramref name="members" />
+	///     also those a <c>Factory</c> or <c>Instance</c> member produces. Malformed and open generic forms are left to
+	///     the container, which reports them.
 	/// </summary>
-	private static IEnumerable<ModuleRegistration> ConstructedModuleRegistrations(INamedTypeSymbol module, Compilation compilation)
+	private static IEnumerable<ModuleRegistration> ConstructedModuleRegistrations(INamedTypeSymbol module, Compilation compilation, bool members = false)
 	{
 		foreach (AttributeData attribute in module.GetAttributes())
 		{
+			(ProductionKind Production, string? Member, bool Conflicting) production = ReadProduction(attribute);
 			if (attribute.AttributeClass is not { Name: "SingletonAttribute" or "TransientAttribute" or "ScopedAttribute", } attributeClass
 			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace
-			    || ReadProduction(attribute).Production != ProductionKind.Constructor)
+			    || (production.Production != ProductionKind.Constructor && !(members && production is { Member: not null, Conflicting: false, })))
 			{
 				continue;
 			}
@@ -178,7 +187,7 @@ partial class AwaitenGenerator
 
 			if (implementation is not null && service is not null)
 			{
-				yield return new ModuleRegistration(attribute, implementation, service, attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation());
+				yield return new ModuleRegistration(attribute, implementation, service, attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation(), production.Production, production.Member);
 			}
 		}
 	}

@@ -39,7 +39,7 @@ partial class AwaitenGenerator
 		if (info.Production == ProductionKind.Instance)
 		{
 			RecordBaseWrappers(info, null, null, null, context);
-			return BuildPrebuiltInstance(info, containerSymbol, compilation, diagnostics) with { ResolverType = resolverType, };
+			return BuildPrebuiltInstance(info, containerSymbol, compilation, diagnostics) with { ResolverType = resolverType, Unlisted = info.Unlisted, };
 		}
 
 		// The producer is a container method (Factory) or the implementation's constructor (default). Null

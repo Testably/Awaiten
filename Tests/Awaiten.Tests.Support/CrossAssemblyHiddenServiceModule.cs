@@ -239,6 +239,81 @@ internal sealed class HiddenLogUser(HiddenKeptLog log) : IHiddenLogUser
 
 internal sealed class HiddenShared : IHiddenFront, IHiddenBack;
 
+/// <summary>A singleton that depends on internal services the module produces through its factory and instance members.</summary>
+public interface IHiddenWeigher
+{
+	/// <summary>The internal scale the module's factory built.</summary>
+	object Scale { get; }
+
+	/// <summary>The internal silo the factory received.</summary>
+	object ScaleSilo { get; }
+
+	/// <summary>Whether the container disposed the scale.</summary>
+	bool ScaleDisposed { get; }
+
+	/// <summary>The internal recipe book the module holds as a pre-built instance.</summary>
+	object RecipeBook { get; }
+
+	/// <summary>Whether anything disposed the recipe book.</summary>
+	bool RecipeBookDisposed { get; }
+}
+
+/// <summary>A singleton that depends on an internal service the module produces through an async factory.</summary>
+public interface IHiddenGaugeReader
+{
+	/// <summary>Whether the async factory finished before the reader received the gauge.</summary>
+	bool GaugeCalibrated { get; }
+}
+
+/// <summary>Exposes the pre-built internal recipe book, so a test can compare it with what the container injects.</summary>
+public static class HiddenRecipeBookAccess
+{
+	/// <summary>The module's pre-built recipe book.</summary>
+	public static object RecipeBook => CrossAssemblyHiddenServiceModule.RecipeBook;
+}
+
+internal class HiddenScale(HiddenSilo silo)
+{
+	public HiddenSilo Silo => silo;
+}
+
+internal sealed class DisposableHiddenScale(HiddenSilo silo) : HiddenScale(silo), IDisposable
+{
+	public bool Disposed { get; private set; }
+
+	public void Dispose() => Disposed = true;
+}
+
+internal sealed class HiddenRecipeBook : IDisposable
+{
+	public bool Disposed { get; private set; }
+
+	public void Dispose() => Disposed = true;
+}
+
+internal sealed class HiddenWeigher(HiddenScale scale, HiddenRecipeBook recipeBook) : IHiddenWeigher
+{
+	public object Scale => scale;
+
+	public object ScaleSilo => scale.Silo;
+
+	public bool ScaleDisposed => ((DisposableHiddenScale)scale).Disposed;
+
+	public object RecipeBook => recipeBook;
+
+	public bool RecipeBookDisposed => recipeBook.Disposed;
+}
+
+internal sealed class HiddenGauge
+{
+	public bool Calibrated { get; set; }
+}
+
+internal sealed class HiddenGaugeReader(HiddenGauge gauge) : IHiddenGaugeReader
+{
+	public bool GaugeCalibrated { get; } = gauge.Calibrated;
+}
+
 /// <summary>
 ///     A <c>[Module]</c> whose public registrations depend on services it registers under internal types. Its build
 ///     emits a public handle per internal service, so a container in Awaiten.Tests depends on the handles without this
@@ -266,8 +341,23 @@ internal sealed class HiddenShared : IHiddenFront, IHiddenBack;
 [Singleton<HiddenLogUser, IHiddenLogUser>]
 [Singleton<HiddenShared, IHiddenFront>]
 [Singleton<HiddenShared, IHiddenBack>]
+[Singleton<HiddenScale>(Factory = nameof(CreateScale))]
+[Singleton<HiddenRecipeBook>(Instance = nameof(RecipeBook))]
+[Singleton<HiddenWeigher, IHiddenWeigher>]
+[Singleton<HiddenGauge>(Factory = nameof(CreateGaugeAsync))]
+[Singleton<HiddenGaugeReader, IHiddenGaugeReader>]
 public static partial class CrossAssemblyHiddenServiceModule
 {
+	internal static readonly HiddenRecipeBook RecipeBook = new();
+
+	internal static HiddenScale CreateScale(HiddenSilo silo) => new DisposableHiddenScale(silo);
+
+	internal static async Task<HiddenGauge> CreateGaugeAsync()
+	{
+		await Task.Yield();
+		return new HiddenGauge { Calibrated = true, };
+	}
+
 	internal static void ActivateStore(HiddenBeanStore store) => store.Activated = true;
 
 	internal static void ReleaseStore(HiddenBeanStore store) => store.Released = true;

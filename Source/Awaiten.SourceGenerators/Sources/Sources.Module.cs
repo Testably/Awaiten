@@ -309,8 +309,21 @@ internal static partial class Sources
 		Indent(builder, depth + 1).Append("internal ").Append(handle.Name).Append('(').Append(handle.ValueType).AppendLine(" value) => Value = value;");
 		builder.AppendLine();
 		Indent(builder, depth + 1).Append("internal ").Append(handle.ValueType).AppendLine(" Value { get; }");
-		const string dispose = "void global::System.IDisposable.Dispose() => ((global::System.IDisposable)Value).Dispose();";
-		const string disposeAsync = "global::System.Threading.Tasks.ValueTask global::System.IAsyncDisposable.DisposeAsync() => ((global::System.IAsyncDisposable)Value).DisposeAsync();";
+		if (handle.Wrap)
+		{
+			builder.AppendLine();
+			Indent(builder, depth + 1).Append("internal static ").Append(handle.Name).Append(" Wrap(").Append(handle.ValueType).AppendLine(" value) => (object?)value switch");
+			Indent(builder, depth + 1).AppendLine("{");
+			Indent(builder, depth + 2).AppendLine("global::System.IDisposable and global::System.IAsyncDisposable => new BothDisposable(value),");
+			Indent(builder, depth + 2).AppendLine("global::System.IDisposable => new Disposable(value),");
+			Indent(builder, depth + 2).AppendLine("global::System.IAsyncDisposable => new AsyncDisposable(value),");
+			Indent(builder, depth + 2).Append("_ => new ").Append(handle.Name).AppendLine("(value),");
+			Indent(builder, depth + 1).AppendLine("};");
+		}
+
+		string value = handle.Wrap ? "(object)Value" : "Value";
+		string dispose = $"void global::System.IDisposable.Dispose() => ((global::System.IDisposable){value}).Dispose();";
+		string disposeAsync = $"global::System.Threading.Tasks.ValueTask global::System.IAsyncDisposable.DisposeAsync() => ((global::System.IAsyncDisposable){value}).DisposeAsync();";
 		if (handle.Disposable)
 		{
 			EmitHandleVariant(builder, depth + 1, handle, "Disposable", "global::System.IDisposable", dispose);
@@ -370,6 +383,21 @@ internal static partial class Sources
 		string[] members = factory.Members.AsArray();
 		string signature = string.Join(", ", parameters.Select(MirroredParameter));
 		string arguments = string.Join(", ", parameters.Take(parameters.Length - members.Length).Select(parameter => parameter.ArgumentExpression));
+
+		if (factory.Call is not null)
+		{
+			Indent(builder, depth).Append(accessibility).Append(" static ");
+			if (factory.IsProperty)
+			{
+				builder.Append(factory.ReturnType).Append(' ').Append(factory.FactoryName).Append(" => ").Append(factory.Handle).Append('(').Append(factory.Call).AppendLine(");");
+				return;
+			}
+
+			builder.Append(factory.Awaited is null ? factory.ReturnType : $"async {factory.Awaited}<{factory.ReturnType}>").Append(' ').Append(factory.FactoryName)
+				.Append('(').Append(signature).Append(") => ").Append(factory.Handle).Append('(').Append(factory.Awaited is null ? string.Empty : "await ")
+				.Append(factory.Call).Append('(').Append(arguments).Append(')').Append(factory.Awaited is null ? string.Empty : ".ConfigureAwait(false)").AppendLine(");");
+			return;
+		}
 
 		Indent(builder, depth)
 			.Append(accessibility).Append(" static ").Append(factory.ReturnType).Append(' ').Append(factory.FactoryName)

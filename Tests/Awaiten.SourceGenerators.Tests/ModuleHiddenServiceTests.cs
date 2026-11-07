@@ -294,6 +294,97 @@ public class ModuleHiddenServiceTests
 	}
 
 	[Test]
+	public async Task FactoryMember_IsWrappedIntoTheHandle()
+	{
+		GeneratorResult result = RunLibrary("""
+			using Awaiten;
+
+			namespace Lib;
+
+			public interface IGrinder { }
+			internal sealed class Silo { }
+			internal sealed class BeanStore { public BeanStore(Silo silo) { } }
+			internal sealed class Grinder : IGrinder { public Grinder(BeanStore store) { } }
+
+			[Module]
+			[Singleton<Silo>]
+			[Singleton<BeanStore>(Factory = nameof(CreateStore), OnActivated = nameof(Activate))]
+			[Singleton<Grinder, IGrinder>]
+			public static partial class CoffeeModule
+			{
+			    internal static BeanStore CreateStore(Silo silo) => new(silo);
+			    internal static void Activate(BeanStore store) { }
+			}
+			""");
+		string module = ModuleSource(result);
+		string handle = Handle("global::Lib.BeanStore");
+
+		await That(result.Diagnostics).IsEmpty()
+			.Because("the module wraps its internal factory into the handle, so the public registration can take it");
+		await That(module).Contains($"public static {handle} {HiddenFactory("global::Lib.BeanStore")}({Handle("global::Lib.Silo")} @silo) => {handle}.Wrap(CreateStore(@silo.Value));")
+			.Because("the factory member's result is wrapped in the handle variant that matches the instance at run time");
+		await That(module).Contains($"internal static {handle.Substring(handle.LastIndexOf('.') + 1)} Wrap(global::Lib.BeanStore value)")
+			.Because("a factory may return a subtype, so the handle picks its disposal variant when it wraps the instance");
+		await That(module).Contains($"({handle} @awaiten__instance) => Activate((global::Lib.BeanStore)@awaiten__instance.Value);");
+		await That(module).Contains($"public static global::Lib.IGrinder {Factory("global::Lib.Grinder")}({handle} @store) => new global::Lib.Grinder(@store.Value);");
+	}
+
+	[Test]
+	public async Task AsyncFactoryMember_IsAwaitedIntoTheHandle()
+	{
+		GeneratorResult result = RunLibrary("""
+			using System.Threading.Tasks;
+			using Awaiten;
+
+			namespace Lib;
+
+			public interface IGrinder { }
+			internal sealed class BeanStore { }
+			internal sealed class Grinder : IGrinder { public Grinder(BeanStore store) { } }
+
+			[Module]
+			[Singleton<BeanStore>(Factory = nameof(CreateStoreAsync))]
+			[Singleton<Grinder, IGrinder>]
+			public static partial class CoffeeModule
+			{
+			    internal static Task<BeanStore> CreateStoreAsync() => Task.FromResult(new BeanStore());
+			}
+			""");
+		string handle = Handle("global::Lib.BeanStore");
+
+		await That(result.Diagnostics).IsEmpty();
+		await That(ModuleSource(result)).Contains($"public static async global::System.Threading.Tasks.Task<{handle}> {HiddenFactory("global::Lib.BeanStore")}() => {handle}.Wrap(await CreateStoreAsync().ConfigureAwait(false));")
+			.Because("an async factory member gets an async wrapper, which a consumer awaits like any async factory");
+	}
+
+	[Test]
+	public async Task InstanceMember_IsWrappedIntoTheHandle()
+	{
+		GeneratorResult result = RunLibrary("""
+			using Awaiten;
+
+			namespace Lib;
+
+			public interface IGrinder { }
+			internal sealed class BeanStore { }
+			internal sealed class Grinder : IGrinder { public Grinder(BeanStore store) { } }
+
+			[Module]
+			[Singleton<BeanStore>(Instance = nameof(Store))]
+			[Singleton<Grinder, IGrinder>]
+			public static partial class CoffeeModule
+			{
+			    internal static readonly BeanStore Store = new();
+			}
+			""");
+		string handle = Handle("global::Lib.BeanStore");
+
+		await That(result.Diagnostics).IsEmpty();
+		await That(ModuleSource(result)).Contains($"public static {handle} {HiddenFactory("global::Lib.BeanStore")} => new {handle}(Store);")
+			.Because("a pre-built instance needs no disposal variant, since no container owns it");
+	}
+
+	[Test]
 	public async Task SameAssemblyContainer_ConstructsTheInternalServiceDirectly()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -448,6 +539,42 @@ public class ModuleHiddenServiceTests
 
 			await That(result.Diagnostics).IsEmpty()
 				.Because("each module's handle is a registration of its own, so the two never conflict");
+		}
+
+		[Test]
+		public async Task FactoryAndInstanceMembers_AreRegisteredThroughTheirHandleWrappers()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly("""
+				using System.Threading.Tasks;
+				using Awaiten;
+
+				namespace Lib;
+
+				public interface IGrinder { }
+				public interface IStock { }
+				internal interface IClock { }
+				internal sealed class Clock : IClock { }
+				internal sealed class BeanStore : IStock { }
+				internal sealed class Grinder : IGrinder { public Grinder(BeanStore store, IClock clock) { } }
+
+				[Module]
+				[Singleton<BeanStore>(Factory = nameof(CreateStoreAsync))]
+				[Singleton<BeanStore, IStock>(Factory = nameof(CreateStoreAsync))]
+				[Singleton<IClock>(Instance = nameof(Clock))]
+				[Singleton<Grinder, IGrinder>]
+				public static partial class CoffeeModule
+				{
+				    internal static readonly IClock Clock = new Clock();
+				    internal static Task<BeanStore> CreateStoreAsync() => Task.FromResult(new BeanStore());
+				}
+				""", Container);
+			string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+			await That(result.Diagnostics).IsEmpty();
+			await That(source).Contains($"global::Lib.CoffeeModule.Internals.{HiddenFactory("global::Lib.BeanStore")}()")
+				.And.Contains($"global::Lib.CoffeeModule.Internals.{HiddenFactory("global::Lib.IClock")}")
+				.And.Contains($"global::Lib.CoffeeModule.Internals.{Alias("global::Lib.BeanStore", "global::Lib.IStock")}(")
+				.Because("the container builds each internal service through the module's wrapper and serves the public service from the handle");
 		}
 
 		[Test]

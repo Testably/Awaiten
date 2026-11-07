@@ -43,7 +43,7 @@ partial class AwaitenGenerator
 		foreach (INamedTypeSymbol module in modules.Where(module => !SymbolEqualityComparer.Default.Equals(module.ContainingAssembly, compilation.Assembly)))
 		{
 			string moduleName = Display(module.ToDisplayString(FullyQualified));
-			foreach (ModuleRegistration registration in ConstructedModuleRegistrations(module, compilation))
+			foreach (ModuleRegistration registration in ConstructedModuleRegistrations(module, compilation, members: true))
 			{
 				foreach (INamedTypeSymbol type in new[] { registration.Service, registration.Implementation, })
 				{
@@ -83,6 +83,18 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
+	///     The generated member named <paramref name="name" /> that builds a handle, a factory method (possibly async) or
+	///     the property over an <c>Instance</c>, and the handle it produces, or <see langword="null" />.
+	/// </summary>
+	private static (string Name, INamedTypeSymbol? Handle)? HiddenProducer(INamedTypeSymbol owner, string name, Compilation compilation)
+		=> InternalsMembers(owner, name).FirstOrDefault(member => member.IsStatic && compilation.IsSymbolAccessibleWithin(member, compilation.Assembly)) switch
+		{
+			IMethodSymbol method => (method.Name, ProducedType(method.ReturnType, compilation) as INamedTypeSymbol),
+			IPropertySymbol property => (property.Name, property.Type as INamedTypeSymbol),
+			_ => null,
+		};
+
+	/// <summary>
 	///     Rewrites a registration read off a module of another assembly whose implementation the module builds through
 	///     a generated handle (see <see cref="HiddenHandle" />), or returns <see langword="null" /> to leave it to the
 	///     other rules: the module has no such handle, or this container can name every service of the implementation and
@@ -99,16 +111,20 @@ partial class AwaitenGenerator
 		INamedTypeSymbol module = registration.Origin!;
 		INamedTypeSymbol implementation = registration.Implementation;
 		if (registration.ServiceSymbol is not { } service
-		    || GeneratedFactoryNamed(module, HiddenFactoryName(implementation), compilation) is not { ReturnType: INamedTypeSymbol handle, } factory)
+		    || HiddenProducer(module, HiddenFactoryName(implementation), compilation) is not { Handle: { } handle, } factory)
 		{
 			return null;
 		}
 
-		List<ModuleRegistration> registrations = ConstructedModuleRegistrations(module, compilation)
-			.Where(candidate => SymbolEqualityComparer.Default.Equals(candidate.Implementation, implementation))
-			.ToList();
-		if (CanConstruct(implementation, compilation)
-		    && registrations.All(candidate => compilation.IsSymbolAccessibleWithin(candidate.Service, compilation.Assembly)))
+		List<ModuleRegistration> registrations = HandledTogether(ConstructedModuleRegistrations(module, compilation, members: true)
+			.Where(candidate => SymbolEqualityComparer.Default.Equals(candidate.Implementation, implementation)));
+		if (registrations.Count == 0
+		    || registrations[0].Production != registration.Production
+		    || registrations[0].Member != registration.ProductionMember
+		    || ((registration.Production == ProductionKind.Constructor
+			        ? CanConstruct(implementation, compilation)
+			        : MembersNamed(module, registration.ProductionMember!).Any(member => compilation.IsSymbolAccessibleWithin(member, compilation.Assembly)))
+		        && registrations.All(candidate => compilation.IsSymbolAccessibleWithin(candidate.Service, compilation.Assembly))))
 		{
 			return null;
 		}
@@ -154,15 +170,16 @@ partial class AwaitenGenerator
 				ServiceType = handle.ToDisplayString(FullyQualified),
 				ServiceSymbol = handle,
 				Implementation = handle,
-				Production = ProductionKind.Factory,
+				Production = registration.Production == ProductionKind.Instance ? ProductionKind.Instance : ProductionKind.Factory,
 				ProductionMember = InInternals(factory.Name),
 				Key = key,
 				Eager = registrations.Any(candidate => NamedFlag(candidate.Attribute, "Eager")),
 				OnActivated = Hook(release: false),
 				OnRelease = Hook(release: true),
 				SuppressDisposal = NamedFlag(registrations[0].Attribute, "SuppressDisposal"),
-				Traits = TraitsOf(implementation, DeclaredAsyncInitializers(module, compilation, null)),
-				TraitsExact = true,
+				// A factory member may return any subtype, which the handle's variant reveals only at run time.
+				Traits = registration.Production == ProductionKind.Constructor ? TraitsOf(implementation, DeclaredAsyncInitializers(module, compilation, null)) : null,
+				TraitsExact = registration.Production == ProductionKind.Constructor,
 				Unlisted = true,
 				Hidden = implementation,
 			};

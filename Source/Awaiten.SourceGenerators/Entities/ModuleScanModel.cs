@@ -40,9 +40,11 @@ internal sealed record ModuleScanModel(
 ///     property, so a container in another assembly depends on it without naming the service. A consumer registers it
 ///     as a dependency-only service. One sealed variant per disposal shape an implementation needs
 ///     (<see cref="Disposable" />, <see cref="AsyncDisposable" />, <see cref="BothDisposable" />) implements the
-///     interfaces and forwards them, so a container disposes exactly what the implementation implements.
+///     interfaces and forwards them, so a container disposes exactly what the implementation implements. With
+///     <see cref="Wrap" />, a factory member's result may be any subtype, so the handle carries every variant and a
+///     method that picks one by the instance's runtime type.
 /// </summary>
-internal sealed record HiddenHandle(string Name, string ValueType, bool Disposable, bool AsyncDisposable, bool BothDisposable);
+internal sealed record HiddenHandle(string Name, string ValueType, bool Disposable, bool AsyncDisposable, bool BothDisposable, bool Wrap = false);
 
 /// <summary>
 ///     A generated factory that serves one more service of an implementation registered under an internal service: it
@@ -86,7 +88,10 @@ internal sealed record SkippedRegistration(string MarkerName, string Reason, boo
 ///     registration of the implementation names. The last <see cref="Members" />.Count parameters fill the injected
 ///     properties of the same names through an object initializer. <see cref="Handle" /> is the handle type (or one of
 ///     its disposable variants) the factory wraps the instance in, for an implementation registered under an internal
-///     service (see <see cref="HiddenHandle" />), and the hooks then take that handle.
+///     service (see <see cref="HiddenHandle" />), and the hooks then take that handle. A factory over the module's own
+///     <c>Factory</c> or <c>Instance</c> <see cref="Call" /> passes the member's result to <see cref="Handle" />, the
+///     expression that wraps it, instead of constructing the implementation: awaited first for an <see cref="Awaited" />
+///     task type, and as a property for an <see cref="IsProperty" /> instance.
 /// </summary>
 internal sealed record RegistrationFactory(
 	string FactoryName,
@@ -95,7 +100,10 @@ internal sealed record RegistrationFactory(
 	EquatableArray<FactoryParameter> Parameters,
 	EquatableArray<RegistrationHook> Hooks,
 	EquatableArray<string> Members = default,
-	string? Handle = null);
+	string? Handle = null,
+	string? Call = null,
+	string? Awaited = null,
+	bool IsProperty = false);
 
 /// <summary>One lifecycle-hook wrapper of a self-compiled module registration and whether it is the release hook.</summary>
 internal sealed record RegistrationHook(ModuleHook Hook, bool Release);

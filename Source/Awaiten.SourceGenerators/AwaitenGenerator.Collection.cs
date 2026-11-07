@@ -259,7 +259,7 @@ partial class AwaitenGenerator
 		List<DiagnosticInfo> diagnostics = context.Diagnostics;
 		bool reportedNotSelfCompiled = false;
 		HashSet<INamedTypeSymbol> implicitHandles = new(SymbolEqualityComparer.Default);
-		bool fromModule =origin is not null && HasAwaitenAttribute(context.Owner.GetAttributes(), "ModuleAttribute");
+		bool fromModule = origin is not null && HasAwaitenAttribute(context.Owner.GetAttributes(), "ModuleAttribute");
 		foreach (AttributeData attribute in context.Owner.GetAttributes())
 		{
 			if (attribute.AttributeClass is not { } attributeClass
@@ -335,7 +335,7 @@ partial class AwaitenGenerator
 				SuppressDisposal: NamedFlag(attribute, "SuppressDisposal"),
 				WhenInjectedInto: whenInjectedInto);
 
-			if (fromModule && production == ProductionKind.Constructor && !conflictingDirectives && !skipGeneratedScanRegistrations
+			if (fromModule && !conflictingDirectives && !skipGeneratedScanRegistrations
 			    && ThroughHandle(registration, context.Compilation, implicitHandles) is { } handled)
 			{
 				result.AddRange(handled);
