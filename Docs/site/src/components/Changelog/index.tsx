@@ -97,7 +97,7 @@ function Release({release, latest}: {release: ChangelogRelease; latest: boolean}
       <div className={styles.when}>
         <b>{formatDate(release.date, {month: 'short', day: 'numeric'})}</b> {release.date.substring(0, 4)}
       </div>
-      <div className={styles.body}>
+      <div className={styles.body} id={`release-${release.version}`}>
         <span className={clsx(styles.dot, summary.counts.breaking > 0 && styles.breakingDot)} aria-hidden="true" />
         <div className={styles.head}>
           <a className={styles.version} href={release.url}>{release.version}</a>
@@ -136,12 +136,141 @@ function Release({release, latest}: {release: ChangelogRelease; latest: boolean}
   );
 }
 
+function Pills({summary}: {summary: Summary}): ReactElement {
+  return (
+    <span className={styles.pills}>
+      {categories
+        .filter(({category}) => summary.counts[category] > 0)
+        .map(({category, one, many}) => (
+          <span key={category} className={clsx(styles.pill, styles[`${category}Pill`])}>
+            {plural(summary.counts[category], one, many)}
+          </span>
+        ))}
+    </span>
+  );
+}
+
+function Latest({releases}: {releases: ChangelogRelease[]}): ReactElement {
+  const latest = releases[0];
+  const withChanges = releases.find((release) => release.items.length > 0);
+  return (
+    <div className={styles.latestCard}>
+      <div className={styles.latestTop}>
+        <div className={styles.latestTitle}>
+          <span className={styles.eyebrow}>Latest release</span>
+          <span>
+            <span className={styles.latestVersion}>{latest.version}</span>{' '}
+            <span className={styles.span}>{formatDate(latest.date, {month: 'short', day: 'numeric', year: 'numeric'})}</span>
+          </span>
+          {latest.items.length === 0 ? (
+            <span className={styles.span}>A maintenance release without user-facing changes.</span>
+          ) : (
+            <Pills summary={summarize([latest])} />
+          )}
+        </div>
+        <div className={styles.actions}>
+          <a className={styles.primaryAction} href={latest.url}>Release notes on GitHub</a>
+        </div>
+      </div>
+      {withChanges && withChanges !== latest && (
+        <div className={styles.latestChanges}>
+          <span className={styles.span}>Last release with changes</span>
+          <b>
+            {withChanges.version} · {formatDate(withChanges.date, {month: 'short', day: 'numeric', year: 'numeric'})}
+          </b>
+          <Pills summary={summarize([withChanges])} />
+          <a className={styles.jump} href={`#release-${withChanges.version}`}>Jump to {withChanges.version} ↓</a>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const SHOWN_BREAKING_CHANGES = 5;
+
+function Upgrade({releases}: {releases: ChangelogRelease[]}): ReactElement | null {
+  const older = releases.slice(1);
+  // Start just before the last release with changes, so the helper opens on something to read.
+  const lastWithChanges = releases.findIndex((release) => release.items.length > 0);
+  const [from, setFrom] = useState((releases[lastWithChanges + 1] ?? older[0])?.version);
+  const [showAll, setShowAll] = useState(false);
+  if (older.length === 0) return null;
+
+  const newer = releases.slice(0, releases.findIndex((release) => release.version === from));
+  const summary = summarize(newer);
+  const breaking = newer.flatMap((release) =>
+    release.items.filter((item) => item.category === 'breaking').map((item) => ({release, item})),
+  );
+  const shown = showAll ? breaking : breaking.slice(0, SHOWN_BREAKING_CHANGES);
+
+  return (
+    <section className={styles.upgrade} aria-labelledby="upgrade-heading">
+      <div className={styles.upgradeHead}>
+        <h2 id="upgrade-heading">What changes when I upgrade?</h2>
+        <span className={styles.upgradeFrom}>
+          <label htmlFor="upgrade-from">I use</label>
+          <select
+            id="upgrade-from"
+            value={from}
+            onChange={(event) => {
+              setFrom(event.target.value);
+              setShowAll(false);
+            }}>
+            {older.map((release) => (
+              <option key={release.version} value={release.version}>{release.version}</option>
+            ))}
+          </select>
+          <span>→ latest {releases[0].version}</span>
+        </span>
+      </div>
+      {newer.every((release) => release.items.length === 0) ? (
+        <p className={styles.span}>No user-facing changes since {from}.</p>
+      ) : (
+        <Pills summary={summary} />
+      )}
+      {breaking.length === 0 ? (
+        newer.some((release) => release.items.length > 0) && (
+          <p className={styles.span}>No breaking changes since {from}.</p>
+        )
+      ) : (
+        <div>
+          <div className={clsx(styles.group, styles.breakingText)}>Breaking changes to handle</div>
+          <ul className={styles.upgradeList}>
+            {shown.map(({release, item}) => (
+              <li key={item.number}>
+                <span className={styles.span}>{release.version}</span>
+                <span>{renderText(item.text)}</span>
+                <a href={item.url}>#{item.number}</a>
+              </li>
+            ))}
+          </ul>
+          {breaking.length > SHOWN_BREAKING_CHANGES && (
+            <button type="button" className={styles.show} onClick={() => setShowAll(!showAll)}>
+              {showAll
+                ? 'Show fewer breaking changes'
+                : `Show ${plural(breaking.length - SHOWN_BREAKING_CHANGES, 'more breaking change', 'more breaking changes')}`}
+            </button>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function Changelog({changelog: {releases}}: Props): ReactElement {
   const [expanded, setExpanded] = useState<number[]>([]);
   const majors = [...new Set(releases.map(majorOf))];
 
   return (
     <>
+      {releases.length > 0 && <Latest releases={releases} />}
+      {releases.length > 0 && majorOf(releases[0]) === 0 && (
+        <div className={styles.notice}>
+          Before 1.0, a minor release can contain breaking changes. Each one is marked in red and links to its pull
+          request.
+        </div>
+      )}
+      <Upgrade releases={releases} />
       <div className={styles.legend}>
         {categories.map(({category, label}) => (
           <span key={category} className={styles[`${category}Text`]}>{label}</span>

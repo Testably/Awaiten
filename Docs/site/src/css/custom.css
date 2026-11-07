@@ -19,3 +19,9 @@
   --ifm-color-primary-lightest: #79cdc8;
   --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
 }
+
+.docs-doc-id-benchmarks article,
+.docs-doc-id-changelog article {
+  max-width: 1000px;
+  margin: 0 auto;
+}

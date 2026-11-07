@@ -37,8 +37,12 @@ const config: Config = {
       {
         docs: {
           path: '../pages',
-          routeBasePath: '/',
+          routeBasePath: 'docs',
           sidebarPath: './sidebars.ts',
+          sidebarItemsGenerator: async ({defaultSidebarItemsGenerator, ...args}) =>
+            (await defaultSidebarItemsGenerator(args)).filter(
+              (item) => !(item.type === 'doc' && ['benchmarks', 'changelog'].includes(item.id)),
+            ),
         },
         blog: false,
         theme: {
@@ -54,7 +58,7 @@ const config: Config = {
       '@easyops-cn/docusaurus-search-local',
       {
         hashed: true,
-        docsRouteBasePath: '/',
+        docsRouteBasePath: 'docs',
         docsDir: '../pages',
         indexBlog: false,
         highlightSearchTermsOnTargetPage: true,
@@ -69,6 +73,14 @@ const config: Config = {
       {packages: ['Awaiten', 'Awaiten.Extensions.DependencyInjection']},
     ],
     './src/plugins/llms-txt/index.ts',
+    [
+      '@docusaurus/plugin-client-redirects',
+      {
+        redirects: [{from: '/docs', to: '/docs/getting-started'}],
+        createRedirects: (path: string) =>
+          path.startsWith('/docs/') && path.length > '/docs/'.length ? [path.slice('/docs'.length)] : undefined,
+      },
+    ],
   ],
 
   themeConfig: {
@@ -85,6 +97,22 @@ const config: Config = {
         height: 32,
       },
       items: [
+        {
+          to: '/docs/getting-started',
+          label: 'Docs',
+          position: 'left',
+          activeBaseRegex: '/docs/(?!benchmarks|changelog)',
+        },
+        {
+          to: '/docs/benchmarks',
+          label: 'Benchmarks',
+          position: 'left',
+        },
+        {
+          to: '/docs/changelog',
+          label: 'Changelog',
+          position: 'left',
+        },
         {
           href: 'https://github.com/awaiten-dev/Awaiten',
           label: 'GitHub',

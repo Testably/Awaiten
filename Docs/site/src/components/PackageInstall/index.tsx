@@ -15,6 +15,7 @@ type Props = {
   package: string | string[];
   prerelease?: boolean;
   developmentDependency?: boolean;
+  showLatestVersion?: boolean;
 };
 
 type ResolvedPackage = {id: string; version: string; prerelease: boolean};
@@ -34,6 +35,7 @@ export default function PackageInstall({
   package: packageIds,
   prerelease = false,
   developmentDependency = false,
+  showLatestVersion = true,
 }: Props): ReactElement {
   const versions = usePluginData('nuget-versions') as PackageVersions;
   const packages = resolve(Array.isArray(packageIds) ? packageIds : [packageIds], versions, prerelease);
@@ -66,17 +68,19 @@ export default function PackageInstall({
           <CodeBlock language="xml" title="Project file">{centralReferences}</CodeBlock>
         </TabItem>
       </Tabs>
-      <p className={styles.versions}>
-        Latest version:{' '}
-        {packages.map((p, index) => (
-          <React.Fragment key={p.id}>
-            {index > 0 && ', '}
-            <a href={`https://www.nuget.org/packages/${p.id}/${p.version}`}>
-              {packages.length > 1 ? `${p.id} ${p.version}` : p.version}
-            </a>
-          </React.Fragment>
-        ))}
-      </p>
+      {showLatestVersion && (
+        <p className={styles.versions}>
+          Latest version:{' '}
+          {packages.map((p, index) => (
+            <React.Fragment key={p.id}>
+              {index > 0 && ', '}
+              <a href={`https://www.nuget.org/packages/${p.id}/${p.version}`}>
+                {packages.length > 1 ? `${p.id} ${p.version}` : p.version}
+              </a>
+            </React.Fragment>
+          ))}
+        </p>
+      )}
     </>
   );
 }
