@@ -183,7 +183,7 @@ partial class AwaitenGenerator
 				? entries
 				: new List<InjectPropertyEntry>();
 
-		if (OpenInjectPropertyKey(info) is { } openKey
+		if (OpenInjectPropertyKey(info, context.Compilation) is { } openKey
 		    && context.InjectProperties.TryGetValue(openKey, out List<InjectPropertyEntry>? openEntries))
 		{
 			injectProperties = MergeOpenInjectProperties(info, injectProperties, openEntries, context.Diagnostics);
@@ -224,10 +224,10 @@ partial class AwaitenGenerator
 	///     <see langword="null" />. A decorator chain link carries a synthetic identity and is skipped, exactly as a
 	///     closed entry naming the decorator type does not reach it.
 	/// </summary>
-	private static string? OpenInjectPropertyKey(ImplInfo info)
+	private static string? OpenInjectPropertyKey(ImplInfo info, Compilation compilation)
 		=> !SymbolEqualityComparer.Default.Equals(info.Symbol, info.Symbol.OriginalDefinition)
-		   && RegisteredType(info.ImplementationType) == info.Symbol.ToDisplayString(FullyQualified)
-			? info.Symbol.OriginalDefinition.ToDisplayString(FullyQualified)
+		   && RegisteredType(info.ImplementationType) == TypeIdentity(info.Symbol, compilation)
+			? TypeIdentity(info.Symbol.OriginalDefinition, compilation)
 			: null;
 
 	/// <summary>

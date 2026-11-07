@@ -305,7 +305,7 @@ partial class AwaitenGenerator
 
 			// A [Singleton<…>(WhenInjectedInto = typeof(Consumer))] contextual binding, resolved to the consumer's
 			// context key.
-			string? whenInjectedInto = NamedTypeArgument(attribute, "WhenInjectedInto");
+			string? whenInjectedInto = NamedTypeArgument(attribute, "WhenInjectedInto", context.Compilation);
 
 			Location? location = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? fallbackLocation;
 
@@ -314,7 +314,7 @@ partial class AwaitenGenerator
 
 			RawRegistration registration = new(
 				service.ToDisplayString(FullyQualified),
-				implementation.ToDisplayString(FullyQualified),
+				TypeIdentity((INamedTypeSymbol)implementation, context.Compilation),
 				lifetime.Value,
 				(INamedTypeSymbol)implementation,
 				location,
@@ -408,11 +408,11 @@ partial class AwaitenGenerator
 
 			if (SkippedRegistrationReason(module, implementation) is { } reason)
 			{
-				ReportNotSelfCompiled(context, module, implementation, "factory", reason, $"make '{Display(registration.ImplementationType)}', its constructor and the constructor's parameter types public");
+				ReportNotSelfCompiled(context, module, implementation, "factory", reason, $"make '{DisplayInstance(registration.ImplementationType)}', its constructor and the constructor's parameter types public");
 			}
 			else if (ModuleShapeReason(module) is { } shape)
 			{
-				ReportNotSelfCompiled(context, module, implementation, "factory", shape, $"make '{Display(registration.ImplementationType)}', its constructor and the constructor's parameter types public");
+				ReportNotSelfCompiled(context, module, implementation, "factory", shape, $"make '{DisplayInstance(registration.ImplementationType)}', its constructor and the constructor's parameter types public");
 			}
 			else if (!reportedNotSelfCompiled)
 			{
@@ -422,7 +422,7 @@ partial class AwaitenGenerator
 					LocationInfo.From(context.FallbackLocation ?? registration.Location),
 					new EquatableArray<string>([
 						Display(module.ToDisplayString(FullyQualified)),
-						$"registers '{Display(registration.ImplementationType)}', which this container cannot construct",
+						$"registers '{DisplayInstance(registration.ImplementationType)}', which this container cannot construct",
 					])));
 			}
 
@@ -441,7 +441,7 @@ partial class AwaitenGenerator
 				}
 
 				string slot = release ? "OnRelease" : "OnActivated";
-				ReportNotSelfCompiled(context, module, implementation, $"{slot} hook wrapper", hookReason, $"make '{Display(registration.ImplementationType)}', its constructor and its {slot} hook public");
+				ReportNotSelfCompiled(context, module, implementation, $"{slot} hook wrapper", hookReason, $"make '{DisplayInstance(registration.ImplementationType)}', its constructor and its {slot} hook public");
 				return null;
 			}
 		}
@@ -552,7 +552,7 @@ partial class AwaitenGenerator
 					LocationInfo.From(context.FallbackLocation),
 					new EquatableArray<string>([
 						Display(module.ToDisplayString(FullyQualified)),
-						Display(registration.ImplementationType),
+						DisplayInstance(registration.ImplementationType),
 						release ? "OnRelease" : "OnActivated",
 						hook,
 						reason,
@@ -741,7 +741,7 @@ partial class AwaitenGenerator
 			{
 				result.Add(new RawRegistration(
 					serviceType,
-					implementation.ToDisplayString(FullyQualified),
+					TypeIdentity(implementation, context.Compilation),
 					lifetime,
 					implementation,
 					location,
@@ -767,7 +767,7 @@ partial class AwaitenGenerator
 			return true;
 		}
 
-		string qualifiedFactory = origin is null ? factory : $"{origin.ToDisplayString(FullyQualified)}.{factory}";
+		string qualifiedFactory = origin is null ? factory : $"{TypeIdentity(origin, context.Compilation)}.{factory}";
 
 		result.Add(new RawRegistration(
 			serviceType,
@@ -787,20 +787,9 @@ partial class AwaitenGenerator
 			OnActivated: onActivated,
 			OnRelease: onRelease,
 			Traits: traits.IsEmpty ? null : traits,
-			ScanImplementation: origin is null || implementationName is null ? null : ScannedImplementation(origin, implementationName, context.Compilation)));
+			ScanImplementation: origin is null || implementationName is null ? null : origin.ContainingAssembly.GetTypeByMetadataName(implementationName)));
 		return true;
 	}
-
-	/// <summary>
-	///     The implementation of <paramref name="module" />'s assembly named <paramref name="metadataName" />, when this
-	///     compilation names no other type so, or <see langword="null" />. Its fully qualified name then identifies it
-	///     among every registration of the container.
-	/// </summary>
-	private static INamedTypeSymbol? ScannedImplementation(INamedTypeSymbol module, string metadataName, Compilation compilation)
-		=> module.ContainingAssembly.GetTypeByMetadataName(metadataName) is { } implementation
-		   && SymbolEqualityComparer.Default.Equals(compilation.GetTypeByMetadataName(metadataName), implementation)
-			? implementation
-			: null;
 
 	/// <summary>
 	///     AWT168: a contextual binding is stored under a synthetic per-consumer key (see <c>ContextKey</c>), which
@@ -1391,12 +1380,12 @@ partial class AwaitenGenerator
 	///     the same implementation, keeping only the first.
 	/// </summary>
 	private static Dictionary<string, List<InjectPropertyEntry>> CollectInjectProperties(
-		INamedTypeSymbol containerSymbol, List<DiagnosticInfo> diagnostics)
+		INamedTypeSymbol containerSymbol, Compilation compilation, List<DiagnosticInfo> diagnostics)
 	{
 		Dictionary<string, List<InjectPropertyEntry>> map = new(StringComparer.Ordinal);
 		foreach (AttributeData attribute in containerSymbol.GetAttributes())
 		{
-			if (!TryReadInjectPropertyTarget(attribute, diagnostics, out string? propertyName, out string? implementationType, out LocationInfo? location))
+			if (!TryReadInjectPropertyTarget(attribute, compilation, diagnostics, out string? propertyName, out string? implementationType, out LocationInfo? location))
 			{
 				continue;
 			}
@@ -1443,6 +1432,7 @@ partial class AwaitenGenerator
 	/// </summary>
 	private static bool TryReadInjectPropertyTarget(
 		AttributeData attribute,
+		Compilation compilation,
 		List<DiagnosticInfo> diagnostics,
 		[NotNullWhen(true)] out string? propertyName,
 		[NotNullWhen(true)] out string? implementationType,
@@ -1468,9 +1458,7 @@ partial class AwaitenGenerator
 			return false;
 		}
 
-		string type = implementation.IsUnboundGenericType
-			? implementation.OriginalDefinition.ToDisplayString(FullyQualified)
-			: implementation.ToDisplayString(FullyQualified);
+		string type = TypeIdentity(implementation.IsUnboundGenericType ? implementation.OriginalDefinition : implementation, compilation);
 
 		// AWT177 on the definition: every closing shares its members, so a bad name is reported once at the
 		// attribute, even when no closing is constructed, instead of once per closing.
@@ -1480,7 +1468,7 @@ partial class AwaitenGenerator
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.InjectPropertyNotFound,
 				location,
-				new EquatableArray<string>([propertyName, Display(type),])));
+				new EquatableArray<string>([propertyName, DisplayInstance(type),])));
 			return false;
 		}
 
@@ -1576,6 +1564,7 @@ partial class AwaitenGenerator
 	private static void ReportUnmatchedInjectProperties(
 		Dictionary<string, List<InjectPropertyEntry>> injectProperties,
 		List<ImplInfo> implOrder,
+		Compilation compilation,
 		List<DiagnosticInfo> diagnostics)
 	{
 		if (injectProperties.Count == 0)
@@ -1587,8 +1576,8 @@ partial class AwaitenGenerator
 		foreach (ImplInfo info in implOrder)
 		{
 			registered.Add(info.ImplementationType);
-			registered.Add(info.Symbol.ToDisplayString(FullyQualified));
-			registered.Add(info.Symbol.OriginalDefinition.ToDisplayString(FullyQualified));
+			registered.Add(TypeIdentity(info.Symbol, compilation));
+			registered.Add(TypeIdentity(info.Symbol.OriginalDefinition, compilation));
 		}
 
 		foreach (KeyValuePair<string, List<InjectPropertyEntry>> implementation in injectProperties)

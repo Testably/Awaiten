@@ -61,7 +61,7 @@ partial class AwaitenGenerator
 		    || info.Production != ProductionKind.Constructor
 		    || info.ConstructVia is not null
 		    || request.ResolverType is null
-		    || BaseFactoryName(info) is not { } factoryName
+		    || BaseFactoryName(info, context.Compilation) is not { } factoryName
 		    || factories.Factories.Any(factory => factory.FactoryName == factoryName)
 		    || (info.OnActivated is not null && request.OnActivated is null)
 		    || (info.OnRelease is not null && request.OnRelease is null)
@@ -115,14 +115,14 @@ partial class AwaitenGenerator
 	///     composite, or <see langword="null" />
 	///     for any other instance, which an extending container builds otherwise.
 	/// </summary>
-	private static string? BaseFactoryName(ImplInfo info)
+	private static string? BaseFactoryName(ImplInfo info, Compilation compilation)
 	{
 		if (info.IsComposite)
 		{
 			return info.Services.Count > 0 ? ContributionFactoryName("CompositeAttribute", info.Symbol, info.Services[0].Service) : null;
 		}
 
-		if (info.ImplementationType == info.Symbol.ToDisplayString(FullyQualified))
+		if (info.ImplementationType == TypeIdentity(info.Symbol, compilation))
 		{
 			return RegistrationFactoryName(info.Symbol);
 		}

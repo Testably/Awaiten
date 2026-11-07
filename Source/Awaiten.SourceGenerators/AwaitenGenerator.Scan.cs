@@ -154,7 +154,7 @@ partial class AwaitenGenerator
 			}
 
 			IReadOnlyList<INamedTypeSymbol>? hookClosedMarkers = ScanHookMarkers(candidate.Type, match, openMarker, markerDefinition);
-			produced += RegisterScanMatch(candidate.Type, ScanContracts(candidate.Type, match, marker, openMarker, markerDefinition, compilation, containerSymbol), markerDisplay, match, hookClosedMarkers, result, diagnostics);
+			produced += RegisterScanMatch(candidate.Type, ScanContracts(candidate.Type, match, marker, openMarker, markerDefinition, compilation, containerSymbol), markerDisplay, match, hookClosedMarkers, result, compilation, diagnostics);
 		}
 
 		ReportScanFilterDiagnostics(filters, hits, new ScanFilterCounts(assignable, registered, produced), assemblies, markerDisplay, location, diagnostics);
@@ -311,20 +311,22 @@ partial class AwaitenGenerator
 		ScanMatch match,
 		IReadOnlyList<INamedTypeSymbol>? hookClosedMarkers,
 		List<RawRegistration> result,
+		Compilation compilation,
 		List<DiagnosticInfo> diagnostics)
 	{
 		string typeName = type.ToDisplayString(FullyQualified);
+		string identity = TypeIdentity(type, compilation);
 		int produced = 0;
 
 		if (match.RegisterSelf)
 		{
-			result.Add(ScanRegistration(typeName, typeName, type, type, match, hookClosedMarkers));
+			result.Add(ScanRegistration(typeName, identity, type, type, match, hookClosedMarkers));
 			produced++;
 		}
 
 		foreach (INamedTypeSymbol contract in contracts.Contracts)
 		{
-			result.Add(ScanRegistration(contract.ToDisplayString(FullyQualified), typeName, type, contract, match, hookClosedMarkers));
+			result.Add(ScanRegistration(contract.ToDisplayString(FullyQualified), identity, type, contract, match, hookClosedMarkers));
 			produced++;
 		}
 
@@ -1199,7 +1201,7 @@ partial class AwaitenGenerator
 
 			INamedTypeSymbol narrower = LessAccessibleThanContainer(match.Implementation, containerSymbol)!;
 			string type = Display(narrower.ToDisplayString(FullyQualified));
-			bool scannedAsItself = registrations.Any(registration => registration.IsScan && registration.ServiceType == implementationType);
+			bool scannedAsItself = registrations.Any(registration => registration is { IsScan: true, ServiceSymbol: { } service, } && TypeIdentity(service, compilation) == implementationType);
 			(string reason, string remedy) = MissingResolverTypeReason(match.Implementation, narrower, services, containerSymbol, compilation, moduleRegistered: false).PrivateService switch
 			{
 				not null when scannedAsItself => ("the scan registers it as itself", "expose it through ScanAs.Marker or ScanAs.MatchingInterface instead of ScanAs.Self"),
@@ -1210,10 +1212,10 @@ partial class AwaitenGenerator
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.ScanTypePrivate,
 				LocationInfo.From(match.Location),
-				new EquatableArray<string>([Display(implementationType), $"'{type}' is private or protected and {reason}", remedy,])));
+				new EquatableArray<string>([DisplayInstance(implementationType), $"'{type}' is private or protected and {reason}", remedy,])));
 			raw.RemoveAll(registration => registration.IsScan && registration.ImplementationType == implementationType);
 			diagnostics.RemoveAll(diagnostic => diagnostic.Descriptor == Diagnostics.ScanAmbiguousMatchingInterfaces
-			                                    && diagnostic.MessageArgs.AsArray()[0] == Display(implementationType));
+			                                    && diagnostic.MessageArgs.AsArray()[0] == DisplayInstance(implementationType));
 		}
 	}
 

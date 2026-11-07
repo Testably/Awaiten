@@ -75,15 +75,15 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     Reads a <c>System.Type</c> named argument (a <c>typeof(…)</c>) off an attribute, returning its
-	///     fully-qualified display, or <see langword="null" /> when unset. Used for <c>WhenInjectedInto</c>.
+	///     <see cref="TypeIdentity" />, or <see langword="null" /> when unset. Used for <c>WhenInjectedInto</c>.
 	/// </summary>
-	private static string? NamedTypeArgument(AttributeData attribute, string name)
+	private static string? NamedTypeArgument(AttributeData attribute, string name, Compilation compilation)
 	{
 		foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
 		{
 			if (argument.Key == name && argument.Value.Value is INamedTypeSymbol type)
 			{
-				return type.ToDisplayString(FullyQualified);
+				return TypeIdentity(type, compilation);
 			}
 		}
 

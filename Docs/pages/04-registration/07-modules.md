@@ -154,7 +154,7 @@ When the module lives in the **same assembly as the container**, there is no ass
 
 ### Shared instances
 
-A match shares one instance with every other registration or scan match of the same implementation, in any assembly. This holds when the module registers the implementation through a `Factory`, when another module, the container or the base of an [extended container](./08-extending-containers.md) registers it, and when the scans of two modules match it. Each generated registration names its implementation, so a container in another assembly builds the instance once, through the registration that wins, and the match joins it.
+A match shares one instance with every other registration or scan match of the same implementation, in any assembly. This holds when the module registers the implementation through a `Factory`, when another module, the container or the base of an [extended container](./08-extending-containers.md) registers it, and when the scans of two modules match it. Each generated registration names its implementation, so a container in another assembly builds the instance once, through the registration that wins, and the match joins it. Types of the same full name from different assemblies are different implementations, so they never share an instance.
 
 ```csharp
 public interface IAppliance;

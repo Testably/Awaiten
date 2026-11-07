@@ -52,7 +52,7 @@ partial class AwaitenGenerator
 		HashSet<string> named = new(raw.Where(registration => registration.ScanImplementation is null).Select(registration => registration.ImplementationType), StringComparer.Ordinal);
 		Dictionary<string, INamedTypeSymbol> shared = raw
 			.Where(registration => registration.ScanImplementation is not null)
-			.GroupBy(registration => registration.ScanImplementation!.ToDisplayString(FullyQualified), StringComparer.Ordinal)
+			.GroupBy(registration => TypeIdentity(registration.ScanImplementation!, compilation), StringComparer.Ordinal)
 			.Where(group => group.Count() > 1 || named.Contains(group.Key))
 			.ToDictionary(group => group.Key, group => group.First().ScanImplementation!, StringComparer.Ordinal);
 		if (shared.Count == 0)
@@ -62,9 +62,9 @@ partial class AwaitenGenerator
 
 		for (int index = 0; index < raw.Count; index++)
 		{
-			if (raw[index].ScanImplementation is { } implementation && shared.ContainsKey(implementation.ToDisplayString(FullyQualified)))
+			if (raw[index].ScanImplementation is { } implementation && shared.ContainsKey(TypeIdentity(implementation, compilation)))
 			{
-				raw[index] = raw[index] with { ImplementationType = implementation.ToDisplayString(FullyQualified), };
+				raw[index] = raw[index] with { ImplementationType = TypeIdentity(implementation, compilation), };
 			}
 		}
 
@@ -99,7 +99,7 @@ partial class AwaitenGenerator
 					Diagnostics.ScanMatchNotShared,
 					LocationInfo.From(match.Location),
 					new EquatableArray<string>([
-						Display(entry.Key),
+						DisplayInstance(entry.Key),
 						Display(match.Origin!.ToDisplayString(FullyQualified)),
 						Display(match.ServiceType),
 						Display(builtAs.ToDisplayString(FullyQualified)),
@@ -117,7 +117,7 @@ partial class AwaitenGenerator
 			INamedTypeSymbol builtAs = InPrecedenceOrder(raw)
 				.First(candidate => !dropped.Contains(candidate.Index) && candidate.Registration.ImplementationType == identity)
 				.Registration.Implementation;
-			if (builtAs.ToDisplayString(FullyQualified) == identity)
+			if (TypeIdentity(builtAs, compilation) == identity)
 			{
 				return [];
 			}
@@ -147,7 +147,7 @@ partial class AwaitenGenerator
 	///     implementation still conflict (AWT111). An open generic factory's closing is identified the same way, per
 	///     closing. Scan matches keep their own identities.
 	/// </summary>
-	private static void AssignMemberIdentities(List<RawRegistration> raw, INamedTypeSymbol containerSymbol)
+	private static void AssignMemberIdentities(List<RawRegistration> raw, INamedTypeSymbol containerSymbol, Compilation compilation)
 	{
 		HashSet<string> implementations = new(
 			raw.Where(registration => !NamesOnlyItsService(registration)).Select(registration => registration.ImplementationType),
@@ -159,14 +159,59 @@ partial class AwaitenGenerator
 			{
 				raw[index] = registration with
 				{
-					ImplementationType = $"{registration.ImplementationType}{MemberKeyMarker}{QualifiedMember(registration.Origin ?? containerSymbol, registration.ProductionMember)}",
+					ImplementationType = $"{registration.ImplementationType}{MemberKeyMarker}{TypeIdentity(registration.Origin ?? containerSymbol, compilation)}.{registration.ProductionMember}",
 				};
 			}
 		}
 
-		static bool NamesOnlyItsService(RawRegistration registration)
+		bool NamesOnlyItsService(RawRegistration registration)
 			=> registration is { Production: not ProductionKind.Constructor, IsScan: false, }
-			   && registration.ImplementationType == registration.ServiceType;
+			   && registration.ImplementationType == (registration.ServiceSymbol is { } service ? TypeIdentity(service, compilation) : registration.ServiceType);
+	}
+
+	/// <summary>
+	///     The marker inside the identity of a type that the compilation does not find by its name (see
+	///     <see cref="TypeIdentity" />). <c>DisplayInstance</c> trims it.
+	/// </summary>
+	private const string AssemblyMarker = "@assembly:";
+
+	/// <summary>
+	///     The identity that coalescing and every map keyed by an implementation know a type by: its fully qualified
+	///     name, followed by the assemblies of the type and of its type arguments when the compilation finds another
+	///     type or none by one of their names, as for two same-named types of different assemblies. Two different
+	///     types never share an identity, and a type the compilation finds by its name keeps that name.
+	/// </summary>
+	private static string TypeIdentity(INamedTypeSymbol type, Compilation compilation)
+	{
+		string name = type.ToDisplayString(FullyQualified);
+		List<INamedTypeSymbol> components = NamedComponents(type).ToList();
+		return components.All(component => component.TypeKind == TypeKind.Error
+		                                   || SymbolEqualityComparer.Default.Equals(compilation.GetTypeByMetadataName(MetadataNameOf(component.OriginalDefinition)), component.OriginalDefinition))
+			? name
+			: $"{name}{AssemblyMarker}{string.Join(",", components.Select(component => component.ContainingAssembly?.Name))}";
+	}
+
+	/// <summary>The named types that make up <paramref name="type" />: the type itself, then its and its containing types' type arguments.</summary>
+	private static IEnumerable<INamedTypeSymbol> NamedComponents(ITypeSymbol type)
+	{
+		if (type is IArrayTypeSymbol array)
+		{
+			foreach (INamedTypeSymbol component in NamedComponents(array.ElementType))
+			{
+				yield return component;
+			}
+		}
+		else if (type is INamedTypeSymbol named)
+		{
+			yield return named;
+			for (INamedTypeSymbol? owner = named; owner is not null; owner = owner.ContainingType)
+			{
+				foreach (INamedTypeSymbol component in owner.TypeArguments.SelectMany(NamedComponents))
+				{
+					yield return component;
+				}
+			}
+		}
 	}
 
 	/// <summary>
@@ -498,7 +543,7 @@ partial class AwaitenGenerator
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.ContextualBindingNeverApplies,
 				conditional.Location,
-				new EquatableArray<string>([Display(conditional.Service), Display(conditional.Consumer),])));
+				new EquatableArray<string>([Display(conditional.Service), DisplayInstance(conditional.Consumer),])));
 		}
 	}
 
@@ -851,7 +896,7 @@ partial class AwaitenGenerator
 		diagnostics.Add(new DiagnosticInfo(
 			Diagnostics.DuplicateContextualBinding,
 			LocationInfo.From(registration.Location),
-			new EquatableArray<string>([Display(registration.ServiceType), Display(consumer),])));
+			new EquatableArray<string>([Display(registration.ServiceType), DisplayInstance(consumer),])));
 	}
 
 	/// <summary>

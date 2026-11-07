@@ -54,6 +54,20 @@ public static class Generator
 		return Run(source, [EmitToReference(referencedOutput),]);
 	}
 
+	/// <summary>
+	///     Like <see cref="RunWithGeneratedReferencedAssembly" />, but with two independent generated referenced
+	///     assemblies, for example two libraries that declare a type of the same name.
+	/// </summary>
+	public static GeneratorResult RunWithGeneratedReferencedAssemblies(
+		[StringSyntax("c#-test")] string firstReferencedSource,
+		[StringSyntax("c#-test")] string secondReferencedSource,
+		[StringSyntax("c#-test")] string source)
+	{
+		(Compilation first, _) = RunGenerator(firstReferencedSource, [], [], "FirstAssembly");
+		(Compilation second, _) = RunGenerator(secondReferencedSource, [], [], "SecondAssembly");
+		return Run(source, [EmitToReference(first), EmitToReference(second),]);
+	}
+
 	private static GeneratorResult Run(
 		[StringSyntax("c#-test")] string source,
 		MetadataReference[] additionalReferences,
