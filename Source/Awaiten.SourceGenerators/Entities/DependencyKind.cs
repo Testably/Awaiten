@@ -96,4 +96,11 @@ internal enum DependencyKind
 	///     edge and is analyzed per member through <c>AwaitenGenerator.AnalyzedDependencies</c>.
 	/// </summary>
 	TypeDispatch,
+
+	/// <summary>
+	///     The optional parameter of a module's generated factory for an <c>[Inject(Optional = true)]</c> property whose
+	///     service the container does not register: passed as <see langword="null" />, so the factory leaves the
+	///     property as it is. Contributes no edge.
+	/// </summary>
+	Absent,
 }

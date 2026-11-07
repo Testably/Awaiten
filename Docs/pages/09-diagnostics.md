@@ -135,6 +135,8 @@ An implementation is registered with conflicting lifetimes.
 public static partial class CoffeeShop;
 ```
 
+The library's build reports this too for an implementation a module builds through a [generated handle](./04-registration/07-modules.md#services-only-the-module-uses), since a container in another assembly serves all its registrations from one instance.
+
 **Fix:** Register the implementation with a single lifetime attribute and remove the other.
 
 ### AWT111
@@ -154,6 +156,8 @@ public static partial class CoffeeShop
 ```
 
 Registrations that name the same implementation type are one implementation. A `Factory` or `Instance` registration that names only the service is its own implementation, identified by its member, unless another registration names that type as its implementation, as `[Singleton<Grinder>]` does here.
+
+The library's build reports this too for an implementation a module builds through a [generated handle](./04-registration/07-modules.md#services-only-the-module-uses), since a container in another assembly serves all its registrations from one instance.
 
 **Fix:** Produce the implementation one way only: keep either the `Factory` registration or the constructor registration, or name the same `Factory` on both.
 
@@ -667,6 +671,8 @@ public static partial class CoffeeShop
 ```
 
 A hook is identified by its declaring type and its name, so methods of the same name on a module and on the container, or on two modules, are different hooks and conflict. Registrations naming the same method of the same type share it.
+
+The library's build reports this too for an implementation a module builds through a [generated handle](./04-registration/07-modules.md#services-only-the-module-uses), since a container in another assembly serves all its registrations from one instance.
 
 **Fix:** Declare one hook for the implementation: set it on one registration and leave it unset on the others (an unset directive merges with the winner's), or name the same method on all of them. To let the container replace a module's registration, hooks included, mark the module's registration `Fallback`.
 
@@ -1975,7 +1981,7 @@ internal sealed class Roaster : IRoaster;
 public static class RoastingModule;
 ```
 
-A [self-compiled module scan](./04-registration/07-modules.md#self-compiled-scans) emits a factory method and a registration attribute into the module's partial, and a registration of an [internal implementation](./04-registration/07-modules.md#internal-implementations) a factory method, re-opening the whole nesting chain of a nested module. Add the `partial` modifier to the module class and every type containing it. A module whose registrations another assembly can construct, or that another assembly cannot name, needs no generated code and need not be partial. A module without a `[Scan]` is reported only when its assembly grants `InternalsVisibleTo` to no assembly. Otherwise the module builds, and a container that can't construct the implementation reports [AWT231](#awt231). A registration of a type private to the module keeps the error. A module with a `[Scan]` keeps it too, even when its assembly grants `InternalsVisibleTo`. A container reads the matches from what the generator adds to the module, so the scan needs the `partial` modifier. The message says so when the assembly grants `InternalsVisibleTo`. Reported in the module's own build.
+A [self-compiled module scan](./04-registration/07-modules.md#self-compiled-scans) emits a factory method and a registration attribute into the module's partial, and a registration of an [internal implementation](./04-registration/07-modules.md#internal-implementations) a factory method, re-opening the whole nesting chain of a nested module. An `Eager` or async-initialized singleton the module registers under an internal type needs a [generated handle](./04-registration/07-modules.md#services-only-the-module-uses) as well, since a container builds it even when nothing depends on it. Add the `partial` modifier to the module class and every type containing it. A module whose registrations another assembly can construct, or that another assembly cannot name, needs no generated code and need not be partial. A module without a `[Scan]` is reported only when its assembly grants `InternalsVisibleTo` to no assembly. Otherwise the module builds, and a container that can't construct the implementation reports [AWT231](#awt231). A registration of a type private to the module keeps the error. A module with a `[Scan]` keeps it too, even when its assembly grants `InternalsVisibleTo`. A container reads the matches from what the generator adds to the module, so the scan needs the `partial` modifier. The message says so when the assembly grants `InternalsVisibleTo`. Reported in the module's own build.
 
 **Fix:** Add `partial` to the module and every type that contains it: `public static partial class PluginModule;`.
 
@@ -1994,7 +2000,7 @@ internal sealed class Roaster(Secret secret) : IRoaster;   // Secret is internal
 public static partial class PluginModule;
 ```
 
-The generated factory is a `public` method whose parameters are resolved from the *consuming* container's graph, so each parameter type has to be nameable by the consumer. The same holds for the factory of an [internal implementation](./04-registration/07-modules.md#internal-implementations) a module registers. Widen the parameter type's accessibility, or keep the type out of self-compilation. (A v1 limitation: a self-compiled factory cannot construct through an inaccessible parameter.) This is reported only when the module's assembly grants `InternalsVisibleTo` to no assembly. Otherwise the module skips the factory, and a container that can't construct the implementation reports [AWT231](#awt231).
+The generated factory is a `public` method whose parameters are resolved from the *consuming* container's graph, so each parameter type has to be nameable by the consumer. The same holds for the factory of an [internal implementation](./04-registration/07-modules.md#internal-implementations) a module registers. A parameter of an internal type that the module itself registers with a constructor is fine: the factory takes it through a [generated handle](./04-registration/07-modules.md#services-only-the-module-uses). The implementation of such an internal service is reported when something needs the service, or when another module of the assembly registers the service as well, since a container in another assembly would then serve that module's implementation instead. Widen the parameter type's accessibility, or keep the type out of self-compilation. (A v1 limitation: a self-compiled factory cannot construct through an inaccessible parameter.) This is reported only when the module's assembly grants `InternalsVisibleTo` to no assembly. Otherwise the module skips the factory, and a container that can't construct the implementation reports [AWT231](#awt231).
 
 The factory is as accessible as the module. The factory of an `internal` module, which builds the types private to it, is reached only from the module's own assembly and from assemblies it grants `InternalsVisibleTo`, so its parameter types may be internal too.
 
@@ -2049,15 +2055,16 @@ public static partial class PluginModule;
 ```
 
 ```csharp expect=AWT197
-internal sealed class Roaster : IPlugin, IRoaster;
-
 [Module]
 [Singleton<Roaster, IRoaster>]
-[Singleton<Roaster, IPlugin>]   // a second service of the internal Roaster
-public static partial class RoastingModule;
+[Singleton<Roaster, IPlugin>]   // a second service of the private Roaster
+public static partial class RoastingModule
+{
+    private sealed class Roaster : IPlugin, IRoaster;
+}
 ```
 
-A self-compiled implementation is reached through a generated factory that returns a single accessible interface, so a shared instance across several interfaces cannot be expressed (unlike a container, whose registrations coalesce on the concrete type). The same applies across scans: two `[Scan]`s on one module that expose the same type under two different interfaces would emit two factories and silently split the instance, so that overlap is also rejected, as is an [internal implementation](./04-registration/07-modules.md#internal-implementations) that a scan of the same module matches too. Several keys of one service share the factory and stay one instance. A registered internal implementation can serve several services when one public type covers them all: the factory returns a registered service that converts to the others, or a public base class or interface of the implementation. Without such a type it is rejected too. Narrow the exposure to a single interface (typically `ScanAs.MatchingInterface`), or exclude the match. This is a v1 limitation. For an internal implementation registered under several services, a match its scans expose under two interfaces, or an internal implementation that the module both registers and scans, this is reported only when the module's assembly grants `InternalsVisibleTo` to no assembly. Otherwise the module skips the factory, both factories in the last case, and a container that can't construct the implementation reports [AWT231](#awt231). A public implementation with a public constructor that the module both registers and scans is never reported: every container constructs it and shares one instance, so the scan generates no factory.
+A self-compiled implementation is reached through a generated factory that returns a single accessible interface, so a shared instance across several interfaces cannot be expressed (unlike a container, whose registrations coalesce on the concrete type). The same applies across scans: two `[Scan]`s on one module that expose the same type under two different interfaces would emit two factories and silently split the instance, so that overlap is also rejected, as is an [internal implementation](./04-registration/07-modules.md#internal-implementations) that a scan of the same module matches too, including one the module builds through a [generated handle](./04-registration/07-modules.md#services-only-the-module-uses). Several keys of one service share the factory and stay one instance. A registered internal implementation can serve several services when one public type covers them all: the factory returns a registered service that converts to the others, or a public base class or interface of the implementation. Without such a type, the module shares the instance through a [generated handle](./04-registration/07-modules.md#services-only-the-module-uses) instead. A type private to the module, or one the handle's factory can't build, is still rejected. Narrow the exposure to a single interface (typically `ScanAs.MatchingInterface`), or exclude the match. This is a v1 limitation. For an internal implementation registered under several services, a match its scans expose under two interfaces, or an internal implementation that the module both registers and scans, this is reported only when the module's assembly grants `InternalsVisibleTo` to no assembly. Otherwise the module skips the factory, both factories in the last case, and a container that can't construct the implementation reports [AWT231](#awt231). A public implementation with a public constructor that the module both registers and scans is never reported: every container constructs it and shares one instance, so the scan generates no factory.
 
 **Fix:** Narrow `As` to a single interface, typically `As = ScanAs.MatchingInterface`, or exclude the match; register an internal implementation under a single service, give it a public base type or interface that covers its services, or make it public.
 
@@ -2081,9 +2088,9 @@ internal sealed class Roaster : IRoaster
 public static partial class PluginModule;
 ```
 
-The generated factory reduces a match, or a registered [internal implementation](./04-registration/07-modules.md#internal-implementations), to a parameter list resolved from the consuming container's graph. It copies an `[Arg]` or `[FromKey]` of a constructor parameter onto its own parameter. The factory of a registration also takes each `[Inject]` property as a parameter with the property's name and assigns it. What a parameter cannot express is rejected, because the consumer would silently construct the type differently than a container in the module's own assembly would: an `[Inject]` property of a scan match, an `Optional` property (a parameter can't be left out when its service is missing), a `Deferred` property (assigned after construction), a property without a setter the module can reach, one named like a constructor parameter, or one whose type another assembly can't name. Remove the attribute, keep the type out of self-compilation, or register it through a hand-written module factory. This is reported only when the module's assembly grants `InternalsVisibleTo` to no assembly. Otherwise the module skips the factory, and a container that can't construct the implementation reports [AWT231](#awt231).
+The generated factory reduces a match, or a registered [internal implementation](./04-registration/07-modules.md#internal-implementations), to a parameter list resolved from the consuming container's graph. It copies an `[Arg]` or `[FromKey]` of a constructor parameter onto its own parameter. The factory of a registration also takes each `[Inject]` property as a parameter with the property's name and assigns it. An `Optional` property becomes an optional parameter, which a consumer passes as `null` when it doesn't register the service. A `Deferred` property gets a setter that a consumer calls after construction. What the factory cannot express is rejected, because the consumer would silently construct the type differently than a container in the module's own assembly would: an `[Inject]` property of a scan match, an `Optional` property that is init-only, required or of a value type, a `Deferred` property that is init-only or required, a property marked both `Optional` and `Deferred`, a property without a setter the module can reach, one named like a constructor parameter, or one whose type another assembly can't name. Remove the attribute, keep the type out of self-compilation, or register it through a hand-written module factory. This is reported only when the module's assembly grants `InternalsVisibleTo` to no assembly. Otherwise the module skips the factory, and a container that can't construct the implementation reports [AWT231](#awt231).
 
-**Fix:** Remove the attribute or its `Optional` or `Deferred` flag, exclude the match from the scan or make a registered implementation public, or register the type through a hand-written module factory.
+**Fix:** Remove the attribute, give an `Optional` or `Deferred` property a plain `set` accessor, exclude the match from the scan or make a registered implementation public, or register the type through a hand-written module factory.
 
 ### AWT201
 
@@ -2185,7 +2192,7 @@ public static class EquipmentModule;
 public static partial class CoffeeShop;
 ```
 
-A module self-compiles its scans, its closed registrations of [internal implementations](./04-registration/07-modules.md#internal-implementations) and its closed decorators and composites, but not an open generic registration. A decorator or composite gets no factory when the module isn't `partial`, or when the factory can't express it, for example because a constructor parameter type isn't public. When such a type, or every constructor of it, is not accessible to a container in another assembly, and the module generated no factory for it, nothing can construct it there, so the container reports it at its `[Import]` and leaves the contribution out. A container in the module's own assembly, or one the library grants `InternalsVisibleTo`, constructs the type itself.
+A module self-compiles its scans, its closed registrations of [internal implementations](./04-registration/07-modules.md#internal-implementations) and its closed decorators and composites, but not an open generic registration. A decorator or composite gets no factory when the module isn't `partial`, or when the factory can't express it, for example because a constructor parameter type isn't public. A composite of a service the module registers under an internal type gets none either, since only a decorator is built into the service's [generated handle](./04-registration/07-modules.md#services-only-the-module-uses). When such a type, or every constructor of it, is not accessible to a container in another assembly, and the module generated no factory for it, nothing can construct it there, so the container reports it at its `[Import]` and leaves the contribution out. A container in the module's own assembly, or one the library grants `InternalsVisibleTo`, constructs the type itself.
 
 **Fix:** Make the type and its constructor public, or grant the container's assembly `InternalsVisibleTo`.
 
@@ -2260,6 +2267,75 @@ public static partial class CoffeeShop
 
 **Fix:** Rename the member.
 
+### AWT236
+
+:::danger[Error]
+A self-compiled module registration needs an internal service that the module doesn't register, and other modules of the same assembly register it, but none of them can share its handle.
+:::
+
+```csharp expect=AWT236
+internal sealed class BeanStore;
+internal sealed class Grinder(BeanStore beans) : IGrinder;
+
+[Module]
+[Singleton<BeanStore>]
+public static class StorageModule;     // not partial, so it can't declare the handle
+
+[Module]
+[Singleton<Grinder, IGrinder>]   // BeanStore is registered only in StorageModule
+public static partial class CoffeeModule;
+```
+
+A container in another assembly reaches an internal service only through its [generated handle](./04-registration/07-modules.md#services-only-the-module-uses), which one module of the assembly declares for all of them. Another module that registers the service serves the handle when it is `partial` and can build the service, also from internal services that further modules share. The message names every module that registers the service. Like [AWT195](#awt195), this is reported only when the module's assembly grants `InternalsVisibleTo` to no assembly.
+
+**Fix:** Make the other module `partial`, register the internal service in the module that needs it too, or move both registrations into one module.
+
+### AWT237
+
+:::danger[Error]
+A self-compiled module registration takes an internal service the module registers in a shape its generated factory can't pass on.
+:::
+
+```csharp expect=AWT237
+internal sealed class BeanStore;
+internal sealed class Grinder(Task<BeanStore> beans) : IGrinder;   // Task<T> of an internal service
+
+[Module]
+[Singleton<BeanStore>]
+[Singleton<Grinder, IGrinder>]
+public static partial class CoffeeModule;
+```
+
+The factory takes the [generated handle](./04-registration/07-modules.md#services-only-the-module-uses) of the internal service in the same shape and passes the instance it holds on. It can do that for the service itself and for `Func<T>`, `Lazy<T>`, `Owned<T>`, `Func<Owned<T>>` and the collections of `T`, but not for other shapes such as `Task<T>`, `Lazy<Task<T>>` or a keyed dictionary. Like [AWT195](#awt195), this is reported only when the module's assembly grants `InternalsVisibleTo` to no assembly.
+
+**Fix:** Take the internal service in one of the supported shapes, or make the service public.
+
+### AWT238
+
+:::danger[Error]
+A container imports a module that needs an internal service of another module of its assembly, but not that other module.
+:::
+
+```csharp no-compile
+// Lib
+[Module]
+[Singleton<BeanStore>]
+public static partial class StorageModule;
+
+[Module]
+[Singleton<Grinder, IGrinder>]   // Grinder takes the internal BeanStore
+public static partial class CoffeeModule;
+
+// App
+[Container]
+[Import(typeof(CoffeeModule))]   // StorageModule is not imported
+public static partial class CoffeeShop;
+```
+
+The generated factory of `Grinder` takes the [generated handle](./04-registration/07-modules.md#services-only-the-module-uses) of `BeanStore`, which `StorageModule` declares and builds. Without importing `StorageModule`, nothing registers it. The same goes for a decorator or composite of such a service. The container reports only this cause, not the missing dependency ([AWT101](#awt101)) or the decorated service without a registration ([AWT123](#awt123)) it leads to.
+
+**Fix:** Import the module the message names too.
+
 ### AWT240
 
 :::danger[Error]
@@ -2287,7 +2363,38 @@ public static partial class ApplianceModule;
 public static partial class CoffeeShop;
 ```
 
+When the other module builds the implementation through a [generated handle](./04-registration/07-modules.md#services-only-the-module-uses), for example because it registers it under an internal service, the scanning module generates an alias that serves the match from the handle, so the container shares the handle's instance instead.
+
 **Fix:** Grant the container's assembly `InternalsVisibleTo` in the library, so the container constructs the implementation once for all of them. Or keep the scan from matching the implementation, or register it under a service that converts to the scan's interface.
+
+### AWT241
+
+:::danger[Error]
+A registration names an implementation that an imported module of another assembly builds through a generated handle, but the container can't share the handle's instance with it faithfully.
+:::
+
+A module builds an implementation through a [generated handle](./04-registration/07-modules.md#services-only-the-module-uses) when it registers it under an internal service. When the container or another module registers the same public implementation too, the container serves that registration from the handle's instance, so there is one instance, as in the library's own assembly. The handle builds the instance, though, so it can't run an `OnActivated` or `OnRelease` hook or apply `SuppressDisposal` that the earlier registration sets.
+
+```csharp no-compile
+// In a referenced library, which does not grant the application InternalsVisibleTo:
+internal interface IBeanStore;
+public sealed class BeanStore : IBeanStore;
+
+[Module]
+[Singleton<BeanStore, IBeanStore>]
+public static partial class CoffeeModule;
+
+// In the application:
+[Container]
+[Import(typeof(CoffeeModule))]
+[Singleton<BeanStore>(OnActivated = nameof(Fill))]   // the handle can't run this hook
+public static partial class CoffeeShop
+{
+    private static void Fill(BeanStore store) { }
+}
+```
+
+**Fix:** Set the directive on the module's registration, or remove it from this one. Granting the container's assembly `InternalsVisibleTo` in the library lets the container construct the implementation itself.
 
 ## Extending containers
 

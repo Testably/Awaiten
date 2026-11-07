@@ -10,10 +10,17 @@ namespace Awaiten.SourceGenerators;
 partial class AwaitenGenerator
 {
 	/// <summary>
-	///     One closed constructor-produced lifetime registration declared on a <c>[Module]</c>: the attribute, its
-	///     implementation and service, and where it is declared.
+	///     One closed lifetime registration declared on a <c>[Module]</c>: the attribute, its implementation and service,
+	///     and where it is declared. <see cref="Production" /> and <see cref="Member" /> name the <c>Factory</c> or
+	///     <c>Instance</c> member that produces it, if any.
 	/// </summary>
-	private sealed record ModuleRegistration(AttributeData Attribute, INamedTypeSymbol Implementation, INamedTypeSymbol Service, Location? Location);
+	private sealed record ModuleRegistration(
+		AttributeData Attribute,
+		INamedTypeSymbol Implementation,
+		INamedTypeSymbol Service,
+		Location? Location,
+		ProductionKind Production = ProductionKind.Constructor,
+		string? Member = null);
 
 	/// <summary>
 	///     Whether a module registration is self-compiled: the module and the service can be named from another
@@ -22,9 +29,10 @@ partial class AwaitenGenerator
 	///     another assembly can import the module without <c>InternalsVisibleTo</c>. A module another assembly cannot
 	///     name, or a service it cannot name, never reaches such a container, so neither is self-compiled. An
 	///     implementation hidden in the module (see <see cref="IsHiddenInModule" />) is self-compiled whatever the
-	///     module's accessibility, since only the module can construct it, unless the factory, which is as visible as
-	///     the module, could not return the service. The module's build and every importing container ask this same
-	///     question.
+	///     module's accessibility, since only the module can construct it, unless no factory could return the service,
+	///     because it is private or protected too. The factory of such an implementation under an internal service is
+	///     internal (see <see cref="RegistrationFactoryOf" />). The module's build and every importing container ask this
+	///     same question.
 	/// </summary>
 	private static bool SelfCompilesRegistration(INamedTypeSymbol module, INamedTypeSymbol implementation, INamedTypeSymbol service, Compilation compilation)
 		=> implementation is { TypeKind: TypeKind.Class, IsAbstract: false, IsStatic: false, IsUnboundGenericType: false, }
@@ -68,6 +76,7 @@ partial class AwaitenGenerator
 		private readonly Compilation _compilation;
 		private readonly Dictionary<INamedTypeSymbol, List<ModuleScanExpansion>> _scans = new(SymbolEqualityComparer.Default);
 		private readonly Dictionary<INamedTypeSymbol, List<RegistrationFactory>> _registrations = new(SymbolEqualityComparer.Default);
+		private readonly Dictionary<INamedTypeSymbol, List<RegistrationFactory>> _internalRegistrations = new(SymbolEqualityComparer.Default);
 		private readonly Dictionary<INamedTypeSymbol, List<RegistrationFactory>> _contributions = new(SymbolEqualityComparer.Default);
 
 		public SameCompilationModules(Compilation compilation) => _compilation = compilation;
@@ -77,7 +86,10 @@ partial class AwaitenGenerator
 		{
 			if (!_scans.TryGetValue(module, out List<ModuleScanExpansion>? scans))
 			{
-				_scans[module] = scans = CollectModuleScanFactories(module, _compilation, new List<DiagnosticInfo>(), CancellationToken.None);
+				// Without a grant, the module's scans take internal services through handles, which this container builds itself.
+				_scans[module] = scans = IsExternallyAccessible(module) && ReceivesGeneratedMembers(module) && !GrantsInternalsVisibleTo(_compilation.Assembly)
+					? InternalScanFactories(module, _compilation, CancellationToken.None)
+					: CollectModuleScanFactories(module, _compilation, new List<DiagnosticInfo>(), CancellationToken.None);
 			}
 
 			return scans;
@@ -97,24 +109,35 @@ partial class AwaitenGenerator
 					: new List<RegistrationFactory>();
 			}
 
+			// A module that builds internal services through handles gives a private implementation that takes one an
+			// internal factory too, which takes the services this container builds itself.
+			if (!_internalRegistrations.TryGetValue(module, out List<RegistrationFactory>? direct))
+			{
+				_internalRegistrations[module] = direct = ReceivesGeneratedMembers(module) && IsExternallyAccessible(module) && MayBuildThroughHandles(module, _compilation)
+					? CollectModuleRegistrationFactories(module, _compilation, new List<DiagnosticInfo>(), Scans(module).Select(expansion => expansion.Factory).ToList(), new List<SkippedRegistration>(), internalOnly: true)
+					: new List<RegistrationFactory>();
+			}
+
 			string name = RegistrationFactoryName(implementation);
-			return factories.FirstOrDefault(factory => factory.FactoryName == name);
+			string internalName = InternalRegistrationFactoryName(implementation);
+			return direct.Concat(factories).FirstOrDefault(factory => factory.FactoryName == internalName) ?? factories.FirstOrDefault(factory => factory.FactoryName == name);
 		}
 
 		/// <summary>
 		///     The factory named <paramref name="name" /> the module generates for a decorator or composite (see
-		///     <see cref="CollectModuleContributionFactories" />), or <see langword="null" />.
+		///     <see cref="CollectModuleContributionFactories" />), or its internal one, which takes the internal services
+		///     this container builds itself instead of their handles, or <see langword="null" />.
 		/// </summary>
 		public RegistrationFactory? Contribution(INamedTypeSymbol module, string name)
 		{
 			if (!_contributions.TryGetValue(module, out List<RegistrationFactory>? factories))
 			{
 				_contributions[module] = factories = ReceivesGeneratedMembers(module)
-					? CollectModuleContributionFactories(module, _compilation)
+					? CollectModuleContributionFactories(module, _compilation, CollectHiddenServices(module, _compilation, CancellationToken.None))
 					: new List<RegistrationFactory>();
 			}
 
-			return factories.FirstOrDefault(factory => factory.FactoryName == name);
+			return factories.FirstOrDefault(factory => factory.FactoryName == "Internal" + name) ?? factories.FirstOrDefault(factory => factory.FactoryName == name);
 		}
 	}
 
@@ -141,16 +164,18 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     The module's closed lifetime registrations that the container constructs (no <c>Factory</c> or
-	///     <c>Instance</c>), from the generic form or a closed <c>typeof</c> pair. Malformed and open generic forms
-	///     are left to the container, which reports them.
+	///     <c>Instance</c>), from the generic form or a closed <c>typeof</c> pair, and with <paramref name="members" />
+	///     also those a <c>Factory</c> or <c>Instance</c> member produces. Malformed and open generic forms are left to
+	///     the container, which reports them.
 	/// </summary>
-	private static IEnumerable<ModuleRegistration> ConstructedModuleRegistrations(INamedTypeSymbol module, Compilation compilation)
+	private static IEnumerable<ModuleRegistration> ConstructedModuleRegistrations(INamedTypeSymbol module, Compilation compilation, bool members = false)
 	{
 		foreach (AttributeData attribute in module.GetAttributes())
 		{
+			(ProductionKind Production, string? Member, bool Conflicting) production = ReadProduction(attribute);
 			if (attribute.AttributeClass is not { Name: "SingletonAttribute" or "TransientAttribute" or "ScopedAttribute", } attributeClass
 			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace
-			    || ReadProduction(attribute).Production != ProductionKind.Constructor)
+			    || (production.Production != ProductionKind.Constructor && !(members && production is { Member: not null, Conflicting: false, })))
 			{
 				continue;
 			}
@@ -178,7 +203,7 @@ partial class AwaitenGenerator
 
 			if (implementation is not null && service is not null)
 			{
-				yield return new ModuleRegistration(attribute, implementation, service, attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation());
+				yield return new ModuleRegistration(attribute, implementation, service, attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation(), production.Production, production.Member);
 			}
 		}
 	}
@@ -327,36 +352,76 @@ partial class AwaitenGenerator
 	///     and the injected properties like the factory of a registration, so a decorator's inner parameter stays the one
 	///     a container redirects to the next link of the chain, and a composite's collection parameter the one it fills.
 	///     A type the factory cannot express gets none and no error in the module's build: a container that cannot
-	///     construct it reports it at its <c>[Import]</c> (AWT230), as before.
+	///     construct it reports it at its <c>[Import]</c> (AWT230), as before. In the module's own build, one over an
+	///     internal service is built into the service's handle instead (see <see cref="HiddenContributionFactory" />).
 	/// </summary>
-	private static List<RegistrationFactory> CollectModuleContributionFactories(INamedTypeSymbol module, Compilation compilation)
+	private static List<RegistrationFactory> CollectModuleContributionFactories(INamedTypeSymbol module, Compilation compilation, HiddenServices? hidden = null)
 	{
 		List<RegistrationFactory> factories = new();
-		ModuleScanContext context = new(module, compilation, new List<DiagnosticInfo>(), new HashSet<string>(StringComparer.Ordinal));
+		ModuleScanContext context = new(module, compilation, new List<DiagnosticInfo>(), new HashSet<string>(StringComparer.Ordinal), hidden);
 		foreach (AttributeData attribute in module.GetAttributes())
 		{
 			if (attribute.AttributeClass is not { Name: "DecorateAttribute" or "CompositeAttribute", } attributeClass
 			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace
-			    || ContributedPair(attribute, attributeClass) is not ({ } type, { } service)
-			    || !SelfCompilesRegistration(module, type, service, compilation))
+			    || ContributedPair(attribute, attributeClass) is not ({ } type, { } service))
 			{
 				continue;
 			}
 
 			string name = ContributionFactoryName(attributeClass.Name, type, service);
-			SelfCompiledSubject subject = RegistrationSubject(type.ToDisplayString(FullyQualified));
-			if (factories.Any(factory => factory.FactoryName == name)
-			    || FactoryReturnType(type, [service,], context) is not { } returnType
-			    || !TryMirrorFactoryParameters(type, context, null, subject, out EquatableArray<FactoryParameter> parameters, mirrorProperties: true)
-			    || !TryMirrorInjectedProperties(type, context, null, subject, ref parameters, out EquatableArray<string> members))
+			if (factories.Any(factory => factory.FactoryName == name))
 			{
 				continue;
 			}
 
-			factories.Add(new RegistrationFactory(name, returnType.ToDisplayString(FullyQualified), type.ToDisplayString(FullyQualified), parameters, default, members));
+			RegistrationFactory? built;
+			if (hidden is not null && (hidden.Services.ContainsKey(service) || hidden.ProvidedElsewhere(service)))
+			{
+				built = HiddenContributionFactory(type, service, name, attributeClass.Name == "CompositeAttribute", context);
+			}
+			else if (SelfCompilesRegistration(module, type, service, compilation))
+			{
+				built = ContributionFactory(type, service, name, context);
+			}
+			else
+			{
+				continue;
+			}
+
+			if (built is null)
+			{
+				continue;
+			}
+
+			factories.Add(built);
+
+			// A container that builds the internal services itself registers no handles, so a type private to the module
+			// whose factory takes or returns a handle gets an internal factory that takes the services directly.
+			if (hidden is not null
+			    && IsHiddenInModule(type, module, compilation)
+			    && ContributionFactory(type, service, name, context with { Hidden = null, Internal = true, }) is { } direct
+			    && (direct.ReturnType != built.ReturnType || direct.Parameters != built.Parameters))
+			{
+				factories.Add(direct with { FactoryName = "Internal" + name, IsInternal = true, });
+			}
 		}
 
 		return factories;
+	}
+
+	/// <summary>
+	///     The factory of a decorator or composite that mirrors its constructor and injected properties, or
+	///     <see langword="null" /> when it cannot express them.
+	/// </summary>
+	private static RegistrationFactory? ContributionFactory(INamedTypeSymbol type, INamedTypeSymbol service, string name, ModuleScanContext context)
+	{
+		SelfCompiledSubject subject = RegistrationSubject(type.ToDisplayString(FullyQualified));
+		return FactoryReturnType(type, [service,], context) is { } returnType
+		       && FitsFactorySignature(returnType, context)
+		       && TryMirrorFactoryParameters(type, context, null, subject, out EquatableArray<FactoryParameter> parameters, mirrorProperties: true)
+		       && TryMirrorInjectedProperties(type, context, null, subject, ref parameters, out MirroredMembers members)
+			? new RegistrationFactory(name, returnType.ToDisplayString(FullyQualified), type.ToDisplayString(FullyQualified), parameters, default, members.Required, OptionalMembers: members.Optional, DeferredMembers: members.Deferred)
+			: null;
 	}
 
 	/// <summary>
@@ -384,10 +449,11 @@ partial class AwaitenGenerator
 	///     Whether <paramref name="type" /> may appear on a factory the module generates, which is as accessible as the
 	///     module: any type another assembly can name, and for a module another assembly cannot name (an internal one,
 	///     reached only from its own assembly or one granted <c>InternalsVisibleTo</c>), any type its assembly can name.
+	///     The same holds for an internal factory (see <see cref="ModuleScanContext.Internal" />).
 	/// </summary>
 	private static bool FitsFactorySignature(ITypeSymbol type, ModuleScanContext context)
 		=> IsExternallyAccessible(type)
-		   || (!IsExternallyAccessible(context.Module) && context.Compilation.IsSymbolAccessibleWithin(type, context.Module.ContainingAssembly));
+		   || ((context.Internal || !IsExternallyAccessible(context.Module)) && context.Compilation.IsSymbolAccessibleWithin(type, context.Module.ContainingAssembly));
 
 	/// <summary>
 	///     AWT203 for the first hook parameter after the instance whose type is private to the module or a class
@@ -451,20 +517,28 @@ partial class AwaitenGenerator
 	///     with the reason, which a consumer that cannot construct it reports (AWT231). A type hidden in the module
 	///     (see <see cref="TypeHiddenInModule" />) is never skipped, since no other assembly can construct it. A hook
 	///     whose wrapper fails only with AWT203 or AWT204 is skipped the same way: the factory stays, and the hook lands
-	///     in <paramref name="skipped" />, since such an assembly calls it directly.
+	///     in <paramref name="skipped" />, since such an assembly calls it directly. In the module's own build,
+	///     <paramref name="hidden" /> lets a factory take the internal services the module registers through their handles,
+	///     and an implementation the module builds through a handle gets no factory of its own, unless it is private to
+	///     the module, whose factory a container in the module's assembly calls. Such a private implementation whose
+	///     factory takes a handle gets an internal factory too (see <see cref="InternalRegistrationFactory" />), the only
+	///     factories <paramref name="internalOnly" /> returns, with their hooks.
 	/// </summary>
 	private static List<RegistrationFactory> CollectModuleRegistrationFactories(
 		INamedTypeSymbol module,
 		Compilation compilation,
 		List<DiagnosticInfo> diagnostics,
 		IReadOnlyList<ModuleFactory> scanFactories,
-		List<SkippedRegistration> skipped)
+		List<SkippedRegistration> skipped,
+		HiddenServices? hidden = null,
+		bool internalOnly = false)
 	{
-		ModuleScanContext context = new(module, compilation, diagnostics, new HashSet<string>(StringComparer.Ordinal));
+		ModuleScanContext context = new(module, compilation, diagnostics, new HashSet<string>(StringComparer.Ordinal), hidden);
 		List<(ModuleRegistration First, List<ModuleRegistration> All)> implementations = new();
 		foreach (ModuleRegistration registration in ConstructedModuleRegistrations(module, compilation))
 		{
-			if (!SelfCompilesRegistration(module, registration.Implementation, registration.Service, compilation))
+			if (!SelfCompilesRegistration(module, registration.Implementation, registration.Service, compilation)
+			    || (hidden?.Handles(registration.Implementation) == true && !IsHiddenInModule(registration.Implementation, module, compilation)))
 			{
 				continue;
 			}
@@ -484,9 +558,18 @@ partial class AwaitenGenerator
 		List<RegistrationFactory> factories = new();
 		foreach ((ModuleRegistration first, List<ModuleRegistration> all) in implementations)
 		{
-			if (RegistrationFactoryOf(first, all, context, scanFactories, friendsCanConstruct, skipped) is { } factory)
+			RegistrationFactory? factory = internalOnly ? null : RegistrationFactoryOf(first, all, context, scanFactories, friendsCanConstruct, skipped);
+			RegistrationFactory? direct = (internalOnly || (hidden is not null && factory is not null)) && IsHiddenInModule(first.Implementation, module, compilation)
+				? InternalRegistrationFactory(first, all, context, scanFactories)
+				: null;
+			if (factory is not null)
 			{
 				factories.Add(factory);
+			}
+
+			if (direct is not null)
+			{
+				factories.Add(internalOnly ? direct : direct with { Hooks = default, });
 			}
 		}
 
@@ -494,9 +577,29 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
+	///     The internal factory of an implementation private to a module another assembly can name, whose public factory
+	///     takes internal services through their handles, or <see langword="null" /> when the public factory takes none:
+	///     it takes those services directly, for a container in the module's own assembly or in one the assembly grants
+	///     <c>InternalsVisibleTo</c>, which builds the services itself and registers no handles. Its hooks are the public
+	///     factory's, which take no handles for such an implementation, so the module emits them once.
+	/// </summary>
+	private static RegistrationFactory? InternalRegistrationFactory(ModuleRegistration first, List<ModuleRegistration> all, ModuleScanContext context, IReadOnlyList<ModuleFactory> scanFactories)
+	{
+		ModuleScanContext plain = context with { Hidden = null, Diagnostics = new List<DiagnosticInfo>(), FailedHooks = new HashSet<string>(StringComparer.Ordinal), };
+		RegistrationFactory? direct = RegistrationFactoryOf(first, all, plain with { Internal = true, }, scanFactories, false, new List<SkippedRegistration>());
+		RegistrationFactory? exposed = RegistrationFactoryOf(first, all, plain, scanFactories, false, new List<SkippedRegistration>());
+		return direct is not null && exposed is not { IsInternal: true, } && direct != exposed
+			? direct with { FactoryName = InternalRegistrationFactoryName(first.Implementation), IsInternal = true, }
+			: null;
+	}
+
+	/// <summary>
 	///     The factory of one self-compiled implementation from its registrations, or <see langword="null" /> after
 	///     reporting why it cannot be built or recording it in <paramref name="skipped" /> (see
-	///     <see cref="CollectModuleRegistrationFactories" />).
+	///     <see cref="CollectModuleRegistrationFactories" />). A factory of a module another assembly can name that can
+	///     return only an internal type, such as the internal service of an implementation private to the module, is
+	///     internal, with its hooks, and takes the internal services directly, since only containers that build them
+	///     themselves can call it.
 	/// </summary>
 	private static RegistrationFactory? RegistrationFactoryOf(
 		ModuleRegistration first,
@@ -523,6 +626,13 @@ partial class AwaitenGenerator
 				rejections);
 		}
 
+		if (returnType is not null && !context.Internal && IsExternallyAccessible(context.Module) && !IsExternallyAccessible(returnType))
+		{
+			return RegistrationFactoryOf(first, all, context with { Hidden = null, Internal = true, }, scanFactories, friendsCanConstruct, skipped) is { } internalFactory
+				? internalFactory with { FactoryName = InternalRegistrationFactoryName(implementation), IsInternal = true, }
+				: null;
+		}
+
 		string returnName = (returnType ?? first.Service).ToDisplayString(FullyQualified);
 
 		// A scan factory builds the type for every consumer, so one constructing the registration itself would still split it.
@@ -544,7 +654,7 @@ partial class AwaitenGenerator
 			rejections.Add(initializerFault);
 		}
 
-		EquatableArray<string> members = default;
+		MirroredMembers members = default;
 		if (!TryMirrorFactoryParameters(implementation, context with { Diagnostics = rejections, }, first.Location, subject, out EquatableArray<FactoryParameter> parameters, mirrorProperties: true)
 		    || !TryMirrorInjectedProperties(implementation, context with { Diagnostics = rejections, }, first.Location, subject, ref parameters, out members)
 		    || rejections.Count > 0)
@@ -586,7 +696,10 @@ partial class AwaitenGenerator
 				ModuleHookRequest request = new(
 					implementation, hookName, registration.Location, release, RegistrationHookWrapperName(implementation, release, hookName), subject,
 					friendsCanConstruct && TypeHiddenInModule(implementation, context.Module, context.Compilation) is null);
-				if (ResolveModuleHookCore(request, null, context) is not { } resolved)
+
+				// The hooks of an implementation private to the module serve its internal factory too (see
+				// InternalRegistrationFactory), whose callers register no handles, so they take none.
+				if (ResolveModuleHookCore(request, null, IsHiddenInModule(implementation, context.Module, context.Compilation) ? context with { Hidden = null, } : context) is not { } resolved)
 				{
 					continue;
 				}
@@ -608,17 +721,22 @@ partial class AwaitenGenerator
 			typeName,
 			parameters,
 			new EquatableArray<RegistrationHook>(hooks.ToArray()),
-			members);
+			members.Required,
+			OptionalMembers: members.Optional,
+			DeferredMembers: members.Deferred);
 	}
 
 	/// <summary>
 	///     Appends a parameter per <c>[Inject]</c> property of <paramref name="type" /> to the mirrored constructor
 	///     <paramref name="parameters" />, named like the property and carrying its <c>[FromKey]</c>, so the factory fills
-	///     the property through an object initializer and a consumer resolves it like any other dependency. Reports
-	///     AWT200 and returns <see langword="false" /> for what a factory parameter cannot express: a property assigned
-	///     after construction (<c>Deferred</c>), one left out when its service is missing (<c>Optional</c>), one without a
-	///     setter the module can reach, one named like a constructor parameter, and one whose type another assembly
-	///     cannot name.
+	///     the property through an object initializer and a consumer resolves it like any other dependency. An
+	///     <c>Optional</c> property becomes an optional parameter after the others, which a consumer passes as
+	///     <see langword="null" /> when it does not register the service, and the factory then leaves the property as it
+	///     is. A <c>Deferred</c> property is no parameter: it gets a setter wrapper the consumer calls after it built and
+	///     cached the instance. Reports AWT200 and returns <see langword="false" /> for what the factory cannot express:
+	///     an optional property of a value type, or one that is init-only or required, a deferred property that is
+	///     init-only, required or also optional, one without a setter the module can reach, one named like a constructor
+	///     parameter, and one whose type another assembly cannot name.
 	/// </summary>
 	private static bool TryMirrorInjectedProperties(
 		INamedTypeSymbol type,
@@ -626,34 +744,59 @@ partial class AwaitenGenerator
 		Location? location,
 		SelfCompiledSubject subject,
 		ref EquatableArray<FactoryParameter> parameters,
-		out EquatableArray<string> members)
+		out MirroredMembers members)
 	{
 		members = default;
 		List<FactoryParameter> mirrored = new(parameters.AsArray());
 		List<string> names = new();
+		List<FactoryParameter> optionalParameters = new();
+		List<string> optionalNames = new();
+		List<FactoryParameter> deferred = new();
 		foreach (IPropertySymbol property in InjectedProperties(type))
 		{
 			ImmutableArray<AttributeData> attributes = property.GetAttributes();
+			bool isDeferred = IsInjectDeferred(attributes);
+			bool isOptional = IsInjectOptional(attributes);
 			string? reason = null;
-			if (IsInjectDeferred(attributes))
-			{
-				reason = "is marked [Inject(Deferred = true)]";
-			}
-			else if (IsInjectOptional(attributes))
-			{
-				reason = "is marked [Inject(Optional = true)]";
-			}
-			else if (property.SetMethod is not { } setter || !context.Compilation.IsSymbolAccessibleWithin(setter, context.Module))
+			if (property.SetMethod is not { } setter || !context.Compilation.IsSymbolAccessibleWithin(setter, context.Module))
 			{
 				reason = "has no setter the module can reach";
 			}
-			else if (mirrored.Any(parameter => parameter.Name == property.Name))
+			else if (isDeferred && isOptional)
+			{
+				reason = "is marked both Optional and Deferred, which a generated factory cannot combine";
+			}
+			else if ((isDeferred || isOptional) && (setter.IsInitOnly || property.IsRequired))
+			{
+				reason = $"is marked [Inject({(isDeferred ? "Deferred" : "Optional")} = true)] and is {(setter.IsInitOnly ? "init-only" : "required")}, so a generated factory cannot assign it on its own";
+			}
+			else if (isOptional && !property.Type.IsReferenceType)
+			{
+				reason = "is marked [Inject(Optional = true)] and has a value type, so a generated factory cannot tell a missing service from a value";
+			}
+			else if (mirrored.Concat(optionalParameters).Any(parameter => parameter.Name == property.Name))
 			{
 				reason = "has the name of a constructor parameter";
 			}
 			else if (HasAwaitenAttribute(attributes, "FromKeyAttribute") && FromKey(attributes) is null)
 			{
 				reason = "is marked [FromKey] with an unsupported key";
+			}
+			else if (MirrorHiddenService(property.Type, property.Name, attributes, context) is { } handle)
+			{
+				if (handle.Error is { } error)
+				{
+					context.Diagnostics.Add(error.WithLocation(location, subject, $"its property '{property.Name}'"));
+					return false;
+				}
+
+				Add(handle.Parameter);
+				continue;
+			}
+			else if (InternalServiceOfAnotherModule(property.Type, context) is { } otherModule)
+			{
+				context.Diagnostics.Add(otherModule.WithLocation(location, subject, $"its property '{property.Name}'"));
+				return false;
 			}
 			else if (!FitsFactorySignature(property.Type, context) || TypeHiddenInModule(property.Type, context.Module, context.Compilation) is not null)
 			{
@@ -669,14 +812,48 @@ partial class AwaitenGenerator
 				return false;
 			}
 
-			mirrored.Add(new FactoryParameter(property.Type.ToDisplayString(FullyQualifiedWithNullability), property.Name, KeyAttribute(FromKey(attributes))));
-			names.Add(property.Name);
+			Add(new FactoryParameter(property.Type.ToDisplayString(FullyQualifiedWithNullability), property.Name, KeyAttribute(FromKey(attributes))));
+
+			void Add(FactoryParameter parameter)
+			{
+				if (isDeferred)
+				{
+					deferred.Add(parameter);
+				}
+				else if (isOptional)
+				{
+					optionalParameters.Add(parameter);
+					optionalNames.Add(property.Name);
+				}
+				else
+				{
+					mirrored.Add(parameter);
+					names.Add(property.Name);
+				}
+			}
 		}
 
-		parameters = new EquatableArray<FactoryParameter>(mirrored.ToArray());
-		members = new EquatableArray<string>(names.ToArray());
+		parameters = new EquatableArray<FactoryParameter>(mirrored.Concat(optionalParameters).ToArray());
+		members = new MirroredMembers(
+			new EquatableArray<string>(names.ToArray()),
+			new EquatableArray<string>(optionalNames.ToArray()),
+			new EquatableArray<FactoryParameter>(deferred.ToArray()));
 		return true;
 	}
+
+	/// <summary>
+	///     A deterministic name for the setter wrapper of the deferred <paramref name="property" /> that the generated
+	///     factory <paramref name="factory" /> builds, which a consumer finds next to the factory.
+	/// </summary>
+	internal static string DeferredSetterName(string factory, string property)
+		=> $"Deferred_{factory}_{property}";
+
+	/// <summary>
+	///     The <c>[Inject]</c> properties a generated factory fills (see <see cref="TryMirrorInjectedProperties" />): the
+	///     <see cref="Required" /> ones and then the <see cref="Optional" /> ones, whose parameters follow the constructor's
+	///     in that order, and the <see cref="Deferred" /> ones, each with the parameter of its setter wrapper.
+	/// </summary>
+	private readonly record struct MirroredMembers(EquatableArray<string> Required, EquatableArray<string> Optional, EquatableArray<FactoryParameter> Deferred);
 
 	/// <summary>
 	///     The type the factory of <paramref name="implementation" /> returns, which every service it is registered under
@@ -719,6 +896,18 @@ partial class AwaitenGenerator
 		if (rejection.Descriptor == Diagnostics.ModuleScanInjectionMetadata)
 		{
 			return rejection.MessageArgs.AsArray()[1];
+		}
+
+		if (rejection.Descriptor == Diagnostics.ModuleHiddenServiceInOtherModule)
+		{
+			string[] arguments = rejection.MessageArgs.AsArray();
+			return $"{arguments[1]} needs the internal service '{arguments[2]}', which only the module '{arguments[3]}' registers";
+		}
+
+		if (rejection.Descriptor == Diagnostics.ModuleHiddenServiceShape)
+		{
+			string[] arguments = rejection.MessageArgs.AsArray();
+			return $"{arguments[1]} takes the internal service '{arguments[2]}' as '{arguments[3]}'";
 		}
 
 		if (rejection.Descriptor == Diagnostics.InaccessibleAsyncInitializer)
@@ -790,6 +979,26 @@ partial class AwaitenGenerator
 	/// </summary>
 	private static string RegistrationFactoryName(INamedTypeSymbol implementation)
 		=> $"Registration_{implementation.Name}_{Fnv1a(implementation.ToDisplayString(FullyQualified)):x8}";
+
+	/// <summary>
+	///     The matches of the scans of a module another assembly can name, as a container in the module's own assembly
+	///     reads them: their factories may take the internal services the public factories take through handles, which
+	///     such a container builds itself, so it constructs such a match directly. A match private to the module, which
+	///     only a factory can build, gets the name of the internal factory the module generates for it when it takes
+	///     such a service.
+	/// </summary>
+	private static List<ModuleScanExpansion> InternalScanFactories(INamedTypeSymbol module, Compilation compilation, CancellationToken cancellationToken)
+		=> CollectModuleScanFactories(module, compilation, new List<DiagnosticInfo>(), cancellationToken, internalFactories: true)
+			.Select(expansion => expansion.Factory.Skip is null
+			                     && IsHiddenInModule(expansion.Implementation, module, compilation)
+			                     && !TryMirrorFactoryParameters(expansion.Implementation, new ModuleScanContext(module, compilation, new List<DiagnosticInfo>(), new HashSet<string>(StringComparer.Ordinal)), null, ScanSubject(expansion.Factory.ImplementationType), out _)
+				? expansion with { Factory = expansion.Factory with { FactoryName = "Internal" + expansion.Factory.FactoryName, }, }
+				: expansion)
+			.ToList();
+
+	/// <summary>A deterministic name for the internal factory of an implementation private to the module (see <see cref="InternalRegistrationFactory" />).</summary>
+	private static string InternalRegistrationFactoryName(INamedTypeSymbol implementation)
+		=> "Internal" + RegistrationFactoryName(implementation);
 
 	/// <summary>
 	///     A deterministic name for the constant that records why the module generates no factory for an

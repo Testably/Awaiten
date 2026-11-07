@@ -238,7 +238,6 @@ public class AsyncActivationHookTests
 			internal sealed class Printer : IPlugin, IPrinter { }
 
 			[Module]
-			[Singleton<Log>]
 			[Singleton<Terminal, ITerminal>(OnActivated = nameof(Connect))]
 			[Scan<IPlugin>(As = ScanAs.MatchingInterface, Lifetime = Lifetime.Singleton, OnActivated = nameof(Warm))]
 			public static partial class TerminalModule
@@ -279,7 +278,6 @@ public class AsyncActivationHookTests
 				internal sealed class Terminal : ITerminal { }
 
 				[Module]
-				[Singleton<Log>]
 				[Singleton<Terminal, ITerminal>(OnRelease = nameof(Disconnect))]
 				public static partial class TerminalModule
 				{
@@ -304,6 +302,7 @@ public class AsyncActivationHookTests
 
 				[Container]
 				[Import(typeof(TerminalModule))]
+				[Singleton<Log>]
 				public static partial class MyContainer;
 				""");
 
@@ -332,6 +331,7 @@ public class AsyncActivationHookTests
 				[Import(typeof(TerminalModule))]
 				[Singleton<TerminalConsumer>]
 				[Singleton<PrinterConsumer>]
+				[Singleton<Log>]
 				public static partial class MyContainer;
 				""");
 

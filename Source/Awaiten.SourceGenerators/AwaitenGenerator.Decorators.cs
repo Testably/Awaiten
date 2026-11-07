@@ -362,6 +362,8 @@ partial class AwaitenGenerator
 				ConstructVia = via?.Call,
 				ConstructViaType = via?.ReturnType,
 				Constructor = via?.Producer,
+				Hidden = chain.Ordered[linkIndex].ThroughHandle ? decorator : null,
+				Unlisted = chain.Ordered[linkIndex].ThroughHandle,
 			};
 			_byImpl[identity] = info;
 			_implOrder.Add(info);
@@ -665,6 +667,8 @@ partial class AwaitenGenerator
 			ConstructVia = composite.Via?.Call,
 			ConstructViaType = composite.Via?.ReturnType,
 			Constructor = composite.Via?.Producer,
+			Hidden = composite.ThroughHandle ? composite.Composite : null,
+			Unlisted = composite.ThroughHandle,
 		};
 		byImpl.Add(identity, compositeInfo);
 		implOrder.Add(compositeInfo);

@@ -39,6 +39,81 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
+	///     Lets the scan match of a module in another assembly share the instance of an implementation another module
+	///     builds through a generated handle (see <see cref="ThroughHandle" />). The handle hides the instance, so the
+	///     match can only serve it through an alias that serves the implementation under a service that converts to the
+	///     match's service, whose identity it takes so coalescing keeps one instance. Without such an alias the match's
+	///     factory would build a second instance, so the match is dropped after reporting AWT240.
+	/// </summary>
+	private static void ShareHandledInstances(List<RawRegistration> raw, INamedTypeSymbol container, Compilation compilation, List<DiagnosticInfo> diagnostics)
+	{
+		List<(RawRegistration Handle, int Index, string Identity)> indexed = raw
+			.Select((registration, index) => (registration, index))
+			.Where(entry => entry.registration.Hidden is not null && entry.registration.ImplementationType.Contains(HiddenKeyMarker))
+			.Select(entry => (entry.registration, entry.index, TypeIdentity(entry.registration.Hidden!, compilation)))
+			.ToList();
+		if (indexed.Count > 0)
+		{
+			ShareHandleWithRegistrations(raw, indexed, container, compilation, diagnostics);
+		}
+
+		List<RawRegistration> handles = indexed.Select(entry => entry.Handle).ToList();
+		for (int index = raw.Count - 1; index >= 0 && handles.Count > 0; index--)
+		{
+			if (raw[index] is not { ScanImplementation: { } implementation, ServiceSymbol: { } service, } match
+			    || handles.FirstOrDefault(handle => SymbolEqualityComparer.Default.Equals(handle.Hidden, implementation)) is not { } handle)
+			{
+				continue;
+			}
+
+			string aliasMarker = AliasKeyMarker + TypeIdentity(implementation, compilation);
+			if (raw.FirstOrDefault(alias => alias.ServiceSymbol is { } aliased
+			                                && alias.ImplementationType.EndsWith(aliasMarker, StringComparison.Ordinal)
+			                                && alias.ImplementationType == TypeIdentity(aliased, compilation) + aliasMarker
+			                                && compilation.HasImplicitConversion(aliased, service)) is { } alias)
+			{
+				raw[index] = match with
+				{
+					ImplementationType = alias.ImplementationType,
+					Implementation = alias.Implementation,
+					Origin = alias.Origin,
+					Production = alias.Production,
+					ProductionMember = alias.ProductionMember,
+					OnActivated = null,
+					OnRelease = null,
+					Traits = alias.Traits,
+					TraitsExact = true,
+					ScanImplementation = null,
+				};
+				continue;
+			}
+
+			// The scanning module, or a module that builds the handle, may generate an alias under the match's service or,
+			// for a public implementation, under the implementation itself.
+			if (handles.Select(entry => entry.Origin).Prepend(match.Origin).OfType<INamedTypeSymbol>()
+				    .SelectMany(module => new[] { service, implementation, }.Select(aliased => (Module: module, Alias: GeneratedFactoryNamed(module, HiddenAliasName(implementation, aliased), compilation))))
+				    .FirstOrDefault(candidate => candidate.Alias is { Parameters.Length: 1, } generated
+				                                 && generated.Parameters[0].Type.ToDisplayString(FullyQualified) == handle.ServiceType
+				                                 && compilation.HasImplicitConversion(generated.ReturnType, service)) is ({ } owner, { } shared))
+			{
+				raw[index] = ThroughAlias(match with { Lifetime = handle.Lifetime, }, owner, implementation, shared, compilation);
+				continue;
+			}
+
+			diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.ScanMatchNotShared,
+				LocationInfo.From(match.Location),
+				new EquatableArray<string>([
+					Display(implementation.ToDisplayString(FullyQualified)),
+					Display(match.Origin!.ToDisplayString(FullyQualified)),
+					Display(match.ServiceType),
+					Display(raw.FirstOrDefault(alias => alias.ImplementationType.EndsWith(aliasMarker, StringComparison.Ordinal))?.ServiceType ?? handle.ServiceType),
+				])));
+			raw.RemoveAt(index);
+		}
+	}
+
+	/// <summary>
 	///     Gives the scan match of a module in another assembly the identity of the implementation its generated factory
 	///     builds (see <see cref="RawRegistration.ScanImplementation" />) when another registration or scan match names
 	///     that implementation too, so coalescing shares one instance between them, as a container in the module's own
@@ -318,8 +393,10 @@ partial class AwaitenGenerator
 			// checked before the per-service dedup below (else re-registering a service type differently would drop
 			// the contradiction silently). A scan yields to an explicit registration and is exempt, but two scans
 			// with different lifetimes are AWT142. An overridable default losing its key yields transparently; every
-			// other default is checked like an explicit registration.
-			if (!registration.IsScan && (!registration.Weak || !alreadyChosen || winner!.Weak))
+			// other default is checked like an explicit registration. The instance handle of a module of another
+			// assembly shares its key with the handles of the other modules that build the implementation, so it is
+			// checked whenever it is kept, which it is only while one of its aliases survives (see SettleHandleDirectives).
+			if (!registration.IsScan && (!registration.Weak || !alreadyChosen || winner!.Weak || registration.Hidden is not null))
 			{
 				ReportCoalescingConflicts(info, registration, containerSymbol, reportedConflicts, reportedProductionConflicts, reportedDirectiveConflicts, diagnostics);
 			}
@@ -383,34 +460,44 @@ partial class AwaitenGenerator
 		{
 			if (!implInfos.TryGetValue(reg.ImplementationType, out ImplInfo? info))
 			{
-				info = new ImplInfo(
-					reg.ImplementationType, reg.Implementation, reg.Lifetime,
-					LocationInfo.From(reg.Location), reg.Production, reg.ProductionMember)
-				{
-					IsScan = reg.IsScan,
-					GreedyConstructor = reg.GreedyConstructor,
-					Origin = reg.Origin,
-					Eager = reg.Eager,
-					OnActivated = reg.OnActivated,
-					OnRelease = reg.OnRelease,
-					OnActivatedOrigin = reg.OnActivated is null ? null : reg.Origin,
-					OnReleaseOrigin = reg.OnRelease is null ? null : reg.Origin,
-					SuppressDisposal = reg.SuppressDisposal,
-					GenericFactory = reg.GenericFactory,
-					Traits = reg.Traits,
-					TraitsExact = reg.TraitsExact,
-					ConstructVia = reg.ConstructVia,
-					ConstructViaType = reg.ConstructViaType,
-					Constructor = reg.Constructor,
-				};
-				info.OnActivatedMarkers.AddRange(reg.OnActivatedMarkers ?? []);
-				info.OnReleaseMarkers.AddRange(reg.OnReleaseMarkers ?? []);
+				info = NewImplInfo(reg);
 				implInfos.Add(reg.ImplementationType, info);
 				implOrder.Add(info);
 			}
 
 			return info;
 		}
+	}
+
+	/// <summary>The coalesced info of an implementation whose first registration is <paramref name="reg" />.</summary>
+	private static ImplInfo NewImplInfo(RawRegistration reg)
+	{
+		ImplInfo info = new(
+			reg.ImplementationType, reg.Implementation, reg.Lifetime,
+			LocationInfo.From(reg.Location), reg.Production, reg.ProductionMember)
+		{
+			IsScan = reg.IsScan,
+			GreedyConstructor = reg.GreedyConstructor,
+			Origin = reg.Origin,
+			Eager = reg.Eager,
+			OnActivated = reg.OnActivated,
+			OnRelease = reg.OnRelease,
+			OnActivatedOrigin = reg.OnActivated is null ? null : reg.Origin,
+			OnReleaseOrigin = reg.OnRelease is null ? null : reg.Origin,
+			SuppressDisposal = reg.SuppressDisposal,
+			GenericFactory = reg.GenericFactory,
+			Traits = reg.Traits,
+			TraitsExact = reg.TraitsExact,
+			ConstructVia = reg.ConstructVia,
+			ConstructViaType = reg.ConstructViaType,
+			Constructor = reg.Constructor,
+			Unlisted = reg.Unlisted,
+			Hidden = reg.Hidden,
+			HiddenProduction = reg.HiddenProduction,
+		};
+		info.OnActivatedMarkers.AddRange(reg.OnActivatedMarkers ?? []);
+		info.OnReleaseMarkers.AddRange(reg.OnReleaseMarkers ?? []);
+		return info;
 	}
 
 	/// <summary>
@@ -674,7 +761,7 @@ partial class AwaitenGenerator
 	///     The registrations (by index into <paramref name="raw" />) coalescing will drop in full: an overridable
 	///     default whose service key a higher-tier or earlier registration claims. Losing strong/synthesized/scan
 	///     registrations stay collection members. Sound to compute before open generic expansion (synthesized ranks
-	///     below defaults).
+	///     below defaults). A contextual registration claims its context key, as in coalescing.
 	/// </summary>
 	private static HashSet<int> DroppedOverridableDefaults(List<RawRegistration> raw)
 	{
@@ -682,7 +769,7 @@ partial class AwaitenGenerator
 		HashSet<int> dropped = new();
 		foreach ((RawRegistration registration, int index) in InPrecedenceOrder(raw))
 		{
-			if (!claimed.Add(new ServiceKey(registration.ServiceType, registration.Key)) && registration.Weak)
+			if (!claimed.Add(new ServiceKey(registration.ServiceType, registration.WhenInjectedInto is { } consumer ? ContextKey(consumer) : registration.Key)) && registration.Weak)
 			{
 				dropped.Add(index);
 			}
@@ -696,7 +783,9 @@ partial class AwaitenGenerator
 	///     lifetime (AWT107), a different production strategy (AWT111), or a contradicting
 	///     OnActivated/OnRelease/Eager/SuppressDisposal directive (AWT166). Lifetime and production conflicts are
 	///     reported once per implementation, each directive
-	///     conflict once per (implementation, directive), since coalescing keeps the first registration.
+	///     conflict once per (implementation, directive), since coalescing keeps the first registration. An alias of an
+	///     instance handle (see <see cref="ThroughHandle" />) owns nothing and is exempt, since the handle registration of
+	///     its implementation carries every conflict.
 	/// </summary>
 	private static void ReportCoalescingConflicts(
 		ImplInfo? info,
@@ -707,7 +796,7 @@ partial class AwaitenGenerator
 		HashSet<string> reportedDirectiveConflicts,
 		List<DiagnosticInfo> diagnostics)
 	{
-		if (info is null)
+		if (info is null || registration.ImplementationType.Contains(AliasKeyMarker))
 		{
 			return;
 		}
@@ -731,8 +820,8 @@ partial class AwaitenGenerator
 				LocationInfo.From(registration.Location),
 				new EquatableArray<string>([
 					DisplayInstance(registration.ImplementationType),
-					DescribeProduction(info.Production, info.ProductionMember, info.Origin ?? containerSymbol),
-					DescribeProduction(registration.Production, registration.ProductionMember, registration.Origin ?? containerSymbol),
+					info.HiddenProduction ?? DescribeProduction(info.Production, info.ProductionMember, info.Origin ?? containerSymbol),
+					registration.HiddenProduction ?? DescribeProduction(registration.Production, registration.ProductionMember, registration.Origin ?? containerSymbol),
 				])));
 		}
 
@@ -917,13 +1006,17 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     Two registrations of the same implementation conflict when they produce it differently: a different kind
-	///     (constructor vs factory vs instance), a different member, or the same member name on different owners.
+	///     (constructor vs factory vs instance), a different member, or the same member name on different owners. The
+	///     instance handles of several modules of another assembly (see <see cref="ThroughHandle" />) conflict when the
+	///     modules produce the implementation differently, whichever module's generated factory builds it.
 	/// </summary>
 	private static bool ConflictsWith(ImplInfo info, RawRegistration registration)
-		=> info.Production != registration.Production
-		   || !string.Equals(info.ProductionMember, registration.ProductionMember, StringComparison.Ordinal)
-		   || (registration.Production != ProductionKind.Constructor
-		       && !SymbolEqualityComparer.Default.Equals(info.Origin, registration.Origin));
+		=> info.HiddenProduction is not null || registration.HiddenProduction is not null
+			? info.HiddenProduction != registration.HiddenProduction
+			: (info.Production != registration.Production
+			   || !string.Equals(info.ProductionMember, registration.ProductionMember, StringComparison.Ordinal)
+			   || (registration.Production != ProductionKind.Constructor
+			       && !SymbolEqualityComparer.Default.Equals(info.Origin, registration.Origin)));
 
 	/// <summary>
 	///     Names a production strategy in the AWT111 message, qualifying a member with its owner so two members of the

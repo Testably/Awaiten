@@ -27,6 +27,12 @@ namespace Awaiten.SourceGenerators;
 ///     (a base container's factory mirrors the constructor the base picked).
 ///     <c>ScanImplementation</c> is the implementation a module's generated scan factory in another assembly builds,
 ///     which lets the container share one instance with every other registration of it (see <c>ShareScannedInstances</c>).
+///     <c>Unlisted</c> marks a dependency-only service, the generated handle of a service a module of another assembly
+///     registers under an internal type, which the container never offers for resolution, <c>Hidden</c> the
+///     implementation such a handle holds, and <c>HiddenProduction</c> how the module produces it, which two handle
+///     registrations of one implementation are compared by (AWT111). <c>Aliased</c> is the module registration an
+///     alias of such a handle stands for, with its hooks named by their generated wrappers, whose directives the
+///     handle takes when it is the first registration that survives coalescing.
 /// </summary>
 /// <remarks>
 ///     <see cref="Location" /> is the live Roslyn location (with its syntax tree), not an equatable
@@ -64,7 +70,11 @@ internal sealed record RawRegistration(
 	string? ConstructVia = null,
 	string? ConstructViaType = null,
 	IMethodSymbol? Constructor = null,
-	INamedTypeSymbol? ScanImplementation = null);
+	INamedTypeSymbol? ScanImplementation = null,
+	bool Unlisted = false,
+	INamedTypeSymbol? Hidden = null,
+	string? HiddenProduction = null,
+	RawRegistration? Aliased = null);
 
 /// <summary>
 ///     An imported module: its symbol and the location of the container's <c>[Import]</c> attribute that
@@ -87,7 +97,8 @@ internal sealed record ImportedModule(INamedTypeSymbol Symbol, Location? ImportL
 ///     list is <c>AllKeys</c>). Expanded after coalescing into synthetic-keyed chain links. <see cref="Inherited" />
 ///     marks a decorator of an extended base, which stays inside every decorator of the extending container.
 ///     <see cref="Owner" /> is the module or base that declares it, whose async initializer conventions judge it, or
-///     <see langword="null" /> for the container's own.
+///     <see langword="null" /> for the container's own. <see cref="ThroughHandle" /> marks a decorator a module of
+///     another assembly builds into the handle of a service it registers under an internal type, which decorates that handle.
 /// </summary>
 /// <remarks>An intermediate type carrying a live Roslyn <see cref="Location" />; see <see cref="RawRegistration" />.</remarks>
 internal sealed record DecorateRegistration(
@@ -100,7 +111,8 @@ internal sealed record DecorateRegistration(
 	IReadOnlyList<string?>? Keys,
 	bool Inherited = false,
 	OwnerFactoryCall? Via = null,
-	INamedTypeSymbol? Owner = null);
+	INamedTypeSymbol? Owner = null,
+	bool ThroughHandle = false);
 
 /// <summary>
 ///     The generated factory of a module or base container (<see cref="Owner" />) that builds a decorator or composite
@@ -119,7 +131,9 @@ internal sealed record OwnerFactoryCall(INamedTypeSymbol Owner, string Name, str
 ///     A single <c>[Composite&lt;TComposite, TService&gt;]</c> registration: the composed service, the service and
 ///     composite symbols, the lifetime (default transient) and the fronted <see cref="Key" />
 ///     (<see langword="null" /> for the unkeyed registrations). Applied after coalescing (and decorator chains) as
-///     the public single-dispatch winner, excluded from collection membership.
+///     the public single-dispatch winner, excluded from collection membership. <see cref="ThroughHandle" /> marks a
+///     composite a module of another assembly builds into the handle of a service it registers under an internal type,
+///     which fronts that handle.
 /// </summary>
 /// <remarks>An intermediate type carrying a live Roslyn <see cref="Location" />; see <see cref="RawRegistration" />.</remarks>
 internal sealed record CompositeRegistration(
@@ -130,7 +144,8 @@ internal sealed record CompositeRegistration(
 	Location? Location,
 	string? Key,
 	OwnerFactoryCall? Via = null,
-	INamedTypeSymbol? Owner = null);
+	INamedTypeSymbol? Owner = null,
+	bool ThroughHandle = false);
 
 /// <summary>
 ///     A single open generic <c>[Decorate(typeof(D&lt;&gt;), typeof(IService&lt;&gt;))]</c> registration: the unbound
@@ -327,6 +342,15 @@ partial class AwaitenGenerator
 		///     <see langword="null" /> to select one as usual.
 		/// </summary>
 		public IMethodSymbol? Constructor { get; init; }
+
+		/// <inheritdoc cref="RawRegistration" />
+		public bool Unlisted { get; init; }
+
+		/// <inheritdoc cref="RawRegistration" />
+		public INamedTypeSymbol? Hidden { get; init; }
+
+		/// <inheritdoc cref="RawRegistration" />
+		public string? HiddenProduction { get; init; }
 
 		public List<ServiceKey> Services { get; }
 

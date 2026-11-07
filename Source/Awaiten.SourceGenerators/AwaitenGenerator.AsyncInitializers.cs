@@ -281,6 +281,11 @@ partial class AwaitenGenerator
 	/// </summary>
 	private static EquatableArray<AsyncInitializerModel> BuildAsyncInitializers(ImplInfo info, ITypeSymbol ownedType, BuildContext context)
 	{
+		if (info is { Hidden: { } hidden, Origin: { } module, })
+		{
+			return HiddenAsyncInitializers(info, hidden, module, context);
+		}
+
 		List<AsyncInitializerConvention> conventions = context.AsyncInitializers.Of(info.ConventionScope(context.ContainerSymbol));
 		if (conventions.Count == 0)
 		{
@@ -312,6 +317,30 @@ partial class AwaitenGenerator
 				convention.Type.ToDisplayString(FullyQualified),
 				convention.Method.Name,
 				ClassifyHookParameterSymbols(convention.Method.Parameters, asynchronous: true, release: false, info, context)));
+		}
+
+		return new EquatableArray<AsyncInitializerModel>(models.ToArray());
+	}
+
+	/// <summary>
+	///     The async initializers of the handle of an internal service a module of another assembly registers: the
+	///     wrapper the module generates for each of its conventions that initializes the implementation, which runs the
+	///     convention on the instance the handle holds, so neither the service nor the convention has to be accessible.
+	/// </summary>
+	private static EquatableArray<AsyncInitializerModel> HiddenAsyncInitializers(ImplInfo info, INamedTypeSymbol implementation, INamedTypeSymbol module, BuildContext context)
+	{
+		List<AsyncInitializerModel> models = new();
+		foreach (AsyncInitializerConvention convention in MatchingAsyncInitializers(DeclaredAsyncInitializers(module, context.Compilation, null), implementation, convention => IsOfConventionType(implementation, convention.Type)))
+		{
+			string name = HiddenInitializerName(implementation, convention);
+			if (InternalsMembers(module, name).OfType<IMethodSymbol>().FirstOrDefault(method => context.Compilation.IsSymbolAccessibleWithin(method, context.Compilation.Assembly)) is { } wrapper)
+			{
+				models.Add(new AsyncInitializerModel(
+					$"{module.ToDisplayString(FullyQualified)}.{InternalsClass}",
+					name,
+					ClassifyHookParameterSymbols(wrapper.Parameters.Skip(1), asynchronous: true, release: false, info, context),
+					Wrapper: true));
+			}
 		}
 
 		return new EquatableArray<AsyncInitializerModel>(models.ToArray());

@@ -258,6 +258,7 @@ partial class AwaitenGenerator
 		Location? fallbackLocation = context.FallbackLocation;
 		List<DiagnosticInfo> diagnostics = context.Diagnostics;
 		bool reportedNotSelfCompiled = false;
+		HashSet<INamedTypeSymbol> implicitHandles = new(SymbolEqualityComparer.Default);
 		bool fromModule = origin is not null && HasAwaitenAttribute(context.Owner.GetAttributes(), "ModuleAttribute");
 		foreach (AttributeData attribute in context.Owner.GetAttributes())
 		{
@@ -334,6 +335,13 @@ partial class AwaitenGenerator
 				SuppressDisposal: NamedFlag(attribute, "SuppressDisposal"),
 				WhenInjectedInto: whenInjectedInto);
 
+			if (fromModule && !conflictingDirectives && !skipGeneratedScanRegistrations
+			    && ThroughHandle(registration, context.Compilation, implicitHandles) is { } handled)
+			{
+				result.AddRange(handled);
+				continue;
+			}
+
 			RawRegistration? collected = fromModule && production == ProductionKind.Constructor && !conflictingDirectives
 				? SelfCompiledRegistration(registration, context, skipGeneratedScanRegistrations, ref reportedNotSelfCompiled)
 				: WithCallableHooks(ThroughMemberWrapper(registration, origin, context.Compilation, !skipGeneratedScanRegistrations), context, fromModule && !skipGeneratedScanRegistrations);
@@ -372,14 +380,26 @@ partial class AwaitenGenerator
 		Compilation compilation = context.Compilation;
 		if (registration.ServiceSymbol is not { } service || !SelfCompilesRegistration(module, implementation, service, compilation))
 		{
-			return !sameCompilation
-			       && !context.Inherited
-			       && registration.ServiceSymbol is { } inaccessible
-			       && !compilation.IsSymbolAccessibleWithin(inaccessible, compilation.Assembly)
-			       && implementation is { TypeKind: TypeKind.Class, IsAbstract: false, }
-			       && !CanConstruct(implementation, compilation)
-				? null
-				: registration;
+			if (!sameCompilation
+			    && !context.Inherited
+			    && registration.ServiceSymbol is { } inaccessible
+			    && !compilation.IsSymbolAccessibleWithin(inaccessible, compilation.Assembly)
+			    && implementation is { TypeKind: TypeKind.Class, IsAbstract: false, }
+			    && !CanConstruct(implementation, compilation))
+			{
+				if (registration.Lifetime == Lifetime.Singleton
+				    && (registration.Eager || TraitsOf(implementation, DeclaredAsyncInitializers(module, compilation, null)).AsyncInitializers.Count > 0))
+				{
+					ReportNotSelfCompiled(
+						context, module, implementation, "handle",
+						ModuleShapeReason(module) ?? "it leaves the singleton to the assemblies it grants InternalsVisibleTo",
+						$"make '{Display(registration.ImplementationType)}' and the service it is registered under public");
+				}
+
+				return null;
+			}
+
+			return registration;
 		}
 
 		if (sameCompilation && IsHiddenInModule(implementation, module, compilation))
@@ -399,7 +419,9 @@ partial class AwaitenGenerator
 			return registration;
 		}
 
-		if (GeneratedFactory(module, implementation, compilation) is not { } factory)
+		// A container granted InternalsVisibleTo builds the internal services itself and registers no handles, so it
+		// calls the internal factory that takes them directly, which the module generates when the public one takes handles.
+		if ((GeneratedFactoryNamed(module, InternalRegistrationFactoryName(implementation), compilation) ?? GeneratedFactory(module, implementation, compilation)) is not { } factory)
 		{
 			if (context.Inherited)
 			{
@@ -1043,8 +1065,9 @@ partial class AwaitenGenerator
 	///     finds the generated factory that builds it in <paramref name="via" />. A base container's own is resolved by
 	///     the inheritance (see <see cref="InaccessibleInheritedType" />). A module's closed one calls the factory the
 	///     module generates for it (see <see cref="CollectModuleContributionFactories" />): from metadata in another
-	///     assembly, or by its deterministic name in the module's own assembly when the type is private to the module.
-	///     Without a factory, one inherited through <c>Extends</c> is AWT226 and any other is AWT230.
+	///     assembly, or by its deterministic name in the module's own assembly when the type is private to the module,
+	///     preferring the internal factory that takes the internal services instead of their handles where the container
+	///     can see it. Without a factory, one inherited through <c>Extends</c> is AWT226 and any other is AWT230.
 	/// </summary>
 	private static bool UnavailableContribution(ContributionContext context, AttributeData attribute, INamedTypeSymbol attributeClass, out OwnerFactoryCall? via)
 	{
@@ -1071,7 +1094,7 @@ partial class AwaitenGenerator
 			    && context.Modules.Contribution(module, name) is { } generated
 			    && MirroredConstructor(type, generated) is { } constructor)
 			{
-				via = new OwnerFactoryCall(module, name, generated.ReturnType, constructor);
+				via = new OwnerFactoryCall(module, generated.FactoryName, generated.ReturnType, constructor);
 				return false;
 			}
 
@@ -1083,9 +1106,11 @@ partial class AwaitenGenerator
 			return inheritance is not null && InaccessibleInheritedType(attribute, attributeClass, inheritance, diagnostics, out _);
 		}
 
-		if (name is not null && GeneratedFactoryNamed(module, name, compilation) is { } factory)
+		// A container granted InternalsVisibleTo builds the internal services itself and registers no handles, so it calls
+		// the internal factory that takes them directly, which the module generates when the public one takes handles.
+		if (name is not null && (GeneratedFactoryNamed(module, "Internal" + name, compilation) ?? GeneratedFactoryNamed(module, name, compilation)) is { } factory)
 		{
-			via = new OwnerFactoryCall(module, name, factory.ReturnType.ToDisplayString(FullyQualified), factory);
+			via = new OwnerFactoryCall(module, factory.Name, factory.ReturnType.ToDisplayString(FullyQualified), factory);
 			return false;
 		}
 
@@ -1193,8 +1218,11 @@ partial class AwaitenGenerator
 			{
 				if (ContributedPair(attribute, attributeClass) is ({ } decorator, { } service))
 				{
+					// A module of another assembly builds a decorator of an internal service into the service's handle, which the chain then decorates.
+					INamedTypeSymbol? handle = HandleProducedBy(via, service, compilation);
+					INamedTypeSymbol decorated = handle ?? service;
 					closed.Add(new DecorateRegistration(
-						service.ToDisplayString(FullyQualified), service, decorator, order, declarationOrder, location, keys, inherited, via, module));
+						decorated.ToDisplayString(FullyQualified), decorated, decorator, order, declarationOrder, location, keys, inherited, via, module, handle is not null));
 				}
 			}
 			else if (attribute.ConstructorArguments.Length == 2
@@ -1212,6 +1240,18 @@ partial class AwaitenGenerator
 
 		return (closed, open);
 	}
+
+	/// <summary>
+	///     The handle of <paramref name="service" /> that the generated factory <paramref name="via" /> of a module of
+	///     another assembly builds a decorator or composite into, because this container cannot name the internal service,
+	///     or <see langword="null" />.
+	/// </summary>
+	private static INamedTypeSymbol? HandleProducedBy(OwnerFactoryCall? via, INamedTypeSymbol service, Compilation compilation)
+		=> via?.Producer is { MethodKind: MethodKind.Ordinary, ReturnType: INamedTypeSymbol handle, }
+		   && handle.Name == HiddenHandleName(service)
+		   && !compilation.IsSymbolAccessibleWithin(service, compilation.Assembly)
+			? handle
+			: null;
 
 	/// <summary>
 	///     Reads the <c>Keys</c> and <c>AllKeys</c> named arguments of a <c>[Decorate]</c> as the selected canonical
@@ -1342,8 +1382,11 @@ partial class AwaitenGenerator
 			{
 				if (ContributedPair(attribute, attributeClass) is ({ } composite, { } service))
 				{
+					// A module of another assembly builds a composite of an internal service into the service's handle, which it then fronts.
+					INamedTypeSymbol? handle = HandleProducedBy(via, service, compilation);
+					INamedTypeSymbol composed = handle ?? service;
 					closed.Add(new CompositeRegistration(
-						service.ToDisplayString(FullyQualified), service, composite, lifetime, location, key, via, module));
+						composed.ToDisplayString(FullyQualified), composed, composite, lifetime, location, key, via, module, handle is not null));
 				}
 			}
 			else if (attribute.ConstructorArguments.Length == 2

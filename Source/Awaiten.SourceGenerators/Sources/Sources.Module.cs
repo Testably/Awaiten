@@ -66,7 +66,8 @@ internal static partial class Sources
 		Indent(builder, depth).Append("static partial class ").AppendLine(model.TypeName);
 		Indent(builder, depth).AppendLine("{");
 
-		bool hasMembers = model.Factories.Count > 0 || model.Registrations.Count > 0 || model.Wrappers.Count > 0 || model.Skipped.Count > 0;
+		bool hasMembers = model.Factories.Count > 0 || model.Registrations.Count > 0 || model.Wrappers.Count > 0 || model.Skipped.Count > 0
+		                  || model.Handles.Count > 0;
 		if (hasMembers)
 		{
 			OpenInternals(builder, depth + 1, "public",
@@ -118,11 +119,41 @@ internal static partial class Sources
 
 			first = false;
 			EmitRegistrationFactory(builder, depth + 2, registration);
+			EmitDeferredSetters(builder, depth + 2, registration);
 			foreach (RegistrationHook hook in registration.Hooks.AsArray())
 			{
 				builder.AppendLine();
-				EmitModuleHook(builder, depth + 2, registration.ReturnType, hook.Hook, hook.Release, RegistrationOrigin);
+				EmitModuleHook(builder, depth + 2, registration.ReturnType, hook.Hook, hook.Release, RegistrationOrigin, registration.Handle is not null, registration.IsInternal);
 			}
+		}
+
+		foreach (HiddenHandle handle in model.Handles.AsArray())
+		{
+			builder.AppendLine();
+			EmitHiddenHandle(builder, depth + 2, handle);
+		}
+
+		foreach (HiddenAlias alias in model.Aliases.AsArray())
+		{
+			builder.AppendLine();
+			AppendXmlSummary(builder, depth + 2,
+				"Generated from a module registration: serves a service of an implementation the module builds through a handle,",
+				"from the instance handle of the implementation, so every service shares the one instance.");
+			Indent(builder, depth + 2).Append("public static ").Append(alias.ReturnType).Append(' ').Append(alias.Name).Append('(')
+				.Append(alias.HandleType).Append(" @awaiten__handle) => ").Append(alias.Body).AppendLine(";");
+		}
+
+		foreach (HiddenInitializer initializer in model.Initializers.AsArray())
+		{
+			builder.AppendLine();
+			AppendXmlSummary(builder, depth + 2,
+				"Generated from a module [AsyncInitializer]: runs the convention on the instance a handle holds, so a consuming",
+				"container initializes a service the module registers under an internal service type.");
+			FactoryParameter[] parameters = initializer.Parameters.AsArray();
+			Indent(builder, depth + 2).Append("public static ").Append(initializer.ReturnType).Append(' ').Append(initializer.Name).Append('(')
+				.Append(initializer.HandleType).Append(" @awaiten__instance").Append(string.Concat(parameters.Select(parameter => $", {MirroredParameter(parameter)}")))
+				.Append(") => ((").Append(initializer.ConventionType).Append(")@awaiten__instance.Value).").Append(initializer.Method).Append('(')
+				.Append(string.Join(", ", parameters.Select(parameter => parameter.ArgumentExpression))).AppendLine(");");
 		}
 
 		foreach (MemberWrapper wrapper in model.Wrappers.AsArray())
@@ -263,6 +294,70 @@ internal static partial class Sources
 		Indent(builder, depth).AppendLine("{");
 	}
 
+	/// <summary>
+	///     Emits the handle of a service the module registers under an internal type (see <see cref="HiddenHandle" />): a
+	///     public class another assembly can name but neither create nor unwrap, plus a sealed variant for each disposal
+	///     shape an implementation of the service needs, which forwards disposal to the instance.
+	/// </summary>
+	private static void EmitHiddenHandle(StringBuilder builder, int depth, HiddenHandle handle)
+	{
+		AppendXmlSummary(builder, depth,
+			"Generated from a module registration: holds an instance of a service the module registers under an internal",
+			"type, so a consuming container in another assembly depends on it without naming the service. Not intended to be used directly.");
+		Indent(builder, depth).AppendLine("[global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]");
+		Indent(builder, depth).Append("public class ").AppendLine(handle.Name);
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).Append("internal ").Append(handle.Name).Append('(').Append(handle.ValueType).AppendLine(" value) => Value = value;");
+		builder.AppendLine();
+		Indent(builder, depth + 1).Append("internal ").Append(handle.ValueType).AppendLine(" Value { get; }");
+		if (handle.Wrap)
+		{
+			builder.AppendLine();
+			Indent(builder, depth + 1).Append("internal static ").Append(handle.Name).Append(" Wrap(").Append(handle.ValueType).AppendLine(" value) => (object?)value switch");
+			Indent(builder, depth + 1).AppendLine("{");
+			Indent(builder, depth + 2).AppendLine("global::System.IDisposable and global::System.IAsyncDisposable => new BothDisposable(value),");
+			Indent(builder, depth + 2).AppendLine("global::System.IDisposable => new Disposable(value),");
+			Indent(builder, depth + 2).AppendLine("global::System.IAsyncDisposable => new AsyncDisposable(value),");
+			Indent(builder, depth + 2).Append("_ => new ").Append(handle.Name).AppendLine("(value),");
+			Indent(builder, depth + 1).AppendLine("};");
+		}
+
+		string value = handle.Wrap ? "(object)Value" : "Value";
+		string dispose = $"void global::System.IDisposable.Dispose() => ((global::System.IDisposable){value}).Dispose();";
+		string disposeAsync = $"global::System.Threading.Tasks.ValueTask global::System.IAsyncDisposable.DisposeAsync() => ((global::System.IAsyncDisposable){value}).DisposeAsync();";
+		if (handle.Disposable)
+		{
+			EmitHandleVariant(builder, depth + 1, handle, "Disposable", "global::System.IDisposable", dispose);
+		}
+
+		if (handle.AsyncDisposable)
+		{
+			EmitHandleVariant(builder, depth + 1, handle, "AsyncDisposable", "global::System.IAsyncDisposable", disposeAsync);
+		}
+
+		if (handle.BothDisposable)
+		{
+			EmitHandleVariant(builder, depth + 1, handle, "BothDisposable", "global::System.IDisposable, global::System.IAsyncDisposable", dispose, disposeAsync);
+		}
+
+		Indent(builder, depth).AppendLine("}");
+	}
+
+	private static void EmitHandleVariant(StringBuilder builder, int depth, HiddenHandle handle, string name, string interfaces, params string[] members)
+	{
+		builder.AppendLine();
+		Indent(builder, depth).Append("internal sealed class ").Append(name).Append(" : ").Append(handle.Name).Append(", ").AppendLine(interfaces);
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).Append("internal ").Append(name).Append('(').Append(handle.ValueType).AppendLine(" value) : base(value) { }");
+		foreach (string member in members)
+		{
+			builder.AppendLine();
+			Indent(builder, depth + 1).AppendLine(member);
+		}
+
+		Indent(builder, depth).AppendLine("}");
+	}
+
 	private const string ScanOrigin = "a module [Scan]";
 
 	private const string RegistrationOrigin = "a module registration";
@@ -273,7 +368,7 @@ internal static partial class Sources
 	///     accessible type a consumer names in its stead.
 	/// </summary>
 	private static void EmitRegistrationFactory(StringBuilder builder, int depth, RegistrationFactory factory)
-		=> EmitRegistrationFactory(builder, depth, factory, "public",
+		=> EmitRegistrationFactory(builder, depth, factory, factory.IsInternal ? "internal" : "public",
 			"Generated from a module registration: constructs an implementation a consuming container cannot construct and",
 			"returns it as an accessible type, so a consuming container resolves it without naming the implementation.");
 
@@ -287,19 +382,100 @@ internal static partial class Sources
 
 		FactoryParameter[] parameters = factory.Parameters.AsArray();
 		string[] members = factory.Members.AsArray();
-		string signature = string.Join(", ", parameters.Select(MirroredParameter));
-		string arguments = string.Join(", ", parameters.Take(parameters.Length - members.Length).Select(parameter => $"@{parameter.Name}"));
+		string[] optional = factory.OptionalMembers.AsArray();
+		string signature = string.Join(", ", parameters.Select((parameter, index) => index < parameters.Length - optional.Length
+			? MirroredParameter(parameter)
+			: $"{MirroredParameter(parameter with { Type = parameter.Type.EndsWith("?", StringComparison.Ordinal) ? parameter.Type : parameter.Type + "?", })} = null"));
+		string arguments = string.Join(", ", parameters.Take(parameters.Length - members.Length - optional.Length).Select(parameter => parameter.ArgumentExpression));
+		if (optional.Length > 0)
+		{
+			EmitFactoryWithOptionalMembers(builder, depth, factory, accessibility, signature, arguments);
+			return;
+		}
+
+		if (factory.Call is not null)
+		{
+			Indent(builder, depth).Append(accessibility).Append(" static ");
+			if (factory.IsProperty)
+			{
+				builder.Append(factory.ReturnType).Append(' ').Append(factory.FactoryName).Append(" => ").Append(factory.Handle).Append('(').Append(factory.Call).AppendLine(");");
+				return;
+			}
+
+			builder.Append(factory.Awaited is null ? factory.ReturnType : $"async {factory.Awaited}<{factory.ReturnType}>").Append(' ').Append(factory.FactoryName)
+				.Append('(').Append(signature).Append(") => ").Append(factory.Handle).Append('(').Append(factory.Awaited is null ? string.Empty : "await ")
+				.Append(factory.Call).Append('(').Append(arguments).Append(')').Append(factory.Awaited is null ? string.Empty : ".ConfigureAwait(false)").AppendLine(");");
+			return;
+		}
 
 		Indent(builder, depth)
 			.Append(accessibility).Append(" static ").Append(factory.ReturnType).Append(' ').Append(factory.FactoryName)
-			.Append('(').Append(signature).Append(") => new ").Append(factory.ImplementationType)
-			.Append('(').Append(arguments).Append(')');
+			.Append('(').Append(signature).Append(") => ");
+		if (factory.Handle is not null)
+		{
+			builder.Append("new ").Append(factory.Handle).Append('(');
+		}
+
+		builder.Append("new ").Append(factory.ImplementationType).Append('(').Append(arguments).Append(')');
 		if (members.Length > 0)
 		{
-			builder.Append(" { ").Append(string.Join(", ", members.Select(member => $"{member} = @{member}"))).Append(" }");
+			FactoryParameter[] memberParameters = parameters.Skip(parameters.Length - members.Length).ToArray();
+			builder.Append(" { ").Append(string.Join(", ", members.Select((member, index) => $"{member} = {memberParameters[index].ArgumentExpression}"))).Append(" }");
+		}
+
+		builder.AppendLine(factory.Handle is null ? ";" : ");");
+	}
+
+	/// <summary>
+	///     Emits a generated factory with optional members (see <see cref="RegistrationFactory.OptionalMembers" />) as a
+	///     block: it constructs the implementation with its required members, assigns each optional member only when the
+	///     consumer passed a service, so a missing one keeps the property's own value, and returns the instance.
+	/// </summary>
+	private static void EmitFactoryWithOptionalMembers(StringBuilder builder, int depth, RegistrationFactory factory, string accessibility, string signature, string arguments)
+	{
+		FactoryParameter[] parameters = factory.Parameters.AsArray();
+		string[] members = factory.Members.AsArray();
+		string[] optional = factory.OptionalMembers.AsArray();
+		int first = parameters.Length - members.Length - optional.Length;
+		Indent(builder, depth).Append(accessibility).Append(" static ").Append(factory.ReturnType).Append(' ').Append(factory.FactoryName).Append('(').Append(signature).AppendLine(")");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).Append("var awaiten__instance = new ").Append(factory.ImplementationType).Append('(').Append(arguments).Append(')');
+		if (members.Length > 0)
+		{
+			builder.Append(" { ").Append(string.Join(", ", members.Select((member, index) => $"{member} = {parameters[first + index].ArgumentExpression}"))).Append(" }");
 		}
 
 		builder.AppendLine(";");
+		for (int index = 0; index < optional.Length; index++)
+		{
+			FactoryParameter parameter = parameters[first + members.Length + index];
+			Indent(builder, depth + 1).Append("if (@").Append(parameter.Name).AppendLine(" is not null)");
+			Indent(builder, depth + 1).AppendLine("{");
+			Indent(builder, depth + 2).Append("awaiten__instance.").Append(optional[index]).Append(" = ").Append(parameter.ArgumentExpression).AppendLine(";");
+			Indent(builder, depth + 1).AppendLine("}");
+		}
+
+		Indent(builder, depth + 1).Append("return ").Append(factory.Handle is null ? "awaiten__instance" : $"new {factory.Handle}(awaiten__instance)").AppendLine(";");
+		Indent(builder, depth).AppendLine("}");
+	}
+
+	/// <summary>
+	///     Emits the setter wrapper of each deferred member of a generated factory: it takes the instance the factory
+	///     returned and the service, and assigns the property, so a consumer wires it after construction.
+	/// </summary>
+	private static void EmitDeferredSetters(StringBuilder builder, int depth, RegistrationFactory factory)
+	{
+		foreach (FactoryParameter parameter in factory.DeferredMembers.AsArray())
+		{
+			builder.AppendLine();
+			AppendXmlSummary(builder, depth,
+				"Generated from a module registration: assigns a property marked [Inject(Deferred = true)] after a consuming",
+				"container built and cached the instance, so it can break a cycle.");
+			Indent(builder, depth).Append(factory.IsInternal ? "internal" : "public").Append(" static void ").Append(AwaitenGenerator.DeferredSetterName(factory.FactoryName, parameter.Name)).Append('(')
+				.Append(factory.ReturnType).Append(" @awaiten__instance, ").Append(MirroredParameter(parameter)).Append(") => ((")
+				.Append(factory.ImplementationType).Append(")@awaiten__instance").Append(factory.Handle is null ? string.Empty : ".Value").Append(").")
+				.Append(parameter.Name).Append(" = ").Append(parameter.ArgumentExpression).AppendLine(";");
+		}
 	}
 
 	/// <summary>
@@ -347,7 +523,7 @@ internal static partial class Sources
 		// reserved keyword ('@event'), whose symbol name carries no '@', and the prefix is harmless otherwise.
 		FactoryParameter[] parameters = factory.Parameters.AsArray();
 		string signature = string.Join(", ", parameters.Select(MirroredParameter));
-		string arguments = string.Join(", ", parameters.Select(parameter => $"@{parameter.Name}"));
+		string arguments = string.Join(", ", parameters.Select(parameter => parameter.ArgumentExpression));
 
 		Indent(builder, depth)
 			.Append("public static ").Append(factory.ServiceType).Append(' ').Append(factory.FactoryName)
@@ -363,21 +539,21 @@ internal static partial class Sources
 	///     cast and the call compile because the wrapper body sits in the module's own assembly, while the
 	///     <c>public</c> signature is all a consumer needs to run it.
 	/// </summary>
-	private static void EmitModuleHook(StringBuilder builder, int depth, string instanceType, ModuleHook hook, bool release, string origin)
-		=> EmitHookWrapper(builder, depth, "public", instanceType, hook,
+	private static void EmitModuleHook(StringBuilder builder, int depth, string instanceType, ModuleHook hook, bool release, string origin, bool fromHandle = false, bool isInternal = false)
+		=> EmitHookWrapper(builder, depth, isInternal ? "internal" : "public", instanceType, hook, fromHandle,
 			$"Generated from {origin}: the {(release ? "OnRelease" : "OnActivated")} lifecycle wrapper, casting the exposure",
 			"interface to the hook's own instance parameter type and forwarding to the module's own hook, so a consumer runs it without naming the internal hook.");
 
 	/// <summary>
 	///     Emits a lifecycle-hook wrapper with the given accessibility and summary (see <see cref="EmitModuleHook" />).
 	/// </summary>
-	private static void EmitHookWrapper(StringBuilder builder, int depth, string accessibility, string instanceType, ModuleHook hook, params string[] summary)
+	private static void EmitHookWrapper(StringBuilder builder, int depth, string accessibility, string instanceType, ModuleHook hook, bool fromHandle, params string[] summary)
 	{
 		AppendXmlSummary(builder, depth, summary);
 
 		FactoryParameter[] parameters = hook.Parameters.AsArray();
 		string signature = string.Concat(parameters.Select(parameter => $", {MirroredParameter(parameter)}"));
-		string arguments = string.Concat(parameters.Select(parameter => $", @{parameter.Name}"));
+		string arguments = string.Concat(parameters.Select(parameter => $", {parameter.ArgumentExpression}"));
 
 		// The synthetic instance parameter starts from an awaiten__ prefix so it is very unlikely to collide with a
 		// mirrored user hook parameter (a plain name like "instance" would be a duplicate-parameter error in the
@@ -393,6 +569,6 @@ internal static partial class Sources
 		Indent(builder, depth)
 			.Append(accessibility).Append(" static ").Append(hook.ReturnType).Append(' ').Append(hook.WrapperName)
 			.Append('(').Append(instanceType).Append(" @").Append(instance).Append(signature).Append(") => ")
-			.Append(hook.Target).Append("((").Append(hook.InstanceCast).Append(")@").Append(instance).Append(arguments).AppendLine(");");
+			.Append(hook.Target).Append("((").Append(hook.InstanceCast).Append(")@").Append(instance).Append(fromHandle ? ".Value" : string.Empty).Append(arguments).AppendLine(");");
 	}
 }

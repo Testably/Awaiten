@@ -235,7 +235,7 @@ public partial class DiagnosticTests
 		public class Awt197
 		{
 			[Test]
-			public async Task ReportsAnInaccessibleImplementationUnderSeveralServices()
+			public async Task ReportsAnInaccessibleImplementationUnderSeveralServicesThatNoHandleCanBuild()
 			{
 				GeneratorResult result = Generator.Run("""
 					using Awaiten;
@@ -244,7 +244,8 @@ public partial class DiagnosticTests
 
 					public interface IGreeter { }
 					public interface IFarewell { }
-					internal sealed class Greeter : IGreeter, IFarewell { }
+					internal sealed class Secret { }
+					internal sealed class Greeter : IGreeter, IFarewell { public Greeter(Secret secret) { } }
 
 					[Module]
 					[Singleton<Greeter, IGreeter>]
@@ -253,11 +254,11 @@ public partial class DiagnosticTests
 					""");
 
 				await That(result.Diagnostics).Contains("*AWT197*Lib.Greeter*Lib.IGreeter, Lib.IFarewell*").AsWildcard()
-					.Because("one factory returns one service, so a second service would split the singleton a container shares across both");
+					.Because("one factory returns one service, so a second service would split the singleton a container shares across both, and no handle can share it since the implementation cannot be built");
 			}
 
 			[Test]
-			public async Task DoesNotReportSeveralServicesWhenTheAssemblyGrantsInternalsVisibleTo()
+			public async Task SharesAnImplementationUnderSeveralServicesThroughAHandleWhenTheAssemblyGrantsInternalsVisibleTo()
 			{
 				GeneratorResult result = Generator.Run("""
 					using Awaiten;
@@ -276,10 +277,10 @@ public partial class DiagnosticTests
 					public static partial class GreetingModule { }
 					""");
 
-				await That(result.Diagnostics).IsEmpty()
-					.Because("an assembly granted InternalsVisibleTo constructs the implementation itself and shares it across both services");
-				await That(result.Sources.Values.Single()).Contains("it is registered under several services (Lib.IGreeter, Lib.IFarewell)")
-					.And.DoesNotContain("Registration_");
+				await That(result.Diagnostics).IsEmpty();
+				await That(result.Sources.Values.Single()).Contains("HiddenRegistration_Greeter_")
+					.And.DoesNotContain("RegistrationSkipped_")
+					.Because("a handle shares the instance across both services for an assembly without InternalsVisibleTo, while a friend still constructs it itself");
 			}
 
 			[Test]
@@ -467,7 +468,7 @@ public partial class DiagnosticTests
 		public class Awt200
 		{
 			[Test]
-			public async Task ReportsAnOptionalInjectProperty()
+			public async Task ReportsAnInitOnlyOptionalInjectProperty()
 			{
 				GeneratorResult result = Generator.Run("""
 					using Awaiten;
@@ -479,7 +480,7 @@ public partial class DiagnosticTests
 					internal sealed class Greeter : IGreeter
 					{
 					    [Inject(Optional = true)]
-					    public IClock? Clock { get; set; }
+					    public IClock? Clock { get; init; }
 					}
 
 					[Module]
@@ -488,11 +489,11 @@ public partial class DiagnosticTests
 					""");
 
 				await That(result.Diagnostics).Contains("*AWT200*Lib.Greeter*Clock*[Inject(Optional = true)]*").AsWildcard()
-					.Because("no other assembly can ever construct the implementation, and a factory parameter cannot be left out when the service is missing");
+					.Because("no other assembly can ever construct the implementation, and the factory cannot assign an init-only property after construction");
 			}
 
 			[Test]
-			public async Task ReportsADeferredInjectProperty()
+			public async Task ReportsAnInitOnlyDeferredInjectProperty()
 			{
 				GeneratorResult result = Generator.Run("""
 					using Awaiten;
@@ -504,7 +505,7 @@ public partial class DiagnosticTests
 					internal sealed class Greeter : IGreeter
 					{
 					    [Inject(Deferred = true)]
-					    public IClock Clock { get; set; } = null!;
+					    public IClock Clock { get; init; } = null!;
 					}
 
 					[Module]
@@ -513,11 +514,11 @@ public partial class DiagnosticTests
 					""");
 
 				await That(result.Diagnostics).Contains("*AWT200*Lib.Greeter*Clock*[Inject(Deferred = true)]*").AsWildcard()
-					.Because("a deferred property is assigned after construction, which a factory parameter cannot express");
+					.Because("a deferred property is assigned through a setter wrapper after construction, which an init-only accessor does not allow");
 			}
 
 			[Test]
-			public async Task DoesNotReportAnOptionalInjectPropertyWhenTheAssemblyGrantsInternalsVisibleTo()
+			public async Task DoesNotReportAnInitOnlyOptionalInjectPropertyWhenTheAssemblyGrantsInternalsVisibleTo()
 			{
 				GeneratorResult result = Generator.Run("""
 					using Awaiten;
@@ -531,7 +532,7 @@ public partial class DiagnosticTests
 					internal sealed class Greeter : IGreeter
 					{
 					    [Inject(Optional = true)]
-					    public IClock Clock { get; set; } = null!;
+					    public IClock Clock { get; init; } = null!;
 					}
 
 					[Module]
@@ -564,7 +565,7 @@ public partial class DiagnosticTests
 					    private sealed class Greeter : IGreeter
 					    {
 					        [Inject(Optional = true)]
-					        public IClock? Clock { get; set; }
+					        public IClock? Clock { get; init; }
 					    }
 					}
 					""");
@@ -591,7 +592,7 @@ public partial class DiagnosticTests
 					    private sealed class Greeter : IGreeter
 					    {
 					        [Inject(Optional = true)]
-					        public IClock? Clock { get; set; }
+					        public IClock? Clock { get; init; }
 					    }
 
 					    [Module]

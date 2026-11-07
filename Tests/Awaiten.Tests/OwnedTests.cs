@@ -1,3 +1,5 @@
+using Awaiten.Internals;
+
 namespace Awaiten.Tests;
 
 /// <summary>
@@ -28,6 +30,21 @@ public partial class OwnedTests
 		Widget second = workshop.Rent().Value;
 		await That(second).IsNotSameAs(first)
 			.Because("each call to the factory builds a fresh instance");
+	}
+
+	[Test]
+	public async Task Map_KeepsTheScopeOfTheOriginalHandle()
+	{
+		using OwnedContainer.Root container = new();
+		Owned<Widget> owned = container.Resolve<Owned<Widget>>();
+
+		Owned<string> mapped = AwaitenOwnedProjection.Map(owned, widget => widget.GetHashCode().ToString());
+		mapped.Dispose();
+
+		await That(mapped.Value).IsEqualTo(owned.Value.GetHashCode().ToString())
+			.Because("the projection maps the value of the original handle");
+		await That(owned.Value.Disposed).IsTrue()
+			.Because("disposing the projected handle disposes the scope of the original one");
 	}
 
 	[Test]

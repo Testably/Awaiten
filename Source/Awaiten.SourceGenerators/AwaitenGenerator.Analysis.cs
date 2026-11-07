@@ -464,11 +464,12 @@ partial class AwaitenGenerator
 			// and an unguarded indexer would crash the generator instead of surfacing the real registration error.
 			if (parameter.Kind is not (DependencyKind.Func or DependencyKind.Lazy or DependencyKind.Owned)
 			    || !serviceToImpl.TryGetValue(KeyOf(parameter), out string? targetImpl)
-			    || !implToIndex.TryGetValue(targetImpl, out int target))
+			    || !implToIndex.TryGetValue(targetImpl, out int aliasOrTarget))
 			{
 				return;
 			}
 
+			int target = AliasedInstance(aliasOrTarget, instances, serviceToImpl, implToIndex);
 			if (!instances[target].IsAsyncTainted)
 			{
 				return;
@@ -561,6 +562,7 @@ partial class AwaitenGenerator
 		List<InstanceModel> instances,
 		List<ServiceMembers> collections,
 		List<KeyedServiceMembers> keyedCollections,
+		Dictionary<ServiceKey, string> serviceToImpl,
 		Dictionary<string, int> implToIndex,
 		List<LocationInfo?> instanceLocations,
 		List<DiagnosticInfo> diagnostics)
@@ -598,7 +600,7 @@ partial class AwaitenGenerator
 			if (dependency.Kind == DependencyKind.Enumerable
 			    && byService.TryGetValue(KeyOf(dependency), out ServiceMembers members))
 			{
-				ReportAsyncTaintedMembers(consumer, dependency, members.Implementations.AsArray(), instances, implToIndex, instanceLocations, diagnostics);
+				ReportAsyncTaintedMembers(consumer, dependency, members.Implementations.AsArray(), instances, serviceToImpl, implToIndex, instanceLocations, diagnostics);
 			}
 
 			// A keyed collection is also materialized synchronously into a dictionary, so an async-tainted keyed
@@ -608,7 +610,7 @@ partial class AwaitenGenerator
 			{
 				ReportAsyncTaintedMembers(
 					consumer, dependency, keyed.Members.AsArray().Select(member => member.Implementation).ToArray(),
-					instances, implToIndex, instanceLocations, diagnostics);
+					instances, serviceToImpl, implToIndex, instanceLocations, diagnostics);
 			}
 		}
 	}
@@ -622,13 +624,20 @@ partial class AwaitenGenerator
 		ParameterModel parameter,
 		string[] members,
 		List<InstanceModel> instances,
+		Dictionary<ServiceKey, string> serviceToImpl,
 		Dictionary<string, int> implToIndex,
 		List<LocationInfo?> instanceLocations,
 		List<DiagnosticInfo> diagnostics)
 	{
 		foreach (string member in members)
 		{
-			if (!implToIndex.TryGetValue(member, out int memberIndex) || !instances[memberIndex].IsAsyncTainted)
+			if (!implToIndex.TryGetValue(member, out int aliasOrMember))
+			{
+				continue;
+			}
+
+			int memberIndex = AliasedInstance(aliasOrMember, instances, serviceToImpl, implToIndex);
+			if (!instances[memberIndex].IsAsyncTainted)
 			{
 				continue;
 			}
@@ -1326,6 +1335,16 @@ partial class AwaitenGenerator
 		if (marker < 0)
 		{
 			marker = implementationType.IndexOf(MemberKeyMarker, StringComparison.Ordinal);
+		}
+
+		if (marker < 0)
+		{
+			marker = implementationType.IndexOf(AliasKeyMarker, StringComparison.Ordinal);
+		}
+
+		if (marker < 0)
+		{
+			marker = implementationType.IndexOf(HiddenKeyMarker, StringComparison.Ordinal);
 		}
 
 		string type = marker >= 0 ? implementationType.Substring(0, marker) : implementationType;

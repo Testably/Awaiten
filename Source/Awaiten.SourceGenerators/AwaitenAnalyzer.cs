@@ -697,7 +697,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 		string[] suppressed = graph.Instances
 			.Where(instance => !instance.IsParameterized
 			                   && Sources.AdvertisesSuppressedDisposal(instance, syncAfterInit)
-			                   && instance.Services.AsArray().Any(service => service.Key is null || AwaitenGenerator.IsUserKey(service.Key)))
+			                   && instance.ListedServices.Any(service => service.Key is null || AwaitenGenerator.IsUserKey(service.Key)))
 			.Select(instance => AwaitenGenerator.DisplayInstance(instance.ImplementationType))
 			.Distinct(StringComparer.Ordinal)
 			.ToArray();

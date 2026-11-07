@@ -1,5 +1,6 @@
 using System.Linq;
 using System.Threading;
+using Awaiten.Internals;
 
 namespace Awaiten.Tests;
 

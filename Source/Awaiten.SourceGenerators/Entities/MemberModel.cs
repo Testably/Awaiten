@@ -12,5 +12,7 @@ namespace Awaiten.SourceGenerators.Entities;
 ///     the instance is constructed and cached, so it contributes no <em>cycle</em> edge, which lets
 ///     it break a mutual constructor cycle, but it still participates in captive and async-taint analysis
 ///     (its assignment captures the target for the owner's lifetime and awaits an async-initialized target).
+///     <see cref="Setter" /> is the qualified setter wrapper a module generates for a deferred member of an
+///     implementation built through its factory, which the container calls instead of assigning the property.
 /// </summary>
-internal sealed record MemberModel(string MemberName, ParameterModel Dependency, bool Deferred = false);
+internal sealed record MemberModel(string MemberName, ParameterModel Dependency, bool Deferred = false, string? Setter = null);

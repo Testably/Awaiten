@@ -127,6 +127,15 @@ partial class AwaitenGenerator
 				parameterModel = parameterModel with { Kind = DependencyKind.External, };
 			}
 
+			if (parameter is { HasExplicitDefaultValue: true, ExplicitDefaultValue: null, }
+			    && IsGeneratedOwnerFactory(producer)
+			    && parameterModel.Kind is not (DependencyKind.Arg or DependencyKind.CancellationToken or DependencyKind.External)
+			    && !IsSynthesizedCollection(parameterModel.Kind)
+			    && !context.ServiceToImpl.ContainsKey(KeyOf(parameterModel)))
+			{
+				parameterModel = parameterModel with { Kind = DependencyKind.Absent, };
+			}
+
 			parameters.Add(parameterModel);
 			ReportWhenUnregistered(parameterModel, info, context);
 		}
@@ -165,7 +174,7 @@ partial class AwaitenGenerator
 	/// </summary>
 	private static void ReportWhenUnregistered(ParameterModel parameterModel, ImplInfo info, BuildContext context)
 	{
-		if (parameterModel.Kind is DependencyKind.Arg or DependencyKind.CancellationToken or DependencyKind.External
+		if (parameterModel.Kind is DependencyKind.Arg or DependencyKind.CancellationToken or DependencyKind.External or DependencyKind.Absent
 		    || IsSynthesizedCollection(parameterModel.Kind)
 		    || context.ServiceToImpl.ContainsKey(KeyOf(parameterModel))
 		    || context.ConstraintRejected.Contains(parameterModel.ServiceType))

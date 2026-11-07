@@ -17,7 +17,7 @@ internal static partial class Sources
 	/// </summary>
 	private static bool IsWithheld(InstanceModel instance, bool strict)
 		=> strict
-		   && (instance.NeedsDisposal || instance.HasReleaseHook)
+		   && (instance.NeedsDisposal || instance.HasReleaseHook || instance.TracksHandleDisposal)
 		   && (instance.Lifetime == Lifetime.Transient || instance.IsParameterized);
 
 	/// <summary>
@@ -252,7 +252,7 @@ internal static partial class Sources
 			}
 		}
 
-		return result;
+		return WithoutUnlisted(result, instances, entry => entry.Type);
 	}
 
 	/// <summary>
@@ -322,7 +322,7 @@ internal static partial class Sources
 				continue;
 			}
 
-			foreach (ServiceKey service in instances[i].Services.AsArray())
+			foreach (ServiceKey service in instances[i].ListedServices)
 			{
 				// Keyed registrations are reached only by [FromKey] injection, never by-type resolution.
 				if (service.Key is not null || !seen.Add(service.Service))

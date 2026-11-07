@@ -2025,6 +2025,44 @@ internal static class Diagnostics
 		isEnabledByDefault: true);
 
 	/// <summary>
+	///     In a module's own build, a generated factory needs an internal service that the module does not register but
+	///     other modules of the same assembly do, and none of them can share its handle: they cannot receive generated
+	///     members, or cannot build the service on their own.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ModuleHiddenServiceInOtherModule = new(
+		"AWT236",
+		"Internal service registered in another module",
+		"{0}, but {1} needs the internal service '{2}', which is registered only by {3}, so a container in another assembly cannot provide it to '{4}'; register '{2}' in '{4}' too, or move both registrations into one module",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     In a module's own build, a generated factory needs an internal service the module registers, but in a shape
+	///     it cannot pass on from the service's handle, such as <c>Task&lt;T&gt;</c> or a keyed dictionary.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ModuleHiddenServiceShape = new(
+		"AWT237",
+		"Internal service in an unsupported shape",
+		"{0}, but {1} takes the internal service '{2}' as '{3}', which the generated factory cannot pass on to a container in another assembly; take '{2}' directly, or as Func<T>, Lazy<T>, Owned<T>, Func<Owned<T>> or a collection of T",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A container imports a module of another assembly whose generated members take the handle of an internal
+	///     service that another module of that assembly registers and declares, but it does not import that module, so
+	///     nothing builds the service.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ModuleHandleProviderNotImported = new(
+		"AWT238",
+		"Module that provides an internal service not imported",
+		"The imported module '{0}' needs the internal service '{1}', which the module '{2}' of the same assembly registers; import '{2}' too",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
 	///     A scan match of an imported module in another assembly and another registration or scan match of the same
 	///     implementation, which a container in the module's own assembly shares as one instance. The container builds
 	///     that instance as a type that does not convert to the match's service, and it cannot construct the
@@ -2034,6 +2072,20 @@ internal static class Diagnostics
 		"AWT240",
 		"Scan match of another assembly cannot share its implementation's instance",
 		"'{0}' is matched by the [Scan] of the imported module '{1}' as '{2}', but this container builds its one instance of '{0}' as '{3}', which does not convert to '{2}', and cannot construct '{0}' itself; the match's generated factory would build a second instance, so the match is dropped; grant this assembly InternalsVisibleTo in the module's assembly, or exclude '{0}' from the scan",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A registration of an implementation that an imported module of another assembly builds through a generated
+	///     handle, which a container in the module's own assembly shares as one instance. The container serves the
+	///     registration from the handle's instance, but cannot share it faithfully: the registration sets a directive the
+	///     handle cannot apply, or the module generated no member that returns the implementation from its handle.
+	/// </summary>
+	public static readonly DiagnosticDescriptor RegistrationNotSharedWithHandle = new(
+		"AWT241",
+		"Registration cannot share the instance of a generated handle",
+		"'{0}' is built through a generated handle of the imported module '{1}', which this registration of '{0}' shares in a container of the module's own assembly, but {2}; {3}",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);

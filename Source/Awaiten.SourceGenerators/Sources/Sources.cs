@@ -148,7 +148,7 @@ internal static partial class Sources
 			foreach (RegistrationHook hook in factory.Hooks.AsArray())
 			{
 				builder.AppendLine();
-				EmitHookWrapper(builder, depth, "internal", factory.ReturnType, hook.Hook,
+				EmitHookWrapper(builder, depth, "internal", factory.ReturnType, hook.Hook, false,
 					$"Generated for a container that extends this one: the {(hook.Release ? "OnRelease" : "OnActivated")} lifecycle wrapper, casting the",
 					"accessible type to the hook's own instance parameter type and forwarding to this container's hook.");
 			}

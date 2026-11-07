@@ -75,7 +75,7 @@ public class GeneralTests
 			.Because("a compound dispatch entry binds its forwarder as a method group, since the trim analyzer is quadratic in the lambdas of one method");
 		await That(source).DoesNotContain("static __s => __R")
 			.Because("no compound dispatch entry wraps its forwarder in a lambda");
-		await That(source).Contains("typeof(global::System.Threading.Tasks.Task<global::MyCode.B>), global::Awaiten.AwaitenTaskProjection.AsTask<global::MyCode.B>)")
+		await That(source).Contains("typeof(global::System.Threading.Tasks.Task<global::MyCode.B>), global::Awaiten.Internals.AwaitenTaskProjection.AsTask<global::MyCode.B>)")
 			.Because("the async projection of a registration is bound as a method group, not one lambda per registration");
 	}
 

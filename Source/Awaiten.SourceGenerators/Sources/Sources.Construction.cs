@@ -237,6 +237,10 @@ internal static partial class Sources
 				// ! keeps the call warning-free whether the factory declares the parameter nullable or not.
 				arguments.Append(RequestingTypeParameterName).Append('!');
 			}
+			else if (parameters[p].Kind == DependencyKind.Absent)
+			{
+				arguments.Append("default!");
+			}
 			else
 			{
 				arguments.Append(DependencyValue(parameters[p], instances, names, serviceToIndex, asynchronous, requestingType));
@@ -246,8 +250,8 @@ internal static partial class Sources
 		if (instance.Production == ProductionKind.Factory)
 		{
 			// Only an implementation built through its owner's generated factory has injected members here: the factory
-			// takes each as a parameter named like the property.
-			foreach (MemberModel member in instance.InjectedMembers.AsArray())
+			// takes each as a parameter named like the property, except a deferred one, assigned through its setter wrapper.
+			foreach (MemberModel member in instance.InjectedMembers.AsArray().Where(member => !member.Deferred))
 			{
 				arguments.Append(arguments.Length > 0 ? ", @" : "@").Append(member.MemberName).Append(": ")
 					.Append(DependencyValue(member.Dependency, instances, names, serviceToIndex, asynchronous, requestingType));
@@ -379,6 +383,12 @@ internal static partial class Sources
 			}
 
 			string value = DependencyValue(member.Dependency, context.Instances, context.Names, context.ServiceToIndex, asynchronous, requestingType);
+			if (member.Setter is { } setter)
+			{
+				Indent(builder, depth).Append(setter).Append('(').Append(variable).Append(", ").Append(value).AppendLine(");");
+				continue;
+			}
+
 			Indent(builder, depth).Append(variable).Append('.').Append(member.MemberName).Append(" = ").Append(value).AppendLine(";");
 		}
 	}
