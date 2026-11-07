@@ -2,12 +2,6 @@ window.BENCHMARK_DATA = {
   "Resolve (Size=8)": {
     "commits": [
       {
-        "sha": "cbb9b91a776f41835205f94e1dbfddbe1570313d",
-        "author": "Valentin Breu\u00DF",
-        "date": "Sat Oct 31 08:14:15 2026 \u002B0100",
-        "message": "docs: correct the diagnostic count and explain SyncAfterInit in the complete example (#231)"
-      },
-      {
         "sha": "9fd56950a5917f7599ecdc90e41184c145ec7c07",
         "author": "Valentin Breu\u00DF",
         "date": "Sat Oct 31 08:23:31 2026 \u002B0100",
@@ -300,10 +294,15 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 13:03:31 2026 \u002B0100",
         "message": "docs: show an async initializer convention in the quick start (#296)"
+      },
+      {
+        "sha": "746c51e49689b6e5c4419bb0ad08ce416786ae96",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 13:03:35 2026 \u002B0100",
+        "message": "docs: link GitHub Sponsors from the documentation header (#295)"
       }
     ],
     "labels": [
-      "cbb9b91a",
       "9fd56950",
       "901805b6",
       "49f30958",
@@ -352,14 +351,14 @@ window.BENCHMARK_DATA = {
       "31dac7e7",
       "f3f401b1",
       "dc9c2c1c",
-      "0c0f88d5"
+      "0c0f88d5",
+      "746c51e4"
     ],
     "datasets": [
       {
         "label": "Awaiten time",
         "unit": "ns",
         "data": [
-          7.199809367103236,
           5.475880987942219,
           7.225707537929217,
           6.063011535085165,
@@ -408,7 +407,8 @@ window.BENCHMARK_DATA = {
           5.936611338456472,
           7.14416278898716,
           6.282223316033681,
-          7.1361276040474575
+          7.1361276040474575,
+          5.947241951028506
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -484,7 +484,6 @@ window.BENCHMARK_DATA = {
         "label": "MsDI time",
         "unit": "ns",
         "data": [
-          7.219303556850979,
           7.533856291856084,
           7.772120439089262,
           6.5275257408618925,
@@ -533,7 +532,8 @@ window.BENCHMARK_DATA = {
           7.746079376110663,
           7.367984943664991,
           6.60550715561424,
-          7.329823404550552
+          7.329823404550552,
+          4.557122246424357
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -609,7 +609,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac time",
         "unit": "ns",
         "data": [
-          128.8669077952703,
           156.44384710605328,
           119.06986452851977,
           108.10068261623383,
@@ -658,7 +657,8 @@ window.BENCHMARK_DATA = {
           85.2396669626236,
           115.04723027774266,
           84.00887862535623,
-          104.7605748573939
+          104.7605748573939,
+          103.59020003477733
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -734,7 +734,6 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc time",
         "unit": "ns",
         "data": [
-          9.028791852295399,
           7.784278407692909,
           8.897412807742755,
           6.573854300592627,
@@ -783,7 +782,8 @@ window.BENCHMARK_DATA = {
           7.113225168415478,
           8.792669971783956,
           6.944260048178526,
-          8.887216713031133
+          8.887216713031133,
+          7.287702653270501
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -859,7 +859,6 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector time",
         "unit": "ns",
         "data": [
-          11.098417440286049,
           9.961834695722375,
           10.751090586185455,
           9.350020883338791,
@@ -908,7 +907,8 @@ window.BENCHMARK_DATA = {
           8.756297117897443,
           10.913744831723827,
           8.761714037794333,
-          11.310979110002517
+          11.310979110002517,
+          8.600960342089335
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -985,12 +985,6 @@ window.BENCHMARK_DATA = {
   "Resolve (Size=256)": {
     "commits": [
       {
-        "sha": "cbb9b91a776f41835205f94e1dbfddbe1570313d",
-        "author": "Valentin Breu\u00DF",
-        "date": "Sat Oct 31 08:14:15 2026 \u002B0100",
-        "message": "docs: correct the diagnostic count and explain SyncAfterInit in the complete example (#231)"
-      },
-      {
         "sha": "9fd56950a5917f7599ecdc90e41184c145ec7c07",
         "author": "Valentin Breu\u00DF",
         "date": "Sat Oct 31 08:23:31 2026 \u002B0100",
@@ -1283,10 +1277,15 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 13:03:31 2026 \u002B0100",
         "message": "docs: show an async initializer convention in the quick start (#296)"
+      },
+      {
+        "sha": "746c51e49689b6e5c4419bb0ad08ce416786ae96",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 13:03:35 2026 \u002B0100",
+        "message": "docs: link GitHub Sponsors from the documentation header (#295)"
       }
     ],
     "labels": [
-      "cbb9b91a",
       "9fd56950",
       "901805b6",
       "49f30958",
@@ -1335,14 +1334,14 @@ window.BENCHMARK_DATA = {
       "31dac7e7",
       "f3f401b1",
       "dc9c2c1c",
-      "0c0f88d5"
+      "0c0f88d5",
+      "746c51e4"
     ],
     "datasets": [
       {
         "label": "Awaiten time",
         "unit": "ns",
         "data": [
-          8.106923421988121,
           6.621588476002216,
           8.098851716518402,
           6.949207954605421,
@@ -1391,7 +1390,8 @@ window.BENCHMARK_DATA = {
           6.018283696128772,
           8.215671673417091,
           6.354564317635128,
-          8.08468312983002
+          8.08468312983002,
+          6.462372806171576
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -1467,7 +1467,6 @@ window.BENCHMARK_DATA = {
         "label": "MsDI time",
         "unit": "ns",
         "data": [
-          7.265060443144578,
           7.539700497190157,
           7.732584930383242,
           6.467993729880878,
@@ -1516,7 +1515,8 @@ window.BENCHMARK_DATA = {
           6.455636762082577,
           7.276280882103102,
           6.513853524412427,
-          7.280531728906291
+          7.280531728906291,
+          4.821196233853698
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -1592,7 +1592,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac time",
         "unit": "ns",
         "data": [
-          135.38768382072448,
           157.52002464930217,
           121.17289245923361,
           101.65210106543132,
@@ -1641,7 +1640,8 @@ window.BENCHMARK_DATA = {
           83.57048817475636,
           113.45713103612265,
           86.20904715855916,
-          105.5847470852045
+          105.5847470852045,
+          105.54962032181876
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -1717,7 +1717,6 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc time",
         "unit": "ns",
         "data": [
-          9.256657438782545,
           7.857610277258432,
           8.716745321949324,
           6.556041053363255,
@@ -1766,7 +1765,8 @@ window.BENCHMARK_DATA = {
           6.778044698635737,
           9.007707502160754,
           6.846068484278826,
-          8.806058989961942
+          8.806058989961942,
+          7.1084304091831045
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -1842,7 +1842,6 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector time",
         "unit": "ns",
         "data": [
-          14.657154922301952,
           13.62738448381424,
           14.137380738343511,
           8.485602602362633,
@@ -1891,7 +1890,8 @@ window.BENCHMARK_DATA = {
           11.599838403860728,
           14.647800761461259,
           11.465969539114408,
-          14.960997599821825
+          14.960997599821825,
+          10.256872245669365
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -1968,12 +1968,6 @@ window.BENCHMARK_DATA = {
   "Build (Size=8)": {
     "commits": [
       {
-        "sha": "cbb9b91a776f41835205f94e1dbfddbe1570313d",
-        "author": "Valentin Breu\u00DF",
-        "date": "Sat Oct 31 08:14:15 2026 \u002B0100",
-        "message": "docs: correct the diagnostic count and explain SyncAfterInit in the complete example (#231)"
-      },
-      {
         "sha": "9fd56950a5917f7599ecdc90e41184c145ec7c07",
         "author": "Valentin Breu\u00DF",
         "date": "Sat Oct 31 08:23:31 2026 \u002B0100",
@@ -2266,10 +2260,15 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 13:03:31 2026 \u002B0100",
         "message": "docs: show an async initializer convention in the quick start (#296)"
+      },
+      {
+        "sha": "746c51e49689b6e5c4419bb0ad08ce416786ae96",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 13:03:35 2026 \u002B0100",
+        "message": "docs: link GitHub Sponsors from the documentation header (#295)"
       }
     ],
     "labels": [
-      "cbb9b91a",
       "9fd56950",
       "901805b6",
       "49f30958",
@@ -2318,14 +2317,14 @@ window.BENCHMARK_DATA = {
       "31dac7e7",
       "f3f401b1",
       "dc9c2c1c",
-      "0c0f88d5"
+      "0c0f88d5",
+      "746c51e4"
     ],
     "datasets": [
       {
         "label": "Awaiten time",
         "unit": "ns",
         "data": [
-          19.172607247318542,
           14.903845953941346,
           16.129320595945632,
           10.468831247091293,
@@ -2374,7 +2373,8 @@ window.BENCHMARK_DATA = {
           20.849544993468694,
           11.349326225121816,
           27.886247165997823,
-          11.084885752626828
+          11.084885752626828,
+          11.465736424922943
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -2450,7 +2450,6 @@ window.BENCHMARK_DATA = {
         "label": "MsDI time",
         "unit": "ns",
         "data": [
-          1406.7898111343384,
           1096.2855527060372,
           1173.5332114355904,
           718.4618699210031,
@@ -2499,7 +2498,8 @@ window.BENCHMARK_DATA = {
           1483.730047861735,
           777.95446656545,
           1724.4790709177653,
-          817.1202362605503
+          817.1202362605503,
+          812.2018456141154
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -2575,7 +2575,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac time",
         "unit": "ns",
         "data": [
-          29878.790901692708,
           25368.823499407088,
           19419.08597891671,
           16462.103157552083,
@@ -2624,7 +2623,8 @@ window.BENCHMARK_DATA = {
           30091.146451822915,
           17317.80350167411,
           25395.174952915735,
-          18207.834700520834
+          18207.834700520834,
+          17257.640767415363
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -2636,7 +2636,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
-          32482,
           32478,
           32474,
           32478,
@@ -2685,7 +2684,8 @@ window.BENCHMARK_DATA = {
           32482,
           32478,
           32474,
-          32477
+          32477,
+          32478
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -2700,7 +2700,6 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc time",
         "unit": "ns",
         "data": [
-          724.1780805587769,
           548.2301207951137,
           545.636457379659,
           372.298821755818,
@@ -2749,7 +2748,8 @@ window.BENCHMARK_DATA = {
           690.8401736531939,
           400.71647000312805,
           700.945457013448,
-          422.2134127934774
+          422.2134127934774,
+          396.04076906840004
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -2825,7 +2825,6 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector time",
         "unit": "ns",
         "data": [
-          11988.276845659528,
           8629.358443040113,
           9110.734084065754,
           6395.177406311035,
@@ -2874,7 +2873,8 @@ window.BENCHMARK_DATA = {
           12357.126165771484,
           6784.037655131022,
           12185.989453125,
-          6713.618688964843
+          6713.618688964843,
+          6741.6809005737305
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -2895,7 +2895,6 @@ window.BENCHMARK_DATA = {
           24760,
           24760,
           24760,
-          24760,
           24761,
           24761,
           24760,
@@ -2934,6 +2933,7 @@ window.BENCHMARK_DATA = {
           24760,
           24761,
           24761,
+          24760,
           24760,
           24760
         ],
@@ -2950,12 +2950,6 @@ window.BENCHMARK_DATA = {
   },
   "Build (Size=256)": {
     "commits": [
-      {
-        "sha": "cbb9b91a776f41835205f94e1dbfddbe1570313d",
-        "author": "Valentin Breu\u00DF",
-        "date": "Sat Oct 31 08:14:15 2026 \u002B0100",
-        "message": "docs: correct the diagnostic count and explain SyncAfterInit in the complete example (#231)"
-      },
       {
         "sha": "9fd56950a5917f7599ecdc90e41184c145ec7c07",
         "author": "Valentin Breu\u00DF",
@@ -3249,10 +3243,15 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 13:03:31 2026 \u002B0100",
         "message": "docs: show an async initializer convention in the quick start (#296)"
+      },
+      {
+        "sha": "746c51e49689b6e5c4419bb0ad08ce416786ae96",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 13:03:35 2026 \u002B0100",
+        "message": "docs: link GitHub Sponsors from the documentation header (#295)"
       }
     ],
     "labels": [
-      "cbb9b91a",
       "9fd56950",
       "901805b6",
       "49f30958",
@@ -3301,14 +3300,14 @@ window.BENCHMARK_DATA = {
       "31dac7e7",
       "f3f401b1",
       "dc9c2c1c",
-      "0c0f88d5"
+      "0c0f88d5",
+      "746c51e4"
     ],
     "datasets": [
       {
         "label": "Awaiten time",
         "unit": "ns",
         "data": [
-          169.41983933108193,
           103.95067853132883,
           166.28459678377425,
           77.4594729979833,
@@ -3357,7 +3356,8 @@ window.BENCHMARK_DATA = {
           187.1634455680847,
           76.95422825813293,
           351.7960612297058,
-          74.7533876987604
+          74.7533876987604,
+          80.57856663635799
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -3433,7 +3433,6 @@ window.BENCHMARK_DATA = {
         "label": "MsDI time",
         "unit": "ns",
         "data": [
-          14165.388678995769,
           10115.962408883232,
           10242.803854370117,
           7017.37736714681,
@@ -3482,7 +3481,8 @@ window.BENCHMARK_DATA = {
           15053.990669759114,
           7457.814703721267,
           14754.67061832973,
-          7516.215811157226
+          7516.215811157226,
+          7126.2112955365865
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -3558,7 +3558,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac time",
         "unit": "ns",
         "data": [
-          743064.3482840402,
           623732.029296875,
           469517.71937779017,
           396668.796875,
@@ -3607,7 +3606,8 @@ window.BENCHMARK_DATA = {
           739513.637109375,
           436696.5011268029,
           585256.2476981027,
-          415250.0730919471
+          415250.0730919471,
+          406746.2070661272
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -3619,7 +3619,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
-          736756,
           740350,
           737924,
           739387,
@@ -3668,7 +3667,8 @@ window.BENCHMARK_DATA = {
           739022,
           720378,
           719197,
-          718367
+          718367,
+          718405
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -3683,7 +3683,6 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc time",
         "unit": "ns",
         "data": [
-          43389.93280029297,
           34222.03263753255,
           30738.099827357702,
           22407.56075846354,
@@ -3732,7 +3731,8 @@ window.BENCHMARK_DATA = {
           41946.815329415454,
           23579.17320760091,
           40771.01618739537,
-          23890.38814086914
+          23890.38814086914,
+          22861.244561767577
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -3744,7 +3744,6 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
-          81172,
           80015,
           80198,
           80100,
@@ -3793,7 +3792,8 @@ window.BENCHMARK_DATA = {
           80069,
           80302,
           80836,
-          80351
+          80351,
+          80350
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -3808,7 +3808,6 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector time",
         "unit": "ns",
         "data": [
-          362286.03011067706,
           260519.36595052082,
           259996.26393229168,
           188444.64444173177,
@@ -3857,7 +3856,8 @@ window.BENCHMARK_DATA = {
           378219.96443684894,
           194446.7380126953,
           350615.7896809896,
-          195745.27898297991
+          195745.27898297991,
+          195049.4735281808
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -3869,7 +3869,6 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
-          573090,
           573074,
           571215,
           573058,
@@ -3918,7 +3917,8 @@ window.BENCHMARK_DATA = {
           573137,
           573092,
           571211,
-          573022
+          573022,
+          572990
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -3933,12 +3933,6 @@ window.BENCHMARK_DATA = {
   },
   "Realistic": {
     "commits": [
-      {
-        "sha": "cbb9b91a776f41835205f94e1dbfddbe1570313d",
-        "author": "Valentin Breu\u00DF",
-        "date": "Sat Oct 31 08:14:15 2026 \u002B0100",
-        "message": "docs: correct the diagnostic count and explain SyncAfterInit in the complete example (#231)"
-      },
       {
         "sha": "9fd56950a5917f7599ecdc90e41184c145ec7c07",
         "author": "Valentin Breu\u00DF",
@@ -4232,10 +4226,15 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 13:03:31 2026 \u002B0100",
         "message": "docs: show an async initializer convention in the quick start (#296)"
+      },
+      {
+        "sha": "746c51e49689b6e5c4419bb0ad08ce416786ae96",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 13:03:35 2026 \u002B0100",
+        "message": "docs: link GitHub Sponsors from the documentation header (#295)"
       }
     ],
     "labels": [
-      "cbb9b91a",
       "9fd56950",
       "901805b6",
       "49f30958",
@@ -4284,14 +4283,14 @@ window.BENCHMARK_DATA = {
       "31dac7e7",
       "f3f401b1",
       "dc9c2c1c",
-      "0c0f88d5"
+      "0c0f88d5",
+      "746c51e4"
     ],
     "datasets": [
       {
         "label": "Awaiten time",
         "unit": "ns",
         "data": [
-          229.97631784847803,
           288.55060625076294,
           245.1238031387329,
           253.66118939717612,
@@ -4340,7 +4339,8 @@ window.BENCHMARK_DATA = {
           177.35941479887282,
           270.2936977318355,
           221.5297645880626,
-          253.58504111950214
+          253.58504111950214,
+          222.17189300855
         ],
         "borderColor": "#3949AB",
         "backgroundColor": "#3949AB",
@@ -4416,7 +4416,6 @@ window.BENCHMARK_DATA = {
         "label": "MsDI time",
         "unit": "ns",
         "data": [
-          586.7205320199331,
           718.1137480735779,
           657.2909893622765,
           496.4104159218924,
@@ -4465,7 +4464,8 @@ window.BENCHMARK_DATA = {
           429.28538802691867,
           620.4263546625773,
           463.91272395451864,
-          580.4872319539388
+          580.4872319539388,
+          529.6825239181519
         ],
         "borderColor": "#512BD4",
         "backgroundColor": "#512BD4",
@@ -4541,7 +4541,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac time",
         "unit": "ns",
         "data": [
-          6553.719646160419,
           6560.0149706327,
           6477.584494527181,
           5373.258656056722,
@@ -4590,7 +4589,8 @@ window.BENCHMARK_DATA = {
           3852.1693022591726,
           6705.928993770054,
           4830.678050486246,
-          6401.686316426595
+          6401.686316426595,
+          3947.941729032076
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -4666,7 +4666,6 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc time",
         "unit": "ns",
         "data": [
-          384.5720346371333,
           438.5710569699605,
           401.66472185575043,
           364.38143774668373,
@@ -4715,7 +4714,8 @@ window.BENCHMARK_DATA = {
           275.5822614034017,
           386.2216288248698,
           343.49978059132894,
-          372.9189969698588
+          372.9189969698588,
+          338.65057201385497
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -4791,7 +4791,6 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector time",
         "unit": "ns",
         "data": [
-          722.5628248214722,
           779.3136354173932,
           707.2424107279096,
           595.2971396446228,
@@ -4840,7 +4839,8 @@ window.BENCHMARK_DATA = {
           427.2957167625427,
           731.0750053405761,
           549.6443550927298,
-          714.6304956844875
+          714.6304956844875,
+          524.539628469027
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
