@@ -56,6 +56,8 @@ partial class AwaitenGenerator
 			return null;
 		}
 
+		members = WithDeferredSetters(members, info, producer, context);
+
 		// An async factory returns Task<T> / ValueTask<T>: the container awaits it, so the owned type is the
 		// awaited result T, not the Task. A sync factory owns its return type; a constructed impl owns info.Symbol.
 		bool asyncFactory = info.Production == ProductionKind.Factory
@@ -167,6 +169,42 @@ partial class AwaitenGenerator
 			=> type.TypeKind is TypeKind.Interface or TypeKind.TypeParameter
 			   || (type.TypeKind == TypeKind.Class && !type.IsSealed);
 	}
+
+	/// <summary>
+	///     The injected members of an implementation a module's generated factory builds, completed with the deferred
+	///     ones, which the factory leaves to its setter wrappers (see <see cref="DeferredSetterName" />): read from the
+	///     wrappers next to a factory from metadata, each classified like a deferred property, or, for a factory the
+	///     module generates in the same run, the deferred members the container discovered pointed at their wrappers.
+	/// </summary>
+	private static List<MemberModel> WithDeferredSetters(List<MemberModel> members, ImplInfo info, IMethodSymbol producer, BuildContext context)
+	{
+		if (info.ConstructVia is { } via && producer.MethodKind != MethodKind.Ordinary)
+		{
+			string owner = via.Substring(0, via.LastIndexOf('.'));
+			string factory = via.Substring(via.LastIndexOf('.') + 1);
+			return members.Select(member => member.Deferred ? member with { Setter = $"{owner}.{DeferredSetterName(factory, member.MemberName)}", } : member).ToList();
+		}
+
+		if (!IsGeneratedOwnerFactory(producer))
+		{
+			return members;
+		}
+
+		string prefix = DeferredSetterName(producer.Name, string.Empty);
+		foreach (IMethodSymbol setter in producer.ContainingType.GetMembers().OfType<IMethodSymbol>()
+			         .Where(method => method is { IsStatic: true, Parameters.Length: 2, } && method.Name.StartsWith(prefix, StringComparison.Ordinal)))
+		{
+			ParameterModel dependency = ClassifyParameter(setter.Parameters[1], asyncFactory: false, context.External.ServiceTypes);
+			ReportWhenUnregistered(dependency, info, context);
+			members.Add(new MemberModel(setter.Name.Substring(prefix.Length), dependency, Deferred: true, $"{producer.ContainingType.ToDisplayString(FullyQualified)}.{setter.Name}"));
+		}
+
+		return members;
+	}
+
+	/// <summary>Whether <paramref name="method" /> is a factory a module or base container generated into its <c>Internals</c> class.</summary>
+	private static bool IsGeneratedOwnerFactory(IMethodSymbol method)
+		=> method is { MethodKind: MethodKind.Ordinary, ContainingType: { Name: InternalsClass, ContainingType: not null, }, };
 
 	/// <summary>
 	///     The property-injection members of an instance: its opt-in <c>[Inject]</c> properties plus the container's

@@ -386,7 +386,43 @@ public class RegistrationFactoryShapeTests
 		}
 
 		[Test]
-		public async Task AnOptionalInjectProperty_StillReportsAwt200()
+		public async Task OptionalAndDeferredPropertiesOfAPrivateNestedType_AreFilledThroughTheFactoryInTheSameAssembly()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace Lib;
+
+			                                       public interface IGreeter { }
+			                                       public interface IClock { }
+			                                       public interface IAudit { }
+			                                       public sealed class Audit : IAudit { public Audit(IGreeter greeter) { } }
+
+			                                       [Module]
+			                                       [Singleton<GreetingModule.Greeter, IGreeter>]
+			                                       [Transient<Audit, IAudit>]
+			                                       public static partial class GreetingModule
+			                                       {
+			                                           private sealed class Greeter : IGreeter
+			                                           {
+			                                               [Inject(Optional = true)] public IClock Clock { get; set; } = null!;
+			                                               [Inject(Deferred = true)] public IAudit Audit { get; set; } = null!;
+			                                           }
+			                                       }
+
+			                                       [Container]
+			                                       [Import(typeof(GreetingModule))]
+			                                       public static partial class GreetingContainer { }
+			                                       """);
+			string container = result.Sources.Single(source => source.Key.Contains("GreetingContainer")).Value;
+
+			await That(result.Diagnostics).IsEmpty();
+			await That(container).Contains("global::Lib.GreetingModule.Internals.Deferred_Registration_Greeter_*_Audit(*").AsWildcard()
+				.Because("a container in the module's assembly cannot assign a property of a type private to the module, so it calls the setter wrapper");
+		}
+
+		[Test]
+		public async Task AnInitOnlyOptionalInjectProperty_StillReportsAwt200()
 		{
 			GeneratorResult result = Generator.Run("""
 			                                       using Awaiten;
@@ -398,7 +434,7 @@ public class RegistrationFactoryShapeTests
 			                                       internal sealed class Greeter : IGreeter
 			                                       {
 			                                           [Inject(Optional = true)]
-			                                           public IClock? Clock { get; set; }
+			                                           public IClock? Clock { get; init; }
 			                                       }
 
 			                                       [Module]
@@ -407,11 +443,11 @@ public class RegistrationFactoryShapeTests
 			                                       """);
 
 			await That(result.Diagnostics).Contains("*AWT200*Lib.Greeter*Clock*[Inject(Optional = true)]*").AsWildcard()
-				.Because("a factory parameter cannot be left out when the dependency is not registered");
+				.Because("the factory assigns an optional property only after construction, which an init-only accessor does not allow");
 		}
 
 		[Test]
-		public async Task ADeferredInjectProperty_StillReportsAwt200()
+		public async Task AnInitOnlyDeferredInjectProperty_StillReportsAwt200()
 		{
 			GeneratorResult result = Generator.Run("""
 			                                       using Awaiten;
@@ -423,7 +459,7 @@ public class RegistrationFactoryShapeTests
 			                                       internal sealed class Greeter : IGreeter
 			                                       {
 			                                           [Inject(Deferred = true)]
-			                                           public IClock Clock { get; set; } = null!;
+			                                           public IClock Clock { get; init; } = null!;
 			                                       }
 
 			                                       [Module]
@@ -432,7 +468,7 @@ public class RegistrationFactoryShapeTests
 			                                       """);
 
 			await That(result.Diagnostics).Contains("*AWT200*Lib.Greeter*Clock*[Inject(Deferred = true)]*").AsWildcard()
-				.Because("a deferred property is assigned after construction, which a factory parameter cannot express");
+				.Because("a deferred property is assigned through a setter wrapper after construction, which an init-only accessor does not allow");
 		}
 	}
 

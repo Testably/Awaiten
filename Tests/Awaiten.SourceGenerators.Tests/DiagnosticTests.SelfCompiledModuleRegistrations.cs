@@ -468,7 +468,7 @@ public partial class DiagnosticTests
 		public class Awt200
 		{
 			[Test]
-			public async Task ReportsAnOptionalInjectProperty()
+			public async Task ReportsAnInitOnlyOptionalInjectProperty()
 			{
 				GeneratorResult result = Generator.Run("""
 					using Awaiten;
@@ -480,7 +480,7 @@ public partial class DiagnosticTests
 					internal sealed class Greeter : IGreeter
 					{
 					    [Inject(Optional = true)]
-					    public IClock? Clock { get; set; }
+					    public IClock? Clock { get; init; }
 					}
 
 					[Module]
@@ -489,11 +489,11 @@ public partial class DiagnosticTests
 					""");
 
 				await That(result.Diagnostics).Contains("*AWT200*Lib.Greeter*Clock*[Inject(Optional = true)]*").AsWildcard()
-					.Because("no other assembly can ever construct the implementation, and a factory parameter cannot be left out when the service is missing");
+					.Because("no other assembly can ever construct the implementation, and the factory cannot assign an init-only property after construction");
 			}
 
 			[Test]
-			public async Task ReportsADeferredInjectProperty()
+			public async Task ReportsAnInitOnlyDeferredInjectProperty()
 			{
 				GeneratorResult result = Generator.Run("""
 					using Awaiten;
@@ -505,7 +505,7 @@ public partial class DiagnosticTests
 					internal sealed class Greeter : IGreeter
 					{
 					    [Inject(Deferred = true)]
-					    public IClock Clock { get; set; } = null!;
+					    public IClock Clock { get; init; } = null!;
 					}
 
 					[Module]
@@ -514,11 +514,11 @@ public partial class DiagnosticTests
 					""");
 
 				await That(result.Diagnostics).Contains("*AWT200*Lib.Greeter*Clock*[Inject(Deferred = true)]*").AsWildcard()
-					.Because("a deferred property is assigned after construction, which a factory parameter cannot express");
+					.Because("a deferred property is assigned through a setter wrapper after construction, which an init-only accessor does not allow");
 			}
 
 			[Test]
-			public async Task DoesNotReportAnOptionalInjectPropertyWhenTheAssemblyGrantsInternalsVisibleTo()
+			public async Task DoesNotReportAnInitOnlyOptionalInjectPropertyWhenTheAssemblyGrantsInternalsVisibleTo()
 			{
 				GeneratorResult result = Generator.Run("""
 					using Awaiten;
@@ -532,7 +532,7 @@ public partial class DiagnosticTests
 					internal sealed class Greeter : IGreeter
 					{
 					    [Inject(Optional = true)]
-					    public IClock Clock { get; set; } = null!;
+					    public IClock Clock { get; init; } = null!;
 					}
 
 					[Module]
@@ -565,7 +565,7 @@ public partial class DiagnosticTests
 					    private sealed class Greeter : IGreeter
 					    {
 					        [Inject(Optional = true)]
-					        public IClock? Clock { get; set; }
+					        public IClock? Clock { get; init; }
 					    }
 					}
 					""");
@@ -592,7 +592,7 @@ public partial class DiagnosticTests
 					    private sealed class Greeter : IGreeter
 					    {
 					        [Inject(Optional = true)]
-					        public IClock? Clock { get; set; }
+					        public IClock? Clock { get; init; }
 					    }
 
 					    [Module]

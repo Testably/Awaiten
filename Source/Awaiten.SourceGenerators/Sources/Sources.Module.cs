@@ -119,6 +119,7 @@ internal static partial class Sources
 
 			first = false;
 			EmitRegistrationFactory(builder, depth + 2, registration);
+			EmitDeferredSetters(builder, depth + 2, registration);
 			foreach (RegistrationHook hook in registration.Hooks.AsArray())
 			{
 				builder.AppendLine();
@@ -381,8 +382,16 @@ internal static partial class Sources
 
 		FactoryParameter[] parameters = factory.Parameters.AsArray();
 		string[] members = factory.Members.AsArray();
-		string signature = string.Join(", ", parameters.Select(MirroredParameter));
-		string arguments = string.Join(", ", parameters.Take(parameters.Length - members.Length).Select(parameter => parameter.ArgumentExpression));
+		string[] optional = factory.OptionalMembers.AsArray();
+		string signature = string.Join(", ", parameters.Select((parameter, index) => index < parameters.Length - optional.Length
+			? MirroredParameter(parameter)
+			: $"{MirroredParameter(parameter with { Type = parameter.Type.EndsWith("?", StringComparison.Ordinal) ? parameter.Type : parameter.Type + "?", })} = null"));
+		string arguments = string.Join(", ", parameters.Take(parameters.Length - members.Length - optional.Length).Select(parameter => parameter.ArgumentExpression));
+		if (optional.Length > 0)
+		{
+			EmitFactoryWithOptionalMembers(builder, depth, factory, accessibility, signature, arguments);
+			return;
+		}
 
 		if (factory.Call is not null)
 		{
@@ -415,6 +424,58 @@ internal static partial class Sources
 		}
 
 		builder.AppendLine(factory.Handle is null ? ";" : ");");
+	}
+
+	/// <summary>
+	///     Emits a generated factory with optional members (see <see cref="RegistrationFactory.OptionalMembers" />) as a
+	///     block: it constructs the implementation with its required members, assigns each optional member only when the
+	///     consumer passed a service, so a missing one keeps the property's own value, and returns the instance.
+	/// </summary>
+	private static void EmitFactoryWithOptionalMembers(StringBuilder builder, int depth, RegistrationFactory factory, string accessibility, string signature, string arguments)
+	{
+		FactoryParameter[] parameters = factory.Parameters.AsArray();
+		string[] members = factory.Members.AsArray();
+		string[] optional = factory.OptionalMembers.AsArray();
+		int first = parameters.Length - members.Length - optional.Length;
+		Indent(builder, depth).Append(accessibility).Append(" static ").Append(factory.ReturnType).Append(' ').Append(factory.FactoryName).Append('(').Append(signature).AppendLine(")");
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).Append("var awaiten__instance = new ").Append(factory.ImplementationType).Append('(').Append(arguments).Append(')');
+		if (members.Length > 0)
+		{
+			builder.Append(" { ").Append(string.Join(", ", members.Select((member, index) => $"{member} = {parameters[first + index].ArgumentExpression}"))).Append(" }");
+		}
+
+		builder.AppendLine(";");
+		for (int index = 0; index < optional.Length; index++)
+		{
+			FactoryParameter parameter = parameters[first + members.Length + index];
+			Indent(builder, depth + 1).Append("if (@").Append(parameter.Name).AppendLine(" is not null)");
+			Indent(builder, depth + 1).AppendLine("{");
+			Indent(builder, depth + 2).Append("awaiten__instance.").Append(optional[index]).Append(" = ").Append(parameter.ArgumentExpression).AppendLine(";");
+			Indent(builder, depth + 1).AppendLine("}");
+		}
+
+		Indent(builder, depth + 1).Append("return ").Append(factory.Handle is null ? "awaiten__instance" : $"new {factory.Handle}(awaiten__instance)").AppendLine(";");
+		Indent(builder, depth).AppendLine("}");
+	}
+
+	/// <summary>
+	///     Emits the setter wrapper of each deferred member of a generated factory: it takes the instance the factory
+	///     returned and the service, and assigns the property, so a consumer wires it after construction.
+	/// </summary>
+	private static void EmitDeferredSetters(StringBuilder builder, int depth, RegistrationFactory factory)
+	{
+		foreach (FactoryParameter parameter in factory.DeferredMembers.AsArray())
+		{
+			builder.AppendLine();
+			AppendXmlSummary(builder, depth,
+				"Generated from a module registration: assigns a property marked [Inject(Deferred = true)] after a consuming",
+				"container built and cached the instance, so it can break a cycle.");
+			Indent(builder, depth).Append("public static void ").Append(AwaitenGenerator.DeferredSetterName(factory.FactoryName, parameter.Name)).Append('(')
+				.Append(factory.ReturnType).Append(" @awaiten__instance, ").Append(MirroredParameter(parameter)).Append(") => ((")
+				.Append(factory.ImplementationType).Append(")@awaiten__instance").Append(factory.Handle is null ? string.Empty : ".Value").Append(").")
+				.Append(parameter.Name).Append(" = ").Append(parameter.ArgumentExpression).AppendLine(";");
+		}
 	}
 
 	/// <summary>

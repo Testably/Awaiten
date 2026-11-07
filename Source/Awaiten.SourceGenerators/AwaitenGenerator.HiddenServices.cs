@@ -344,7 +344,7 @@ partial class AwaitenGenerator
 			: new SelfCompiledSubject(typeName, $"'{Display(typeName)}' is registered under the internal service '{Display(candidate.Owner.ToDisplayString(FullyQualified))}', which a consuming container reaches through a generated handle", "register it in the module");
 		Location? location = candidate.Registrations[0].Location;
 		EquatableArray<FactoryParameter> parameters;
-		EquatableArray<string> members = default;
+		MirroredMembers members = default;
 		string? awaited = null;
 		bool instance = candidate.Production == ProductionKind.Instance;
 		bool built = candidate.Production == ProductionKind.Constructor
@@ -405,8 +405,10 @@ partial class AwaitenGenerator
 			typeName,
 			parameters,
 			new EquatableArray<RegistrationHook>(hooks.ToArray()),
-			members,
-			handle + HandleVariant(TraitsOf(implementation, [])));
+			members.Required,
+			handle + HandleVariant(TraitsOf(implementation, [])),
+			OptionalMembers: members.Optional,
+			DeferredMembers: members.Deferred);
 	}
 
 	/// <summary>The nested handle variant that implements exactly the disposal interfaces of <paramref name="traits" />.</summary>
@@ -506,7 +508,7 @@ partial class AwaitenGenerator
 		string handle = hidden.HandleType(service);
 		List<HiddenInitializer> initializers = new();
 		if (!TryMirrorFactoryParameters(decorator, context, null, subject, out EquatableArray<FactoryParameter> parameters, mirrorProperties: true)
-		    || !TryMirrorInjectedProperties(decorator, context, null, subject, ref parameters, out EquatableArray<string> members)
+		    || !TryMirrorInjectedProperties(decorator, context, null, subject, ref parameters, out MirroredMembers members)
 		    || !TryAddHiddenInitializers(decorator, handle, context, null, subject, initializers))
 		{
 			return null;
@@ -516,7 +518,7 @@ partial class AwaitenGenerator
 		hidden.Use(service);
 		hidden.DecoratorTraits.Add((service, traits));
 		hidden.DecoratorInitializers.AddRange(initializers);
-		return new RegistrationFactory(name, handle, typeName, parameters, default, members, handle + HandleVariant(traits));
+		return new RegistrationFactory(name, handle, typeName, parameters, default, members.Required, handle + HandleVariant(traits), OptionalMembers: members.Optional, DeferredMembers: members.Deferred);
 	}
 
 	/// <summary>

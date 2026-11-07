@@ -91,7 +91,10 @@ internal sealed record SkippedRegistration(string MarkerName, string Reason, boo
 ///     service (see <see cref="HiddenHandle" />), and the hooks then take that handle. A factory over the module's own
 ///     <c>Factory</c> or <c>Instance</c> <see cref="Call" /> passes the member's result to <see cref="Handle" />, the
 ///     expression that wraps it, instead of constructing the implementation: awaited first for an <see cref="Awaited" />
-///     task type, and as a property for an <see cref="IsProperty" /> instance.
+///     task type, and as a property for an <see cref="IsProperty" /> instance. The last
+///     <see cref="OptionalMembers" />.Count parameters are optional and fill their properties only when a consumer
+///     passes a service, and each of the <see cref="DeferredMembers" /> gets a setter wrapper a consumer calls after
+///     construction.
 /// </summary>
 internal sealed record RegistrationFactory(
 	string FactoryName,
@@ -103,7 +106,9 @@ internal sealed record RegistrationFactory(
 	string? Handle = null,
 	string? Call = null,
 	string? Awaited = null,
-	bool IsProperty = false);
+	bool IsProperty = false,
+	EquatableArray<string> OptionalMembers = default,
+	EquatableArray<FactoryParameter> DeferredMembers = default);
 
 /// <summary>One lifecycle-hook wrapper of a self-compiled module registration and whether it is the release hook.</summary>
 internal sealed record RegistrationHook(ModuleHook Hook, bool Release);

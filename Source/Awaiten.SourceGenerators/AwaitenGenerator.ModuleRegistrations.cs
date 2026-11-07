@@ -371,12 +371,12 @@ partial class AwaitenGenerator
 			if (factories.Any(factory => factory.FactoryName == name)
 			    || FactoryReturnType(type, [service,], context) is not { } returnType
 			    || !TryMirrorFactoryParameters(type, context, null, subject, out EquatableArray<FactoryParameter> parameters, mirrorProperties: true)
-			    || !TryMirrorInjectedProperties(type, context, null, subject, ref parameters, out EquatableArray<string> members))
+			    || !TryMirrorInjectedProperties(type, context, null, subject, ref parameters, out MirroredMembers members))
 			{
 				continue;
 			}
 
-			factories.Add(new RegistrationFactory(name, returnType.ToDisplayString(FullyQualified), type.ToDisplayString(FullyQualified), parameters, default, members));
+			factories.Add(new RegistrationFactory(name, returnType.ToDisplayString(FullyQualified), type.ToDisplayString(FullyQualified), parameters, default, members.Required, OptionalMembers: members.Optional, DeferredMembers: members.Deferred));
 		}
 
 		return factories;
@@ -572,7 +572,7 @@ partial class AwaitenGenerator
 			rejections.Add(initializerFault);
 		}
 
-		EquatableArray<string> members = default;
+		MirroredMembers members = default;
 		if (!TryMirrorFactoryParameters(implementation, context with { Diagnostics = rejections, }, first.Location, subject, out EquatableArray<FactoryParameter> parameters, mirrorProperties: true)
 		    || !TryMirrorInjectedProperties(implementation, context with { Diagnostics = rejections, }, first.Location, subject, ref parameters, out members)
 		    || rejections.Count > 0)
@@ -636,17 +636,22 @@ partial class AwaitenGenerator
 			typeName,
 			parameters,
 			new EquatableArray<RegistrationHook>(hooks.ToArray()),
-			members);
+			members.Required,
+			OptionalMembers: members.Optional,
+			DeferredMembers: members.Deferred);
 	}
 
 	/// <summary>
 	///     Appends a parameter per <c>[Inject]</c> property of <paramref name="type" /> to the mirrored constructor
 	///     <paramref name="parameters" />, named like the property and carrying its <c>[FromKey]</c>, so the factory fills
-	///     the property through an object initializer and a consumer resolves it like any other dependency. Reports
-	///     AWT200 and returns <see langword="false" /> for what a factory parameter cannot express: a property assigned
-	///     after construction (<c>Deferred</c>), one left out when its service is missing (<c>Optional</c>), one without a
-	///     setter the module can reach, one named like a constructor parameter, and one whose type another assembly
-	///     cannot name.
+	///     the property through an object initializer and a consumer resolves it like any other dependency. An
+	///     <c>Optional</c> property becomes an optional parameter after the others, which a consumer passes as
+	///     <see langword="null" /> when it does not register the service, and the factory then leaves the property as it
+	///     is. A <c>Deferred</c> property is no parameter: it gets a setter wrapper the consumer calls after it built and
+	///     cached the instance. Reports AWT200 and returns <see langword="false" /> for what the factory cannot express:
+	///     an optional property of a value type, or one that is init-only or required, a deferred property that is
+	///     init-only, required or also optional, one without a setter the module can reach, one named like a constructor
+	///     parameter, and one whose type another assembly cannot name.
 	/// </summary>
 	private static bool TryMirrorInjectedProperties(
 		INamedTypeSymbol type,
@@ -654,28 +659,37 @@ partial class AwaitenGenerator
 		Location? location,
 		SelfCompiledSubject subject,
 		ref EquatableArray<FactoryParameter> parameters,
-		out EquatableArray<string> members)
+		out MirroredMembers members)
 	{
 		members = default;
 		List<FactoryParameter> mirrored = new(parameters.AsArray());
 		List<string> names = new();
+		List<FactoryParameter> optionalParameters = new();
+		List<string> optionalNames = new();
+		List<FactoryParameter> deferred = new();
 		foreach (IPropertySymbol property in InjectedProperties(type))
 		{
 			ImmutableArray<AttributeData> attributes = property.GetAttributes();
+			bool isDeferred = IsInjectDeferred(attributes);
+			bool isOptional = IsInjectOptional(attributes);
 			string? reason = null;
-			if (IsInjectDeferred(attributes))
-			{
-				reason = "is marked [Inject(Deferred = true)]";
-			}
-			else if (IsInjectOptional(attributes))
-			{
-				reason = "is marked [Inject(Optional = true)]";
-			}
-			else if (property.SetMethod is not { } setter || !context.Compilation.IsSymbolAccessibleWithin(setter, context.Module))
+			if (property.SetMethod is not { } setter || !context.Compilation.IsSymbolAccessibleWithin(setter, context.Module))
 			{
 				reason = "has no setter the module can reach";
 			}
-			else if (mirrored.Any(parameter => parameter.Name == property.Name))
+			else if (isDeferred && isOptional)
+			{
+				reason = "is marked both Optional and Deferred, which a generated factory cannot combine";
+			}
+			else if ((isDeferred || isOptional) && (setter.IsInitOnly || property.IsRequired))
+			{
+				reason = $"is marked [Inject({(isDeferred ? "Deferred" : "Optional")} = true)] and is {(setter.IsInitOnly ? "init-only" : "required")}, so a generated factory cannot assign it on its own";
+			}
+			else if (isOptional && !property.Type.IsReferenceType)
+			{
+				reason = "is marked [Inject(Optional = true)] and has a value type, so a generated factory cannot tell a missing service from a value";
+			}
+			else if (mirrored.Concat(optionalParameters).Any(parameter => parameter.Name == property.Name))
 			{
 				reason = "has the name of a constructor parameter";
 			}
@@ -691,8 +705,7 @@ partial class AwaitenGenerator
 					return false;
 				}
 
-				mirrored.Add(handle.Parameter);
-				names.Add(property.Name);
+				Add(handle.Parameter);
 				continue;
 			}
 			else if (InternalServiceOfAnotherModule(property.Type, context) is { } otherModule)
@@ -714,14 +727,48 @@ partial class AwaitenGenerator
 				return false;
 			}
 
-			mirrored.Add(new FactoryParameter(property.Type.ToDisplayString(FullyQualifiedWithNullability), property.Name, KeyAttribute(FromKey(attributes))));
-			names.Add(property.Name);
+			Add(new FactoryParameter(property.Type.ToDisplayString(FullyQualifiedWithNullability), property.Name, KeyAttribute(FromKey(attributes))));
+
+			void Add(FactoryParameter parameter)
+			{
+				if (isDeferred)
+				{
+					deferred.Add(parameter);
+				}
+				else if (isOptional)
+				{
+					optionalParameters.Add(parameter);
+					optionalNames.Add(property.Name);
+				}
+				else
+				{
+					mirrored.Add(parameter);
+					names.Add(property.Name);
+				}
+			}
 		}
 
-		parameters = new EquatableArray<FactoryParameter>(mirrored.ToArray());
-		members = new EquatableArray<string>(names.ToArray());
+		parameters = new EquatableArray<FactoryParameter>(mirrored.Concat(optionalParameters).ToArray());
+		members = new MirroredMembers(
+			new EquatableArray<string>(names.ToArray()),
+			new EquatableArray<string>(optionalNames.ToArray()),
+			new EquatableArray<FactoryParameter>(deferred.ToArray()));
 		return true;
 	}
+
+	/// <summary>
+	///     A deterministic name for the setter wrapper of the deferred <paramref name="property" /> that the generated
+	///     factory <paramref name="factory" /> builds, which a consumer finds next to the factory.
+	/// </summary>
+	internal static string DeferredSetterName(string factory, string property)
+		=> $"Deferred_{factory}_{property}";
+
+	/// <summary>
+	///     The <c>[Inject]</c> properties a generated factory fills (see <see cref="TryMirrorInjectedProperties" />): the
+	///     <see cref="Required" /> ones and then the <see cref="Optional" /> ones, whose parameters follow the constructor's
+	///     in that order, and the <see cref="Deferred" /> ones, each with the parameter of its setter wrapper.
+	/// </summary>
+	private readonly record struct MirroredMembers(EquatableArray<string> Required, EquatableArray<string> Optional, EquatableArray<FactoryParameter> Deferred);
 
 	/// <summary>
 	///     The type the factory of <paramref name="implementation" /> returns, which every service it is registered under

@@ -441,6 +441,40 @@ public class ModuleHiddenServiceTests
 	}
 
 	[Test]
+	public async Task OptionalAndDeferredProperties_AreMirroredOntoTheFactory()
+	{
+		GeneratorResult result = RunLibrary("""
+			using Awaiten;
+
+			namespace Lib;
+
+			public interface IClock { }
+			public interface IAudit { }
+			public interface IGrinder { }
+			internal sealed class Grinder : IGrinder
+			{
+			    [Inject(Optional = true)] public IClock Clock { get; set; }
+			    [Inject(Deferred = true)] public IAudit Audit { get; set; } = null!;
+			}
+
+			[Module]
+			[Singleton<Grinder, IGrinder>]
+			public static partial class CoffeeModule { }
+			""");
+		string module = ModuleSource(result);
+		string factory = Factory("global::Lib.Grinder");
+
+		await That(result.Diagnostics).IsEmpty()
+			.Because("an optional property becomes an optional factory parameter and a deferred one gets a setter wrapper");
+		await That(module).Contains($"public static global::Lib.IGrinder {factory}(global::Lib.IClock? @Clock = null)")
+			.And.Contains("if (@Clock is not null)")
+			.And.Contains("awaiten__instance.Clock = @Clock;")
+			.Because("a consumer passes null when the optional service is missing, and the factory then leaves the property as it is");
+		await That(module).Contains($"public static void Deferred_{factory}_Audit(global::Lib.IGrinder @awaiten__instance, global::Lib.IAudit @Audit) => ((global::Lib.Grinder)@awaiten__instance).Audit = @Audit;")
+			.Because("a consumer assigns a deferred property after it built and cached the instance, so it can break a cycle");
+	}
+
+	[Test]
 	public async Task SameAssemblyContainer_ConstructsTheInternalServiceDirectly()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -666,6 +700,50 @@ public class ModuleHiddenServiceTests
 				.Because("the container decorates the handle through the module's decorator factories");
 			await That(source).DoesNotContain($"global::Awaiten.IAwaitenResolver<{handle}>")
 				.Because("a decorated handle stays a dependency only");
+		}
+
+		[Test]
+		public async Task OptionalAndDeferredProperties_AreResolvedThroughTheFactory()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly("""
+				using Awaiten;
+
+				namespace Lib;
+
+				public interface IClock { }
+				public interface IAudit { }
+				public interface IGrinder { }
+				internal sealed class Grinder : IGrinder
+				{
+				    [Inject(Optional = true)] public IClock Clock { get; set; }
+				    [Inject(Deferred = true)] public IAudit Audit { get; set; } = null!;
+				}
+
+				[Module]
+				[Singleton<Grinder, IGrinder>]
+				public static partial class CoffeeModule { }
+				""", """
+				using Awaiten;
+				using Lib;
+
+				namespace MyCode;
+
+				public sealed class Audit : IAudit { public Audit(IGrinder grinder) { } }
+
+				[Container]
+				[Import(typeof(CoffeeModule))]
+				[Transient<Audit, IAudit>]
+				public static partial class MyContainer;
+				""");
+			string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+			string factory = Factory("global::Lib.Grinder");
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("the missing optional clock is no missing dependency, and the deferred audit breaks the cycle with the grinder");
+			await That(source).Contains($"global::Lib.CoffeeModule.Internals.{factory}(default!)")
+				.Because("the container passes null for an optional service it does not register");
+			await That(source).Contains($"global::Lib.CoffeeModule.Internals.Deferred_{factory}_Audit(")
+				.Because("the container assigns the deferred property through the module's setter wrapper");
 		}
 
 		[Test]
