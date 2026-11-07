@@ -245,6 +245,8 @@ partial class AwaitenGenerator
 					GenericFactory = reg.GenericFactory,
 					Traits = reg.Traits,
 					TraitsExact = reg.TraitsExact,
+					ConstructVia = reg.ConstructVia,
+					ConstructViaType = reg.ConstructViaType,
 				};
 				info.OnActivatedMarkers.AddRange(reg.OnActivatedMarkers ?? []);
 				info.OnReleaseMarkers.AddRange(reg.OnReleaseMarkers ?? []);

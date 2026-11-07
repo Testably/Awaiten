@@ -1718,17 +1718,32 @@ internal static class Diagnostics
 		isEnabledByDefault: true);
 
 	/// <summary>
-	///     A registration's implementation (for a <c>Factory</c> or <c>Instance</c> registration its registered type) or
-	///     one of its <c>[Arg]</c> types is, or contains, a private or protected nested type. The generated
-	///     <c>Root</c> and <c>Scope</c> are public classes nested in the container, and their resolvers return the
-	///     implementation and take the runtime arguments as <c>internal</c> members, which C# does not allow to expose a
-	///     less accessible type (CS0050/CS0051). A private type is fine when the container itself is nested privately
-	///     beside it, because then the generated members are no more visible than the type. The registration is skipped.
+	///     A registration's implementation (for a <c>Factory</c> or <c>Instance</c> registration its registered type) is,
+	///     or contains, a private or protected nested type that the generated container cannot stand in for. The
+	///     generated <c>Root</c> and <c>Scope</c> are public classes nested in the container: their resolver bodies may
+	///     construct such a type, but their <c>internal</c> signatures return an accessible type it converts to, and C#
+	///     does not allow them to expose a less accessible one (CS0050). <c>{2}</c> says why no such type exists (the
+	///     container cannot reach the type, a private type argument, a private service, or no accessible type covering
+	///     all services) and <c>{3}</c> the remedy. The registration is skipped.
 	/// </summary>
 	public static readonly DiagnosticDescriptor RegisteredTypeLessAccessible = new(
 		"AWT216",
 		"A registered type is less accessible than the generated container",
-		"'{0}' cannot be registered: '{1}' is private or protected, but the generated container exposes it from internal resolver members of its Root and Scope, which would not compile; make '{1}' internal or public",
+		"'{0}' cannot be registered: '{1}' is private or protected and {2}; {3}",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     The <c>[Arg]</c> form of <see cref="RegisteredTypeLessAccessible">AWT216</see>: a runtime argument type of the
+	///     registration is a private or protected nested type. The parameterized resolvers take their runtime arguments
+	///     as parameters of <c>internal</c> members, and the <c>Func&lt;TArg, T&gt;</c> a consumer asks for names the
+	///     type too, so no accessible type can stand in for it (CS0051). The registration is skipped.
+	/// </summary>
+	public static readonly DiagnosticDescriptor RegisteredArgTypeLessAccessible = new(
+		"AWT216",
+		RegisteredTypeLessAccessible.Title,
+		"'{0}' cannot be registered: its [Arg] type '{1}' is private or protected, but the internal resolver members of the generated Root and Scope take runtime arguments as parameters; make '{1}' internal or public",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);

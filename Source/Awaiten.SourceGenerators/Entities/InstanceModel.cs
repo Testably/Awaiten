@@ -30,6 +30,8 @@ namespace Awaiten.SourceGenerators.Entities;
 ///     built as its consumers see it.
 ///     <see cref="PrivateServices" /> are the service types that are private or protected nested types, which the
 ///     generated <c>Root</c> cannot hold in an <c>internal</c> field, so their typed async resolution is not cached.
+///     <see cref="ResolverType" /> is the accessible type the resolvers return for an implementation private to the
+///     container, which converts to all of its services (see <see cref="SurfaceType" />).
 /// </summary>
 internal sealed record InstanceModel(
 	string ImplementationType,
@@ -55,10 +57,19 @@ internal sealed record InstanceModel(
 	EquatableArray<ParameterModel> ReleaseParameters = default,
 	bool SuppressDisposal = false,
 	EquatableArray<int> OutermostDecorators = default,
-	EquatableArray<string> PrivateServices = default)
+	EquatableArray<string> PrivateServices = default,
+	string? ResolverType = null)
 {
 	/// <summary>
-	///     The concrete type to construct and to use for cache fields and resolver return types. Normally the same
+	///     The type the generated resolvers return and the async cache holds: <see cref="ResolverType" /> for an
+	///     implementation private to the container, which only the resolver bodies may name, else
+	///     <see cref="ConstructedType" />.
+	/// </summary>
+	public string SurfaceType => ResolverType ?? ConstructedType;
+
+	/// <summary>
+	///     The concrete type to construct and to use for cache fields and, unless <see cref="ResolverType" /> is set,
+	///     resolver return types (see <see cref="SurfaceType" />). Normally the same
 	///     as <see cref="ImplementationType" />, but a decorator chain link reuses one decorator type across several
 	///     instances, so it carries a synthetic <see cref="ImplementationType" /> identity while
 	///     <see cref="EmitType" /> holds the real type. Ordinary registrations (<see cref="EmitType" /> null) are unaffected.
