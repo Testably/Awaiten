@@ -192,7 +192,8 @@ internal static partial class Sources
 	///     Emits the <c>__AsTask</c> helper that converts an async resolver's task to the task of a service type it
 	///     implements: the same task when the types match, a completed task when it has completed successfully, and an
 	///     awaiting conversion otherwise, so a fault or cancellation surfaces on await like on the Type-based path.
-	///     Protected, since the Root's singleton resolvers also adapt their async relationship dependencies through it.
+	///     Private protected, since the Root's singleton resolvers also adapt their async relationship dependencies through
+	///     it, without publishing it on a public container.
 	/// </summary>
 	private static void EmitAsTaskHelper(StringBuilder helpers, int depth)
 	{
@@ -200,7 +201,7 @@ internal static partial class Sources
 		Separate(helpers);
 		AppendXmlSummary(helpers, depth,
 			"Converts the task of an instance to the task of a service it implements.");
-		Indent(helpers, depth).Append("protected static ").Append(task).Append("<TService> __AsTask<TInstance, TService>(").Append(task)
+		Indent(helpers, depth).Append("private protected static ").Append(task).Append("<TService> __AsTask<TInstance, TService>(").Append(task)
 			.AppendLine("<TInstance> __task) where TInstance : TService");
 		Indent(helpers, depth).AppendLine("{");
 		Indent(helpers, depth + 1).Append("if (__task is ").Append(task).AppendLine("<TService> __same)");

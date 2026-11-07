@@ -99,7 +99,8 @@ public class TaskOfServiceConversionTests
 		await That(result.Diagnostics).IsEmpty();
 		await That(result.Sources["Awaiten.MyCode.MyContainer.g.cs"])
 			.Contains("__AsTask<global::MyCode.Store, global::MyCode.IStore>(ResolveStoreAsync(__s, default))").And
-			.Contains("protected static global::System.Threading.Tasks.Task<TService> __AsTask<TInstance, TService>(");
+			.Contains("private protected static global::System.Threading.Tasks.Task<TService> __AsTask<TInstance, TService>(")
+			.Because("only the derived Root calls the helper, so it stays out of the public API of a public container");
 	}
 
 	[Test]
