@@ -187,6 +187,113 @@ public partial class DiagnosticTests
 			}
 		}
 
+		public class ModulesTakingEachOthersServicesThatOneCannotBuild
+		{
+			private static string Library(bool buildable, bool grant = false, bool fourth = false, bool cycle = true) => $$"""
+				using Awaiten;
+
+				{{(grant ? "[assembly: System.Runtime.CompilerServices.InternalsVisibleTo(\"TestAssembly\")]" : "")}}
+
+				namespace Lib;
+
+				public interface IUser { }
+				internal sealed class Missing { }
+				internal interface IKettle { }
+				internal interface ISilo { }
+				internal interface IBean { }
+				internal interface IGrain { }
+				internal sealed class Kettle : IKettle { public Kettle(IBean bean) { } }
+				internal sealed class Silo : ISilo { public Silo({{(buildable ? "" : "Missing missing")}}) { } }
+				internal sealed class Bean : IBean { public Bean({{(fourth ? "IGrain grain" : "ISilo silo")}}) { } }
+				internal sealed class Grain : IGrain { public Grain(ISilo silo) { } }
+				internal sealed class User : IUser { public User(IKettle kettle) { } }
+
+				[Module]
+				{{(cycle ? "[Singleton<Kettle, IKettle>]" : "")}}
+				[Singleton<Silo, ISilo>]
+				public static partial class AModule { }
+
+				[Module]
+				[Singleton<Bean, IBean>]
+				public static partial class BModule { }
+
+				[Module]
+				[Singleton<User, IUser>]
+				public static partial class CModule { }
+
+				[Module]
+				{{(fourth ? "[Singleton<Grain, IGrain>]" : "")}}
+				{{(cycle ? "" : "[Singleton<Kettle, IKettle>]")}}
+				public static partial class DModule { }
+				""";
+
+			private static string Container(bool fourth) => $$"""
+				[Container]
+				[Import(typeof(AModule))]
+				[Import(typeof(BModule))]
+				[Import(typeof(CModule))]
+				{{(fourth ? "[Import(typeof(DModule))]" : "")}}
+				public static partial class MyContainer;
+				""";
+
+			private static string Consumer(bool fourth) => "using Awaiten;\nusing Lib;\n\nnamespace MyCode;\n\n" + Container(fourth);
+
+			[Test]
+			public async Task TheLibrary_ReportsAwt236AsWithoutTheCycle()
+			{
+				GeneratorResult acyclic = Generator.Run(Library(buildable: false, cycle: false));
+				GeneratorResult cyclic = Generator.Run(Library(buildable: false));
+
+				await That(acyclic.Diagnostics).Contains("*AWT236*'Lib.User'*'Lib.IKettle'*registered only by the module 'Lib.DModule'*").AsWildcard();
+				await That(cyclic.Diagnostics).Contains("*AWT236*'Lib.User'*'Lib.IKettle'*registered only by the module 'Lib.AModule'*").AsWildcard()
+					.Because("the module that registers the kettle cannot build it once the silo it needs through the bean of another module cannot be built, whether the modules form a cycle or not");
+			}
+
+			[Test]
+			public async Task TheLibraryWithACycleThroughFourModules_ReportsAwt236()
+			{
+				GeneratorResult result = Generator.Run(Library(buildable: false, fourth: true));
+
+				await That(result.Diagnostics).Contains("*AWT236*'Lib.User'*'Lib.IKettle'*registered only by the module 'Lib.AModule'*").AsWildcard()
+					.Because("the cycle from the kettle through the bean and the grain back to the silo of the same module cannot be built either");
+			}
+
+			[Test]
+			[Arguments(false)]
+			[Arguments(true)]
+			public async Task ContainerInTheModulesAssembly_ReportsTheMissingDependencyAndAwt236(bool fourth)
+			{
+				GeneratorResult result = Generator.Run(Library(buildable: false, fourth: fourth) + Container(fourth));
+
+				await That(result.Diagnostics).Contains("*AWT101*'Lib.ISilo'*'Lib.Missing'*").AsWildcard()
+					.And.Contains("*AWT236*'Lib.IKettle'*").AsWildcard()
+					.Because("the container reports the dependency the silo misses and the module still reports why a container in another assembly could not use it");
+			}
+
+			[Test]
+			[Arguments(false)]
+			[Arguments(true)]
+			public async Task ContainerInAnAssemblyGrantedInternalsVisibleTo_ReportsTheMissingDependency(bool fourth)
+			{
+				GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Library(buildable: false, grant: true, fourth: fourth), Consumer(fourth));
+
+				await That(result.Diagnostics).Contains("*AWT101*'Lib.ISilo'*'Lib.Missing'*").AsWildcard()
+					.And.DoesNotContain("*Lib.IBean*").AsWildcard();
+			}
+
+			[Test]
+			[Arguments(false)]
+			[Arguments(true)]
+			public async Task ACycleEveryModuleCanBuild_ReportsNothing(bool fourth)
+			{
+				await That(Generator.Run(Library(buildable: true, fourth: fourth)).Diagnostics).IsEmpty()
+					.Because("each module of the cycle builds its service through the handles of the others");
+				await That(Generator.Run(Library(buildable: true, fourth: fourth) + Container(fourth)).Diagnostics).IsEmpty();
+				await That(Generator.RunWithGeneratedReferencedAssembly(Library(buildable: true, fourth: fourth), Consumer(fourth)).Diagnostics).IsEmpty();
+				await That(Generator.RunWithGeneratedReferencedAssembly(Library(buildable: true, grant: true, fourth: fourth), Consumer(fourth)).Diagnostics).IsEmpty();
+			}
+		}
+
 		public class SeveralRegisteringModules
 		{
 			private static string Library(string first) => $$"""

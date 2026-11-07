@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Runtime.CompilerServices;
 using Awaiten.SourceGenerators.Entities;
@@ -22,14 +21,16 @@ partial class AwaitenGenerator
 	private sealed class HiddenServices
 	{
 		private readonly HashSet<INamedTypeSymbol> _used = new(SymbolEqualityComparer.Default);
+		private readonly Dictionary<INamedTypeSymbol, HashSet<INamedTypeSymbol>>? _buildable;
+		private readonly CancellationToken _cancellationToken;
 
-		public HiddenServices(INamedTypeSymbol module, bool friends, Compilation compilation, ImmutableHashSet<INamedTypeSymbol> judging, CancellationToken cancellationToken)
+		public HiddenServices(INamedTypeSymbol module, bool friends, Compilation compilation, Dictionary<INamedTypeSymbol, HashSet<INamedTypeSymbol>>? buildable, CancellationToken cancellationToken)
 		{
 			Module = module;
 			Friends = friends;
 			Compilation = compilation;
-			Judging = judging.Add(module);
-			CancellationToken = cancellationToken;
+			_buildable = buildable;
+			_cancellationToken = cancellationToken;
 			Assembly = AssemblyModuleIndex.Of(compilation);
 		}
 
@@ -37,23 +38,8 @@ partial class AwaitenGenerator
 
 		public Compilation Compilation { get; }
 
-		/// <summary>The token of the module's build, which a probe of another module observes too.</summary>
-		public CancellationToken CancellationToken { get; }
-
 		/// <summary>The modules of the module's assembly and their registrations.</summary>
 		public AssemblyModuleIndex Assembly { get; }
-
-		/// <summary>
-		///     The modules whose viability is being judged while this one is, this module included, so a probe of another
-		///     module (see <see cref="AssemblyModuleIndex.Probe" />) never recurses into one of them.
-		/// </summary>
-		public ImmutableHashSet<INamedTypeSymbol> Judging { get; }
-
-		/// <summary>
-		///     Whether a judgement took a service of a module still being judged as provided, because the modules take each
-		///     other's services, so it holds only for the modules on the current path and is not cached.
-		/// </summary>
-		public bool Cut { get; private set; }
 
 		/// <summary>Whether the assembly has more than one module that receives generated members, so another one may share a handle of this module.</summary>
 		public bool SeveralModules => Assembly.Modules.Count > 1;
@@ -85,31 +71,17 @@ partial class AwaitenGenerator
 		/// <summary>
 		///     Whether a member of this module may take <paramref name="service" /> through the handle that another module
 		///     declares (see <see cref="Provider" />): the module does not register the service itself, and another module
-		///     that registers it can build it, with the services of further modules too. A module still being judged (see
-		///     <see cref="Judging" />) is taken to build it, since the modules then take each other's services, which only
-		///     a cycle between the services themselves breaks, and a container reports that. That module serves the handle
-		///     to a consuming container that imports it.
+		///     that registers it can build it, with the services of further modules too (see
+		///     <see cref="AssemblyModuleIndex.Buildable" />). That module serves the handle to a consuming container that
+		///     imports it.
 		/// </summary>
 		public bool ProvidedElsewhere(INamedTypeSymbol service)
 			=> !Services.ContainsKey(service)
 			   && IsHiddenService(service, Module, Compilation)
 			   && Provider(service) is not null
 			   && Assembly.Modules.Any(other => !SymbolEqualityComparer.Default.Equals(other, Module)
-			                                    && Assembly.RegistrationsOf(other).Any(registration => SymbolEqualityComparer.Default.Equals(registration.Service, service))
-			                                    && Builds(other, service));
-
-		private bool Builds(INamedTypeSymbol other, INamedTypeSymbol service)
-		{
-			if (Judging.Contains(other))
-			{
-				Cut = true;
-				return true;
-			}
-
-			HiddenServices? probe = Assembly.Probe(other, Judging, CancellationToken);
-			Cut |= probe?.Cut == true;
-			return probe is not null && probe.Services.ContainsKey(service) && !probe.NonViable.Contains(service);
-		}
+			                                    && (_buildable ?? Assembly.Buildable(_cancellationToken)).TryGetValue(other, out HashSet<INamedTypeSymbol>? services)
+			                                    && services.Contains(service));
 
 		/// <summary>
 		///     Whether another module of the assembly that another assembly can import registers <paramref name="service" />
@@ -190,7 +162,7 @@ partial class AwaitenGenerator
 
 		private readonly Compilation _compilation;
 		private readonly Lazy<HashSet<INamedTypeSymbol>> _imported;
-		private readonly ConcurrentDictionary<INamedTypeSymbol, HiddenServices?> _probes = new(SymbolEqualityComparer.Default);
+		private Dictionary<INamedTypeSymbol, HashSet<INamedTypeSymbol>>? _buildable;
 
 		private AssemblyModuleIndex(Compilation compilation)
 		{
@@ -294,35 +266,61 @@ partial class AwaitenGenerator
 				: ConstructedModuleRegistrations(module, _compilation, members: true).ToList();
 
 		/// <summary>
-		///     The internal services <paramref name="module" /> can build, with the services other modules provide, judged
-		///     while the modules in <paramref name="judging" /> are (see <see cref="HiddenServices.Judging" />). Cached once
-		///     per compilation unless the judgement depended on one of those modules (see <see cref="HiddenServices.Cut" />).
-		///     Like the module's own build, it rejects an implementation one of the module's scans matches too.
+		///     The internal services each module of <see cref="Modules" /> can build, with the services the other modules
+		///     can build. Modules may take each other's services, so every module starts out building every internal service
+		///     it registers, and each one is judged again against the others until no module loses a service. A cycle
+		///     between modules thus stays buildable unless one of its services cannot be built for a reason of its own,
+		///     and the verdict depends neither on the order the modules are judged in nor on whether they form a cycle.
+		///     Like the module's own build, a judgement rejects an implementation one of the module's scans matches too.
 		/// </summary>
-		/// <remarks>A cancelled probe caches nothing, so a later build of the same compilation probes again with its own token.</remarks>
-		public HiddenServices? Probe(INamedTypeSymbol module, ImmutableHashSet<INamedTypeSymbol> judging, CancellationToken cancellationToken)
+		/// <remarks>A cancelled judgement caches nothing, so a later build of the same compilation judges again with its own token.</remarks>
+		public Dictionary<INamedTypeSymbol, HashSet<INamedTypeSymbol>> Buildable(CancellationToken cancellationToken)
 		{
-			if (_probes.TryGetValue(module, out HiddenServices? probe))
+			if (Volatile.Read(ref _buildable) is { } known)
 			{
-				return probe;
+				return known;
 			}
 
-			probe = BuildProbe(module, judging, cancellationToken);
-			return probe is { Cut: true, } ? probe : _probes.GetOrAdd(module, probe);
+			Dictionary<INamedTypeSymbol, HashSet<INamedTypeSymbol>> buildable = new(SymbolEqualityComparer.Default);
+			foreach (INamedTypeSymbol module in Modules)
+			{
+				HashSet<INamedTypeSymbol> services = new(Registrations[module].Select(registration => registration.Service).Where(service => IsHiddenService(service, module, _compilation)), SymbolEqualityComparer.Default);
+				if (services.Count > 0)
+				{
+					buildable[module] = services;
+				}
+			}
+
+			List<INamedTypeSymbol> judged = Modules.Where(buildable.ContainsKey).ToList();
+			bool changed = true;
+			while (changed)
+			{
+				changed = false;
+				foreach (INamedTypeSymbol module in judged)
+				{
+					cancellationToken.ThrowIfCancellationRequested();
+					HiddenServices? judgement = Judge(module, buildable, cancellationToken);
+					int before = buildable[module].Count;
+					buildable[module].RemoveWhere(service => judgement is null || !judgement.Services.ContainsKey(service) || judgement.NonViable.Contains(service));
+					changed |= buildable[module].Count != before;
+				}
+			}
+
+			return Interlocked.CompareExchange(ref _buildable, buildable, null) ?? buildable;
 		}
 
-		private HiddenServices? BuildProbe(INamedTypeSymbol module, ImmutableHashSet<INamedTypeSymbol> judging, CancellationToken cancellationToken)
+		private HiddenServices? Judge(INamedTypeSymbol module, Dictionary<INamedTypeSymbol, HashSet<INamedTypeSymbol>> buildable, CancellationToken cancellationToken)
 		{
-			HiddenServices? probe = CollectHiddenServices(module, _compilation, cancellationToken, judging);
-			if (probe is not null && HasAwaitenAttribute(module.GetAttributes(), "ScanAttribute"))
+			HiddenServices? judgement = CollectHiddenServices(module, _compilation, cancellationToken, buildable);
+			if (judgement is not null && HasAwaitenAttribute(module.GetAttributes(), "ScanAttribute"))
 			{
-				List<ModuleFactory> scanned = CollectModuleScanFactories(module, _compilation, new List<DiagnosticInfo>(), cancellationToken, probe.Friends ? null : probe)
+				List<ModuleFactory> scanned = CollectModuleScanFactories(module, _compilation, new List<DiagnosticInfo>(), cancellationToken, judgement.Friends ? null : judgement)
 					.Select(expansion => expansion.Factory)
 					.ToList();
-				RejectScannedHiddenImplementations(probe, scanned, new List<DiagnosticInfo>());
+				RejectScannedHiddenImplementations(judgement, scanned, new List<DiagnosticInfo>());
 			}
 
-			return probe;
+			return judgement;
 		}
 	}
 
@@ -485,14 +483,14 @@ partial class AwaitenGenerator
 	///     needs such a service falls back to what it did before (AWT195). Returns <see langword="null" /> for a module
 	///     no other assembly can name.
 	/// </summary>
-	private static HiddenServices? CollectHiddenServices(INamedTypeSymbol module, Compilation compilation, CancellationToken cancellationToken, ImmutableHashSet<INamedTypeSymbol>? judging = null)
+	private static HiddenServices? CollectHiddenServices(INamedTypeSymbol module, Compilation compilation, CancellationToken cancellationToken, Dictionary<INamedTypeSymbol, HashSet<INamedTypeSymbol>>? buildable = null)
 	{
 		if (!IsExternallyAccessible(module) || !MayBuildThroughHandles(module, compilation))
 		{
 			return null;
 		}
 
-		HiddenServices hidden = new(module, GrantsInternalsVisibleTo(compilation.Assembly), compilation, judging ?? ImmutableHashSet.Create<INamedTypeSymbol>(SymbolEqualityComparer.Default), cancellationToken);
+		HiddenServices hidden = new(module, GrantsInternalsVisibleTo(compilation.Assembly), compilation, buildable, cancellationToken);
 		ModuleScanContext context = new(module, compilation, new List<DiagnosticInfo>(), new HashSet<string>(StringComparer.Ordinal), hidden);
 		foreach (IGrouping<INamedTypeSymbol, ModuleRegistration> group in hidden.Assembly.RegistrationsOf(module)
 			         .GroupBy<ModuleRegistration, INamedTypeSymbol>(registration => registration.Implementation, SymbolEqualityComparer.Default))
