@@ -81,6 +81,33 @@ public static partial class CrossAssemblyProvidedBModule;
 [Singleton<ProvidedChef, IProvidedChef>]
 public static partial class CrossAssemblyProvidedCModule;
 
+/// <summary>A clock that <see cref="CrossAssemblyOverriddenEagerModule" /> registers as an eager overridable default.</summary>
+public interface IOverriddenClock;
+
+/// <summary>Counts the constructions of the clock behind <see cref="IOverriddenClock" />, so a test sees whether it is built eagerly.</summary>
+public static class OverriddenClockCounter
+{
+	private static int _constructed;
+
+	/// <summary>How often the clock was constructed.</summary>
+	public static int Constructed => System.Threading.Volatile.Read(ref _constructed);
+
+	internal static void Increment() => System.Threading.Interlocked.Increment(ref _constructed);
+}
+
+internal interface IOverriddenTick;
+
+internal sealed class OverriddenClock : IOverriddenClock, IOverriddenTick
+{
+	public OverriddenClock() => OverriddenClockCounter.Increment();
+}
+
+/// <summary>A <c>[Module]</c> whose eager registration is an overridable default beside a lazy one under an internal service.</summary>
+[Module]
+[Singleton<OverriddenClock, IOverriddenClock>(Eager = true, Fallback = Fallback.Silent)]
+[Singleton<OverriddenClock, IOverriddenTick>]
+public static partial class CrossAssemblyOverriddenEagerModule;
+
 /// <summary>A user of an internal till that one module registers and another module decorates.</summary>
 public interface IDecoratedTillUser
 {

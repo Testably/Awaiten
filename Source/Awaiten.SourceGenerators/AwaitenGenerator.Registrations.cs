@@ -30,7 +30,9 @@ namespace Awaiten.SourceGenerators;
 ///     <c>Unlisted</c> marks a dependency-only service, the generated handle of a service a module of another assembly
 ///     registers under an internal type, which the container never offers for resolution, <c>Hidden</c> the
 ///     implementation such a handle holds, and <c>HiddenProduction</c> how the module produces it, which two handle
-///     registrations of one implementation are compared by (AWT111).
+///     registrations of one implementation are compared by (AWT111). <c>Aliased</c> is the module registration an
+///     alias of such a handle stands for, with its hooks named by their generated wrappers, whose directives the
+///     handle takes when it is the first registration that survives coalescing.
 /// </summary>
 /// <remarks>
 ///     <see cref="Location" /> is the live Roslyn location (with its syntax tree), not an equatable
@@ -71,7 +73,8 @@ internal sealed record RawRegistration(
 	INamedTypeSymbol? ScanImplementation = null,
 	bool Unlisted = false,
 	INamedTypeSymbol? Hidden = null,
-	string? HiddenProduction = null);
+	string? HiddenProduction = null,
+	RawRegistration? Aliased = null);
 
 /// <summary>
 ///     An imported module: its symbol and the location of the container's <c>[Import]</c> attribute that

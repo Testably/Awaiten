@@ -1319,6 +1319,62 @@ public class ModuleHiddenServiceTests
 				.Because("the modules build the implementation into one instance handle, whose registrations the container checks like any other");
 		}
 
+		public class OverridableDefaults
+		{
+			private const string Library = """
+				using Awaiten;
+
+				namespace Lib;
+
+				public interface IClock { }
+				internal interface ITick { }
+				internal sealed class Clock : IClock, ITick { }
+
+				[Module]
+				[Singleton<Clock, IClock>(Eager = true, Fallback = Fallback.Silent)]
+				[Singleton<Clock, ITick>]
+				public static partial class ClockModule { }
+				""";
+
+			private const string Container = """
+				[Container]
+				[Import(typeof(ClockModule))]
+				public static partial class MyContainer;
+				""";
+
+			[Test]
+			public async Task DirectiveOfASurvivingDefault_ReportsAwt166LikeTheModulesOwnAssembly()
+			{
+				GeneratorResult same = Generator.Run(Library + Container);
+				GeneratorResult cross = Generator.RunWithGeneratedReferencedAssembly(Library, "using Awaiten;\nusing Lib;\n\nnamespace MyCode;\n\n" + Container);
+
+				await That(same.Diagnostics).Contains("*AWT166*'Lib.Clock'*Eager*").AsWildcard();
+				await That(cross.Diagnostics).Contains("*AWT166*'Lib.Clock'*Eager*").AsWildcard()
+					.Because("the strong registration comes first and keeps the clock lazy, so the surviving eager default contradicts it, as in the module's own assembly");
+			}
+
+			[Test]
+			public async Task DirectiveOfAnOverriddenDefault_IsDropped()
+			{
+				GeneratorResult cross = Generator.RunWithGeneratedReferencedAssembly(Library, """
+					using Awaiten;
+					using Lib;
+
+					namespace MyCode;
+
+					public sealed class MyClock : IClock { }
+
+					[Container]
+					[Import(typeof(ClockModule))]
+					[Singleton<MyClock, IClock>]
+					public static partial class MyContainer;
+					""");
+
+				await That(cross.Diagnostics).IsEmpty()
+					.Because("the container overrides the eager default, which then contributes nothing, as in the module's own assembly");
+			}
+		}
+
 		private const string DirectiveModules = """
 			using Awaiten;
 

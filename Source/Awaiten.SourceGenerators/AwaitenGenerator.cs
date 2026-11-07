@@ -657,6 +657,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 
 		// Coalesce registrations by (service type, key): first per key wins, and registrations of the same
 		// implementation share one instance. Conflicting lifetimes are AWT107; a duplicate key is AWT117.
+		SettleHandleDirectives(raw, containerSymbol, diagnostics);
 		AssignMemberIdentities(raw, containerSymbol, compilation);
 		(List<ImplInfo> implOrder, Dictionary<ServiceKey, string> serviceToImpl, Dictionary<ServiceKey, List<string>> serviceMembers, List<ServiceKey> serviceMemberOrder, List<(string ServiceType, INamedTypeSymbol Symbol)> varianceCandidates, Dictionary<string, List<KeyedMember>> keyedMembers, List<string> keyedMemberOrder) =
 			CoalesceByImplementation(raw, containerSymbol, diagnostics);

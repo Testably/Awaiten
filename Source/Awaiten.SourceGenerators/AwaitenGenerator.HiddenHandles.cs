@@ -161,6 +161,59 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
+	///     Gives each instance handle registration (see <see cref="ThroughHandle" />) the directives of the first
+	///     registration of its module that survives coalescing, in precedence order, as a container in the module's own
+	///     assembly takes them from the first registration it keeps: an overridable default whose service the container
+	///     overrides is dropped and contributes nothing. A handle whose surviving registrations are all overridable
+	///     defaults, or that has none left, yields to the handle of another module that registers the implementation.
+	///     A later surviving registration that sets a directive the first does not is AWT166 when one of the two is an
+	///     overridable default, which the library's build leaves to the container.
+	/// </summary>
+	private static void SettleHandleDirectives(List<RawRegistration> raw, INamedTypeSymbol container, List<DiagnosticInfo> diagnostics)
+	{
+		HashSet<int> dropped = DroppedOverridableDefaults(raw);
+		List<RawRegistration> surviving = InPrecedenceOrder(raw)
+			.Where(entry => entry.Registration.Aliased is not null && !dropped.Contains(entry.Index))
+			.Select(entry => entry.Registration)
+			.ToList();
+		for (int index = 0; index < raw.Count; index++)
+		{
+			if (raw[index] is not { Hidden: { } implementation, Origin: { } module, } handle || !handle.ImplementationType.Contains(HiddenKeyMarker))
+			{
+				continue;
+			}
+
+			string marker = AliasKeyMarker + implementation.ToDisplayString(FullyQualified);
+			List<RawRegistration> own = surviving
+				.Where(alias => SymbolEqualityComparer.Default.Equals(alias.Origin, module) && alias.ImplementationType.EndsWith(marker, StringComparison.Ordinal))
+				.Select(alias => alias.Aliased!)
+				.ToList();
+			HashSet<string> reported = new(StringComparer.Ordinal);
+			foreach (RawRegistration later in own.Skip(1).Where(later => later.Weak || own[0].Weak))
+			{
+				foreach ((string directive, string winner, string loser) in ConflictingDirectives(NewImplInfo(own[0]), later, container).Where(directive => reported.Add(directive.Directive)))
+				{
+					diagnostics.Add(new DiagnosticInfo(
+						Diagnostics.ConflictingLifecycleDirectives,
+						LocationInfo.From(later.Location),
+						new EquatableArray<string>([DisplayInstance(later.ImplementationType), directive, winner, loser,])));
+				}
+			}
+
+			raw[index] = own.Count == 0
+				? handle with { Weak = true, }
+				: handle with
+				{
+					Weak = own.All(registration => registration.Weak),
+					Eager = own[0].Eager,
+					SuppressDisposal = own[0].SuppressDisposal,
+					OnActivated = own[0].OnActivated,
+					OnRelease = own[0].OnRelease,
+				};
+		}
+	}
+
+	/// <summary>
 	///     Marks each alias (see <see cref="ThroughAlias" />) that takes a transient instance handle the container tracks
 	///     for teardown (<see cref="InstanceModel.TracksHandleDisposal" />): building the alias builds and tracks the
 	///     implementation, so strict lifetime safety withholds it on the Root, as it withholds the implementation in a
@@ -344,7 +397,10 @@ partial class AwaitenGenerator
 			},
 			module,
 			implementation,
-			alias));
+			alias) with
+		{
+			Aliased = registration with { OnActivated = Hook(registration.OnActivated, release: false), OnRelease = Hook(registration.OnRelease, release: true), },
+		});
 		return handled;
 
 		IMethodSymbol? Alias(INamedTypeSymbol aliased)
@@ -362,8 +418,8 @@ partial class AwaitenGenerator
 				HiddenProduction = DescribeProduction(registrations[0].Production, registrations[0].Member, module),
 				Key = null,
 				Eager = NamedFlag(registrations[0].Attribute, "Eager"),
-				OnActivated = Hook(release: false),
-				OnRelease = Hook(release: true),
+				OnActivated = Hook(NamedArgument(registrations[0].Attribute, "OnActivated"), release: false),
+				OnRelease = Hook(NamedArgument(registrations[0].Attribute, "OnRelease"), release: true),
 				SuppressDisposal = NamedFlag(registrations[0].Attribute, "SuppressDisposal"),
 				// A factory member may return any subtype, which the handle's variant reveals only at run time.
 				Traits = registration.Production == ProductionKind.Constructor ? TraitsOf(implementation, DeclaredAsyncInitializers(module, compilation, null)) : null,
@@ -372,8 +428,8 @@ partial class AwaitenGenerator
 				Hidden = implementation,
 			};
 
-		string? Hook(bool release)
-			=> NamedArgument(registrations[0].Attribute, release ? "OnRelease" : "OnActivated") is { } hook
+		string? Hook(string? hook, bool release)
+			=> hook is not null
 			   && HiddenHookName(implementation, release, hook) is { } wrapper
 			   && !InternalsMembers(module, wrapper).IsEmpty
 				? InInternals(wrapper)

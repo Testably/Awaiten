@@ -50,6 +50,16 @@ public class ModuleHandleSharingTests
 	}
 
 	[Test]
+	public async Task EagerDefaultTheContainerOverrides_LeavesTheHandleLazy()
+	{
+		using OverriddenEagerContainer.Root container = new();
+
+		await That(OverriddenClockCounter.Constructed).IsEqualTo(0)
+			.Because("the eager registration is an overridable default the container overrides, so only the lazy registration under the internal service remains");
+		await That(container.Resolve<IOverriddenClock>()).IsExactly<LocalClock>();
+	}
+
+	[Test]
 	public async Task DecoratorOfAnInternalServiceAnotherModuleRegisters_DecoratesIt()
 	{
 		IDecoratedTillUser user;
@@ -64,6 +74,14 @@ public class ModuleHandleSharingTests
 			.Because("the container disposes the decorator link through the handle variant of its disposal");
 	}
 }
+
+/// <summary>The clock this assembly registers over the eager default of <see cref="CrossAssemblyOverriddenEagerModule" />.</summary>
+public sealed class LocalClock : IOverriddenClock;
+
+[Container]
+[Import(typeof(CrossAssemblyOverriddenEagerModule))]
+[Singleton<LocalClock, IOverriddenClock>]
+public static partial class OverriddenEagerContainer;
 
 [Container]
 [Import(typeof(CrossAssemblyTillModule))]
