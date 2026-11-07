@@ -26,7 +26,9 @@ public sealed class GeneratedScanRegistrationAttribute<TService> : Attribute
 	/// <summary>Registers one scan match produced by <paramref name="factory" />.</summary>
 	/// <param name="factory">
 	///     The name of the generated <c>static</c> factory method on the module that constructs the match and
-	///     returns <typeparamref name="TService" />; its parameters are resolved from the consumer's graph.
+	///     returns <typeparamref name="TService" />; its parameters are resolved from the consumer's graph. For a match
+	///     the module generates no factory for, the match's metadata name instead, which only a consumer that can
+	///     construct the match registers.
 	/// </param>
 	public GeneratedScanRegistrationAttribute(string factory)
 	{

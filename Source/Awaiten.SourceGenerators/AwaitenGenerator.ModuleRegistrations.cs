@@ -256,7 +256,7 @@ partial class AwaitenGenerator
 
 		// A scan factory builds the type for every consumer, so one constructing the registration itself would still split it.
 		bool scannedToo = false;
-		if (scanFactories.FirstOrDefault(factory => factory.ImplementationType == typeName) is { } scanned)
+		if (scanFactories.FirstOrDefault(factory => factory.ImplementationType == typeName && factory.Skip is null) is { } scanned)
 		{
 			ReportRegistrationExposures(subject, $"{Display(scanned.ServiceType)}, {Display(returnName)}", "remove the registration or exclude the type from the scan", first.Location, rejections);
 			scannedToo = true;

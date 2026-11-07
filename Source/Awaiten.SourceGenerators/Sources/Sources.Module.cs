@@ -49,7 +49,17 @@ internal static partial class Sources
 		// consuming container reads these like a container [Scan]'s matches (collection-eligible and overridable).
 		foreach (ModuleFactory factory in model.Factories.AsArray())
 		{
-			Indent(builder, depth).Append('[').Append(RegistrationAttribute(factory)).AppendLine("]");
+			if (factory.Skip is { } skip)
+			{
+				foreach (string service in skip.Services.AsArray())
+				{
+					Indent(builder, depth).Append('[').Append(RegistrationAttribute(factory with { FactoryName = skip.ImplementationMetadataName, ServiceType = service, })).AppendLine("]");
+				}
+			}
+			else
+			{
+				Indent(builder, depth).Append('[').Append(RegistrationAttribute(factory)).AppendLine("]");
+			}
 		}
 
 		Indent(builder, depth).Append("static partial class ").AppendLine(model.TypeName);
@@ -64,7 +74,16 @@ internal static partial class Sources
 			}
 
 			first = false;
-			EmitModuleFactory(builder, depth + 1, factory);
+			if (factory.Skip is { } skip)
+			{
+				EmitSkipReason(builder, depth + 1, skip.MarkerName, skip.Reason,
+					"Generated from a module [Scan]: why no factory constructs this match. An assembly granted InternalsVisibleTo",
+					"constructs it itself; a consuming container that cannot reports this reason.");
+			}
+			else
+			{
+				EmitModuleFactory(builder, depth + 1, factory);
+			}
 
 			// The lifecycle-hook wrappers, emitted beside the factory: public so a cross-assembly consumer can run
 			// them, but bodied inside the module so they may cast to and call its internal implementation and hook.
@@ -105,12 +124,9 @@ internal static partial class Sources
 			}
 
 			first = false;
-			AppendXmlSummary(builder, depth + 1,
+			EmitSkipReason(builder, depth + 1, skipped.MarkerName, skipped.Reason,
 				"Generated from a module registration: why no factory constructs this implementation. An assembly granted",
 				"InternalsVisibleTo constructs it itself; a consuming container that cannot reports this reason.");
-			Indent(builder, depth + 1)
-				.Append("public const string ").Append(skipped.MarkerName).Append(" = ")
-				.Append(SymbolDisplay.FormatLiteral(skipped.Reason, quote: true)).AppendLine(";");
 		}
 
 		Indent(builder, depth).AppendLine("}");
@@ -182,6 +198,18 @@ internal static partial class Sources
 			.Append(accessibility).Append(" static ").Append(factory.ReturnType).Append(' ').Append(factory.FactoryName)
 			.Append('(').Append(signature).Append(") => new ").Append(factory.ImplementationType)
 			.Append('(').Append(arguments).AppendLine(");");
+	}
+
+	/// <summary>
+	///     Emits the public constant that records why the module generates no code a consumer would otherwise call.
+	///     A consumer reads it from metadata, which carries no internal member of another assembly.
+	/// </summary>
+	private static void EmitSkipReason(StringBuilder builder, int depth, string name, string reason, params string[] summary)
+	{
+		AppendXmlSummary(builder, depth, summary);
+		Indent(builder, depth)
+			.Append("public const string ").Append(name).Append(" = ")
+			.Append(SymbolDisplay.FormatLiteral(reason, quote: true)).AppendLine(";");
 	}
 
 	private static void EmitModuleFactory(StringBuilder builder, int depth, ModuleFactory factory)

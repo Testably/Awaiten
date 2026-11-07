@@ -1915,15 +1915,15 @@ internal static class Diagnostics
 
 	/// <summary>
 	///     An imported module of another assembly registers an implementation this container cannot construct, and the
-	///     module's build generated no factory for it, because the factory cannot support the registration (an
-	///     inaccessible constructor parameter type, injection metadata, or several services). The module's assembly
-	///     grants <c>InternalsVisibleTo</c> to some assembly, which constructs the implementation itself, so its own
-	///     build only records the reason. Reported at the consumer's <c>[Import]</c>, and the registration is dropped.
+	///     module's build generated no factory for it, because the factory cannot support the registration or the scan
+	///     match (an inaccessible constructor parameter type, injection metadata, or several services). The module's
+	///     assembly grants <c>InternalsVisibleTo</c> to some assembly, which constructs the implementation itself, so its
+	///     own build only records the reason. Reported at the consumer's <c>[Import]</c>, and the registration is dropped.
 	/// </summary>
 	public static readonly DiagnosticDescriptor ModuleRegistrationNotSelfCompiled = new(
 		"AWT231",
 		"Module registration has no generated factory",
-		"The imported module '{0}' registers '{1}', which this container cannot construct, and the module's assembly generated no factory for it because {2}; grant this assembly InternalsVisibleTo in the module's assembly, or make '{1}', its constructor and the constructor's parameter types public",
+		"The imported module '{0}' registers '{1}', which this container cannot construct, and the module's assembly generated no {2} for it because {3}; grant this assembly InternalsVisibleTo in the module's assembly, or {4}",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
