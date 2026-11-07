@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using Awaiten.Tests.ContainerSupport;
 
 namespace Awaiten.Tests;
@@ -38,7 +40,77 @@ public partial class FriendModuleTests
 			.Because("the container reads the [FromKey] off the constructor it calls");
 	}
 
+	[Test]
+	public async Task RegistersAScanMatchWithAnInternalDependency()
+	{
+		using FriendScanContainer.Root container = new();
+
+		IFriendRoaster roaster = container.Resolve<IFriendRoaster>();
+
+		await That(roaster.Secret.GetType().Name).IsEqualTo("FriendSecret")
+			.Because("the container constructs the scanned internal implementation and its internal dependency directly");
+	}
+
+	[Test]
+	public async Task SharesAScanMatchAcrossTheServicesBothScansExposeItAs()
+	{
+		using FriendScanContainer.Root container = new();
+
+		IFriendPlugin[] plugins = container.Resolve<IEnumerable<IFriendPlugin>>().ToArray();
+
+		await That(plugins).HasCount(2)
+			.Because("each match joins the marker's collection once");
+		await That((object)container.Resolve<IFriendGrinder>()).IsSameAs(plugins.Single(plugin => plugin is IFriendGrinder))
+			.Because("the container coalesces the match's registrations on the implementation it constructs, as a scan would");
+		await That((object)container.Resolve<IFriendRoaster>()).IsSameAs(plugins.Single(plugin => plugin is IFriendRoaster));
+	}
+
+	[Test]
+	public async Task ConstructsTheImplementationOfAModuleThatIsNotPartial()
+	{
+		using FriendShapeContainer.Root container = new();
+
+		await That(container.Resolve<IFriendWelcome>().GetType().Name).IsEqualTo("FriendWelcome")
+			.Because("the container constructs the internal implementation of a module that cannot carry a factory");
+	}
+
+	[Test]
+	public async Task ConstructsTheImplementationOfAGenericModule()
+	{
+		using FriendGenericContainer.Root container = new();
+
+		await That(container.Resolve<IFriendWelcome>().GetType().Name).IsEqualTo("FriendWelcome")
+			.Because("the container constructs the internal implementation of a generic module itself");
+	}
+
+	[Test]
+	public async Task CallsAHookWithAnInternalDependency()
+	{
+		using FriendHookContainer.Root container = new();
+
+		await That(container.Resolve<IFriendActivated>().Activated).IsTrue()
+			.Because("the container calls the module's internal hook directly instead of a wrapper the module could not generate");
+		await That(container.Resolve<IFriendHookedPlugin>().Activated).IsTrue()
+			.Because("the container registers the scan match itself and calls its internal hook directly");
+	}
+
 	[Container]
 	[Import(typeof(SupportFriendModule))]
 	public static partial class FriendContainer;
+
+	[Container]
+	[Import(typeof(SupportFriendHookModule))]
+	public static partial class FriendHookContainer;
+
+	[Container]
+	[Import(typeof(SupportFriendNotPartialModule))]
+	public static partial class FriendShapeContainer;
+
+	[Container]
+	[Import(typeof(SupportFriendGenericModule<int>))]
+	public static partial class FriendGenericContainer;
+
+	[Container]
+	[Import(typeof(SupportFriendScanModule))]
+	public static partial class FriendScanContainer;
 }

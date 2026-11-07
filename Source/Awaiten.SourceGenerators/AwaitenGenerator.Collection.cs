@@ -149,7 +149,8 @@ partial class AwaitenGenerator
 	///     except that with no assembly boundary the container constructs the match directly instead of through the
 	///     factory it cannot resolve. A match hidden in the module it cannot construct either, so it calls the
 	///     factory the module generates in the same run, by its deterministic name, and runs the hooks through the
-	///     generated wrappers; a module that cannot receive the factory (AWT194) contributes no such match. A
+	///     generated wrappers; a module that cannot receive the factory (AWT194) contributes no such match. A match the
+	///     module generates no factory for is registered under every service its scans expose it as. A
 	///     referenced-assembly module is excluded: its metadata carries the self-compiled
 	///     expansion instead, and re-running its scan here would double-register every match. The expansion's
 	///     diagnostics are discarded: the module pipeline (BuildModuleModel) already reports on the same <c>[Scan]</c>
@@ -171,7 +172,15 @@ partial class AwaitenGenerator
 
 			foreach (ModuleScanExpansion expansion in sameCompilationModules.Scans(moduleSymbol))
 			{
-				if (!IsHiddenInModule(expansion.Implementation, moduleSymbol, compilation))
+				if (expansion.SkippedServices is { } services)
+				{
+					result.AddRange(services.Select(service => SameCompilationScanRegistration(expansion, moduleSymbol) with
+					{
+						ServiceType = service.ToDisplayString(FullyQualified),
+						ServiceSymbol = service,
+					}));
+				}
+				else if (!IsHiddenInModule(expansion.Implementation, moduleSymbol, compilation))
 				{
 					result.Add(SameCompilationScanRegistration(expansion, moduleSymbol));
 				}
@@ -260,7 +269,7 @@ partial class AwaitenGenerator
 
 			// A [GeneratedScanRegistration<TService>(factory, Lifetime = …)] is what a [Module] self-compiled from
 			// its own [Scan] (one per match), read back and consumed there.
-			if (CollectGeneratedScanRegistration(attribute, attributeClass, result, origin, fallbackLocation, skipGeneratedScanRegistrations))
+			if (CollectGeneratedScanRegistration(attribute, attributeClass, result, context, skipGeneratedScanRegistrations))
 			{
 				continue;
 			}
@@ -347,7 +356,8 @@ partial class AwaitenGenerator
 	///     traits off its metadata, so it initializes, disposes and shares it exactly as it would a type it constructs. A registration whose service this container cannot
 	///     name either is dropped: nothing here can resolve or depend on it (a self-compiled constructor parameter
 	///     is accessible, AWT195). Returns <see langword="null" /> for a dropped registration, after reporting
-	///     AWT231 once per implementation when the module recorded why it generated no factory for it, else AWT154
+	///     AWT231 once per implementation when the module recorded why it generated no factory for it or cannot carry
+	///     one (see <see cref="ModuleShapeReason" />), else AWT154
 	///     once per module when the module carries no generated factory for it. A module inherited through
 	///     <c>Extends</c> keeps such a registration instead, which the inheritance reports as inaccessible (AWT226).
 	/// </summary>
@@ -398,18 +408,11 @@ partial class AwaitenGenerator
 
 			if (SkippedRegistrationReason(module, implementation) is { } reason)
 			{
-				DiagnosticInfo skipped = new(
-					Diagnostics.ModuleRegistrationNotSelfCompiled,
-					LocationInfo.From(context.FallbackLocation ?? registration.Location),
-					new EquatableArray<string>([
-						Display(module.ToDisplayString(FullyQualified)),
-						Display(registration.ImplementationType),
-						reason,
-					]));
-				if (!context.Diagnostics.Contains(skipped))
-				{
-					context.Diagnostics.Add(skipped);
-				}
+				ReportNotSelfCompiled(context, module, implementation, "factory", reason, $"make '{Display(registration.ImplementationType)}', its constructor and the constructor's parameter types public");
+			}
+			else if (ModuleShapeReason(module) is { } shape)
+			{
+				ReportNotSelfCompiled(context, module, implementation, "factory", shape, $"make '{Display(registration.ImplementationType)}', its constructor and the constructor's parameter types public");
 			}
 			else if (!reportedNotSelfCompiled)
 			{
@@ -426,7 +429,47 @@ partial class AwaitenGenerator
 			return null;
 		}
 
+		foreach ((string? hook, bool release) in new[] { (registration.OnActivated, false), (registration.OnRelease, true), })
+		{
+			if (hook is not null
+			    && module.GetMembers(RegistrationHookWrapperName(implementation, release, hook)).IsEmpty
+			    && SkippedHookReason(module, implementation, release, hook) is { } hookReason)
+			{
+				if (context.Inherited)
+				{
+					return registration;
+				}
+
+				string slot = release ? "OnRelease" : "OnActivated";
+				ReportNotSelfCompiled(context, module, implementation, $"{slot} hook wrapper", hookReason, $"make '{Display(registration.ImplementationType)}', its constructor and its {slot} hook public");
+				return null;
+			}
+		}
+
 		return ThroughGeneratedFactory(registration, factory);
+	}
+
+	/// <summary>
+	///     Reports AWT231 at the consumer's <c>[Import]</c>, once per implementation and missing piece: the imported
+	///     module generated no <paramref name="missing" /> for <paramref name="implementation" /> for the recorded
+	///     <paramref name="reason" />, and this container cannot construct it either.
+	/// </summary>
+	private static void ReportNotSelfCompiled(LifetimeCollectionContext context, INamedTypeSymbol module, INamedTypeSymbol implementation, string missing, string reason, string remedy)
+	{
+		DiagnosticInfo diagnostic = new(
+			Diagnostics.ModuleRegistrationNotSelfCompiled,
+			LocationInfo.From(context.FallbackLocation),
+			new EquatableArray<string>([
+				Display(module.ToDisplayString(FullyQualified)),
+				Display(implementation.ToDisplayString(FullyQualified)),
+				missing,
+				reason,
+				remedy,
+			]));
+		if (!context.Diagnostics.Contains(diagnostic))
+		{
+			context.Diagnostics.Add(diagnostic);
+		}
 	}
 
 	/// <summary>
@@ -505,16 +548,19 @@ partial class AwaitenGenerator
 	///     collapse into one member, silently dropping the later module's match from the collection. Returns whether
 	///     the attribute was a <c>[GeneratedScanRegistration]</c> (so the caller skips its lifetime handling), even
 	///     when <paramref name="skip" /> suppressed the collection for a same-compilation module whose <c>[Scan]</c>
-	///     the container expands directly (see <see cref="Collect" />).
+	///     the container expands directly (see <see cref="Collect" />). An attribute that names a match the module
+	///     generated no factory for (see <see cref="SkippedScanMatch" />) registers the match itself when this container
+	///     can construct it, exactly as a scan would, and is otherwise dropped after reporting AWT231 once per match.
 	/// </summary>
 	private static bool CollectGeneratedScanRegistration(
 		AttributeData attribute,
 		INamedTypeSymbol attributeClass,
 		List<RawRegistration> result,
-		INamedTypeSymbol? origin,
-		Location? fallbackLocation,
+		LifetimeCollectionContext context,
 		bool skip)
 	{
+		INamedTypeSymbol? origin = context.Origin;
+		Location? fallbackLocation = context.FallbackLocation;
 		if (attributeClass is not { Name: "GeneratedScanRegistrationAttribute", IsGenericType: true, })
 		{
 			return false;
@@ -562,6 +608,32 @@ partial class AwaitenGenerator
 
 		string serviceType = service.ToDisplayString(FullyQualified);
 		Location? location = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? fallbackLocation;
+		if (origin is not null && SkippedScanMatch(origin, factory) is var (implementation, reason))
+		{
+			if (context.Inherited || CanConstruct(implementation, context.Compilation))
+			{
+				result.Add(new RawRegistration(
+					serviceType,
+					implementation.ToDisplayString(FullyQualified),
+					lifetime,
+					implementation,
+					location,
+					ServiceSymbol: service,
+					IsScan: true,
+					ScanSkipsUnconstructable: skipUnconstructable,
+					Origin: origin,
+					OnActivated: onActivated,
+					OnRelease: onRelease,
+					GreedyConstructor: true));
+			}
+			else
+			{
+				ReportNotSelfCompiled(context, origin, implementation, "factory", reason, $"change the module so its [Scan] can generate a factory for '{Display(implementation.ToDisplayString(FullyQualified))}'");
+			}
+
+			return true;
+		}
+
 		string qualifiedFactory = origin is null ? factory : $"{origin.ToDisplayString(FullyQualified)}.{factory}";
 
 		result.Add(new RawRegistration(

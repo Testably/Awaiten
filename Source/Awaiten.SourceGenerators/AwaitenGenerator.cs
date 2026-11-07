@@ -74,6 +74,10 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			{
 				spc.AddSource(model.HintName, SourceText.From(Sources.EmitModule(model), Encoding.UTF8));
 			}
+			else if (model.NotPartialMarker is not null)
+			{
+				spc.AddSource(model.HintName, SourceText.From(Sources.EmitModuleNotPartialMarker(model), Encoding.UTF8));
+			}
 		});
 	}
 
@@ -82,7 +86,8 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 	///     self-compiled registration (see <see cref="SelfCompilesRegistration" />), returning
 	///     <see langword="null" /> for any other module, which self-compiles nothing. The module must be
 	///     non-generic (AWT201) and <c>partial</c>, as must every type enclosing a nested module, to receive the
-	///     generated factories and registration attributes (AWT194); when it is, its scans and registrations are
+	///     generated factories and registration attributes (AWT194), unless it declares no <c>[Scan]</c> and its
+	///     assembly grants <c>InternalsVisibleTo</c> (see <see cref="FriendsConstructEveryRegistration" />); when it is, its scans and registrations are
 	///     expanded into factories in its own build (see <see cref="CollectModuleScanFactories" /> and
 	///     <see cref="CollectModuleRegistrationFactories" />).
 	/// </summary>
@@ -120,7 +125,15 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		List<RegistrationFactory> registrations = new();
 		List<SkippedRegistration> skipped = new();
 		bool expanded = false;
-		if (HasOpenTypeParameters(moduleSymbol))
+		string? notPartialMarker = null;
+		if (selfCompiled is not null && moduleSymbol.IsStatic && (HasOpenTypeParameters(moduleSymbol) || !isPartial) && FriendsConstructEveryRegistration(moduleSymbol, compilation))
+		{
+			// A registration-only module that cannot receive the factories leaves construction to the assemblies granted
+			// InternalsVisibleTo, as before modules generated factories. A consumer sees a generic module from metadata,
+			// but not a missing partial modifier, so that is recorded in an internal type, which metadata carries too.
+			notPartialMarker = HasOpenTypeParameters(moduleSymbol) ? null : ModuleNotPartialName(moduleSymbol);
+		}
+		else if (HasOpenTypeParameters(moduleSymbol))
 		{
 			// AWT201: a generic module (or one nested in a generic type) has no single closed type a consumer could
 			// import, and re-opening it as a bare-named partial would emit an unrelated non-generic class instead.
@@ -186,7 +199,8 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			new EquatableArray<DiagnosticInfo>(diagnostics.ToArray()),
 			declaresScan,
 			new EquatableArray<RegistrationFactory>(registrations.ToArray()),
-			new EquatableArray<SkippedRegistration>(skipped.ToArray()));
+			new EquatableArray<SkippedRegistration>(skipped.ToArray()),
+			notPartialMarker);
 	}
 
 	/// <summary>

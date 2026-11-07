@@ -1919,7 +1919,7 @@ internal sealed class Roaster : IRoaster;
 public static class RoastingModule;
 ```
 
-A [self-compiled module scan](./04-registration/07-modules.md#self-compiled-scans) emits a factory method and a registration attribute into the module's partial, and a registration of an [internal implementation](./04-registration/07-modules.md#internal-implementations) a factory method, re-opening the whole nesting chain of a nested module. Add the `partial` modifier to the module class and every type containing it. A module whose registrations another assembly can construct, or that another assembly cannot name, needs no generated code and need not be partial. Reported in the module's own build.
+A [self-compiled module scan](./04-registration/07-modules.md#self-compiled-scans) emits a factory method and a registration attribute into the module's partial, and a registration of an [internal implementation](./04-registration/07-modules.md#internal-implementations) a factory method, re-opening the whole nesting chain of a nested module. Add the `partial` modifier to the module class and every type containing it. A module whose registrations another assembly can construct, or that another assembly cannot name, needs no generated code and need not be partial. A module without a `[Scan]` is reported only when its assembly grants `InternalsVisibleTo` to no assembly. Otherwise the module builds, and a container that can't construct the implementation reports [AWT231](#awt231). A registration of a type private to the module keeps the error. Reported in the module's own build.
 
 **Fix:** Add `partial` to the module and every type that contains it: `public static partial class PluginModule;`.
 
@@ -1938,7 +1938,7 @@ internal sealed class Roaster(Secret secret) : IRoaster;   // Secret is internal
 public static partial class PluginModule;
 ```
 
-The generated factory is a `public` method whose parameters are resolved from the *consuming* container's graph, so each parameter type has to be nameable by the consumer. The same holds for the factory of an [internal implementation](./04-registration/07-modules.md#internal-implementations) a module registers. Widen the parameter type's accessibility, or keep the type out of self-compilation. (A v1 limitation: a self-compiled factory cannot construct through an inaccessible parameter.) For a registration, this is reported only when the module's assembly grants `InternalsVisibleTo` to no assembly. Otherwise the module skips the factory, and a container that can't construct the implementation reports [AWT231](#awt231).
+The generated factory is a `public` method whose parameters are resolved from the *consuming* container's graph, so each parameter type has to be nameable by the consumer. The same holds for the factory of an [internal implementation](./04-registration/07-modules.md#internal-implementations) a module registers. Widen the parameter type's accessibility, or keep the type out of self-compilation. (A v1 limitation: a self-compiled factory cannot construct through an inaccessible parameter.) This is reported only when the module's assembly grants `InternalsVisibleTo` to no assembly. Otherwise the module skips the factory, and a container that can't construct the implementation reports [AWT231](#awt231).
 
 **Fix:** Make the parameter type public, or exclude the match from the scan, or make a registered implementation and its constructor public.
 
@@ -1997,7 +1997,7 @@ internal sealed class Roaster : IPlugin, IRoaster;
 public static partial class RoastingModule;
 ```
 
-A self-compiled implementation is reached through a generated factory that returns a single accessible interface, so a shared instance across several interfaces cannot be expressed (unlike a container, whose registrations coalesce on the concrete type). The same applies across scans: two `[Scan]`s on one module that expose the same type under two different interfaces would emit two factories and silently split the instance, so that overlap is also rejected, as are an [internal implementation](./04-registration/07-modules.md#internal-implementations) registered under two services and one that a scan of the same module matches too. Several keys of one service share the factory and stay one instance, and a public implementation with an internal constructor is returned as itself, so it serves several services. Narrow the exposure to a single interface (typically `ScanAs.MatchingInterface`), or exclude the match. This is a v1 limitation. For an internal implementation registered under two services, this is reported only when the module's assembly grants `InternalsVisibleTo` to no assembly. Otherwise the module skips the factory, and a container that can't construct the implementation reports [AWT231](#awt231).
+A self-compiled implementation is reached through a generated factory that returns a single accessible interface, so a shared instance across several interfaces cannot be expressed (unlike a container, whose registrations coalesce on the concrete type). The same applies across scans: two `[Scan]`s on one module that expose the same type under two different interfaces would emit two factories and silently split the instance, so that overlap is also rejected, as are an [internal implementation](./04-registration/07-modules.md#internal-implementations) registered under two services and one that a scan of the same module matches too. Several keys of one service share the factory and stay one instance, and a public implementation with an internal constructor is returned as itself, so it serves several services. Narrow the exposure to a single interface (typically `ScanAs.MatchingInterface`), or exclude the match. This is a v1 limitation. For an internal implementation registered under two services, or a match its scans expose under two interfaces, this is reported only when the module's assembly grants `InternalsVisibleTo` to no assembly. Otherwise the module skips the factory, and a container that can't construct the implementation reports [AWT231](#awt231).
 
 **Fix:** Narrow `As` to a single interface, typically `As = ScanAs.MatchingInterface`, or exclude the match; register an internal implementation under a single service, or make it public.
 
@@ -2021,7 +2021,7 @@ internal sealed class Roaster : IRoaster
 public static partial class PluginModule;
 ```
 
-The generated factory reduces a match, or a registered [internal implementation](./04-registration/07-modules.md#internal-implementations), to a plain parameter list resolved from the consuming container's graph. An `[Inject]` property, or a constructor parameter marked `[Inject]`, `[Arg]` or `[FromKey]`, carries per-dependency semantics that plain parameters cannot express, so the consumer would silently construct the type differently than a container in the module's own assembly would. Remove the attribute, keep the type out of self-compilation, or register it through a hand-written module factory. For a registration, this is reported only when the module's assembly grants `InternalsVisibleTo` to no assembly. Otherwise the module skips the factory, and a container that can't construct the implementation reports [AWT231](#awt231).
+The generated factory reduces a match, or a registered [internal implementation](./04-registration/07-modules.md#internal-implementations), to a plain parameter list resolved from the consuming container's graph. An `[Inject]` property, or a constructor parameter marked `[Inject]`, `[Arg]` or `[FromKey]`, carries per-dependency semantics that plain parameters cannot express, so the consumer would silently construct the type differently than a container in the module's own assembly would. Remove the attribute, keep the type out of self-compilation, or register it through a hand-written module factory. This is reported only when the module's assembly grants `InternalsVisibleTo` to no assembly. Otherwise the module skips the factory, and a container that can't construct the implementation reports [AWT231](#awt231).
 
 **Fix:** Remove the `[Inject]`, `[Arg]` or `[FromKey]` attribute, exclude the match from the scan or make a registered implementation public, or register the type through a hand-written module factory.
 
@@ -2037,7 +2037,7 @@ A generic `[Module]` (or one nested in a generic type) declares a `[Scan]`, or a
 public static partial class PluginModule<T>;   // no closed PluginModule<T> exists to [Import]
 ```
 
-A consumer imports a module by `typeof`, so there is no single closed module type to import from a generic declaration, and the generated partial could not re-open it by its bare name. Move the `[Scan]`, or the registration of the [internal implementation](./04-registration/07-modules.md#internal-implementations), onto a non-generic module.
+A consumer imports a module by `typeof`, so there is no single closed module type to import from a generic declaration, and the generated partial could not re-open it by its bare name. Move the `[Scan]`, or the registration of the [internal implementation](./04-registration/07-modules.md#internal-implementations), onto a non-generic module. A module without a `[Scan]` is reported only when its assembly grants `InternalsVisibleTo` to no assembly. Otherwise the module builds, and a container that can't construct the implementation reports [AWT231](#awt231).
 
 **Fix:** Move the `[Scan]` or the registration onto a non-generic module.
 
@@ -2075,7 +2075,7 @@ public static partial class PluginModule
 }
 ```
 
-The module emits a `public` wrapper for the hook of a scan or of a registered [internal implementation](./04-registration/07-modules.md#internal-implementations), and that wrapper's parameters after the instance are resolved from the consuming container's graph, so each type has to be nameable by the consumer, the same rule a self-compiled factory parameter gets ([AWT195](#awt195)). The instance parameter itself is exempt: it is the accessible exposure interface, cast back to the internal implementation inside the module. Widen the parameter type's accessibility, resolve a different dependency, or drop the hook.
+The module emits a `public` wrapper for the hook of a scan or of a registered [internal implementation](./04-registration/07-modules.md#internal-implementations), and that wrapper's parameters after the instance are resolved from the consuming container's graph, so each type has to be nameable by the consumer, the same rule a self-compiled factory parameter gets ([AWT195](#awt195)). The instance parameter itself is exempt: it is the accessible exposure interface, cast back to the internal implementation inside the module. Widen the parameter type's accessibility, resolve a different dependency, or drop the hook. This doesn't apply when the module's assembly grants `InternalsVisibleTo` to any assembly and the hook is not generic: the module then emits no wrapper and reports no error, because such an assembly calls the hook directly. A container that can't reports [AWT231](#awt231). A hook of a type private to the module keeps the error.
 
 **Fix:** Make the parameter type public, take a different dependency, or drop the hook.
 
@@ -2096,7 +2096,7 @@ public static partial class PluginModule
 }
 ```
 
-The hook's parameters after the instance mirror onto the generated `public` wrapper as a bare type-and-name signature, so the attribute's per-dependency semantics (a key, optionality, deferral) would be silently dropped: a cross-assembly consumer would resolve the plain type while a same-compilation container, binding the module's own hook directly, honored the attribute, so the same source would inject different instances depending on which side of the assembly boundary the consumer sits. This is the hook-parameter twin of the factory's [AWT200](#awt200), rejected rather than silently degraded. Remove the attribute, resolve the dependency plainly, or drop the hook.
+The hook's parameters after the instance mirror onto the generated `public` wrapper as a bare type-and-name signature, so the attribute's per-dependency semantics (a key, optionality, deferral) would be silently dropped: a cross-assembly consumer would resolve the plain type while a same-compilation container, binding the module's own hook directly, honored the attribute, so the same source would inject different instances depending on which side of the assembly boundary the consumer sits. This is the hook-parameter twin of the factory's [AWT200](#awt200), rejected rather than silently degraded. Remove the attribute, resolve the dependency plainly, or drop the hook. This doesn't apply when the module's assembly grants `InternalsVisibleTo` to any assembly and the hook is not generic: the module then emits no wrapper and reports no error, because such an assembly calls the hook directly. A container that can't reports [AWT231](#awt231). A hook of a type private to the module keeps the error.
 
 **Fix:** Remove the `[FromKey]` or `[Inject]` attribute and resolve the dependency plainly, or drop the hook.
 
@@ -2128,7 +2128,7 @@ A module self-compiles its scans and its closed registrations of [internal imple
 ### AWT231
 
 :::danger[Error]
-An imported module of another assembly registers an implementation the container cannot construct, and the module generated no factory for it.
+An imported module of another assembly registers an implementation the container cannot construct, and the module generated no factory or hook wrapper for it.
 :::
 
 ```csharp no-compile
@@ -2145,9 +2145,9 @@ public static partial class EquipmentModule;
 public static partial class CoffeeShop;
 ```
 
-A module generates a factory for each [internal implementation](./04-registration/07-modules.md#internal-implementations) it registers. Some registrations are beyond what the factory supports: a constructor parameter type that isn't public ([AWT195](#awt195)), `[Inject]`, `[Arg]` or `[FromKey]` metadata ([AWT200](#awt200)), or one implementation under several services ([AWT197](#awt197)). When the library grants `InternalsVisibleTo` to any assembly, the module generates no factory for such a registration and records why. An assembly the library grants `InternalsVisibleTo` constructs the implementation itself. Any other container can't construct it, so it reports this error at its `[Import]`, names the reason, and leaves the registration out.
+A module generates a factory for each [internal implementation](./04-registration/07-modules.md#internal-implementations) it registers. Some registrations are beyond what the factory supports: a constructor parameter type that isn't public ([AWT195](#awt195)), `[Inject]`, `[Arg]` or `[FromKey]` metadata ([AWT200](#awt200)), or one implementation under several services ([AWT197](#awt197)). The same holds for a hook whose wrapper can't mirror its parameters ([AWT203](#awt203), [AWT204](#awt204)), for a match of the module's [`[Scan]`](./04-registration/07-modules.md#self-compiled-scans), and for every registration of a module that can't carry a factory at all, because it is generic ([AWT201](#awt201)) or not `partial` ([AWT194](#awt194)). When the library grants `InternalsVisibleTo` to any assembly, the module generates no factory or wrapper for such a registration or match and records why. An assembly the library grants `InternalsVisibleTo` constructs the implementation and calls its hooks itself. Any other container can't construct it, so it reports this error at its `[Import]`, names the reason, and leaves the registration out.
 
-**Fix:** Grant the container's assembly `InternalsVisibleTo` in the library, or make the implementation, its constructor and the constructor's parameter types public.
+**Fix:** Grant the container's assembly `InternalsVisibleTo` in the library. Or make the implementation, its constructor and the constructor's parameter types public, or, for a hook or a scan match, fix the reason the message names.
 
 ## Extending containers
 

@@ -182,7 +182,9 @@ partial class AwaitenGenerator
 	///     <c>InternalsVisibleTo</c> to any assembly, an implementation that fails only with AWT195, AWT197 or AWT200
 	///     gets no factory and no error: such an assembly constructs it itself. It lands in <paramref name="skipped" />
 	///     with the reason, which a consumer that cannot construct it reports (AWT231). A type hidden in the module
-	///     (see <see cref="TypeHiddenInModule" />) is never skipped, since no other assembly can construct it.
+	///     (see <see cref="TypeHiddenInModule" />) is never skipped, since no other assembly can construct it. A hook
+	///     whose wrapper fails only with AWT203 or AWT204 is skipped the same way: the factory stays, and the hook lands
+	///     in <paramref name="skipped" />, since such an assembly calls it directly.
 	/// </summary>
 	private static List<RegistrationFactory> CollectModuleRegistrationFactories(
 		INamedTypeSymbol module,
@@ -256,7 +258,7 @@ partial class AwaitenGenerator
 
 		// A scan factory builds the type for every consumer, so one constructing the registration itself would still split it.
 		bool scannedToo = false;
-		if (scanFactories.FirstOrDefault(factory => factory.ImplementationType == typeName) is { } scanned)
+		if (scanFactories.FirstOrDefault(factory => factory.ImplementationType == typeName && factory.Skip is null) is { } scanned)
 		{
 			ReportRegistrationExposures(subject, $"{Display(scanned.ServiceType)}, {Display(returnName)}", "remove the registration or exclude the type from the scan", first.Location, rejections);
 			scannedToo = true;
@@ -293,8 +295,19 @@ partial class AwaitenGenerator
 					continue;
 				}
 
-				ModuleHookRequest request = new(implementation, hookName, registration.Location, release, RegistrationHookWrapperName(implementation, release, hookName), subject);
-				if (ResolveModuleHookCore(request, null, context) is { } resolved)
+				ModuleHookRequest request = new(
+					implementation, hookName, registration.Location, release, RegistrationHookWrapperName(implementation, release, hookName), subject,
+					friendsCanConstruct && TypeHiddenInModule(implementation, context.Module, context.Compilation) is null);
+				if (ResolveModuleHookCore(request, null, context) is not { } resolved)
+				{
+					continue;
+				}
+
+				if (resolved.Wrapper.SkipReason is { } reason)
+				{
+					skipped.Add(new SkippedRegistration(RegistrationHookSkippedName(implementation, release, hookName), reason, Hook: true));
+				}
+				else
 				{
 					hooks.Add(new RegistrationHook(resolved.Wrapper, release));
 				}
@@ -334,6 +347,49 @@ partial class AwaitenGenerator
 
 		return rejection.Descriptor == Diagnostics.ModuleScanMultipleExposures
 			? $"it is registered under several services ({string.Join(", ", services.Select(Display))})"
+			: null;
+	}
+
+	/// <summary>
+	///     Whether an assembly granted <c>InternalsVisibleTo</c> can construct every self-compiled registration of
+	///     <paramref name="module" /> itself: the module's assembly grants it to any assembly, and no such registration
+	///     is hidden in the module (see <see cref="TypeHiddenInModule" />).
+	/// </summary>
+	private static bool FriendsConstructEveryRegistration(INamedTypeSymbol module, Compilation compilation)
+		=> GrantsInternalsVisibleTo(compilation.Assembly)
+		   && !ConstructedModuleRegistrations(module, compilation).Any(registration =>
+			   SelfCompilesRegistration(module, registration.Implementation, registration.Service, compilation)
+			   && TypeHiddenInModule(registration.Implementation, module, compilation) is not null);
+
+	/// <summary>
+	///     A deterministic name for the internal type, in the module's namespace, that records a module the generator
+	///     left to the assemblies granted <c>InternalsVisibleTo</c> because it is not partial. Its presence tells a
+	///     consumer that the module skipped its factories on purpose (AWT231), not built without the generator (AWT154).
+	/// </summary>
+	private static string ModuleNotPartialName(INamedTypeSymbol module)
+		=> $"Awaiten__ModuleNotPartial_{module.Name}_{Fnv1a(module.ToDisplayString(FullyQualified)):x8}";
+
+	/// <summary>
+	///     Why the imported module of another assembly can carry no generated factory, read from its metadata: it is
+	///     generic, or it recorded that it is not partial (see <see cref="ModuleNotPartialName" />). Otherwise
+	///     <see langword="null" />.
+	/// </summary>
+	private static string? ModuleShapeReason(INamedTypeSymbol module)
+	{
+		for (INamedTypeSymbol? type = module; type is not null; type = type.ContainingType)
+		{
+			if (type.IsGenericType)
+			{
+				return "the module is generic";
+			}
+		}
+
+		INamedTypeSymbol definition = module.OriginalDefinition;
+		string name = definition.ContainingNamespace is { IsGlobalNamespace: false, } ns
+			? $"{ns.ToDisplayString()}.{ModuleNotPartialName(definition)}"
+			: ModuleNotPartialName(definition);
+		return module.ContainingAssembly.GetTypeByMetadataName(name) is not null
+			? "the module, or a class that contains it, is not partial"
 			: null;
 	}
 
@@ -381,6 +437,23 @@ partial class AwaitenGenerator
 		string slot = release ? "OnRelease" : "OnActivated";
 		return $"Awaiten__Hook_{slot}_{implementation.Name}_{Fnv1a($"{implementation.ToDisplayString(FullyQualified)}\0{slot}\0{hookName}"):x8}";
 	}
+
+	/// <summary>
+	///     A deterministic name for the constant that records why the module emits no wrapper for a hook of a
+	///     self-compiled registration, derived like <see cref="RegistrationHookWrapperName" />.
+	/// </summary>
+	private static string RegistrationHookSkippedName(INamedTypeSymbol implementation, bool release, string hookName)
+		=> "Awaiten__HookSkipped_" + RegistrationHookWrapperName(implementation, release, hookName).Substring("Awaiten__Hook_".Length);
+
+	/// <summary>
+	///     Why the imported module of another assembly generated no wrapper for a hook of a registration of
+	///     <paramref name="implementation" />, or <see langword="null" /> when it records no such skip.
+	/// </summary>
+	private static string? SkippedHookReason(INamedTypeSymbol module, INamedTypeSymbol implementation, bool release, string hookName)
+		=> module.GetMembers(RegistrationHookSkippedName(implementation, release, hookName))
+			.OfType<IFieldSymbol>()
+			.Select(field => field.ConstantValue as string)
+			.FirstOrDefault(reason => reason is not null);
 
 	private static uint Fnv1a(string text)
 	{

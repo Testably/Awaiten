@@ -14,6 +14,8 @@ namespace Awaiten.SourceGenerators.Entities;
 ///     (<see cref="Registrations" />), which a consumer finds by name from the module's own registration attribute.
 ///     <see cref="DeclaresScan" /> decides whether the <c>[GeneratedScanExpansion]</c> marker is emitted.
 ///     <see cref="Skipped" /> records each implementation whose factory the module leaves out.
+///     <see cref="NotPartialMarker" /> names the internal type that records a module left to the assemblies granted
+///     <c>InternalsVisibleTo</c> because it is not partial.
 /// </summary>
 internal sealed record ModuleScanModel(
 	string? Namespace,
@@ -25,14 +27,16 @@ internal sealed record ModuleScanModel(
 	EquatableArray<DiagnosticInfo> Diagnostics,
 	bool DeclaresScan = true,
 	EquatableArray<RegistrationFactory> Registrations = default,
-	EquatableArray<SkippedRegistration> Skipped = default);
+	EquatableArray<SkippedRegistration> Skipped = default,
+	string? NotPartialMarker = null);
 
 /// <summary>
 ///     An implementation the module generates no factory for, because an assembly granted <c>InternalsVisibleTo</c>
 ///     constructs it itself: the name of the emitted constant and the reason it holds, which a consumer that cannot
-///     construct the implementation reports.
+///     construct the implementation reports. <see cref="Hook" /> marks a hook whose wrapper the module leaves out
+///     instead, beside a factory it still emits.
 /// </summary>
-internal sealed record SkippedRegistration(string MarkerName, string Reason);
+internal sealed record SkippedRegistration(string MarkerName, string Reason, bool Hook = false);
 
 /// <summary>
 ///     The generated factory of an implementation that only its owner can construct: a self-compiled module
@@ -67,7 +71,7 @@ internal readonly record struct ImplementationTraits(bool AsyncInitializable, bo
 ///     <c>SkipUnconstructable</c> opt-in the scan declared, and the constructor parameters mirrored onto the
 ///     factory signature (resolved from the consuming container's graph, exactly like a hand-written module
 ///     factory's parameters). <see cref="Traits" /> tells the consumer how the match it cannot see is initialized
-///     and disposed.
+///     and disposed. <see cref="Skip" /> marks a match the module emits no factory for.
 /// </summary>
 internal sealed record ModuleFactory(
 	string FactoryName,
@@ -78,7 +82,16 @@ internal sealed record ModuleFactory(
 	EquatableArray<FactoryParameter> Parameters,
 	ModuleHook? OnActivated = null,
 	ModuleHook? OnRelease = null,
-	ImplementationTraits Traits = default);
+	ImplementationTraits Traits = default,
+	ScanSkip? Skip = null);
+
+/// <summary>
+///     A module-scan match the module emits no factory for, because an assembly granted <c>InternalsVisibleTo</c>
+///     constructs it itself: the name of the constant that holds the reason, the match's metadata name, which each
+///     <c>[GeneratedScanRegistration]</c> names in place of a factory so a consumer finds the match, and every service
+///     the module's scans expose it as.
+/// </summary>
+internal sealed record ScanSkip(string MarkerName, string ImplementationMetadataName, string Reason, EquatableArray<string> Services);
 
 /// <summary>A mirrored constructor parameter on a generated factory: its fully-qualified type and its name.</summary>
 internal readonly record struct FactoryParameter(string Type, string Name);
@@ -92,10 +105,12 @@ internal readonly record struct FactoryParameter(string Type, string Name);
 ///     and forwards it, plus <see cref="Parameters" /> (mirrored like factory parameters and resolved from the
 ///     consumer's graph), to <see cref="Target" /> - the user hook, carrying its bound type arguments for a generic
 ///     one. The consumer reads <see cref="WrapperName" /> off the <c>[GeneratedScanRegistration]</c> and runs it
-///     through the ordinary hook pipeline.
+///     through the ordinary hook pipeline. A hook with a <see cref="SkipReason" /> gets no wrapper, because an assembly
+///     granted <c>InternalsVisibleTo</c> calls it directly: <see cref="WrapperName" /> is then the user hook's own name.
 /// </summary>
 internal sealed record ModuleHook(
 	string WrapperName,
 	string Target,
 	string InstanceCast,
-	EquatableArray<FactoryParameter> Parameters);
+	EquatableArray<FactoryParameter> Parameters,
+	string? SkipReason = null);
