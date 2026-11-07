@@ -1387,6 +1387,119 @@ public class ModuleHiddenServiceTests
 		}
 	}
 
+	public class PrivateDecoratorTakingAnInternalService
+	{
+		private const string OfTheInternalService = """
+			[Decorate<CoffeeModule.LoggingStore, IBeanStore>]
+			public static partial class CoffeeModule
+			{
+			    private sealed class LoggingStore : IBeanStore { public LoggingStore(IBeanStore inner) { } }
+			}
+			""";
+
+		private const string OfAPublicService = """
+			[Decorate<CoffeeModule.LoggingGrinder, IGrinder>]
+			public static partial class CoffeeModule
+			{
+			    private sealed class LoggingGrinder : IGrinder { public LoggingGrinder(IGrinder inner, IBeanStore store) { } }
+			}
+			""";
+
+		private const string CompositeOfAPublicService = """
+			[Composite<CoffeeModule.AllGrinders, IGrinder>]
+			public static partial class CoffeeModule
+			{
+			    private sealed class AllGrinders : IGrinder { public AllGrinders(System.Collections.Generic.IEnumerable<IGrinder> all, IBeanStore store) { } }
+			}
+			""";
+
+		private const string Container = """
+			[Container]
+			[Import(typeof(CoffeeModule))]
+			public static partial class MyContainer;
+			""";
+
+		private static string Library(string decorator, bool grant = false) => $$"""
+			using Awaiten;
+
+			{{(grant ? "[assembly: System.Runtime.CompilerServices.InternalsVisibleTo(\"TestAssembly\")]" : "")}}
+
+			namespace Lib;
+
+			public interface IGrinder { }
+			internal interface IBeanStore { }
+			internal sealed class BeanStore : IBeanStore { }
+			internal sealed class Grinder : IGrinder { public Grinder(IBeanStore store) { } }
+
+			[Module]
+			[Singleton<BeanStore, IBeanStore>]
+			[Singleton<Grinder, IGrinder>]
+			{{decorator}}
+			""";
+
+		private static string Decorator(string decorator)
+			=> decorator switch
+			{
+				OfTheInternalService => "Decorator_LoggingStore_",
+				OfAPublicService => "Decorator_LoggingGrinder_",
+				_ => "Composite_AllGrinders_",
+			};
+
+		[Test]
+		[Arguments(OfTheInternalService)]
+		[Arguments(OfAPublicService)]
+		[Arguments(CompositeOfAPublicService)]
+		public async Task Library_BuildsCleanly(string decorator)
+		{
+			GeneratorResult result = Generator.Run(Library(decorator));
+
+			await That(result.Diagnostics).IsEmpty();
+		}
+
+		[Test]
+		[Arguments(OfTheInternalService)]
+		[Arguments(OfAPublicService)]
+		[Arguments(CompositeOfAPublicService)]
+		public async Task ContainerInTheModulesAssembly_BuildsItThroughAnInternalFactory(string decorator)
+		{
+			GeneratorResult result = Generator.Run(Library(decorator) + Container);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("a container of the module's own assembly builds the internal services itself and registers no handle");
+			await That(result.Sources["Awaiten.Lib.MyContainer.g.cs"]).Contains("global::Lib.CoffeeModule.Internals.Internal" + Decorator(decorator))
+				.Because("it calls the factory that takes the internal services directly");
+			await That(ModuleSource(result)).Contains($"internal static global::Lib.{(decorator == OfTheInternalService ? "IBeanStore" : "IGrinder")} Internal{Decorator(decorator)}")
+				.Because("the module emits the internal factory beside the one that takes handles");
+		}
+
+		[Test]
+		[Arguments(OfTheInternalService)]
+		[Arguments(OfAPublicService)]
+		[Arguments(CompositeOfAPublicService)]
+		public async Task ContainerInAnAssemblyGrantedInternalsVisibleTo_BuildsItThroughTheInternalFactory(string decorator)
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Library(decorator, grant: true), "using Awaiten;\nusing Lib;\n\nnamespace MyCode;\n\n" + Container);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("a friend constructs the internal services itself and registers no handle");
+			await That(result.Sources["Awaiten.MyCode.MyContainer.g.cs"]).Contains("Internals.Internal" + Decorator(decorator));
+		}
+
+		[Test]
+		[Arguments(OfTheInternalService)]
+		[Arguments(OfAPublicService)]
+		[Arguments(CompositeOfAPublicService)]
+		public async Task ContainerInAnotherAssembly_TakesItThroughTheHandles(string decorator)
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Library(decorator), "using Awaiten;\nusing Lib;\n\nnamespace MyCode;\n\n" + Container);
+			string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+			await That(result.Diagnostics).IsEmpty();
+			await That(source).Contains("Internals." + Decorator(decorator)).And.DoesNotContain("Internals.Internal" + Decorator(decorator))
+				.Because("the internal factory is not accessible to an assembly without InternalsVisibleTo");
+		}
+	}
+
 	public class Conflicts
 	{
 		private static string Library(string registrations) => $$"""

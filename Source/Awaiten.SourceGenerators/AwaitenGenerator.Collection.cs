@@ -1065,8 +1065,9 @@ partial class AwaitenGenerator
 	///     finds the generated factory that builds it in <paramref name="via" />. A base container's own is resolved by
 	///     the inheritance (see <see cref="InaccessibleInheritedType" />). A module's closed one calls the factory the
 	///     module generates for it (see <see cref="CollectModuleContributionFactories" />): from metadata in another
-	///     assembly, or by its deterministic name in the module's own assembly when the type is private to the module.
-	///     Without a factory, one inherited through <c>Extends</c> is AWT226 and any other is AWT230.
+	///     assembly, or by its deterministic name in the module's own assembly when the type is private to the module,
+	///     preferring the internal factory that takes the internal services instead of their handles where the container
+	///     can see it. Without a factory, one inherited through <c>Extends</c> is AWT226 and any other is AWT230.
 	/// </summary>
 	private static bool UnavailableContribution(ContributionContext context, AttributeData attribute, INamedTypeSymbol attributeClass, out OwnerFactoryCall? via)
 	{
@@ -1093,7 +1094,7 @@ partial class AwaitenGenerator
 			    && context.Modules.Contribution(module, name) is { } generated
 			    && MirroredConstructor(type, generated) is { } constructor)
 			{
-				via = new OwnerFactoryCall(module, name, generated.ReturnType, constructor);
+				via = new OwnerFactoryCall(module, generated.FactoryName, generated.ReturnType, constructor);
 				return false;
 			}
 
@@ -1105,9 +1106,11 @@ partial class AwaitenGenerator
 			return inheritance is not null && InaccessibleInheritedType(attribute, attributeClass, inheritance, diagnostics, out _);
 		}
 
-		if (name is not null && GeneratedFactoryNamed(module, name, compilation) is { } factory)
+		// A container granted InternalsVisibleTo builds the internal services itself and registers no handles, so it calls
+		// the internal factory that takes them directly, which the module generates when the public one takes handles.
+		if (name is not null && (GeneratedFactoryNamed(module, "Internal" + name, compilation) ?? GeneratedFactoryNamed(module, name, compilation)) is { } factory)
 		{
-			via = new OwnerFactoryCall(module, name, factory.ReturnType.ToDisplayString(FullyQualified), factory);
+			via = new OwnerFactoryCall(module, factory.Name, factory.ReturnType.ToDisplayString(FullyQualified), factory);
 			return false;
 		}
 

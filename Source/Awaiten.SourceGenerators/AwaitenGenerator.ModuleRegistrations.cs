@@ -124,18 +124,19 @@ partial class AwaitenGenerator
 
 		/// <summary>
 		///     The factory named <paramref name="name" /> the module generates for a decorator or composite (see
-		///     <see cref="CollectModuleContributionFactories" />), or <see langword="null" />.
+		///     <see cref="CollectModuleContributionFactories" />), or its internal one, which takes the internal services
+		///     this container builds itself instead of their handles, or <see langword="null" />.
 		/// </summary>
 		public RegistrationFactory? Contribution(INamedTypeSymbol module, string name)
 		{
 			if (!_contributions.TryGetValue(module, out List<RegistrationFactory>? factories))
 			{
 				_contributions[module] = factories = ReceivesGeneratedMembers(module)
-					? CollectModuleContributionFactories(module, _compilation)
+					? CollectModuleContributionFactories(module, _compilation, CollectHiddenServices(module, _compilation, CancellationToken.None))
 					: new List<RegistrationFactory>();
 			}
 
-			return factories.FirstOrDefault(factory => factory.FactoryName == name);
+			return factories.FirstOrDefault(factory => factory.FactoryName == "Internal" + name) ?? factories.FirstOrDefault(factory => factory.FactoryName == name);
 		}
 	}
 
@@ -366,34 +367,58 @@ partial class AwaitenGenerator
 			}
 
 			string name = ContributionFactoryName(attributeClass.Name, type, service);
+			if (factories.Any(factory => factory.FactoryName == name))
+			{
+				continue;
+			}
+
+			RegistrationFactory? built;
 			if (hidden is not null && attributeClass.Name == "DecorateAttribute" && (hidden.Services.ContainsKey(service) || hidden.ProvidedElsewhere(service)))
 			{
-				if (factories.All(factory => factory.FactoryName != name) && HiddenDecoratorFactory(type, service, name, context) is { } decorator)
-				{
-					factories.Add(decorator);
-				}
-
-				continue;
+				built = HiddenDecoratorFactory(type, service, name, context);
 			}
-
-			if (!SelfCompilesRegistration(module, type, service, compilation))
+			else if (SelfCompilesRegistration(module, type, service, compilation))
+			{
+				built = ContributionFactory(type, service, name, context);
+			}
+			else
 			{
 				continue;
 			}
 
-			SelfCompiledSubject subject = RegistrationSubject(type.ToDisplayString(FullyQualified));
-			if (factories.Any(factory => factory.FactoryName == name)
-			    || FactoryReturnType(type, [service,], context) is not { } returnType
-			    || !TryMirrorFactoryParameters(type, context, null, subject, out EquatableArray<FactoryParameter> parameters, mirrorProperties: true)
-			    || !TryMirrorInjectedProperties(type, context, null, subject, ref parameters, out MirroredMembers members))
+			if (built is null)
 			{
 				continue;
 			}
 
-			factories.Add(new RegistrationFactory(name, returnType.ToDisplayString(FullyQualified), type.ToDisplayString(FullyQualified), parameters, default, members.Required, OptionalMembers: members.Optional, DeferredMembers: members.Deferred));
+			factories.Add(built);
+
+			// A container that builds the internal services itself registers no handles, so a type private to the module
+			// whose factory takes or returns a handle gets an internal factory that takes the services directly.
+			if (hidden is not null
+			    && IsHiddenInModule(type, module, compilation)
+			    && ContributionFactory(type, service, name, context with { Hidden = null, Internal = true, }) is { } direct
+			    && (direct.ReturnType != built.ReturnType || direct.Parameters != built.Parameters))
+			{
+				factories.Add(direct with { FactoryName = "Internal" + name, IsInternal = true, });
+			}
 		}
 
 		return factories;
+	}
+
+	/// <summary>
+	///     The factory of a decorator or composite that mirrors its constructor and injected properties, or
+	///     <see langword="null" /> when it cannot express them.
+	/// </summary>
+	private static RegistrationFactory? ContributionFactory(INamedTypeSymbol type, INamedTypeSymbol service, string name, ModuleScanContext context)
+	{
+		SelfCompiledSubject subject = RegistrationSubject(type.ToDisplayString(FullyQualified));
+		return FactoryReturnType(type, [service,], context) is { } returnType
+		       && TryMirrorFactoryParameters(type, context, null, subject, out EquatableArray<FactoryParameter> parameters, mirrorProperties: true)
+		       && TryMirrorInjectedProperties(type, context, null, subject, ref parameters, out MirroredMembers members)
+			? new RegistrationFactory(name, returnType.ToDisplayString(FullyQualified), type.ToDisplayString(FullyQualified), parameters, default, members.Required, OptionalMembers: members.Optional, DeferredMembers: members.Deferred)
+			: null;
 	}
 
 	/// <summary>

@@ -42,6 +42,33 @@ public partial class FriendModuleTests
 	}
 
 	[Test]
+	public async Task PrivateDecoratorsTakingAnInternalService_WrapTheServicesTheContainerBuilds()
+	{
+		using FriendPrivateDecoratorContainer.Root container = new();
+
+		IFriendDecoratedGrinder grinder = container.Resolve<IFriendDecoratedGrinder>();
+
+		await That(grinder.Chain).IsEqualTo("logging grinder")
+			.Because("the container builds the private decorator of the public grinder through its internal factory");
+		await That(((IFriendDecoratedStore)grinder.Store).Chain).IsEqualTo("logging store")
+			.Because("the container builds the private decorator of the internal store through its internal factory too");
+		await That(grinder.Store).IsSameAs(container.Resolve<IFriendDecoratedStore>())
+			.Because("the decorator of the grinder takes the one decorated store the container builds");
+	}
+
+	[Test]
+	public async Task PrivateDecoratorsTakingAnInternalService_AreBuiltByAContainerInTheModulesAssembly()
+	{
+		using FriendPrivateDecoratorLocalContainer.Root container = new();
+
+		IFriendDecoratedGrinder grinder = container.Resolve<IFriendDecoratedGrinder>();
+
+		await That(grinder.Chain).IsEqualTo("logging grinder");
+		await That(((IFriendDecoratedStore)grinder.Store).Chain).IsEqualTo("logging store")
+			.Because("a container in the module's own assembly builds the private decorators through the internal factories too");
+	}
+
+	[Test]
 	public async Task SharesAnImplementationAcrossItsServices()
 	{
 		using FriendContainer.Root container = new();
@@ -168,6 +195,10 @@ public partial class FriendModuleTests
 	[Container]
 	[Import(typeof(SupportFriendPrivateModule))]
 	public static partial class FriendPrivateContainer;
+
+	[Container]
+	[Import(typeof(SupportFriendPrivateDecoratorModule))]
+	public static partial class FriendPrivateDecoratorContainer;
 
 	[Container]
 	[Import(typeof(SupportFriendFactoryHookModule))]
