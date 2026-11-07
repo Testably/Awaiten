@@ -76,7 +76,29 @@ public class ModuleHandleRuntimeTests
 		await That(grinder.StoreDisposed).IsFalse()
 			.Because("the first import suppresses the disposal of the one shared store");
 	}
+
+	[Test]
+	public async Task ImplementationWhoseEveryRegistrationTheContainerOverrides_IsNeitherBuiltNorInitialized()
+	{
+		await using OverriddenBoilerContainer.Root container = new();
+
+		await container.InitializeAsync(TestContext.Current!.Execution.CancellationToken);
+
+		await That(container.Resolve<IBoilerFront>()).IsExactly<OverridingBoilerFront>();
+		await That(BoilerProbe.Started).IsEqualTo(0)
+			.Because("the container overrides every registration of the boiler, so, as in the module's own assembly, nothing builds or initializes it");
+	}
 }
+
+public sealed class OverridingBoilerFront : IBoilerFront;
+
+public sealed class OverridingBoilerBack : IBoilerBack;
+
+[Container]
+[Import(typeof(CrossAssemblyOverridableBoilerModule))]
+[Singleton<OverridingBoilerFront, IBoilerFront>]
+[Singleton<OverridingBoilerBack, IBoilerBack>]
+public static partial class OverriddenBoilerContainer;
 
 [Container]
 [Import(typeof(CrossAssemblyFailingHeaterModule))]

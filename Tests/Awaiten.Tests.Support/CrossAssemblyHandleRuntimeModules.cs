@@ -162,3 +162,41 @@ public static partial class CrossAssemblyAsyncValveModule
 {
 	internal static Valve CreateValve() => new AsyncValve();
 }
+
+/// <summary>A front service of the internal boiler that a container can override.</summary>
+public interface IBoilerFront;
+
+/// <summary>A back service of the internal boiler that a container can override.</summary>
+public interface IBoilerBack;
+
+/// <summary>Counts how often the internal boiler of <see cref="CrossAssemblyOverridableBoilerModule" /> was initialized.</summary>
+public static class BoilerProbe
+{
+	private static int _started;
+
+	/// <summary>How often the boiler was initialized.</summary>
+	public static int Started => Volatile.Read(ref _started);
+
+	internal static void Start() => Interlocked.Increment(ref _started);
+}
+
+internal interface IBoilerStartable
+{
+	Task StartAsync(CancellationToken cancellationToken);
+}
+
+internal sealed class Boiler : IBoilerFront, IBoilerBack, IBoilerStartable
+{
+	public Task StartAsync(CancellationToken cancellationToken)
+	{
+		BoilerProbe.Start();
+		return Task.CompletedTask;
+	}
+}
+
+/// <summary>A <c>[Module]</c> whose async-initialized internal boiler serves two services as overridable defaults.</summary>
+[Module]
+[AsyncInitializer<IBoilerStartable>(nameof(IBoilerStartable.StartAsync))]
+[Singleton<Boiler, IBoilerFront>(Fallback = Fallback.Silent)]
+[Singleton<Boiler, IBoilerBack>(Fallback = Fallback.Silent)]
+public static partial class CrossAssemblyOverridableBoilerModule;

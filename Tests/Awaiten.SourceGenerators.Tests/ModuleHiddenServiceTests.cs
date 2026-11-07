@@ -1389,6 +1389,61 @@ public class ModuleHiddenServiceTests
 			}
 		}
 
+		public class EveryRegistrationOverridden
+		{
+			private static string Library(string conventions = "") => $$"""
+				using Awaiten;
+				using System.Threading.Tasks;
+
+				namespace Lib;
+
+				public interface IA { }
+				public interface IB { }
+				public sealed class Dep { }
+				internal interface IStartable { Task StartAsync(); }
+				internal sealed class Impl : IA, IB, IStartable { public Impl(Dep dep) { } public Task StartAsync() => Task.CompletedTask; }
+
+				[Module]
+				{{conventions}}
+				[Singleton<Impl, IA>(Fallback = Fallback.Silent)]
+				[Singleton<Impl, IB>(Fallback = Fallback.Silent)]
+				public static partial class AModule { }
+				""";
+
+			private const string Container = """
+				public sealed class MyA : IA { }
+				public sealed class MyB : IB { }
+
+				[Container]
+				[Import(typeof(AModule))]
+				[Singleton<MyA, IA>]
+				[Singleton<MyB, IB>]
+				public static partial class MyContainer;
+				""";
+
+			[Test]
+			public async Task DependencyOfTheImplementation_IsNotRequired()
+			{
+				GeneratorResult same = Generator.Run(Library() + Container);
+				GeneratorResult cross = Generator.RunWithGeneratedReferencedAssembly(Library(), "using Awaiten;\nusing Lib;\n\nnamespace MyCode;\n\n" + Container);
+
+				await That(same.Diagnostics).IsEmpty();
+				await That(cross.Diagnostics).IsEmpty()
+					.Because("the container overrides every registration of the implementation, so, as in the module's own assembly, nothing builds it");
+			}
+
+			[Test]
+			public async Task AsyncInitializedImplementation_IsNotBuiltAtStartup()
+			{
+				string library = Library("[AsyncInitializer<IStartable>(nameof(IStartable.StartAsync))]");
+				GeneratorResult cross = Generator.RunWithGeneratedReferencedAssembly(library, "using Awaiten;\nusing Lib;\n\nnamespace MyCode;\n\npublic sealed class MyDep { }\n" + Container.Replace("[Singleton<MyA, IA>]", "[Singleton<MyA, IA>]\n[Singleton<Dep>]"));
+
+				await That(cross.Diagnostics).IsEmpty();
+				await That(cross.Sources["Awaiten.MyCode.MyContainer.g.cs"]).DoesNotContain("HiddenRegistration_Impl")
+					.Because("the handle of an implementation whose every registration is overridden is dropped with its initializer");
+			}
+		}
+
 		public class OverridableDefaultsOfAModule
 		{
 			private const string Library = """

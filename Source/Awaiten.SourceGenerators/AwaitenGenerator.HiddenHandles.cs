@@ -176,17 +176,21 @@ partial class AwaitenGenerator
 	///     registration of its module that survives coalescing, in precedence order, as a container in the module's own
 	///     assembly takes them from the first registration it keeps: an overridable default whose service the container
 	///     overrides is dropped and contributes nothing. A handle whose surviving registrations are all overridable
-	///     defaults, or that has none left, yields to the handle of another module that registers the implementation.
-	///     A later surviving registration that sets a directive the first does not is AWT166 when one of the two is an
+	///     defaults yields to the handle of another module that registers the implementation. A handle with no surviving
+	///     registration is dropped with its hooks and initializers, since nothing builds the implementation in the module's
+	///     own assembly either, unless no other handle of the implementation is kept and a registration or scan match the
+	///     container shares with the handle still takes it.
+	///     A later surviving registration that contradicts the first is AWT107 or AWT166 when one of the two is an
 	///     overridable default, which the library's build leaves to the container.
 	/// </summary>
 	private static void SettleHandleDirectives(List<RawRegistration> raw, INamedTypeSymbol container, List<DiagnosticInfo> diagnostics)
 	{
 		HashSet<int> dropped = DroppedOverridableDefaults(raw);
-		List<RawRegistration> surviving = InPrecedenceOrder(raw)
-			.Where(entry => entry.Registration.Aliased is not null && !dropped.Contains(entry.Index))
+		List<RawRegistration> aliases = InPrecedenceOrder(raw)
+			.Where(entry => entry.Registration.ImplementationType.Contains(AliasKeyMarker) && !dropped.Contains(entry.Index))
 			.Select(entry => entry.Registration)
 			.ToList();
+		List<int> unused = new();
 		for (int index = 0; index < raw.Count; index++)
 		{
 			if (raw[index] is not { Hidden: { } implementation, Origin: { } module, } handle || !handle.ImplementationType.Contains(HiddenKeyMarker))
@@ -195,10 +199,16 @@ partial class AwaitenGenerator
 			}
 
 			string marker = AliasKeyMarker + implementation.ToDisplayString(FullyQualified);
-			List<RawRegistration> own = surviving
-				.Where(alias => SymbolEqualityComparer.Default.Equals(alias.Origin, module) && alias.ImplementationType.EndsWith(marker, StringComparison.Ordinal))
+			List<RawRegistration> own = aliases
+				.Where(alias => alias.Aliased is not null && SymbolEqualityComparer.Default.Equals(alias.Origin, module) && alias.ImplementationType.EndsWith(marker, StringComparison.Ordinal))
 				.Select(alias => alias.Aliased!)
 				.ToList();
+			if (own.Count == 0)
+			{
+				unused.Add(index);
+				continue;
+			}
+
 			HashSet<string> lifetimes = new(StringComparer.Ordinal);
 			HashSet<string> productions = new(StringComparer.Ordinal);
 			HashSet<string> directives = new(StringComparer.Ordinal);
@@ -207,17 +217,36 @@ partial class AwaitenGenerator
 				ReportCoalescingConflicts(NewImplInfo(own[0]), later, container, lifetimes, productions, directives, diagnostics);
 			}
 
-			raw[index] = own.Count == 0
-				? handle with { Weak = true, Eager = false, }
-				: handle with
-				{
-					Weak = own.All(registration => registration.Weak),
-					Lifetime = own[0].Lifetime,
-					Eager = own[0].Eager,
-					SuppressDisposal = own[0].SuppressDisposal,
-					OnActivated = own[0].OnActivated,
-					OnRelease = own[0].OnRelease,
-				};
+			raw[index] = handle with
+			{
+				Weak = own.All(registration => registration.Weak),
+				Lifetime = own[0].Lifetime,
+				Eager = own[0].Eager,
+				SuppressDisposal = own[0].SuppressDisposal,
+				OnActivated = own[0].OnActivated,
+				OnRelease = own[0].OnRelease,
+			};
+		}
+
+		HashSet<INamedTypeSymbol> kept = new(raw.Where((registration, index) => registration.Hidden is not null && registration.ImplementationType.Contains(HiddenKeyMarker) && !unused.Contains(index))
+			.Select(registration => registration.Hidden!), SymbolEqualityComparer.Default);
+		List<int> removed = new();
+		foreach (int index in unused)
+		{
+			string marker = AliasKeyMarker + raw[index].Hidden!.ToDisplayString(FullyQualified);
+			if (aliases.Any(alias => alias.ImplementationType.EndsWith(marker, StringComparison.Ordinal)) && kept.Add(raw[index].Hidden!))
+			{
+				raw[index] = raw[index] with { Weak = true, Eager = false, };
+			}
+			else
+			{
+				removed.Add(index);
+			}
+		}
+
+		for (int position = removed.Count - 1; position >= 0; position--)
+		{
+			raw.RemoveAt(removed[position]);
 		}
 	}
 
