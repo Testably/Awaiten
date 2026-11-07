@@ -119,6 +119,74 @@ public partial class DiagnosticTests
 				.Because("the providing module builds no handle factory for an implementation its scan matches too, so the other module leaves the brewer to the assemblies it grants InternalsVisibleTo instead of taking a handle nothing serves");
 		}
 
+		public class ChainAcrossThreeModules
+		{
+			private const string Library = """
+				using Awaiten;
+
+				namespace Lib;
+
+				public interface IUser { }
+				internal interface IKettle { }
+				internal sealed class Bean { }
+				internal sealed class Kettle : IKettle { public Kettle(Bean bean) { } }
+				internal sealed class User : IUser { public User(IKettle kettle) { } }
+
+				[Module]
+				[Singleton<Kettle, IKettle>]
+				public static partial class AModule { }
+
+				[Module]
+				[Singleton<User, IUser>]
+				public static partial class BModule { }
+
+				[Module]
+				[Singleton<Bean>]
+				public static partial class CModule { }
+
+				""";
+
+			[Test]
+			public async Task ProviderTakingAServiceOfAThirdModule_DoesNotReportAwt236()
+			{
+				GeneratorResult result = Generator.Run(Library);
+
+				await That(result.Diagnostics).IsEmpty()
+					.Because("the module that registers the kettle builds it from the bean the third module shares, as a container in the assembly resolves it");
+			}
+
+			[Test]
+			public async Task ProviderTakingAServiceOfAThirdModule_ServesAContainerInAnotherAssembly()
+			{
+				GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Library, """
+					using Awaiten;
+					using Lib;
+
+					namespace MyCode;
+
+					[Container]
+					[Import(typeof(AModule))]
+					[Import(typeof(BModule))]
+					[Import(typeof(CModule))]
+					public static partial class MyContainer;
+					""");
+
+				await That(result.Diagnostics).IsEmpty();
+			}
+
+			[Test]
+			public async Task ModulesTakingEachOthersServices_DoNotReportAwt236()
+			{
+				GeneratorResult result = Generator.Run(Library
+					.Replace("internal sealed class Bean { }", "internal sealed class Bean { }\ninternal sealed class Grounds { public Grounds(IKettle kettle) { } }\ninternal sealed class Cup : IUser { public Cup(Grounds grounds) { } }")
+					.Replace("[Singleton<Bean>]", "[Singleton<Bean>]\n[Singleton<Grounds>]")
+					.Replace("[Singleton<User, IUser>]", "[Singleton<User, IUser>]\n[Singleton<Cup, IUser>]"));
+
+				await That(result.Diagnostics).IsEmpty()
+					.Because("the third module takes the kettle back from the first, a cycle between modules but not between services, which each module still builds");
+			}
+		}
+
 		public class SeveralRegisteringModules
 		{
 			private static string Library(string first) => $$"""
