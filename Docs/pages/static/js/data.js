@@ -1278,6 +1278,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 11:52:28 2026 \u002B0100",
         "message": "fix: skip both factories of a registered and scanned implementation under InternalsVisibleTo (#292)"
+      },
+      {
+        "sha": "dc9c2c1ceb25072edfd2c38634bc4bd245b74ed2",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 11:56:04 2026 \u002B0100",
+        "message": "fix: name the service in the guidance a synchronous Dispose throws over an asynchronous teardown (#294)"
       }
     ],
     "labels": [
@@ -1493,7 +1499,8 @@ window.BENCHMARK_DATA = {
       "bba2f8ee",
       "e62d36a4",
       "31dac7e7",
-      "f3f401b1"
+      "f3f401b1",
+      "dc9c2c1c"
     ],
     "datasets": [
       {
@@ -1712,7 +1719,8 @@ window.BENCHMARK_DATA = {
           6.102416787828718,
           4.117019369701544,
           5.936611338456472,
-          7.14416278898716
+          7.14416278898716,
+          6.282223316033681
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -1724,6 +1732,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -2163,7 +2172,8 @@ window.BENCHMARK_DATA = {
           7.5823596360591745,
           3.8398674934038093,
           7.746079376110663,
-          7.367984943664991
+          7.367984943664991,
+          6.60550715561424
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -2175,6 +2185,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -2614,7 +2625,8 @@ window.BENCHMARK_DATA = {
           126.70339924494425,
           54.269848195406105,
           85.2396669626236,
-          115.04723027774266
+          115.04723027774266,
+          84.00887862535623
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -2626,6 +2638,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -3061,7 +3074,8 @@ window.BENCHMARK_DATA = {
           7.777860053380331,
           4.577584875623385,
           7.113225168415478,
-          8.792669971783956
+          8.792669971783956,
+          6.944260048178526
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -3073,6 +3087,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -3504,7 +3519,8 @@ window.BENCHMARK_DATA = {
           10.7332625325237,
           5.905110595623652,
           8.756297117897443,
-          10.913744831723827
+          10.913744831723827,
+          8.761714037794333
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -3516,6 +3532,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -5016,6 +5033,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 11:52:28 2026 \u002B0100",
         "message": "fix: skip both factories of a registered and scanned implementation under InternalsVisibleTo (#292)"
+      },
+      {
+        "sha": "dc9c2c1ceb25072edfd2c38634bc4bd245b74ed2",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 11:56:04 2026 \u002B0100",
+        "message": "fix: name the service in the guidance a synchronous Dispose throws over an asynchronous teardown (#294)"
       }
     ],
     "labels": [
@@ -5231,7 +5254,8 @@ window.BENCHMARK_DATA = {
       "bba2f8ee",
       "e62d36a4",
       "31dac7e7",
-      "f3f401b1"
+      "f3f401b1",
+      "dc9c2c1c"
     ],
     "datasets": [
       {
@@ -5450,7 +5474,8 @@ window.BENCHMARK_DATA = {
           6.87297858191388,
           4.34131107032299,
           6.018283696128772,
-          8.215671673417091
+          8.215671673417091,
+          6.354564317635128
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -5462,6 +5487,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -5901,7 +5927,8 @@ window.BENCHMARK_DATA = {
           7.554399792353312,
           3.793737880885601,
           6.455636762082577,
-          7.276280882103102
+          7.276280882103102,
+          6.513853524412427
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -5913,6 +5940,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -6352,7 +6380,8 @@ window.BENCHMARK_DATA = {
           128.47535875865393,
           53.927201671259745,
           83.57048817475636,
-          113.45713103612265
+          113.45713103612265,
+          86.20904715855916
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -6364,6 +6393,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -6799,7 +6829,8 @@ window.BENCHMARK_DATA = {
           7.83126597503821,
           4.7137400805950165,
           6.778044698635737,
-          9.007707502160754
+          9.007707502160754,
+          6.846068484278826
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -6811,6 +6842,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -7242,7 +7274,8 @@ window.BENCHMARK_DATA = {
           13.529849948791357,
           7.7329334410337305,
           11.599838403860728,
-          14.647800761461259
+          14.647800761461259,
+          11.465969539114408
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -7254,6 +7287,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -8754,6 +8788,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 11:52:28 2026 \u002B0100",
         "message": "fix: skip both factories of a registered and scanned implementation under InternalsVisibleTo (#292)"
+      },
+      {
+        "sha": "dc9c2c1ceb25072edfd2c38634bc4bd245b74ed2",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 11:56:04 2026 \u002B0100",
+        "message": "fix: name the service in the guidance a synchronous Dispose throws over an asynchronous teardown (#294)"
       }
     ],
     "labels": [
@@ -8969,7 +9009,8 @@ window.BENCHMARK_DATA = {
       "bba2f8ee",
       "e62d36a4",
       "31dac7e7",
-      "f3f401b1"
+      "f3f401b1",
+      "dc9c2c1c"
     ],
     "datasets": [
       {
@@ -9188,7 +9229,8 @@ window.BENCHMARK_DATA = {
           11.818106722373228,
           22.377091215054193,
           20.849544993468694,
-          11.349326225121816
+          11.349326225121816,
+          27.886247165997823
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -9350,6 +9392,7 @@ window.BENCHMARK_DATA = {
           144,
           144,
           144,
+          208,
           208,
           208,
           208,
@@ -9639,7 +9682,8 @@ window.BENCHMARK_DATA = {
           816.1020108002883,
           1679.6547550201417,
           1483.730047861735,
-          777.95446656545
+          777.95446656545,
+          1724.4790709177653
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -9651,6 +9695,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          5688,
           5688,
           5688,
           5688,
@@ -10090,7 +10135,8 @@ window.BENCHMARK_DATA = {
           18458.976832798548,
           24577.640729631697,
           30091.146451822915,
-          17317.80350167411
+          17317.80350167411,
+          25395.174952915735
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -10314,7 +10360,8 @@ window.BENCHMARK_DATA = {
           32477,
           32476,
           32482,
-          32478
+          32478,
+          32474
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -10537,7 +10584,8 @@ window.BENCHMARK_DATA = {
           407.6954393386841,
           701.3310192108154,
           690.8401736531939,
-          400.71647000312805
+          400.71647000312805,
+          700.945457013448
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -10567,6 +10615,7 @@ window.BENCHMARK_DATA = {
           1472,
           1472,
           1472,
+          1528,
           1528,
           1528,
           1528,
@@ -10980,7 +11029,8 @@ window.BENCHMARK_DATA = {
           6561.246905008952,
           13723.872935994466,
           12357.126165771484,
-          6784.037655131022
+          6784.037655131022,
+          12185.989453125
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -11200,7 +11250,8 @@ window.BENCHMARK_DATA = {
           24760,
           24760,
           24761,
-          24761
+          24761,
+          24760
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -12492,6 +12543,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 11:52:28 2026 \u002B0100",
         "message": "fix: skip both factories of a registered and scanned implementation under InternalsVisibleTo (#292)"
+      },
+      {
+        "sha": "dc9c2c1ceb25072edfd2c38634bc4bd245b74ed2",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 11:56:04 2026 \u002B0100",
+        "message": "fix: name the service in the guidance a synchronous Dispose throws over an asynchronous teardown (#294)"
       }
     ],
     "labels": [
@@ -12707,7 +12764,8 @@ window.BENCHMARK_DATA = {
       "bba2f8ee",
       "e62d36a4",
       "31dac7e7",
-      "f3f401b1"
+      "f3f401b1",
+      "dc9c2c1c"
     ],
     "datasets": [
       {
@@ -12926,7 +12984,8 @@ window.BENCHMARK_DATA = {
           78.47506074394498,
           233.23459405899047,
           187.1634455680847,
-          76.95422825813293
+          76.95422825813293,
+          351.7960612297058
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -13088,6 +13147,7 @@ window.BENCHMARK_DATA = {
           2128,
           2128,
           2128,
+          4176,
           4176,
           4176,
           4176,
@@ -13377,7 +13437,8 @@ window.BENCHMARK_DATA = {
           7601.722882080078,
           14868.3630472819,
           15053.990669759114,
-          7457.814703721267
+          7457.814703721267,
+          14754.67061832973
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -13389,6 +13450,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          61016,
           61016,
           61016,
           61016,
@@ -13828,7 +13890,8 @@ window.BENCHMARK_DATA = {
           429554.3186848958,
           575293.6454326923,
           739513.637109375,
-          436696.5011268029
+          436696.5011268029,
+          585256.2476981027
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -14052,7 +14115,8 @@ window.BENCHMARK_DATA = {
           739415,
           719013,
           739022,
-          720378
+          720378,
+          719197
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -14275,7 +14339,8 @@ window.BENCHMARK_DATA = {
           23718.9529296875,
           43173.72573416574,
           41946.815329415454,
-          23579.17320760091
+          23579.17320760091,
+          40771.01618739537
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -14495,7 +14560,8 @@ window.BENCHMARK_DATA = {
           79994,
           80345,
           80069,
-          80302
+          80302,
+          80836
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -14718,7 +14784,8 @@ window.BENCHMARK_DATA = {
           200671.28181966147,
           388122.45358072914,
           378219.96443684894,
-          194446.7380126953
+          194446.7380126953,
+          350615.7896809896
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -14938,7 +15005,8 @@ window.BENCHMARK_DATA = {
           573121,
           572284,
           573137,
-          573092
+          573092,
+          571211
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -16206,6 +16274,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 11:52:28 2026 \u002B0100",
         "message": "fix: skip both factories of a registered and scanned implementation under InternalsVisibleTo (#292)"
+      },
+      {
+        "sha": "dc9c2c1ceb25072edfd2c38634bc4bd245b74ed2",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 11:56:04 2026 \u002B0100",
+        "message": "fix: name the service in the guidance a synchronous Dispose throws over an asynchronous teardown (#294)"
       }
     ],
     "labels": [
@@ -16417,7 +16491,8 @@ window.BENCHMARK_DATA = {
       "bba2f8ee",
       "e62d36a4",
       "31dac7e7",
-      "f3f401b1"
+      "f3f401b1",
+      "dc9c2c1c"
     ],
     "datasets": [
       {
@@ -16632,7 +16707,8 @@ window.BENCHMARK_DATA = {
           251.2369601045336,
           280.5241302710313,
           177.35941479887282,
-          270.2936977318355
+          270.2936977318355,
+          221.5297645880626
         ],
         "borderColor": "#3949AB",
         "backgroundColor": "#3949AB",
@@ -16667,6 +16743,7 @@ window.BENCHMARK_DATA = {
           560,
           560,
           560,
+          568,
           568,
           568,
           568,
@@ -17075,7 +17152,8 @@ window.BENCHMARK_DATA = {
           462.403799533844,
           725.7361744562785,
           429.28538802691867,
-          620.4263546625773
+          620.4263546625773,
+          463.91272395451864
         ],
         "borderColor": "#512BD4",
         "backgroundColor": "#512BD4",
@@ -17087,6 +17165,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          1104,
           1104,
           1104,
           1104,
@@ -17518,7 +17597,8 @@ window.BENCHMARK_DATA = {
           4960.147314961751,
           6315.942435631385,
           3852.1693022591726,
-          6705.928993770054
+          6705.928993770054,
+          4830.678050486246
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -17602,6 +17682,7 @@ window.BENCHMARK_DATA = {
           13696,
           13696,
           13696,
+          10784,
           10784,
           10784,
           10784,
@@ -17961,7 +18042,8 @@ window.BENCHMARK_DATA = {
           368.7293354352315,
           419.26341237340654,
           275.5822614034017,
-          386.2216288248698
+          386.2216288248698,
+          343.49978059132894
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -17973,6 +18055,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          944,
           944,
           944,
           944,
@@ -18404,7 +18487,8 @@ window.BENCHMARK_DATA = {
           546.5783175786336,
           762.7318768501282,
           427.2957167625427,
-          731.0750053405761
+          731.0750053405761,
+          549.6443550927298
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -18416,6 +18500,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          1096,
           1096,
           1096,
           1096,
