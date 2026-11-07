@@ -5,6 +5,7 @@ description: Benchmarks that compare Awaiten with other .NET dependency injectio
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 import AwaitenBenchmarkResult from '@site/src/components/AwaitenBenchmarkResult';
+import AwaitenBenchmarkSummary from '@site/src/components/AwaitenBenchmarkSummary';
 
 # Benchmarks
 
@@ -14,12 +15,14 @@ Awaiten wires the graph at build time, so there is nothing to reflect over at ru
 [DryIoc](https://github.com/dadhi/DryIoc) and
 [Simple Injector](https://simpleinjector.org/) across the same graphs.
 
+<AwaitenBenchmarkSummary />
+
 :::note[Methodology]
 
 - **Suite**: [`Awaiten.Benchmarks`](https://github.com/awaiten-dev/Awaiten/tree/main/Benchmarks/Awaiten.Benchmarks) driven by [BenchmarkDotNet](https://benchmarkdotnet.org/).
 - **Job**: `MediumRun` with the in-process toolchain.
 - **Runner**: `ubuntu-latest` GitHub Actions agent, refreshed on every push to `main`.
-- Each row shows time and allocated memory, sorted fastest-first; bars are scaled within the row so length corresponds to magnitude. The Awaiten row is highlighted as the baseline (`1.00x`) and every other row shows its ratio relative to Awaiten. **Lower is better.**
+- Each row shows time and allocated memory, sorted fastest-first; bars are scaled within the row so length corresponds to magnitude. The Awaiten row is highlighted as the baseline; every other row shows its trend relative to Awaiten over the recent runs (dashed line: equal) and ends with the latest change, such as `+170%` for a container that takes 2.7× as long. **Lower is better.**
 - Click a row to hide that container so the others spread out. Build and Resolve are measured at container sizes of 8 and 256 registrations; switch between them with the inline tabs.
 
 :::

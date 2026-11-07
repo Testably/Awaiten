@@ -10,6 +10,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 using Fallout.Common;
 using Fallout.Common.IO;
 using Serilog;
@@ -25,6 +26,14 @@ partial class Build
 
 	static readonly string[] DocsBenchmarkLibraries =
 		["Awaiten", "MsDI", "Autofac", "DryIoc", "SimpleInjector",];
+
+	static readonly Dictionary<string, string> DocsBenchmarkPackages = new()
+	{
+		["Microsoft.Extensions.DependencyInjection"] = "MsDI",
+		["Autofac"] = "Autofac",
+		["DryIoc.dll"] = "DryIoc",
+		["SimpleInjector"] = "SimpleInjector",
+	};
 
 	/// <summary>
 	///     The release note categories in page order. Breaking changes of any type come first; other types
@@ -131,7 +140,22 @@ partial class Build
 		return new DocsBenchmarks(
 			new DocsBenchmarkCommit(latest.Sha, latest.Sha[..8], date.ToString("yyyy-MM-dd"), latest.Message),
 			new DocsBenchmarkEnvironment("ubuntu-latest", "BenchmarkDotNet MediumRun (in-process)"),
-			scenarios);
+			scenarios,
+			await ReadDocsBenchmarkVersions(latest.Sha));
+	}
+
+	/// <summary>
+	///     Reads the versions of the compared containers at the measured commit, so that they always match the numbers.
+	/// </summary>
+	static async Task<Dictionary<string, string>> ReadDocsBenchmarkVersions(string sha)
+	{
+		using HttpClient client = new();
+		string props = await client.GetStringAsync(
+			$"https://raw.githubusercontent.com/{BuildExtensions.Owner}/{BuildExtensions.Repo}/{sha}/Directory.Packages.props");
+		return XDocument.Parse(props).Descendants("PackageVersion")
+			.Where(package => DocsBenchmarkPackages.ContainsKey((string)package.Attribute("Include") ?? ""))
+			.ToDictionary(package => DocsBenchmarkPackages[(string)package.Attribute("Include")!],
+				package => (string)package.Attribute("Version") ?? "");
 	}
 
 	/// <summary>
@@ -217,7 +241,8 @@ partial class Build
 	sealed record DocsBenchmarks(
 		DocsBenchmarkCommit CapturedAt,
 		DocsBenchmarkEnvironment Environment,
-		Dictionary<string, DocsBenchmarkScenario> Benchmarks);
+		Dictionary<string, DocsBenchmarkScenario> Benchmarks,
+		Dictionary<string, string> Versions);
 
 	sealed record DocsBenchmarkCommit(string Sha, string ShortSha, string Date, string Message);
 
