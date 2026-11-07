@@ -101,7 +101,7 @@ A service can match several conventions and also have a hook. All of them run, i
 1. The `OnActivated` hook, synchronous or asynchronous.
 2. Each matching convention, in the order the container declares them.
 
-A method runs at most once per instance, even when several conventions reach it, for example through an interface that extends another.
+A method of the implementation runs at most once per instance, even when several conventions reach it. This happens through an interface that extends another, when one public method implements two interface methods, or when an override also implements an interface method. The method runs where the first of those conventions stands. Explicit implementations of two interface methods are two methods, so both run.
 
 ## Which conventions apply
 
