@@ -181,6 +181,34 @@ public partial class DiagnosticTests
 			}
 
 			[Test]
+			public async Task DoesNotReportWhenTheAssemblyGrantsInternalsVisibleTo()
+			{
+				GeneratorResult result = Generator.Run("""
+					using Awaiten;
+
+					[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("App")]
+
+					namespace Lib;
+
+					public interface IGreeter { }
+					internal interface IClock { }
+					internal sealed class Greeter : IGreeter
+					{
+					    public Greeter(IClock clock) { }
+					}
+
+					[Module]
+					[Singleton<Greeter, IGreeter>]
+					public static partial class GreetingModule { }
+					""");
+
+				await That(result.Diagnostics).IsEmpty()
+					.Because("an assembly granted InternalsVisibleTo constructs the implementation itself, so the module only records why it generated no factory");
+				await That(result.Sources.Values.Single()).Contains("public const string Awaiten__RegistrationSkipped_Greeter_")
+					.And.Contains("its constructor parameter of type 'Lib.IClock' is not accessible outside the module's assembly");
+			}
+
+			[Test]
 			public async Task DoesNotReportForAccessibleParameters()
 			{
 				GeneratorResult result = Generator.Run("""
@@ -226,6 +254,56 @@ public partial class DiagnosticTests
 
 				await That(result.Diagnostics).Contains("*AWT197*Lib.Greeter*Lib.IGreeter, Lib.IFarewell*").AsWildcard()
 					.Because("one factory returns one service, so a second service would split the singleton a container shares across both");
+			}
+
+			[Test]
+			public async Task DoesNotReportSeveralServicesWhenTheAssemblyGrantsInternalsVisibleTo()
+			{
+				GeneratorResult result = Generator.Run("""
+					using Awaiten;
+
+					[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("App")]
+
+					namespace Lib;
+
+					public interface IGreeter { }
+					public interface IFarewell { }
+					internal sealed class Greeter : IGreeter, IFarewell { }
+
+					[Module]
+					[Singleton<Greeter, IGreeter>]
+					[Singleton<Greeter, IFarewell>]
+					public static partial class GreetingModule { }
+					""");
+
+				await That(result.Diagnostics).IsEmpty()
+					.Because("an assembly granted InternalsVisibleTo constructs the implementation itself and shares it across both services");
+				await That(result.Sources.Values.Single()).Contains("it is registered under several services (Lib.IGreeter, Lib.IFarewell)")
+					.And.DoesNotContain("Awaiten__Registration_");
+			}
+
+			[Test]
+			public async Task ReportsAScanOverlapEvenWhenTheAssemblyGrantsInternalsVisibleTo()
+			{
+				GeneratorResult result = Generator.Run("""
+					using Awaiten;
+
+					[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("App")]
+
+					namespace Lib;
+
+					public interface IPlugin { }
+					public interface IGreeter { }
+					internal sealed class Greeter : IPlugin, IGreeter { }
+
+					[Module]
+					[Scan<IPlugin>(As = ScanAs.MatchingInterface)]
+					[Singleton<Greeter, IGreeter>]
+					public static partial class GreetingModule { }
+					""");
+
+				await That(result.Diagnostics).Contains("*AWT197*Lib.Greeter*self-compiled from a module registration*").AsWildcard()
+					.Because("the scan's factory builds the type for every consumer, so a consumer constructing the registration itself would still split the instance");
 			}
 
 			[Test]
@@ -346,6 +424,113 @@ public partial class DiagnosticTests
 
 				await That(result.Diagnostics).Contains("*AWT200*Lib.Greeter*clock*[FromKey]*").AsWildcard()
 					.Because("the factory's bare parameter would resolve the unkeyed service in another assembly");
+			}
+
+			[Test]
+			public async Task ReportsAnArgParameterWithoutAnInternalsVisibleToGrant()
+			{
+				GeneratorResult result = Generator.Run("""
+					using Awaiten;
+
+					namespace Lib;
+
+					public interface IGreeter { }
+					internal sealed class Greeter : IGreeter
+					{
+					    public Greeter([Arg] string name) { }
+					}
+
+					[Module]
+					[Transient<Greeter, IGreeter>]
+					public static partial class GreetingModule { }
+					""");
+
+				await That(result.Diagnostics).Contains("*AWT200*Lib.Greeter*name*[Arg]*").AsWildcard()
+					.Because("no other assembly can ever construct the implementation, so the missing factory is an error in the module's own build");
+			}
+
+			[Test]
+			public async Task DoesNotReportAnArgParameterWhenTheAssemblyGrantsInternalsVisibleTo()
+			{
+				GeneratorResult result = Generator.Run("""
+					using Awaiten;
+
+					[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("App")]
+
+					namespace Lib;
+
+					public interface IGreeter { }
+					internal sealed class Greeter : IGreeter
+					{
+					    public Greeter([Arg] string name) { }
+					}
+
+					[Module]
+					[Transient<Greeter, IGreeter>]
+					public static partial class GreetingModule { }
+					""");
+
+				await That(result.Diagnostics).IsEmpty()
+					.Because("an assembly granted InternalsVisibleTo constructs the implementation itself and honors the [Arg]");
+				await That(result.Sources.Values.Single()).Contains("its constructor parameter 'name' is marked [Arg]");
+			}
+
+			[Test]
+			public async Task ReportsAPrivateNestedImplementationEvenWhenTheAssemblyGrantsInternalsVisibleTo()
+			{
+				GeneratorResult result = Generator.Run("""
+					using Awaiten;
+
+					[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("App")]
+
+					namespace Lib;
+
+					public interface IGreeter { }
+					public interface IClock { }
+
+					[Module]
+					[Singleton<GreetingModule.Greeter, IGreeter>]
+					public static partial class GreetingModule
+					{
+					    private sealed class Greeter : IGreeter
+					    {
+					        public Greeter([FromKey("utc")] IClock clock) { }
+					    }
+					}
+					""");
+
+				await That(result.Diagnostics).Contains("*AWT200*Greeter*clock*[FromKey]*").AsWildcard()
+					.Because("InternalsVisibleTo does not open a private nested type, so no other assembly could construct it");
+			}
+
+			[Test]
+			public async Task ReportsATypePrivateToAClassContainingTheModuleEvenWhenTheAssemblyGrantsInternalsVisibleTo()
+			{
+				GeneratorResult result = Generator.Run("""
+					using Awaiten;
+
+					[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("App")]
+
+					namespace Lib;
+
+					public interface IGreeter { }
+					public interface IClock { }
+
+					public static partial class Greetings
+					{
+					    private sealed class Greeter : IGreeter
+					    {
+					        public Greeter([FromKey("utc")] IClock clock) { }
+					    }
+
+					    [Module]
+					    [Singleton<Greeter, IGreeter>]
+					    public static partial class GreetingModule { }
+					}
+					""");
+
+				await That(result.Diagnostics).Contains("*AWT200*Greeter*clock*[FromKey]*").AsWildcard()
+					.Because("a type hidden in the module always needs the module's factory, whatever InternalsVisibleTo grants");
 			}
 		}
 

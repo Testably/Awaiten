@@ -13,6 +13,7 @@ namespace Awaiten.SourceGenerators.Entities;
 ///     a container scan as the assembly boundary allows. Each self-compiled registration gets a factory of its own
 ///     (<see cref="Registrations" />), which a consumer finds by name from the module's own registration attribute.
 ///     <see cref="DeclaresScan" /> decides whether the <c>[GeneratedScanExpansion]</c> marker is emitted.
+///     <see cref="Skipped" /> records each implementation whose factory the module leaves out.
 /// </summary>
 internal sealed record ModuleScanModel(
 	string? Namespace,
@@ -23,7 +24,15 @@ internal sealed record ModuleScanModel(
 	EquatableArray<ModuleFactory> Factories,
 	EquatableArray<DiagnosticInfo> Diagnostics,
 	bool DeclaresScan = true,
-	EquatableArray<RegistrationFactory> Registrations = default);
+	EquatableArray<RegistrationFactory> Registrations = default,
+	EquatableArray<SkippedRegistration> Skipped = default);
+
+/// <summary>
+///     An implementation the module generates no factory for, because an assembly granted <c>InternalsVisibleTo</c>
+///     constructs it itself: the name of the emitted constant and the reason it holds, which a consumer that cannot
+///     construct the implementation reports.
+/// </summary>
+internal sealed record SkippedRegistration(string MarkerName, string Reason);
 
 /// <summary>
 ///     The generated factory of a self-compiled module registration: the emitted method name, the accessible type it

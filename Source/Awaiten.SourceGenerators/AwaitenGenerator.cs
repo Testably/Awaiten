@@ -118,6 +118,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 
 		List<ModuleFactory> factories = new();
 		List<RegistrationFactory> registrations = new();
+		List<SkippedRegistration> skipped = new();
 		bool expanded = false;
 		if (HasOpenTypeParameters(moduleSymbol))
 		{
@@ -154,7 +155,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 					.ToList();
 			}
 
-			registrations = CollectModuleRegistrationFactories(moduleSymbol, compilation, diagnostics, factories);
+			registrations = CollectModuleRegistrationFactories(moduleSymbol, compilation, diagnostics, factories, skipped);
 			expanded = true;
 		}
 
@@ -184,7 +185,8 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			new EquatableArray<ModuleFactory>(factories.ToArray()),
 			new EquatableArray<DiagnosticInfo>(diagnostics.ToArray()),
 			declaresScan,
-			new EquatableArray<RegistrationFactory>(registrations.ToArray()));
+			new EquatableArray<RegistrationFactory>(registrations.ToArray()),
+			new EquatableArray<SkippedRegistration>(skipped.ToArray()));
 	}
 
 	/// <summary>
