@@ -67,7 +67,8 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     What the modules in a container's own assembly generate, which the container cannot see because it is output
-	///     of the same generator run: the matches of their scans and the factories of their self-compiled registrations.
+	///     of the same generator run: the matches of their scans, the factories of their self-compiled registrations and
+	///     the wrappers of their members.
 	///     Computed by the module pipeline's own logic, once per module and container build, with the diagnostics
 	///     discarded, since the module's own build reports them at the same locations.
 	/// </summary>
@@ -78,8 +79,20 @@ partial class AwaitenGenerator
 		private readonly Dictionary<INamedTypeSymbol, List<RegistrationFactory>> _registrations = new(SymbolEqualityComparer.Default);
 		private readonly Dictionary<INamedTypeSymbol, List<RegistrationFactory>> _internalRegistrations = new(SymbolEqualityComparer.Default);
 		private readonly Dictionary<INamedTypeSymbol, List<RegistrationFactory>> _contributions = new(SymbolEqualityComparer.Default);
+		private readonly Dictionary<INamedTypeSymbol, List<MemberWrapper>> _memberWrappers = new(SymbolEqualityComparer.Default);
 
 		public SameCompilationModules(Compilation compilation) => _compilation = compilation;
+
+		/// <summary>The wrappers the module generates for its members (see <see cref="CollectModuleMemberWrappers" />).</summary>
+		public List<MemberWrapper> MemberWrappers(INamedTypeSymbol module)
+		{
+			if (!_memberWrappers.TryGetValue(module, out List<MemberWrapper>? wrappers))
+			{
+				_memberWrappers[module] = wrappers = CollectModuleMemberWrappers(module, _compilation, new List<DiagnosticInfo>(), new List<SkippedRegistration>());
+			}
+
+			return wrappers;
+		}
 
 		/// <summary>The matches of the module's scans (see <see cref="CollectModuleScanFactories" />).</summary>
 		public List<ModuleScanExpansion> Scans(INamedTypeSymbol module)
