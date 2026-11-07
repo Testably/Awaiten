@@ -101,8 +101,8 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			return null;
 		}
 
-		// Only a module that declares a [Scan] or a registration another assembly cannot construct self-compiles; any
-		// other [Module] carries no generated code (and pays no analysis cost beyond this check).
+		// A module that declares nothing a container in another assembly cannot build carries no generated code, and one
+		// that declares nothing internal never reads the other modules of its assembly (see MayBuildThroughHandles).
 		Compilation compilation = context.SemanticModel.Compilation;
 
 		// The module's [AsyncInitializer<T>] conventions are reported here (AWT233), once, rather than by every
@@ -127,7 +127,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		HiddenServices? hidden = receives ? CollectHiddenServices(moduleSymbol, compilation) : null;
 		List<RegistrationFactory> contributions = receives ? CollectModuleContributionFactories(moduleSymbol, compilation, hidden) : new();
 		if (!declaresScan && selfCompiled is null && started is null && wrappers.Count == 0 && contributions.Count == 0 && skipped.Count == 0
-		    && hidden is not { SeveralModules: true, Implementations.Count: > 0, })
+		    && hidden is not { Implementations.Count: > 0, SeveralModules: true, })
 		{
 			return diagnostics.Count == 0
 				? null
