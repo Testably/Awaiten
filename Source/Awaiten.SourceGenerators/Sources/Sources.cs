@@ -337,7 +337,8 @@ internal static partial class Sources
 		// Typed-resolver region: the explicit IAwaitenResolver<T>.Resolve() and IAwaitenAsyncResolver<T>.ResolveAsync() fast
 		// paths for each registered service.
 		EmitGenericResolverImpls(typed, body, instances, names, strict, syncAfterInit);
-		if (EmitTypedAsyncResolverImpls(typed, body, instances, names, strict))
+		bool typedUsesAsTask = EmitTypedAsyncResolverImpls(typed, body, instances, names, strict);
+		if (typedUsesAsTask || UsesTaskConversion(instances, serviceToIndex))
 		{
 			EmitAsTaskHelper(helpers, body);
 		}
