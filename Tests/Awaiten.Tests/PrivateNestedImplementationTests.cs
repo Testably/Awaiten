@@ -271,9 +271,9 @@ public sealed partial class PrivateNestedImplementationTests
 		[Test]
 		public async Task Disposable_IsDisposedWithItsScope()
 		{
-			using DisposalShop.Root shop = new();
+			await using DisposalShop.Root shop = new();
 			Tracker tracker = shop.Resolve<Tracker>();
-			using (DisposalShop.Scope scope = shop.CreateScope())
+			await using (DisposalShop.Scope scope = shop.CreateScope())
 			{
 				scope.Resolve<ILedger>();
 			}
@@ -297,9 +297,9 @@ public sealed partial class PrivateNestedImplementationTests
 		[Test]
 		public async Task SuppressDisposal_LeavesItUndisposed()
 		{
-			using DisposalShop.Root shop = new();
+			await using DisposalShop.Root shop = new();
 			Tracker tracker = shop.Resolve<Tracker>();
-			using (DisposalShop.Scope scope = shop.CreateScope())
+			await using (DisposalShop.Scope scope = shop.CreateScope())
 			{
 				scope.Resolve<ITimer>();
 			}
