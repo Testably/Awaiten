@@ -1485,6 +1485,44 @@ public class RegistrationFactoryShapeTests
 			await That(result.Diagnostics).DoesNotContain("*AWT234*").AsWildcard()
 				.Because("the container leaves out the registration whose hook it cannot call, so it never judges the registration's convention");
 		}
+
+		private const string SharedHookModule = """
+		                                        using Awaiten;
+
+		                                        namespace Lib;
+
+		                                        public sealed class Kettle { internal Kettle() { } }
+
+		                                        [Module]
+		                                        [Singleton<Kettle>(Key = "made", Factory = nameof(CreateKettle), OnActivated = nameof(Boil))]
+		                                        [Singleton<Kettle>(Key = "built", OnActivated = nameof(Boil))]
+		                                        public static partial class GreetingModule
+		                                        {
+		                                            public static Kettle CreateKettle() => new Kettle();
+
+		                                            internal static void Boil(Kettle kettle) { }
+		                                        }
+		                                        """;
+
+		[Test]
+		public async Task AFactoryAndASelfCompiledRegistrationWithTheSameHook_ShareOneWrapper()
+		{
+			GeneratorResult result = Generator.Run(SharedHookModule);
+
+			await That(result.Diagnostics).IsEmpty();
+			await That(ModuleSource(result)).Contains("public static void Hook_OnActivated_Kettle_").Exactly(1)
+				.Because("both registrations wrap the same hook of the same type under one name, so the module emits the wrapper once");
+		}
+
+		[Test]
+		public async Task AFactoryAndASelfCompiledRegistrationWithTheSameHook_BothRunTheSharedWrapperInAnotherAssembly()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(SharedHookModule, Consumer);
+
+			await That(result.Diagnostics).IsEmpty();
+			await That(result.Sources.Single(source => source.Key.Contains("AppContainer")).Value).Contains("global::Lib.GreetingModule.Internals.Hook_OnActivated_Kettle_").Exactly(2)
+				.Because("the consumer runs the shared wrapper for the Factory registration and for the self-compiled one");
+		}
 	}
 
 	public class BaseContainer

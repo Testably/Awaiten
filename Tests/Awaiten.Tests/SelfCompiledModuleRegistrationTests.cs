@@ -167,9 +167,28 @@ public partial class SelfCompiledModuleRegistrationTests
 			.Because("a container extending an importer of the module inherits its registrations, factory and hook wrapper included");
 	}
 
+	[Test]
+	public async Task AFactoryAndASelfCompiledRegistrationSharingAHookWrapper_EachRunTheHook()
+	{
+		using SharedHookContainer.Root container = new();
+
+		SharedHookKettle made = container.Resolve<SharedHookKettle>("made");
+		SharedHookKettle built = container.Resolve<SharedHookKettle>("built");
+
+		await That(made).IsNotSameAs(built)
+			.Because("the Factory registration and the self-compiled registration build their own instances");
+		await That(made.Boiled).IsEqualTo(1)
+			.Because("the Factory registration runs the hook through the wrapper it shares with the self-compiled registration");
+		await That(built.Boiled).IsEqualTo(1);
+	}
+
 	[Container]
 	[Import(typeof(SelfCompiledRegistrationModule))]
 	public static partial class ImportingContainer;
+
+	[Container]
+	[Import(typeof(SharedHookModule))]
+	public static partial class SharedHookContainer;
 
 	[Container(Extends = typeof(ImportingContainer))]
 	public static partial class ExtendingContainer;
