@@ -31,7 +31,7 @@ public partial class DiagnosticTests
 		                                      [Container]
 		                                      [Import(typeof(PluginModule))]
 		                                      [Singleton<Secret>]
-		                                      [Singleton<UtcClock, IClock>(Key = "utc")]
+		                                      [Singleton<UtcClock, IClock>]
 		                                      public static partial class MyContainer
 		                                      {
 		                                      }
@@ -60,7 +60,8 @@ public partial class DiagnosticTests
 
 			internal sealed class Timer : IPlugin, ITimer
 			{
-			    public Timer([FromKey("utc")] IClock clock) { }
+			    [Inject]
+			    public IClock Clock { get; set; } = null!;
 			}
 
 			[Module]
@@ -79,7 +80,7 @@ public partial class DiagnosticTests
 				await That(result.Diagnostics).Contains("*AWT195*Roaster*Secret*").AsWildcard()
 					.Because("no other assembly could ever construct the match, so the missing factory is an error in the module's own build");
 				await That(result.Diagnostics).Contains("*AWT197*Grinder*").AsWildcard();
-				await That(result.Diagnostics).Contains("*AWT200*Timer*clock*[FromKey]*").AsWildcard();
+				await That(result.Diagnostics).Contains("*AWT200*Timer*Clock*[Inject]*").AsWildcard();
 			}
 
 			[Test]
@@ -99,7 +100,7 @@ public partial class DiagnosticTests
 				await That(source).Contains("public const string Awaiten__ScanSkipped_Roaster_")
 					.And.Contains("its constructor parameter of type 'Lib.Secret' is not accessible outside the module's assembly")
 					.And.Contains("it is exposed under several services (Lib.IGrinder, Lib.IPlugin)")
-					.And.Contains("its constructor parameter 'clock' is marked [FromKey]");
+					.And.Contains("its property 'Clock' is marked [Inject]");
 				await That(source).DoesNotContain("Awaiten__Scan_")
 					.Because("the module generates no factory for a skipped match");
 			}
@@ -123,12 +124,13 @@ public partial class DiagnosticTests
 					{
 					    private sealed class Timer : IPlugin
 					    {
-					        public Timer([FromKey("utc")] IClock clock) { }
+					        [Inject]
+					        public IClock Clock { get; set; } = null!;
 					    }
 					}
 					""");
 
-				await That(result.Diagnostics).Contains("*AWT200*Timer*clock*[FromKey]*").AsWildcard()
+				await That(result.Diagnostics).Contains("*AWT200*Timer*Clock*[Inject]*").AsWildcard()
 					.Because("InternalsVisibleTo does not open a private nested type, so no other assembly could construct it");
 			}
 		}
@@ -143,7 +145,7 @@ public partial class DiagnosticTests
 				await That(result.Diagnostics).Contains("*AWT231*PluginModule*'Lib.Roaster'*generated no factory for it because its constructor parameter of type 'Lib.Secret' is not accessible outside the module's assembly*InternalsVisibleTo*[Scan]*").AsWildcard()
 					.Because("the module skipped the match on purpose, and the consumer names why and how to fix it");
 				await That(result.Diagnostics).Contains("*AWT231*PluginModule*'Lib.Grinder'*because it is exposed under several services (Lib.IGrinder, Lib.IPlugin)*").AsWildcard();
-				await That(result.Diagnostics).Contains("*AWT231*PluginModule*'Lib.Timer'*because its constructor parameter 'clock' is marked [FromKey]*").AsWildcard();
+				await That(result.Diagnostics).Contains("*AWT231*PluginModule*'Lib.Timer'*because its property 'Clock' is marked [Inject]*").AsWildcard();
 				await That(result.Diagnostics.Where(diagnostic => diagnostic.Contains("AWT231"))).HasCount(3)
 					.Because("each match is reported once, even when it is recorded under several services");
 				await That(result.Diagnostics).DoesNotContain("*AWT154*").AsWildcard()

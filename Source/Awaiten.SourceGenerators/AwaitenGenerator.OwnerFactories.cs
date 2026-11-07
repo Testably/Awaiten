@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Awaiten.SourceGenerators.Entities;
 using Awaiten.SourceGenerators.Internals;
 using Microsoft.CodeAnalysis;
@@ -38,10 +39,12 @@ partial class AwaitenGenerator
 	///     (<see cref="RegistrationFactoryName" />), that mirrors the constructor the container picked and returns the
 	///     accessible resolver type, plus an <c>internal</c> wrapper per lifecycle hook. Only a container without
 	///     <c>Extends</c> records any, since extending is one level deep. Decorators, composites and closings of an
-	///     open generic registration are not built this way yet. What the factory cannot express (a generic type,
-	///     injected properties, a constructor or hook parameter carrying <c>[Arg]</c>, <c>[FromKey]</c> or <c>[Inject]</c>,
-	///     or a parameter type private to the container) is recorded as a fault instead, which an extending container
-	///     reports as AWT226; the container itself reports nothing, since it builds the type.
+	///     open generic registration are not built this way yet. The factory carries the <c>[Arg]</c> or <c>[FromKey]</c>
+	///     of a constructor parameter and takes each injected property as a parameter named like it. What it cannot
+	///     express (a generic type, an optional or deferred property, one named like a constructor parameter, a hook
+	///     parameter carrying <c>[Arg]</c>, <c>[FromKey]</c> or <c>[Inject]</c>, or a parameter type private to the
+	///     container) is recorded as a fault instead, which an extending container reports as AWT226; the container
+	///     itself reports nothing, since it builds the type.
 	/// </summary>
 	private static void RecordBaseFactory(BaseFactoryRequest request, BuildContext context)
 	{
@@ -63,7 +66,7 @@ partial class AwaitenGenerator
 			return;
 		}
 
-		if (BaseFactoryFault(request, container, context.Compilation) is { } fault)
+		if (BaseFactoryFault(request, context) is { } fault)
 		{
 			factories.Faults[info.ImplementationType] = fault;
 			return;
@@ -83,17 +86,30 @@ partial class AwaitenGenerator
 			}
 		}
 
+		List<FactoryParameter> parameters = new(MirroredParameters(request.Producer.Parameters).AsArray());
+		foreach (MemberModel member in request.Members)
+		{
+			IPropertySymbol property = (IPropertySymbol)ResolveNamedInstanceMember(info.Symbol, member.MemberName)!;
+			parameters.Add(new FactoryParameter(
+				property.Type.ToDisplayString(FullyQualifiedWithNullability),
+				member.MemberName,
+				IsUserKey(member.Dependency.Key) ? KeyAttribute(member.Dependency.Key) : null));
+		}
+
 		factories.Factories.Add(new RegistrationFactory(
 			RegistrationFactoryName(info.Symbol),
 			request.ResolverType,
 			info.ImplementationType,
-			MirroredParameters(request.Producer.Parameters),
-			new EquatableArray<RegistrationHook>(hooks.ToArray())));
+			new EquatableArray<FactoryParameter>(parameters.ToArray()),
+			new EquatableArray<RegistrationHook>(hooks.ToArray()),
+			new EquatableArray<string>(request.Members.Select(member => member.MemberName).ToArray())));
 	}
 
 	/// <summary>Why <see cref="RecordBaseFactory" /> cannot generate a factory for the request, or <see langword="null" />.</summary>
-	private static FactoryFault? BaseFactoryFault(BaseFactoryRequest request, INamedTypeSymbol container, Compilation compilation)
+	private static FactoryFault? BaseFactoryFault(BaseFactoryRequest request, BuildContext context)
 	{
+		INamedTypeSymbol container = context.ContainerSymbol;
+		Compilation compilation = context.Compilation;
 		INamedTypeSymbol implementation = request.Info.Symbol;
 		string remedy = $"make '{Display(implementation.OriginalDefinition.ToDisplayString(FullyQualified))}' internal";
 		if (implementation.IsGenericType)
@@ -101,32 +117,72 @@ partial class AwaitenGenerator
 			return new FactoryFault("it is generic", remedy);
 		}
 
-		if (request.Members.Count > 0)
-		{
-			return new FactoryFault($"its property '{request.Members[0].MemberName}' is injected", remedy);
-		}
+		return ParameterFault(request.Producer.Parameters, "its constructor parameter", hook: false)
+		       ?? MemberFault()
+		       ?? (request.OnActivated is { } activation ? ParameterFault(activation.Parameters.Skip(1), "its OnActivated hook parameter", hook: true) : null)
+		       ?? (request.OnRelease is { } release ? ParameterFault(release.Parameters.Skip(1), "its OnRelease hook parameter", hook: true) : null);
 
-		return ParameterFault(request.Producer.Parameters, "its constructor parameter")
-		       ?? (request.OnActivated is { } activation ? ParameterFault(activation.Parameters.Skip(1), "its OnActivated hook parameter") : null)
-		       ?? (request.OnRelease is { } release ? ParameterFault(release.Parameters.Skip(1), "its OnRelease hook parameter") : null);
-
-		FactoryFault? ParameterFault(IEnumerable<IParameterSymbol> parameters, string subject)
+		FactoryFault? ParameterFault(IEnumerable<IParameterSymbol> parameters, string subject, bool hook)
 		{
 			foreach (IParameterSymbol parameter in parameters)
 			{
-				if (MirroredAwayAttribute(parameter.GetAttributes()) is { } attribute)
+				if ((hook ? MirroredAwayAttribute(parameter.GetAttributes()) : UnmirroredAttribute(parameter.GetAttributes())) is { } attribute)
 				{
 					return new FactoryFault($"{subject} '{parameter.Name}' is marked {attribute}", remedy);
 				}
 
-				if (TypeHiddenInModule(parameter.Type, container, compilation) is { } hidden)
+				if (HiddenTypeFault(parameter.Type, $"{subject} '{parameter.Name}'") is { } fault)
 				{
-					string type = Display(hidden.ToDisplayString(FullyQualified));
-					return new FactoryFault($"{subject} '{parameter.Name}' takes '{type}', which only '{Display(container.ToDisplayString(FullyQualified))}' can name", $"make '{type}' internal");
+					return fault;
 				}
 			}
 
 			return null;
+		}
+
+		// The factory takes each injected property as a parameter of the same name, so a property assigned after
+		// construction, one left out when its service is missing, or one named like a constructor parameter cannot be mirrored.
+		FactoryFault? MemberFault()
+		{
+			List<InjectPropertyEntry> entries = context.InjectProperties.TryGetValue(RegisteredType(request.Info.ImplementationType), out List<InjectPropertyEntry>? found) ? found : [];
+			string? optional = InjectedProperties(implementation).FirstOrDefault(property => IsInjectOptional(property.GetAttributes()))?.Name
+			                   ?? entries.FirstOrDefault(entry => entry.Optional)?.PropertyName;
+			if (optional is not null)
+			{
+				return new FactoryFault($"its property '{optional}' is injected only when its service is registered", remedy);
+			}
+
+			foreach (MemberModel member in request.Members)
+			{
+				if (member.Deferred)
+				{
+					return new FactoryFault($"its property '{member.MemberName}' is injected after construction", remedy);
+				}
+
+				if (request.Producer.Parameters.Any(parameter => parameter.Name == member.MemberName))
+				{
+					return new FactoryFault($"its injected property '{member.MemberName}' has the name of a constructor parameter", remedy);
+				}
+
+				if (ResolveNamedInstanceMember(implementation, member.MemberName) is IPropertySymbol property
+				    && HiddenTypeFault(property.Type, $"its injected property '{member.MemberName}'") is { } fault)
+				{
+					return fault;
+				}
+			}
+
+			return null;
+		}
+
+		FactoryFault? HiddenTypeFault(ITypeSymbol type, string subject)
+		{
+			if (TypeHiddenInModule(type, container, compilation) is not { } hidden)
+			{
+				return null;
+			}
+
+			string display = Display(hidden.ToDisplayString(FullyQualified));
+			return new FactoryFault($"{subject} takes '{display}', which only '{Display(container.ToDisplayString(FullyQualified))}' can name", $"make '{display}' internal");
 		}
 	}
 
@@ -134,9 +190,36 @@ partial class AwaitenGenerator
 	private static EquatableArray<FactoryParameter> MirroredParameters(IEnumerable<IParameterSymbol> parameters)
 		=> new(parameters.Select(MirrorParameter).ToArray());
 
-	/// <summary>One constructor parameter mirrored onto a generated factory.</summary>
+	/// <summary>
+	///     One constructor parameter mirrored onto a generated factory, with its <c>[Arg]</c> or <c>[FromKey]</c>, so a
+	///     consumer resolves the factory's parameter exactly as it would the constructor's.
+	/// </summary>
 	private static FactoryParameter MirrorParameter(IParameterSymbol parameter)
-		=> new(parameter.Type.ToDisplayString(FullyQualifiedWithNullability), parameter.Name);
+	{
+		ImmutableArray<AttributeData> attributes = parameter.GetAttributes();
+		return new FactoryParameter(
+			parameter.Type.ToDisplayString(FullyQualifiedWithNullability),
+			parameter.Name,
+			HasArgAttribute(attributes) ? "[global::Awaiten.Arg] " : KeyAttribute(FromKey(attributes)));
+	}
+
+	/// <summary>The <c>[FromKey]</c> a generated factory parameter carries for <paramref name="key" />, or <see langword="null" />.</summary>
+	private static string? KeyAttribute(string? key)
+		=> key is null ? null : $"[global::Awaiten.FromKey({KeyLiteral(key)})] ";
+
+	/// <summary>
+	///     The attribute of a constructor parameter a generated factory cannot mirror, or <see langword="null" />: an
+	///     <c>[Inject]</c>, or a <c>[FromKey]</c> whose key is not a supported key constant.
+	/// </summary>
+	private static string? UnmirroredAttribute(ImmutableArray<AttributeData> attributes)
+	{
+		if (HasInject(attributes))
+		{
+			return "[Inject]";
+		}
+
+		return HasAwaitenAttribute(attributes, "FromKeyAttribute") && FromKey(attributes) is null ? "[FromKey]" : null;
+	}
 
 	/// <summary>
 	///     A registration a container in the owner's own assembly builds through the factory the owner (a module or a

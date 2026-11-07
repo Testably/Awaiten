@@ -508,7 +508,7 @@ partial class AwaitenGenerator
 					return null;
 				}
 
-				string[] parameters = factory.Parameters.AsArray().Select(parameter => parameter.Type).ToArray();
+				string[] parameters = factory.Parameters.AsArray().Take(factory.Parameters.Count - factory.Members.Count).Select(parameter => parameter.Type).ToArray();
 				IMethodSymbol? constructor = implementation.InstanceConstructors.FirstOrDefault(candidate =>
 					candidate.Parameters.Select(parameter => parameter.Type.ToDisplayString(FullyQualifiedWithNullability)).SequenceEqual(parameters));
 				return constructor is not null

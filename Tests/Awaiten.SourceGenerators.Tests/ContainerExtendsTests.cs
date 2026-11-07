@@ -697,16 +697,15 @@ public class ContainerExtendsTests
 
 			                                       public interface IClock { }
 			                                       public interface IGrinder { }
-			                                       public sealed class SystemClock : IClock { }
 
 			                                       [Container]
-			                                       [Singleton<SystemClock, IClock>(Key = "system")]
 			                                       [Singleton<Grinder, IGrinder>]
 			                                       public static partial class Shop
 			                                       {
 			                                           private sealed class Grinder : IGrinder
 			                                           {
-			                                               public Grinder([FromKey("system")] IClock clock) { }
+			                                               [Inject(Optional = true)]
+			                                               public IClock? Clock { get; set; }
 			                                           }
 			                                       }
 
@@ -717,8 +716,8 @@ public class ContainerExtendsTests
 			                                       """);
 
 			await That(result.Diagnostics).HasSingle().Matching(diagnostic => diagnostic.Contains("AWT226"));
-			await That(result.Diagnostics).Contains("*error AWT226*The type 'MyCode.Shop.Grinder'*its constructor parameter 'clock' is marked [FromKey]*make 'MyCode.Shop.Grinder' internal*").AsWildcard()
-				.Because("the generated factory cannot carry the key, so it names the reason and the remedy");
+			await That(result.Diagnostics).Contains("*error AWT226*The type 'MyCode.Shop.Grinder'*its property 'Clock' is injected only when its service is registered*make 'MyCode.Shop.Grinder' internal*").AsWildcard()
+				.Because("a factory parameter cannot be left out, so it names the reason and the remedy");
 		}
 
 		[Test]

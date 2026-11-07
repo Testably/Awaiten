@@ -1471,9 +1471,9 @@ internal static class Diagnostics
 	///     A self-compiled module <c>[Scan]</c> match or module registration of an inaccessible implementation would
 	///     be exposed under more than one accessible interface, by one scan, by several, by several registrations or
 	///     by a registration and a scan. A self-compiled implementation is reached only through a generated factory
-	///     that returns a single accessible interface, so a shared instance across several interfaces cannot be
-	///     expressed (unlike a container, whose registrations coalesce on the concrete type), and emitting a factory
-	///     per interface would silently split it. In v1 narrow the exposure to a single interface.
+	///     that returns a single accessible type, so a shared instance across several interfaces needs one that covers
+	///     them all, which a registration's factory finds among the services and the implementation's public base types
+	///     and a scan's does not; emitting a factory per interface would silently split it.
 	/// </summary>
 	public static readonly DiagnosticDescriptor ModuleScanMultipleExposures = new(
 		"AWT197",
@@ -1485,11 +1485,10 @@ internal static class Diagnostics
 
 	/// <summary>
 	///     A self-compiled module <c>[Scan]</c> match or module registration carries injection metadata the
-	///     generated factory cannot mirror: an <c>[Inject]</c> property, or a constructor parameter marked
-	///     <c>[Inject]</c>, <c>[Arg]</c> or <c>[FromKey]</c>. The factory reduces the implementation to a plain
-	///     parameter list resolved from the consumer's graph, so keys, optionality, deferral and resolution arguments
-	///     would be silently dropped, and the same type would behave differently in a container of the module's own
-	///     assembly. Rejected rather than silently degraded.
+	///     generated factory cannot mirror: an <c>[Inject]</c> property of a scan match, or an optional, deferred or
+	///     otherwise unmirrorable <c>[Inject]</c> property of a registration. The factory carries <c>[Arg]</c> and
+	///     <c>[FromKey]</c> onto its parameters, but optionality and deferral would be silently dropped, and the same type
+	///     would behave differently in a container of the module's own assembly. Rejected rather than silently degraded.
 	/// </summary>
 	public static readonly DiagnosticDescriptor ModuleScanInjectionMetadata = new(
 		"AWT200",
