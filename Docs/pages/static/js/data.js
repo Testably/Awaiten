@@ -1260,6 +1260,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 10:43:14 2026 \u002B0100",
         "message": "feat: let an OnRelease hook return Task or ValueTask (#288)"
+      },
+      {
+        "sha": "e62d36a4f22f9b4ed3a3568df6e10076fe160d99",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 10:46:07 2026 \u002B0100",
+        "message": "fix: judge an internal module\u0027s hooks and scan exposures by its real accessibility and wrap the internal hooks of Factory registrations (#289)"
       }
     ],
     "labels": [
@@ -1472,7 +1478,8 @@ window.BENCHMARK_DATA = {
       "20751684",
       "47d7cde4",
       "c2eb0006",
-      "bba2f8ee"
+      "bba2f8ee",
+      "e62d36a4"
     ],
     "datasets": [
       {
@@ -1688,7 +1695,8 @@ window.BENCHMARK_DATA = {
           5.625039557615916,
           7.929147485111441,
           7.134927432124432,
-          6.102416787828718
+          6.102416787828718,
+          4.117019369701544
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -1700,6 +1708,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -2133,7 +2142,8 @@ window.BENCHMARK_DATA = {
           5.71879609823227,
           7.773045597331865,
           8.361563500549112,
-          7.5823596360591745
+          7.5823596360591745,
+          3.8398674934038093
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -2145,6 +2155,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -2578,7 +2589,8 @@ window.BENCHMARK_DATA = {
           106.92758944034577,
           114.72871817861285,
           121.40528082847595,
-          126.70339924494425
+          126.70339924494425,
+          54.269848195406105
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -2590,6 +2602,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -3019,7 +3032,8 @@ window.BENCHMARK_DATA = {
           7.806947524348895,
           9.817431433002154,
           9.416603352874517,
-          7.777860053380331
+          7.777860053380331,
+          4.577584875623385
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -3031,6 +3045,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -3456,7 +3471,8 @@ window.BENCHMARK_DATA = {
           9.560916777451833,
           11.125902941823005,
           11.029202468120134,
-          10.7332625325237
+          10.7332625325237,
+          5.905110595623652
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -3468,6 +3484,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -4947,6 +4964,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 10:43:14 2026 \u002B0100",
         "message": "feat: let an OnRelease hook return Task or ValueTask (#288)"
+      },
+      {
+        "sha": "e62d36a4f22f9b4ed3a3568df6e10076fe160d99",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 10:46:07 2026 \u002B0100",
+        "message": "fix: judge an internal module\u0027s hooks and scan exposures by its real accessibility and wrap the internal hooks of Factory registrations (#289)"
       }
     ],
     "labels": [
@@ -5159,7 +5182,8 @@ window.BENCHMARK_DATA = {
       "20751684",
       "47d7cde4",
       "c2eb0006",
-      "bba2f8ee"
+      "bba2f8ee",
+      "e62d36a4"
     ],
     "datasets": [
       {
@@ -5375,7 +5399,8 @@ window.BENCHMARK_DATA = {
           7.256379851698876,
           8.473682566330982,
           8.286856219172478,
-          6.87297858191388
+          6.87297858191388,
+          4.34131107032299
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -5387,6 +5412,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -5820,7 +5846,8 @@ window.BENCHMARK_DATA = {
           5.829785167024686,
           7.810003021998065,
           7.914983614285787,
-          7.554399792353312
+          7.554399792353312,
+          3.793737880885601
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -5832,6 +5859,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -6265,7 +6293,8 @@ window.BENCHMARK_DATA = {
           125.16257438659667,
           114.00565416018168,
           112.13212935129802,
-          128.47535875865393
+          128.47535875865393,
+          53.927201671259745
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -6277,6 +6306,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -6706,7 +6736,8 @@ window.BENCHMARK_DATA = {
           7.680116426944733,
           9.793151976664861,
           9.407313848917301,
-          7.83126597503821
+          7.83126597503821,
+          4.7137400805950165
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -6718,6 +6749,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -7143,7 +7175,8 @@ window.BENCHMARK_DATA = {
           9.416868659853936,
           14.355613851547242,
           14.593317925930023,
-          13.529849948791357
+          13.529849948791357,
+          7.7329334410337305
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -7155,6 +7188,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -8634,6 +8668,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 10:43:14 2026 \u002B0100",
         "message": "feat: let an OnRelease hook return Task or ValueTask (#288)"
+      },
+      {
+        "sha": "e62d36a4f22f9b4ed3a3568df6e10076fe160d99",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 10:46:07 2026 \u002B0100",
+        "message": "fix: judge an internal module\u0027s hooks and scan exposures by its real accessibility and wrap the internal hooks of Factory registrations (#289)"
       }
     ],
     "labels": [
@@ -8846,7 +8886,8 @@ window.BENCHMARK_DATA = {
       "20751684",
       "47d7cde4",
       "c2eb0006",
-      "bba2f8ee"
+      "bba2f8ee",
+      "e62d36a4"
     ],
     "datasets": [
       {
@@ -9062,7 +9103,8 @@ window.BENCHMARK_DATA = {
           11.640991925199826,
           20.340124646822613,
           21.75352410674095,
-          11.818106722373228
+          11.818106722373228,
+          22.377091215054193
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -9224,6 +9266,7 @@ window.BENCHMARK_DATA = {
           144,
           144,
           144,
+          208,
           208,
           208,
           208,
@@ -9507,7 +9550,8 @@ window.BENCHMARK_DATA = {
           795.2319189218374,
           1536.1326716105143,
           1560.9973545074463,
-          816.1020108002883
+          816.1020108002883,
+          1679.6547550201417
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -9519,6 +9563,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          5688,
           5688,
           5688,
           5688,
@@ -9952,7 +9997,8 @@ window.BENCHMARK_DATA = {
           18532.52566964286,
           30024.65450846354,
           29977.31599644252,
-          18458.976832798548
+          18458.976832798548,
+          24577.640729631697
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -10173,7 +10219,8 @@ window.BENCHMARK_DATA = {
           32476,
           32482,
           32482,
-          32477
+          32477,
+          32476
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -10393,7 +10440,8 @@ window.BENCHMARK_DATA = {
           424.87400003579944,
           733.0398886753962,
           751.1221101125082,
-          407.6954393386841
+          407.6954393386841,
+          701.3310192108154
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -10423,6 +10471,7 @@ window.BENCHMARK_DATA = {
           1472,
           1472,
           1472,
+          1528,
           1528,
           1528,
           1528,
@@ -10830,7 +10879,8 @@ window.BENCHMARK_DATA = {
           6700.985063825335,
           11716.588898794991,
           13036.082037353515,
-          6561.246905008952
+          6561.246905008952,
+          13723.872935994466
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -11042,6 +11092,7 @@ window.BENCHMARK_DATA = {
           24761,
           24760,
           24761,
+          24760,
           24760,
           24760,
           24760,
@@ -12321,6 +12372,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 10:43:14 2026 \u002B0100",
         "message": "feat: let an OnRelease hook return Task or ValueTask (#288)"
+      },
+      {
+        "sha": "e62d36a4f22f9b4ed3a3568df6e10076fe160d99",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 10:46:07 2026 \u002B0100",
+        "message": "fix: judge an internal module\u0027s hooks and scan exposures by its real accessibility and wrap the internal hooks of Factory registrations (#289)"
       }
     ],
     "labels": [
@@ -12533,7 +12590,8 @@ window.BENCHMARK_DATA = {
       "20751684",
       "47d7cde4",
       "c2eb0006",
-      "bba2f8ee"
+      "bba2f8ee",
+      "e62d36a4"
     ],
     "datasets": [
       {
@@ -12749,7 +12807,8 @@ window.BENCHMARK_DATA = {
           80.89287850686482,
           185.9752994378408,
           212.3369577884674,
-          78.47506074394498
+          78.47506074394498,
+          233.23459405899047
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -12911,6 +12970,7 @@ window.BENCHMARK_DATA = {
           2128,
           2128,
           2128,
+          4176,
           4176,
           4176,
           4176,
@@ -13194,7 +13254,8 @@ window.BENCHMARK_DATA = {
           7904.951569777269,
           15155.92276204427,
           16159.93144444057,
-          7601.722882080078
+          7601.722882080078,
+          14868.3630472819
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -13206,6 +13267,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          61016,
           61016,
           61016,
           61016,
@@ -13639,7 +13701,8 @@ window.BENCHMARK_DATA = {
           449377.7698692909,
           746964.2779947916,
           736745.4542518029,
-          429554.3186848958
+          429554.3186848958,
+          575293.6454326923
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -13860,7 +13923,8 @@ window.BENCHMARK_DATA = {
           719044,
           738538,
           740464,
-          739415
+          739415,
+          719013
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -14080,7 +14144,8 @@ window.BENCHMARK_DATA = {
           25161.313983623797,
           44836.136853899276,
           44921.04579264323,
-          23718.9529296875
+          23718.9529296875,
+          43173.72573416574
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -14297,7 +14362,8 @@ window.BENCHMARK_DATA = {
           80970,
           80082,
           80008,
-          79994
+          79994,
+          80345
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -14517,7 +14583,8 @@ window.BENCHMARK_DATA = {
           212749.04331752233,
           359580.6168619792,
           385532.04963030136,
-          200671.28181966147
+          200671.28181966147,
+          388122.45358072914
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -14734,7 +14801,8 @@ window.BENCHMARK_DATA = {
           573076,
           573090,
           573107,
-          573121
+          573121,
+          572284
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -15984,6 +16052,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 10:43:14 2026 \u002B0100",
         "message": "feat: let an OnRelease hook return Task or ValueTask (#288)"
+      },
+      {
+        "sha": "e62d36a4f22f9b4ed3a3568df6e10076fe160d99",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 10:46:07 2026 \u002B0100",
+        "message": "fix: judge an internal module\u0027s hooks and scan exposures by its real accessibility and wrap the internal hooks of Factory registrations (#289)"
       }
     ],
     "labels": [
@@ -16192,7 +16266,8 @@ window.BENCHMARK_DATA = {
       "20751684",
       "47d7cde4",
       "c2eb0006",
-      "bba2f8ee"
+      "bba2f8ee",
+      "e62d36a4"
     ],
     "datasets": [
       {
@@ -16404,7 +16479,8 @@ window.BENCHMARK_DATA = {
           201.70825786249978,
           265.2382357461112,
           279.33723661104835,
-          251.2369601045336
+          251.2369601045336,
+          280.5241302710313
         ],
         "borderColor": "#3949AB",
         "backgroundColor": "#3949AB",
@@ -16439,6 +16515,7 @@ window.BENCHMARK_DATA = {
           560,
           560,
           560,
+          568,
           568,
           568,
           568,
@@ -16841,7 +16918,8 @@ window.BENCHMARK_DATA = {
           449.0135433123662,
           672.2033592632839,
           649.8044139862061,
-          462.403799533844
+          462.403799533844,
+          725.7361744562785
         ],
         "borderColor": "#512BD4",
         "backgroundColor": "#512BD4",
@@ -16853,6 +16931,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          1104,
           1104,
           1104,
           1104,
@@ -17278,7 +17357,8 @@ window.BENCHMARK_DATA = {
           4751.702227456229,
           6313.839005025228,
           6755.252198791504,
-          4960.147314961751
+          4960.147314961751,
+          6315.942435631385
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -17362,6 +17442,7 @@ window.BENCHMARK_DATA = {
           13696,
           13696,
           13696,
+          10784,
           10784,
           10784,
           10784,
@@ -17715,7 +17796,8 @@ window.BENCHMARK_DATA = {
           327.14095272336687,
           401.7604859987895,
           429.3192598025004,
-          368.7293354352315
+          368.7293354352315,
+          419.26341237340654
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -17727,6 +17809,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          944,
           944,
           944,
           944,
@@ -18152,7 +18235,8 @@ window.BENCHMARK_DATA = {
           552.9230056762696,
           737.2925818125407,
           742.4663223266601,
-          546.5783175786336
+          546.5783175786336,
+          762.7318768501282
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -18164,6 +18248,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          1096,
           1096,
           1096,
           1096,
