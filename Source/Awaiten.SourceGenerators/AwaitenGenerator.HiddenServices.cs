@@ -537,14 +537,16 @@ partial class AwaitenGenerator
 			})
 			.ToList();
 
-		IEnumerable<HiddenImplementation> instances = hidden.SeveralModules ? hidden.Implementations : built;
-		foreach (HiddenImplementation candidate in instances.Where(candidate => hidden.DeclaresInstance(candidate.Implementation)))
+		IEnumerable<INamedTypeSymbol> instances = hidden.SeveralModules
+			? hidden.Assembly.RegistrationsOf(module).Select(registration => registration.Implementation).Where(hidden.Assembly.HandledBy.ContainsKey)
+			: built.Select(candidate => candidate.Implementation);
+		foreach (INamedTypeSymbol implementation in instances.Distinct<INamedTypeSymbol>(SymbolEqualityComparer.Default).Where(hidden.DeclaresInstance))
 		{
-			(bool constructed, bool wrap) = InstanceHandleNeeds(candidate, hidden);
-			ImplementationTraits traits = TraitsOf(candidate.Implementation, []);
+			(bool constructed, bool wrap) = InstanceHandleNeeds(implementation, hidden);
+			ImplementationTraits traits = TraitsOf(implementation, []);
 			handles.Add(new HiddenHandle(
-				HiddenInstanceName(candidate.Implementation),
-				candidate.Implementation.ToDisplayString(FullyQualified),
+				HiddenInstanceName(implementation),
+				implementation.ToDisplayString(FullyQualified),
 				wrap || (constructed && traits is { Disposable: true, AsyncDisposable: false, }),
 				wrap || (constructed && traits is { Disposable: false, AsyncDisposable: true, }),
 				wrap || (constructed && traits is { Disposable: true, AsyncDisposable: true, }),
@@ -669,19 +671,18 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     Whether the instance handle of <paramref name="candidate" />, which every module of the assembly that registers
+	///     Whether the instance handle of <paramref name="implementation" />, which every module of the assembly that registers
 	///     the implementation builds it into, needs the variants of a constructed implementation, and whether it needs to
 	///     wrap the result of a <c>Factory</c> member, whose disposal shows only at run time.
 	/// </summary>
-	private static (bool Constructed, bool Wrap) InstanceHandleNeeds(HiddenImplementation candidate, HiddenServices hidden)
+	private static (bool Constructed, bool Wrap) InstanceHandleNeeds(INamedTypeSymbol implementation, HiddenServices hidden)
 	{
-		IEnumerable<ProductionKind> productions = hidden.SeveralModules
-			? hidden.Assembly.Modules.Select(other => HandledTogether(hidden.Assembly.Registrations[other]
-					.Where(registration => SymbolEqualityComparer.Default.Equals(registration.Implementation, candidate.Implementation))))
-				.Where(registrations => registrations.Count > 0)
-				.Select(registrations => registrations[0].Production)
-			: [candidate.Production,];
-		List<ProductionKind> all = productions.ToList();
+		List<ProductionKind> all = (hidden.SeveralModules ? hidden.Assembly.Modules : [hidden.Module,])
+			.Select(other => HandledTogether(hidden.Assembly.RegistrationsOf(other)
+				.Where(registration => SymbolEqualityComparer.Default.Equals(registration.Implementation, implementation))))
+			.Where(registrations => registrations.Count > 0)
+			.Select(registrations => registrations[0].Production)
+			.ToList();
 		return (all.Contains(ProductionKind.Constructor), all.Contains(ProductionKind.Factory));
 	}
 

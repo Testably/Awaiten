@@ -180,6 +180,44 @@ public class ModuleHiddenServiceTests
 		}
 	}
 
+	[Test]
+	public async Task InstanceHandleOfAnImplementationTheProviderDoesNotBuild_IsStillDeclaredByIt()
+	{
+		GeneratorResult result = RunLibrary("""
+			using Awaiten;
+
+			[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("Friend")]
+
+			namespace Lib;
+
+			public interface IAppliance { }
+			public interface IFront { }
+			public interface IBack { }
+			public interface IUser { }
+			internal interface IHiddenKettle { }
+			internal sealed class Kettle : IAppliance, IHiddenKettle, IFront, IBack { }
+			internal sealed class User : IUser { public User(IHiddenKettle kettle) { } }
+
+			[Module]
+			[Scan<IAppliance>(As = ScanAs.Marker, Lifetime = Lifetime.Singleton)]
+			[Singleton<Kettle, IFront>]
+			[Singleton<Kettle, IBack>]
+			public static partial class AModule { }
+
+			[Module]
+			[Singleton<Kettle, IHiddenKettle>]
+			[Singleton<User, IUser>]
+			public static partial class BModule { }
+			""");
+		string declaring = result.Sources.Single(source => source.Key.Contains("AModule")).Value;
+		string user = result.Sources.Single(source => source.Key.Contains("BModule")).Value;
+
+		await That(user).Contains($"global::Lib.AModule.Internals.HiddenInstance_Kettle_{Fnv1a("global::Lib.Kettle"):x8}")
+			.Because("the module first by name declares the instance handle every other module builds the implementation into");
+		await That(declaring).Contains($"public class HiddenInstance_Kettle_{Fnv1a("global::Lib.Kettle"):x8}")
+			.Because("the declaring module emits the handle even when its own scan keeps it from building the implementation");
+	}
+
 	public class StartedSingletons
 	{
 		private static string Library(string registration, bool partial = true, bool grant = false) => $$"""
