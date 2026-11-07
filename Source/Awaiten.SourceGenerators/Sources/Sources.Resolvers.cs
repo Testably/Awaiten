@@ -901,7 +901,7 @@ internal static partial class Sources
 				// resolve rebuilds - with no unpublish/rethrow needed. OnRelease is queued after activation (only a
 				// successfully-activated instance is released), capturing the local by value.
 				Indent(builder, depth + 3).Append(instance.ConstructedType).Append(" created = ").Append(construction).AppendLine(";");
-				EmitCachedDisposalRegistration(builder, depth + 3, "created", disposal, asyncDisposal);
+				EmitCachedDisposalRegistration(builder, depth + 3, instance, "created", disposal, asyncDisposal);
 				EmitActivation(builder, depth + 3, instance, "created", context, asynchronous: false);
 				EmitReleaseRegistration(builder, depth + 3, instance, "created", context, asynchronous: false);
 				Indent(builder, depth + 3).Append("__s.").Append(field).AppendLine(" = created;");
@@ -912,7 +912,7 @@ internal static partial class Sources
 				// directly and register disposal/release against the field, all under the lock that guards this
 				// cache-miss (the owner is known not disposed here, so no separate raced check is needed).
 				Indent(builder, depth + 3).Append("__s.").Append(field).Append(" = ").Append(construction).AppendLine(";");
-				EmitCachedDisposalRegistration(builder, depth + 3, "__s." + field, disposal, asyncDisposal);
+				EmitCachedDisposalRegistration(builder, depth + 3, instance, "__s." + field, disposal, asyncDisposal);
 				EmitCachedReleaseRegistration(builder, depth + 3, instance, field, instance.ConstructedType, context, asynchronous: false);
 			}
 		}
@@ -928,7 +928,7 @@ internal static partial class Sources
 			Indent(builder, depth + 3).AppendLine("{");
 			Indent(builder, depth + 4).Append("__s.").Append(field).Append(" = ").Append(construction).AppendLine(";");
 			emitDeferred?.Invoke(depth + 4);
-			EmitCachedDisposalRegistration(builder, depth + 4, "__s." + field, disposal, asyncDisposal);
+			EmitCachedDisposalRegistration(builder, depth + 4, instance, "__s." + field, disposal, asyncDisposal);
 			// Run OnActivated then queue OnRelease inside the wiring episode's try: a throwing hook rolls the
 			// episode back (unpublishing the field) rather than leaving a published, half-activated instance, and
 			// the release is queued only after activation succeeds. The release captures the instance by value, so
@@ -1000,7 +1000,7 @@ internal static partial class Sources
 	///     output, whose declared return type may hide a concrete disposable) the add is gated on a runtime test so
 	///     only genuinely-disposable outputs are retained.
 	/// </summary>
-	private static void EmitCachedDisposalRegistration(StringBuilder builder, int depth, string target, DisposalTracking disposal, bool asyncDisposal)
+	private static void EmitCachedDisposalRegistration(StringBuilder builder, int depth, InstanceModel instance, string target, DisposalTracking disposal, bool asyncDisposal)
 	{
 		if (disposal == DisposalTracking.Runtime)
 		{
@@ -1014,7 +1014,7 @@ internal static partial class Sources
 		}
 		else if (disposal == DisposalTracking.Static)
 		{
-			Indent(builder, depth).Append("(__s.__disposables ??= new global::System.Collections.Generic.List<object>()).Add(").Append(target).AppendLine(");");
+			Indent(builder, depth).Append("(__s.__disposables ??= new global::System.Collections.Generic.List<object>()).Add(").Append(DisposableEntry(instance, target)).AppendLine(");");
 		}
 	}
 

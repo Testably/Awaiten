@@ -35,6 +35,24 @@ internal static partial class Sources
 		   && AwaitenGenerator.BuildsFreshDisposable(instances, serviceToIndex, membership, index);
 
 	/// <summary>
+	///     The guidance (a quoted string literal) a synchronous <c>Dispose</c> collects for a tracked instance that
+	///     implements <c>IAsyncDisposable</c> but not <c>IDisposable</c>, which only <c>DisposeAsync</c> can tear down.
+	/// </summary>
+	private static string AsyncOnlyDisposalMessage(InstanceModel instance)
+		=> $"\"Awaiten: '{AwaitenGenerator.DisplayInstance(instance.ImplementationType)}' requires asynchronous disposal (it implements IAsyncDisposable but not IDisposable); dispose this scope or container with DisposeAsync ('await using') instead of a synchronous Dispose().\"";
+
+	/// <summary>
+	///     The guidance (a quoted string literal) a synchronous <c>Dispose</c> collects for a queued asynchronous
+	///     <c>OnRelease</c> hook, which only <c>DisposeAsync</c> can await. It names the hook unless the container calls
+	///     a generated wrapper (see <see cref="InstanceModel.AsyncReleaseHookName" />).
+	/// </summary>
+	private static string AsyncReleaseMessage(InstanceModel instance)
+	{
+		string hook = instance.AsyncReleaseHookName is { } name ? $"OnRelease hook '{name}'" : "OnRelease hook";
+		return $"\"Awaiten: the {hook} of '{AwaitenGenerator.DisplayInstance(instance.ImplementationType)}' is asynchronous (it returns Task or ValueTask); dispose this scope or container with DisposeAsync ('await using') instead of a synchronous Dispose().\"";
+	}
+
+	/// <summary>
 	///     The guidance message (a quoted string literal) thrown by Resolve(Type) on the Root when a service
 	///     withheld there under strict lifetime safety is requested by its bare type: it is itself a disposable
 	///     build-on-demand service, reachable from the Root only by injection or through an <c>Owned&lt;T&gt;</c>

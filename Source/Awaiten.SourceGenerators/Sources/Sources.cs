@@ -79,6 +79,9 @@ internal static partial class Sources
 
 		/// <summary>Whether a release hook is asynchronous, so the release queue holds <c>object</c> entries.</summary>
 		public bool AsyncReleases { get; } = HasAsyncReleaseHooks(Instances);
+
+		/// <summary>Whether an instance is tracked as an <c>__AsyncOnlyDisposable</c> (see <see cref="IsAsyncOnlyDisposal" />).</summary>
+		public bool AsyncOnlyDisposals { get; } = HasAsyncOnlyDisposals(Instances);
 	}
 
 	/// <summary>
@@ -324,7 +327,7 @@ internal static partial class Sources
 		Indent(members, body).AppendLine("global::Awaiten.IAwaitenScope global::Awaiten.IAwaitenScope.CreateScope() => CreateScope();");
 		Separate(members);
 		bool hasReleases = HasReleaseHooks(instances);
-		EmitDispose(members, body, asyncDisposal, hasReleases, context.AsyncReleases);
+		EmitDispose(members, body, asyncDisposal, hasReleases, context);
 		if (asyncDisposal)
 		{
 			Separate(members);
@@ -376,6 +379,8 @@ internal static partial class Sources
 			Separate(helpers);
 			EmitWiringSupport(helpers, body, instances, names, root: false);
 		}
+
+		EmitAsyncTeardownEntries(helpers, body, context);
 
 		EmitSections(builder, body,
 			new MemberSection("Fields", fields),
