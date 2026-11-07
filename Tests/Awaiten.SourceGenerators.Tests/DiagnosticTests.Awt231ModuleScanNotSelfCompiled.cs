@@ -97,11 +97,11 @@ public partial class DiagnosticTests
 					.And.Contains("[global::Awaiten.GeneratedScanRegistrationAttribute<global::Lib.IPlugin>(\"Lib.Grinder\", Lifetime = global::Awaiten.Lifetime.Singleton)]")
 					.And.Contains("[global::Awaiten.GeneratedScanRegistrationAttribute<global::Lib.ITimer>(\"Lib.Timer\", Lifetime = global::Awaiten.Lifetime.Singleton)]")
 					.Because("each skipped match is recorded under every service the scans expose it as, named by its metadata name");
-				await That(source).Contains("public const string Awaiten__ScanSkipped_Roaster_")
+				await That(source).Contains("public const string ScanSkipped_Roaster_")
 					.And.Contains("its constructor parameter of type 'Lib.Secret' is not accessible outside the module's assembly")
 					.And.Contains("it is exposed under several services (Lib.IGrinder, Lib.IPlugin)")
 					.And.Contains("its property 'Clock' is marked [Inject]");
-				await That(source).DoesNotContain("Awaiten__Scan_")
+				await That(source).DoesNotContain("Scan_")
 					.Because("the module generates no factory for a skipped match");
 			}
 
@@ -196,7 +196,7 @@ public partial class DiagnosticTests
 				await That(result.Diagnostics).IsEmpty()
 					.Because("the module still emits the public hook wrapper, which takes the service the consumer's instance converts to");
 				await That(result.Sources["Awaiten.MyCode.MyContainer.g.cs"]).Contains("new global::Lib.Roaster(")
-					.And.Contains("global::Lib.PluginModule.Awaiten__ScanHook_OnActivated_Roaster_");
+					.And.Contains("global::Lib.PluginModule.Internals.ScanHook_OnActivated_Roaster_");
 			}
 		}
 	}

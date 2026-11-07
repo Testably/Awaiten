@@ -425,9 +425,9 @@ public class ContainerExtendsTests
 
 			await That(result.Diagnostics).IsEmpty()
 				.Because("the base builds its private implementation for the extending container");
-			await That(result.Sources["Awaiten.MyCode.Shop.g.cs"]).Contains("internal static global::MyCode.IGrinder Awaiten__Registration_Grinder_").And.Contains("=> new global::MyCode.Shop.Grinder(@beans);")
+			await That(result.Sources["Awaiten.MyCode.Shop.g.cs"]).Contains("internal static global::MyCode.IGrinder Registration_Grinder_").And.Contains("=> new global::MyCode.Shop.Grinder(@beans);")
 				.Because("the factory sits in the base, which may construct its private type, and returns the accessible service");
-			await That(result.Sources["Awaiten.MyCode.TestShop.g.cs"]).Contains("global::MyCode.Shop.Awaiten__Registration_Grinder_").And.DoesNotContain("new global::MyCode.Shop.Grinder")
+			await That(result.Sources["Awaiten.MyCode.TestShop.g.cs"]).Contains("global::MyCode.Shop.Internals.Registration_Grinder_").And.DoesNotContain("new global::MyCode.Shop.Grinder")
 				.Because("the extending container calls the factory instead of the constructor it cannot reach");
 		}
 
@@ -456,7 +456,7 @@ public class ContainerExtendsTests
 
 			await That(result.Diagnostics).IsEmpty()
 				.Because("the extending container no longer skips a scan match private to the base");
-			await That(result.Sources["Awaiten.MyCode.TestShop.g.cs"]).Contains("global::MyCode.Shop.Awaiten__Registration_AuditPlugin_");
+			await That(result.Sources["Awaiten.MyCode.TestShop.g.cs"]).Contains("global::MyCode.Shop.Internals.Registration_AuditPlugin_");
 		}
 
 		[Test]
@@ -487,7 +487,7 @@ public class ContainerExtendsTests
 			                                       """);
 
 			await That(result.Diagnostics).IsEmpty();
-			await That(result.Sources["Awaiten.MyCode.TestShop.g.cs"]).Contains("global::MyCode.Production.Shop.Awaiten__Registration_Grinder_")
+			await That(result.Sources["Awaiten.MyCode.TestShop.g.cs"]).Contains("global::MyCode.Production.Shop.Internals.Registration_Grinder_")
 				.Because("the base may access a type private to a class that contains it, so its factory builds it");
 		}
 
@@ -521,9 +521,9 @@ public class ContainerExtendsTests
 			                                       """);
 
 			await That(result.Diagnostics).IsEmpty();
-			await That(result.Sources["Awaiten.MyCode.Shop.g.cs"]).Contains("internal static void Awaiten__Hook_OnActivated_Grinder_").And.Contains("Warm((global::MyCode.Shop.Grinder)@awaiten__instance, @tracker);")
+			await That(result.Sources["Awaiten.MyCode.Shop.g.cs"]).Contains("internal static void Hook_OnActivated_Grinder_").And.Contains("Warm((global::MyCode.Shop.Grinder)@awaiten__instance, @tracker);")
 				.Because("the wrapper takes the accessible service and casts it back inside the base");
-			await That(result.Sources["Awaiten.MyCode.TestShop.g.cs"]).Contains("global::MyCode.Shop.Awaiten__Hook_OnActivated_Grinder_").And.Contains("global::MyCode.Shop.Awaiten__Hook_OnRelease_Grinder_");
+			await That(result.Sources["Awaiten.MyCode.TestShop.g.cs"]).Contains("global::MyCode.Shop.Internals.Hook_OnActivated_Grinder_").And.Contains("global::MyCode.Shop.Internals.Hook_OnRelease_Grinder_");
 		}
 
 		[Test]
@@ -552,7 +552,7 @@ public class ContainerExtendsTests
 			                                       """);
 
 			await That(result.Diagnostics).IsEmpty();
-			await That(result.Sources["Awaiten.MyCode.TestShop.g.cs"]).DoesNotContain("Awaiten__Registration")
+			await That(result.Sources["Awaiten.MyCode.TestShop.g.cs"]).DoesNotContain("Internals.Registration_")
 				.Because("the replaced registration is gone before the factory would be called");
 		}
 
@@ -574,7 +574,7 @@ public class ContainerExtendsTests
 			                                       }
 			                                       """);
 
-			await That(result.Sources["Awaiten.MyCode.Shop.g.cs"]).DoesNotContain("Awaiten__Registration")
+			await That(result.Sources["Awaiten.MyCode.Shop.g.cs"]).DoesNotContain("Internals")
 				.Because("only a private implementation needs a factory, so other containers generate the same code as before");
 		}
 
@@ -604,7 +604,7 @@ public class ContainerExtendsTests
 			                                       """);
 
 			await That(result.Diagnostics).IsEmpty();
-			await That(result.Sources["Awaiten.MyCode.TestShop.g.cs"]).DoesNotContain("Awaiten__Registration")
+			await That(result.Sources["Awaiten.MyCode.TestShop.g.cs"]).DoesNotContain("class Internals")
 				.Because("extending is one level deep, so no container can extend a container that extends another");
 		}
 
@@ -645,7 +645,7 @@ public class ContainerExtendsTests
 
 			await That(result.Diagnostics).IsEmpty()
 				.Because("InternalsVisibleTo lets the extending container call the internal factory and hook wrapper of its base");
-			await That(result.Sources["Awaiten.MyCode.TestShop.g.cs"]).Contains("global::Production.Shop.Awaiten__Registration_Grinder_").And.Contains("global::Production.Shop.Awaiten__Hook_OnActivated_Grinder_").And.Contains("Dispose")
+			await That(result.Sources["Awaiten.MyCode.TestShop.g.cs"]).Contains("global::Production.Shop.Internals.Registration_Grinder_").And.Contains("global::Production.Shop.Internals.Hook_OnActivated_Grinder_").And.Contains("Dispose")
 				.Because("the disposal is read off the private type's metadata, which the factory's return type hides");
 		}
 

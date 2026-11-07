@@ -112,7 +112,7 @@ public class AsyncReleaseHookTests
 			""", [], []);
 		string module = run.Results.SelectMany(r => r.GeneratedSources).Single(s => s.HintName.Contains("TerminalModule")).SourceText.ToString();
 
-		await That(module).Contains("public static global::System.Threading.Tasks.Task Awaiten__Hook_OnRelease_Terminal_*(global::Lib.ITerminal @awaiten__instance) => Disconnect((global::Lib.Terminal)@awaiten__instance);").AsWildcard()
+		await That(module).Contains("public static global::System.Threading.Tasks.Task Hook_OnRelease_Terminal_*(global::Lib.ITerminal @awaiten__instance) => Disconnect((global::Lib.Terminal)@awaiten__instance);").AsWildcard()
 			.Because("the wrapper returns the hook's Task for the consumer to await");
 	}
 
@@ -146,7 +146,7 @@ public class AsyncReleaseHookTests
 			""");
 
 		await That(result.Diagnostics).IsEmpty();
-		await That(result.Sources["Awaiten.MyCode.MyContainer.g.cs"]).Contains("new global::System.Func<global::System.Threading.Tasks.Task>(async () => await global::Lib.TerminalModule.Awaiten__Hook_OnRelease_Terminal_")
+		await That(result.Sources["Awaiten.MyCode.MyContainer.g.cs"]).Contains("new global::System.Func<global::System.Threading.Tasks.Task>(async () => await global::Lib.TerminalModule.Internals.Hook_OnRelease_Terminal_")
 			.Because("the consumer reads the asynchronous release off the wrapper's Task return type");
 	}
 }

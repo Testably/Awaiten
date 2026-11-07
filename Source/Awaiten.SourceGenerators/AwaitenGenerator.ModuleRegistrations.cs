@@ -120,14 +120,16 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     Whether the module pipeline emits into <paramref name="module" />: a non-generic, static, <c>partial</c>
-	///     module whose enclosing types are <c>partial</c> too (see <c>BuildModuleModel</c>, which reports otherwise).
+	///     module whose enclosing types are <c>partial</c> too and that declares no member named like the generated
+	///     <see cref="InternalsClass" /> (see <c>BuildModuleModel</c>, which reports otherwise).
 	/// </summary>
 	private static bool ReceivesGeneratedMembers(INamedTypeSymbol module)
 		=> !HasOpenTypeParameters(module)
 		   && module.IsStatic
 		   && module.DeclaringSyntaxReferences.Any(reference => reference.GetSyntax() is ClassDeclarationSyntax declaration
 		                                                        && declaration.Modifiers.Any(SyntaxKind.PartialKeyword))
-		   && ContainingTypesArePartial(module);
+		   && ContainingTypesArePartial(module)
+		   && !DeclaresInternals(module);
 
 	/// <summary>
 	///     Whether the generated factory of <paramref name="implementation" /> carries a wrapper for the hook
@@ -376,7 +378,7 @@ partial class AwaitenGenerator
 
 	/// <inheritdoc cref="ContributionFactoryName(string, INamedTypeSymbol, INamedTypeSymbol)" />
 	private static string ContributionFactoryName(string attribute, INamedTypeSymbol type, string service)
-		=> $"Awaiten__{(attribute == "CompositeAttribute" ? "Composite" : "Decorator")}_{type.Name}_{Fnv1a($"{type.ToDisplayString(FullyQualified)}\0{service}"):x8}";
+		=> $"{(attribute == "CompositeAttribute" ? "Composite" : "Decorator")}_{type.Name}_{Fnv1a($"{type.ToDisplayString(FullyQualified)}\0{service}"):x8}";
 
 	/// <summary>
 	///     Whether <paramref name="type" /> may appear on a factory the module generates, which is as accessible as the
@@ -775,7 +777,7 @@ partial class AwaitenGenerator
 	///     unrelated changes to the library. Distinct from a scan factory's name (<see cref="ModuleFactoryName" />).
 	/// </summary>
 	private static string RegistrationFactoryName(INamedTypeSymbol implementation)
-		=> $"Awaiten__Registration_{implementation.Name}_{Fnv1a(implementation.ToDisplayString(FullyQualified)):x8}";
+		=> $"Registration_{implementation.Name}_{Fnv1a(implementation.ToDisplayString(FullyQualified)):x8}";
 
 	/// <summary>
 	///     A deterministic name for the constant that records why the module generates no factory for an
@@ -783,14 +785,14 @@ partial class AwaitenGenerator
 	///     module was expanded and skipped the factory on purpose (AWT231), not built without the generator (AWT154).
 	/// </summary>
 	private static string RegistrationSkippedName(INamedTypeSymbol implementation)
-		=> $"Awaiten__RegistrationSkipped_{implementation.Name}_{Fnv1a(implementation.ToDisplayString(FullyQualified)):x8}";
+		=> $"RegistrationSkipped_{implementation.Name}_{Fnv1a(implementation.ToDisplayString(FullyQualified)):x8}";
 
 	/// <summary>
 	///     Why the imported module of another assembly generated no factory for <paramref name="implementation" />,
 	///     or <see langword="null" /> when it records no such skip.
 	/// </summary>
 	private static string? SkippedRegistrationReason(INamedTypeSymbol module, INamedTypeSymbol implementation)
-		=> module.GetMembers(RegistrationSkippedName(implementation))
+		=> InternalsMembers(module, RegistrationSkippedName(implementation))
 			.OfType<IFieldSymbol>()
 			.Select(field => field.ConstantValue as string)
 			.FirstOrDefault(reason => reason is not null);
@@ -803,7 +805,7 @@ partial class AwaitenGenerator
 	private static string RegistrationHookWrapperName(INamedTypeSymbol implementation, bool release, string hookName)
 	{
 		string slot = release ? "OnRelease" : "OnActivated";
-		return $"Awaiten__Hook_{slot}_{implementation.Name}_{Fnv1a($"{implementation.ToDisplayString(FullyQualified)}\0{slot}\0{hookName}"):x8}";
+		return $"Hook_{slot}_{implementation.Name}_{Fnv1a($"{implementation.ToDisplayString(FullyQualified)}\0{slot}\0{hookName}"):x8}";
 	}
 
 	/// <summary>
@@ -811,14 +813,14 @@ partial class AwaitenGenerator
 	///     self-compiled registration, derived like <see cref="RegistrationHookWrapperName" />.
 	/// </summary>
 	private static string RegistrationHookSkippedName(INamedTypeSymbol implementation, bool release, string hookName)
-		=> "Awaiten__HookSkipped_" + RegistrationHookWrapperName(implementation, release, hookName).Substring("Awaiten__Hook_".Length);
+		=> "HookSkipped_" + RegistrationHookWrapperName(implementation, release, hookName).Substring("Hook_".Length);
 
 	/// <summary>
 	///     Why the imported module of another assembly generated no wrapper for a hook of a registration of
 	///     <paramref name="implementation" />, or <see langword="null" /> when it records no such skip.
 	/// </summary>
 	private static string? SkippedHookReason(INamedTypeSymbol module, INamedTypeSymbol implementation, bool release, string hookName)
-		=> module.GetMembers(RegistrationHookSkippedName(implementation, release, hookName))
+		=> InternalsMembers(module, RegistrationHookSkippedName(implementation, release, hookName))
 			.OfType<IFieldSymbol>()
 			.Select(field => field.ConstantValue as string)
 			.FirstOrDefault(reason => reason is not null);

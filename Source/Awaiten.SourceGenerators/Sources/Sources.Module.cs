@@ -7,7 +7,8 @@ namespace Awaiten.SourceGenerators;
 /// <summary>
 ///     Emits the generated partial of a <c>[Module]</c> that self-compiles its <c>[Scan]</c>: the module class is
 ///     re-opened as <c>partial</c>, carrying one <c>[GeneratedScanRegistration]</c> per match and one
-///     <c>public static</c> factory method that constructs the match and returns its accessible exposure interface.
+///     <c>public static</c> factory method, in the nested <c>Internals</c> class that holds every generated member, that
+///     constructs the match and returns its accessible exposure interface.
 ///     The factory body <c>new</c>s the (possibly <c>internal</c>) implementation - legal because this code compiles
 ///     in the module's own assembly - while the consumer only ever names the interface and calls the factory. A
 ///     self-compiled registration gets a factory of the same shape, without an attribute: the consumer finds it by name.
@@ -65,6 +66,14 @@ internal static partial class Sources
 		Indent(builder, depth).Append("static partial class ").AppendLine(model.TypeName);
 		Indent(builder, depth).AppendLine("{");
 
+		bool hasMembers = model.Factories.Count > 0 || model.Registrations.Count > 0 || model.Wrappers.Count > 0 || model.Skipped.Count > 0;
+		if (hasMembers)
+		{
+			OpenInternals(builder, depth + 1, "public",
+				"Generated from the module's registrations and scans: the factories, wrappers and skip records a consuming",
+				"container calls or reads. Not intended to be used directly.");
+		}
+
 		bool first = true;
 		foreach (ModuleFactory factory in model.Factories.AsArray())
 		{
@@ -76,13 +85,13 @@ internal static partial class Sources
 			first = false;
 			if (factory.Skip is { } skip)
 			{
-				EmitSkipReason(builder, depth + 1, skip.MarkerName, skip.Reason,
+				EmitSkipReason(builder, depth + 2, skip.MarkerName, skip.Reason,
 					"Generated from a module [Scan]: why no factory constructs this match. An assembly granted InternalsVisibleTo",
 					"constructs it itself; a consuming container that cannot reports this reason.");
 			}
 			else
 			{
-				EmitModuleFactory(builder, depth + 1, factory);
+				EmitModuleFactory(builder, depth + 2, factory);
 			}
 
 			// The lifecycle-hook wrappers, emitted beside the factory: public so a cross-assembly consumer can run
@@ -90,13 +99,13 @@ internal static partial class Sources
 			if (factory.OnActivated is { SkipReason: null, } activation)
 			{
 				builder.AppendLine();
-				EmitModuleHook(builder, depth + 1, factory.ServiceType, activation, release: false, ScanOrigin);
+				EmitModuleHook(builder, depth + 2, factory.ServiceType, activation, release: false, ScanOrigin);
 			}
 
 			if (factory.OnRelease is { SkipReason: null, } release)
 			{
 				builder.AppendLine();
-				EmitModuleHook(builder, depth + 1, factory.ServiceType, release, release: true, ScanOrigin);
+				EmitModuleHook(builder, depth + 2, factory.ServiceType, release, release: true, ScanOrigin);
 			}
 		}
 
@@ -108,11 +117,11 @@ internal static partial class Sources
 			}
 
 			first = false;
-			EmitRegistrationFactory(builder, depth + 1, registration);
+			EmitRegistrationFactory(builder, depth + 2, registration);
 			foreach (RegistrationHook hook in registration.Hooks.AsArray())
 			{
 				builder.AppendLine();
-				EmitModuleHook(builder, depth + 1, registration.ReturnType, hook.Hook, hook.Release, RegistrationOrigin);
+				EmitModuleHook(builder, depth + 2, registration.ReturnType, hook.Hook, hook.Release, RegistrationOrigin);
 			}
 		}
 
@@ -124,7 +133,7 @@ internal static partial class Sources
 			}
 
 			first = false;
-			EmitMemberWrapper(builder, depth + 1, wrapper, "public",
+			EmitMemberWrapper(builder, depth + 2, wrapper, "public",
 				"Generated from a module registration: forwards to the module's own member, which a consuming container in",
 				"another assembly cannot call.");
 		}
@@ -139,16 +148,21 @@ internal static partial class Sources
 			first = false;
 			if (skipped.Hook)
 			{
-				EmitSkipReason(builder, depth + 1, skipped.MarkerName, skipped.Reason,
+				EmitSkipReason(builder, depth + 2, skipped.MarkerName, skipped.Reason,
 					"Generated from a module registration: why no wrapper runs this lifecycle hook. An assembly granted",
 					"InternalsVisibleTo calls the hook itself; a consuming container that cannot reports this reason.");
 			}
 			else
 			{
-				EmitSkipReason(builder, depth + 1, skipped.MarkerName, skipped.Reason,
+				EmitSkipReason(builder, depth + 2, skipped.MarkerName, skipped.Reason,
 					"Generated from a module registration: why no factory constructs this implementation. An assembly granted",
 					"InternalsVisibleTo constructs it itself; a consuming container that cannot reports this reason.");
 			}
+		}
+
+		if (hasMembers)
+		{
+			Indent(builder, depth + 1).AppendLine("}");
 		}
 
 		Indent(builder, depth).AppendLine("}");
@@ -214,9 +228,10 @@ internal static partial class Sources
 		string skip = factory.SkipUnconstructable ? ", SkipUnconstructable = true" : string.Empty;
 
 		// The hook wrapper names travel on the registration so a consumer runs them through the ordinary hook
-		// pipeline, exactly like OnActivated/OnRelease on a container [Scan].
-		string onActivated = factory.OnActivated is { } activation ? $", OnActivated = \"{activation.WrapperName}\"" : string.Empty;
-		string onRelease = factory.OnRelease is { } release ? $", OnRelease = \"{release.WrapperName}\"" : string.Empty;
+		// pipeline, exactly like OnActivated/OnRelease on a container [Scan]. Every name is relative to the module, so
+		// a generated member carries its Internals class and a skipped one names the module's own member.
+		string onActivated = factory.OnActivated is { } activation ? $", OnActivated = \"{RelativeName(activation.WrapperName, activation.SkipReason is null)}\"" : string.Empty;
+		string onRelease = factory.OnRelease is { } release ? $", OnRelease = \"{RelativeName(release.WrapperName, release.SkipReason is null)}\"" : string.Empty;
 
 		// What the consumer cannot read off the match it never sees: async initialization and disposal.
 		string asyncInitializable = factory.Traits.AsyncInitializers.Count > 0
@@ -224,7 +239,26 @@ internal static partial class Sources
 			: string.Empty;
 		string disposable = factory.Traits.Disposable ? ", Disposable = true" : string.Empty;
 		string asyncDisposable = factory.Traits.AsyncDisposable ? ", AsyncDisposable = true" : string.Empty;
-		return $"global::Awaiten.GeneratedScanRegistrationAttribute<{factory.ServiceType}>(\"{factory.FactoryName}\", Lifetime = global::Awaiten.Lifetime.{factory.Lifetime}{skip}{onActivated}{onRelease}{asyncInitializable}{disposable}{asyncDisposable})";
+		return $"global::Awaiten.GeneratedScanRegistrationAttribute<{factory.ServiceType}>(\"{RelativeName(factory.FactoryName, factory.Skip is null)}\", Lifetime = global::Awaiten.Lifetime.{factory.Lifetime}{skip}{onActivated}{onRelease}{asyncInitializable}{disposable}{asyncDisposable})";
+	}
+
+	/// <summary>
+	///     The name of a member relative to the module that owns it: a <paramref name="generated" /> one sits in the
+	///     generated Internals class, any other is the module's own.
+	/// </summary>
+	private static string RelativeName(string name, bool generated)
+		=> generated ? $"{AwaitenGenerator.InternalsClass}.{name}" : name;
+
+	/// <summary>
+	///     Opens the nested class that holds every member the generator adds to a module or container, hidden from
+	///     IntelliSense, so the generated plumbing stays apart from the user's own members.
+	/// </summary>
+	private static void OpenInternals(StringBuilder builder, int depth, string accessibility, params string[] summary)
+	{
+		AppendXmlSummary(builder, depth, summary);
+		Indent(builder, depth).AppendLine("[global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]");
+		Indent(builder, depth).Append(accessibility).Append(" static class ").AppendLine(AwaitenGenerator.InternalsClass);
+		Indent(builder, depth).AppendLine("{");
 	}
 
 	private const string ScanOrigin = "a module [Scan]";

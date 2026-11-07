@@ -692,7 +692,7 @@ partial class AwaitenGenerator
 			string wrapper = info.IsScan && !HasAwaitenAttribute(origin.GetAttributes(), "ContainerAttribute")
 				? ModuleHookWrapperName(info.Symbol, release)
 				: RegistrationHookWrapperName(info.Symbol, release, hookName);
-			return ($"{origin.ToDisplayString(FullyQualified)}.{wrapper}", ClassifyHookParameters(hook, info, release, context), hook);
+			return ($"{origin.ToDisplayString(FullyQualified)}.{InInternals(wrapper)}", ClassifyHookParameters(hook, info, release, context), hook);
 		}
 
 		(List<IMethodSymbol> matches, List<IReadOnlyList<INamedTypeSymbol>> ambiguousMethods) = CollectHookOverloads(
@@ -1436,7 +1436,7 @@ partial class AwaitenGenerator
 	/// </summary>
 	private static IEnumerable<ISymbol> AccessibleMembers(INamedTypeSymbol container, string name, Compilation compilation)
 	{
-		foreach (ISymbol member in container.GetMembers(name))
+		foreach (ISymbol member in MembersNamed(container, name))
 		{
 			yield return member;
 		}

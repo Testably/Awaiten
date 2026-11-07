@@ -154,7 +154,7 @@ public static partial class Roastery
 public static partial class TestRoastery;   // resolves IGrinder and IEnumerable<IPlugin> like Roastery
 ```
 
-A container only generates these factories when it has private implementations, and an extending container never does. The factory is `internal`, so an extending container in another assembly needs `InternalsVisibleTo`, like for any other internal member of the base. A registration the extending container replaces never calls the factory.
+A container only generates these factories when it has private implementations, and an extending container never does. The factory sits in an `internal` nested class named `Internals`, so an extending container in another assembly needs `InternalsVisibleTo`, like for any other internal member of the base. A registration the extending container replaces never calls the factory.
 
 The factory mirrors the constructor the base uses. It copies an `[Arg]` or `[FromKey]` of a constructor parameter onto its own parameter, and takes each injected property as a parameter with the property's name. It still can't build every private type. A type with an `Optional` or `Deferred` injected property, a hook parameter marked `[Arg]`, `[FromKey]` or `[Inject]`, or a parameter type private to the base is not built for the extending container. A private decorator or composite of the base is built through a factory of its own, which takes the inner service or the collection. An open generic registration private to the base is not built for the extending container. Make such a type `internal`. A type nested privately in an imported module, or in a class that contains the module, is fine, because every container builds it through the module's generated factory.
 

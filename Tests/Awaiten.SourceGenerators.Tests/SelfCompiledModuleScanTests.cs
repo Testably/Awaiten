@@ -22,7 +22,7 @@ public class SelfCompiledModuleScanTests
 		}
 
 		string simpleName = fullyQualifiedName[(fullyQualifiedName.LastIndexOf('.') + 1)..];
-		return $"Awaiten__Scan_{simpleName}_{hash:x8}";
+		return $"Scan_{simpleName}_{hash:x8}";
 	}
 
 	private const string LibrarySource = """
@@ -60,7 +60,7 @@ public class SelfCompiledModuleScanTests
 			.Because("the module is re-opened as partial to receive the generated factory");
 		await That(module).Contains("[global::Awaiten.GeneratedScanExpansionAttribute]")
 			.Because("the expansion marker lets a consuming container tell an expanded scan from one built without the generator (AWT154)");
-		await That(module).Contains($"global::Awaiten.GeneratedScanRegistrationAttribute<global::Lib.IRoaster>(\"{FactoryName("global::Lib.Roaster")}\", Lifetime = global::Awaiten.Lifetime.Singleton)")
+		await That(module).Contains($"global::Awaiten.GeneratedScanRegistrationAttribute<global::Lib.IRoaster>(\"Internals.{FactoryName("global::Lib.Roaster")}\", Lifetime = global::Awaiten.Lifetime.Singleton)")
 			.Because("the match is registered under its accessible MatchingInterface, as a singleton scan match");
 		await That(module).Contains($"public static global::Lib.IRoaster {FactoryName("global::Lib.Roaster")}(global::Lib.IClock @clock) => new global::Lib.Roaster(@clock);")
 			.Because("the factory returns the interface but constructs the internal implementation in the library, with verbatim-prefixed parameter names so keyword-named parameters stay legal");
@@ -118,7 +118,7 @@ public class SelfCompiledModuleScanTests
 			.Because("the internal implementation resolves through its interface with no missing dependency");
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 
-		await That(source).Contains($"global::Lib.PluginModule.{FactoryName("global::Lib.Roaster")}")
+		await That(source).Contains($"global::Lib.PluginModule.Internals.{FactoryName("global::Lib.Roaster")}")
 			.Because("the container calls the module's generated factory to build the implementation");
 		await That(source).DoesNotContain("new global::Lib.Roaster")
 			.Because("the consumer never constructs the internal implementation directly");
@@ -237,9 +237,9 @@ public class SelfCompiledModuleScanTests
 		await That(result.Diagnostics).IsEmpty()
 			.Because("two internal implementations of one marker interface collect instead of colliding (no AWT111)");
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-		await That(source).Contains($"global::Lib.PluginModule.{FactoryName("global::Lib.Alpha")}")
+		await That(source).Contains($"global::Lib.PluginModule.Internals.{FactoryName("global::Lib.Alpha")}")
 			.Because("the first match is a member of the IEnumerable<IPlugin> collection");
-		await That(source).Contains($"global::Lib.PluginModule.{FactoryName("global::Lib.Bravo")}")
+		await That(source).Contains($"global::Lib.PluginModule.Internals.{FactoryName("global::Lib.Bravo")}")
 			.Because("the second match is a member of the IEnumerable<IPlugin> collection too, exactly as a container scan would collect them");
 	}
 
@@ -313,9 +313,9 @@ public class SelfCompiledModuleScanTests
 			""");
 
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-		await That(source).Contains($"global::Lib.ModuleA.{FactoryName("global::Lib.A.Handler")}")
+		await That(source).Contains($"global::Lib.ModuleA.Internals.{FactoryName("global::Lib.A.Handler")}")
 			.Because("module A's match is a member of the collection");
-		await That(source).Contains($"global::Lib.ModuleB.{FactoryName("global::Lib.B.Handler")}")
+		await That(source).Contains($"global::Lib.ModuleB.Internals.{FactoryName("global::Lib.B.Handler")}")
 			.Because("module B's match must not be deduped away by sharing module A's factory name, and the name hash keeps same-named matches distinct");
 	}
 
@@ -443,7 +443,7 @@ public class SelfCompiledModuleScanTests
 
 		await That(module).Contains(FactoryName("global::Lib.Roaster"))
 			.Because("the first scan's match is emitted");
-		await That(module.Split("public static").Length - 1).IsEqualTo(1)
+		await That(module.Split("public static global::").Length - 1).IsEqualTo(1)
 			.Because("the second scan matched the same type under the same exposure, which a container would dedup to one collection member, so only one factory is emitted");
 	}
 
@@ -488,7 +488,7 @@ public class SelfCompiledModuleScanTests
 		await That(result.Diagnostics).DoesNotContain("*error*").AsWildcard()
 			.Because("pruning replaces the missing-dependency error");
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-		await That(source).Contains($"global::Lib.PluginModule.{FactoryName("global::Lib.Grinder")}")
+		await That(source).Contains($"global::Lib.PluginModule.Internals.{FactoryName("global::Lib.Grinder")}")
 			.Because("the constructable match survives the prune");
 	}
 
@@ -801,7 +801,7 @@ public class SelfCompiledModuleScanTests
 			await That(result.Diagnostics).IsEmpty()
 				.Because("the container builds the module's private match through the factory and runs its private hook through the wrapper");
 			string source = result.Sources["Awaiten.Lib.Shop.g.cs"];
-			await That(source).Contains($"global::Lib.PluginModule.{FactoryName("global::Lib.PluginModule.FakePlugin")}(")
+			await That(source).Contains($"global::Lib.PluginModule.Internals.{FactoryName("global::Lib.PluginModule.FakePlugin")}(")
 				.Because("the container cannot construct a type nested privately in the module, not even in the module's own assembly");
 			await That(source).DoesNotContain("new global::Lib.PluginModule.FakePlugin");
 		}
@@ -825,7 +825,7 @@ public class SelfCompiledModuleScanTests
 
 			await That(result.Diagnostics).IsEmpty()
 				.Because("another assembly reads the generated scan registration, exactly as for an internal match");
-			await That(result.Sources["Awaiten.MyCode.Shop.g.cs"]).Contains($"global::Lib.PluginModule.{FactoryName("global::Lib.PluginModule.FakePlugin")}(");
+			await That(result.Sources["Awaiten.MyCode.Shop.g.cs"]).Contains($"global::Lib.PluginModule.Internals.{FactoryName("global::Lib.PluginModule.FakePlugin")}(");
 		}
 
 		[Test]
@@ -858,7 +858,7 @@ public class SelfCompiledModuleScanTests
 
 			await That(result.Diagnostics).IsEmpty()
 				.Because("the container binds the generic hook over the match's closed marker form, as the module's build did");
-			await That(result.Sources["Awaiten.Lib.Shop.g.cs"]).Contains("global::Lib.ViewModule.Awaiten__ScanHook_OnActivated_MainView_")
+			await That(result.Sources["Awaiten.Lib.Shop.g.cs"]).Contains("global::Lib.ViewModule.Internals.ScanHook_OnActivated_MainView_")
 				.Because("the container cannot call a hook that takes the private match, so it runs the generated wrapper");
 		}
 
@@ -951,7 +951,7 @@ public class SelfCompiledModuleScanTests
 			await That(result.Diagnostics).IsEmpty()
 				.Because("the module can reach a type private to a class containing it, so its scan matches the type and runs the private hook through the wrapper");
 			string source = result.Sources["Awaiten.Lib.Shop.g.cs"];
-			await That(source).Contains($"global::Lib.{module}.{FactoryName("global::Lib.Fakes.FakePlugin")}(")
+			await That(source).Contains($"global::Lib.{module}.Internals.{FactoryName("global::Lib.Fakes.FakePlugin")}(")
 				.Because("only the module can construct the type, so the container calls the module's generated factory");
 			await That(source).DoesNotContain("new global::Lib.Fakes.FakePlugin");
 		}
@@ -988,7 +988,7 @@ public class SelfCompiledModuleScanTests
 				""");
 
 			await That(result.Diagnostics).IsEmpty();
-			await That(result.Sources["Awaiten.MyCode.Shop.g.cs"]).Contains($"global::Lib.Fakes.PluginModule.{FactoryName("global::Lib.Fakes.FakePlugin")}(")
+			await That(result.Sources["Awaiten.MyCode.Shop.g.cs"]).Contains($"global::Lib.Fakes.PluginModule.Internals.{FactoryName("global::Lib.Fakes.FakePlugin")}(")
 				.Because("another assembly reads the generated scan registration of a type private to a class containing the module");
 		}
 
@@ -1023,7 +1023,7 @@ public class SelfCompiledModuleScanTests
 			await That(result.Diagnostics).HasSingle().Matching(diagnostic => diagnostic.Contains("warning AWT193")
 			                                                                  && diagnostic.Contains("'Lib.Fakes.FakeClock' is private or protected and the module registers it explicitly"))
 				.Because("a type private to a class containing the module has the module's single factory too, so the scan match yields to the registration");
-			await That(result.Sources["Awaiten.Lib.Shop.g.cs"]).Contains("Awaiten__Registration_FakeClock_");
+			await That(result.Sources["Awaiten.Lib.Shop.g.cs"]).Contains("Registration_FakeClock_");
 		}
 
 		[Test]

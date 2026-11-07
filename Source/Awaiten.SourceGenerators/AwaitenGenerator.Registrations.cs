@@ -109,7 +109,7 @@ internal sealed record DecorateRegistration(
 internal sealed record OwnerFactoryCall(INamedTypeSymbol Owner, string Name, string ReturnType, IMethodSymbol Producer)
 {
 	/// <summary>The qualified factory the generated container calls.</summary>
-	public string Call => $"{Owner.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}.{Name}";
+	public string Call => $"{Owner.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}.{AwaitenGenerator.InternalsClass}.{Name}";
 }
 
 /// <summary>

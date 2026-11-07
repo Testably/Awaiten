@@ -410,7 +410,7 @@ public partial class DiagnosticTests
 				await That(result.Diagnostics).IsEmpty()
 					.Because("the extending container builds the base's private match through the factory the base generates for it");
 				await That(result.Sources["Awaiten.MyCode.Shop.g.cs"]).Contains("new global::MyCode.Shop.FakePlugin()");
-				await That(result.Sources["Awaiten.MyCode.TestShop.g.cs"]).Contains("global::MyCode.Shop.Awaiten__Registration_FakePlugin_");
+				await That(result.Sources["Awaiten.MyCode.TestShop.g.cs"]).Contains("global::MyCode.Shop.Internals.Registration_FakePlugin_");
 			}
 
 			[Test]

@@ -339,7 +339,7 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics.Count(diagnostic => diagnostic.Contains("AWT198"))).IsEqualTo(1)
 				.Because("the first scan's closed marker forms already make the hook ambiguous, and the second scan's restatement re-resolves over the union without repeating the report");
 			string module = result.Sources.Single(source => source.Key.Contains("ModuleScan")).Value;
-			await That(module).DoesNotContain("Awaiten__ScanHook_OnActivated_DualView")
+			await That(module).DoesNotContain("ScanHook_OnActivated_DualView")
 				.Because("the second scan restates the failed hook over its own single closed form; resolving with only that narrower set would wire the hook to a scan-order-dependent closing beside the reported ambiguity, so the slot has to stay failed over the union");
 		}
 
@@ -371,7 +371,7 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics.Count(diagnostic => diagnostic.Contains("AWT198"))).IsEqualTo(1)
 				.Because("the second scan widens the marker union into ambiguity, reported once; the third scan's restatement re-resolves over the same failed union without repeating it");
 			string module = result.Sources.Single(source => source.Key.Contains("ModuleScan")).Value;
-			await That(module).DoesNotContain("Awaiten__ScanHook_OnActivated_Worker")
+			await That(module).DoesNotContain("ScanHook_OnActivated_Worker")
 				.Because("the first scan's successfully wired hook is dropped when the widened union turns ambiguous, and the third scan's restatement must not re-wire it from its own single closed form");
 		}
 
@@ -405,7 +405,7 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).Contains("*AWT198*Wire*").AsWildcard()
 				.Because("the second scan's restatement rewires the hook and clears the failure record, so the third scan widening the union into ambiguity is a fresh outcome that must report rather than hide behind the first scan's stale failure");
 			string module = result.Sources.Single(source => source.Key.Contains("ModuleScan")).Value;
-			await That(module).DoesNotContain("Awaiten__ScanHook_OnActivated_Worker")
+			await That(module).DoesNotContain("ScanHook_OnActivated_Worker")
 				.Because("the slot's final resolution over the full union is ambiguous, so no wrapper is wired");
 		}
 	}

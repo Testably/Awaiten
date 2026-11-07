@@ -25,8 +25,9 @@ public sealed class GeneratedScanRegistrationAttribute<TService> : Attribute
 {
 	/// <summary>Registers one scan match produced by <paramref name="factory" />.</summary>
 	/// <param name="factory">
-	///     The name of the generated <c>static</c> factory method on the module that constructs the match and
-	///     returns <typeparamref name="TService" />; its parameters are resolved from the consumer's graph. For a match
+	///     The name of the generated <c>static</c> factory method that constructs the match and returns
+	///     <typeparamref name="TService" />, relative to the module, so it starts with the generated nested
+	///     <c>Internals</c> class; its parameters are resolved from the consumer's graph. For a match
 	///     the module generates no factory for, the match's metadata name instead, which only a consumer that can
 	///     construct the match registers.
 	/// </param>
@@ -48,7 +49,8 @@ public sealed class GeneratedScanRegistrationAttribute<TService> : Attribute
 	public bool SkipUnconstructable { get; set; }
 
 	/// <summary>
-	///     The name of the generated <c>public static</c> activation wrapper on the module, run once the match
+	///     The name of the generated <c>public static</c> activation wrapper, relative to the module like
+	///     <see cref="Factory" />, run once the match
 	///     is constructed. The module resolves and closes its (possibly <c>internal</c>) <c>OnActivated</c> hook at
 	///     its own build and emits this public wrapper so the consumer can run it without naming the internal hook;
 	///     the wrapper's parameters after the instance resolve from the consumer's graph. It returns what the hook
@@ -58,7 +60,8 @@ public sealed class GeneratedScanRegistrationAttribute<TService> : Attribute
 	public string? OnActivated { get; set; }
 
 	/// <summary>
-	///     The name of the generated <c>public static void</c> release wrapper on the module, run when the match's
+	///     The name of the generated <c>public static void</c> release wrapper, relative to the module like
+	///     <see cref="Factory" />, run when the match's
 	///     owner is disposed. The module counterpart of <see cref="OnActivated" /> for the <c>OnRelease</c> hook.
 	///     Null when the scan declared no release hook.
 	/// </summary>

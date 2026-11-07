@@ -84,7 +84,7 @@ public class RegistrationFactoryShapeTests
 
 			await That(result.Diagnostics).IsEmpty()
 				.Because("one factory returning a type that converts to both services shares one instance");
-			await That(ModuleSource(result)).Contains("public static global::Lib.IFormalGreeter Awaiten__Registration_Greeter_");
+			await That(ModuleSource(result)).Contains("public static global::Lib.IFormalGreeter Registration_Greeter_");
 		}
 
 		[Test]
@@ -107,7 +107,7 @@ public class RegistrationFactoryShapeTests
 			                                       """);
 
 			await That(result.Diagnostics).IsEmpty();
-			await That(ModuleSource(result)).Contains("public static global::Lib.GreeterBase Awaiten__Registration_Greeter_");
+			await That(ModuleSource(result)).Contains("public static global::Lib.GreeterBase Registration_Greeter_");
 		}
 
 		[Test]
@@ -482,9 +482,9 @@ public class RegistrationFactoryShapeTests
 
 			await That(result.Diagnostics).IsEmpty();
 			await That(ModuleSource(result))
-				.Contains("public static global::Lib.IClock Awaiten__Factory_CreateClock_")
+				.Contains("public static global::Lib.IClock Factory_CreateClock_")
 				.And.Contains("(global::Lib.ILog @log) => CreateClock(@log);")
-				.And.Contains("public static global::Lib.IMenu Awaiten__Instance_Menu_")
+				.And.Contains("public static global::Lib.IMenu Instance_Menu_")
 				.Because("a container in another assembly calls the public wrappers instead of the internal members");
 		}
 
@@ -587,8 +587,8 @@ public class RegistrationFactoryShapeTests
 
 			await That(result.Diagnostics).IsEmpty();
 			await That(result.Sources.Single(source => source.Key.Contains("Shop")).Value)
-				.Contains("internal static global::Lib.IClock Awaiten__Factory_CreateClock_")
-				.And.Contains("internal static global::Lib.IMenu Awaiten__Instance_TheMenu_")
+				.Contains("internal static global::Lib.IClock Factory_CreateClock_")
+				.And.Contains("internal static global::Lib.IMenu Instance_TheMenu_")
 				.And.Contains("(global::Lib.Grinder @grinder, global::Lib.IClock @clock) => Calibrate(@grinder, @clock);");
 		}
 
@@ -597,7 +597,7 @@ public class RegistrationFactoryShapeTests
 		{
 			GeneratorResult result = Generator.Run(PrivateMembersBase);
 
-			await That(result.Sources.Single(source => source.Key.Contains("Shop")).Value).DoesNotContain("Awaiten__")
+			await That(result.Sources.Single(source => source.Key.Contains("Shop")).Value).DoesNotContain("Internals")
 				.Because("no other assembly could call an internal wrapper");
 		}
 
@@ -675,7 +675,7 @@ public class RegistrationFactoryShapeTests
 			GeneratorResult result = Generator.Run(DecoratorModule);
 
 			await That(result.Diagnostics).IsEmpty();
-			await That(ModuleSource(result)).Contains("public static global::Lib.IGreeter Awaiten__Decorator_LoudGreeter_")
+			await That(ModuleSource(result)).Contains("public static global::Lib.IGreeter Decorator_LoudGreeter_")
 				.And.Contains("(global::Lib.IGreeter @inner, global::Lib.ILog @log) => new global::Lib.LoudGreeter(@inner, @log);");
 		}
 
@@ -686,7 +686,7 @@ public class RegistrationFactoryShapeTests
 
 			await That(result.Diagnostics).IsEmpty()
 				.Because("the consumer calls the decorator's factory with the inner service instead of reporting AWT230");
-			await That(result.Sources.Single(source => source.Key.Contains("AppContainer")).Value).Contains("global::Lib.GreetingModule.Awaiten__Decorator_LoudGreeter_");
+			await That(result.Sources.Single(source => source.Key.Contains("AppContainer")).Value).Contains("global::Lib.GreetingModule.Internals.Decorator_LoudGreeter_");
 		}
 
 		[Test]
@@ -727,7 +727,7 @@ public class RegistrationFactoryShapeTests
 			                                       """);
 
 			await That(result.Diagnostics).IsEmpty();
-			await That(result.Sources.Single(source => source.Key.Contains("AppContainer")).Value).Contains("global::Lib.GreetingModule.Awaiten__Decorator_LoudGreeter_");
+			await That(result.Sources.Single(source => source.Key.Contains("AppContainer")).Value).Contains("global::Lib.GreetingModule.Internals.Decorator_LoudGreeter_");
 		}
 
 		[Test]
@@ -783,7 +783,7 @@ public class RegistrationFactoryShapeTests
 
 			await That(result.Diagnostics).IsEmpty();
 			await That(result.Sources.Single(source => source.Key.Contains("Shop")).Value)
-				.Contains("internal static global::Lib.IGreeter Awaiten__Decorator_LoudGreeter_");
+				.Contains("internal static global::Lib.IGreeter Decorator_LoudGreeter_");
 		}
 
 		[Test]
@@ -845,7 +845,7 @@ public class RegistrationFactoryShapeTests
 			GeneratorResult result = Generator.Run(CompositeModule);
 
 			await That(result.Diagnostics).IsEmpty();
-			await That(ModuleSource(result)).Contains("public static global::Lib.IGreeter Awaiten__Composite_AllGreeters_")
+			await That(ModuleSource(result)).Contains("public static global::Lib.IGreeter Composite_AllGreeters_")
 				.And.Contains("(global::System.Collections.Generic.IEnumerable<global::Lib.IGreeter> @greeters) => new global::Lib.AllGreeters(@greeters);");
 		}
 
@@ -929,7 +929,7 @@ public class RegistrationFactoryShapeTests
 
 			await That(result.Diagnostics).IsEmpty();
 			await That(result.Sources.Single(source => source.Key.EndsWith("Lib.Shop.g.cs", StringComparison.Ordinal)).Value)
-				.Contains("internal static global::Lib.IGreeter Awaiten__Composite_AllGreeters_");
+				.Contains("internal static global::Lib.IGreeter Composite_AllGreeters_");
 		}
 
 		[Test]
@@ -1161,7 +1161,7 @@ public class RegistrationFactoryShapeTests
 			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Granted(InternalExposureModule), InternalConsumer);
 
 			await That(result.Diagnostics).IsEmpty();
-			await That(result.Sources.Single(source => source.Key.Contains("AppContainer")).Value).Contains("global::Lib.PluginModule.Awaiten__Scan_Roaster_")
+			await That(result.Sources.Single(source => source.Key.Contains("AppContainer")).Value).Contains("global::Lib.PluginModule.Internals.Scan_Roaster_")
 				.Because("the consumer resolves the match under the internal interface through the module's factory");
 		}
 
@@ -1219,7 +1219,7 @@ public class RegistrationFactoryShapeTests
 
 			await That(result.Diagnostics).IsEmpty();
 			await That(result.Sources.Single(source => source.Key.Contains("AppContainer")).Value)
-				.Contains("global::Lib.PluginModule.Awaiten__Scan_Roaster_").And.Contains("await ((global::Lib.IStartable)")
+				.Contains("global::Lib.PluginModule.Internals.Scan_Roaster_").And.Contains("await ((global::Lib.IStartable)")
 				.Because("the module builds the match through its factory instead of leaving it to the friend, which runs the internal convention on it");
 		}
 	}
@@ -1259,8 +1259,8 @@ public class RegistrationFactoryShapeTests
 
 			await That(result.Diagnostics).IsEmpty();
 			await That(ModuleSource(result))
-				.Contains("public static void Awaiten__Hook_OnActivated_IKettle_*(global::Lib.IKettle @awaiten__instance, global::Lib.IClock @clock) => Boil(@awaiten__instance, @clock);").AsWildcard()
-				.And.Contains("public static void Awaiten__Hook_OnRelease_IMenu_*(global::Lib.IMenu @awaiten__instance) => Clear(@awaiten__instance);").AsWildcard()
+				.Contains("public static void Hook_OnActivated_IKettle_*(global::Lib.IKettle @awaiten__instance, global::Lib.IClock @clock) => Boil(@awaiten__instance, @clock);").AsWildcard()
+				.And.Contains("public static void Hook_OnRelease_IMenu_*(global::Lib.IMenu @awaiten__instance) => Clear(@awaiten__instance);").AsWildcard()
 				.Because("a container in another assembly calls the public wrappers instead of the internal hooks");
 		}
 
@@ -1271,7 +1271,7 @@ public class RegistrationFactoryShapeTests
 
 			await That(result.Diagnostics).IsEmpty();
 			string source = result.Sources.Single(source => source.Key.Contains("AppContainer")).Value;
-			await That(source).Contains("global::Lib.GreetingModule.Awaiten__Hook_OnActivated_IKettle_").And.Contains("global::Lib.GreetingModule.Awaiten__Hook_OnRelease_IMenu_")
+			await That(source).Contains("global::Lib.GreetingModule.Internals.Hook_OnActivated_IKettle_").And.Contains("global::Lib.GreetingModule.Internals.Hook_OnRelease_IMenu_")
 				.Because("the consumer runs the wrappers, which it can see, instead of the internal hooks it cannot");
 		}
 
@@ -1322,7 +1322,7 @@ public class RegistrationFactoryShapeTests
 
 			await That(library.Diagnostics).IsEmpty()
 				.Because("an assembly granted InternalsVisibleTo calls the hook directly, so the module needs no wrapper");
-			await That(ModuleSource(library)).Contains("public const string Awaiten__HookSkipped_OnActivated_IKettle_").And.DoesNotContain("Awaiten__Hook_OnActivated_IKettle_");
+			await That(ModuleSource(library)).Contains("public const string HookSkipped_OnActivated_IKettle_").And.DoesNotContain("Hook_OnActivated_IKettle_");
 			await That(result.Diagnostics).IsEmpty();
 			await That(result.Sources.Single(source => source.Key.Contains("AppContainer")).Value).Contains("global::Lib.GreetingModule.Boil(");
 		}
@@ -1364,7 +1364,7 @@ public class RegistrationFactoryShapeTests
 
 			await That(result.Diagnostics).IsEmpty();
 			await That(ModuleSource(result))
-				.Contains("public static global::System.Threading.Tasks.Task Awaiten__Hook_OnActivated_IKettle_*(global::Lib.IKettle @awaiten__instance, global::System.Threading.CancellationToken @cancellationToken) => BoilAsync(@awaiten__instance, @cancellationToken);").AsWildcard();
+				.Contains("public static global::System.Threading.Tasks.Task Hook_OnActivated_IKettle_*(global::Lib.IKettle @awaiten__instance, global::System.Threading.CancellationToken @cancellationToken) => BoilAsync(@awaiten__instance, @cancellationToken);").AsWildcard();
 		}
 
 		[Test]
@@ -1374,7 +1374,7 @@ public class RegistrationFactoryShapeTests
 
 			await That(result.Diagnostics).IsEmpty();
 			await That(result.Sources.Single(source => source.Key.Contains("AppContainer")).Value)
-				.Contains("await global::Lib.GreetingModule.Awaiten__Hook_OnActivated_IKettle_*(*, cancellationToken)").AsWildcard();
+				.Contains("await global::Lib.GreetingModule.Internals.Hook_OnActivated_IKettle_*(*, cancellationToken)").AsWildcard();
 		}
 
 		private const string ConventionFactoryModule = """
@@ -1416,7 +1416,7 @@ public class RegistrationFactoryShapeTests
 
 			await That(result.Diagnostics).IsEmpty();
 			string source = result.Sources.Single(source => source.Key.Contains("AppContainer")).Value;
-			int hook = source.IndexOf("global::Lib.GreetingModule.Awaiten__Hook_OnActivated_Kettle_", StringComparison.Ordinal);
+			int hook = source.IndexOf("global::Lib.GreetingModule.Internals.Hook_OnActivated_Kettle_", StringComparison.Ordinal);
 			int convention = source.IndexOf("await ((global::Lib.Appliance)", StringComparison.Ordinal);
 			await That(hook).IsGreaterThan(-1)
 				.Because("the consumer runs the internal hook through the module's wrapper");
@@ -1433,7 +1433,7 @@ public class RegistrationFactoryShapeTests
 
 			await That(own.Diagnostics).IsEmpty()
 				.Because("the container constructs a Factory registration itself, so the container judges the convention, as for any registration it builds");
-			await That(ModuleSource(own)).Contains("Awaiten__Hook_OnActivated_Kettle_");
+			await That(ModuleSource(own)).Contains("Hook_OnActivated_Kettle_");
 			await That(result.Diagnostics).HasSingle().Matching(diagnostic => diagnostic.Contains("AWT234") && diagnostic.Contains("not accessible from the container"))
 				.Because("the hook wrapper makes the hook callable, but the container still cannot call the internal convention");
 		}
@@ -1468,7 +1468,7 @@ public class RegistrationFactoryShapeTests
 			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Granted(SkippedHookConventionModule), Consumer);
 
 			await That(library.Diagnostics).IsEmpty();
-			await That(ModuleSource(library)).Contains("Awaiten__HookSkipped_OnActivated_Kettle_");
+			await That(ModuleSource(library)).Contains("HookSkipped_OnActivated_Kettle_");
 			await That(result.Diagnostics).IsEmpty()
 				.Because("an assembly granted InternalsVisibleTo calls both the internal hook and the internal convention directly");
 			await That(result.Sources.Single(source => source.Key.Contains("AppContainer")).Value)
@@ -1522,7 +1522,7 @@ public class RegistrationFactoryShapeTests
 
 			await That(result.Diagnostics).IsEmpty();
 			await That(result.Sources.Single(source => source.Key.Contains("Shop")).Value)
-				.Contains("""internal static global::Lib.IGreeter Awaiten__Registration_Greeter_""")
+				.Contains("""internal static global::Lib.IGreeter Registration_Greeter_""")
 				.And.Contains("""([global::Awaiten.FromKey("utc")] global::Lib.IClock @clock, global::Lib.IClock @Clock) => new global::Lib.Shop.Greeter(@clock) { Clock = @Clock };""");
 		}
 
@@ -1598,8 +1598,8 @@ public class RegistrationFactoryShapeTests
 
 			await That(result.Diagnostics).IsEmpty();
 			await That(result.Sources.Single(source => source.Key.Contains("Shop")).Value)
-				.Contains("internal static global::System.Threading.Tasks.Task<global::Lib.IClock> Awaiten__Factory_CreateClockAsync_*(global::System.Threading.CancellationToken @cancellationToken) => CreateClockAsync(@cancellationToken);").AsWildcard()
-				.And.Contains("internal static global::System.Threading.Tasks.Task Awaiten__Hook_OnActivated_Grinder_*(global::Lib.Grinder @grinder, global::System.Threading.CancellationToken @cancellationToken) => CalibrateAsync(@grinder, @cancellationToken);").AsWildcard()
+				.Contains("internal static global::System.Threading.Tasks.Task<global::Lib.IClock> Factory_CreateClockAsync_*(global::System.Threading.CancellationToken @cancellationToken) => CreateClockAsync(@cancellationToken);").AsWildcard()
+				.And.Contains("internal static global::System.Threading.Tasks.Task Hook_OnActivated_Grinder_*(global::Lib.Grinder @grinder, global::System.Threading.CancellationToken @cancellationToken) => CalibrateAsync(@grinder, @cancellationToken);").AsWildcard()
 				.Because("a wrapper returns the member's task and forwards the token, so the extending container awaits it with its own");
 		}
 
@@ -1610,8 +1610,8 @@ public class RegistrationFactoryShapeTests
 
 			await That(result.Diagnostics).IsEmpty();
 			string source = result.Sources.Single(source => source.Key.Contains("TestShop")).Value;
-			await That(source).Contains("await global::Lib.Shop.Awaiten__Factory_CreateClockAsync_*(cancellationToken)").AsWildcard();
-			await That(source).Contains("await global::Lib.Shop.Awaiten__Hook_OnActivated_Grinder_*(*, cancellationToken)").AsWildcard();
+			await That(source).Contains("await global::Lib.Shop.Internals.Factory_CreateClockAsync_*(cancellationToken)").AsWildcard();
+			await That(source).Contains("await global::Lib.Shop.Internals.Hook_OnActivated_Grinder_*(*, cancellationToken)").AsWildcard();
 		}
 
 		[Test]
@@ -1650,7 +1650,7 @@ public class RegistrationFactoryShapeTests
 
 			await That(result.Diagnostics).IsEmpty();
 			await That(ModuleSource(result))
-				.Contains("public static global::System.Threading.Tasks.Task<global::Lib.IClock> Awaiten__Factory_CreateClockAsync_*(global::System.Threading.CancellationToken @cancellationToken) => CreateClockAsync(@cancellationToken);").AsWildcard();
+				.Contains("public static global::System.Threading.Tasks.Task<global::Lib.IClock> Factory_CreateClockAsync_*(global::System.Threading.CancellationToken @cancellationToken) => CreateClockAsync(@cancellationToken);").AsWildcard();
 		}
 
 		[Test]
@@ -1660,7 +1660,7 @@ public class RegistrationFactoryShapeTests
 
 			await That(result.Diagnostics).IsEmpty();
 			await That(result.Sources.Single(source => source.Key.Contains("AppContainer")).Value)
-				.Contains("await global::Lib.GreetingModule.Awaiten__Factory_CreateClockAsync_*(cancellationToken)").AsWildcard();
+				.Contains("await global::Lib.GreetingModule.Internals.Factory_CreateClockAsync_*(cancellationToken)").AsWildcard();
 		}
 
 		private const string AsyncHookedDecoratorBase = """
@@ -1707,8 +1707,8 @@ public class RegistrationFactoryShapeTests
 
 			await That(result.Diagnostics).IsEmpty();
 			string source = result.Sources.Single(source => source.Key.Contains("TestShop")).Value;
-			await That(source).Contains("await global::Lib.Shop.Awaiten__Hook_OnActivated_Greeter_*(*, cancellationToken)").AsWildcard();
-			await That(source).Contains("global::Lib.Shop.Awaiten__Decorator_LoudGreeter_").AsWildcard();
+			await That(source).Contains("await global::Lib.Shop.Internals.Hook_OnActivated_Greeter_*(*, cancellationToken)").AsWildcard();
+			await That(source).Contains("global::Lib.Shop.Internals.Decorator_LoudGreeter_").AsWildcard();
 		}
 
 		private const string AsyncHookedCompositeBase = """
@@ -1747,8 +1747,8 @@ public class RegistrationFactoryShapeTests
 			await That(baseResult.Diagnostics).IsEmpty();
 			await That(result.Diagnostics).IsEmpty();
 			string source = result.Sources.Single(source => source.Key.Contains("TestShop")).Value;
-			await That(source).Contains("await global::Lib.Shop.Awaiten__Hook_OnActivated_Greeter_*(*, cancellationToken)").AsWildcard();
-			await That(source).Contains("global::Lib.Shop.Awaiten__Composite_AllGreeters_").AsWildcard();
+			await That(source).Contains("await global::Lib.Shop.Internals.Hook_OnActivated_Greeter_*(*, cancellationToken)").AsWildcard();
+			await That(source).Contains("global::Lib.Shop.Internals.Composite_AllGreeters_").AsWildcard();
 		}
 
 		[Test]
@@ -1779,8 +1779,8 @@ public class RegistrationFactoryShapeTests
 
 			await That(result.Diagnostics).IsEmpty();
 			string source = result.Sources.Single(source => source.Key.Contains("AppContainer")).Value;
-			await That(source).Contains("await global::Lib.GreetingModule.Awaiten__Hook_OnActivated_Greeter_*(*, cancellationToken)").AsWildcard();
-			await That(source).Contains("global::Lib.GreetingModule.Awaiten__Decorator_LoudGreeter_").AsWildcard();
+			await That(source).Contains("await global::Lib.GreetingModule.Internals.Hook_OnActivated_Greeter_*(*, cancellationToken)").AsWildcard();
+			await That(source).Contains("global::Lib.GreetingModule.Internals.Decorator_LoudGreeter_").AsWildcard();
 		}
 	}
 }
