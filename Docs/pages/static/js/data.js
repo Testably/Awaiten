@@ -1230,6 +1230,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 09:06:25 2026 \u002B0100",
         "message": "fix: let scans, hooks and modules without factories leave construction to assemblies granted InternalsVisibleTo (#284)"
+      },
+      {
+        "sha": "3adbe6e7b21f4ec03165c537268e8e6dce419cbe",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 09:25:44 2026 \u002B0100",
+        "message": "feat: let an OnActivated hook make a service async-initialized (#285)"
       }
     ],
     "labels": [
@@ -1437,7 +1443,8 @@ window.BENCHMARK_DATA = {
       "e3f54e32",
       "0d542565",
       "1f582413",
-      "7392f6a7"
+      "7392f6a7",
+      "3adbe6e7"
     ],
     "datasets": [
       {
@@ -1648,7 +1655,8 @@ window.BENCHMARK_DATA = {
           5.442413080483675,
           7.754577210793893,
           9.328384884198506,
-          7.159590562539441
+          7.159590562539441,
+          7.769932759801547
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -1660,6 +1668,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -2083,7 +2092,8 @@ window.BENCHMARK_DATA = {
           6.684987880862677,
           8.610362975725106,
           6.884327889553139,
-          7.2492813984553015
+          7.2492813984553015,
+          8.144797930760044
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -2095,6 +2105,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -2518,7 +2529,8 @@ window.BENCHMARK_DATA = {
           96.40774822235107,
           118.41469117800395,
           140.5269817193349,
-          153.54467698505945
+          153.54467698505945,
+          128.68937589327496
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -2530,6 +2542,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -2949,7 +2962,8 @@ window.BENCHMARK_DATA = {
           6.5507001007596655,
           9.726211112279158,
           10.293473132451375,
-          8.978432696064313
+          8.978432696064313,
+          8.774185427106344
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -2961,6 +2975,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -3376,7 +3391,8 @@ window.BENCHMARK_DATA = {
           8.367060718933741,
           11.018385034054518,
           12.220266785224279,
-          11.042006477713585
+          11.042006477713585,
+          11.045458747872285
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -3388,6 +3404,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -4832,6 +4849,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 09:06:25 2026 \u002B0100",
         "message": "fix: let scans, hooks and modules without factories leave construction to assemblies granted InternalsVisibleTo (#284)"
+      },
+      {
+        "sha": "3adbe6e7b21f4ec03165c537268e8e6dce419cbe",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 09:25:44 2026 \u002B0100",
+        "message": "feat: let an OnActivated hook make a service async-initialized (#285)"
       }
     ],
     "labels": [
@@ -5039,7 +5062,8 @@ window.BENCHMARK_DATA = {
       "e3f54e32",
       "0d542565",
       "1f582413",
-      "7392f6a7"
+      "7392f6a7",
+      "3adbe6e7"
     ],
     "datasets": [
       {
@@ -5250,7 +5274,8 @@ window.BENCHMARK_DATA = {
           6.071785822510719,
           8.460138532977838,
           10.140788753827414,
-          8.16533014178276
+          8.16533014178276,
+          8.470880098640919
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -5262,6 +5287,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -5685,7 +5711,8 @@ window.BENCHMARK_DATA = {
           6.529049445192019,
           7.301970677716391,
           6.884511306881905,
-          7.346310789768513
+          7.346310789768513,
+          8.590962386131286
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -5697,6 +5724,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -6120,7 +6148,8 @@ window.BENCHMARK_DATA = {
           96.71319056408745,
           133.15486079851786,
           145.9845119714737,
-          130.8045763373375
+          130.8045763373375,
+          126.78858768939972
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -6132,6 +6161,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -6551,7 +6581,8 @@ window.BENCHMARK_DATA = {
           6.54388976842165,
           9.713619984113253,
           10.210193548064966,
-          8.678966947396596
+          8.678966947396596,
+          8.786941647529602
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -6563,6 +6594,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -6978,7 +7010,8 @@ window.BENCHMARK_DATA = {
           8.489655514558157,
           14.64030282731567,
           16.35344121058782,
-          14.251598075032234
+          14.251598075032234,
+          14.36518911591598
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -6990,6 +7023,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -8434,6 +8468,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 09:06:25 2026 \u002B0100",
         "message": "fix: let scans, hooks and modules without factories leave construction to assemblies granted InternalsVisibleTo (#284)"
+      },
+      {
+        "sha": "3adbe6e7b21f4ec03165c537268e8e6dce419cbe",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 09:25:44 2026 \u002B0100",
+        "message": "feat: let an OnActivated hook make a service async-initialized (#285)"
       }
     ],
     "labels": [
@@ -8641,7 +8681,8 @@ window.BENCHMARK_DATA = {
       "e3f54e32",
       "0d542565",
       "1f582413",
-      "7392f6a7"
+      "7392f6a7",
+      "3adbe6e7"
     ],
     "datasets": [
       {
@@ -8852,7 +8893,8 @@ window.BENCHMARK_DATA = {
           21.84052317738533,
           15.630354762077332,
           10.732851804296176,
-          27.525326733078277
+          27.525326733078277,
+          26.132679790258408
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -9014,6 +9056,7 @@ window.BENCHMARK_DATA = {
           144,
           144,
           144,
+          208,
           208,
           208,
           208,
@@ -9287,7 +9330,8 @@ window.BENCHMARK_DATA = {
           1494.0794151306152,
           1174.3671323140463,
           720.3112782069614,
-          1753.655414835612
+          1753.655414835612,
+          1762.3521288463048
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -9299,6 +9343,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          5688,
           5688,
           5688,
           5688,
@@ -9722,7 +9767,8 @@ window.BENCHMARK_DATA = {
           30042.996541341145,
           25368.809422084265,
           17231.84678548177,
-          25443.020799909318
+          25443.020799909318,
+          25683.236106363933
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -9938,6 +9984,7 @@ window.BENCHMARK_DATA = {
           32482,
           32478,
           32478,
+          32476,
           32476
         ],
         "borderColor": "#5E2750",
@@ -10153,7 +10200,8 @@ window.BENCHMARK_DATA = {
           714.5200277056013,
           599.1916379928589,
           381.6618014403752,
-          713.9125383240836
+          713.9125383240836,
+          728.145281346639
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -10183,6 +10231,7 @@ window.BENCHMARK_DATA = {
           1472,
           1472,
           1472,
+          1528,
           1528,
           1528,
           1528,
@@ -10580,7 +10629,8 @@ window.BENCHMARK_DATA = {
           11794.975818634033,
           9127.567311604818,
           6167.829593658447,
-          12443.468803992639
+          12443.468803992639,
+          13890.725759887695
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -10792,6 +10842,7 @@ window.BENCHMARK_DATA = {
           24761,
           24760,
           24761,
+          24760,
           24760
         ],
         "borderColor": "#43A047",
@@ -12036,6 +12087,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 09:06:25 2026 \u002B0100",
         "message": "fix: let scans, hooks and modules without factories leave construction to assemblies granted InternalsVisibleTo (#284)"
+      },
+      {
+        "sha": "3adbe6e7b21f4ec03165c537268e8e6dce419cbe",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 09:25:44 2026 \u002B0100",
+        "message": "feat: let an OnActivated hook make a service async-initialized (#285)"
       }
     ],
     "labels": [
@@ -12243,7 +12300,8 @@ window.BENCHMARK_DATA = {
       "e3f54e32",
       "0d542565",
       "1f582413",
-      "7392f6a7"
+      "7392f6a7",
+      "3adbe6e7"
     ],
     "datasets": [
       {
@@ -12454,7 +12512,8 @@ window.BENCHMARK_DATA = {
           192.00864906311034,
           111.1582202230181,
           73.0721077521642,
-          364.6002065976461
+          364.6002065976461,
+          255.57296552658082
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -12616,6 +12675,7 @@ window.BENCHMARK_DATA = {
           2128,
           2128,
           2128,
+          4176,
           4176,
           4176,
           4176,
@@ -12889,7 +12949,8 @@ window.BENCHMARK_DATA = {
           15496.840397135416,
           10662.155179341635,
           7103.10112116887,
-          15767.609397379558
+          15767.609397379558,
+          15582.189434344951
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -12901,6 +12962,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          61016,
           61016,
           61016,
           61016,
@@ -13324,7 +13386,8 @@ window.BENCHMARK_DATA = {
           742562.5684344952,
           633059.9933733259,
           415945.89020647324,
-          605259.0640345982
+          605259.0640345982,
+          582017.4493489583
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -13540,7 +13603,8 @@ window.BENCHMARK_DATA = {
           740450,
           740319,
           720386,
-          739961
+          739961,
+          719010
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -13755,7 +13819,8 @@ window.BENCHMARK_DATA = {
           44771.6337483724,
           35957.258579799105,
           22425.831917317708,
-          42449.991529192244
+          42449.991529192244,
+          44942.99855143229
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -13967,7 +14032,8 @@ window.BENCHMARK_DATA = {
           80009,
           80001,
           80305,
-          81180
+          81180,
+          80346
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -14182,7 +14248,8 @@ window.BENCHMARK_DATA = {
           355901.13414588344,
           280722.10408528644,
           185029.9194173177,
-          351292.91848958336
+          351292.91848958336,
+          391602.9814778646
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -14394,7 +14461,8 @@ window.BENCHMARK_DATA = {
           573203,
           573074,
           573040,
-          571195
+          571195,
+          572283
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -15614,6 +15682,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 09:06:25 2026 \u002B0100",
         "message": "fix: let scans, hooks and modules without factories leave construction to assemblies granted InternalsVisibleTo (#284)"
+      },
+      {
+        "sha": "3adbe6e7b21f4ec03165c537268e8e6dce419cbe",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 09:25:44 2026 \u002B0100",
+        "message": "feat: let an OnActivated hook make a service async-initialized (#285)"
       }
     ],
     "labels": [
@@ -15817,7 +15891,8 @@ window.BENCHMARK_DATA = {
       "e3f54e32",
       "0d542565",
       "1f582413",
-      "7392f6a7"
+      "7392f6a7",
+      "3adbe6e7"
     ],
     "datasets": [
       {
@@ -16024,7 +16099,8 @@ window.BENCHMARK_DATA = {
           251.27400483403886,
           286.62438780466715,
           301.53457052367077,
-          231.54093503952026
+          231.54093503952026,
+          299.79129188401356
         ],
         "borderColor": "#3949AB",
         "backgroundColor": "#3949AB",
@@ -16059,6 +16135,7 @@ window.BENCHMARK_DATA = {
           560,
           560,
           560,
+          568,
           568,
           568,
           568,
@@ -16451,7 +16528,8 @@ window.BENCHMARK_DATA = {
           572.7826052445632,
           616.8113985061646,
           684.7794905390058,
-          583.765841117272
+          583.765841117272,
+          669.1905132702419
         ],
         "borderColor": "#512BD4",
         "backgroundColor": "#512BD4",
@@ -16463,6 +16541,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          1104,
           1104,
           1104,
           1104,
@@ -16878,7 +16957,8 @@ window.BENCHMARK_DATA = {
           6526.4305828639435,
           7015.630447896322,
           5319.679785664876,
-          6454.416036878313
+          6454.416036878313,
+          5129.340583292643
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -16962,6 +17042,7 @@ window.BENCHMARK_DATA = {
           13696,
           13696,
           13696,
+          10784,
           10784,
           10784,
           10784,
@@ -17305,7 +17386,8 @@ window.BENCHMARK_DATA = {
           391.37754821777344,
           411.61658833821616,
           435.426789410909,
-          417.9155948956807
+          417.9155948956807,
+          422.80907519658405
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -17317,6 +17399,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          944,
           944,
           944,
           944,
@@ -17732,7 +17815,8 @@ window.BENCHMARK_DATA = {
           735.8377890904744,
           751.8731012980144,
           771.1621587753295,
-          750.470496749878
+          750.470496749878,
+          765.9419643695538
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -17744,6 +17828,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          1096,
           1096,
           1096,
           1096,
