@@ -115,7 +115,7 @@ partial class AwaitenGenerator
 		CancellationToken cancellationToken)
 	{
 		List<DiagnosticInfo> diagnostics = context.Diagnostics;
-		Location? location = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation();
+		Location? location = attribute.ApplicationSyntaxReference?.GetSyntax(cancellationToken).GetLocation();
 
 		// v1: a module scans its own assembly only. An InAssembliesOf sweep from a module would see just the
 		// target's public types, which a container [Scan] already covers, so it is rejected (AWT202) rather

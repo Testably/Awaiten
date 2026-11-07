@@ -24,7 +24,7 @@ public partial class LargeContainerDispatchTests
 	public async Task Scope_ResolvesThroughTheSharedTable()
 	{
 		LargeContainer.Root container = new();
-		using IAwaitenScope scope = container.CreateScope();
+		using LargeContainer.Scope scope = container.CreateScope();
 
 		await That(scope.Resolve<S03>()).IsNotNull();
 		await That(scope.TryResolve(typeof(S15), out object? service)).IsTrue();

@@ -43,7 +43,7 @@ internal sealed class FriendAsyncPrinter : IFriendAsyncPlugin, IFriendAsyncPrint
 [Scan<IFriendAsyncPlugin>(As = ScanAs.MatchingInterface, Lifetime = Lifetime.Singleton, OnActivated = nameof(Warm))]
 public static partial class SupportFriendAsyncHookModule
 {
-	internal static async Task Connect(FriendAsyncTerminal terminal, CancellationToken cancellationToken, FriendAsyncLog log)
+	internal static async Task Connect(FriendAsyncTerminal terminal, FriendAsyncLog log, CancellationToken cancellationToken)
 	{
 		await Task.Yield();
 		terminal.Token = cancellationToken;

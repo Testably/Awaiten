@@ -10,6 +10,8 @@
 		<!-- AWT218, AWT219: several tests resolve a service the container does not hand out through that typed call,
 		     to pin the run-time exception and its guidance that untyped callers still get. -->
 		<NoWarn>$(NoWarn);AWT218;AWT219</NoWarn>
+		<!-- Awaiten.Tests.ContainerSupport grants this assembly InternalsVisibleTo, so its copy of the Nullable attributes is visible here and a second one would conflict (CS0436). -->
+		<DefineConstants>$(DefineConstants);NULLABLE_ATTRIBUTES_DISABLE</DefineConstants>
 	</PropertyGroup>
 
 	<ItemGroup>
