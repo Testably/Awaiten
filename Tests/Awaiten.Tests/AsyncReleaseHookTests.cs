@@ -49,6 +49,50 @@ public sealed partial class AsyncReleaseHookTests
 		bool Closed { get; }
 	}
 
+	public interface IWarmable
+	{
+		Task WarmUpAsync(Journal journal);
+	}
+
+	public sealed class Boiler(Journal disposalJournal) : IWarmable, IDisposable
+	{
+		public void Dispose() => disposalJournal.Events.Add("boiler disposed");
+
+		public async Task WarmUpAsync(Journal journal)
+		{
+			await Task.Yield();
+			journal.Events.Add("boiler warmed");
+		}
+	}
+
+	[Test]
+	public async Task AnAsyncInitializerConvention_AndAnAsyncReleaseHook_BothRunOnTheSameService()
+	{
+		await using InitializedShop.Root shop = new();
+		Journal journal = shop.Resolve<Journal>();
+		InitializedShop.Scope scope = shop.CreateScope();
+		await scope.ResolveAsync<Boiler>();
+
+		await scope.DisposeAsync();
+
+		await That(journal.Events).IsEqualTo(["boiler warmed", "boiler drained", "boiler disposed",])
+			.Because("the convention initializes the service at resolve time and DisposeAsync awaits its release hook before disposing it");
+	}
+
+	[Test]
+	public async Task AnAsyncInitializedService_WithAnAsyncReleaseHook_RefusesASynchronousDispose()
+	{
+		await using InitializedShop.Root shop = new();
+		Journal journal = shop.Resolve<Journal>();
+		IAwaitenScope scope = shop.CreateScope();
+		await scope.ResolveAsync<Boiler>();
+
+		await That(() => scope.Dispose()).Throws<InvalidOperationException>().WithMessage("*OnRelease*asynchronous*DisposeAsync*").AsWildcard()
+			.Because("being async-initialized does not let a synchronous Dispose await the release hook");
+		await That(journal.Events).IsEqualTo(["boiler warmed", "boiler disposed",])
+			.Because("the synchronous Dispose skips only the asynchronous hook and still disposes the instance");
+	}
+
 	[Test]
 	public async Task DisposeAsync_AwaitsEachHook_InReverseCreationOrder_BeforeDisposal()
 	{
@@ -272,6 +316,19 @@ public sealed partial class AsyncReleaseHookTests
 		{
 			await Task.Yield();
 			journal.Events.Add("mug returned");
+		}
+	}
+
+	[Container]
+	[Singleton<Journal>]
+	[Scoped<Boiler>(OnRelease = nameof(Drain))]
+	[AsyncInitializer<IWarmable>(nameof(IWarmable.WarmUpAsync))]
+	public static partial class InitializedShop
+	{
+		private static async Task Drain(Boiler boiler, Journal journal)
+		{
+			await Task.Yield();
+			journal.Events.Add("boiler drained");
 		}
 	}
 
