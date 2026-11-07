@@ -144,6 +144,24 @@ If a dependency is missing, verification throws and names it, including keyed on
 
 The bridge is reflection-free. The generator emits the closed `Task<T>` type and a typed converter into the registration metadata, so the bridge never calls `MakeGenericType` or `MakeGenericMethod`. The container and its bridge are native-AOT clean, which the AOT sample in the repository proves.
 
+### Trim analyzer build time
+
+The .NET trim analyzer checks your code for trimming and AOT problems on every build. `IsTrimmable`, `IsAotCompatible` and `PublishAot` turn it on, and so do `EnableTrimAnalyzer`, `EnableAotAnalyzer` and `EnableSingleFileAnalyzer`. With a very large container of several hundred services, it can add noticeable time to each build.
+
+You can turn it off for Debug builds only:
+
+```xml
+<PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+  <EnableTrimAnalyzer>false</EnableTrimAnalyzer>
+  <EnableAotAnalyzer>false</EnableAotAnalyzer>
+  <EnableSingleFileAnalyzer>false</EnableSingleFileAnalyzer>
+</PropertyGroup>
+```
+
+Set all three properties. Each one runs the same analysis on its own, so turning off only one saves no time.
+
+Release builds still run the analyzer. Build Release in CI, so it still reports trimming and AOT warnings.
+
 ## What the bridge does not project
 
 The bridge surfaces each individual registration and the external dependencies. It does not project Awaiten collections into MS.DI-side resolution; those stay internal to the container.
