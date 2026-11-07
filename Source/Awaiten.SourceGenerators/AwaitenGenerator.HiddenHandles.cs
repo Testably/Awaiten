@@ -212,7 +212,7 @@ partial class AwaitenGenerator
 			}
 
 			raw[index] = own.Count == 0
-				? handle with { Weak = true, }
+				? handle with { Weak = true, Eager = false, }
 				: handle with
 				{
 					Weak = own.All(registration => registration.Weak),

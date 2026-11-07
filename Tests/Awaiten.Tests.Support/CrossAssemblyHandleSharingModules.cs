@@ -108,6 +108,34 @@ internal sealed class OverriddenClock : IOverriddenClock, IOverriddenTick
 [Singleton<OverriddenClock, IOverriddenTick>]
 public static partial class CrossAssemblyOverriddenEagerModule;
 
+/// <summary>A clock <see cref="CrossAssemblyDroppedEagerModule" /> registers as an eager overridable default.</summary>
+public interface IDroppedClock;
+
+/// <summary>A timer <see cref="CrossAssemblyDroppedEagerModule" /> registers the same implementation under as an overridable default.</summary>
+public interface IDroppedTimer;
+
+/// <summary>Counts the constructions of the implementation behind <see cref="IDroppedClock" />.</summary>
+public static class DroppedClockCounter
+{
+	private static int _constructed;
+
+	/// <summary>How often the implementation was constructed.</summary>
+	public static int Constructed => System.Threading.Volatile.Read(ref _constructed);
+
+	internal static void Increment() => System.Threading.Interlocked.Increment(ref _constructed);
+}
+
+internal sealed class DroppedClock : IDroppedClock, IDroppedTimer
+{
+	public DroppedClock() => DroppedClockCounter.Increment();
+}
+
+/// <summary>A <c>[Module]</c> whose registrations of one internal implementation are all overridable defaults, one of them eager.</summary>
+[Module]
+[Singleton<DroppedClock, IDroppedClock>(Eager = true, Fallback = Fallback.Silent)]
+[Singleton<DroppedClock, IDroppedTimer>(Fallback = Fallback.Silent)]
+public static partial class CrossAssemblyDroppedEagerModule;
+
 /// <summary>A user of an internal till that one module registers and another module decorates.</summary>
 public interface IDecoratedTillUser
 {

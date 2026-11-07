@@ -60,6 +60,15 @@ public class ModuleHandleSharingTests
 	}
 
 	[Test]
+	public async Task EveryRegistrationOverridden_LeavesTheHandleUnbuilt()
+	{
+		using DroppedEagerContainer.Root container = new();
+
+		await That(DroppedClockCounter.Constructed).IsEqualTo(0)
+			.Because("the container overrides every registration of the implementation, so nothing is left to build eagerly");
+	}
+
+	[Test]
 	public async Task DecoratorOfAnInternalServiceAnotherModuleRegisters_DecoratesIt()
 	{
 		IDecoratedTillUser user;
@@ -77,6 +86,15 @@ public class ModuleHandleSharingTests
 
 /// <summary>The clock this assembly registers over the eager default of <see cref="CrossAssemblyOverriddenEagerModule" />.</summary>
 public sealed class LocalClock : IOverriddenClock;
+
+/// <summary>The clock and timer this assembly registers over the defaults of <see cref="CrossAssemblyDroppedEagerModule" />.</summary>
+public sealed class LocalClockAndTimer : IDroppedClock, IDroppedTimer;
+
+[Container]
+[Import(typeof(CrossAssemblyDroppedEagerModule))]
+[Singleton<LocalClockAndTimer, IDroppedClock>]
+[Singleton<LocalClockAndTimer, IDroppedTimer>]
+public static partial class DroppedEagerContainer;
 
 [Container]
 [Import(typeof(CrossAssemblyOverriddenEagerModule))]
