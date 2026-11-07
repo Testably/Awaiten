@@ -103,7 +103,13 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		Compilation compilation = context.SemanticModel.Compilation;
 		bool declaresScan = HasAwaitenAttribute(moduleSymbol.GetAttributes(), "ScanAttribute");
 		ModuleRegistration? selfCompiled = declaresScan ? null : FirstSelfCompiledRegistration(moduleSymbol, compilation);
-		if (!declaresScan && selfCompiled is null)
+
+		// Member wrappers and the factories of decorators are generated only into a module that can receive them, so a
+		// module that cannot keeps building without them, as it did before they existed.
+		bool receives = ReceivesGeneratedMembers(moduleSymbol);
+		List<MemberWrapper> wrappers = receives ? CollectModuleMemberWrappers(moduleSymbol, compilation) : new();
+		List<RegistrationFactory> contributions = receives ? CollectModuleContributionFactories(moduleSymbol, compilation) : new();
+		if (!declaresScan && selfCompiled is null && wrappers.Count == 0 && contributions.Count == 0)
 		{
 			return null;
 		}
@@ -169,6 +175,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			}
 
 			registrations = CollectModuleRegistrationFactories(moduleSymbol, compilation, diagnostics, factories, skipped);
+			registrations.AddRange(contributions);
 			expanded = true;
 		}
 
@@ -200,7 +207,8 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			declaresScan,
 			new EquatableArray<RegistrationFactory>(registrations.ToArray()),
 			new EquatableArray<SkippedRegistration>(skipped.ToArray()),
-			notPartialMarker);
+			notPartialMarker,
+			new EquatableArray<MemberWrapper>(expanded ? wrappers.ToArray() : []));
 	}
 
 	/// <summary>
@@ -298,7 +306,8 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			graph.External.ImportServices,
 			Dispatchable(graph.External.ServiceTypes, graph.External.ServiceTypes.Closed),
 			Dispatchable(graph.External.ServiceTypes, graph.External.ServiceTypes.Open),
-			new EquatableArray<RegistrationFactory>(graph.Factories.Factories.ToArray()));
+			new EquatableArray<RegistrationFactory>(graph.Factories.Factories.ToArray()),
+			new EquatableArray<MemberWrapper>(graph.Factories.Wrappers.ToArray()));
 	}
 
 	/// <summary>

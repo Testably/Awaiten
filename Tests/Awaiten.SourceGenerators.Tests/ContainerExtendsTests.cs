@@ -697,16 +697,15 @@ public class ContainerExtendsTests
 
 			                                       public interface IClock { }
 			                                       public interface IGrinder { }
-			                                       public sealed class SystemClock : IClock { }
 
 			                                       [Container]
-			                                       [Singleton<SystemClock, IClock>(Key = "system")]
 			                                       [Singleton<Grinder, IGrinder>]
 			                                       public static partial class Shop
 			                                       {
 			                                           private sealed class Grinder : IGrinder
 			                                           {
-			                                               public Grinder([FromKey("system")] IClock clock) { }
+			                                               [Inject(Optional = true)]
+			                                               public IClock? Clock { get; set; }
 			                                           }
 			                                       }
 
@@ -717,12 +716,12 @@ public class ContainerExtendsTests
 			                                       """);
 
 			await That(result.Diagnostics).HasSingle().Matching(diagnostic => diagnostic.Contains("AWT226"));
-			await That(result.Diagnostics).Contains("*error AWT226*The type 'MyCode.Shop.Grinder'*its constructor parameter 'clock' is marked [FromKey]*make 'MyCode.Shop.Grinder' internal*").AsWildcard()
-				.Because("the generated factory cannot carry the key, so it names the reason and the remedy");
+			await That(result.Diagnostics).Contains("*error AWT226*The type 'MyCode.Shop.Grinder'*its property 'Clock' is injected only when its service is registered*make 'MyCode.Shop.Grinder' internal*").AsWildcard()
+				.Because("a factory parameter cannot be left out, so it names the reason and the remedy");
 		}
 
 		[Test]
-		public async Task APrivateDecoratorCompositeOrOpenGenericOfTheBase_ReportsAwt226()
+		public async Task APrivateOpenGenericOfTheBase_ReportsAwt226()
 		{
 			GeneratorResult result = Generator.Run("""
 			                                       using Awaiten;
@@ -759,10 +758,12 @@ public class ContainerExtendsTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics).Contains("*error AWT226*The decorator 'MyCode.Shop.AuditedClock'*generates factories only for constructed registrations of its private implementations*make 'MyCode.Shop.AuditedClock' internal*").AsWildcard();
-			await That(result.Diagnostics).Contains("*error AWT226*The composite 'MyCode.Shop.AllPlugins'*make 'MyCode.Shop.AllPlugins' internal*").AsWildcard();
+			await That(result.Diagnostics).DoesNotContain("*AuditedClock*").AsWildcard()
+				.Because("the base generates a factory for its private decorator");
+			await That(result.Diagnostics).DoesNotContain("*AllPlugins*").AsWildcard()
+				.Because("the base generates a factory for its private composite");
 			await That(result.Diagnostics).Contains("*error AWT226*'MyCode.Shop.Repository<string>'*make 'MyCode.Shop.Repository<T>' internal*").AsWildcard()
-				.Because("decorators, composites and open generics private to the base are not built through a generated factory yet");
+				.Because("open generics private to the base are not built through a generated factory yet");
 			await That(result.Diagnostics).DoesNotContain("*error CS*").AsWildcard();
 		}
 	}

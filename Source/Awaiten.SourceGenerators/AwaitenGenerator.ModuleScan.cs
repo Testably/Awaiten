@@ -497,6 +497,12 @@ partial class AwaitenGenerator
 			return null;
 		}
 
+		if (HiddenHookParameter(request.Subject, hook, release, location, context) is { } hidden)
+		{
+			context.Diagnostics.Add(hidden);
+			return null;
+		}
+
 		string instanceCast = hook.Parameters[0].Type.ToDisplayString(FullyQualified);
 		string returnType = hook.ReturnType.ToDisplayString(FullyQualified);
 		List<DiagnosticInfo> rejections = new();
@@ -948,10 +954,10 @@ partial class AwaitenGenerator
 	///     <paramref name="type" />, or reports why it cannot and returns <see langword="false" />. Accessibility is
 	///     asked against the module (it emits the <c>new</c>), so an internal constructor in the module's own
 	///     assembly qualifies, and a greediest-fallback keeps a type with no satisfiable-here constructor building
-	///     (its parameters are resolved by the consumer, not us). An <c>[Inject]</c> property or an <c>[Inject]</c>/
-	///     <c>[Arg]</c>/<c>[FromKey]</c> parameter carries per-dependency semantics (keys, optionality, deferral,
-	///     resolution arguments) a mirrored factory signature cannot express, so it is AWT200 rather than silently
-	///     dropped. A parameter whose type is not nameable outside the assembly is AWT195, the v1 limitation, because
+	///     (its parameters are resolved by the consumer, not us). An <c>[Arg]</c> or <c>[FromKey]</c> parameter carries
+	///     its attribute onto the factory's parameter (see <see cref="MirrorParameter" />). An <c>[Inject]</c> property
+	///     is AWT200 unless <paramref name="mirrorProperties" /> leaves it to the caller, since a scan factory cannot
+	///     fill it. A parameter whose type is not nameable outside the assembly is AWT195, the v1 limitation, because
 	///     it appears on the <c>public</c> factory signature and is resolved from the consumer's graph. A parameter type
 	///     private to the module or a class containing it is AWT195 with its own remedy: no container can resolve it as
 	///     a service, and building it in the factory would bypass the lifetime and disposal the graph gives it.
@@ -961,13 +967,14 @@ partial class AwaitenGenerator
 		ModuleScanContext context,
 		Location? location,
 		SelfCompiledSubject subject,
-		out EquatableArray<FactoryParameter> parameters)
+		out EquatableArray<FactoryParameter> parameters,
+		bool mirrorProperties = false)
 	{
 		parameters = default;
 		List<DiagnosticInfo> diagnostics = context.Diagnostics;
 
 		IPropertySymbol? injectedProperty = InjectedProperties(type).FirstOrDefault();
-		if (injectedProperty is not null)
+		if (injectedProperty is not null && !mirrorProperties)
 		{
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.ModuleScanInjectionMetadata,
@@ -991,7 +998,7 @@ partial class AwaitenGenerator
 		foreach (IParameterSymbol parameter in constructor.Parameters)
 		{
 			ImmutableArray<AttributeData> parameterAttributes = parameter.GetAttributes();
-			if (MirroredAwayAttribute(parameterAttributes) is { } attributeName)
+			if (UnmirroredAttribute(parameterAttributes) is { } attributeName)
 			{
 				diagnostics.Add(new DiagnosticInfo(
 					Diagnostics.ModuleScanInjectionMetadata,
@@ -1009,7 +1016,7 @@ partial class AwaitenGenerator
 				return false;
 			}
 
-			if (!IsExternallyAccessible(parameter.Type))
+			if (!FitsFactorySignature(parameter.Type, context))
 			{
 				diagnostics.Add(new DiagnosticInfo(
 					Diagnostics.ModuleScanParameterInaccessible,
@@ -1018,7 +1025,7 @@ partial class AwaitenGenerator
 				return false;
 			}
 
-			mirrored.Add(new FactoryParameter(parameter.Type.ToDisplayString(FullyQualifiedWithNullability), parameter.Name));
+			mirrored.Add(MirrorParameter(parameter));
 		}
 
 		parameters = new EquatableArray<FactoryParameter>(mirrored.ToArray());

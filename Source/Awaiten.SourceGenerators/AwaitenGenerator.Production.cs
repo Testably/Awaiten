@@ -38,6 +38,7 @@ partial class AwaitenGenerator
 		// is never async-initialized (InitializeAsync never runs). The caller owns construction and lifetime.
 		if (info.Production == ProductionKind.Instance)
 		{
+			RecordBaseWrappers(info, null, null, null, context);
 			return BuildPrebuiltInstance(info, containerSymbol, compilation, diagnostics) with { ResolverType = resolverType, };
 		}
 
@@ -115,6 +116,7 @@ partial class AwaitenGenerator
 		(string? onRelease, EquatableArray<ParameterModel> releaseParameters, IMethodSymbol? releaseHook) = ResolveHook(info, info.OnRelease, release: true, context);
 
 		RecordBaseFactory(new BaseFactoryRequest(info, producer, resolverType, members, activationHook, releaseHook), context);
+		RecordBaseWrappers(info, producer, activationHook, releaseHook, context);
 
 		// An implementation hidden in its module is built through the module's factory, which returns its service.
 		bool viaModuleFactory = info.ConstructVia is not null;
@@ -185,6 +187,12 @@ partial class AwaitenGenerator
 		}
 
 		List<MemberModel> members = new();
+
+		// A factory read from its owner's metadata takes the injected properties as parameters of its own.
+		if (info.Constructor is { MethodKind: MethodKind.Ordinary, })
+		{
+			return members;
+		}
 
 		if (info.Production != ProductionKind.Constructor)
 		{

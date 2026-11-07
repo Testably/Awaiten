@@ -378,7 +378,7 @@ public partial class DiagnosticTests
 		public class Awt200
 		{
 			[Test]
-			public async Task ReportsAnInjectProperty()
+			public async Task ReportsAnOptionalInjectProperty()
 			{
 				GeneratorResult result = Generator.Run("""
 					using Awaiten;
@@ -389,7 +389,7 @@ public partial class DiagnosticTests
 					public interface IClock { }
 					internal sealed class Greeter : IGreeter
 					{
-					    [Inject]
+					    [Inject(Optional = true)]
 					    public IClock? Clock { get; set; }
 					}
 
@@ -398,12 +398,12 @@ public partial class DiagnosticTests
 					public static partial class GreetingModule { }
 					""");
 
-				await That(result.Diagnostics).Contains("*AWT200*Lib.Greeter*Clock*[Inject]*").AsWildcard()
-					.Because("the generated factory cannot fill the property the way a container would");
+				await That(result.Diagnostics).Contains("*AWT200*Lib.Greeter*Clock*[Inject(Optional = true)]*").AsWildcard()
+					.Because("no other assembly can ever construct the implementation, and a factory parameter cannot be left out when the service is missing");
 			}
 
 			[Test]
-			public async Task ReportsAFromKeyConstructorParameter()
+			public async Task ReportsADeferredInjectProperty()
 			{
 				GeneratorResult result = Generator.Run("""
 					using Awaiten;
@@ -414,7 +414,8 @@ public partial class DiagnosticTests
 					public interface IClock { }
 					internal sealed class Greeter : IGreeter
 					{
-					    public Greeter([FromKey("utc")] IClock clock) { }
+					    [Inject(Deferred = true)]
+					    public IClock Clock { get; set; } = null!;
 					}
 
 					[Module]
@@ -422,35 +423,12 @@ public partial class DiagnosticTests
 					public static partial class GreetingModule { }
 					""");
 
-				await That(result.Diagnostics).Contains("*AWT200*Lib.Greeter*clock*[FromKey]*").AsWildcard()
-					.Because("the factory's bare parameter would resolve the unkeyed service in another assembly");
+				await That(result.Diagnostics).Contains("*AWT200*Lib.Greeter*Clock*[Inject(Deferred = true)]*").AsWildcard()
+					.Because("a deferred property is assigned after construction, which a factory parameter cannot express");
 			}
 
 			[Test]
-			public async Task ReportsAnArgParameterWithoutAnInternalsVisibleToGrant()
-			{
-				GeneratorResult result = Generator.Run("""
-					using Awaiten;
-
-					namespace Lib;
-
-					public interface IGreeter { }
-					internal sealed class Greeter : IGreeter
-					{
-					    public Greeter([Arg] string name) { }
-					}
-
-					[Module]
-					[Transient<Greeter, IGreeter>]
-					public static partial class GreetingModule { }
-					""");
-
-				await That(result.Diagnostics).Contains("*AWT200*Lib.Greeter*name*[Arg]*").AsWildcard()
-					.Because("no other assembly can ever construct the implementation, so the missing factory is an error in the module's own build");
-			}
-
-			[Test]
-			public async Task DoesNotReportAnArgParameterWhenTheAssemblyGrantsInternalsVisibleTo()
+			public async Task DoesNotReportAnOptionalInjectPropertyWhenTheAssemblyGrantsInternalsVisibleTo()
 			{
 				GeneratorResult result = Generator.Run("""
 					using Awaiten;
@@ -460,19 +438,21 @@ public partial class DiagnosticTests
 					namespace Lib;
 
 					public interface IGreeter { }
+					public interface IClock { }
 					internal sealed class Greeter : IGreeter
 					{
-					    public Greeter([Arg] string name) { }
+					    [Inject(Optional = true)]
+					    public IClock Clock { get; set; } = null!;
 					}
 
 					[Module]
-					[Transient<Greeter, IGreeter>]
+					[Singleton<Greeter, IGreeter>]
 					public static partial class GreetingModule { }
 					""");
 
 				await That(result.Diagnostics).IsEmpty()
-					.Because("an assembly granted InternalsVisibleTo constructs the implementation itself and honors the [Arg]");
-				await That(result.Sources.Values.Single()).Contains("its constructor parameter 'name' is marked [Arg]");
+					.Because("an assembly granted InternalsVisibleTo constructs the implementation itself and honors the optional property");
+				await That(result.Sources.Values.Single()).Contains("its property 'Clock' is marked [Inject(Optional = true)]");
 			}
 
 			[Test]
@@ -494,12 +474,13 @@ public partial class DiagnosticTests
 					{
 					    private sealed class Greeter : IGreeter
 					    {
-					        public Greeter([FromKey("utc")] IClock clock) { }
+					        [Inject(Optional = true)]
+					        public IClock? Clock { get; set; }
 					    }
 					}
 					""");
 
-				await That(result.Diagnostics).Contains("*AWT200*Greeter*clock*[FromKey]*").AsWildcard()
+				await That(result.Diagnostics).Contains("*AWT200*Greeter*Clock*[Inject(Optional = true)]*").AsWildcard()
 					.Because("InternalsVisibleTo does not open a private nested type, so no other assembly could construct it");
 			}
 
@@ -520,7 +501,8 @@ public partial class DiagnosticTests
 					{
 					    private sealed class Greeter : IGreeter
 					    {
-					        public Greeter([FromKey("utc")] IClock clock) { }
+					        [Inject(Optional = true)]
+					        public IClock? Clock { get; set; }
 					    }
 
 					    [Module]
@@ -529,7 +511,7 @@ public partial class DiagnosticTests
 					}
 					""");
 
-				await That(result.Diagnostics).Contains("*AWT200*Greeter*clock*[FromKey]*").AsWildcard()
+				await That(result.Diagnostics).Contains("*AWT200*Greeter*Clock*[Inject(Optional = true)]*").AsWildcard()
 					.Because("a type hidden in the module always needs the module's factory, whatever InternalsVisibleTo grants");
 			}
 		}

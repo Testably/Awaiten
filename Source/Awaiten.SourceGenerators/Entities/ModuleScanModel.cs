@@ -28,7 +28,21 @@ internal sealed record ModuleScanModel(
 	bool DeclaresScan = true,
 	EquatableArray<RegistrationFactory> Registrations = default,
 	EquatableArray<SkippedRegistration> Skipped = default,
-	string? NotPartialMarker = null);
+	string? NotPartialMarker = null,
+	EquatableArray<MemberWrapper> Wrappers = default);
+
+/// <summary>
+///     A generated member that forwards to a <c>Factory</c> or <c>Instance</c> member or a lifecycle hook of its owner
+///     (a module or a base container) that a container in another assembly cannot call: a method taking
+///     <see cref="Parameters" /> and calling <see cref="Target" /> with them, or, for <see cref="IsProperty" />, a
+///     property returning it.
+/// </summary>
+internal sealed record MemberWrapper(
+	string Name,
+	string ReturnType,
+	string Target,
+	EquatableArray<FactoryParameter> Parameters,
+	bool IsProperty = false);
 
 /// <summary>
 ///     An implementation the module generates no factory for, because an assembly granted <c>InternalsVisibleTo</c>
@@ -43,14 +57,16 @@ internal sealed record SkippedRegistration(string MarkerName, string Reason, boo
 ///     registration, or an implementation private to a base container that an extending container builds. It holds the
 ///     emitted method name, the accessible type it returns, the implementation it constructs, the constructor
 ///     parameters mirrored onto its signature and the lifecycle-hook wrappers emitted beside it, one per hook a
-///     registration of the implementation names.
+///     registration of the implementation names. The last <see cref="Members" />.Count parameters fill the injected
+///     properties of the same names through an object initializer.
 /// </summary>
 internal sealed record RegistrationFactory(
 	string FactoryName,
 	string ReturnType,
 	string ImplementationType,
 	EquatableArray<FactoryParameter> Parameters,
-	EquatableArray<RegistrationHook> Hooks);
+	EquatableArray<RegistrationHook> Hooks,
+	EquatableArray<string> Members = default);
 
 /// <summary>One lifecycle-hook wrapper of a self-compiled module registration and whether it is the release hook.</summary>
 internal sealed record RegistrationHook(ModuleHook Hook, bool Release);
@@ -93,8 +109,12 @@ internal sealed record ModuleFactory(
 /// </summary>
 internal sealed record ScanSkip(string MarkerName, string ImplementationMetadataName, string Reason, EquatableArray<string> Services);
 
-/// <summary>A mirrored constructor parameter on a generated factory: its fully-qualified type and its name.</summary>
-internal readonly record struct FactoryParameter(string Type, string Name);
+/// <summary>
+///     A mirrored constructor parameter on a generated factory: its fully-qualified type, its name and the
+///     <c>[FromKey]</c> or <c>[Arg]</c> attribute it carries (<c>[global::Awaiten.FromKey("utc")] </c>), so a consumer
+///     resolves the parameter as the constructor would.
+/// </summary>
+internal readonly record struct FactoryParameter(string Type, string Name, string? Attributes = null);
 
 /// <summary>
 ///     One generated lifecycle-hook wrapper the module emits beside a match's factory. The module resolves and

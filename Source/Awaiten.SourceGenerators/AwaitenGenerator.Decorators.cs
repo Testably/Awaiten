@@ -258,7 +258,7 @@ partial class AwaitenGenerator
 			bool valid = true;
 			foreach (DecorateRegistration decorator in ordered)
 			{
-				string? innerType = SingleInnerParameterType(decorator.Decorator, decorator.ServiceSymbol);
+				string? innerType = SingleInnerParameterType(decorator);
 				if (innerType is null)
 				{
 					Report(Diagnostics.DecoratorMissingInnerParameter, decorator.Location,
@@ -354,7 +354,14 @@ partial class AwaitenGenerator
 			INamedTypeSymbol decorator = chain.Ordered[linkIndex].Decorator;
 			string identity = DecoratorIdentity(decorator.ToDisplayString(FullyQualified), service, baseIndex, link);
 
-			ImplInfo info = new(identity, decorator, lifetime, location, ProductionKind.Constructor, null);
+			OwnerFactoryCall? via = chain.Ordered[linkIndex].Via;
+			ImplInfo info = new(identity, decorator, lifetime, location, ProductionKind.Constructor, null)
+			{
+				Origin = via?.Owner,
+				ConstructVia = via?.Call,
+				ConstructViaType = via?.ReturnType,
+				Constructor = via?.Producer,
+			};
 			_byImpl[identity] = info;
 			_implOrder.Add(info);
 
@@ -412,12 +419,13 @@ partial class AwaitenGenerator
 		///     <see cref="SelectConstructor" /> the container builds through, and returns the type string
 		///     <see cref="ClassifyParameter" /> produces so the redirect can match it.
 		/// </summary>
-		private string? SingleInnerParameterType(INamedTypeSymbol decorator, INamedTypeSymbol service)
+		private string? SingleInnerParameterType(DecorateRegistration decorator)
 		{
-			IMethodSymbol? constructor = SelectConstructor(decorator, _containerSymbol, _compilation, _serviceToImpl.Keys.Select(k => k.Service), _external);
+			IMethodSymbol? constructor = decorator.Via?.Producer
+			                             ?? SelectConstructor(decorator.Decorator, _containerSymbol, _compilation, _serviceToImpl.Keys.Select(k => k.Service), _external);
 			return constructor is null
 				? null
-				: InnerParameter(constructor, service, _compilation)?.Type.ToDisplayString(FullyQualified);
+				: InnerParameter(constructor, decorator.ServiceSymbol, _compilation)?.Type.ToDisplayString(FullyQualified);
 		}
 
 		private static string DecoratorKey(string service, int baseIndex, int link)
@@ -602,7 +610,7 @@ partial class AwaitenGenerator
 		ExternalSurface external,
 		List<DiagnosticInfo> diagnostics)
 	{
-		switch (ClassifyCompositeCollection(composite.Composite, composite.ServiceSymbol, containerSymbol, compilation, serviceToImpl, external, out string? relatedElement))
+		switch (ClassifyCompositeCollection(composite, containerSymbol, compilation, serviceToImpl, external, out string? relatedElement))
 		{
 			case CompositeCollectionKind.Missing:
 				diagnostics.Add(new DiagnosticInfo(
@@ -651,6 +659,10 @@ partial class AwaitenGenerator
 			LocationInfo.From(composite.Location), ProductionKind.Constructor, null)
 		{
 			IsComposite = true,
+			Origin = composite.Via?.Owner,
+			ConstructVia = composite.Via?.Call,
+			ConstructViaType = composite.Via?.ReturnType,
+			Constructor = composite.Via?.Producer,
 		};
 		byImpl.Add(identity, compositeInfo);
 		implOrder.Add(compositeInfo);
@@ -739,16 +751,16 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     Classifies the collection constructor parameter <paramref name="composite" /> offers for its composed
-	///     <paramref name="service" />: <see cref="CompositeCollectionKind.Exact" /> for a collection of exactly the
-	///     service, <see cref="CompositeCollectionKind.RelatedElement" /> (yielding the element in
+	///     Classifies the collection constructor parameter the composite of <paramref name="registration" /> offers for
+	///     its composed service: <see cref="CompositeCollectionKind.Exact" /> for a collection of exactly the service,
+	///     <see cref="CompositeCollectionKind.RelatedElement" /> (yielding the element in
 	///     <paramref name="relatedElement" />) for a collection of a base type (which resolves a different collection),
 	///     otherwise <see cref="CompositeCollectionKind.Missing" />. Exact wins over related. Uses the same
-	///     <see cref="SelectConstructor" /> the container builds the composite through.
+	///     <see cref="SelectConstructor" /> the container builds the composite through, or the generated factory that
+	///     builds it for the container.
 	/// </summary>
 	private static CompositeCollectionKind ClassifyCompositeCollection(
-		INamedTypeSymbol composite,
-		INamedTypeSymbol service,
+		CompositeRegistration registration,
 		INamedTypeSymbol containerSymbol,
 		Compilation compilation,
 		Dictionary<ServiceKey, string> serviceToImpl,
@@ -756,7 +768,9 @@ partial class AwaitenGenerator
 		out string? relatedElement)
 	{
 		relatedElement = null;
-		IMethodSymbol? constructor = SelectConstructor(composite, containerSymbol, compilation, serviceToImpl.Keys.Select(k => k.Service), external);
+		INamedTypeSymbol service = registration.ServiceSymbol;
+		IMethodSymbol? constructor = registration.Via?.Producer
+		                             ?? SelectConstructor(registration.Composite, containerSymbol, compilation, serviceToImpl.Keys.Select(k => k.Service), external);
 		if (constructor is null)
 		{
 			return CompositeCollectionKind.Missing;

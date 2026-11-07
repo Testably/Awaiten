@@ -351,8 +351,8 @@ partial class AwaitenGenerator
 		// internal one in an assembly that grants the container no [InternalsVisibleTo]) is out of reach even
 		// though not private. Apply the same accessibility test the constructor path uses rather than a bare
 		// not-private check, so an unreachable setter surfaces as AWT136 instead of an inaccessible-setter error
-		// in generated code.
-		if (property.SetMethod is not { } setter || !IsAccessibleSetter(setter, context.ContainerSymbol, context.Compilation))
+		// in generated code. An implementation built through its owner's generated factory is assigned there.
+		if (property.SetMethod is not { } setter || !IsAccessibleSetter(setter, info.ConstructVia is null ? context.ContainerSymbol : info.Origin!, context.Compilation))
 		{
 			context.Diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.InjectedPropertyNotSettable,

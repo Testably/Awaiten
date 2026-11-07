@@ -93,7 +93,21 @@ internal sealed record DecorateRegistration(
 	int DeclarationOrder,
 	Location? Location,
 	IReadOnlyList<string?>? Keys,
-	bool Inherited = false);
+	bool Inherited = false,
+	OwnerFactoryCall? Via = null);
+
+/// <summary>
+///     The generated factory of a module or base container (<see cref="Owner" />) that builds a decorator or composite
+///     the container cannot construct: its name, the accessible type it returns, and the method whose parameters the
+///     container resolves, which is the factory itself when read from metadata, or the constructor it mirrors when the
+///     owner generates it in the same run.
+/// </summary>
+/// <remarks>An intermediate type carrying live Roslyn symbols; see <see cref="RawRegistration" />.</remarks>
+internal sealed record OwnerFactoryCall(INamedTypeSymbol Owner, string Name, string ReturnType, IMethodSymbol Producer)
+{
+	/// <summary>The qualified factory the generated container calls.</summary>
+	public string Call => $"{Owner.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}.{Name}";
+}
 
 /// <summary>
 ///     A single <c>[Composite&lt;TComposite, TService&gt;]</c> registration: the composed service, the service and
@@ -108,7 +122,8 @@ internal sealed record CompositeRegistration(
 	INamedTypeSymbol Composite,
 	Lifetime Lifetime,
 	Location? Location,
-	string? Key);
+	string? Key,
+	OwnerFactoryCall? Via = null);
 
 /// <summary>
 ///     A single open generic <c>[Decorate(typeof(D&lt;&gt;), typeof(IService&lt;&gt;))]</c> registration: the unbound

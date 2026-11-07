@@ -245,6 +245,14 @@ internal static partial class Sources
 
 		if (instance.Production == ProductionKind.Factory)
 		{
+			// Only an implementation built through its owner's generated factory has injected members here: the factory
+			// takes each as a parameter named like the property.
+			foreach (MemberModel member in instance.InjectedMembers.AsArray())
+			{
+				arguments.Append(arguments.Length > 0 ? ", @" : "@").Append(member.MemberName).Append(": ")
+					.Append(DependencyValue(member.Dependency, instances, names, serviceToIndex, asynchronous, requestingType));
+			}
+
 			// The container is a static class enclosing both Scope and Root, so its static factory method is in
 			// scope by simple name. An async factory returns Task<T> / ValueTask<T>, awaited here (uniformly, no
 			// TFM gating); it is only ever reached on the async path.

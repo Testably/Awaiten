@@ -39,7 +39,7 @@ public partial class DiagnosticTests
 				""", Consumer);
 
 			await That(result.Diagnostics).Contains("*AWT230*GreetingModule*the decorator 'Lib.LoudGreeter'*").AsWildcard()
-				.Because("a module does not self-compile a decorator, so the consumer cannot construct the internal one");
+				.Because("a module that is not partial carries no factory for its internal decorator, so the consumer cannot construct it");
 		}
 
 		[Test]
@@ -64,7 +64,8 @@ public partial class DiagnosticTests
 				public static class GreetingModule { }
 				""", Consumer);
 
-			await That(result.Diagnostics).Contains("*AWT230*GreetingModule*the composite 'Lib.AllGreeters'*").AsWildcard();
+			await That(result.Diagnostics).Contains("*AWT230*GreetingModule*the composite 'Lib.AllGreeters'*").AsWildcard()
+				.Because("a module that is not partial carries no factory for its internal composite");
 		}
 
 		[Test]

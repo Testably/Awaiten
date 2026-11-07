@@ -1471,9 +1471,9 @@ internal static class Diagnostics
 	///     A self-compiled module <c>[Scan]</c> match or module registration of an inaccessible implementation would
 	///     be exposed under more than one accessible interface, by one scan, by several, by several registrations or
 	///     by a registration and a scan. A self-compiled implementation is reached only through a generated factory
-	///     that returns a single accessible interface, so a shared instance across several interfaces cannot be
-	///     expressed (unlike a container, whose registrations coalesce on the concrete type), and emitting a factory
-	///     per interface would silently split it. In v1 narrow the exposure to a single interface.
+	///     that returns a single accessible type, so a shared instance across several interfaces needs one that covers
+	///     them all, which a registration's factory finds among the services and the implementation's public base types
+	///     and a scan's does not; emitting a factory per interface would silently split it.
 	/// </summary>
 	public static readonly DiagnosticDescriptor ModuleScanMultipleExposures = new(
 		"AWT197",
@@ -1485,11 +1485,10 @@ internal static class Diagnostics
 
 	/// <summary>
 	///     A self-compiled module <c>[Scan]</c> match or module registration carries injection metadata the
-	///     generated factory cannot mirror: an <c>[Inject]</c> property, or a constructor parameter marked
-	///     <c>[Inject]</c>, <c>[Arg]</c> or <c>[FromKey]</c>. The factory reduces the implementation to a plain
-	///     parameter list resolved from the consumer's graph, so keys, optionality, deferral and resolution arguments
-	///     would be silently dropped, and the same type would behave differently in a container of the module's own
-	///     assembly. Rejected rather than silently degraded.
+	///     generated factory cannot mirror: an <c>[Inject]</c> property of a scan match, or an optional, deferred or
+	///     otherwise unmirrorable <c>[Inject]</c> property of a registration. The factory carries <c>[Arg]</c> and
+	///     <c>[FromKey]</c> onto its parameters, but optionality and deferral would be silently dropped, and the same type
+	///     would behave differently in a container of the module's own assembly. Rejected rather than silently degraded.
 	/// </summary>
 	public static readonly DiagnosticDescriptor ModuleScanInjectionMetadata = new(
 		"AWT200",
@@ -1577,6 +1576,19 @@ internal static class Diagnostics
 		"AWT203",
 		"Self-compiled hook has an inaccessible parameter",
 		"{0}, but its {1} hook parameter of type '{2}' is not accessible outside the module's assembly, so the generated hook wrapper cannot expose it; widen the parameter type's accessibility, resolve a different dependency, or drop the hook",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     The module-private form of <see cref="ModuleScanHookParameterInaccessible">AWT203</see>: a hook parameter's type
+	///     is private to the module or a class containing it. Widening it is not the remedy for a type meant to stay
+	///     private, and no container can register or resolve it; depend on an accessible service the type implements.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ModuleHookParameterHiddenInModule = new(
+		"AWT203",
+		ModuleScanHookParameterInaccessible.Title,
+		"{0}, but its {1} hook parameter '{2}' needs '{3}', which is private to the module or a class containing it, so no container can register or resolve it; depend on an accessible service that '{3}' implements instead, and register '{3}' under that service",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
@@ -1903,14 +1915,15 @@ internal static class Diagnostics
 	/// <summary>
 	///     An imported module of another assembly declares a decorator, a composite or an open generic registration
 	///     whose type this container cannot construct (it, or every constructor, is not accessible here). A module
-	///     self-compiles its scans and closed registrations only, so nothing constructs this type for the container.
+	///     generated no factory for it (it generates them for its scans, closed registrations, decorators and composites,
+	///     where the factory can express the type), so nothing constructs this type for the container.
 	///     Reported at the consumer's <c>[Import]</c> instead of a misleading constructor diagnostic, and the
 	///     contribution is skipped.
 	/// </summary>
 	public static readonly DiagnosticDescriptor ModuleContributionNotSelfCompiled = new(
 		"AWT230",
 		"Module contribution cannot be constructed",
-		"The imported module '{0}' declares {1} '{2}', which this container cannot construct; a module self-compiles only its scans and closed registrations, so make '{2}' and its constructor public, or grant this assembly InternalsVisibleTo",
+		"The imported module '{0}' declares {1} '{2}', which this container cannot construct, and the module generated no factory for it; make '{2}' and its constructor public, or grant this assembly InternalsVisibleTo",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);

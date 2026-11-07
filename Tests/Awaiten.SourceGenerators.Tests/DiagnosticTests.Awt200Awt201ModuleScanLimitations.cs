@@ -34,7 +34,7 @@ public partial class DiagnosticTests
 		}
 
 		[Test]
-		public async Task Awt200_ReportsWhenAMatchConstructorParameterIsMarkedArg()
+		public async Task Awt200_DoesNotReportWhenAMatchConstructorParameterIsMarkedArg()
 		{
 			GeneratorResult result = Generator.Run("""
 			                                       using Awaiten;
@@ -54,12 +54,13 @@ public partial class DiagnosticTests
 			                                       public static partial class PluginModule { }
 			                                       """);
 
-			await That(result.Diagnostics).Contains("*AWT200*Roaster*strength*[Arg]*").AsWildcard()
-				.Because("an [Arg] parameter takes its value from the resolution call, which a mirrored factory parameter resolved from the graph would silently change");
+			await That(result.Diagnostics).IsEmpty();
+			await That(result.Sources.Values.Single()).Contains("[global::Awaiten.Arg] int @strength")
+				.Because("the factory carries the [Arg], so a consumer takes the value from the resolution call as the constructor would");
 		}
 
 		[Test]
-		public async Task Awt200_ReportsWhenAMatchConstructorParameterIsMarkedFromKey()
+		public async Task Awt200_DoesNotReportWhenAMatchConstructorParameterIsMarkedFromKey()
 		{
 			GeneratorResult result = Generator.Run("""
 			                                       using Awaiten;
@@ -80,8 +81,9 @@ public partial class DiagnosticTests
 			                                       public static partial class PluginModule { }
 			                                       """);
 
-			await That(result.Diagnostics).Contains("*AWT200*Roaster*clock*[FromKey]*").AsWildcard()
-				.Because("the factory's bare parameter would resolve the unkeyed service in another assembly while a container of the module's own assembly honors the key");
+			await That(result.Diagnostics).IsEmpty();
+			await That(result.Sources.Values.Single()).Contains("""[global::Awaiten.FromKey("utc")] global::Lib.IClock @clock""")
+				.Because("the factory carries the key, so a consumer in another assembly resolves the keyed service like a container of the module's own assembly");
 		}
 
 		[Test]

@@ -336,7 +336,7 @@ partial class AwaitenGenerator
 
 			RawRegistration? collected = fromModule && production == ProductionKind.Constructor && !conflictingDirectives
 				? SelfCompiledRegistration(registration, context, skipGeneratedScanRegistrations, ref reportedNotSelfCompiled)
-				: registration;
+				: ThroughMemberWrapper(registration, origin, context.Compilation, !skipGeneratedScanRegistrations);
 			if (collected is not null)
 			{
 				result.Add(collected);
@@ -470,6 +470,41 @@ partial class AwaitenGenerator
 		{
 			context.Diagnostics.Add(diagnostic);
 		}
+	}
+
+	/// <summary>
+	///     A registration of <paramref name="owner" /> rewritten to call the wrappers the owner generates for its
+	///     <c>Factory</c> or <c>Instance</c> member and its lifecycle hooks (see <see cref="CollectModuleMemberWrappers" />
+	///     and <see cref="RecordBaseWrappers" />), for each member this compilation cannot reach while it can reach the
+	///     wrapper. Only <paramref name="applies" /> to an owner in another assembly, whose generated members this
+	///     compilation can see. The hooks of an implementation hidden in its owner are left to its generated factory.
+	/// </summary>
+	private static RawRegistration ThroughMemberWrapper(RawRegistration registration, INamedTypeSymbol? owner, Compilation compilation, bool applies)
+	{
+		if (!applies || owner is null || registration.ConflictingDirectives)
+		{
+			return registration;
+		}
+
+		string? member = registration.ProductionMember;
+		if (registration.Production is ProductionKind.Factory or ProductionKind.Instance && member is not null)
+		{
+			member = Wrapped(member, MemberWrapperName(registration.Production == ProductionKind.Factory ? "Factory" : "Instance", member, registration.Implementation));
+		}
+
+		bool hidden = IsHiddenInModule(registration.Implementation.OriginalDefinition, owner, compilation);
+		return registration with
+		{
+			ProductionMember = member,
+			OnActivated = hidden || registration.OnActivated is not { } activation ? registration.OnActivated : Wrapped(activation, RegistrationHookWrapperName(registration.Implementation, release: false, activation)),
+			OnRelease = hidden || registration.OnRelease is not { } release ? registration.OnRelease : Wrapped(release, RegistrationHookWrapperName(registration.Implementation, release: true, release)),
+		};
+
+		string Wrapped(string name, string wrapper)
+			=> !Reachable(name) && Reachable(wrapper) ? wrapper : name;
+
+		bool Reachable(string name)
+			=> owner.GetMembers(name).Any(candidate => compilation.IsSymbolAccessibleWithin(candidate, compilation.Assembly));
 	}
 
 	/// <summary>
@@ -861,9 +896,8 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     Reports <see cref="Diagnostics.ModuleContributionNotSelfCompiled">AWT230</see> and returns
 	///     <see langword="true" /> when a decorator, composite or open generic registration of an imported module of
-	///     another assembly names a type this container cannot construct: a module self-compiles only its scans and
-	///     closed registrations, so the contribution is skipped rather than failing as a misleading constructor
-	///     diagnostic.
+	///     another assembly names a type this container cannot construct and for which the module generated no factory,
+	///     so the contribution is skipped rather than failing as a misleading constructor diagnostic.
 	/// </summary>
 	private static bool IsUnconstructibleModuleContribution(
 		INamedTypeSymbol? module,
@@ -890,6 +924,78 @@ partial class AwaitenGenerator
 				Display(type.OriginalDefinition.ToDisplayString(FullyQualified)),
 			])));
 		return true;
+	}
+
+	/// <summary>
+	///     Where a <c>[Decorate]</c> or <c>[Composite]</c> comes from while the container reads it: the module or base
+	///     that declares it (<see langword="null" /> for the container's own), the inheritance when it is inherited
+	///     through <c>Extends</c>, and where to report.
+	/// </summary>
+	private readonly record struct ContributionContext(
+		INamedTypeSymbol? Module,
+		Inheritance? Inheritance,
+		Location? Location,
+		Compilation Compilation,
+		SameCompilationModules Modules,
+		List<DiagnosticInfo> Diagnostics);
+
+	/// <summary>
+	///     Whether a decorator or composite that the container cannot construct is left out, after reporting why, or
+	///     finds the generated factory that builds it in <paramref name="via" />. A base container's own is resolved by
+	///     the inheritance (see <see cref="InaccessibleInheritedType" />). A module's closed one calls the factory the
+	///     module generates for it (see <see cref="CollectModuleContributionFactories" />): from metadata in another
+	///     assembly, or by its deterministic name in the module's own assembly when the type is private to the module.
+	///     Without a factory, one inherited through <c>Extends</c> is AWT226 and any other is AWT230.
+	/// </summary>
+	private static bool UnavailableContribution(ContributionContext context, AttributeData attribute, INamedTypeSymbol attributeClass, out OwnerFactoryCall? via)
+	{
+		via = null;
+		Inheritance? inheritance = context.Inheritance;
+		Compilation compilation = context.Compilation;
+		List<DiagnosticInfo> diagnostics = context.Diagnostics;
+		if (inheritance is not null && SymbolEqualityComparer.Default.Equals(context.Module, inheritance.Base))
+		{
+			return InaccessibleInheritedType(attribute, attributeClass, inheritance, diagnostics, out via);
+		}
+
+		if (context.Module is not { } module || ContributedType(attribute, attributeClass) is not { } type)
+		{
+			return false;
+		}
+
+		(INamedTypeSymbol? closedType, INamedTypeSymbol? service) = ContributedPair(attribute, attributeClass);
+		string? name = closedType is not null && service is not null ? ContributionFactoryName(attributeClass.Name, closedType, service) : null;
+		if (SymbolEqualityComparer.Default.Equals(module.ContainingAssembly, compilation.Assembly))
+		{
+			if (name is not null
+			    && IsHiddenInModule(type, module, compilation)
+			    && context.Modules.Contribution(module, name) is { } generated
+			    && MirroredConstructor(type, generated) is { } constructor)
+			{
+				via = new OwnerFactoryCall(module, name, generated.ReturnType, constructor);
+				return false;
+			}
+
+			return inheritance is not null && InaccessibleInheritedType(attribute, attributeClass, inheritance, diagnostics, out _);
+		}
+
+		if (type is not { TypeKind: TypeKind.Class, IsAbstract: false, } || CanConstruct(type.OriginalDefinition, compilation))
+		{
+			return inheritance is not null && InaccessibleInheritedType(attribute, attributeClass, inheritance, diagnostics, out _);
+		}
+
+		if (name is not null && GeneratedFactoryNamed(module, name, compilation) is { } factory)
+		{
+			via = new OwnerFactoryCall(module, name, factory.ReturnType.ToDisplayString(FullyQualified), factory);
+			return false;
+		}
+
+		if (inheritance is not null)
+		{
+			return InaccessibleInheritedType(attribute, attributeClass, inheritance, diagnostics, out _);
+		}
+
+		return IsUnconstructibleModuleContribution(module, type, attributeClass.Name == "CompositeAttribute" ? "the composite" : "the decorator", context.Location, compilation, diagnostics);
 	}
 
 	/// <summary>
@@ -951,6 +1057,7 @@ partial class AwaitenGenerator
 	{
 		List<DecorateRegistration> closed = new();
 		List<OpenDecorateRegistration> open = new();
+		SameCompilationModules sameCompilationModules = new(compilation);
 		int declarationOrder = 0;
 		foreach ((AttributeData attribute, Location? fallbackLocation, bool inherited, INamedTypeSymbol? module) in AttributesOf(containerSymbol, modules))
 		{
@@ -960,7 +1067,9 @@ partial class AwaitenGenerator
 				continue;
 			}
 
-			if (inherited && InaccessibleInheritedType(attribute, attributeClass, inheritance!, diagnostics))
+			Location? location = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? fallbackLocation;
+			ContributionContext contribution = new(module, inherited ? inheritance : null, location, compilation, sameCompilationModules, diagnostics);
+			if (UnavailableContribution(contribution, attribute, attributeClass, out OwnerFactoryCall? via))
 			{
 				declarationOrder++;
 				continue;
@@ -975,10 +1084,7 @@ partial class AwaitenGenerator
 				}
 			}
 
-			Location? location = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? fallbackLocation;
-			if (!TryReadDecoratorKeys(attribute, attributeClass, LocationInfo.From(location), diagnostics, out IReadOnlyList<string?>? keys)
-			    || (ContributedType(attribute, attributeClass) is { } decoratorType
-			        && IsUnconstructibleModuleContribution(module, decoratorType, "the decorator", location, compilation, diagnostics)))
+			if (!TryReadDecoratorKeys(attribute, attributeClass, LocationInfo.From(location), diagnostics, out IReadOnlyList<string?>? keys))
 			{
 				declarationOrder++;
 				continue;
@@ -986,12 +1092,10 @@ partial class AwaitenGenerator
 
 			if (attributeClass.IsGenericType)
 			{
-				if (attributeClass.TypeArguments.Length == 2
-				    && attributeClass.TypeArguments[0] is INamedTypeSymbol decorator
-				    && attributeClass.TypeArguments[1] is INamedTypeSymbol service)
+				if (ContributedPair(attribute, attributeClass) is ({ } decorator, { } service))
 				{
 					closed.Add(new DecorateRegistration(
-						service.ToDisplayString(FullyQualified), service, decorator, order, declarationOrder, location, keys, inherited));
+						service.ToDisplayString(FullyQualified), service, decorator, order, declarationOrder, location, keys, inherited, via));
 				}
 			}
 			else if (attribute.ConstructorArguments.Length == 2
@@ -1104,11 +1208,11 @@ partial class AwaitenGenerator
 	{
 		List<CompositeRegistration> closed = new();
 		List<OpenCompositeRegistration> open = new();
+		SameCompilationModules sameCompilationModules = new(compilation);
 		foreach ((AttributeData attribute, Location? fallbackLocation, bool inherited, INamedTypeSymbol? module) in AttributesOf(containerSymbol, modules))
 		{
 			if (attribute.AttributeClass is not { Name: "CompositeAttribute", } attributeClass
-			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace
-			    || (inherited && InaccessibleInheritedType(attribute, attributeClass, inheritance!, diagnostics)))
+			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace)
 			{
 				continue;
 			}
@@ -1129,20 +1233,18 @@ partial class AwaitenGenerator
 			ReportUnsupportedRegistrationKey(attribute, LocationInfo.From(location), AttributeTypeArgument(attribute, attributeClass, 0), diagnostics);
 			string? key = NamedKeyArgument(attribute);
 
-			if (ContributedType(attribute, attributeClass) is { } compositeType
-			    && IsUnconstructibleModuleContribution(module, compositeType, "the composite", location, compilation, diagnostics))
+			ContributionContext contribution = new(module, inherited ? inheritance : null, location, compilation, sameCompilationModules, diagnostics);
+			if (UnavailableContribution(contribution, attribute, attributeClass, out OwnerFactoryCall? via))
 			{
 				continue;
 			}
 
 			if (attributeClass.IsGenericType)
 			{
-				if (attributeClass.TypeArguments.Length == 2
-				    && attributeClass.TypeArguments[0] is INamedTypeSymbol composite
-				    && attributeClass.TypeArguments[1] is INamedTypeSymbol service)
+				if (ContributedPair(attribute, attributeClass) is ({ } composite, { } service))
 				{
 					closed.Add(new CompositeRegistration(
-						service.ToDisplayString(FullyQualified), service, composite, lifetime, location, key));
+						service.ToDisplayString(FullyQualified), service, composite, lifetime, location, key, via));
 				}
 			}
 			else if (attribute.ConstructorArguments.Length == 2

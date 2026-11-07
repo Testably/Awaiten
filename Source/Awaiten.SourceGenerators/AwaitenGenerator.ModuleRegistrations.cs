@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Awaiten.SourceGenerators.Entities;
 using Awaiten.SourceGenerators.Internals;
 using Microsoft.CodeAnalysis;
@@ -67,6 +68,7 @@ partial class AwaitenGenerator
 		private readonly Compilation _compilation;
 		private readonly Dictionary<INamedTypeSymbol, List<ModuleScanExpansion>> _scans = new(SymbolEqualityComparer.Default);
 		private readonly Dictionary<INamedTypeSymbol, List<RegistrationFactory>> _registrations = new(SymbolEqualityComparer.Default);
+		private readonly Dictionary<INamedTypeSymbol, List<RegistrationFactory>> _contributions = new(SymbolEqualityComparer.Default);
 
 		public SameCompilationModules(Compilation compilation) => _compilation = compilation;
 
@@ -96,6 +98,22 @@ partial class AwaitenGenerator
 			}
 
 			string name = RegistrationFactoryName(implementation);
+			return factories.FirstOrDefault(factory => factory.FactoryName == name);
+		}
+
+		/// <summary>
+		///     The factory named <paramref name="name" /> the module generates for a decorator or composite (see
+		///     <see cref="CollectModuleContributionFactories" />), or <see langword="null" />.
+		/// </summary>
+		public RegistrationFactory? Contribution(INamedTypeSymbol module, string name)
+		{
+			if (!_contributions.TryGetValue(module, out List<RegistrationFactory>? factories))
+			{
+				_contributions[module] = factories = ReceivesGeneratedMembers(module)
+					? CollectModuleContributionFactories(module, _compilation)
+					: new List<RegistrationFactory>();
+			}
+
 			return factories.FirstOrDefault(factory => factory.FactoryName == name);
 		}
 	}
@@ -163,6 +181,186 @@ partial class AwaitenGenerator
 		}
 	}
 
+	/// <summary>
+	///     The public wrappers a module another assembly can name emits for the <c>Factory</c> and <c>Instance</c> members
+	///     its closed registrations name when a member is not public but its assembly can reach it, so a container in
+	///     another assembly calls the wrapper instead of the member it cannot see. A member gets one only when its
+	///     signature is public throughout, it is not generic, and no parameter carries an attribute the wrapper cannot
+	///     carry; otherwise a consumer reports the member as before (AWT108, AWT109).
+	/// </summary>
+	private static List<MemberWrapper> CollectModuleMemberWrappers(INamedTypeSymbol module, Compilation compilation)
+	{
+		List<MemberWrapper> wrappers = new();
+		if (!IsExternallyAccessible(module))
+		{
+			return wrappers;
+		}
+
+		foreach (AttributeData attribute in module.GetAttributes())
+		{
+			if (attribute.AttributeClass is not { Name: "SingletonAttribute" or "TransientAttribute" or "ScopedAttribute", } attributeClass
+			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace
+			    || ReadProduction(attribute) is not { Production: ProductionKind.Factory or ProductionKind.Instance, Member: { } member, Conflicting: false, } production
+			    || ProducedRegistrationType(attribute, attributeClass) is not { } produced
+			    || AccessibleMembers(module, member, compilation).Any(candidate => candidate.DeclaredAccessibility == Accessibility.Public))
+			{
+				continue;
+			}
+
+			MemberWrapper? wrapper = production.Production == ProductionKind.Factory
+				? FactoryWrapper(member, produced)
+				: InstanceWrapper(member, produced);
+			if (wrapper is not null && wrappers.All(existing => existing.Name != wrapper.Name))
+			{
+				wrappers.Add(wrapper);
+			}
+		}
+
+		return wrappers;
+
+		MemberWrapper? FactoryWrapper(string member, INamedTypeSymbol produced)
+		{
+			List<IMethodSymbol> candidates = FindFactoryCandidates(module, member, produced, compilation)
+				.Where(candidate => compilation.IsSymbolAccessibleWithin(candidate, module.ContainingAssembly))
+				.ToList();
+			return candidates.Count == 1
+			       && candidates[0] is { IsStatic: true, IsGenericMethod: false, } method
+			       && IsExternallyAccessible(method.ReturnType)
+			       && method.Parameters.All(parameter => IsExternallyAccessible(parameter.Type) && parameter.RefKind == RefKind.None && UnmirroredAttribute(parameter.GetAttributes()) is null)
+				? new MemberWrapper(MemberWrapperName("Factory", member, produced), method.ReturnType.ToDisplayString(FullyQualifiedWithNullability), member, MirroredParameters(method.Parameters))
+				: null;
+		}
+
+		MemberWrapper? InstanceWrapper(string member, INamedTypeSymbol produced)
+		{
+			foreach (ISymbol candidate in AccessibleMembers(module, member, compilation))
+			{
+				ITypeSymbol? type = candidate switch
+				{
+					IFieldSymbol { IsStatic: true, } field => field.Type,
+					IPropertySymbol { IsStatic: true, GetMethod: not null, } property => property.Type,
+					_ => null,
+				};
+				if (type is not null
+				    && compilation.IsSymbolAccessibleWithin(candidate, module.ContainingAssembly)
+				    && compilation.HasImplicitConversion(type, produced)
+				    && IsExternallyAccessible(type))
+				{
+					return new MemberWrapper(MemberWrapperName("Instance", member, produced), type.ToDisplayString(FullyQualifiedWithNullability), member, default, IsProperty: true);
+				}
+			}
+
+			return null;
+		}
+	}
+
+	/// <summary>
+	///     The factories a module generates for its closed decorators and composites whose type another assembly cannot
+	///     construct (see <see cref="SelfCompilesRegistration" />), one per type and service. Each mirrors the constructor
+	///     and the injected properties like the factory of a registration, so a decorator's inner parameter stays the one
+	///     a container redirects to the next link of the chain, and a composite's collection parameter the one it fills.
+	///     A type the factory cannot express gets none and no error in the module's build: a container that cannot
+	///     construct it reports it at its <c>[Import]</c> (AWT230), as before.
+	/// </summary>
+	private static List<RegistrationFactory> CollectModuleContributionFactories(INamedTypeSymbol module, Compilation compilation)
+	{
+		List<RegistrationFactory> factories = new();
+		ModuleScanContext context = new(module, compilation, new List<DiagnosticInfo>(), new HashSet<string>(StringComparer.Ordinal));
+		foreach (AttributeData attribute in module.GetAttributes())
+		{
+			if (attribute.AttributeClass is not { Name: "DecorateAttribute" or "CompositeAttribute", } attributeClass
+			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace
+			    || ContributedPair(attribute, attributeClass) is not ({ } type, { } service)
+			    || !SelfCompilesRegistration(module, type, service, compilation))
+			{
+				continue;
+			}
+
+			string name = ContributionFactoryName(attributeClass.Name, type, service);
+			SelfCompiledSubject subject = RegistrationSubject(type.ToDisplayString(FullyQualified));
+			if (factories.Any(factory => factory.FactoryName == name)
+			    || FactoryReturnType(type, [service,], context) is not { } returnType
+			    || !TryMirrorFactoryParameters(type, context, null, subject, out EquatableArray<FactoryParameter> parameters, mirrorProperties: true)
+			    || !TryMirrorInjectedProperties(type, context, null, subject, ref parameters, out EquatableArray<string> members))
+			{
+				continue;
+			}
+
+			factories.Add(new RegistrationFactory(name, returnType.ToDisplayString(FullyQualified), type.ToDisplayString(FullyQualified), parameters, default, members));
+		}
+
+		return factories;
+	}
+
+	/// <summary>
+	///     The type and service of the closed, generic form of a <c>[Decorate]</c> or <c>[Composite]</c>, or
+	///     <see langword="null" /> types for the <c>typeof</c> form, which names an open generic.
+	/// </summary>
+	private static (INamedTypeSymbol? Type, INamedTypeSymbol? Service) ContributedPair(AttributeData attribute, INamedTypeSymbol attributeClass)
+		=> attributeClass is { IsGenericType: true, TypeArguments.Length: 2, }
+			? (attributeClass.TypeArguments[0] as INamedTypeSymbol, attributeClass.TypeArguments[1] as INamedTypeSymbol)
+			: (null, null);
+
+	/// <summary>
+	///     A deterministic name for the factory of a decorator or composite, derived from its type and the service it
+	///     decorates or composes, so one type serving two services gets two factories and the owner's build and a
+	///     consuming container agree on the name.
+	/// </summary>
+	private static string ContributionFactoryName(string attribute, INamedTypeSymbol type, INamedTypeSymbol service)
+		=> ContributionFactoryName(attribute, type, service.ToDisplayString(FullyQualified));
+
+	/// <inheritdoc cref="ContributionFactoryName(string, INamedTypeSymbol, INamedTypeSymbol)" />
+	private static string ContributionFactoryName(string attribute, INamedTypeSymbol type, string service)
+		=> $"Awaiten__{(attribute == "CompositeAttribute" ? "Composite" : "Decorator")}_{type.Name}_{Fnv1a($"{type.ToDisplayString(FullyQualified)}\0{service}"):x8}";
+
+	/// <summary>
+	///     Whether <paramref name="type" /> may appear on a factory the module generates, which is as accessible as the
+	///     module: any type another assembly can name, and for a module another assembly cannot name (an internal one,
+	///     reached only from its own assembly or one granted <c>InternalsVisibleTo</c>), any type its assembly can name.
+	/// </summary>
+	private static bool FitsFactorySignature(ITypeSymbol type, ModuleScanContext context)
+		=> IsExternallyAccessible(type)
+		   || (!IsExternallyAccessible(context.Module) && context.Compilation.IsSymbolAccessibleWithin(type, context.Module.ContainingAssembly));
+
+	/// <summary>
+	///     AWT203 for the first hook parameter after the instance whose type is private to the module or a class
+	///     containing it, or <see langword="null" />. Such a parameter cannot be resolved by any container, so it gets the
+	///     reason and the remedy of its own instead of the advice to widen the type. A parameter with an attribute is left
+	///     to the rules for that attribute.
+	/// </summary>
+	private static DiagnosticInfo? HiddenHookParameter(SelfCompiledSubject subject, IMethodSymbol hook, bool release, Location? location, ModuleScanContext context)
+	{
+		foreach (IParameterSymbol parameter in hook.Parameters.Skip(1))
+		{
+			if (!parameter.GetAttributes().Any(attribute => attribute.AttributeClass?.ContainingNamespace?.ToDisplayString() == AttributeNamespace)
+			    && TypeHiddenInModule(parameter.Type, context.Module, context.Compilation) is { } hidden)
+			{
+				return new DiagnosticInfo(
+					Diagnostics.ModuleHookParameterHiddenInModule,
+					LocationInfo.From(location),
+					new EquatableArray<string>([subject.Subject, release ? "OnRelease" : "OnActivated", parameter.Name, Display(hidden.ToDisplayString(FullyQualified)),]));
+			}
+		}
+
+		return null;
+	}
+
+	/// <summary>
+	///     The type a closed lifetime registration produces: the implementation of the generic form, or of a closed
+	///     <c>typeof</c> pair, or <see langword="null" /> for an open or malformed one.
+	/// </summary>
+	private static INamedTypeSymbol? ProducedRegistrationType(AttributeData attribute, INamedTypeSymbol attributeClass)
+	{
+		if (attributeClass.IsGenericType)
+		{
+			return attributeClass.TypeArguments.FirstOrDefault() as INamedTypeSymbol;
+		}
+
+		return TryReadTypeofPair(attribute, out INamedTypeSymbol implementation, out _) && !implementation.IsUnboundGenericType
+			? implementation
+			: null;
+	}
+
 	/// <summary>The first registration of <paramref name="module" /> that is self-compiled, or <see langword="null" />.</summary>
 	private static ModuleRegistration? FirstSelfCompiledRegistration(INamedTypeSymbol module, Compilation compilation)
 		=> ConstructedModuleRegistrations(module, compilation)
@@ -171,14 +369,15 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     Builds the factory of every self-compiled registration of a module (see
 	///     <see cref="SelfCompilesRegistration" />), in the module's own build. One factory per implementation
-	///     constructs it through the constructor a self-compiled scan match would use and returns the implementation
-	///     when another assembly can name it, else the registered service. A consumer finds the factory by its
+	///     constructs it through the constructor a self-compiled scan match would use, carrying the <c>[Arg]</c> and
+	///     <c>[FromKey]</c> of its parameters and taking each <c>[Inject]</c> property as a parameter, and returns a type
+	///     every service converts from (see <see cref="FactoryReturnType" />). A consumer finds the factory by its
 	///     deterministic name and keeps reading every other option off the registration attribute itself. Each hook a
 	///     registration names gets a public wrapper, so a consumer runs the module's possibly internal hook. Rejects
-	///     what the factory cannot express: an inaccessible constructor parameter (AWT195), injection metadata
-	///     (AWT200), hook parameters the wrapper cannot mirror (AWT203/AWT204), and an inaccessible implementation
-	///     exposed under several services or also matched by one of the module's scans (AWT197), since one factory
-	///     returns one service and two would split the shared instance. When the module's assembly grants
+	///     what the factory cannot express: an inaccessible constructor parameter (AWT195), injection metadata a
+	///     parameter cannot carry (AWT200), hook parameters the wrapper cannot mirror (AWT203/AWT204), and an
+	///     inaccessible implementation under several services no accessible type covers, or also matched by one of the
+	///     module's scans (AWT197), since two factories would split the shared instance. When the module's assembly grants
 	///     <c>InternalsVisibleTo</c> to any assembly, an implementation that fails only with AWT195, AWT197 or AWT200
 	///     gets no factory and no error: such an assembly constructs it itself. It lands in <paramref name="skipped" />
 	///     with the reason, which a consumer that cannot construct it reports (AWT231). A type hidden in the module
@@ -242,19 +441,21 @@ partial class AwaitenGenerator
 		INamedTypeSymbol implementation = first.Implementation;
 		string typeName = implementation.ToDisplayString(FullyQualified);
 		SelfCompiledSubject subject = RegistrationSubject(typeName);
-		INamedTypeSymbol returnType = IsExternallyAccessible(implementation) ? implementation : first.Service;
-		string returnName = returnType.ToDisplayString(FullyQualified);
 		List<DiagnosticInfo> rejections = new();
 
 		string[] services = all.Select(registration => registration.Service.ToDisplayString(FullyQualified)).Distinct().ToArray();
-		foreach (ModuleRegistration registration in all)
+		INamedTypeSymbol? returnType = FactoryReturnType(implementation, all.Select(registration => registration.Service).ToList(), context);
+		if (returnType is null)
 		{
-			string service = registration.Service.ToDisplayString(FullyQualified);
-			if (!SymbolEqualityComparer.Default.Equals(returnType, implementation) && service != returnName)
-			{
-				ReportRegistrationExposures(subject, $"{Display(returnName)}, {Display(service)}", "register it under a single service, or make the implementation public", registration.Location, rejections);
-			}
+			ReportRegistrationExposures(
+				subject,
+				string.Join(", ", services.Select(Display)),
+				"register it under a single service, give it a public base type or interface that covers its services, or make the implementation public",
+				all.First(registration => !SymbolEqualityComparer.Default.Equals(registration.Service, first.Service)).Location,
+				rejections);
 		}
+
+		string returnName = (returnType ?? first.Service).ToDisplayString(FullyQualified);
 
 		// A scan factory builds the type for every consumer, so one constructing the registration itself would still split it.
 		bool scannedToo = false;
@@ -264,7 +465,9 @@ partial class AwaitenGenerator
 			scannedToo = true;
 		}
 
-		if (!TryMirrorFactoryParameters(implementation, context with { Diagnostics = rejections, }, first.Location, subject, out EquatableArray<FactoryParameter> parameters)
+		EquatableArray<string> members = default;
+		if (!TryMirrorFactoryParameters(implementation, context with { Diagnostics = rejections, }, first.Location, subject, out EquatableArray<FactoryParameter> parameters, mirrorProperties: true)
+		    || !TryMirrorInjectedProperties(implementation, context with { Diagnostics = rejections, }, first.Location, subject, ref parameters, out members)
 		    || rejections.Count > 0)
 		{
 			string?[] reasons = rejections.Select(rejection => SkipReason(rejection, services)).ToArray();
@@ -319,7 +522,95 @@ partial class AwaitenGenerator
 			returnName,
 			typeName,
 			parameters,
-			new EquatableArray<RegistrationHook>(hooks.ToArray()));
+			new EquatableArray<RegistrationHook>(hooks.ToArray()),
+			members);
+	}
+
+	/// <summary>
+	///     Appends a parameter per <c>[Inject]</c> property of <paramref name="type" /> to the mirrored constructor
+	///     <paramref name="parameters" />, named like the property and carrying its <c>[FromKey]</c>, so the factory fills
+	///     the property through an object initializer and a consumer resolves it like any other dependency. Reports
+	///     AWT200 and returns <see langword="false" /> for what a factory parameter cannot express: a property assigned
+	///     after construction (<c>Deferred</c>), one left out when its service is missing (<c>Optional</c>), one without a
+	///     setter the module can reach, one named like a constructor parameter, and one whose type another assembly
+	///     cannot name.
+	/// </summary>
+	private static bool TryMirrorInjectedProperties(
+		INamedTypeSymbol type,
+		ModuleScanContext context,
+		Location? location,
+		SelfCompiledSubject subject,
+		ref EquatableArray<FactoryParameter> parameters,
+		out EquatableArray<string> members)
+	{
+		members = default;
+		List<FactoryParameter> mirrored = new(parameters.AsArray());
+		List<string> names = new();
+		foreach (IPropertySymbol property in InjectedProperties(type))
+		{
+			ImmutableArray<AttributeData> attributes = property.GetAttributes();
+			string? reason = null;
+			if (IsInjectDeferred(attributes))
+			{
+				reason = "is marked [Inject(Deferred = true)]";
+			}
+			else if (IsInjectOptional(attributes))
+			{
+				reason = "is marked [Inject(Optional = true)]";
+			}
+			else if (property.SetMethod is not { } setter || !context.Compilation.IsSymbolAccessibleWithin(setter, context.Module))
+			{
+				reason = "has no setter the module can reach";
+			}
+			else if (mirrored.Any(parameter => parameter.Name == property.Name))
+			{
+				reason = "has the name of a constructor parameter";
+			}
+			else if (HasAwaitenAttribute(attributes, "FromKeyAttribute") && FromKey(attributes) is null)
+			{
+				reason = "is marked [FromKey] with an unsupported key";
+			}
+			else if (!FitsFactorySignature(property.Type, context) || TypeHiddenInModule(property.Type, context.Module, context.Compilation) is not null)
+			{
+				reason = $"has the type '{Display(property.Type.ToDisplayString(FullyQualified))}', which is not accessible outside the module's assembly";
+			}
+
+			if (reason is not null)
+			{
+				context.Diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.ModuleScanInjectionMetadata,
+					LocationInfo.From(location),
+					new EquatableArray<string>([subject.Subject, $"its property '{property.Name}' {reason}", subject.Remedy,])));
+				return false;
+			}
+
+			mirrored.Add(new FactoryParameter(property.Type.ToDisplayString(FullyQualifiedWithNullability), property.Name, KeyAttribute(FromKey(attributes))));
+			names.Add(property.Name);
+		}
+
+		parameters = new EquatableArray<FactoryParameter>(mirrored.ToArray());
+		members = new EquatableArray<string>(names.ToArray());
+		return true;
+	}
+
+	/// <summary>
+	///     The type the factory of <paramref name="implementation" /> returns, which every service it is registered under
+	///     converts from, so one instance serves all of them: the implementation when another assembly can name it, else
+	///     a registered service that covers the others, else the most derived base class, else the first interface in
+	///     declaration order, among the types the factory may expose. <see langword="null" /> when none covers them all.
+	/// </summary>
+	private static INamedTypeSymbol? FactoryReturnType(INamedTypeSymbol implementation, List<INamedTypeSymbol> services, ModuleScanContext context)
+	{
+		if (IsExternallyAccessible(implementation))
+		{
+			return implementation;
+		}
+
+		bool hidden = IsHiddenInModule(implementation, context.Module, context.Compilation);
+		return services
+			.Concat(ServableTypes(implementation))
+			.Where(candidate => IsExternallyAccessible(candidate) || (hidden && LessAccessibleThanContainer(candidate, context.Module) is null))
+			.FirstOrDefault(candidate => services.All(service => context.Compilation.HasImplicitConversion(candidate, service)));
 	}
 
 	private static void ReportRegistrationExposures(SelfCompiledSubject subject, string exposures, string remedy, Location? location, List<DiagnosticInfo> diagnostics)
