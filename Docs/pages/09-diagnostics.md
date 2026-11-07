@@ -222,7 +222,8 @@ AWT216 remains in these cases:
 - **A private service.** The implementation is registered as itself, or under another private service, so there is nothing accessible to return. Register it under an accessible service, or make it `internal`.
 - **A private type argument.** A closed generic such as `Box<Content>` or `Handler<Message> : IHandler<Message>` carries the private type into every type it converts to. Make the type argument `internal`.
 - **A private `[Arg]` type.** The parameterized resolvers and the `Func<TArg, T>` a consumer asks for take the runtime argument in their signatures. Make the argument type `internal`.
-- **A type the container cannot reach.** The container registers a type that is private to a class the container is not nested in. Nest the container beside it, or make it `internal`. A module builds such a type for the container only if it is a class, so a private struct registered by a module needs to be `internal`.
+- **A type the container cannot reach.** The container registers a type that is private to a class the container is not nested in. Nest the container beside it, or make it `internal`.
+- **A struct.** Making a struct `internal` does not help: an implementation must be a class, and the compiler also reports CS0452. Wrap the struct in a class, or register an interface it implements with a `Factory` or `Instance` that returns it.
 
 ```csharp expect=AWT216
 [Container]

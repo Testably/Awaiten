@@ -1023,7 +1023,7 @@ public partial class DiagnosticTests
 		}
 
 		[Test]
-		public async Task PrivateNestedStructOfAClassEnclosingTheModule_Reports()
+		public async Task PrivateNestedStructOfAClassEnclosingTheModule_ReportsThatImplementationsMustBeClasses()
 		{
 			GeneratorResult result = Generator.Run("""
 			                                       using Awaiten;
@@ -1050,9 +1050,12 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics).Contains("*error AWT216*'MyCode.Fakes.FakeClock'*the generated container cannot reach it; make 'MyCode.Fakes.FakeClock' internal*").AsWildcard()
-				.Because("a module generates factories for classes only, so the container would have to construct the struct itself");
-			await That(result.Diagnostics).DoesNotContain("*nest the container beside it*").AsWildcard();
+			await That(result.Diagnostics).Contains("*error CS0452*").AsWildcard()
+				.Because("the registration attributes constrain the implementation to a class");
+			await That(result.Diagnostics).Contains("*error AWT216*'MyCode.Fakes.FakeClock'*an implementation must be a class, so wrap 'MyCode.Fakes.FakeClock' in a class, or register an interface it implements with a Factory or Instance that returns it*").AsWildcard()
+				.Because("making a struct internal would not make it a valid implementation");
+			await That(result.Diagnostics).DoesNotContain("*internal*").AsWildcard()
+				.Because("no access modifier makes a struct a supported implementation");
 		}
 
 		[Test]
