@@ -608,7 +608,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 
 		// A scan match a module's generated factory builds shares the instance of every other registration of its
 		// implementation, as it would in the module's own assembly.
-		ShareScannedInstances(raw, compilation, diagnostics);
+		List<string> sharedScanImplementations = ShareScannedInstances(raw, compilation);
 
 		// A scanned private nested type the resolvers cannot stand in for is skipped with AWT193, not the AWT216 error.
 		DropUnsupportedPrivateScanMatches(raw, containerSymbol, compilation, diagnostics);
@@ -616,6 +616,14 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		// [Scan(SkipUnconstructable = true)] trades the AWT101 error for a skip-with-warning (AWT141) on matches
 		// the container cannot construct. Scans without the opt-in, and explicit registrations, keep the error.
 		PruneUnconstructableScanMatches(raw, containerSymbol, compilation, external, constraintRejected, diagnostics);
+
+		// After the pruning, so a pruned match reports only AWT141. A dropped match can leave another opted-in match
+		// unconstructable, so the pruning runs again.
+		if (DropUnsharedScanMatches(raw, sharedScanImplementations, compilation, diagnostics))
+		{
+			PruneUnconstructableScanMatches(raw, containerSymbol, compilation, external, constraintRejected, diagnostics);
+		}
+
 		diagnostics.AddRange(wrapperDiagnostics);
 
 		// Coalesce registrations by (service type, key): first per key wins, and registrations of the same

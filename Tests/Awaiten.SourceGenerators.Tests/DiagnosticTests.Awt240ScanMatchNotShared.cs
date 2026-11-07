@@ -80,6 +80,58 @@ public partial class DiagnosticTests
 		}
 
 		[Test]
+		public async Task AScanMatchThatSkipUnconstructablePrunes_ReportsOnlyAwt141()
+		{
+			const string library = """
+				using Awaiten;
+
+				namespace Lib;
+
+				public interface IAppliance { }
+				public interface IKettle { }
+				public interface IWater { }
+				internal sealed class Kettle : IAppliance, IKettle
+				{
+				    public Kettle(IWater water) { }
+				}
+
+				[Module]
+				[Scan<IKettle>(As = ScanAs.Marker, Lifetime = Lifetime.Singleton, SkipUnconstructable = true)]
+				public static partial class KettleModule { }
+
+				[Module]
+				[Scan<IAppliance>(As = ScanAs.Marker, Lifetime = Lifetime.Singleton, SkipUnconstructable = true)]
+				public static partial class ScanModule { }
+				""";
+
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(library, Consumer);
+
+			await That(result.Diagnostics).HasCount(1);
+			await That(result.Diagnostics).Contains("*AWT141*Lib.Kettle*").AsWildcard()
+				.Because("the container drops both matches as unconstructable, so neither builds an instance that could fail to be shared");
+		}
+
+		[Test]
+		public async Task AnOptedInMatchThatDependsOnlyOnTheDroppedMatch_IsSkippedWithAwt141()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Library(RegisteringModule, grant: false), Consumer.Replace("[Container]", """
+				public interface IToaster { }
+				public sealed class Toaster : IToaster
+				{
+				    public Toaster(IAppliance appliance) { }
+				}
+
+				[Container]
+				[Scan<IToaster>(As = ScanAs.Marker, SkipUnconstructable = true)]
+				"""));
+
+			await That(result.Diagnostics).HasCount(2);
+			await That(result.Diagnostics).Contains("*AWT240*").AsWildcard()
+				.And.Contains("*AWT141*MyCode.Toaster*").AsWildcard()
+				.Because("dropping the unshared match leaves nothing to resolve IAppliance, so the opted-in match is skipped instead of failing with AWT101");
+		}
+
+		[Test]
 		public async Task ScanMatchesOfTwoModulesUnderOneService_DoNotReportAwt240()
 		{
 			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Library(KettleScanModule.Replace("Scan<IKettle>", "Scan<IAppliance>"), grant: false), Consumer);

@@ -44,10 +44,10 @@ partial class AwaitenGenerator
 	///     that implementation too, so coalescing shares one instance between them, as a container in the module's own
 	///     assembly does. The instance is built by whichever of them coalescing picks first, so a match whose service the
 	///     instance's type does not convert to cannot share it. The container then constructs the implementation for all
-	///     of these matches when it can, and otherwise drops each such match after reporting AWT240, since its factory
-	///     would build a second instance.
+	///     of these matches when it can, and otherwise <see cref="DropUnsharedScanMatches" /> drops each such match.
+	///     Returns the identities of the shared implementations.
 	/// </summary>
-	private static void ShareScannedInstances(List<RawRegistration> raw, Compilation compilation, List<DiagnosticInfo> diagnostics)
+	private static List<string> ShareScannedInstances(List<RawRegistration> raw, Compilation compilation)
 	{
 		HashSet<string> named = new(raw.Where(registration => registration.ScanImplementation is null).Select(registration => registration.ImplementationType), StringComparer.Ordinal);
 		Dictionary<string, INamedTypeSymbol> shared = raw
@@ -57,7 +57,7 @@ partial class AwaitenGenerator
 			.ToDictionary(group => group.Key, group => group.First().ScanImplementation!, StringComparer.Ordinal);
 		if (shared.Count == 0)
 		{
-			return;
+			return [];
 		}
 
 		for (int index = 0; index < raw.Count; index++)
@@ -70,65 +70,81 @@ partial class AwaitenGenerator
 
 		foreach (KeyValuePair<string, INamedTypeSymbol> entry in shared)
 		{
-			if (Unshared(entry.Key).Count == 0)
+			if (UnsharedScanMatches(raw, entry.Key, compilation).Count == 0 || !CanConstruct(entry.Value, compilation))
 			{
 				continue;
 			}
 
-			if (CanConstruct(entry.Value, compilation))
+			for (int index = 0; index < raw.Count; index++)
 			{
-				for (int index = 0; index < raw.Count; index++)
+				if (raw[index].ScanImplementation is { } implementation && SymbolEqualityComparer.Default.Equals(implementation, entry.Value))
 				{
-					if (raw[index].ScanImplementation is { } implementation && SymbolEqualityComparer.Default.Equals(implementation, entry.Value))
+					raw[index] = raw[index] with
 					{
-						raw[index] = raw[index] with
-						{
-							Implementation = implementation,
-							Production = ProductionKind.Constructor,
-							ProductionMember = null,
-							GreedyConstructor = true,
-							Traits = null,
-						};
-					}
+						Implementation = implementation,
+						Production = ProductionKind.Constructor,
+						ProductionMember = null,
+						GreedyConstructor = true,
+						Traits = null,
+					};
 				}
 			}
+		}
 
-			foreach ((RawRegistration match, INamedTypeSymbol builtAs) in Unshared(entry.Key))
+		return shared.Keys.ToList();
+	}
+
+	/// <summary>
+	///     Drops each scan match of a <paramref name="shared" /> implementation (see <see cref="ShareScannedInstances" />)
+	///     that cannot share its instance after reporting AWT240, since its factory would build a second instance. Runs
+	///     after the <c>SkipUnconstructable</c> pruning, so a match the pruning drops reports only AWT141. Returns whether
+	///     it dropped a match.
+	/// </summary>
+	private static bool DropUnsharedScanMatches(List<RawRegistration> raw, List<string> shared, Compilation compilation, List<DiagnosticInfo> diagnostics)
+	{
+		bool dropped = false;
+		foreach (string identity in shared)
+		{
+			foreach ((RawRegistration match, INamedTypeSymbol builtAs) in UnsharedScanMatches(raw, identity, compilation))
 			{
 				diagnostics.Add(new DiagnosticInfo(
 					Diagnostics.ScanMatchNotShared,
 					LocationInfo.From(match.Location),
 					new EquatableArray<string>([
-						DisplayInstance(entry.Key),
+						DisplayInstance(identity),
 						Display(match.Origin!.ToDisplayString(FullyQualified)),
 						Display(match.ServiceType),
 						Display(builtAs.ToDisplayString(FullyQualified)),
 					])));
 				raw.RemoveAll(registration => ReferenceEquals(registration, match));
+				dropped = true;
 			}
 		}
 
-		// The generated scan matches of the implementation whose service the type of its shared instance does not
-		// convert to: coalescing builds the instance by the first registration in precedence order that it does not
-		// drop. An instance built as the implementation itself converts to every service a scan matched it under.
-		List<(RawRegistration Match, INamedTypeSymbol BuiltAs)> Unshared(string identity)
+		return dropped;
+	}
+
+	/// <summary>
+	///     The generated scan matches of the implementation <paramref name="identity" /> whose service the type of its
+	///     shared instance does not convert to: coalescing builds the instance by the first registration in precedence
+	///     order that it does not drop. An instance built as the implementation itself converts to every service a scan
+	///     matched it under.
+	/// </summary>
+	private static List<(RawRegistration Match, INamedTypeSymbol BuiltAs)> UnsharedScanMatches(List<RawRegistration> raw, string identity, Compilation compilation)
+	{
+		HashSet<int> dropped = DroppedOverridableDefaults(raw);
+		if (InPrecedenceOrder(raw).FirstOrDefault(candidate => !dropped.Contains(candidate.Index) && candidate.Registration.ImplementationType == identity).Registration?.Implementation is not { } builtAs
+		    || TypeIdentity(builtAs, compilation) == identity)
 		{
-			HashSet<int> dropped = DroppedOverridableDefaults(raw);
-			INamedTypeSymbol builtAs = InPrecedenceOrder(raw)
-				.First(candidate => !dropped.Contains(candidate.Index) && candidate.Registration.ImplementationType == identity)
-				.Registration.Implementation;
-			if (TypeIdentity(builtAs, compilation) == identity)
-			{
-				return [];
-			}
-
-			return raw
-				.Where(registration => registration is { ScanImplementation: not null, ServiceSymbol: { } service, }
-				                       && registration.ImplementationType == identity
-				                       && !compilation.HasImplicitConversion(builtAs, service))
-				.Select(registration => (registration, builtAs))
-				.ToList();
+			return [];
 		}
+
+		return raw
+			.Where(registration => registration is { ScanImplementation: not null, ServiceSymbol: { } service, }
+			                       && registration.ImplementationType == identity
+			                       && !compilation.HasImplicitConversion(builtAs, service))
+			.Select(registration => (registration, builtAs))
+			.ToList();
 	}
 
 	/// <summary>
