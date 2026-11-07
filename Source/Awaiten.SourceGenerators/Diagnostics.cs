@@ -2075,4 +2075,18 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A registration of an implementation that an imported module of another assembly builds through a generated
+	///     handle, which a container in the module's own assembly shares as one instance. The container serves the
+	///     registration from the handle's instance, but cannot share it faithfully: the registration sets a directive the
+	///     handle cannot apply, or the module generated no member that returns the implementation from its handle.
+	/// </summary>
+	public static readonly DiagnosticDescriptor RegistrationNotSharedWithHandle = new(
+		"AWT241",
+		"Registration cannot share the instance of a generated handle",
+		"'{0}' is built through a generated handle of the imported module '{1}', which this registration of '{0}' shares in a container of the module's own assembly, but {2}; {3}",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

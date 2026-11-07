@@ -997,12 +997,19 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     The aliases of an implementation the module builds through a handle: one per service it is registered under,
 	///     returning its instance from its instance handle, as the accessible service or wrapped in the handle of the
-	///     internal service.
+	///     internal service. A public implementation gets one under its own type too, through which a container in another
+	///     assembly serves its own registration of the implementation from the same instance.
 	/// </summary>
 	private static IEnumerable<HiddenAlias> HiddenAliases(HiddenImplementation candidate, HiddenServices hidden, Compilation compilation)
 	{
 		INamedTypeSymbol implementation = candidate.Implementation;
-		foreach (INamedTypeSymbol service in candidate.Registrations.Select(registration => registration.Service).Distinct<INamedTypeSymbol>(SymbolEqualityComparer.Default))
+		IEnumerable<INamedTypeSymbol> services = candidate.Registrations.Select(registration => registration.Service);
+		if (IsExternallyAccessible(implementation))
+		{
+			services = services.Concat([implementation,]);
+		}
+
+		foreach (INamedTypeSymbol service in services.Distinct<INamedTypeSymbol>(SymbolEqualityComparer.Default))
 		{
 			bool internalService = IsHiddenService(service, hidden.Module, compilation);
 			if (internalService)

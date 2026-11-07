@@ -1049,6 +1049,74 @@ public class ModuleHiddenServiceTests
 				.Because("the container assigns the deferred property through the module's setter wrapper");
 		}
 
+		public class PublicImplementation
+		{
+			private const string Library = """
+				using Awaiten;
+
+				namespace Lib;
+
+				internal interface IStore { }
+				public sealed class Store : IStore { }
+				public interface IGrinder { }
+				internal sealed class Grinder : IGrinder { public Grinder(IStore store) { } }
+
+				[Module]
+				[Singleton<Store, IStore>]
+				[Singleton<Grinder, IGrinder>]
+				public static partial class CoffeeModule { }
+				""";
+
+			private static string Consumer(string registration) => $$"""
+				using Awaiten;
+				using Lib;
+
+				namespace MyCode;
+
+				[Container]
+				[Import(typeof(CoffeeModule))]
+				{{registration}}
+				public static partial class MyContainer;
+				""";
+
+			[Test]
+			public async Task RegisteredByTheConsumerToo_SharesTheInstanceOfTheHandle()
+			{
+				GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Library, Consumer("[Singleton<Store>]"));
+				string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+				await That(result.Diagnostics).IsEmpty();
+				await That(source).DoesNotContain("new global::Lib.Store(")
+					.Because("the container's registration serves the one instance the handle holds, as a container in the module's own assembly coalesces both");
+				await That(source).Contains($"global::Lib.CoffeeModule.Internals.{Alias("global::Lib.Store", "global::Lib.Store")}(");
+			}
+
+			[Test]
+			public async Task RegisteredByAModuleOfTheConsumer_SharesTheInstanceOfTheHandle()
+			{
+				GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Library, Consumer("[Import(typeof(StoreModule))]") + """
+
+					[Module]
+					[Singleton<Store>]
+					public static class StoreModule { }
+					""");
+				string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+				await That(result.Diagnostics).IsEmpty();
+				await That(source).DoesNotContain("new global::Lib.Store(")
+					.Because("a module of another assembly that registers the public implementation shares the handle's instance too");
+			}
+
+			[Test]
+			public async Task WithALifetimeOfItsOwn_ReportsAwt107()
+			{
+				GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Library, Consumer("[Transient<Store>]"));
+
+				await That(result.Diagnostics).Contains("*AWT107*'Lib.Store'*").AsWildcard()
+					.Because("a container in the module's own assembly reports the conflicting lifetime of the one implementation");
+			}
+		}
+
 		[Test]
 		public async Task ConsumerGrantedInternalsVisibleTo_ConstructsDirectly()
 		{

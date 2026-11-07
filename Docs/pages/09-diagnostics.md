@@ -2367,6 +2367,35 @@ The same applies when the other module builds the implementation through a [gene
 
 **Fix:** Grant the container's assembly `InternalsVisibleTo` in the library, so the container constructs the implementation once for all of them. Or keep the scan from matching the implementation, or register it under a service that converts to the scan's interface.
 
+### AWT241
+
+:::danger[Error]
+A registration names an implementation that an imported module of another assembly builds through a generated handle, but the container can't share the handle's instance with it faithfully.
+:::
+
+A module builds an implementation through a [generated handle](./04-registration/07-modules.md#services-only-the-module-uses) when it registers it under an internal service. When the container or another module registers the same public implementation too, the container serves that registration from the handle's instance, so there is one instance, as in the library's own assembly. The handle builds the instance, though, so it can't run an `OnActivated` or `OnRelease` hook or apply `SuppressDisposal` that the earlier registration sets.
+
+```csharp no-compile
+// In a referenced library, which does not grant the application InternalsVisibleTo:
+internal interface IBeanStore;
+public sealed class BeanStore : IBeanStore;
+
+[Module]
+[Singleton<BeanStore, IBeanStore>]
+public static partial class CoffeeModule;
+
+// In the application:
+[Container]
+[Import(typeof(CoffeeModule))]
+[Singleton<BeanStore>(OnActivated = nameof(Fill))]   // the handle can't run this hook
+public static partial class CoffeeShop
+{
+    private static void Fill(BeanStore store) { }
+}
+```
+
+**Fix:** Set the directive on the module's registration, or remove it from this one. Granting the container's assembly `InternalsVisibleTo` in the library lets the container construct the implementation itself.
+
 ## Extending containers
 
 These concern a container that [extends](./04-registration/08-extending-containers.md) another with `[Container(Extends = typeof(...))]`. Each is reported on the `Extends` argument.

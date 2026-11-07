@@ -161,6 +161,103 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
+	///     <paramref name="registration" /> served through <paramref name="alias" />, the generated member of
+	///     <paramref name="module" /> that returns the instance of <paramref name="implementation" /> from its instance
+	///     handle. Its identity names the alias's type and the implementation, and it owns nothing.
+	/// </summary>
+	private static RawRegistration ThroughAlias(RawRegistration registration, INamedTypeSymbol module, INamedTypeSymbol implementation, IMethodSymbol alias)
+	{
+		INamedTypeSymbol aliasType = (INamedTypeSymbol)alias.ReturnType;
+		return registration with
+		{
+			ImplementationType = $"{aliasType.ToDisplayString(FullyQualified)}{AliasKeyMarker}{implementation.ToDisplayString(FullyQualified)}",
+			Implementation = aliasType,
+			Origin = module,
+			Production = ProductionKind.Factory,
+			ProductionMember = InInternals(alias.Name),
+			Eager = false,
+			OnActivated = null,
+			OnRelease = null,
+			OnActivatedMarkers = null,
+			OnReleaseMarkers = null,
+			SuppressDisposal = false,
+			GreedyConstructor = false,
+			GenericFactory = false,
+			Traits = new ImplementationTraits(default, false, false),
+			TraitsExact = true,
+			ConstructVia = null,
+			ConstructViaType = null,
+			Constructor = null,
+			ScanImplementation = null,
+			Hidden = null,
+			HiddenProduction = null,
+		};
+	}
+
+	/// <summary>
+	///     Lets a registration that constructs or produces an implementation a module of another assembly builds through
+	///     a generated handle share the handle's instance, as a container in the module's own assembly coalesces both into
+	///     one instance: a registration of the container, or of a module that can name the implementation. It is served
+	///     through the alias that returns the implementation from its instance handle, with the handle's lifetime. The two
+	///     no longer share an identity, so the checks coalescing would run between them run here (AWT107, AWT111, AWT166).
+	///     A directive of the registration that the handle cannot run, or a missing alias, is AWT241.
+	/// </summary>
+	private static void ShareHandleWithRegistrations(List<RawRegistration> raw, List<(RawRegistration Handle, int Index)> handles, INamedTypeSymbol container, Compilation compilation, List<DiagnosticInfo> diagnostics)
+	{
+		HashSet<string> lifetimes = new(StringComparer.Ordinal);
+		HashSet<string> productions = new(StringComparer.Ordinal);
+		HashSet<string> directives = new(StringComparer.Ordinal);
+		for (int index = 0; index < raw.Count; index++)
+		{
+			RawRegistration registration = raw[index];
+			if (registration.Hidden is not null
+			    || registration.ScanImplementation is not null
+			    || handles.FirstOrDefault(entry => entry.Handle.Hidden!.ToDisplayString(FullyQualified) == registration.ImplementationType) is not ({ } handle, int handleIndex))
+			{
+				continue;
+			}
+
+			INamedTypeSymbol implementation = handle.Hidden!;
+			if (!registration.IsScan)
+			{
+				RawRegistration plain = registration with { HiddenProduction = DescribeProduction(registration.Production, registration.ProductionMember, registration.Origin ?? container) };
+				bool registrationFirst = (PrecedenceRank(registration), index).CompareTo((PrecedenceRank(handle), handleIndex)) < 0;
+				ReportCoalescingConflicts(NewImplInfo(registrationFirst ? plain : handle), registrationFirst ? handle : plain, container, lifetimes, productions, directives, diagnostics);
+				if (registrationFirst)
+				{
+					HashSet<string> conflicting = new(ConflictingDirectives(NewImplInfo(plain), handle, container).Select(directive => directive.Directive), StringComparer.Ordinal);
+					foreach ((string directive, string _, string _) in ConflictingDirectives(NewImplInfo(handle), registration, container)
+						         .Where(directive => directive.Directive != "Eager" && !conflicting.Contains(directive.Directive)))
+					{
+						Report($"it sets {directive}, which the handle cannot apply to the instance it builds", $"set {directive} on the module's registration, or remove it");
+					}
+				}
+			}
+
+			if (handles.Select(entry => entry.Handle.Origin).OfType<INamedTypeSymbol>()
+				    .Select(module => (Module: module, Alias: GeneratedFactoryNamed(module, HiddenAliasName(implementation, implementation), compilation)))
+				    .FirstOrDefault(candidate => candidate.Alias is not null) is not ({ } owner, { } alias))
+			{
+				Report("the module generated no member that returns the implementation from its handle", "remove the registration, or grant this assembly InternalsVisibleTo in the module's assembly");
+				continue;
+			}
+
+			raw[index] = ThroughAlias(registration with { Lifetime = handle.Lifetime, }, owner, implementation, alias) with { Eager = registration.Eager, };
+
+			void Report(string reason, string remedy)
+				=> diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.RegistrationNotSharedWithHandle,
+					LocationInfo.From(registration.Location),
+					new EquatableArray<string>([
+						Display(implementation.ToDisplayString(FullyQualified)),
+						Display(handle.Origin!.ToDisplayString(FullyQualified)),
+						reason,
+						remedy,
+					])));
+		}
+	}
+
+	/// <summary>
 	///     The generated member named <paramref name="name" /> that builds a handle, a factory method (possibly async) or
 	///     the property over an <c>Instance</c>, and the handle it produces, or <see langword="null" />.
 	/// </summary>
@@ -216,23 +313,16 @@ partial class AwaitenGenerator
 			handled.Add(HandleRegistration() with { Weak = false, IsDefault = false, WhenInjectedInto = null, });
 		}
 
-		string aliasName = aliasType.ToDisplayString(FullyQualified);
-		handled.Add(registration with
-		{
-			ServiceType = aliasName,
-			ServiceSymbol = aliasType,
-			ImplementationType = $"{aliasName}{AliasKeyMarker}{implementation.ToDisplayString(FullyQualified)}",
-			Implementation = aliasType,
-			Production = ProductionKind.Factory,
-			ProductionMember = InInternals(alias.Name),
-			Eager = false,
-			OnActivated = null,
-			OnRelease = null,
-			SuppressDisposal = false,
-			Traits = new ImplementationTraits(default, false, false),
-			TraitsExact = true,
-			Unlisted = !compilation.IsSymbolAccessibleWithin(service, compilation.Assembly),
-		});
+		handled.Add(ThroughAlias(
+			registration with
+			{
+				ServiceType = aliasType.ToDisplayString(FullyQualified),
+				ServiceSymbol = aliasType,
+				Unlisted = !compilation.IsSymbolAccessibleWithin(service, compilation.Assembly),
+			},
+			module,
+			implementation,
+			alias));
 		return handled;
 
 		IMethodSymbol? Alias(INamedTypeSymbol aliased)

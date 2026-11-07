@@ -45,9 +45,18 @@ partial class AwaitenGenerator
 	///     match's service, whose identity it takes so coalescing keeps one instance. Without such an alias the match's
 	///     factory would build a second instance, so the match is dropped after reporting AWT240.
 	/// </summary>
-	private static void ShareHandledInstances(List<RawRegistration> raw, Compilation compilation, List<DiagnosticInfo> diagnostics)
+	private static void ShareHandledInstances(List<RawRegistration> raw, INamedTypeSymbol container, Compilation compilation, List<DiagnosticInfo> diagnostics)
 	{
-		List<RawRegistration> handles = raw.Where(registration => registration.Hidden is not null && registration.ImplementationType.Contains(HiddenKeyMarker)).ToList();
+		List<(RawRegistration Handle, int Index)> indexed = raw
+			.Select((registration, index) => (registration, index))
+			.Where(entry => entry.registration.Hidden is not null && entry.registration.ImplementationType.Contains(HiddenKeyMarker))
+			.ToList();
+		if (indexed.Count > 0)
+		{
+			ShareHandleWithRegistrations(raw, indexed, container, compilation, diagnostics);
+		}
+
+		List<RawRegistration> handles = indexed.Select(entry => entry.Handle).ToList();
 		for (int index = raw.Count - 1; index >= 0 && handles.Count > 0; index--)
 		{
 			if (raw[index] is not { ScanImplementation: { } implementation, ServiceSymbol: { } service, } match
@@ -435,37 +444,44 @@ partial class AwaitenGenerator
 		{
 			if (!implInfos.TryGetValue(reg.ImplementationType, out ImplInfo? info))
 			{
-				info = new ImplInfo(
-					reg.ImplementationType, reg.Implementation, reg.Lifetime,
-					LocationInfo.From(reg.Location), reg.Production, reg.ProductionMember)
-				{
-					IsScan = reg.IsScan,
-					GreedyConstructor = reg.GreedyConstructor,
-					Origin = reg.Origin,
-					Eager = reg.Eager,
-					OnActivated = reg.OnActivated,
-					OnRelease = reg.OnRelease,
-					OnActivatedOrigin = reg.OnActivated is null ? null : reg.Origin,
-					OnReleaseOrigin = reg.OnRelease is null ? null : reg.Origin,
-					SuppressDisposal = reg.SuppressDisposal,
-					GenericFactory = reg.GenericFactory,
-					Traits = reg.Traits,
-					TraitsExact = reg.TraitsExact,
-					ConstructVia = reg.ConstructVia,
-					ConstructViaType = reg.ConstructViaType,
-					Constructor = reg.Constructor,
-					Unlisted = reg.Unlisted,
-					Hidden = reg.Hidden,
-					HiddenProduction = reg.HiddenProduction,
-				};
-				info.OnActivatedMarkers.AddRange(reg.OnActivatedMarkers ?? []);
-				info.OnReleaseMarkers.AddRange(reg.OnReleaseMarkers ?? []);
+				info = NewImplInfo(reg);
 				implInfos.Add(reg.ImplementationType, info);
 				implOrder.Add(info);
 			}
 
 			return info;
 		}
+	}
+
+	/// <summary>The coalesced info of an implementation whose first registration is <paramref name="reg" />.</summary>
+	private static ImplInfo NewImplInfo(RawRegistration reg)
+	{
+		ImplInfo info = new(
+			reg.ImplementationType, reg.Implementation, reg.Lifetime,
+			LocationInfo.From(reg.Location), reg.Production, reg.ProductionMember)
+		{
+			IsScan = reg.IsScan,
+			GreedyConstructor = reg.GreedyConstructor,
+			Origin = reg.Origin,
+			Eager = reg.Eager,
+			OnActivated = reg.OnActivated,
+			OnRelease = reg.OnRelease,
+			OnActivatedOrigin = reg.OnActivated is null ? null : reg.Origin,
+			OnReleaseOrigin = reg.OnRelease is null ? null : reg.Origin,
+			SuppressDisposal = reg.SuppressDisposal,
+			GenericFactory = reg.GenericFactory,
+			Traits = reg.Traits,
+			TraitsExact = reg.TraitsExact,
+			ConstructVia = reg.ConstructVia,
+			ConstructViaType = reg.ConstructViaType,
+			Constructor = reg.Constructor,
+			Unlisted = reg.Unlisted,
+			Hidden = reg.Hidden,
+			HiddenProduction = reg.HiddenProduction,
+		};
+		info.OnActivatedMarkers.AddRange(reg.OnActivatedMarkers ?? []);
+		info.OnReleaseMarkers.AddRange(reg.OnReleaseMarkers ?? []);
+		return info;
 	}
 
 	/// <summary>
