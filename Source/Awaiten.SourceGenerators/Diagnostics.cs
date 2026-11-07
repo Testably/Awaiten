@@ -2027,8 +2027,7 @@ internal static class Diagnostics
 	/// <summary>
 	///     In a module's own build, a generated factory needs an internal service that the module does not register but
 	///     another module of the same assembly does, and that module cannot share its handle: it cannot receive generated
-	///     members, cannot build the service on its own, or the member is a scan match, which the other module does not
-	///     account for.
+	///     members, or cannot build the service on its own.
 	/// </summary>
 	public static readonly DiagnosticDescriptor ModuleHiddenServiceInOtherModule = new(
 		"AWT236",

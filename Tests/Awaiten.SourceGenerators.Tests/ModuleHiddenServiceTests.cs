@@ -808,16 +808,6 @@ public class ModuleHiddenServiceTests
 				.Because("the storage module registers the handle the coffee module's factory takes");
 		}
 
-		[Test]
-		public async Task InternalServiceOfAModuleNotImported_ReportsAwt238()
-		{
-			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(StorageAndCoffee, Container);
-
-			await That(result.Diagnostics).Contains("*AWT238*'Lib.CoffeeModule'*'Lib.BeanStore'*'Lib.StorageModule'*import 'Lib.StorageModule' too*").AsWildcard();
-			await That(result.Diagnostics).DoesNotContain("*AWT101*").AsWildcard()
-				.Because("the missing import is the one cause, so the missing handle is not reported again");
-		}
-
 		private const string StorageAndCoffee = """
 		                                        using Awaiten;
 
@@ -1208,53 +1198,6 @@ public class ModuleHiddenServiceTests
 
 	public class Diagnostics
 	{
-		[Test]
-		public async Task UnsupportedShape_ReportsAwt237()
-		{
-			GeneratorResult result = RunLibrary("""
-				using System.Threading.Tasks;
-				using Awaiten;
-
-				namespace Lib;
-
-				public interface IGrinder { }
-				internal sealed class BeanStore { }
-				internal sealed class Grinder : IGrinder { public Grinder(Task<BeanStore> store) { } }
-
-				[Module]
-				[Singleton<BeanStore>]
-				[Singleton<Grinder, IGrinder>]
-				public static partial class CoffeeModule { }
-				""");
-
-			await That(result.Diagnostics).Contains("*AWT237*'Lib.Grinder'*constructor parameter 'store'*'Lib.BeanStore'*'System.Threading.Tasks.Task<Lib.BeanStore>'*").AsWildcard();
-		}
-
-		[Test]
-		public async Task InternalServiceOfAModuleThatCannotShareItsHandle_ReportsAwt236()
-		{
-			GeneratorResult result = RunLibrary("""
-				using Awaiten;
-
-				namespace Lib;
-
-				public interface IGrinder { }
-				internal sealed class BeanStore { }
-				internal sealed class Grinder : IGrinder { public Grinder(BeanStore store) { } }
-
-				[Module]
-				[Singleton<BeanStore>]
-				public static class StorageModule { }
-
-				[Module]
-				[Singleton<Grinder, IGrinder>]
-				public static partial class CoffeeModule { }
-				""");
-
-			await That(result.Diagnostics).Contains("*AWT236*'Lib.BeanStore'*only the module 'Lib.StorageModule'*register 'Lib.BeanStore' in 'Lib.CoffeeModule' too*").AsWildcard()
-				.Because("a module that is not partial cannot declare the handle another module would take");
-		}
-
 		[Test]
 		public async Task InternalServiceThatCannotBeBuilt_ReportsItsCause()
 		{

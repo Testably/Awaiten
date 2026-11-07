@@ -2286,7 +2286,7 @@ public static class StorageModule;     // not partial, so it can't declare the h
 public static partial class CoffeeModule;
 ```
 
-A container in another assembly reaches an internal service only through its [generated handle](./04-registration/07-modules.md#services-only-the-module-uses), which one module of the assembly declares for all of them. A module can't declare it when it isn't `partial`, or when it can't build the service on its own. A scan match can't take a service of another module either. Like [AWT195](#awt195), this is reported only when the module's assembly grants `InternalsVisibleTo` to no assembly.
+A container in another assembly reaches an internal service only through its [generated handle](./04-registration/07-modules.md#services-only-the-module-uses), which one module of the assembly declares for all of them. A module can't declare it when it isn't `partial`, or when it can't build the service on its own. Like [AWT195](#awt195), this is reported only when the module's assembly grants `InternalsVisibleTo` to no assembly.
 
 **Fix:** Make the other module `partial`, register the internal service in the module that needs it too, or move both registrations into one module.
 
