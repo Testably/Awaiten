@@ -186,40 +186,34 @@ public partial class EagerActivationTests
 		}
 
 		[Container]
-		[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		[Singleton<Client, IClient>(Eager = true)]
 		[Decorate<MonitoringClient, IClient>]
 		public static partial class DecoratedContainer;
 
 		[Container]
-		[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		[Singleton<Client, IClient>(Eager = true)]
 		[Singleton<Second>(Eager = true)]
 		[Decorate<MonitoringClient, IClient>]
 		public static partial class DecoratedOrderContainer;
 
 		[Container]
-		[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		[Singleton<Client, IClient>(Key = "primary", Eager = true)]
 		[Decorate<MonitoringClient, IClient>(Keys = new object?[] { "primary", })]
 		public static partial class KeyedDecoratedContainer;
 
 		[Container]
-		[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		[Singleton<Client, IClient>(Eager = true)]
 		[Singleton<BackupClient, IClient>(Eager = true)]
 		[Decorate<MonitoringClient, IClient>]
 		public static partial class DecoratedMembersContainer;
 
 		[Container]
-		[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		[Singleton<Client, IClient>(Eager = true)]
 		[Decorate<MonitoringClient, IClient>]
 		[Composite<CompositeClient, IClient>(Lifetime = Lifetime.Singleton)]
 		public static partial class DecoratedCompositeContainer;
 
 		[Container]
-		[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		[Singleton<IClient>(Instance = nameof(Shared), Eager = true)]
 		[Decorate<MonitoringClient, IClient>]
 		public static partial class DecoratedInstanceContainer

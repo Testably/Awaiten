@@ -167,29 +167,24 @@ public partial class EagerActivationTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Eager>(Eager = true)]
 	public static partial class EagerContainer;
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Eager>(Eager = true)]
 	[Singleton<Lazy>]
 	public static partial class MixedContainer;
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<First>(Eager = true)]
 	[Singleton<Second>(Eager = true)]
 	public static partial class OrderedContainer;
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Disposable>(Eager = true)]
 	public static partial class DisposableContainer;
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<ProbeDisposable>(Eager = true)]
 	public static partial class ProbeDisposableContainer;
 

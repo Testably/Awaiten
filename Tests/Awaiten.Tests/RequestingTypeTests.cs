@@ -171,7 +171,6 @@ public partial class RequestingTypeTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Prefix>]
 	[Transient<ILogger>(Factory = nameof(CreateLogger))]
 	[Transient<Alpha>]
@@ -200,7 +199,6 @@ public partial class RequestingTypeTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Prefix>]
 	[Transient<ILogger>(Factory = nameof(CreateLogger))]
 	[Transient<Epsilon>]

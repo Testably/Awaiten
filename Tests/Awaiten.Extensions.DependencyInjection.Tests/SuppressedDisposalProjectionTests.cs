@@ -134,17 +134,14 @@ public sealed partial class SuppressedDisposalProjectionTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Pooled>(SuppressDisposal = true)]
 	public static partial class SuppressedSingletonContainer;
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<Pooled>(SuppressDisposal = true, Key = "pool")]
 	public static partial class SuppressedKeyedTransientContainer;
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<IBuffer>(Factory = nameof(Make), SuppressDisposal = true)]
 	public static partial class SuppressedFactoryContainer
 	{
@@ -155,7 +152,6 @@ public sealed partial class SuppressedDisposalProjectionTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Ticket>(SuppressDisposal = true, OnRelease = nameof(Release))]
 	public static partial class SuppressedTicketContainer
 	{

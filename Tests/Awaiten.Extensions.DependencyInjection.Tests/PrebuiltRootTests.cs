@@ -40,7 +40,6 @@ public sealed partial class PrebuiltRootTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<OuterService>]
 	[Singleton<InnerDependency>]
 	[Scoped<ScopedConsumer>]
@@ -76,7 +75,6 @@ public sealed partial class PrebuiltRootTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[ImportService<IClock>]
 	[Singleton<TimeReporter>]
 	public static partial class ExternalContainer;

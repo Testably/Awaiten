@@ -113,7 +113,6 @@ public sealed partial class HostInitializationTests
 	public sealed class Menu;
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[ImportServices]
 	[Singleton<Menu>]
 	public static partial class ImportingHostContainer;

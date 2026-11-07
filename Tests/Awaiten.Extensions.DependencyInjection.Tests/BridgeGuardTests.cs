@@ -14,7 +14,6 @@ public sealed partial class BridgeGuardTests
 	public sealed class Widget;
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Widget>]
 	public static partial class GuardContainer;
 

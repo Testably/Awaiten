@@ -72,7 +72,6 @@ public sealed partial class NestedTypeAccessibilityTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<FakeClock, IClock>]
 	private static partial class TestShop;
 
