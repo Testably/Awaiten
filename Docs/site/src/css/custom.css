@@ -1,21 +1,21 @@
 :root {
-  --ifm-color-primary: #3949ab;
-  --ifm-color-primary-dark: #34429c;
-  --ifm-color-primary-darker: #313f93;
-  --ifm-color-primary-darkest: #2a357d;
-  --ifm-color-primary-light: #4b59b3;
-  --ifm-color-primary-lighter: #5562b7;
-  --ifm-color-primary-lightest: #6e7ac2;
+  --ifm-color-primary: #0e6e6e;
+  --ifm-color-primary-dark: #0d6363;
+  --ifm-color-primary-darker: #0c5e5e;
+  --ifm-color-primary-darkest: #0a4d4d;
+  --ifm-color-primary-light: #267d7d;
+  --ifm-color-primary-lighter: #328484;
+  --ifm-color-primary-lightest: #569a9a;
   --ifm-code-font-size: 95%;
   --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
 }
 [data-theme='dark'] {
-  --ifm-color-primary: #5c6bc0;
-  --ifm-color-primary-dark: #5461af;
-  --ifm-color-primary-darker: #4f5ca5;
-  --ifm-color-primary-darkest: #434e8c;
-  --ifm-color-primary-light: #6b78c6;
-  --ifm-color-primary-lighter: #7380c9;
-  --ifm-color-primary-lightest: #8893d1;
+  --ifm-color-primary: #3fb8b0;
+  --ifm-color-primary-dark: #39a69e;
+  --ifm-color-primary-darker: #369c96;
+  --ifm-color-primary-darkest: #2c817b;
+  --ifm-color-primary-light: #52bfb8;
+  --ifm-color-primary-lighter: #5cc3bc;
+  --ifm-color-primary-lightest: #79cdc8;
   --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
 }

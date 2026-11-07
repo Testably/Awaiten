@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <style>
+    @media (prefers-color-scheme: dark) {
+      .teal { stroke: #3FB8B0; }
+      .teal-fill { fill: #3FB8B0; }
+      .amber { fill: #F5B85A; }
+    }
+  </style>
+  <path d="M28.52 58.1A34 34 0 1 1 56.1 97.48" class="teal" fill="none" stroke="#0E6E6E" stroke-width="14" stroke-linecap="round"/>
+  <path d="M96 30V98" class="teal" stroke="#0E6E6E" stroke-width="14" stroke-linecap="round"/>
+  <circle cx="96" cy="30" r="11" class="teal-fill" fill="#0E6E6E"/>
+  <circle cx="96" cy="98" r="11" class="teal-fill" fill="#0E6E6E"/>
+  <circle cx="34.15" cy="83.5" r="11" class="amber" fill="#E9962B"/>
+</svg>

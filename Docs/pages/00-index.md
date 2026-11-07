@@ -5,8 +5,6 @@ description: Awaiten is an async-first, compile-time dependency injection contai
 
 # Awaiten
 
-<img align="right" width="200" src="https://raw.githubusercontent.com/awaiten-dev/Awaiten/main/Docs/Awaiten_256x256.png" alt="Awaiten logo" />
-
 The async-first dependency injection container for .NET. Awaiten wires your object graph at build time and checks it with the compiler, including services that need asynchronous setup.
 
 Think of the container as a coffee shop. The espresso machine is shared, so it is a singleton, and it has to warm up before it can serve. Each order gets its own scope. A cup is made fresh every time, so it is transient.
