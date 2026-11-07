@@ -1709,7 +1709,9 @@ public static partial class CoffeeShop;
 
 Where [AWT188](#awt188) is about an interface the match cannot be exposed under, this one is about the match itself, so no `ScanAs` flag rescues it: every registration has to name the implementation. Make the type public, grant the container's assembly `InternalsVisibleTo`, or exclude it with a `NamePatterns`/`NamespacePatterns` entry (the `Exclude` type list cannot name an inaccessible type). Reported only for a type the marker matched and the scan's filters kept, so an unrelated internal type in a scanned assembly stays silent, as does one you already excluded.
 
-**Fix:** Make the type public, grant the container's assembly `InternalsVisibleTo`, or exclude it with a `NamePatterns` or `NamespacePatterns` entry.
+A match from another assembly names that assembly in the message and suggests moving the scan into a `[Module]` there: a [module's scan](./04-registration/07-modules.md#self-compiled-scans) runs in the module's own build and generates a factory per internal match, so any container that imports the module registers the matches.
+
+**Fix:** Move the scan into a `[Module]` in the type's assembly, make the type public, grant the container's assembly `InternalsVisibleTo`, or exclude it with a `NamePatterns` or `NamespacePatterns` entry.
 
 A type nested privately in the container is a match like any other: the generated resolvers return an accessible type it converts to (see [AWT216](#awt216)). The scan skips it with this warning, and names the reason, only where no such type exists, so a private type never turns a scan into an error:
 
@@ -1962,6 +1964,8 @@ public static partial class PluginModule;
 
 The generated factory is a `public` method whose parameters are resolved from the *consuming* container's graph, so each parameter type has to be nameable by the consumer. The same holds for the factory of an [internal implementation](./04-registration/07-modules.md#internal-implementations) a module registers. Widen the parameter type's accessibility, or keep the type out of self-compilation. (A v1 limitation: a self-compiled factory cannot construct through an inaccessible parameter.) This is reported only when the module's assembly grants `InternalsVisibleTo` to no assembly. Otherwise the module skips the factory, and a container that can't construct the implementation reports [AWT231](#awt231).
 
+The factory is as accessible as the module. The factory of an `internal` module, which builds the types private to it, is reached only from the module's own assembly and from assemblies it grants `InternalsVisibleTo`, so its parameter types may be internal too.
+
 **Fix:** Make the parameter type public, or exclude the match from the scan, or make a registered implementation and its constructor public.
 
 A parameter type private to the module, or to a class that contains it, has a message of its own, because widening it is not the remedy for a type that is meant to stay private. No container can register a service of such a type or resolve the parameter, and the factory cannot build it either without bypassing the lifetime and disposal the graph gives it. Depend on an accessible service the private type implements, and register the type under that service:
@@ -2098,6 +2102,8 @@ public static partial class PluginModule
 ```
 
 The module emits a `public` wrapper for the hook of a scan or of a registered [internal implementation](./04-registration/07-modules.md#internal-implementations), and that wrapper's parameters after the instance are resolved from the consuming container's graph, so each type has to be nameable by the consumer, the same rule a self-compiled factory parameter gets ([AWT195](#awt195)). The instance parameter itself is exempt: it is the accessible exposure interface, cast back to the internal implementation inside the module. Widen the parameter type's accessibility, resolve a different dependency, or drop the hook. This doesn't apply when the module's assembly grants `InternalsVisibleTo` to any assembly and the hook is not generic: the module then emits no wrapper and reports no error, because such an assembly calls the hook directly. A container that can't reports [AWT231](#awt231). A hook of a type private to the module keeps the error.
+
+A parameter type private to the module, or to a class that contains it, has a message of its own, like [AWT195](#awt195): no container can register or resolve such a type, so widening it is not the remedy. Depend on an accessible service the private type implements, and register the type under that service.
 
 **Fix:** Make the parameter type public, take a different dependency, or drop the hook.
 

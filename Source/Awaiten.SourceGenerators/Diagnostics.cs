@@ -1581,6 +1581,19 @@ internal static class Diagnostics
 		isEnabledByDefault: true);
 
 	/// <summary>
+	///     The module-private form of <see cref="ModuleScanHookParameterInaccessible">AWT203</see>: a hook parameter's type
+	///     is private to the module or a class containing it. Widening it is not the remedy for a type meant to stay
+	///     private, and no container can register or resolve it; depend on an accessible service the type implements.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ModuleHookParameterHiddenInModule = new(
+		"AWT203",
+		ModuleScanHookParameterInaccessible.Title,
+		"{0}, but its {1} hook parameter '{2}' needs '{3}', which is private to the module or a class containing it, so no container can register or resolve it; depend on an accessible service that '{3}' implements instead, and register '{3}' under that service",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
 	///     A self-compiled module <c>[Scan]</c> or module registration names a lifecycle hook with a parameter (after the instance) marked
 	///     <c>[FromKey]</c> or <c>[Inject]</c>. The hook's parameters mirror onto the generated <c>public</c>
 	///     wrapper as a bare type-and-name signature resolved from the consuming container's graph, so the

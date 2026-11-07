@@ -159,6 +159,18 @@ public sealed partial class RegistrationFactoryShapeTests
 		}
 	}
 
+	public sealed class InternalModule
+	{
+		[Test]
+		public async Task APrivateImplementation_TakesAnInternalParameterType()
+		{
+			using InternalModuleContainer.Root container = new();
+
+			await That(container.Resolve<IBell>().Inner).IsNull()
+				.Because("the factory of an internal module may take the internal clock its private bell needs");
+		}
+	}
+
 	public sealed class BaseContainer
 	{
 		[Test]
@@ -298,6 +310,25 @@ public sealed partial class RegistrationFactoryShapeTests
 
 	[Container(Extends = typeof(Shop))]
 	public static partial class TestShop;
+
+	internal interface IInternalClock;
+
+	internal sealed class InternalClock : IInternalClock;
+
+	[Module]
+	[Singleton<InternalClock, IInternalClock>]
+	[Singleton<InternalBellModule.ClockedBell, IBell>]
+	internal static partial class InternalBellModule
+	{
+		private sealed class ClockedBell(IInternalClock clock) : IBell
+		{
+			public IBell? Inner => clock is null ? this : null;
+		}
+	}
+
+	[Container]
+	[Import(typeof(InternalBellModule))]
+	internal static partial class InternalModuleContainer;
 
 	[Container(Extends = typeof(SupportShapeBaseContainer))]
 	public static partial class SupportShapeTestContainer;

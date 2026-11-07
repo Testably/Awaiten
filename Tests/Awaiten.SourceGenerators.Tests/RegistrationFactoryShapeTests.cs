@@ -949,6 +949,110 @@ public class RegistrationFactoryShapeTests
 		}
 	}
 
+	public class Messages
+	{
+		[Test]
+		public async Task AnInaccessibleMatchOfAContainerScan_SuggestsAModuleInItsAssembly()
+		{
+			GeneratorResult result = Generator.RunWithReferencedAssembly("""
+			                                                            namespace Lib;
+
+			                                                            public interface IPlugin { }
+			                                                            internal sealed class Roaster : IPlugin { }
+			                                                            """, """
+			                                                                 using Awaiten;
+			                                                                 using Lib;
+
+			                                                                 namespace App;
+
+			                                                                 [Container]
+			                                                                 [Scan<IPlugin>(As = ScanAs.Marker, InAssembliesOf = [typeof(IPlugin)])]
+			                                                                 public static partial class AppContainer { }
+			                                                                 """);
+
+			await That(result.Diagnostics).Contains("*warning AWT193*'Lib.Roaster'*not accessible outside its assembly 'ReferencedAssembly'*move the scan into a [Module] in 'ReferencedAssembly'*").AsWildcard()
+				.Because("a module of the type's assembly builds its internal types for any container that imports it");
+		}
+
+		[Test]
+		public async Task AHookParameterPrivateToTheModule_NamesTheRealReason()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace Lib;
+
+			                                       public interface IGreeter { }
+			                                       internal sealed class Greeter : IGreeter { }
+
+			                                       [Module]
+			                                       [Singleton<Greeter, IGreeter>(OnActivated = nameof(Activate))]
+			                                       public static partial class GreetingModule
+			                                       {
+			                                           private sealed class Log { }
+
+			                                           internal static void Activate(Greeter greeter, Log log) { }
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT203*Lib.Greeter*OnActivated hook parameter 'log' needs 'Lib.GreetingModule.Log', which is private to the module*depend on an accessible service*").AsWildcard()
+				.Because("widening a type that is meant to stay private is not the remedy");
+		}
+
+		private const string InternalModule = """
+		                                      using Awaiten;
+
+		                                      namespace Lib;
+
+		                                      public interface IGreeter { }
+		                                      internal interface IClock { }
+		                                      internal sealed class Clock : IClock { }
+
+		                                      [Module]
+		                                      [Singleton<Clock, IClock>]
+		                                      [Singleton<GreetingModule.Greeter, IGreeter>]
+		                                      internal static partial class GreetingModule
+		                                      {
+		                                          private sealed class Greeter : IGreeter
+		                                          {
+		                                              public Greeter(IClock clock) { }
+		                                          }
+		                                      }
+		                                      """;
+
+		[Test]
+		public async Task AnInternalModule_TakesInternalParameterTypesOnItsFactory()
+		{
+			GeneratorResult result = Generator.Run(InternalModule + """
+
+			                                                        [Container]
+			                                                        [Import(typeof(GreetingModule))]
+			                                                        internal static partial class AppContainer { }
+			                                                        """);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("the factory of an internal module is reached only where the internal parameter type is too");
+			await That(ModuleSource(result)).Contains("(global::Lib.IClock @clock) => new global::Lib.GreetingModule.Greeter(@clock);");
+		}
+
+		[Test]
+		public async Task AnInternalModule_IsImportedByAnAssemblyGrantedInternalsVisibleTo()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Granted(InternalModule), """
+			                                                                                               using Awaiten;
+			                                                                                               using Lib;
+
+			                                                                                               namespace App;
+
+			                                                                                               [Container]
+			                                                                                               [Import(typeof(GreetingModule))]
+			                                                                                               internal static partial class AppContainer { }
+			                                                                                               """);
+
+			await That(result.Diagnostics).IsEmpty();
+		}
+	}
+
 	public class BaseContainer
 	{
 		private const string PrivateBase = """

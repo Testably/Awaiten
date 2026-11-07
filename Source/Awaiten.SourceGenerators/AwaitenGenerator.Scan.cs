@@ -149,10 +149,7 @@ partial class AwaitenGenerator
 			// reach is registered: its resolver bodies may construct it (see DropUnsupportedPrivateScanMatches).
 			if (candidate.Inaccessible && !compilation.IsSymbolAccessibleWithin(candidate.Type, containerSymbol))
 			{
-				diagnostics.Add(new DiagnosticInfo(
-					Diagnostics.ScanTypeInaccessible,
-					LocationInfo.From(location),
-					new EquatableArray<string>([Display(candidate.Type.ToDisplayString(FullyQualified)),])));
+				diagnostics.Add(InaccessibleScanMatch(candidate.Type, location, compilation));
 				continue;
 			}
 
@@ -161,6 +158,30 @@ partial class AwaitenGenerator
 		}
 
 		ReportScanFilterDiagnostics(filters, hits, new ScanFilterCounts(assignable, registered, produced), assemblies, markerDisplay, location, diagnostics);
+	}
+
+	/// <summary>
+	///     AWT193 for a scan match the generated container cannot access. A match from another assembly names that
+	///     assembly and suggests moving the scan into a <c>[Module]</c> there, whose generated factories build the types
+	///     it can reach for any container that imports it.
+	/// </summary>
+	private static DiagnosticInfo InaccessibleScanMatch(INamedTypeSymbol type, Location? location, Compilation compilation)
+	{
+		string display = Display(type.ToDisplayString(FullyQualified));
+		if (SymbolEqualityComparer.Default.Equals(type.ContainingAssembly, compilation.Assembly))
+		{
+			return new DiagnosticInfo(Diagnostics.ScanTypeInaccessible, LocationInfo.From(location), new EquatableArray<string>([display,]));
+		}
+
+		string assembly = type.ContainingAssembly.Name;
+		return new DiagnosticInfo(
+			Diagnostics.ScanTypePrivate,
+			LocationInfo.From(location),
+			new EquatableArray<string>([
+				display,
+				$"'{display}' is not accessible outside its assembly '{assembly}'",
+				$"move the scan into a [Module] in '{assembly}', whose generated factories build such types for any container that imports it, grant this assembly InternalsVisibleTo, or make the type public",
+			]));
 	}
 
 	/// <summary>

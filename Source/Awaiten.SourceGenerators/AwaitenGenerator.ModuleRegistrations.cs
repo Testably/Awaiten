@@ -314,6 +314,38 @@ partial class AwaitenGenerator
 		=> $"Awaiten__{(attribute == "CompositeAttribute" ? "Composite" : "Decorator")}_{type.Name}_{Fnv1a($"{type.ToDisplayString(FullyQualified)}\0{service}"):x8}";
 
 	/// <summary>
+	///     Whether <paramref name="type" /> may appear on a factory the module generates, which is as accessible as the
+	///     module: any type another assembly can name, and for a module another assembly cannot name (an internal one,
+	///     reached only from its own assembly or one granted <c>InternalsVisibleTo</c>), any type its assembly can name.
+	/// </summary>
+	private static bool FitsFactorySignature(ITypeSymbol type, ModuleScanContext context)
+		=> IsExternallyAccessible(type)
+		   || (!IsExternallyAccessible(context.Module) && context.Compilation.IsSymbolAccessibleWithin(type, context.Module.ContainingAssembly));
+
+	/// <summary>
+	///     AWT203 for the first hook parameter after the instance whose type is private to the module or a class
+	///     containing it, or <see langword="null" />. Such a parameter cannot be resolved by any container, so it gets the
+	///     reason and the remedy of its own instead of the advice to widen the type. A parameter with an attribute is left
+	///     to the rules for that attribute.
+	/// </summary>
+	private static DiagnosticInfo? HiddenHookParameter(SelfCompiledSubject subject, IMethodSymbol hook, bool release, Location? location, ModuleScanContext context)
+	{
+		foreach (IParameterSymbol parameter in hook.Parameters.Skip(1))
+		{
+			if (!parameter.GetAttributes().Any(attribute => attribute.AttributeClass?.ContainingNamespace?.ToDisplayString() == AttributeNamespace)
+			    && TypeHiddenInModule(parameter.Type, context.Module, context.Compilation) is { } hidden)
+			{
+				return new DiagnosticInfo(
+					Diagnostics.ModuleHookParameterHiddenInModule,
+					LocationInfo.From(location),
+					new EquatableArray<string>([subject.Subject, release ? "OnRelease" : "OnActivated", parameter.Name, Display(hidden.ToDisplayString(FullyQualified)),]));
+			}
+		}
+
+		return null;
+	}
+
+	/// <summary>
 	///     The type a closed lifetime registration produces: the implementation of the generic form, or of a closed
 	///     <c>typeof</c> pair, or <see langword="null" /> for an open or malformed one.
 	/// </summary>
@@ -538,7 +570,7 @@ partial class AwaitenGenerator
 			{
 				reason = "is marked [FromKey] with an unsupported key";
 			}
-			else if (!IsExternallyAccessible(property.Type) || TypeHiddenInModule(property.Type, context.Module, context.Compilation) is not null)
+			else if (!FitsFactorySignature(property.Type, context) || TypeHiddenInModule(property.Type, context.Module, context.Compilation) is not null)
 			{
 				reason = $"has the type '{Display(property.Type.ToDisplayString(FullyQualified))}', which is not accessible outside the module's assembly";
 			}

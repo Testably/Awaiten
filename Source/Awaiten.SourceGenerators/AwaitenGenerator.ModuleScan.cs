@@ -497,6 +497,12 @@ partial class AwaitenGenerator
 			return null;
 		}
 
+		if (HiddenHookParameter(request.Subject, hook, release, location, context) is { } hidden)
+		{
+			context.Diagnostics.Add(hidden);
+			return null;
+		}
+
 		string instanceCast = hook.Parameters[0].Type.ToDisplayString(FullyQualified);
 		string returnType = hook.ReturnType.ToDisplayString(FullyQualified);
 		List<DiagnosticInfo> rejections = new();
@@ -1010,7 +1016,7 @@ partial class AwaitenGenerator
 				return false;
 			}
 
-			if (!IsExternallyAccessible(parameter.Type))
+			if (!FitsFactorySignature(parameter.Type, context))
 			{
 				diagnostics.Add(new DiagnosticInfo(
 					Diagnostics.ModuleScanParameterInaccessible,
