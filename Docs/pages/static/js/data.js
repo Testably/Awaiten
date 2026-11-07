@@ -1206,6 +1206,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 06:34:00 2026 \u002B0100",
         "message": "fix: wire the root to the host when the provider factory builds it, and explain a missing required service (#277)"
+      },
+      {
+        "sha": "e3f54e32137b331103f65754dcf35a598f1d7eaf",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 07:23:42 2026 \u002B0100",
+        "message": "feat!: register private nested implementations found by a scan (#278)"
       }
     ],
     "labels": [
@@ -1409,7 +1415,8 @@ window.BENCHMARK_DATA = {
       "36756ef2",
       "808136a5",
       "4aaa3ebf",
-      "25c12b4f"
+      "25c12b4f",
+      "e3f54e32"
     ],
     "datasets": [
       {
@@ -1616,7 +1623,8 @@ window.BENCHMARK_DATA = {
           6.258720891816275,
           4.221110881865025,
           7.769033941839423,
-          7.60893460895334
+          7.60893460895334,
+          5.442413080483675
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -1628,6 +1636,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -2043,7 +2052,8 @@ window.BENCHMARK_DATA = {
           7.564080652381692,
           3.9690932144339266,
           7.76448251839195,
-          7.504670562346776
+          7.504670562346776,
+          6.684987880862677
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -2055,6 +2065,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -2470,7 +2481,8 @@ window.BENCHMARK_DATA = {
           145.0333003447606,
           57.53807532787323,
           119.30468052228292,
-          116.95757095019023
+          116.95757095019023,
+          96.40774822235107
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -2482,6 +2494,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -2893,7 +2906,8 @@ window.BENCHMARK_DATA = {
           7.6732401723663015,
           5.46014941483736,
           9.75702491402626,
-          9.831362144305157
+          9.831362144305157,
+          6.5507001007596655
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -2905,6 +2919,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -3312,7 +3327,8 @@ window.BENCHMARK_DATA = {
           10.939174892810675,
           6.042097799976667,
           10.67872095214469,
-          11.170236507287392
+          11.170236507287392,
+          8.367060718933741
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -3324,6 +3340,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -4740,6 +4757,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 06:34:00 2026 \u002B0100",
         "message": "fix: wire the root to the host when the provider factory builds it, and explain a missing required service (#277)"
+      },
+      {
+        "sha": "e3f54e32137b331103f65754dcf35a598f1d7eaf",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 07:23:42 2026 \u002B0100",
+        "message": "feat!: register private nested implementations found by a scan (#278)"
       }
     ],
     "labels": [
@@ -4943,7 +4966,8 @@ window.BENCHMARK_DATA = {
       "36756ef2",
       "808136a5",
       "4aaa3ebf",
-      "25c12b4f"
+      "25c12b4f",
+      "e3f54e32"
     ],
     "datasets": [
       {
@@ -5150,7 +5174,8 @@ window.BENCHMARK_DATA = {
           7.2576323539018635,
           4.583554430731705,
           8.492885713775953,
-          8.723820370435714
+          8.723820370435714,
+          6.071785822510719
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -5162,6 +5187,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -5577,7 +5603,8 @@ window.BENCHMARK_DATA = {
           7.7947013431361745,
           4.142908322491816,
           7.667722655194146,
-          7.444825304547946
+          7.444825304547946,
+          6.529049445192019
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -5589,6 +5616,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -6004,7 +6032,8 @@ window.BENCHMARK_DATA = {
           143.12616322721755,
           59.42546090909413,
           124.70340830939156,
-          109.60562057495117
+          109.60562057495117,
+          96.71319056408745
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -6016,6 +6045,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -6427,7 +6457,8 @@ window.BENCHMARK_DATA = {
           7.737891724476447,
           5.263031415641308,
           9.71657551129659,
-          9.80580143057383
+          9.80580143057383,
+          6.54388976842165
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -6439,6 +6470,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -6846,7 +6878,8 @@ window.BENCHMARK_DATA = {
           13.199643049637476,
           7.766098361214002,
           14.120663680632909,
-          14.516431087007126
+          14.516431087007126,
+          8.489655514558157
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -6858,6 +6891,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -8274,6 +8308,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 06:34:00 2026 \u002B0100",
         "message": "fix: wire the root to the host when the provider factory builds it, and explain a missing required service (#277)"
+      },
+      {
+        "sha": "e3f54e32137b331103f65754dcf35a598f1d7eaf",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 07:23:42 2026 \u002B0100",
+        "message": "feat!: register private nested implementations found by a scan (#278)"
       }
     ],
     "labels": [
@@ -8477,7 +8517,8 @@ window.BENCHMARK_DATA = {
       "36756ef2",
       "808136a5",
       "4aaa3ebf",
-      "25c12b4f"
+      "25c12b4f",
+      "e3f54e32"
     ],
     "datasets": [
       {
@@ -8684,7 +8725,8 @@ window.BENCHMARK_DATA = {
           10.813336339592933,
           15.079138308763504,
           27.589746057987213,
-          16.531011655926704
+          16.531011655926704,
+          21.84052317738533
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -8846,6 +8888,7 @@ window.BENCHMARK_DATA = {
           144,
           144,
           144,
+          208,
           208,
           208,
           208,
@@ -9111,7 +9154,8 @@ window.BENCHMARK_DATA = {
           802.0788377761841,
           1098.3237799130952,
           1852.339037068685,
-          1139.6790691103254
+          1139.6790691103254,
+          1494.0794151306152
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -9123,6 +9167,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          5688,
           5688,
           5688,
           5688,
@@ -9538,7 +9583,8 @@ window.BENCHMARK_DATA = {
           17677.889066256008,
           25180.729125976562,
           25382.609189860024,
-          25562.579516601563
+          25562.579516601563,
+          30042.996541341145
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -9750,7 +9796,8 @@ window.BENCHMARK_DATA = {
           32476,
           32478,
           32476,
-          32478
+          32478,
+          32482
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -9961,7 +10008,8 @@ window.BENCHMARK_DATA = {
           386.71909405634955,
           569.6685842514038,
           719.3910491943359,
-          565.583544031779
+          565.583544031779,
+          714.5200277056013
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -9991,6 +10039,7 @@ window.BENCHMARK_DATA = {
           1472,
           1472,
           1472,
+          1528,
           1528,
           1528,
           1528,
@@ -10380,7 +10429,8 @@ window.BENCHMARK_DATA = {
           6586.469537353516,
           8631.97853415353,
           13451.928114754814,
-          8728.227014814105
+          8728.227014814105,
+          11794.975818634033
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -10588,6 +10638,7 @@ window.BENCHMARK_DATA = {
           24760,
           24761,
           24760,
+          24761,
           24761
         ],
         "borderColor": "#43A047",
@@ -11808,6 +11859,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 06:34:00 2026 \u002B0100",
         "message": "fix: wire the root to the host when the provider factory builds it, and explain a missing required service (#277)"
+      },
+      {
+        "sha": "e3f54e32137b331103f65754dcf35a598f1d7eaf",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 07:23:42 2026 \u002B0100",
+        "message": "feat!: register private nested implementations found by a scan (#278)"
       }
     ],
     "labels": [
@@ -12011,7 +12068,8 @@ window.BENCHMARK_DATA = {
       "36756ef2",
       "808136a5",
       "4aaa3ebf",
-      "25c12b4f"
+      "25c12b4f",
+      "e3f54e32"
     ],
     "datasets": [
       {
@@ -12218,7 +12276,8 @@ window.BENCHMARK_DATA = {
           74.98039690937314,
           110.4418732325236,
           331.91127087275186,
-          109.22288527659008
+          109.22288527659008,
+          192.00864906311034
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -12380,6 +12439,7 @@ window.BENCHMARK_DATA = {
           2128,
           2128,
           2128,
+          4176,
           4176,
           4176,
           4176,
@@ -12645,7 +12705,8 @@ window.BENCHMARK_DATA = {
           7396.538390023367,
           10220.738894144693,
           16077.633976236979,
-          10365.120604451497
+          10365.120604451497,
+          15496.840397135416
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -12657,6 +12718,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          61016,
           61016,
           61016,
           61016,
@@ -13072,7 +13134,8 @@ window.BENCHMARK_DATA = {
           413878.8464518229,
           618765.2409855769,
           611270.2755998884,
-          621552.8912527902
+          621552.8912527902,
+          742562.5684344952
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -13284,7 +13347,8 @@ window.BENCHMARK_DATA = {
           718408,
           740080,
           738499,
-          740059
+          740059,
+          740450
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -13495,7 +13559,8 @@ window.BENCHMARK_DATA = {
           23253.86467566857,
           34473.41499110631,
           44218.84289550781,
-          34854.955467811
+          34854.955467811,
+          44771.6337483724
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -13703,6 +13768,7 @@ window.BENCHMARK_DATA = {
           80350,
           80009,
           80270,
+          80009,
           80009
         ],
         "borderColor": "#1565C0",
@@ -13914,7 +13980,8 @@ window.BENCHMARK_DATA = {
           190356.49312918526,
           258663.45348307292,
           377826.5760216346,
-          265795.9797363281
+          265795.9797363281,
+          355901.13414588344
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -14122,7 +14189,8 @@ window.BENCHMARK_DATA = {
           573120,
           573089,
           572327,
-          573059
+          573059,
+          573203
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -15318,6 +15386,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 06:34:00 2026 \u002B0100",
         "message": "fix: wire the root to the host when the provider factory builds it, and explain a missing required service (#277)"
+      },
+      {
+        "sha": "e3f54e32137b331103f65754dcf35a598f1d7eaf",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 07:23:42 2026 \u002B0100",
+        "message": "feat!: register private nested implementations found by a scan (#278)"
       }
     ],
     "labels": [
@@ -15517,7 +15591,8 @@ window.BENCHMARK_DATA = {
       "36756ef2",
       "808136a5",
       "4aaa3ebf",
-      "25c12b4f"
+      "25c12b4f",
+      "e3f54e32"
     ],
     "datasets": [
       {
@@ -15720,7 +15795,8 @@ window.BENCHMARK_DATA = {
           252.62564863477434,
           260.8456418355306,
           268.7132699966431,
-          244.31128461020333
+          244.31128461020333,
+          251.27400483403886
         ],
         "borderColor": "#3949AB",
         "backgroundColor": "#3949AB",
@@ -15755,6 +15831,7 @@ window.BENCHMARK_DATA = {
           560,
           560,
           560,
+          568,
           568,
           568,
           568,
@@ -16139,7 +16216,8 @@ window.BENCHMARK_DATA = {
           454.65825172833036,
           613.2390531812396,
           614.6337416966757,
-          602.7085116068522
+          602.7085116068522,
+          572.7826052445632
         ],
         "borderColor": "#512BD4",
         "backgroundColor": "#512BD4",
@@ -16151,6 +16229,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          1104,
           1104,
           1104,
           1104,
@@ -16558,7 +16637,8 @@ window.BENCHMARK_DATA = {
           4780.296831003825,
           6617.670308249338,
           4762.533066558838,
-          6551.773107256208
+          6551.773107256208,
+          6526.4305828639435
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -16642,6 +16722,7 @@ window.BENCHMARK_DATA = {
           13696,
           13696,
           13696,
+          10784,
           10784,
           10784,
           10784,
@@ -16977,7 +17058,8 @@ window.BENCHMARK_DATA = {
           326.88944840431213,
           391.92014764149985,
           394.7113081773122,
-          385.44796439579557
+          385.44796439579557,
+          391.37754821777344
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -16989,6 +17071,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          944,
           944,
           944,
           944,
@@ -17396,7 +17479,8 @@ window.BENCHMARK_DATA = {
           515.8929798762003,
           732.1082817224355,
           697.0866574605305,
-          714.054590733846
+          714.054590733846,
+          735.8377890904744
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -17408,6 +17492,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          1096,
           1096,
           1096,
           1096,
