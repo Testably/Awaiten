@@ -26,6 +26,9 @@ public class ModuleHiddenServiceTests
 	private static string Handle(string service)
 		=> $"global::Lib.CoffeeModule.Internals.Hidden_{SimpleName(service)}_{Fnv1a(service):x8}";
 
+	private static string Instance(string implementation)
+		=> $"global::Lib.CoffeeModule.Internals.HiddenInstance_{SimpleName(implementation)}_{Fnv1a(implementation):x8}";
+
 	private static string HiddenFactory(string implementation)
 		=> $"HiddenRegistration_{SimpleName(implementation)}_{Fnv1a(implementation):x8}";
 
@@ -66,7 +69,11 @@ public class ModuleHiddenServiceTests
 			.Because("the handle is public, so a consumer in another assembly can depend on it");
 		await That(module).Contains("internal global::Lib.BeanStore Value { get; }")
 			.Because("only the module's assembly can unwrap the handle");
-		await That(module).Contains($"public static {handle} {HiddenFactory("global::Lib.BeanStore")}() => new {handle}(new global::Lib.BeanStore());");
+		string instance = Instance("global::Lib.BeanStore");
+		await That(module).Contains($"public static {instance} {HiddenFactory("global::Lib.BeanStore")}() => new {instance}(new global::Lib.BeanStore());")
+			.Because("the factory wraps the instance in the instance handle of the implementation");
+		await That(module).Contains($"public static {handle} {Alias("global::Lib.BeanStore", "global::Lib.BeanStore")}({instance} @awaiten__handle) => new {handle}(@awaiten__handle.Value);")
+			.Because("every service of the implementation is served from its instance handle");
 		await That(module).Contains($"public static global::Lib.IGrinder {Factory("global::Lib.Grinder")}({handle} @store) => new global::Lib.Grinder(@store.Value);")
 			.Because("the factory takes the handle and passes the instance it holds to the constructor");
 	}
@@ -143,9 +150,9 @@ public class ModuleHiddenServiceTests
 		string handle = Handle("global::Lib.IFilter");
 
 		await That(result.Diagnostics).IsEmpty();
-		await That(module).Contains($"=> new {handle}.Disposable(new global::Lib.PaperFilter());");
-		await That(module).Contains($"=> new {handle}.AsyncDisposable(new global::Lib.MetalFilter());");
-		await That(module).Contains($"=> new {handle}(new global::Lib.ClothFilter());")
+		await That(module).Contains($"=> new {Instance("global::Lib.PaperFilter")}.Disposable(new global::Lib.PaperFilter());");
+		await That(module).Contains($"=> new {Instance("global::Lib.MetalFilter")}.AsyncDisposable(new global::Lib.MetalFilter());");
+		await That(module).Contains($"=> new {Instance("global::Lib.ClothFilter")}(new global::Lib.ClothFilter());")
 			.Because("each implementation gets the variant that implements exactly its disposal interfaces");
 		await That(module).Contains($"public static global::Lib.IGrinder {Factory("global::Lib.Grinder")}(global::System.Collections.Generic.IEnumerable<{handle}> @filters) => new global::Lib.Grinder(global::System.Linq.Enumerable.ToArray(global::System.Linq.Enumerable.Select(@filters, awaiten__handle => awaiten__handle.Value)));");
 	}
@@ -200,7 +207,7 @@ public class ModuleHiddenServiceTests
 			""");
 
 		await That(result.Diagnostics).IsEmpty();
-		await That(ModuleSource(result)).Contains($"public static {Handle("global::Lib.BeanStore")} {HiddenFactory("global::Lib.BeanStore")}({Handle("global::Lib.Silo")} @silo) => new {Handle("global::Lib.BeanStore")}(new global::Lib.BeanStore(@silo.Value));");
+		await That(ModuleSource(result)).Contains($"public static {Instance("global::Lib.BeanStore")} {HiddenFactory("global::Lib.BeanStore")}({Handle("global::Lib.Silo")} @silo) => new {Instance("global::Lib.BeanStore")}(new global::Lib.BeanStore(@silo.Value));");
 	}
 
 	[Test]
@@ -226,9 +233,9 @@ public class ModuleHiddenServiceTests
 		string module = ModuleSource(result);
 
 		await That(result.Diagnostics).IsEmpty()
-			.Because("the public service is served from the handle that owns the instance, so no second factory splits it");
+			.Because("the public service is served from the instance handle, so no second factory splits it");
 		await That(module).DoesNotContain($"global::Lib.IStock {Factory("global::Lib.BeanStore")}");
-		await That(module).Contains($"public static global::Lib.IStock {Alias("global::Lib.BeanStore", "global::Lib.IStock")}({Handle("global::Lib.IBeanStore")} @awaiten__handle) => ((global::Lib.BeanStore)@awaiten__handle.Value);");
+		await That(module).Contains($"public static global::Lib.IStock {Alias("global::Lib.BeanStore", "global::Lib.IStock")}({Instance("global::Lib.BeanStore")} @awaiten__handle) => @awaiten__handle.Value;");
 	}
 
 	[Test]
@@ -249,7 +256,7 @@ public class ModuleHiddenServiceTests
 			public static partial class CoffeeModule { }
 			""");
 		string module = ModuleSource(result);
-		string handle = Handle("global::Lib.Shared");
+		string handle = Instance("global::Lib.Shared");
 
 		await That(result.Diagnostics).IsEmpty()
 			.Because("one handle owns the instance and both services are aliases of it, so no covering type is needed");
@@ -284,7 +291,7 @@ public class ModuleHiddenServiceTests
 			}
 			""");
 		string module = ModuleSource(result);
-		string handle = Handle("global::Lib.BeanStore");
+		string handle = Instance("global::Lib.BeanStore");
 
 		await That(result.Diagnostics).IsEmpty();
 		await That(module).Contains($"({handle} @awaiten__instance) => Activate((global::Lib.BeanStore)@awaiten__instance.Value);")
@@ -350,7 +357,7 @@ public class ModuleHiddenServiceTests
 			}
 			""");
 		string module = ModuleSource(result);
-		string handle = Handle("global::Lib.BeanStore");
+		string handle = Instance("global::Lib.BeanStore");
 
 		await That(result.Diagnostics).IsEmpty()
 			.Because("the module wraps its internal factory into the handle, so the public registration can take it");
@@ -359,7 +366,7 @@ public class ModuleHiddenServiceTests
 		await That(module).Contains($"internal static {handle.Substring(handle.LastIndexOf('.') + 1)} Wrap(global::Lib.BeanStore value)")
 			.Because("a factory may return a subtype, so the handle picks its disposal variant when it wraps the instance");
 		await That(module).Contains($"({handle} @awaiten__instance) => Activate((global::Lib.BeanStore)@awaiten__instance.Value);");
-		await That(module).Contains($"public static global::Lib.IGrinder {Factory("global::Lib.Grinder")}({handle} @store) => new global::Lib.Grinder(@store.Value);");
+		await That(module).Contains($"public static global::Lib.IGrinder {Factory("global::Lib.Grinder")}({Handle("global::Lib.BeanStore")} @store) => new global::Lib.Grinder(@store.Value);");
 	}
 
 	[Test]
@@ -383,7 +390,7 @@ public class ModuleHiddenServiceTests
 			    internal static Task<BeanStore> CreateStoreAsync() => Task.FromResult(new BeanStore());
 			}
 			""");
-		string handle = Handle("global::Lib.BeanStore");
+		string handle = Instance("global::Lib.BeanStore");
 
 		await That(result.Diagnostics).IsEmpty();
 		await That(ModuleSource(result)).Contains($"public static async global::System.Threading.Tasks.Task<{handle}> {HiddenFactory("global::Lib.BeanStore")}() => {handle}.Wrap(await CreateStoreAsync().ConfigureAwait(false));")
@@ -410,7 +417,7 @@ public class ModuleHiddenServiceTests
 			    internal static readonly BeanStore Store = new();
 			}
 			""");
-		string handle = Handle("global::Lib.BeanStore");
+		string handle = Instance("global::Lib.BeanStore");
 
 		await That(result.Diagnostics).IsEmpty();
 		await That(ModuleSource(result)).Contains($"public static {handle} {HiddenFactory("global::Lib.BeanStore")} => new {handle}(Store);")
@@ -447,7 +454,7 @@ public class ModuleHiddenServiceTests
 	}
 
 	[Test]
-	public async Task DecoratorOfAnInternalServiceWhoseInstanceAnAliasShares_GetsNoFactory()
+	public async Task DecoratorOfAnInternalServiceWhoseImplementationHasAPublicServiceToo_IsBuiltIntoTheHandle()
 	{
 		GeneratorResult result = RunLibrary("""
 			using Awaiten;
@@ -469,8 +476,9 @@ public class ModuleHiddenServiceTests
 			public static partial class CoffeeModule { }
 			""");
 
-		await That(ModuleSource(result)).DoesNotContain("Decorator_LoggingStore_")
-			.Because("the alias of IStock unwraps the handle of IBeanStore, which must stay the undecorated instance");
+		await That(result.Diagnostics).IsEmpty();
+		await That(ModuleSource(result)).Contains("Decorator_LoggingStore_")
+			.Because("every service is an alias of the instance handle, so decorating the internal service leaves the public one undecorated, as in a container of the module's own assembly");
 	}
 
 	[Test]
@@ -534,7 +542,7 @@ public class ModuleHiddenServiceTests
 		await That(result.Sources.Single(source => source.Key.Contains("CoffeeModule")).Value)
 			.Contains($"public static global::Lib.IGrinder {Factory("global::Lib.Grinder")}({handle} @store) => new global::Lib.Grinder(@store.Value);");
 		await That(result.Sources.Single(source => source.Key.Contains("StorageModule")).Value)
-			.Contains($"public static {handle} {HiddenFactory("global::Lib.BeanStore")}()")
+			.Contains($"public static global::Lib.StorageModule.Internals.HiddenInstance_BeanStore_{Fnv1a("global::Lib.BeanStore"):x8} {HiddenFactory("global::Lib.BeanStore")}()")
 			.Because("in an assembly with several modules, each module builds every internal service it can, since another module may need it");
 	}
 

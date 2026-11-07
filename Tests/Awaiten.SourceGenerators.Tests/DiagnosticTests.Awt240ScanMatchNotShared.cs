@@ -155,8 +155,9 @@ public partial class DiagnosticTests
 
 			await That(result.Diagnostics).IsEmpty()
 				.Because("the match serves the handle's instance through the alias of its service");
-			await That(result.Sources["Awaiten.MyCode.MyContainer.g.cs"]).Contains("Internals.Alias_Kettle_").Exactly(1)
-				.And.DoesNotContain("Scan_Kettle_");
+			await That(result.Sources["Awaiten.MyCode.MyContainer.g.cs"]).Contains("Internals.Alias_Kettle_").Exactly(2)
+				.And.DoesNotContain("Scan_Kettle_")
+				.Because("each service of the handle has one alias, and the match shares the alias of its service");
 		}
 
 		[Test]

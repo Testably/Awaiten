@@ -57,8 +57,7 @@ partial class AwaitenGenerator
 			}
 
 			if (raw.FirstOrDefault(alias => alias.ServiceSymbol is { } aliased
-			                                && alias.ImplementationType.StartsWith(alias.ServiceType + AliasKeyMarker, StringComparison.Ordinal)
-			                                && alias.ImplementationType.EndsWith("." + HiddenAliasName(implementation, aliased), StringComparison.Ordinal)
+			                                && alias.ImplementationType == alias.ServiceType + AliasKeyMarker + implementation.ToDisplayString(FullyQualified)
 			                                && compilation.HasImplicitConversion(aliased, service)) is { } alias)
 			{
 				raw[index] = match with
@@ -77,6 +76,7 @@ partial class AwaitenGenerator
 				continue;
 			}
 
+			string aliasMarker = AliasKeyMarker + implementation.ToDisplayString(FullyQualified);
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.ScanMatchNotShared,
 				LocationInfo.From(match.Location),
@@ -84,7 +84,7 @@ partial class AwaitenGenerator
 					Display(implementation.ToDisplayString(FullyQualified)),
 					Display(match.Origin!.ToDisplayString(FullyQualified)),
 					Display(match.ServiceType),
-					Display(handle.ServiceType),
+					Display(raw.FirstOrDefault(alias => alias.ImplementationType.EndsWith(aliasMarker, StringComparison.Ordinal))?.ServiceType ?? handle.ServiceType),
 				])));
 			raw.RemoveAt(index);
 		}
@@ -750,7 +750,9 @@ partial class AwaitenGenerator
 	///     lifetime (AWT107), a different production strategy (AWT111), or a contradicting
 	///     OnActivated/OnRelease/Eager/SuppressDisposal directive (AWT166). Lifetime and production conflicts are
 	///     reported once per implementation, each directive
-	///     conflict once per (implementation, directive), since coalescing keeps the first registration.
+	///     conflict once per (implementation, directive), since coalescing keeps the first registration. An alias of an
+	///     instance handle (see <see cref="ThroughHandle" />) owns nothing and is exempt, since the handle registration of
+	///     its implementation carries every conflict.
 	/// </summary>
 	private static void ReportCoalescingConflicts(
 		ImplInfo? info,
@@ -761,7 +763,7 @@ partial class AwaitenGenerator
 		HashSet<string> reportedDirectiveConflicts,
 		List<DiagnosticInfo> diagnostics)
 	{
-		if (info is null)
+		if (info is null || registration.ImplementationType.Contains(AliasKeyMarker))
 		{
 			return;
 		}

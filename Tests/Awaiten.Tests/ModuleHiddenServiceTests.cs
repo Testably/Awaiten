@@ -247,6 +247,18 @@ public class ModuleHiddenServiceTests
 	}
 
 	[Test]
+	public async Task DecoratorOfAnInternalService_LeavesAPublicServiceOfTheImplementationUndecorated()
+	{
+		using HiddenDecoratedAliasContainer.Root container = new();
+
+		IHiddenJournalReader reader = container.Resolve<IHiddenJournalReader>();
+
+		await That(reader.Journal.GetType().Name).IsEqualTo("TracedJournal");
+		await That(reader.Inner).IsSameAs(container.Resolve<IHiddenJournalView>())
+			.Because("the decorator wraps the one instance, which the public service serves undecorated, as in a container of the module's own assembly");
+	}
+
+	[Test]
 	public async Task EagerInternalSingleton_IsBuiltWithTheContainer()
 	{
 		int before = HiddenEagerCounter.Constructed;
@@ -268,3 +280,7 @@ public static partial class HiddenAsyncDisposalContainer;
 [Container]
 [Import(typeof(CrossAssemblyHiddenDecoratorModule))]
 public static partial class HiddenDecoratorContainer;
+
+[Container]
+[Import(typeof(CrossAssemblyHiddenDecoratedAliasModule))]
+public static partial class HiddenDecoratedAliasContainer;

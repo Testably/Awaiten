@@ -137,10 +137,10 @@ internal static partial class Sources
 		{
 			builder.AppendLine();
 			AppendXmlSummary(builder, depth + 2,
-				"Generated from a module registration: serves another service of an implementation the module registers under an",
-				"internal service, from the handle that owns its instance, so every service shares the one instance.");
+				"Generated from a module registration: serves a service of an implementation the module builds through a handle,",
+				"from the instance handle of the implementation, so every service shares the one instance.");
 			Indent(builder, depth + 2).Append("public static ").Append(alias.ReturnType).Append(' ').Append(alias.Name).Append('(')
-				.Append(alias.Attributes).Append(alias.HandleType).Append(" @awaiten__handle) => ").Append(alias.Body).AppendLine(";");
+				.Append(alias.HandleType).Append(" @awaiten__handle) => ").Append(alias.Body).AppendLine(";");
 		}
 
 		foreach (HiddenInitializer initializer in model.Initializers.AsArray())

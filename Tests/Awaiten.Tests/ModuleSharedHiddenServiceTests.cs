@@ -31,7 +31,49 @@ public class ModuleSharedHiddenServiceTests
 		await That(bartender.PantryDisposals).IsEqualTo(1)
 			.Because("the one shared instance is disposed once");
 	}
+
+	[Test]
+	public async Task OneImplementationOfTwoModulesUnderPublicServicesOnly_IsOneInstance()
+	{
+		using SharedBoardContainer.Root container = new();
+
+		await That(container.Resolve<ISharedMenu>()).IsSameAs(container.Resolve<ISharedPrices>())
+			.Because("both modules register the same internal implementation, which a container in their own assembly shares as one instance");
+	}
+
+	[Test]
+	public async Task OneImplementationOfTwoModulesUnderDifferentInternalServices_IsOneInstance()
+	{
+		using SharedTillContainer.Root container = new();
+
+		await That(container.Resolve<ISharedTill>()).IsSameAs(container.Resolve<ISharedCash>())
+			.Because("both modules register the same internal implementation, each under an internal service of its own");
+	}
+
+	[Test]
+	public async Task OneImplementationThatOnlyOneModuleBuildsThroughAHandle_IsOneInstance()
+	{
+		using SharedSafeContainer.Root container = new();
+
+		await That(container.Resolve<ISharedSafe>()).IsSameAs(container.Resolve<ISharedVault>())
+			.Because("the module that registers the implementation under a public service alone shares the instance of the handle the other module builds");
+	}
 }
+
+[Container]
+[Import(typeof(CrossAssemblySharedMenuModule))]
+[Import(typeof(CrossAssemblySharedPriceModule))]
+public static partial class SharedBoardContainer;
+
+[Container]
+[Import(typeof(CrossAssemblySharedTillModule))]
+[Import(typeof(CrossAssemblySharedCashModule))]
+public static partial class SharedTillContainer;
+
+[Container]
+[Import(typeof(CrossAssemblySharedSafeModule))]
+[Import(typeof(CrossAssemblySharedVaultModule))]
+public static partial class SharedSafeContainer;
 
 [Container]
 [Import(typeof(CrossAssemblySharedStorageModule))]

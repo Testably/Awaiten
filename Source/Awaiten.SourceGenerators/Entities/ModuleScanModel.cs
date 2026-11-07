@@ -35,10 +35,10 @@ internal sealed record ModuleScanModel(
 	EquatableArray<HiddenInitializer> Initializers = default);
 
 /// <summary>
-///     The generated public handle of a service the module registers under an internal type: a class nested in the
-///     module's <c>Internals</c> that holds the instance as <see cref="ValueType" /> behind an internal constructor and
-///     property, so a container in another assembly depends on it without naming the service. A consumer registers it
-///     as a dependency-only service. One sealed variant per disposal shape an implementation needs
+///     The generated public handle of a service the module registers under an internal type, or the instance handle of
+///     an implementation it builds through a handle: a class nested in the module's <c>Internals</c> that holds the
+///     instance as <see cref="ValueType" /> behind an internal constructor and property, so a container in another
+///     assembly depends on it without naming the type. A consumer registers it as a dependency-only service. One sealed variant per disposal shape an implementation needs
 ///     (<see cref="Disposable" />, <see cref="AsyncDisposable" />, <see cref="BothDisposable" />) implements the
 ///     interfaces and forwards them, so a container disposes exactly what the implementation implements. With
 ///     <see cref="Wrap" />, a factory member's result may be any subtype, so the handle carries every variant and a
@@ -47,11 +47,11 @@ internal sealed record ModuleScanModel(
 internal sealed record HiddenHandle(string Name, string ValueType, bool Disposable, bool AsyncDisposable, bool BothDisposable, bool Wrap = false);
 
 /// <summary>
-///     A generated factory that serves one more service of an implementation registered under an internal service: it
-///     takes the handle that owns the instance (with the key of its owning registration in <see cref="Attributes" />)
-///     and returns <see cref="Body" />, the instance as <see cref="ReturnType" />, so every service shares one instance.
+///     A generated factory that serves one service of an implementation the module builds through a handle: it takes
+///     the instance handle of the implementation and returns <see cref="Body" />, the instance as <see cref="ReturnType" />,
+///     so every service shares one instance.
 /// </summary>
-internal sealed record HiddenAlias(string Name, string ReturnType, string HandleType, string? Attributes, string Body);
+internal sealed record HiddenAlias(string Name, string ReturnType, string HandleType, string Body);
 
 /// <summary>
 ///     A generated wrapper that runs one <c>[AsyncInitializer&lt;T&gt;]</c> convention of the module on the instance a

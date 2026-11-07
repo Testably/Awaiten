@@ -468,3 +468,40 @@ public static partial class CrossAssemblyHiddenDecoratorModule;
 [Singleton<HiddenLock>]
 [Singleton<HiddenVault, IHiddenVault>]
 public static partial class CrossAssemblyHiddenAsyncDisposalModule;
+
+/// <summary>A public view of the internal journal, which the module serves undecorated.</summary>
+public interface IHiddenJournalView;
+
+/// <summary>A singleton that reads the internal journal the module decorates.</summary>
+public interface IHiddenJournalReader
+{
+	/// <summary>The journal the reader received, the outermost link of its chain.</summary>
+	object Journal { get; }
+
+	/// <summary>The journal the decorator wraps.</summary>
+	object Inner { get; }
+}
+
+internal interface IHiddenJournal;
+
+internal sealed class HiddenJournal : IHiddenJournal, IHiddenJournalView;
+
+internal sealed class TracedJournal(IHiddenJournal inner) : IHiddenJournal
+{
+	public IHiddenJournal Inner => inner;
+}
+
+internal sealed class HiddenJournalReader(IHiddenJournal journal) : IHiddenJournalReader
+{
+	public object Journal => journal;
+
+	public object Inner => ((TracedJournal)journal).Inner;
+}
+
+/// <summary>A <c>[Module]</c> that decorates an internal service whose implementation it registers under a public service too.</summary>
+[Module]
+[Singleton<HiddenJournal, IHiddenJournal>]
+[Singleton<HiddenJournal, IHiddenJournalView>]
+[Singleton<HiddenJournalReader, IHiddenJournalReader>]
+[Decorate<TracedJournal, IHiddenJournal>]
+public static partial class CrossAssemblyHiddenDecoratedAliasModule;
