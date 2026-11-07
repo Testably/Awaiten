@@ -1308,6 +1308,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 13:07:21 2026 \u002B0100",
         "message": "chore: resolve open Sonar issues (#298)"
+      },
+      {
+        "sha": "4705a2d25fb73d3dffe56990cdae57f746fa9064",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 13:38:06 2026 \u002B0100",
+        "message": "docs: show the benchmark change relative to Awaiten and summarize the realistic request (#300)"
       }
     ],
     "labels": [
@@ -1528,7 +1534,8 @@ window.BENCHMARK_DATA = {
       "0c0f88d5",
       "746c51e4",
       "a091e045",
-      "30755a3f"
+      "30755a3f",
+      "4705a2d2"
     ],
     "datasets": [
       {
@@ -1752,7 +1759,8 @@ window.BENCHMARK_DATA = {
           7.1361276040474575,
           5.947241951028506,
           7.769211361041436,
-          7.171465588609378
+          7.171465588609378,
+          5.456317562609911
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -1764,6 +1772,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -2213,7 +2222,8 @@ window.BENCHMARK_DATA = {
           7.329823404550552,
           4.557122246424357,
           7.891414188345274,
-          7.394987699886163
+          7.394987699886163,
+          6.579347377786269
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -2225,6 +2235,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -2674,7 +2685,8 @@ window.BENCHMARK_DATA = {
           104.7605748573939,
           103.59020003477733,
           108.5925442150661,
-          109.94935009112724
+          109.94935009112724,
+          86.7945578779493
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -2686,6 +2698,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -3131,7 +3144,8 @@ window.BENCHMARK_DATA = {
           8.887216713031133,
           7.287702653270501,
           8.69707406525101,
-          8.650832613309225
+          8.650832613309225,
+          6.2991398446835
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -3143,6 +3157,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -3584,7 +3599,8 @@ window.BENCHMARK_DATA = {
           11.310979110002517,
           8.600960342089335,
           10.948023945093155,
-          10.707710474729538
+          10.707710474729538,
+          8.455064307038601
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -3596,6 +3612,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -5131,6 +5148,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 13:07:21 2026 \u002B0100",
         "message": "chore: resolve open Sonar issues (#298)"
+      },
+      {
+        "sha": "4705a2d25fb73d3dffe56990cdae57f746fa9064",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 13:38:06 2026 \u002B0100",
+        "message": "docs: show the benchmark change relative to Awaiten and summarize the realistic request (#300)"
       }
     ],
     "labels": [
@@ -5351,7 +5374,8 @@ window.BENCHMARK_DATA = {
       "0c0f88d5",
       "746c51e4",
       "a091e045",
-      "30755a3f"
+      "30755a3f",
+      "4705a2d2"
     ],
     "datasets": [
       {
@@ -5575,7 +5599,8 @@ window.BENCHMARK_DATA = {
           8.08468312983002,
           6.462372806171576,
           8.388703792045513,
-          8.163053243206097
+          8.163053243206097,
+          6.312703053538616
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -5587,6 +5612,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -6036,7 +6062,8 @@ window.BENCHMARK_DATA = {
           7.280531728906291,
           4.821196233853698,
           7.669059711907591,
-          7.439854875206947
+          7.439854875206947,
+          6.479800861080488
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -6048,6 +6075,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -6497,7 +6525,8 @@ window.BENCHMARK_DATA = {
           105.5847470852045,
           105.54962032181876,
           107.93092146714528,
-          125.77851236661276
+          125.77851236661276,
+          85.7903923590978
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -6509,6 +6538,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -6954,7 +6984,8 @@ window.BENCHMARK_DATA = {
           8.806058989961942,
           7.1084304091831045,
           8.706418997049331,
-          8.40508126041719
+          8.40508126041719,
+          6.414191743731498
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -6966,6 +6997,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -7407,7 +7439,8 @@ window.BENCHMARK_DATA = {
           14.960997599821825,
           10.256872245669365,
           14.869051851828893,
-          14.076013792306185
+          14.076013792306185,
+          11.700280797481536
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -7419,6 +7452,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -8954,6 +8988,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 13:07:21 2026 \u002B0100",
         "message": "chore: resolve open Sonar issues (#298)"
+      },
+      {
+        "sha": "4705a2d25fb73d3dffe56990cdae57f746fa9064",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 13:38:06 2026 \u002B0100",
+        "message": "docs: show the benchmark change relative to Awaiten and summarize the realistic request (#300)"
       }
     ],
     "labels": [
@@ -9174,7 +9214,8 @@ window.BENCHMARK_DATA = {
       "0c0f88d5",
       "746c51e4",
       "a091e045",
-      "30755a3f"
+      "30755a3f",
+      "4705a2d2"
     ],
     "datasets": [
       {
@@ -9398,7 +9439,8 @@ window.BENCHMARK_DATA = {
           11.084885752626828,
           11.465736424922943,
           15.741096131006877,
-          20.031821734138898
+          20.031821734138898,
+          19.684886475404102
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -9560,6 +9602,7 @@ window.BENCHMARK_DATA = {
           144,
           144,
           144,
+          208,
           208,
           208,
           208,
@@ -9859,7 +9902,8 @@ window.BENCHMARK_DATA = {
           817.1202362605503,
           812.2018456141154,
           1136.306197611491,
-          1518.4405143444355
+          1518.4405143444355,
+          1470.7674173990886
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -9871,6 +9915,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          5688,
           5688,
           5688,
           5688,
@@ -10320,7 +10365,8 @@ window.BENCHMARK_DATA = {
           18207.834700520834,
           17257.640767415363,
           17973.975813802084,
-          30177.769278390067
+          30177.769278390067,
+          29436.810032435827
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -10549,6 +10595,7 @@ window.BENCHMARK_DATA = {
           32477,
           32478,
           32474,
+          32482,
           32482
         ],
         "borderColor": "#5E2750",
@@ -10777,7 +10824,8 @@ window.BENCHMARK_DATA = {
           422.2134127934774,
           396.04076906840004,
           496.6727166493734,
-          725.8441343307495
+          725.8441343307495,
+          738.0200435002645
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -10807,6 +10855,7 @@ window.BENCHMARK_DATA = {
           1472,
           1472,
           1472,
+          1528,
           1528,
           1528,
           1528,
@@ -11230,7 +11279,8 @@ window.BENCHMARK_DATA = {
           6713.618688964843,
           6741.6809005737305,
           8431.403186035157,
-          12322.00723063151
+          12322.00723063151,
+          11508.83398844401
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -11451,6 +11501,7 @@ window.BENCHMARK_DATA = {
           24760,
           24761,
           24761,
+          24760,
           24760,
           24760,
           24760,
@@ -12777,6 +12828,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 13:07:21 2026 \u002B0100",
         "message": "chore: resolve open Sonar issues (#298)"
+      },
+      {
+        "sha": "4705a2d25fb73d3dffe56990cdae57f746fa9064",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 13:38:06 2026 \u002B0100",
+        "message": "docs: show the benchmark change relative to Awaiten and summarize the realistic request (#300)"
       }
     ],
     "labels": [
@@ -12997,7 +13054,8 @@ window.BENCHMARK_DATA = {
       "0c0f88d5",
       "746c51e4",
       "a091e045",
-      "30755a3f"
+      "30755a3f",
+      "4705a2d2"
     ],
     "datasets": [
       {
@@ -13221,7 +13279,8 @@ window.BENCHMARK_DATA = {
           74.7533876987604,
           80.57856663635799,
           165.53958863871438,
-          207.48814115524291
+          207.48814115524291,
+          171.08001316510715
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -13383,6 +13442,7 @@ window.BENCHMARK_DATA = {
           2128,
           2128,
           2128,
+          4176,
           4176,
           4176,
           4176,
@@ -13682,7 +13742,8 @@ window.BENCHMARK_DATA = {
           7516.215811157226,
           7126.2112955365865,
           9211.451314290365,
-          14707.428967989408
+          14707.428967989408,
+          14122.693215942383
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -13694,6 +13755,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          61016,
           61016,
           61016,
           61016,
@@ -14143,7 +14205,8 @@ window.BENCHMARK_DATA = {
           415250.0730919471,
           406746.2070661272,
           429313.9988932292,
-          755402.038671875
+          755402.038671875,
+          724260.4038085938
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -14372,7 +14435,8 @@ window.BENCHMARK_DATA = {
           718367,
           718405,
           735232,
-          738539
+          738539,
+          740466
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -14600,7 +14664,8 @@ window.BENCHMARK_DATA = {
           23890.38814086914,
           22861.244561767577,
           26369.09079683744,
-          44989.03494497446
+          44989.03494497446,
+          43926.6748453776
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -14825,7 +14890,8 @@ window.BENCHMARK_DATA = {
           80351,
           80350,
           79661,
-          80082
+          80082,
+          80007
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -15053,7 +15119,8 @@ window.BENCHMARK_DATA = {
           195745.27898297991,
           195049.4735281808,
           219731.7515345982,
-          363928.8023963341
+          363928.8023963341,
+          349127.34358723956
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -15278,7 +15345,8 @@ window.BENCHMARK_DATA = {
           573022,
           572990,
           571194,
-          573110
+          573110,
+          573122
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -16576,6 +16644,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 13:07:21 2026 \u002B0100",
         "message": "chore: resolve open Sonar issues (#298)"
+      },
+      {
+        "sha": "4705a2d25fb73d3dffe56990cdae57f746fa9064",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 13:38:06 2026 \u002B0100",
+        "message": "docs: show the benchmark change relative to Awaiten and summarize the realistic request (#300)"
       }
     ],
     "labels": [
@@ -16792,7 +16866,8 @@ window.BENCHMARK_DATA = {
       "0c0f88d5",
       "746c51e4",
       "a091e045",
-      "30755a3f"
+      "30755a3f",
+      "4705a2d2"
     ],
     "datasets": [
       {
@@ -17012,7 +17087,8 @@ window.BENCHMARK_DATA = {
           253.58504111950214,
           222.17189300855,
           258.80458395821705,
-          263.5817415373666
+          263.5817415373666,
+          203.41571067174274
         ],
         "borderColor": "#3949AB",
         "backgroundColor": "#3949AB",
@@ -17047,6 +17123,7 @@ window.BENCHMARK_DATA = {
           560,
           560,
           560,
+          568,
           568,
           568,
           568,
@@ -17465,7 +17542,8 @@ window.BENCHMARK_DATA = {
           580.4872319539388,
           529.6825239181519,
           603.7704200744629,
-          605.814691066742
+          605.814691066742,
+          467.43557217915856
         ],
         "borderColor": "#512BD4",
         "backgroundColor": "#512BD4",
@@ -17477,6 +17555,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          1104,
           1104,
           1104,
           1104,
@@ -17918,7 +17997,8 @@ window.BENCHMARK_DATA = {
           6401.686316426595,
           3947.941729032076,
           6380.2290730794275,
-          6691.837372334799
+          6691.837372334799,
+          5230.649369812012
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -18002,6 +18082,7 @@ window.BENCHMARK_DATA = {
           13696,
           13696,
           13696,
+          10784,
           10784,
           10784,
           10784,
@@ -18371,7 +18452,8 @@ window.BENCHMARK_DATA = {
           372.9189969698588,
           338.65057201385497,
           384.7468133994511,
-          391.07122113154486
+          391.07122113154486,
+          337.21720501354764
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -18383,6 +18465,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          944,
           944,
           944,
           944,
@@ -18824,7 +18907,8 @@ window.BENCHMARK_DATA = {
           714.6304956844875,
           524.539628469027,
           734.2013996669224,
-          744.8488781611125
+          744.8488781611125,
+          537.9970523198446
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -18836,6 +18920,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          1096,
           1096,
           1096,
           1096,
