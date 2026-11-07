@@ -35,10 +35,11 @@ internal sealed record ModuleScanModel(
 internal sealed record SkippedRegistration(string MarkerName, string Reason);
 
 /// <summary>
-///     The generated factory of a self-compiled module registration: the emitted method name, the accessible type it
-///     returns (the implementation when another assembly can name it, else the registered service), the
-///     implementation it constructs, the constructor parameters mirrored onto its signature and the lifecycle-hook
-///     wrappers emitted beside it, one per hook a registration of the implementation names.
+///     The generated factory of an implementation that only its owner can construct: a self-compiled module
+///     registration, or an implementation private to a base container that an extending container builds. It holds the
+///     emitted method name, the accessible type it returns, the implementation it constructs, the constructor
+///     parameters mirrored onto its signature and the lifecycle-hook wrappers emitted beside it, one per hook a
+///     registration of the implementation names.
 /// </summary>
 internal sealed record RegistrationFactory(
 	string FactoryName,

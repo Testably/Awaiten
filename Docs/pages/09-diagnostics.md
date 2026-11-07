@@ -1693,7 +1693,7 @@ A type nested privately in the container is a match like any other: the generate
 
 - **Registered as itself.** `ScanAs.Self` would make the private type its own service. Expose it through `ScanAs.Marker` or `ScanAs.MatchingInterface` instead.
 - **Several services without a common type.** No accessible type the match converts to covers all the interfaces it is registered under, including those of an explicit registration of the same type. Narrow the scan to one interface, or give the type an accessible base type that covers them. An explicit registration of the type stays as it is without the scan.
-- **Out of an extending container's reach.** A base container's scan registers a type nested privately in the base, which a container that [extends](./04-registration/08-extending-containers.md) it cannot construct. Make the type `internal`.
+- **Out of an extending container's reach.** A base container's scan registers a type nested privately in the base, which a container that [extends](./04-registration/08-extending-containers.md) it builds through the factory the base generates. The extending container skips the match when it cannot call that factory: the factory is internal and the base's assembly does not grant the extending one `InternalsVisibleTo`, or the factory cannot express the type (see [AWT226](#awt226)). Grant `InternalsVisibleTo`, or make the type `internal`.
 - **Registered by its module.** A module scan matched a type private to the module, or to a class that contains it, that the module also registers, and the type's single generated factory serves that registration.
 
 ```csharp expect=AWT193
@@ -2224,7 +2224,7 @@ public static partial class TestCoffeeShop;
 ### AWT226
 
 :::danger[Error]
-A factory, instance member, lifecycle hook, constructor or scanned type that a container inherits through `Extends` is not accessible from it, although the base reaches it: a private member of the base, or an internal one in another assembly that does not grant `InternalsVisibleTo`. The generated extending container calls inherited members from its own code, so it must see them; an inaccessible scan match would otherwise be silently missing from the test graph. The inherited declaration is ignored.
+A factory, instance member, lifecycle hook, constructor or scanned type that a container inherits through `Extends` is not accessible from it, although the base reaches it: a private member of the base, or an internal one in another assembly that does not grant `InternalsVisibleTo`. It is also reported when an implementation private to the base cannot be built through the factory the base generates for it. The generated extending container calls inherited members from its own code, so it must see them; an inaccessible scan match would otherwise be silently missing from the test graph. The inherited declaration is ignored.
 :::
 
 ```csharp expect=AWT226
@@ -2240,6 +2240,25 @@ public static partial class TestCoffeeShop;
 ```
 
 **Fix:** Make the member or type public, or internal and grant the assembly of the extending container `[InternalsVisibleTo]`. Replacing the registration on the extending container also removes the need for it.
+
+An implementation nested privately in the base, or in a class that contains the base, is built through an `internal` factory the base generates for it (see [extending containers](./04-registration/08-extending-containers.md#accessibility)). The extending container reports this error, with the reason, only where it cannot build such a type:
+
+- **No access to the factory.** The base is in another assembly that does not grant the extending container's assembly `InternalsVisibleTo`. Grant it.
+- **A shape the factory cannot express.** The type has `[Inject]` properties, a constructor or hook parameter marked `[Arg]`, `[FromKey]` or `[Inject]`, or a parameter type private to the base. Make the type `internal`.
+- **A decorator, composite or open generic registration.** The base generates factories only for constructed registrations of its private implementations. Make the type `internal`.
+
+```csharp expect=AWT226
+[Container]
+[Singleton<Clock, IClock>(Key = "system")]
+[Singleton<BurrGrinder, IGrinder>]
+public static partial class CoffeeShop
+{
+    private sealed class BurrGrinder([FromKey("system")] IClock clock) : IGrinder;   // the factory cannot carry the key
+}
+
+[Container(Extends = typeof(CoffeeShop))]
+public static partial class TestCoffeeShop;
+```
 
 ## Keyed collections
 

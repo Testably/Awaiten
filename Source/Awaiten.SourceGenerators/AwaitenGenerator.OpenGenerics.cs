@@ -355,7 +355,7 @@ partial class AwaitenGenerator
 	///     default that coalescing drops in full (see <see cref="DroppedOverridableDefaults" />) is skipped, so
 	///     its producer and hooks never synthesize closed registrations the surviving graph does not need. Each
 	///     registration is scanned through what produces it: a constructed implementation through its constructor and
-	///     injected members, a <c>Factory</c> through the factory's parameters, and an <c>Instance</c> not at all. Every
+	///     injected members (or through the constructor a generated factory mirrors, when that is fixed), a <c>Factory</c> through the factory's parameters, and an <c>Instance</c> not at all. Every
 	///     closed decorator and composite is seeded too, and each registration closes the open ones that apply to it.
 	/// </summary>
 	private static void SeedExpansionWorklist(HashSet<int> droppedWeak, ExpansionContext context)
@@ -368,7 +368,11 @@ partial class AwaitenGenerator
 			}
 
 			RawRegistration registration = context.Raw[index];
-			if (registration.Production == ProductionKind.Constructor)
+			if (registration.Constructor is { } constructor)
+			{
+				Enqueue(new ExpansionWork(registration.Implementation, constructor, 0, ExpansionScan.Factory), context);
+			}
+			else if (registration.Production == ProductionKind.Constructor)
 			{
 				Enqueue(new ExpansionWork(registration.Implementation, null, 0, ExpansionScan.ConstructedInstance), context);
 			}

@@ -89,6 +89,7 @@ partial class AwaitenGenerator
 		if (inheritance is not null)
 		{
 			ReplaceInherited(inheritance, own, ownOpen, result, open);
+			BuildThroughBaseFactories(inheritance, result, constraintRejected, diagnostics);
 		}
 
 		// Expand open generic registrations: for every closed generic service required from the graph
@@ -374,14 +375,7 @@ partial class AwaitenGenerator
 		if (sameCompilation && IsHiddenInModule(implementation, module, compilation))
 		{
 			return context.Modules.Registration(module, implementation) is { } generated
-				? registration with
-				{
-					GreedyConstructor = true,
-					ConstructVia = $"{module.ToDisplayString(FullyQualified)}.{generated.FactoryName}",
-					ConstructViaType = generated.ReturnType,
-					OnActivated = HasHookWrapper(generated, implementation, registration.OnActivated, release: false) ? registration.OnActivated : null,
-					OnRelease = HasHookWrapper(generated, implementation, registration.OnRelease, release: true) ? registration.OnRelease : null,
-				}
+				? ThroughSameCompilationFactory(registration, module, generated) with { GreedyConstructor = true, }
 				: null;
 		}
 
@@ -395,7 +389,7 @@ partial class AwaitenGenerator
 			return registration;
 		}
 
-		if (SelfCompiledFactory(module, implementation) is not { ReturnType: INamedTypeSymbol returnType, } factory)
+		if (GeneratedFactory(module, implementation, compilation) is not { } factory)
 		{
 			if (context.Inherited)
 			{
@@ -432,16 +426,7 @@ partial class AwaitenGenerator
 			return null;
 		}
 
-		return registration with
-		{
-			Implementation = returnType,
-			Production = ProductionKind.Factory,
-			ProductionMember = factory.Name,
-			OnActivated = registration.OnActivated is { } activation ? RegistrationHookWrapperName(implementation, release: false, activation) : null,
-			OnRelease = registration.OnRelease is { } release ? RegistrationHookWrapperName(implementation, release: true, release) : null,
-			Traits = TraitsOf(implementation),
-			TraitsExact = true,
-		};
+		return ThroughGeneratedFactory(registration, factory);
 	}
 
 	/// <summary>

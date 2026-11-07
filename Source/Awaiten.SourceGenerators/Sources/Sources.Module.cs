@@ -162,17 +162,24 @@ internal static partial class Sources
 	///     accessible type a consumer names in its stead.
 	/// </summary>
 	private static void EmitRegistrationFactory(StringBuilder builder, int depth, RegistrationFactory factory)
-	{
-		AppendXmlSummary(builder, depth,
+		=> EmitRegistrationFactory(builder, depth, factory, "public",
 			"Generated from a module registration: constructs an implementation a consuming container cannot construct and",
 			"returns it as an accessible type, so a consuming container resolves it without naming the implementation.");
+
+	/// <summary>
+	///     Emits a generated factory with the given accessibility and summary: a static method that constructs the
+	///     implementation, which only its owner may, and returns it as the accessible type a consumer names in its stead.
+	/// </summary>
+	private static void EmitRegistrationFactory(StringBuilder builder, int depth, RegistrationFactory factory, string accessibility, params string[] summary)
+	{
+		AppendXmlSummary(builder, depth, summary);
 
 		FactoryParameter[] parameters = factory.Parameters.AsArray();
 		string signature = string.Join(", ", parameters.Select(parameter => $"{parameter.Type} @{parameter.Name}"));
 		string arguments = string.Join(", ", parameters.Select(parameter => $"@{parameter.Name}"));
 
 		Indent(builder, depth)
-			.Append("public static ").Append(factory.ReturnType).Append(' ').Append(factory.FactoryName)
+			.Append(accessibility).Append(" static ").Append(factory.ReturnType).Append(' ').Append(factory.FactoryName)
 			.Append('(').Append(signature).Append(") => new ").Append(factory.ImplementationType)
 			.Append('(').Append(arguments).AppendLine(");");
 	}
@@ -204,10 +211,16 @@ internal static partial class Sources
 	///     <c>public</c> signature is all a consumer needs to run it.
 	/// </summary>
 	private static void EmitModuleHook(StringBuilder builder, int depth, string instanceType, ModuleHook hook, bool release, string origin)
-	{
-		AppendXmlSummary(builder, depth,
+		=> EmitHookWrapper(builder, depth, "public", instanceType, hook,
 			$"Generated from {origin}: the {(release ? "OnRelease" : "OnActivated")} lifecycle wrapper, casting the exposure",
 			"interface to the hook's own instance parameter type and forwarding to the module's own hook, so a consumer runs it without naming the internal hook.");
+
+	/// <summary>
+	///     Emits a lifecycle-hook wrapper with the given accessibility and summary (see <see cref="EmitModuleHook" />).
+	/// </summary>
+	private static void EmitHookWrapper(StringBuilder builder, int depth, string accessibility, string instanceType, ModuleHook hook, params string[] summary)
+	{
+		AppendXmlSummary(builder, depth, summary);
 
 		FactoryParameter[] parameters = hook.Parameters.AsArray();
 		string signature = string.Concat(parameters.Select(parameter => $", {parameter.Type} @{parameter.Name}"));
@@ -225,7 +238,7 @@ internal static partial class Sources
 		}
 
 		Indent(builder, depth)
-			.Append("public static void ").Append(hook.WrapperName)
+			.Append(accessibility).Append(" static void ").Append(hook.WrapperName)
 			.Append('(').Append(instanceType).Append(" @").Append(instance).Append(signature).Append(") => ")
 			.Append(hook.Target).Append("((").Append(hook.InstanceCast).Append(")@").Append(instance).Append(arguments).AppendLine(");");
 	}

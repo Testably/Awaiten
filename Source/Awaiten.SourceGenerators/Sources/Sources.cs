@@ -104,6 +104,30 @@ internal static partial class Sources
 			builder.AppendLine();
 			EmitAsyncArrayHelper(builder, depth);
 		}
+
+		EmitBaseFactories(builder, depth, model.Factories.AsArray());
+	}
+
+	/// <summary>
+	///     Emits the <c>internal</c> factory and hook wrappers of each implementation private to the container, which a
+	///     container that extends it calls because its own generated code cannot name the private type.
+	/// </summary>
+	private static void EmitBaseFactories(StringBuilder builder, int depth, RegistrationFactory[] factories)
+	{
+		foreach (RegistrationFactory factory in factories)
+		{
+			builder.AppendLine();
+			EmitRegistrationFactory(builder, depth, factory, "internal",
+				"Generated for a container that extends this one: constructs an implementation private to this container and",
+				"returns it as an accessible type, so the extending container resolves it without naming the implementation.");
+			foreach (RegistrationHook hook in factory.Hooks.AsArray())
+			{
+				builder.AppendLine();
+				EmitHookWrapper(builder, depth, "internal", factory.ReturnType, hook.Hook,
+					$"Generated for a container that extends this one: the {(hook.Release ? "OnRelease" : "OnActivated")} lifecycle wrapper, casting the",
+					"accessible type to the hook's own instance parameter type and forwarding to this container's hook.");
+			}
+		}
 	}
 
 	private static bool IsRootOwned(InstanceModel instance)

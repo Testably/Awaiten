@@ -1390,7 +1390,8 @@ internal static class Diagnostics
 	///     protected nested type the scanning container can reach, but the registration would need an accessible type
 	///     to stand in for it that does not exist (the shapes of <see cref="RegisteredTypeLessAccessible">AWT216</see>),
 	///     for example because <c>ScanAs.Self</c> registers it as itself, or a container extending the scanning base
-	///     cannot reach it (where an explicit registration is <see cref="InheritedMemberInaccessible">AWT226</see>).
+	///     cannot build it through the base's generated factory (where an explicit registration is
+	///     <see cref="InheritedPrivateImplementation">AWT226</see>).
 	///     <c>{1}</c> names the reason and <c>{2}</c> the remedy. A scan skips such a match with this warning rather
 	///     than failing, and also drops it when only its combination with another registration of the same type has no
 	///     accessible stand-in, so the other registration keeps its meaning.
@@ -1878,6 +1879,21 @@ internal static class Diagnostics
 		"AWT226",
 		"Inherited member is not accessible",
 		"{0} is not accessible from '{1}', which inherits it from '{2}' through Extends; make it public, or internal and grant the assembly of '{1}' [InternalsVisibleTo]",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     AWT226 for a type private to the base container, or to a class that contains it, that an extending container
+	///     cannot build. The base builds such a type for an extending container through an <c>internal</c> generated
+	///     factory, but not here: <c>{3}</c> names the reason (the factory is internal and the base's assembly grants the
+	///     extending one no <c>InternalsVisibleTo</c>, the factory cannot express the type, or it is a decorator,
+	///     composite or open generic registration) and <c>{4}</c> the remedy. The inherited declaration is ignored.
+	/// </summary>
+	public static readonly DiagnosticDescriptor InheritedPrivateImplementation = new(
+		"AWT226",
+		InheritedMemberInaccessible.Title,
+		"{0} cannot be built by '{1}', which inherits it from '{2}' through Extends: {3}; {4}",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);

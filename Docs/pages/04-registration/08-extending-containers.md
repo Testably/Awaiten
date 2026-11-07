@@ -133,7 +133,30 @@ The generated extending container calls the inherited factories, instance member
 [assembly: InternalsVisibleTo("CoffeeShop.Tests")]
 ```
 
-The same applies to the base's `[Scan]`: it sweeps the base's assembly and matches what the base sees, and a match the extending container cannot access is an error rather than a silently missing service. It also applies to an implementation nested privately in the base: the extending container is not nested in the base, so it cannot construct it. A type nested privately in an imported module, or in a class that contains the module, is fine, because every container builds it through the module's generated factory. Anything inherited that the extending container cannot reach is reported on its `Extends` argument ([AWT226](../09-diagnostics.md#awt226)), except a match of the base's scan that is nested privately in the base: the extending container skips it with a warning ([AWT193](../09-diagnostics.md#awt193)), so a scan of private types never fails the build.
+The same applies to the base's `[Scan]`: it sweeps the base's assembly and matches what the base sees, and a match the extending container cannot access is an error rather than a silently missing service.
+
+An implementation nested privately in the base, or in a class that contains the base, is built by the base. The extending container cannot construct such a type, so the base generates an `internal` factory for it, and the extending container calls that factory. Everything else the registration declares still applies: the lifetime, `Eager`, keys, `WhenInjectedInto`, `Fallback`, collections, lifecycle hooks, async initialization and disposal. A private match of the base's scan is built the same way, so the test graph holds the same services as the production graph.
+
+```csharp
+[Container]
+[Singleton<BurrGrinder, IGrinder>]
+[Scan<IPlugin>(As = ScanAs.Marker)]
+public static partial class Roastery
+{
+    private sealed class BurrGrinder : IGrinder;
+
+    private sealed class AuditPlugin : IPlugin;
+}
+
+[Container(Extends = typeof(Roastery))]
+public static partial class TestRoastery;   // resolves IGrinder and IEnumerable<IPlugin> like Roastery
+```
+
+A container only generates these factories when it has private implementations, and an extending container never does. The factory is `internal`, so an extending container in another assembly needs `InternalsVisibleTo`, like for any other internal member of the base. A registration the extending container replaces never calls the factory.
+
+The factory mirrors the constructor the base uses, so it cannot build every private type. A type with `[Inject]` properties, a constructor or hook parameter marked `[Arg]`, `[FromKey]` or `[Inject]`, or a parameter type private to the base is not built for the extending container. Neither is a decorator, composite or open generic registration private to the base. Make such a type `internal`. A type nested privately in an imported module, or in a class that contains the module, is fine, because every container builds it through the module's generated factory.
+
+Anything inherited that the extending container cannot reach or build is reported on its `Extends` argument ([AWT226](../09-diagnostics.md#awt226)), except a match of the base's scan: the extending container skips it with a warning ([AWT193](../09-diagnostics.md#awt193)), so a scan never fails the build.
 
 ## One level deep
 

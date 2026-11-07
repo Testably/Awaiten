@@ -601,7 +601,7 @@ public partial class DiagnosticTests
 		}
 
 		[Test]
-		public async Task PrivateNestedTypeOfExtendedBase_ReportsAwt226()
+		public async Task PrivateNestedTypeOfExtendedBase_DoesNotReport()
 		{
 			GeneratorResult result = Generator.Run("""
 			                                       using Awaiten;
@@ -623,11 +623,8 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics).Contains("*error AWT226*'MyCode.Shop.FakeClock'*").AsWildcard()
-				.Because("the extending container is not nested in the base, so it cannot construct the base's private type");
-			await That(result.Diagnostics).DoesNotContain("*AWT216*").AsWildcard()
-				.Because("the base itself builds the private type");
-			await That(result.Diagnostics).DoesNotContain("*error CS*").AsWildcard();
+			await That(result.Diagnostics).IsEmpty()
+				.Because("the base builds its private type itself, and the extending container calls the factory the base generates for it");
 		}
 
 		[Test]
