@@ -70,7 +70,9 @@ await using CoffeeShop.Root shop = new();
 
 A scope disposes the same way, also through the `IAwaitenScope` interface, which is `IAsyncDisposable` on every framework. On net48 and other netstandard2.0 consumers, `IAsyncDisposable` comes from `Microsoft.Bcl.AsyncInterfaces`, which Awaiten references there.
 
-Disposing synchronously while the container owns a service that is `IAsyncDisposable` but not `IDisposable` throws at runtime, because a synchronous dispose cannot tear it down. Every other instance is still disposed, only the async-only one is left undisposed. Awaiten warns about this at compile time (AWT156).
+An [`OnRelease` hook](../06-lifetime/03-lifecycle-hooks.md#asynchronous-release) that returns `Task` or `ValueTask` is awaited the same way, before any instance is disposed.
+
+Disposing synchronously while the container owns a service that is `IAsyncDisposable` but not `IDisposable` throws at runtime, because a synchronous dispose cannot tear it down. Every other instance is still disposed, only the async-only one is left undisposed. An asynchronous `OnRelease` hook follows the same rule: a synchronous dispose skips it, runs everything else and then throws. Awaiten warns about both at compile time ([AWT156](../09-diagnostics.md#awt156)).
 
 ## When teardown fails
 

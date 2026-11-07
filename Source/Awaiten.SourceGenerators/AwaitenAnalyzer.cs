@@ -427,7 +427,7 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 		}
 
 		GraphModel graph = CachedGraph(graphByContainer, container, compilation, context.CancellationToken).Graph;
-		ImmutableArray<string> asyncOnly = AsyncOnlyDisposables(graph, includeRootOwned: disposedType.Name == "Root");
+		ImmutableArray<string> asyncOnly = AsyncOnlyTeardowns(graph, includeRootOwned: disposedType.Name == "Root");
 		if (asyncOnly.IsEmpty)
 		{
 			return;
@@ -437,22 +437,34 @@ public sealed class AwaitenAnalyzer : DiagnosticAnalyzer
 			Diagnostics.AsyncOnlyDisposal,
 			reportSyntax.GetLocation(),
 			disposedType.ToDisplayString(),
-			string.Join("', '", asyncOnly)));
+			string.Join(", ", asyncOnly)));
 	}
 
-	// The async-only disposable implementations (IAsyncDisposable without IDisposable) the disposed owner
-	// could track: a child Scope's drain never reaches a root-owned instance, so those are filtered out
-	// unless the Root itself is disposed. Deduped by display name: a decorator type can recur as several
-	// chain-link instances, which would repeat one name (Distinct keeps the first occurrence, preserving
-	// registration order). The cheap flag test runs before the display formatting, which allocates.
-	private static ImmutableArray<string> AsyncOnlyDisposables(GraphModel graph, bool includeRootOwned)
+	// The teardowns the disposed owner could hold that only DisposeAsync can run: an async-only disposable
+	// (IAsyncDisposable without IDisposable, unless SuppressDisposal skips its disposal) and an asynchronous OnRelease
+	// hook (which runs regardless of SuppressDisposal). A child Scope's drain never reaches a root-owned instance, so
+	// those are filtered out unless the Root itself is disposed. Deduped: a decorator type can recur as several
+	// chain-link instances, which would repeat one entry (Distinct keeps the first occurrence, preserving
+	// registration order). The cheap flag tests run before the display formatting, which allocates.
+	private static ImmutableArray<string> AsyncOnlyTeardowns(GraphModel graph, bool includeRootOwned)
 		=> graph.Instances
-			.Where(instance => instance.IsAsyncDisposable && !instance.IsDisposable
-			                   && !instance.SuppressDisposal
-			                   && (includeRootOwned || !IsRootOwned(instance)))
-			.Select(instance => AwaitenGenerator.DisplayInstance(instance.ImplementationType))
+			.Where(instance => includeRootOwned || !IsRootOwned(instance))
+			.SelectMany(AsyncOnlyTeardowns)
 			.Distinct(StringComparer.Ordinal)
 			.ToImmutableArray();
+
+	private static IEnumerable<string> AsyncOnlyTeardowns(InstanceModel instance)
+	{
+		if (instance.IsAsyncDisposable && !instance.IsDisposable && !instance.SuppressDisposal)
+		{
+			yield return $"'{AwaitenGenerator.DisplayInstance(instance.ImplementationType)}', which implements IAsyncDisposable but not IDisposable";
+		}
+
+		if (instance.IsAsyncRelease)
+		{
+			yield return $"'{AwaitenGenerator.DisplayInstance(instance.ImplementationType)}', whose OnRelease hook is asynchronous";
+		}
+	}
 
 	// The [Container] of a generated Root or Scope: a type named Root or Scope, implementing IAwaitenScope, nested in
 	// a [Container] class. The name check matters: a user-authored type nested in the container class can

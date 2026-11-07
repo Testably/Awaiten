@@ -820,7 +820,8 @@ internal static class Diagnostics
 	/// <summary>
 	///     A generated <c>Root</c> or <c>Scope</c> is disposed synchronously (<c>using</c> or a direct
 	///     <c>Dispose()</c> call) although its container owns a service that implements <c>IAsyncDisposable</c>
-	///     but not <c>IDisposable</c>. Such a service can only be torn down by <c>DisposeAsync</c>, so the
+	///     but not <c>IDisposable</c>, or one whose <c>OnRelease</c> hook returns <c>Task</c> or <c>ValueTask</c>.
+	///     Such a service can only be torn down by <c>DisposeAsync</c>, so the
 	///     synchronous drain throws when it reaches one (matching Microsoft.Extensions.DependencyInjection,
 	///     rather than leaking it or blocking on its <c>DisposeAsync</c>); <c>await using</c> tears it down
 	///     correctly. Reported at the disposal site, not the registration: registering an async-only disposable
@@ -843,7 +844,7 @@ internal static class Diagnostics
 	public static readonly DiagnosticDescriptor AsyncOnlyDisposal = new(
 		"AWT156",
 		"Synchronous dispose of a container that requires asynchronous disposal",
-		"'{0}' is disposed synchronously, but its container owns '{1}', which implements IAsyncDisposable but not IDisposable; this Dispose() throws when its drain reaches such a service - dispose with DisposeAsync ('await using')",
+		"'{0}' is disposed synchronously, but its container owns {1}; this Dispose() throws when its drain reaches such a service - dispose with DisposeAsync ('await using')",
 		"Awaiten",
 		DiagnosticSeverity.Warning,
 		isEnabledByDefault: true);
@@ -1947,8 +1948,8 @@ internal static class Diagnostics
 
 	/// <summary>
 	///     A lifecycle hook is asynchronous in a way the container cannot run: an <c>OnActivated</c> hook returns a
-	///     result (<c>Task&lt;T&gt;</c> or <c>ValueTask&lt;T&gt;</c>) the container would discard, or an
-	///     <c>OnRelease</c> hook returns a task that teardown would never await.
+	///     result (<c>Task&lt;T&gt;</c> or <c>ValueTask&lt;T&gt;</c>) the container would discard, or an asynchronous
+	///     <c>OnRelease</c> hook takes a <c>CancellationToken</c>, which <c>DisposeAsync</c> has none to pass to.
 	/// </summary>
 	public static readonly DiagnosticDescriptor UnsupportedAsyncLifecycleHook = new(
 		"AWT232",

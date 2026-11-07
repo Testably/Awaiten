@@ -394,8 +394,10 @@ public static partial class CoffeeShop;
 ### AWT156
 
 :::warning[Warning]
-A generated `Root`/`Scope` is disposed synchronously although its container owns a service that implements `IAsyncDisposable` but not `IDisposable`.
+A generated `Root`/`Scope` is disposed synchronously although its container owns a service that implements `IAsyncDisposable` but not `IDisposable`, or a service with an asynchronous `OnRelease` hook.
 :::
+
+A synchronous `Dispose` cannot await either one. It skips them, finishes the rest of the teardown and then throws.
 
 ```csharp expect=AWT156
 public sealed class Boiler : IAsyncDisposable
@@ -731,7 +733,7 @@ public static partial class CoffeeShop
 A lifecycle hook is asynchronous in a way the container cannot run.
 :::
 
-The container awaits an `OnActivated` hook that returns `Task` or `ValueTask`. A hook that returns `Task<T>` or `ValueTask<T>` has a result the container would throw away. Teardown does not await an `OnRelease` hook, so a release hook that returns `Task` or `ValueTask` would never finish its work.
+The container awaits a hook that returns `Task` or `ValueTask`. A hook that returns `Task<T>` or `ValueTask<T>` has a result the container would throw away. An asynchronous `OnRelease` hook runs in `DisposeAsync`, which has no `CancellationToken` to pass, so it cannot take one.
 
 ```csharp expect=AWT232
 [Container]
@@ -739,11 +741,11 @@ The container awaits an `OnActivated` hook that returns `Task` or `ValueTask`. A
 public static partial class CoffeeShop
 {
     private static Task<bool> ConnectAsync(PaymentTerminal terminal) => Task.FromResult(true);   // the result has nowhere to go
-    private static Task DisconnectAsync(PaymentTerminal terminal) => Task.CompletedTask;   // teardown does not await it
+    private static Task DisconnectAsync(PaymentTerminal terminal, CancellationToken cancellationToken) => Task.CompletedTask;   // DisposeAsync has no token
 }
 ```
 
-**Fix:** Return `Task` or `ValueTask` from an `OnActivated` hook. Return `void` from an `OnRelease` hook, and put asynchronous cleanup in the service's `DisposeAsync`.
+**Fix:** Return `Task` or `ValueTask` instead of `Task<T>` or `ValueTask<T>`. Remove the `CancellationToken` parameter from an asynchronous `OnRelease` hook.
 
 ## Runtime arguments
 

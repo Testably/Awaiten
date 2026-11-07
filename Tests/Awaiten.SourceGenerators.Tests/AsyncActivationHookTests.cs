@@ -264,7 +264,7 @@ public class AsyncActivationHookTests
 		}
 
 		[Test]
-		public async Task AnAsyncReleaseHookStaysAwt232()
+		public async Task AnAsyncReleaseHookIsSkippedLikeAnyOther()
 		{
 			GeneratorResult result = Generator.Run("""
 				using Awaiten;
@@ -287,8 +287,10 @@ public class AsyncActivationHookTests
 				}
 				""");
 
-			await That(result.Diagnostics).Contains("*AWT232*Lib.Terminal*Disconnect*").AsWildcard()
-				.Because("no container could await the release hook, so skipping its wrapper for a friend would only defer the error");
+			await That(result.Diagnostics).IsEmpty()
+				.Because("a friend consumer awaits an asynchronous release hook it calls directly, so the module skips its wrapper");
+			await That(result.Sources.Values.Single()).Contains("public const string Awaiten__HookSkipped_OnRelease_Terminal_")
+				.And.DoesNotContain("Awaiten__Hook_OnRelease_Terminal_");
 		}
 
 		[Test]
