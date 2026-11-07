@@ -2,12 +2,6 @@ window.BENCHMARK_DATA = {
   "Resolve (Size=8)": {
     "commits": [
       {
-        "sha": "20fe85a1f6c506f4aa3be069ac626f26ac8a572d",
-        "author": "Valentin Breu\u00DF",
-        "date": "Wed Nov 4 17:30:04 2026 \u002B0100",
-        "message": "build: move the SDK to the 10.0.4xx feature band (#243)"
-      },
-      {
         "sha": "42ebfdc1c3c1c9fbbd269b0e2f249792a9ed4102",
         "author": "Valentin Breu\u00DF",
         "date": "Wed Nov 4 17:44:50 2026 \u002B0100",
@@ -300,10 +294,15 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 18:36:35 2026 \u002B0100",
         "message": "docs: add a start page and move the documentation under /docs (#305)"
+      },
+      {
+        "sha": "370b625ea57213ef37c09f678a61c4bcc76b50b7",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 20:03:17 2026 \u002B0100",
+        "message": "feat!: let a container in another assembly use services a module registers under internal types (#293)"
       }
     ],
     "labels": [
-      "20fe85a1",
       "42ebfdc1",
       "d414e954",
       "0f19f50e",
@@ -352,14 +351,14 @@ window.BENCHMARK_DATA = {
       "ccf58c56",
       "2a2d7fcf",
       "2b142d5c",
-      "a3653614"
+      "a3653614",
+      "370b625e"
     ],
     "datasets": [
       {
         "label": "Awaiten time",
         "unit": "ns",
         "data": [
-          4.333773547067092,
           7.14302912230293,
           4.215154405683279,
           5.137713657816251,
@@ -408,7 +407,8 @@ window.BENCHMARK_DATA = {
           7.152551202901772,
           6.22518953787429,
           5.990023606098616,
-          5.6568721224864325
+          5.6568721224864325,
+          7.796339565267165
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -484,7 +484,6 @@ window.BENCHMARK_DATA = {
         "label": "MsDI time",
         "unit": "ns",
         "data": [
-          4.264337435364723,
           8.01674353480339,
           3.875690248111884,
           8.166216450241896,
@@ -533,7 +532,8 @@ window.BENCHMARK_DATA = {
           7.686421884940221,
           6.607575004654271,
           8.048060488487993,
-          5.304618752002716
+          5.304618752002716,
+          8.697762619990568
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -609,7 +609,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac time",
         "unit": "ns",
         "data": [
-          70.93705562750499,
           126.60672596295674,
           59.84509944518407,
           89.22451087144705,
@@ -658,7 +657,8 @@ window.BENCHMARK_DATA = {
           136.54314168294272,
           80.97903691927591,
           85.84115645090739,
-          91.2033970441137
+          91.2033970441137,
+          111.14538760185242
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -734,7 +734,6 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc time",
         "unit": "ns",
         "data": [
-          4.572064952055613,
           8.784676281469208,
           4.6678718785444895,
           6.463912828763326,
@@ -783,7 +782,8 @@ window.BENCHMARK_DATA = {
           8.46698340658958,
           7.370255270351966,
           7.127158185201032,
-          7.721382867296537
+          7.721382867296537,
+          9.030579051146141
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -859,7 +859,6 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector time",
         "unit": "ns",
         "data": [
-          6.096964804331462,
           11.044007768233618,
           5.912013929088911,
           8.722112960049085,
@@ -908,7 +907,8 @@ window.BENCHMARK_DATA = {
           10.814559342769476,
           8.588356546064217,
           9.987180081861359,
-          10.4060402320964
+          10.4060402320964,
+          11.213501382332582
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -985,12 +985,6 @@ window.BENCHMARK_DATA = {
   "Resolve (Size=256)": {
     "commits": [
       {
-        "sha": "20fe85a1f6c506f4aa3be069ac626f26ac8a572d",
-        "author": "Valentin Breu\u00DF",
-        "date": "Wed Nov 4 17:30:04 2026 \u002B0100",
-        "message": "build: move the SDK to the 10.0.4xx feature band (#243)"
-      },
-      {
         "sha": "42ebfdc1c3c1c9fbbd269b0e2f249792a9ed4102",
         "author": "Valentin Breu\u00DF",
         "date": "Wed Nov 4 17:44:50 2026 \u002B0100",
@@ -1283,10 +1277,15 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 18:36:35 2026 \u002B0100",
         "message": "docs: add a start page and move the documentation under /docs (#305)"
+      },
+      {
+        "sha": "370b625ea57213ef37c09f678a61c4bcc76b50b7",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 20:03:17 2026 \u002B0100",
+        "message": "feat!: let a container in another assembly use services a module registers under internal types (#293)"
       }
     ],
     "labels": [
-      "20fe85a1",
       "42ebfdc1",
       "d414e954",
       "0f19f50e",
@@ -1335,14 +1334,14 @@ window.BENCHMARK_DATA = {
       "ccf58c56",
       "2a2d7fcf",
       "2b142d5c",
-      "a3653614"
+      "a3653614",
+      "370b625e"
     ],
     "datasets": [
       {
         "label": "Awaiten time",
         "unit": "ns",
         "data": [
-          4.671954985459646,
           8.468214093574456,
           4.2292218288140635,
           5.972636700822757,
@@ -1391,7 +1390,8 @@ window.BENCHMARK_DATA = {
           8.1625124546034,
           6.307027402733054,
           6.276053121456733,
-          6.767882611070361
+          6.767882611070361,
+          8.386247757290091
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -1467,7 +1467,6 @@ window.BENCHMARK_DATA = {
         "label": "MsDI time",
         "unit": "ns",
         "data": [
-          3.996003957895132,
           7.807243731617928,
           3.9124948978424072,
           6.714167223374049,
@@ -1516,7 +1515,8 @@ window.BENCHMARK_DATA = {
           8.013456351558368,
           6.5010578873065805,
           6.473943101508277,
-          5.5266898820797605
+          5.5266898820797605,
+          7.240685649789297
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -1592,7 +1592,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac time",
         "unit": "ns",
         "data": [
-          60.03634014496436,
           120.36708203156789,
           58.81966981093089,
           88.18475545247396,
@@ -1641,7 +1640,8 @@ window.BENCHMARK_DATA = {
           141.78986191749573,
           80.69127450670514,
           86.28255980014801,
-          96.9563953450748
+          96.9563953450748,
+          107.40489029884338
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -1717,7 +1717,6 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc time",
         "unit": "ns",
         "data": [
-          4.850611983736356,
           8.787831749767065,
           4.637533284723759,
           6.699241537849108,
@@ -1766,7 +1765,8 @@ window.BENCHMARK_DATA = {
           9.337876484862395,
           7.1331194788217545,
           7.1081315040588375,
-          8.095845530430475
+          8.095845530430475,
+          9.225028793017069
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -1842,7 +1842,6 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector time",
         "unit": "ns",
         "data": [
-          6.275532152255376,
           14.633172113696734,
           5.844218065341313,
           11.903095732132593,
@@ -1891,7 +1890,8 @@ window.BENCHMARK_DATA = {
           14.069668560073925,
           11.427632818264621,
           11.369449884692829,
-          10.922918966412544
+          10.922918966412544,
+          15.215904714663823
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -1968,12 +1968,6 @@ window.BENCHMARK_DATA = {
   "Build (Size=8)": {
     "commits": [
       {
-        "sha": "20fe85a1f6c506f4aa3be069ac626f26ac8a572d",
-        "author": "Valentin Breu\u00DF",
-        "date": "Wed Nov 4 17:30:04 2026 \u002B0100",
-        "message": "build: move the SDK to the 10.0.4xx feature band (#243)"
-      },
-      {
         "sha": "42ebfdc1c3c1c9fbbd269b0e2f249792a9ed4102",
         "author": "Valentin Breu\u00DF",
         "date": "Wed Nov 4 17:44:50 2026 \u002B0100",
@@ -2266,10 +2260,15 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 18:36:35 2026 \u002B0100",
         "message": "docs: add a start page and move the documentation under /docs (#305)"
+      },
+      {
+        "sha": "370b625ea57213ef37c09f678a61c4bcc76b50b7",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 20:03:17 2026 \u002B0100",
+        "message": "feat!: let a container in another assembly use services a module registers under internal types (#293)"
       }
     ],
     "labels": [
-      "20fe85a1",
       "42ebfdc1",
       "d414e954",
       "0f19f50e",
@@ -2318,14 +2317,14 @@ window.BENCHMARK_DATA = {
       "ccf58c56",
       "2a2d7fcf",
       "2b142d5c",
-      "a3653614"
+      "a3653614",
+      "370b625e"
     ],
     "datasets": [
       {
         "label": "Awaiten time",
         "unit": "ns",
         "data": [
-          27.573993015289307,
           23.6793565928936,
           15.586625031630199,
           15.294351984347616,
@@ -2374,7 +2373,8 @@ window.BENCHMARK_DATA = {
           15.677066132426262,
           16.406379848718643,
           23.68210225701332,
-          16.236739282097137
+          16.236739282097137,
+          17.331699498494466
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -2450,7 +2450,6 @@ window.BENCHMARK_DATA = {
         "label": "MsDI time",
         "unit": "ns",
         "data": [
-          1778.6053737640382,
           1615.2945438385009,
           1173.4060801097326,
           1200.2248420715332,
@@ -2499,7 +2498,8 @@ window.BENCHMARK_DATA = {
           1308.6835789998372,
           1286.1200045176915,
           1666.2849545796712,
-          1200.0716029575892
+          1200.0716029575892,
+          1238.0439668382917
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -2575,7 +2575,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac time",
         "unit": "ns",
         "data": [
-          25508.396211896623,
           30330.74226597377,
           25860.29587402344,
           26117.898049490792,
@@ -2624,7 +2623,8 @@ window.BENCHMARK_DATA = {
           26508.70210484096,
           26349.615421840124,
           31544.145802815754,
-          26396.858467610677
+          26396.858467610677,
+          20687.157112630208
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -2636,7 +2636,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
-          32476,
           32482,
           32478,
           32478,
@@ -2685,7 +2684,8 @@ window.BENCHMARK_DATA = {
           32478,
           32478,
           32482,
-          32478
+          32478,
+          32476
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -2700,7 +2700,6 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc time",
         "unit": "ns",
         "data": [
-          781.306055205209,
           761.1802495956421,
           561.6188453946795,
           593.3621552149455,
@@ -2749,7 +2748,8 @@ window.BENCHMARK_DATA = {
           588.7318829854329,
           622.9590184529623,
           775.5524712880452,
-          589.8228967984518
+          589.8228967984518,
+          568.2726034751305
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -2825,7 +2825,6 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector time",
         "unit": "ns",
         "data": [
-          13109.729975773738,
           13465.788891601562,
           8948.914367675781,
           9046.533822631836,
@@ -2874,7 +2873,8 @@ window.BENCHMARK_DATA = {
           9932.408028157552,
           9703.552462259928,
           13089.775373331706,
-          9373.086362398588
+          9373.086362398588,
+          9533.815707906087
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -2886,7 +2886,6 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
-          24760,
           24761,
           24761,
           24760,
@@ -2935,6 +2934,7 @@ window.BENCHMARK_DATA = {
           24760,
           24760,
           24761,
+          24760,
           24760
         ],
         "borderColor": "#43A047",
@@ -2950,12 +2950,6 @@ window.BENCHMARK_DATA = {
   },
   "Build (Size=256)": {
     "commits": [
-      {
-        "sha": "20fe85a1f6c506f4aa3be069ac626f26ac8a572d",
-        "author": "Valentin Breu\u00DF",
-        "date": "Wed Nov 4 17:30:04 2026 \u002B0100",
-        "message": "build: move the SDK to the 10.0.4xx feature band (#243)"
-      },
       {
         "sha": "42ebfdc1c3c1c9fbbd269b0e2f249792a9ed4102",
         "author": "Valentin Breu\u00DF",
@@ -3249,10 +3243,15 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 18:36:35 2026 \u002B0100",
         "message": "docs: add a start page and move the documentation under /docs (#305)"
+      },
+      {
+        "sha": "370b625ea57213ef37c09f678a61c4bcc76b50b7",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 20:03:17 2026 \u002B0100",
+        "message": "feat!: let a container in another assembly use services a module registers under internal types (#293)"
       }
     ],
     "labels": [
-      "20fe85a1",
       "42ebfdc1",
       "d414e954",
       "0f19f50e",
@@ -3301,14 +3300,14 @@ window.BENCHMARK_DATA = {
       "ccf58c56",
       "2a2d7fcf",
       "2b142d5c",
-      "a3653614"
+      "a3653614",
+      "370b625e"
     ],
     "datasets": [
       {
         "label": "Awaiten time",
         "unit": "ns",
         "data": [
-          254.00867999394734,
           231.8163410504659,
           113.10505035718282,
           113.05510992209116,
@@ -3357,7 +3356,8 @@ window.BENCHMARK_DATA = {
           117.44301011562348,
           119.22174943288168,
           177.0146333694458,
-          116.15712831815084
+          116.15712831815084,
+          175.78983709017436
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -3433,7 +3433,6 @@ window.BENCHMARK_DATA = {
         "label": "MsDI time",
         "unit": "ns",
         "data": [
-          15757.8271484375,
           15935.262278965542,
           10773.254559326171,
           10906.050315348308,
@@ -3482,7 +3481,8 @@ window.BENCHMARK_DATA = {
           11012.183235168457,
           12003.559396362305,
           15366.220078531902,
-          11098.153425089518
+          11098.153425089518,
+          10740.553206380207
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -3558,7 +3558,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac time",
         "unit": "ns",
         "data": [
-          600647.5397786458,
           751709.5521484375,
           618252.7292829241,
           635725.8701171875,
@@ -3607,7 +3606,8 @@ window.BENCHMARK_DATA = {
           642654.7808919271,
           646329.7504185268,
           769742.7905273438,
-          657602.3051757812
+          657602.3051757812,
+          520693.158984375
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -3619,7 +3619,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
-          736829,
           736979,
           719482,
           740792,
@@ -3668,7 +3667,8 @@ window.BENCHMARK_DATA = {
           719096,
           721169,
           741735,
-          741801
+          741801,
+          740392
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -3683,7 +3683,6 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc time",
         "unit": "ns",
         "data": [
-          43901.6412222726,
           47838.73460693359,
           36068.219571940106,
           36620.402444022046,
@@ -3732,7 +3731,8 @@ window.BENCHMARK_DATA = {
           36076.742358398435,
           36986.69571940104,
           45223.80165921725,
-          37129.964998372394
+          37129.964998372394,
+          34152.92017211914
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -3744,7 +3744,6 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
-          80328,
           81572,
           80326,
           80302,
@@ -3793,7 +3792,8 @@ window.BENCHMARK_DATA = {
           80351,
           80971,
           80307,
-          80313
+          80313,
+          79997
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -3808,7 +3808,6 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector time",
         "unit": "ns",
         "data": [
-          373330.4401855469,
           381385.1567871094,
           266557.538671875,
           267101.3173828125,
@@ -3857,7 +3856,8 @@ window.BENCHMARK_DATA = {
           271205.96350097656,
           305479.79811197915,
           396440.4999674479,
-          281903.87361653644
+          281903.87361653644,
+          303288.9976074219
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -3869,7 +3869,6 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
-          572263,
           573108,
           573040,
           573107,
@@ -3918,7 +3917,8 @@ window.BENCHMARK_DATA = {
           573044,
           573075,
           573119,
-          573110
+          573110,
+          571193
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -3933,12 +3933,6 @@ window.BENCHMARK_DATA = {
   },
   "Realistic": {
     "commits": [
-      {
-        "sha": "20fe85a1f6c506f4aa3be069ac626f26ac8a572d",
-        "author": "Valentin Breu\u00DF",
-        "date": "Wed Nov 4 17:30:04 2026 \u002B0100",
-        "message": "build: move the SDK to the 10.0.4xx feature band (#243)"
-      },
       {
         "sha": "42ebfdc1c3c1c9fbbd269b0e2f249792a9ed4102",
         "author": "Valentin Breu\u00DF",
@@ -4232,10 +4226,15 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 18:36:35 2026 \u002B0100",
         "message": "docs: add a start page and move the documentation under /docs (#305)"
+      },
+      {
+        "sha": "370b625ea57213ef37c09f678a61c4bcc76b50b7",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 20:03:17 2026 \u002B0100",
+        "message": "feat!: let a container in another assembly use services a module registers under internal types (#293)"
       }
     ],
     "labels": [
-      "20fe85a1",
       "42ebfdc1",
       "d414e954",
       "0f19f50e",
@@ -4284,14 +4283,14 @@ window.BENCHMARK_DATA = {
       "ccf58c56",
       "2a2d7fcf",
       "2b142d5c",
-      "a3653614"
+      "a3653614",
+      "370b625e"
     ],
     "datasets": [
       {
         "label": "Awaiten time",
         "unit": "ns",
         "data": [
-          169.95375445910864,
           439.20451154027666,
           167.28270382540566,
           204.60447363853456,
@@ -4340,7 +4339,8 @@ window.BENCHMARK_DATA = {
           297.06142603556316,
           166.57418851852418,
           207.37625492413838,
-          220.58188829421997
+          220.58188829421997,
+          250.3774986607688
         ],
         "borderColor": "#3949AB",
         "backgroundColor": "#3949AB",
@@ -4416,7 +4416,6 @@ window.BENCHMARK_DATA = {
         "label": "MsDI time",
         "unit": "ns",
         "data": [
-          405.0412059227626,
           623.0102205912273,
           451.3294880390167,
           456.0909945487976,
@@ -4465,7 +4464,8 @@ window.BENCHMARK_DATA = {
           658.1334022680918,
           403.36327799161273,
           472.92447985921586,
-          483.41390975316364
+          483.41390975316364,
+          590.6739802360535
         ],
         "borderColor": "#512BD4",
         "backgroundColor": "#512BD4",
@@ -4541,7 +4541,6 @@ window.BENCHMARK_DATA = {
         "label": "Autofac time",
         "unit": "ns",
         "data": [
-          3486.1027246202743,
           6969.412118094308,
           3686.3983424050466,
           4904.391601816813,
@@ -4590,7 +4589,8 @@ window.BENCHMARK_DATA = {
           5197.812123616536,
           3638.01783396403,
           5099.211953989665,
-          5082.806159337361
+          5082.806159337361,
+          6347.971502176921
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -4666,7 +4666,6 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc time",
         "unit": "ns",
         "data": [
-          249.27125559534346,
           416.0741336743037,
           272.30408056577045,
           336.78906582196555,
@@ -4715,7 +4714,8 @@ window.BENCHMARK_DATA = {
           426.95728039741516,
           248.0403185571943,
           362.7832593282064,
-          361.03914145060946
+          361.03914145060946,
+          401.7365409533183
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -4791,7 +4791,6 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector time",
         "unit": "ns",
         "data": [
-          401.6462879547706,
           761.4379814147949,
           413.0524007161458,
           541.018697806767,
@@ -4840,7 +4839,8 @@ window.BENCHMARK_DATA = {
           732.3823932647705,
           394.29474479811535,
           585.9068884849548,
-          561.3177251815796
+          561.3177251815796,
+          700.3314395904541
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
