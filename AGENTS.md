@@ -34,7 +34,7 @@ Correctness is a must. The other goals are strong defaults and win in this order
 
 ## Documentation
 
-Pages under `Docs/pages` are published on [awaiten-dev.github.io/Awaiten](https://awaiten-dev.github.io/Awaiten) by the Docusaurus site in `Docs/site` and follow the [docs style guide](https://github.com/Testably/Testably.Site/blob/main/Docs/style-guide.md). The key rules:
+Pages under `Docs/pages` are published on [awaiten.dev](https://awaiten.dev) by the Docusaurus site in `Docs/site` and follow the [docs style guide](https://github.com/Testably/Testably.Site/blob/main/Docs/style-guide.md). The key rules:
 
 - US English, sentence case for headings and labels, no em dashes, one line per paragraph.
 - A `description` in the front matter of every page; the H1 is the title; order with unique `NN-` prefixes.

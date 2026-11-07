@@ -14,7 +14,7 @@ namespace Build;
 
 /// <summary>
 ///     Aggregates BenchmarkDotNet JSON reports into the <c>data.js</c> / <c>limited-data.js</c> files consumed
-///     by the documentation site (<see href="https://awaiten-dev.github.io/Awaiten/docs/benchmarks" />).
+///     by the documentation site (<see href="https://awaiten.dev/docs/benchmarks" />).
 /// </summary>
 /// <remarks>
 ///     The structure intentionally mirrors aweXpect's PageBenchmarkReportGenerator so the same docs-site

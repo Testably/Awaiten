@@ -11,8 +11,8 @@ const config: Config = {
     v4: true,
   },
 
-  url: 'https://awaiten-dev.github.io',
-  baseUrl: '/Awaiten/',
+  url: 'https://awaiten.dev',
+  baseUrl: '/',
 
   organizationName: 'awaiten-dev',
   projectName: 'Awaiten',

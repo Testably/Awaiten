@@ -7,6 +7,7 @@
 		<Authors>Awaiten</Authors>
 		<Description>Compile-time dependency injection for .NET.</Description>
 		<Copyright>Copyright (c) 2026 - $([System.DateTime]::Now.ToString('yyyy')) Valentin Breuß</Copyright>
+		<PackageProjectUrl>https://awaiten.dev</PackageProjectUrl>
 		<RepositoryUrl>https://github.com/awaiten-dev/Awaiten.git</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
