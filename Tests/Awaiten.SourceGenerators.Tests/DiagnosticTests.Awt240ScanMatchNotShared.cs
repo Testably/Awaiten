@@ -193,6 +193,69 @@ public partial class DiagnosticTests
 		}
 
 		[Test]
+		public async Task AScanMatchOfAnImplementationItsModuleRegistersThroughAFactoryMember_ReportsAwt240()
+		{
+			const string library = """
+				using Awaiten;
+
+				namespace Lib;
+
+				public interface IAppliance { }
+				public interface IPot { }
+				internal interface IHiddenKettle { }
+				internal sealed class Kettle : IAppliance, IPot, IHiddenKettle { }
+
+				[Module]
+				[Singleton<Kettle, IHiddenKettle>]
+				public static partial class KettleModule { }
+
+				[Module]
+				[Singleton<Kettle, IPot>(Factory = nameof(Make))]
+				[Scan<IAppliance>(As = ScanAs.Marker, Lifetime = Lifetime.Singleton)]
+				public static partial class ScanModule { private static IPot Make() => new Kettle(); }
+				""";
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(library, Consumer);
+
+			await That(Generator.Run(library).Diagnostics).IsEmpty();
+			await That(result.Diagnostics).Contains("*AWT240*'Lib.Kettle' is matched by the [Scan] of the imported module 'Lib.ScanModule' as 'Lib.IAppliance'*").AsWildcard()
+				.Because("the scanning module serves no alias of the handle, since it registers the implementation itself, so the match's factory would build a second instance");
+			await That(result.Diagnostics).Contains("*AWT111*'Lib.Kettle'*").AsWildcard()
+				.Because("the container reports the conflicting production a container of the modules' assembly reports too");
+		}
+
+		[Test]
+		public async Task AScanMatchThatSkipUnconstructablePrunesOfAnImplementationAnotherModuleBuildsThroughAHandle_ReportsOneDiagnostic()
+		{
+			const string library = """
+				using Awaiten;
+
+				namespace Lib;
+
+				public interface IAppliance { }
+				public interface IWater { }
+				internal interface IHiddenKettle { }
+				internal sealed class Kettle : IAppliance, IHiddenKettle { public Kettle(IWater water) { } }
+
+				[Module]
+				[Singleton<Kettle, IHiddenKettle>]
+				public static partial class KettleModule { }
+
+				[Module]
+				[Scan<IAppliance>(As = ScanAs.Marker, Lifetime = Lifetime.Singleton, SkipUnconstructable = true)]
+				public static partial class ScanModule { }
+				""";
+
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(library, Consumer);
+			GeneratorResult same = Generator.Run(library + Consumer.Replace("using Awaiten;", "").Replace("using Lib;", "").Replace("namespace MyCode;", ""));
+
+			await That(result.Diagnostics).HasCount(1);
+			await That(result.Diagnostics).Contains("*AWT101*IWater*").AsWildcard()
+				.Because("the match shares the instance of the handle through the scanning module's alias, so the one diagnostic is the missing dependency of that instance");
+			await That(same.Diagnostics).HasCount(1).And.Contains("*AWT101*IWater*").AsWildcard()
+				.Because("a container of the modules' assembly reports the same single diagnostic");
+		}
+
+		[Test]
 		public async Task ScanMatchesOfTwoModulesUnderOneService_DoNotReportAwt240()
 		{
 			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Library(KettleScanModule.Replace("Scan<IKettle>", "Scan<IAppliance>"), grant: false), Consumer);
