@@ -9,12 +9,23 @@ description: Awaiten is an async-first, compile-time dependency injection contai
 
 The async-first dependency injection container for .NET. Awaiten wires your object graph at build time and checks it with the compiler, including services that need asynchronous setup.
 
-Think of the container as a coffee shop. The espresso machine is shared, so it is a singleton. Each order gets its own scope. A cup is made fresh every time, so it is transient.
+Think of the container as a coffee shop. The espresso machine is shared, so it is a singleton, and it has to warm up before it can serve. Each order gets its own scope. A cup is made fresh every time, so it is transient.
 
 ```csharp
 using Awaiten;
 
+public interface IWarmUp                                  // your own interface, no Awaiten reference
+{
+    Task WarmUpAsync(CancellationToken cancellationToken);
+}
+
+public sealed class EspressoMachine : IWarmUp
+{
+    public Task WarmUpAsync(CancellationToken cancellationToken) => HeatBoilerAsync(cancellationToken);
+}
+
 [Container]
+[AsyncInitializer<IWarmUp>(nameof(IWarmUp.WarmUpAsync))]   // every IWarmUp is warmed up before use
 [Singleton<EspressoMachine>]
 [Scoped<Order>]
 [Transient<Cup>]
