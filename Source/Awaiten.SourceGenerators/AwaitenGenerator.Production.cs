@@ -120,6 +120,7 @@ partial class AwaitenGenerator
 
 		// An implementation hidden in its module is built through the module's factory, which returns its service.
 		bool viaModuleFactory = info.ConstructVia is not null;
+		bool asyncRelease = releaseHook is not null && IsAsyncHookReturn(releaseHook.ReturnType, compilation);
 		return new InstanceModel(
 			info.ImplementationType,
 			info.Symbol.Name,
@@ -148,7 +149,8 @@ partial class AwaitenGenerator
 			PrivateServices: PrivateServices(info, containerSymbol),
 			ResolverType: resolverType,
 			IsAsyncActivation: activationHook is not null && IsAsyncHookReturn(activationHook.ReturnType, compilation),
-			IsAsyncRelease: releaseHook is not null && IsAsyncHookReturn(releaseHook.ReturnType, compilation));
+			IsAsyncRelease: asyncRelease,
+			AsyncReleaseHookName: asyncRelease && releaseHook is { } hook && hook.ContainingType.Name != InternalsClass ? hook.Name : null);
 
 		static bool ImplementsInterface(ITypeSymbol type, INamedTypeSymbol @interface)
 		{

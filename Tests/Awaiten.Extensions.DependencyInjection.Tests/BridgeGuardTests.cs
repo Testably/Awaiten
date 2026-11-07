@@ -14,7 +14,6 @@ public sealed partial class BridgeGuardTests
 	public sealed class Widget;
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Widget>]
 	public static partial class GuardContainer;
 
@@ -99,7 +98,7 @@ public sealed partial class BridgeGuardTests
 
 		await That(() => provider.Dispose())
 			.Throws<InvalidOperationException>()
-			.WithMessage("*asynchronous disposal*DisposeAsync*").AsWildcard()
-			.Because("a synchronous teardown of the root that built an IAsyncDisposable-only instance throws the container's guidance rather than blocking on async disposal");
+			.WithMessage("*'Awaiten.Extensions.DependencyInjection.Tests.BridgeGuardTests.AsyncOnlyDisposableSingleton' requires asynchronous disposal*DisposeAsync*").AsWildcard()
+			.Because("a synchronous teardown of the root that built an IAsyncDisposable-only instance throws the container's guidance naming it rather than blocking on async disposal");
 	}
 }

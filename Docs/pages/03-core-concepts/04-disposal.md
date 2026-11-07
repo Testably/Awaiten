@@ -72,7 +72,7 @@ A scope disposes the same way, also through the `IAwaitenScope` interface, which
 
 An [`OnRelease` hook](../06-lifetime/03-lifecycle-hooks.md#asynchronous-release) that returns `Task` or `ValueTask` is awaited the same way, before any instance is disposed.
 
-Disposing synchronously while the container owns a service that is `IAsyncDisposable` but not `IDisposable` throws at runtime, because a synchronous dispose cannot tear it down. Every other instance is still disposed, only the async-only one is left undisposed. An asynchronous `OnRelease` hook follows the same rule: a synchronous dispose skips it, runs everything else and then throws. Awaiten warns about both at compile time ([AWT156](../09-diagnostics.md#awt156)).
+Disposing synchronously while the container owns a service that is `IAsyncDisposable` but not `IDisposable` throws at runtime, because a synchronous dispose cannot tear it down. Every other instance is still disposed, only the async-only one is left undisposed. An asynchronous `OnRelease` hook follows the same rule: a synchronous dispose skips it, runs everything else and then throws. The `InvalidOperationException` names the service, and also the hook unless the hook is called through a generated wrapper. It cannot name a service whose factory returns a type that hides the async-only disposable. Several of them are reported in one `AggregateException`, one inner exception each. Awaiten warns about both at compile time ([AWT156](../09-diagnostics.md#awt156)).
 
 ## When teardown fails
 

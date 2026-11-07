@@ -63,8 +63,9 @@ public sealed partial class AsyncReleaseHookBridgeTests
 		IServiceScope scope = provider.CreateScope();
 		Till till = scope.ServiceProvider.GetRequiredService<Till>();
 
-		await That(() => scope.Dispose()).Throws<InvalidOperationException>().WithMessage("*DisposeAsync*").AsWildcard()
-			.Because("a synchronous teardown cannot await the release hook, as for an async-only disposable");
+		await That(() => scope.Dispose()).Throws<InvalidOperationException>()
+			.WithMessage("*OnRelease hook 'Close' of 'Awaiten.Extensions.DependencyInjection.Tests.AsyncReleaseHookBridgeTests.Till' is asynchronous*DisposeAsync*").AsWildcard()
+			.Because("a synchronous teardown cannot await the release hook, as for an async-only disposable, and the guidance names the hook and its service");
 		await That(till.Closed).IsFalse();
 	}
 

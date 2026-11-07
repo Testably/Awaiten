@@ -254,7 +254,112 @@ public sealed partial class AsyncInitializerConventionTests
 		await That(printer.Started).IsTrue();
 	}
 
+	public interface IOpenable
+	{
+		Task OpenAsync(Journal journal);
+	}
+
+	public interface IUnlockable
+	{
+		Task OpenAsync(Journal journal);
+	}
+
+	public interface IWarmable
+	{
+		Task WarmUpAsync(Journal journal);
+	}
+
+	public sealed class Door : IOpenable, ICalibratable, IUnlockable
+	{
+		public Task OpenAsync(Journal journal)
+		{
+			journal.Events.Add("door opened");
+			return Task.CompletedTask;
+		}
+
+		public ValueTask CalibrateAsync(Journal journal)
+		{
+			journal.Events.Add("door calibrated");
+			return default;
+		}
+	}
+
+	public sealed class Gate : IOpenable, IUnlockable
+	{
+		Task IOpenable.OpenAsync(Journal journal)
+		{
+			journal.Events.Add("gate opened");
+			return Task.CompletedTask;
+		}
+
+		Task IUnlockable.OpenAsync(Journal journal)
+		{
+			journal.Events.Add("gate unlocked");
+			return Task.CompletedTask;
+		}
+	}
+
+	public sealed class Oven : Appliance, IWarmable
+	{
+		public override Task WarmUpAsync(Journal journal)
+		{
+			journal.Events.Add("oven warmed");
+			return Task.CompletedTask;
+		}
+	}
+
+	public class SharedImplementation
+	{
+		[Test]
+		public async Task TwoInterfaceMethodsImplementedByOneMethod_RunItOnce_AtTheFirstConventionsPosition()
+		{
+			using SharedMethodShop.Root shop = new();
+			Journal journal = shop.Resolve<Journal>();
+
+			await shop.ResolveAsync<Door>();
+
+			await That(journal.Events).IsEqualTo(["door opened", "door calibrated",])
+				.Because("Door.OpenAsync implements both IOpenable.OpenAsync and IUnlockable.OpenAsync, so it runs once, where the first of them stands");
+		}
+
+		[Test]
+		public async Task ExplicitImplementationsOfTwoInterfaceMethods_BothRun()
+		{
+			using SharedMethodShop.Root shop = new();
+			Journal journal = shop.Resolve<Journal>();
+
+			await shop.ResolveAsync<Gate>();
+
+			await That(journal.Events).IsEqualTo(["gate opened", "gate unlocked",])
+				.Because("each explicit implementation is a method of its own");
+		}
+
+		[Test]
+		public async Task AnOverrideThatAlsoImplementsAnInterfaceMethod_RunsOnce()
+		{
+			using SharedMethodShop.Root shop = new();
+			Journal journal = shop.Resolve<Journal>();
+
+			await shop.ResolveAsync<Oven>();
+
+			await That(journal.Events).IsEqualTo(["oven warmed",])
+				.Because("the override of Appliance.WarmUpAsync also implements IWarmable.WarmUpAsync");
+		}
+	}
+
 	public interface ITerminal;
+
+	[Container]
+	[AsyncInitializer<IOpenable>(nameof(IOpenable.OpenAsync))]
+	[AsyncInitializer<ICalibratable>(nameof(ICalibratable.CalibrateAsync))]
+	[AsyncInitializer<IUnlockable>(nameof(IUnlockable.OpenAsync))]
+	[AsyncInitializer<Appliance>(nameof(Appliance.WarmUpAsync))]
+	[AsyncInitializer<IWarmable>(nameof(IWarmable.WarmUpAsync))]
+	[Singleton<Journal>]
+	[Singleton<Door>]
+	[Singleton<Gate>]
+	[Singleton<Oven>]
+	public static partial class SharedMethodShop;
 
 	[Container]
 	[AsyncInitializer<IConnectable>(nameof(IConnectable.ConnectAsync))]

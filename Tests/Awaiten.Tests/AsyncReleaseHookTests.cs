@@ -190,7 +190,10 @@ public sealed partial class AsyncReleaseHookTests
 		await That(thrown.InnerExceptions).HasCount(2)
 			.Because("a synchronous Dispose cannot await either asynchronous hook, so it reports each one, like each async-only disposable");
 		await That(thrown.InnerExceptions[0]).IsExactly<InvalidOperationException>();
-		await That(thrown.InnerExceptions[0].Message).Contains("*OnRelease*asynchronous*DisposeAsync*").AsWildcard();
+		await That(thrown.InnerExceptions[0].Message).Contains("*OnRelease hook 'Cool' of 'Awaiten.Tests.AsyncReleaseHookTests.Kettle' is asynchronous*DisposeAsync*").AsWildcard()
+			.Because("each guidance names its hook and service, in teardown order");
+		await That(thrown.InnerExceptions[1].Message).Contains("*OnRelease hook 'Close' of 'Awaiten.Tests.AsyncReleaseHookTests.Till' is asynchronous*DisposeAsync*").AsWildcard()
+			.Because("each guidance names its hook and service, in teardown order");
 		await That(journal.Events).IsEqualTo(["tray wiped", "kettle disposed",])
 			.Because("the synchronous release hooks and the disposals still run, only the asynchronous hooks are skipped");
 	}
@@ -225,6 +228,18 @@ public sealed partial class AsyncReleaseHookTests
 			.Because("the module's public wrapper returns the internal hook's Task for the consumer to await");
 		await That(grinder.Cleaned).IsTrue()
 			.Because("the scan hook's wrapper returns its ValueTask too");
+	}
+
+	[Test]
+	public async Task AModuleHookInAnotherAssembly_IsNamedByItsServiceWhenASynchronousDisposeRefusesIt()
+	{
+		await using ModuleShop.Root shop = new();
+		IAwaitenScope scope = shop.CreateScope();
+		scope.Resolve<IAsyncReleasedTill>();
+
+		await That(() => scope.Dispose()).Throws<InvalidOperationException>()
+			.WithMessage("*OnRelease hook of 'Awaiten.Tests.Support.AsyncReleasedTill' is asynchronous*DisposeAsync*").AsWildcard()
+			.Because("the consumer calls the module's generated wrapper, whose name means nothing to the user, so the guidance names the service alone");
 	}
 
 	[Test]

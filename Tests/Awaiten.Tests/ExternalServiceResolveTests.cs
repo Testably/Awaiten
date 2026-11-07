@@ -62,24 +62,20 @@ public sealed partial class ExternalServiceResolveTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[ImportService<IClock>]
 	[Transient<Reporter>]
 	[Transient<KeyedReporter>]
 	public static partial class ImportingContainer;
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[ImportService(typeof(ILog<>))]
 	[Transient<LoggingReporter>]
 	public static partial class OpenImportingContainer;
 
 	[Container(Extends = typeof(ImportingContainer))]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	public static partial class ExtendingContainer;
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[ImportService<IHandler<Order>>]
 	[Singleton<AnyHandler, IHandler<object>>]
 	[Transient<OrderDesk>]

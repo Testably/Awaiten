@@ -351,7 +351,6 @@ public sealed partial class AsyncActivationHookTests
 	}
 
 	[Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<PaymentTerminal, ITerminal>(OnActivated = nameof(Connect))]
 	public static partial class SyncAfterInitShop
 	{
@@ -363,12 +362,10 @@ public sealed partial class AsyncActivationHookTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Import(typeof(AsyncHookModule))]
 	public static partial class ModuleShop;
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Journal>]
 	[Singleton<HiddenTerminal, ITerminal>(OnActivated = nameof(Connect))]
 	public static partial class BaseShop
@@ -387,10 +384,8 @@ public sealed partial class AsyncActivationHookTests
 	}
 
 	[Container(Extends = typeof(BaseShop))]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	public static partial class ExtendingShop;
 
 	[Container(Extends = typeof(SupportAsyncHookBaseContainer))]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	public static partial class ExtendingSupportShop;
 }

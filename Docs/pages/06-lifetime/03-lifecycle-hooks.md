@@ -88,7 +88,7 @@ public static partial class CoffeeShop
 
 The hook does not make the service async-initialized. It still resolves through `Resolve`, because the hook only runs at teardown.
 
-Dispose the owner with `await using` or `DisposeAsync`. A synchronous `Dispose` cannot await the hook, so it skips it. It still runs every other release hook and disposes every instance, then throws an `InvalidOperationException` that tells you to use `DisposeAsync`. This is the same rule as for a service that is `IAsyncDisposable` but not `IDisposable`, and Awaiten warns about it at compile time ([AWT156](../09-diagnostics.md#awt156)). The same holds for an [`Owned<T>`](./01-owned.md) handle and for a scope of the [MS.DI bridge](../07-hosting/01-msdi-bridge.md).
+Dispose the owner with `await using` or `DisposeAsync`. A synchronous `Dispose` cannot await the hook, so it skips it. It still runs every other release hook and disposes every instance, then throws an `InvalidOperationException` that names the service and, where it can, the hook, and tells you to use `DisposeAsync`. This is the same rule as for a service that is `IAsyncDisposable` but not `IDisposable`, and Awaiten warns about it at compile time ([AWT156](../09-diagnostics.md#awt156)). The same holds for an [`Owned<T>`](./01-owned.md) handle and for a scope of the [MS.DI bridge](../07-hosting/01-msdi-bridge.md).
 
 A module or a base container runs an asynchronous release hook through a generated wrapper that returns the hook's task, like an activation hook.
 

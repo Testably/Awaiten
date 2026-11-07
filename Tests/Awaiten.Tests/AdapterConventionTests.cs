@@ -209,7 +209,6 @@ public partial class AdapterConventionTests
 	public static partial class AsyncCollectionContainer;
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<SyncHandler, IHandler>]
 	[Singleton<HandlerBag, IReadOnlyList<IHandler>>]
 	public static partial class SuppressedCollectionContainer;
@@ -220,7 +219,6 @@ public partial class AdapterConventionTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[ImportService<IChannel>]
 	[Transient<Switchboard>]
 	public static partial class ImportingContainer;

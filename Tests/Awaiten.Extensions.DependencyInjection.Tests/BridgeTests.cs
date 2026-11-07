@@ -61,7 +61,6 @@ public sealed partial class BridgeTests
 	public sealed class SecondScopedService;
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Scoped<SecondScopedService>]
 	public static partial class SecondContainer;
 

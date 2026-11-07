@@ -178,6 +178,94 @@ public class AsyncInitializerConventionTests
 	}
 
 	[Test]
+	public async Task TwoInterfaceMethodsImplementedByOneMethod_RunItOnce_AtTheFirstConventionsPosition()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Threading.Tasks;
+
+		                                       namespace MyCode;
+
+		                                       public interface IStartable { Task StartAsync(); }
+		                                       public interface ICalibratable { Task CalibrateAsync(); }
+		                                       public interface IPowered { Task StartAsync(); }
+		                                       public sealed class Grinder : IStartable, ICalibratable, IPowered
+		                                       {
+		                                       	public Task StartAsync() => Task.CompletedTask;
+		                                       	public Task CalibrateAsync() => Task.CompletedTask;
+		                                       }
+
+		                                       [Container]
+		                                       [AsyncInitializer<IStartable>(nameof(IStartable.StartAsync))]
+		                                       [AsyncInitializer<ICalibratable>(nameof(ICalibratable.CalibrateAsync))]
+		                                       [AsyncInitializer<IPowered>(nameof(IPowered.StartAsync))]
+		                                       [Singleton<Grinder>]
+		                                       public static partial class MyContainer;
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+		await That(source).Contains("StartAsync()").Exactly(1)
+			.Because("Grinder.StartAsync implements both IStartable.StartAsync and IPowered.StartAsync, and runs at most once per instance");
+		await That(source.IndexOf("((global::MyCode.IStartable)", StringComparison.Ordinal)).IsLessThan(source.IndexOf("CalibrateAsync()", StringComparison.Ordinal))
+			.Because("the method runs at the position of the first convention that reaches it");
+	}
+
+	[Test]
+	public async Task ABaseClassMethodAndAnInterfaceMethodImplementedByOneOverride_RunItOnce()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Threading.Tasks;
+
+		                                       namespace MyCode;
+
+		                                       public abstract class Appliance { public virtual Task WarmUpAsync() => Task.CompletedTask; }
+		                                       public interface IWarmable { Task WarmUpAsync(); }
+		                                       public sealed class Oven : Appliance, IWarmable { public override Task WarmUpAsync() => Task.CompletedTask; }
+
+		                                       [Container]
+		                                       [AsyncInitializer<Appliance>(nameof(Appliance.WarmUpAsync))]
+		                                       [AsyncInitializer<IWarmable>(nameof(IWarmable.WarmUpAsync))]
+		                                       [Singleton<Oven>]
+		                                       public static partial class MyContainer;
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		await That(result.Sources["Awaiten.MyCode.MyContainer.g.cs"]).Contains("WarmUpAsync()").Exactly(1)
+			.Because("the override of Appliance.WarmUpAsync also implements IWarmable.WarmUpAsync, so it runs once");
+	}
+
+	[Test]
+	public async Task ExplicitImplementationsOfTwoInterfaceMethods_BothRun()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System.Threading.Tasks;
+
+		                                       namespace MyCode;
+
+		                                       public interface IStartable { Task StartAsync(); }
+		                                       public interface IPowered { Task StartAsync(); }
+		                                       public sealed class Grinder : IStartable, IPowered
+		                                       {
+		                                       	Task IStartable.StartAsync() => Task.CompletedTask;
+		                                       	Task IPowered.StartAsync() => Task.CompletedTask;
+		                                       }
+
+		                                       [Container]
+		                                       [AsyncInitializer<IStartable>(nameof(IStartable.StartAsync))]
+		                                       [AsyncInitializer<IPowered>(nameof(IPowered.StartAsync))]
+		                                       [Singleton<Grinder>]
+		                                       public static partial class MyContainer;
+		                                       """);
+
+		await That(result.Diagnostics).IsEmpty();
+		await That(result.Sources["Awaiten.MyCode.MyContainer.g.cs"]).Contains("StartAsync()").Exactly(2)
+			.Because("each explicit implementation is a method of its own");
+	}
+
+	[Test]
 	public async Task ANonMatchingService_IsNotInitialized()
 	{
 		GeneratorResult result = Generator.Run("""

@@ -246,7 +246,6 @@ public partial class ResolvabilityTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Plain>]
 	[Transient<Disposable>]
 	public static partial class MixedContainer;
@@ -257,7 +256,6 @@ public partial class ResolvabilityTests
 	public static partial class AsyncOnlyContainer;
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	public static partial class EmptyContainer;
 
 	[Container]
@@ -268,12 +266,10 @@ public partial class ResolvabilityTests
 	public static partial class KeyedContainer;
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Handler, IHandler<DerivedEvent>>]
 	public static partial class VarianceContainer;
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<DisposableHandler, IHandler<DerivedEvent>>]
 	public static partial class WithheldVarianceContainer;
 }

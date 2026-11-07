@@ -38,7 +38,6 @@ public sealed partial class BridgeDisposalTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<OuterService>]
 	[Singleton<InnerDependency>]
 	public static partial class NestedSingletonContainer;
@@ -156,13 +155,11 @@ public sealed partial class BridgeDisposalTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Scoped<AsyncOnlyConsumer>]
 	[Scoped<AsyncOnlyDisposable>]
 	public static partial class NestedAsyncOnlyScopedContainer;
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<AsyncOnlyConsumer>]
 	[Singleton<AsyncOnlyDisposable>]
 	public static partial class NestedAsyncOnlySingletonContainer;
@@ -226,13 +223,11 @@ public sealed partial class BridgeDisposalTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<MultiService, IFirst>]
 	[Singleton<MultiService, ISecond>]
 	public static partial class MultiServiceContainer;
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Scoped<OuterService>]
 	[Scoped<InnerDependency>]
 	public static partial class NestedContainer;
@@ -278,7 +273,6 @@ public sealed partial class BridgeDisposalTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<DisposableTransient>]
 	public static partial class TransientContainer;
 
@@ -430,7 +424,6 @@ public sealed partial class BridgeDisposalTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<ExternalProbe>(Instance = nameof(External))]
 	public static partial class ExternalInstanceContainer
 	{
@@ -466,7 +459,6 @@ public sealed partial class BridgeDisposalTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Scoped<AsyncOnlyDisposable>]
 	public static partial class AsyncOnlyDisposalContainer;
 

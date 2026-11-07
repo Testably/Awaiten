@@ -419,6 +419,66 @@ public class GeneralTests
 			.Because("a genuinely-disposable factory output is still registered for teardown");
 		await That(source).DoesNotContain("((global::System.IDisposable)created).Dispose();")
 			.Because("the realized instance is reached through the runtime pattern, never an unchecked cast");
+		await That(source).DoesNotContain("__AsyncOnlyDisposable")
+			.Because("only a statically async-only disposable is tracked with its name");
+	}
+
+	[Test]
+	public async Task AsyncOnlyDisposables_AreTrackedWithTheGuidanceNamingThem()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System;
+		                                       using System.Threading.Tasks;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class Socket : IAsyncDisposable { public ValueTask DisposeAsync() => default; }
+		                                       public sealed class Pipe : IAsyncDisposable { public ValueTask DisposeAsync() => default; }
+		                                       public sealed class Stream : IAsyncDisposable { public ValueTask DisposeAsync() => default; }
+
+		                                       [Container]
+		                                       [Singleton<Socket>]
+		                                       [Scoped<Pipe>]
+		                                       [Transient<Stream>]
+		                                       public static partial class MyContainer;
+		                                       """);
+
+		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+		await That(source).Contains("private protected sealed class __AsyncOnlyDisposable : global::System.IAsyncDisposable");
+		await That(source).Contains("Add(new __AsyncOnlyDisposable(__s.*, \"Awaiten: 'MyCode.Socket' requires asynchronous disposal").AsWildcard()
+			.Because("a singleton carries its name into the disposal queue");
+		await That(source).Contains("Add(new __AsyncOnlyDisposable(__s.*, \"Awaiten: 'MyCode.Pipe' requires asynchronous disposal").AsWildcard()
+			.Because("a scoped service carries its name into the disposal queue");
+		await That(source).Contains("Add(new __AsyncOnlyDisposable(created, \"Awaiten: 'MyCode.Stream' requires asynchronous disposal")
+			.Because("a transient carries its name into the disposal queue");
+		await That(source).Contains("else if (__toDispose[__index] is __AsyncOnlyDisposable __asyncOnly)")
+			.Because("a synchronous Dispose throws the guidance the entry carries");
+	}
+
+	[Test]
+	public async Task DisposablesWithASynchronousDispose_AreTrackedAsThemselves()
+	{
+		GeneratorResult result = Generator.Run("""
+		                                       using Awaiten;
+		                                       using System;
+		                                       using System.Threading.Tasks;
+
+		                                       namespace MyCode;
+
+		                                       public sealed class Socket : IDisposable, IAsyncDisposable
+		                                       {
+		                                       	public void Dispose() { }
+		                                       	public ValueTask DisposeAsync() => default;
+		                                       }
+
+		                                       [Container]
+		                                       [Scoped<Socket>]
+		                                       public static partial class MyContainer;
+		                                       """);
+
+		await That(result.Sources["Awaiten.MyCode.MyContainer.g.cs"]).DoesNotContain("__AsyncOnlyDisposable")
+			.Because("the generated code of a container without an async-only disposable stays unchanged");
 	}
 
 	[Test]

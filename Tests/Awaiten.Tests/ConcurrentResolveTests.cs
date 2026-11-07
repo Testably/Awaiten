@@ -424,7 +424,6 @@ public partial class ConcurrentResolveTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Counter>]
 	[Singleton<CountedService>]
 	public static partial class SyncContainer;
@@ -473,7 +472,6 @@ public partial class ConcurrentResolveTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Counter>]
 	[Scoped<ScopedCountedService>]
 	public static partial class ScopedContainer;
@@ -546,7 +544,6 @@ public partial class ConcurrentResolveTests
 	public sealed class HeteroD(HeteroCounter counter) : HeteroService(counter);
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<HeteroCounter>]
 	[Singleton<HeteroA>]
 	[Singleton<HeteroB>]
@@ -590,7 +587,6 @@ public partial class ConcurrentResolveTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<GraphCounter>]
 	[Singleton<GraphLeaf>]
 	[Singleton<GraphMid>]
@@ -634,7 +630,6 @@ public partial class ConcurrentResolveTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<GenericCounter>]
 	[Singleton(typeof(Cache<>), typeof(ICache<>))]
 	[Singleton<GenericSeed>]
@@ -676,7 +671,6 @@ public partial class ConcurrentResolveTests
 	public sealed class SlowKeyed(KeyedCounter counter) : KeyedServiceBase(counter);
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<KeyedCounter>]
 	[Singleton<FastKeyed, IKeyedService>(Key = "fast")]
 	[Singleton<SlowKeyed, IKeyedService>(Key = "slow")]
@@ -696,7 +690,6 @@ public partial class ConcurrentResolveTests
 	// Loose: the test resolves the disposable transient directly by type and asserts it is tracked by and
 	// disposed with its owning scope, the permissive path that strict lifetime safety withholds.
 	[Container(LifetimeSafety = LifetimeSafety.Loose)]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<ScopedTransient>]
 	public static partial class TransientScopeContainer;
 

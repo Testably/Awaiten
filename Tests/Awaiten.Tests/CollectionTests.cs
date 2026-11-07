@@ -968,7 +968,6 @@ public partial class CollectionTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Alpha, IPlugin>]
 	[Singleton<Beta, IPlugin>]
 	[Singleton<PluginHost>]
@@ -1002,21 +1001,18 @@ public partial class CollectionTests
 	// Every member is synchronous, so the async collection is a synchronous expression and its host stays
 	// synchronously resolvable. The IAsyncEnumerable<T> shape does not by itself force the async path.
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Alpha, IPlugin>]
 	[Singleton<Beta, IPlugin>]
 	[Singleton<AsyncStreamHost>]
 	public static partial class SyncAsyncStreamContainer;
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<AsyncExtensionHost>]
 	public static partial class EmptyAsyncStreamContainer;
 
 	// A disposable scoped member consumed through an async collection: the member resolves off the scope and is
 	// tracked for disposal there, so the async-collection materialization respects scoping and disposal.
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Scoped<DisposableScopedPlugin, IPlugin>]
 	[Scoped<AsyncStreamHost>]
 	public static partial class ScopedAsyncStreamContainer;
@@ -1025,12 +1021,10 @@ public partial class CollectionTests
 	// accumulate the transients for the container's lifetime, so under strict lifetime safety the collection is
 	// withheld on the root (resolvable from a child scope, which bounds it). Loose keeps it root-resolvable.
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<DisposableWidget, IWidget>]
 	public static partial class DisposableCollectionContainer;
 
 	[Container(LifetimeSafety = LifetimeSafety.Loose)]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<DisposableWidget, IWidget>]
 	public static partial class LooseCollectionContainer;
 
@@ -1045,7 +1039,6 @@ public partial class CollectionTests
 	// Async collections under disjoint key buckets: 'primary' (alpha) and unkeyed (plain). A [FromKey] async
 	// collection resolves exactly the members of its bucket, like the synchronous shapes.
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Alpha, IPlugin>(Key = "primary")]
 	[Singleton<Plain, IPlugin>]
 	[Singleton<KeyedAsyncStreamHost>]
@@ -1091,20 +1084,17 @@ public partial class CollectionTests
 
 	// Every member is synchronous, so the awaited collection is a completed Task.FromResult.
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Alpha, IPlugin>]
 	[Singleton<Beta, IPlugin>]
 	[Singleton<AwaitedPluginHost>]
 	public static partial class SyncAwaitedStreamContainer;
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<AwaitedExtensionHost>]
 	public static partial class EmptyAwaitedStreamContainer;
 
 	// Awaited collections under disjoint key buckets: 'primary' (alpha) and unkeyed (plain).
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Alpha, IPlugin>(Key = "primary")]
 	[Singleton<Plain, IPlugin>]
 	[Singleton<KeyedAwaitedPluginHost>]
@@ -1122,7 +1112,6 @@ public partial class CollectionTests
 	// IEnumerable<IPlugin> is registered directly (an opaque value); the individual IPlugin registrations would
 	// otherwise synthesize a collection of two, so the counts distinguish which one injection resolves to.
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Alpha, IPlugin>]
 	[Singleton<Beta, IPlugin>]
 	[Singleton<PluginBundle, IEnumerable<IPlugin>>]
@@ -1133,7 +1122,6 @@ public partial class CollectionTests
 	// A [FromKey] collection resolves exactly the members of its bucket. A key identifies at most one
 	// registration per service type (two would be AWT117), so each keyed collection holds its single member.
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Alpha, IPlugin>(Key = "primary")]
 	[Singleton<Gamma, IPlugin>(Key = "secondary")]
 	[Singleton<Plain, IPlugin>]

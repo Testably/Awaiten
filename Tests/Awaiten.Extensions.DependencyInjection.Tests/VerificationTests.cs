@@ -20,13 +20,11 @@ public sealed partial class VerificationTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[ImportService<IHandler<IEvent>>]
 	[Singleton<Dispatcher>]
 	public static partial class ImportingContainer;
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<DerivedHandler, IHandler<DerivedEvent>>]
 	public static partial class ProvidingContainer;
 
@@ -47,7 +45,6 @@ public sealed partial class VerificationTests
 	public static partial class AsyncProvidingContainer;
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[ImportService<AsyncService>]
 	[Singleton<AsyncConsumer>]
 	public static partial class AsyncImportingContainer;
@@ -97,7 +94,6 @@ public sealed partial class VerificationTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<DerivedEvent>]
 	public static partial class ConformanceOnlyContainer;
 

@@ -37,10 +37,12 @@ public class AsyncReleaseHookTests
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
 		await That(source).Contains("protected global::System.Collections.Generic.List<object>? __releases;")
 			.Because("one queue keeps synchronous and asynchronous releases in creation order");
-		await That(source).Contains("new global::System.Func<global::System.Threading.Tasks.Task>(async () => await Disconnect(");
-		await That(source).Contains("new global::System.Func<global::System.Threading.Tasks.Task>(async () => await Cool(")
-			.Because("a ValueTask hook is awaited inside a Task closure, so the queue holds one asynchronous delegate type");
+		await That(source).Contains("new __AsyncRelease(async () => await Disconnect(*\"Awaiten: the OnRelease hook 'Disconnect' of 'MyCode.Terminal' is asynchronous").AsWildcard()
+			.Because("an asynchronous release carries the guidance naming its hook and service");
+		await That(source).Contains("new __AsyncRelease(async () => await Cool(*\"Awaiten: the OnRelease hook 'Cool' of 'MyCode.Printer' is asynchronous").AsWildcard()
+			.Because("a ValueTask hook is awaited inside a Task closure, so the queue holds one asynchronous entry type");
 		await That(source).Contains("new global::System.Action(() => Wipe(");
+		await That(source).Contains("private protected sealed class __AsyncRelease");
 	}
 
 	[Test]
@@ -63,6 +65,7 @@ public class AsyncReleaseHookTests
 
 		await That(result.Sources["Awaiten.MyCode.MyContainer.g.cs"]).Contains("protected global::System.Collections.Generic.List<global::System.Action>? __releases;")
 			.Because("the generated code of a container without an asynchronous release hook stays unchanged");
+		await That(result.Sources["Awaiten.MyCode.MyContainer.g.cs"]).DoesNotContain("__AsyncRelease");
 	}
 
 	[Test]
@@ -146,7 +149,9 @@ public class AsyncReleaseHookTests
 			""");
 
 		await That(result.Diagnostics).IsEmpty();
-		await That(result.Sources["Awaiten.MyCode.MyContainer.g.cs"]).Contains("new global::System.Func<global::System.Threading.Tasks.Task>(async () => await global::Lib.TerminalModule.Internals.Hook_OnRelease_Terminal_")
+		await That(result.Sources["Awaiten.MyCode.MyContainer.g.cs"]).Contains("new __AsyncRelease(async () => await global::Lib.TerminalModule.Internals.Hook_OnRelease_Terminal_")
 			.Because("the consumer reads the asynchronous release off the wrapper's Task return type");
+		await That(result.Sources["Awaiten.MyCode.MyContainer.g.cs"]).Contains("\"Awaiten: the OnRelease hook of 'Lib.Terminal' is asynchronous")
+			.Because("the guidance names the service but not the generated wrapper, whose name means nothing to the user");
 	}
 }

@@ -83,7 +83,6 @@ public partial class DiagnosticTests
 			                                       }
 
 			                                       [Container(Extends = typeof(Shop))]
-			                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			                                       [Singleton<Consumer>]
 			                                       public static partial class TestShop
 			                                       {

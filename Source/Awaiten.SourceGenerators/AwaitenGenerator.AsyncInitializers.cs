@@ -219,21 +219,57 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     The conventions that run on an implementation, in declaration order: those whose type
-	///     <paramref name="matches" /> says it is, each method once even when several conventions reach it.
+	///     <paramref name="matches" /> says it is, each method of <paramref name="implementation" /> once even when several
+	///     conventions reach it, at the position of the first. Without the implementation (one hidden behind a generated
+	///     factory) each convention method runs once.
 	/// </summary>
-	private static List<AsyncInitializerConvention> MatchingAsyncInitializers(IEnumerable<AsyncInitializerConvention> conventions, Func<INamedTypeSymbol, bool> matches)
+	private static List<AsyncInitializerConvention> MatchingAsyncInitializers(IEnumerable<AsyncInitializerConvention> conventions, ITypeSymbol? implementation, Func<INamedTypeSymbol, bool> matches)
 	{
 		List<AsyncInitializerConvention> matched = new();
 		HashSet<IMethodSymbol> methods = new(SymbolEqualityComparer.Default);
 		foreach (AsyncInitializerConvention convention in conventions)
 		{
-			if (matches(convention.Type) && methods.Add(convention.Method.OriginalDefinition))
+			if (matches(convention.Type) && methods.Add(ImplementingMethod(convention.Method, implementation).OriginalDefinition))
 			{
 				matched.Add(convention);
 			}
 		}
 
 		return matched;
+	}
+
+	/// <summary>
+	///     The method a call of the convention <paramref name="method" /> runs on <paramref name="implementation" />: the
+	///     implementation of an interface method, or the most derived override of a class method. An explicit interface
+	///     implementation is a method of its own. Falls back to <paramref name="method" /> itself.
+	/// </summary>
+	private static IMethodSymbol ImplementingMethod(IMethodSymbol method, ITypeSymbol? implementation)
+	{
+		if (implementation is null)
+		{
+			return method;
+		}
+
+		if (method.ContainingType.TypeKind == TypeKind.Interface)
+		{
+			return implementation.FindImplementationForInterfaceMember(method) as IMethodSymbol ?? method;
+		}
+
+		for (ITypeSymbol? current = implementation; current is not null; current = current.BaseType)
+		{
+			foreach (IMethodSymbol candidate in current.GetMembers(method.Name).OfType<IMethodSymbol>())
+			{
+				for (IMethodSymbol? overridden = candidate; overridden is not null; overridden = overridden.OverriddenMethod)
+				{
+					if (SymbolEqualityComparer.Default.Equals(overridden.OriginalDefinition, method.OriginalDefinition))
+					{
+						return candidate;
+					}
+				}
+			}
+		}
+
+		return method;
 	}
 
 	/// <summary>
@@ -254,7 +290,7 @@ partial class AwaitenGenerator
 
 		ImplementationTraits? traits = info.Traits;
 		List<AsyncInitializerModel> models = new();
-		foreach (AsyncInitializerConvention convention in MatchingAsyncInitializers(conventions, type => traits is { } known
+		foreach (AsyncInitializerConvention convention in MatchingAsyncInitializers(conventions, traits is null ? ownedType : null, type => traits is { } known
 			         ? known.AsyncInitializers.Contains(type.ToDisplayString(FullyQualified))
 			         : IsOfConventionType(ownedType, type)))
 		{
@@ -310,12 +346,13 @@ partial class AwaitenGenerator
 	private static DiagnosticInfo? ModuleAsyncInitializerFault(INamedTypeSymbol implementation, ModuleScanContext context, SelfCompiledSubject subject, Location? location)
 	{
 		List<AsyncInitializerConvention> conventions = DeclaredAsyncInitializers(context.Module, context.Compilation, null);
-		foreach (AsyncInitializerConvention convention in MatchingAsyncInitializers(conventions, type => IsOfConventionType(implementation, type)))
+		foreach (AsyncInitializerConvention convention in MatchingAsyncInitializers(conventions, implementation, type => IsOfConventionType(implementation, type)))
 		{
 			string? reason = null;
 			if (!FitsFactorySignature(convention.Type, context))
 			{
-				reason = $"'{Display(convention.Type.ToDisplayString(FullyQualified))}' is not accessible outside the module's assembly";
+				string where = IsHiddenInModule(convention.Type, context.Module, context.Compilation) ? "private to the module" : "not accessible outside the module's assembly";
+				reason = $"'{Display(convention.Type.ToDisplayString(FullyQualified))}' is {where}";
 			}
 			else if (convention.Method.DeclaredAccessibility != Accessibility.Public
 			         && (IsExternallyAccessible(context.Module) || !context.Compilation.IsSymbolAccessibleWithin(convention.Method, context.Module.ContainingAssembly)))

@@ -189,7 +189,6 @@ public partial class KeyedDictionaryTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<FastChannel, IChannel>(Key = "fast")]
 	[Singleton<SlowChannel, IChannel>(Key = "slow")]
 	[Singleton<PlainChannel, IChannel>]
@@ -241,7 +240,6 @@ public partial class KeyedDictionaryTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<DisposableWidget, IWidget>(Key = "a")]
 	public static partial class WidgetContainer;
 
@@ -250,7 +248,6 @@ public partial class KeyedDictionaryTests
 	public sealed class TwinChannel : ITwin;
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<TwinChannel, ITwin>(Key = "a")]
 	[Singleton<TwinChannel, ITwin>(Key = "b")]
 	public static partial class TwinContainer;
@@ -265,7 +262,6 @@ public partial class KeyedDictionaryTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<FastChannel, IChannel>(Key = "fast")]
 	[Singleton<ChannelMap, IReadOnlyDictionary<string, IChannel>>]
 	[Singleton<MapConsumer>]
@@ -507,7 +503,6 @@ public partial class KeyedDictionaryTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<FastChannel, IChannel>(Key = "fast")]
 	[Singleton<KeyedChannelMap, IReadOnlyDictionary<string, IChannel>>(Key = "map")]
 	[Singleton<IntChannelMap, IReadOnlyDictionary<int, IChannel>>]

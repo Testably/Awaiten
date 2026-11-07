@@ -790,7 +790,6 @@ public partial class AsyncInitializationTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<AsyncFactoryService, IAsyncFactoryService>(Factory = nameof(CreateAsync))]
 	public static partial class AsyncFactoryContainer
 	{
@@ -812,7 +811,6 @@ public partial class AsyncInitializationTests
 	}
 
 	[Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<PragmaticAsyncFactoryService>(Factory = nameof(CreateAsync))]
 	public static partial class PragmaticAsyncFactoryContainer
 	{
@@ -827,7 +825,6 @@ public partial class AsyncInitializationTests
 	public sealed class TransientAsyncFactoryService;
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<TransientAsyncFactoryService>(Factory = nameof(CreateAsync))]
 	public static partial class TransientAsyncFactoryContainer
 	{
@@ -868,7 +865,6 @@ public partial class AsyncInitializationTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<SelfInitializingService>(Factory = nameof(CreateAsync))]
 	public static partial class SelfInitializingFactoryContainer
 	{
@@ -895,7 +891,6 @@ public partial class AsyncInitializationTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<IHiddenDisposableFactoryService>(Factory = nameof(CreateAsync))]
 	public static partial class HiddenDisposableAsyncFactoryContainer
 	{
@@ -911,7 +906,6 @@ public partial class AsyncInitializationTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<TokenAwareService>(Factory = nameof(CreateAsync))]
 	public static partial class TokenForwardingContainer
 	{

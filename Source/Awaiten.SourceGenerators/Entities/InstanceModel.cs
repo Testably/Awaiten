@@ -28,6 +28,8 @@ namespace Awaiten.SourceGenerators.Entities;
 ///     an owner outside the container), so a suppressed instance is never tracked for teardown.
 ///     <see cref="IsAsyncRelease" /> marks a release hook returning <c>Task</c> or <c>ValueTask</c>, which only
 ///     <c>DisposeAsync</c> can await; it does not taint the instance, since it runs at teardown.
+///     <see cref="AsyncReleaseHookName" /> is the declared name of such a hook, for the guidance a synchronous
+///     <c>Dispose</c> throws over it; it is null for a generated wrapper, whose name means nothing to the user.
 ///     <see cref="OutermostDecorators" /> holds the instance indices of the outermost decorator chain links wrapping
 ///     this instance, one per decorated slot; an <see cref="Eager" /> instance is activated through them, so it is
 ///     built as its consumers see it.
@@ -63,7 +65,8 @@ internal sealed record InstanceModel(
 	EquatableArray<string> PrivateServices = default,
 	string? ResolverType = null,
 	bool IsAsyncActivation = false,
-	bool IsAsyncRelease = false)
+	bool IsAsyncRelease = false,
+	string? AsyncReleaseHookName = null)
 {
 	/// <summary>
 	///     The type the generated resolvers return and the async cache holds: <see cref="ResolverType" /> for an

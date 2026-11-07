@@ -181,7 +181,6 @@ public partial class PropertyInjectionTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<Bus>]
 	[Transient<Logger>]
 	public static partial class InjectContainer;
@@ -195,7 +194,6 @@ public partial class PropertyInjectionTests
 	public sealed class DerivedConsumer : ConsumerBase;
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<Bus>]
 	[Transient<DerivedConsumer>]
 	public static partial class InheritedContainer;
@@ -214,7 +212,6 @@ public partial class PropertyInjectionTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<Bus>]
 	[Transient<OverridingConsumer>]
 	public static partial class OverrideContainer;
@@ -237,7 +234,6 @@ public partial class PropertyInjectionTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<FastChannel, IChannel>(Key = "fast")]
 	[Singleton<SlowChannel, IChannel>(Key = "slow")]
 	[Singleton<KeyedConsumer>]
@@ -250,7 +246,6 @@ public partial class PropertyInjectionTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<Bus>]
 	[Singleton<DeferredConsumer>]
 	public static partial class RelationshipContainer;
@@ -268,7 +263,6 @@ public partial class PropertyInjectionTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<Alpha, IPlugin>]
 	[Transient<Beta, IPlugin>]
 	[Transient<PluginHost>]
@@ -334,7 +328,6 @@ public partial class PropertyInjectionTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<OrderService>]
 	[Singleton<InvoiceService>]
 	public static partial class DeferredCycleContainer;
@@ -346,7 +339,6 @@ public partial class PropertyInjectionTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Bus>]
 	[Singleton<Reader>]
 	public static partial class DeferredNonCyclicContainer;
@@ -378,7 +370,6 @@ public partial class PropertyInjectionTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<CachedHub>]
 	[Transient<FreshSpoke>]
 	public static partial class MixedLifetimeCycleContainer;
@@ -396,7 +387,6 @@ public partial class PropertyInjectionTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Scoped<ScopedLeft>]
 	[Scoped<ScopedRight>]
 	public static partial class ScopedDeferredCycleContainer;
@@ -419,7 +409,6 @@ public partial class PropertyInjectionTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Node>]
 	public static partial class SelfReferentialContainer;
 
@@ -458,7 +447,6 @@ public partial class PropertyInjectionTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Ring1>]
 	[Singleton<Ring2>]
 	[Singleton<Ring3>]
@@ -497,7 +485,6 @@ public partial class PropertyInjectionTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<CtorHub>]
 	[Transient<CtorSpoke>]
 	public static partial class CtorSpokeContainer;
@@ -538,7 +525,6 @@ public partial class PropertyInjectionTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<FlakyOwner>]
 	[Transient<FlakyDep>]
 	public static partial class FlakyContainer;
@@ -576,7 +562,6 @@ public partial class PropertyInjectionTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<DisposingWriter>]
 	[Singleton<DisposingDep>]
 	public static partial class DisposalOrderContainer;
@@ -612,12 +597,10 @@ public partial class PropertyInjectionTests
 	// Bus is deliberately not registered: the optional property must be dropped from the graph so the
 	// container still compiles and resolves the consumer with the property left unset.
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<OptionalConsumer>]
 	public static partial class OptionalUnregisteredContainer;
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<Bus>]
 	[Transient<OptionalConsumer>]
 	public static partial class OptionalRegisteredContainer;
@@ -654,7 +637,6 @@ public partial class PropertyInjectionTests
 	}
 
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<Bus>]
 	[Transient(typeof(GenericHandler<>))]
 	[Transient<TicketApp>]

@@ -108,11 +108,35 @@ public partial class DisposalFailureTests
 
 #pragma warning disable AWT156
 			await That(() => owner.Dispose()).Throws<InvalidOperationException>()
-				.WithMessage("*requires asynchronous disposal*DisposeAsync*").AsWildcard();
+				.WithMessage("*'Awaiten.Tests.DisposalFailureTests.AsyncOnlySecond' requires asynchronous disposal*DisposeAsync*").AsWildcard()
+				.Because("the guidance names the service that only DisposeAsync can tear down");
 #pragma warning restore AWT156
 
 			await That(recorder.Log).IsEqualTo(new[] { "disposed:Third", "disposed:First" })
 				.Because("an async-only instance stays undisposed on the synchronous path, but no other instance is skipped");
+		}
+
+		[Test]
+		[Arguments(true)]
+		[Arguments(false)]
+		public async Task WithSeveralAsyncOnlyDisposables_ThrowsOneAggregateExceptionNamingEachService(bool onRoot)
+		{
+#pragma warning disable AWT156
+			using SeveralAsyncOnlyContainer.Root root = new();
+#pragma warning restore AWT156
+			SeveralAsyncOnlyContainer.Scope owner = onRoot ? root : root.CreateScope();
+			owner.Resolve<AsyncOnlyFirst>();
+			owner.Resolve<AsyncOnlySecond>();
+
+#pragma warning disable AWT156
+			AggregateException thrown = await That(() => owner.Dispose()).Throws<AggregateException>();
+#pragma warning restore AWT156
+
+			await That(thrown.InnerExceptions).HasCount(2);
+			await That(thrown.InnerExceptions[0].Message).Contains("*'Awaiten.Tests.DisposalFailureTests.AsyncOnlySecond' requires asynchronous disposal*").AsWildcard()
+				.Because("each guidance names its own service, in teardown order");
+			await That(thrown.InnerExceptions[1].Message).Contains("*'Awaiten.Tests.DisposalFailureTests.AsyncOnlyFirst' requires asynchronous disposal*").AsWildcard()
+				.Because("each guidance names its own service, in teardown order");
 		}
 	}
 
@@ -288,4 +312,14 @@ public partial class DisposalFailureTests
 	[Scoped<AsyncOnlySecond>]
 	[Scoped<Third>]
 	public static partial class AsyncOnlyContainer;
+
+	public sealed class AsyncOnlyFirst : IAsyncDisposable
+	{
+		public ValueTask DisposeAsync() => default;
+	}
+
+	[Container]
+	[Scoped<AsyncOnlyFirst>]
+	[Scoped<AsyncOnlySecond>]
+	public static partial class SeveralAsyncOnlyContainer;
 }

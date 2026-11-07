@@ -75,7 +75,6 @@ public sealed partial class FeatureDetectionTests
 	///     collection shape is available.
 	/// </summary>
 	[Container]
-	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Alpha, IThing>]
 	[Singleton<Beta, IThing>]
 	public static partial class SyncCollectionContainer;
@@ -99,7 +98,6 @@ public sealed partial class FeatureDetectionTests
 		public sealed class TransientThing;
 
 		[Container]
-		[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		[Singleton<Alpha, IThing>]
 		[Scoped<ScopedThing>]
 		[Transient<TransientThing>]
@@ -190,13 +188,11 @@ public sealed partial class FeatureDetectionTests
 		public static partial class AsyncOnlyContainer;
 
 		[Container]
-		[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		[Singleton<Alpha, IThing>]
 		[Singleton<Beta, IThing>(Key = "beta")]
 		public static partial class KeyedContainer;
 
 		[Container]
-		[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		[Singleton<Beta, IThing>(Key = "only")]
 		public static partial class KeyOnlyContainer;
 
@@ -364,13 +360,11 @@ public sealed partial class FeatureDetectionTests
 		}
 
 		[Container]
-		[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		[Singleton<Alpha, IThing>]
 		[Singleton<ThingList, IList<IThing>>]
 		public static partial class ExplicitShapeContainer;
 
 		[Container]
-		[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		[Singleton<Alpha, IThing>(Key = "a")]
 		[Singleton<Beta, IThing>(Key = "b")]
 		public static partial class KeyedOnlyContainer;
@@ -496,19 +490,16 @@ public sealed partial class FeatureDetectionTests
 		public sealed class ThingMap : Dictionary<string, IThing>;
 
 		[Container]
-		[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		[Singleton<Alpha, IThing>(Key = "a")]
 		[Singleton<Beta, IThing>(Key = "b")]
 		public static partial class StringKeyedContainer;
 
 		[Container]
-		[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		[Singleton<Alpha, IThing>(Key = Speed.Slow)]
 		[Singleton<Beta, IThing>(Key = Speed.Fast)]
 		public static partial class EnumKeyedContainer;
 
 		[Container]
-		[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		[Singleton<Alpha, IThing>(Key = "a")]
 		[Singleton<Beta, IThing>(Key = Speed.Fast)]
 		public static partial class MixedKeyKindContainer;
@@ -520,13 +511,11 @@ public sealed partial class FeatureDetectionTests
 		public static partial class AsyncMemberContainer;
 
 		[Container]
-		[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		[Singleton<Alpha, IThing>(Key = "a")]
 		[Singleton<ThingMap, IReadOnlyDictionary<string, IThing>>]
 		public static partial class ExplicitDictionaryContainer;
 
 		[Container]
-		[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		[Singleton<Alpha, IThing>(Key = "a")]
 		[Singleton<ThingMap, IReadOnlyDictionary<string, IThing>>(Key = "map")]
 		public static partial class KeyedExplicitDictionaryContainer;
@@ -738,12 +727,10 @@ public sealed partial class FeatureDetectionTests
 		}
 
 		[Container]
-		[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		[Transient<DisposableTransient>]
 		public static partial class WithheldContainer;
 
 		[Container]
-		[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		[Transient<DisposableTransient>(Key = "x")]
 		public static partial class KeyedWithheldContainer;
 
@@ -834,7 +821,6 @@ public sealed partial class FeatureDetectionTests
 		public sealed class DerivedHandler : IHandler<DerivedEvent>;
 
 		[Container]
-		[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		[Singleton<DerivedHandler, IHandler<DerivedEvent>>]
 		public static partial class VarianceContainer;
 
@@ -846,7 +832,6 @@ public sealed partial class FeatureDetectionTests
 		}
 
 		[Container]
-		[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		[Transient<DisposableHandler, IHandler<DerivedEvent>>]
 		public static partial class WithheldVarianceContainer;
 
@@ -913,13 +898,11 @@ public sealed partial class FeatureDetectionTests
 		}
 
 		[Container]
-		[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		[Singleton(typeof(Repo<>), typeof(IRepo<>))]
 		[Transient<LedgerReader>]
 		public static partial class OpenGenericContainer;
 
 		[Container]
-		[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		[Singleton<Alpha, IThing>]
 		public static partial class SingleRegistrationContainer;
 
