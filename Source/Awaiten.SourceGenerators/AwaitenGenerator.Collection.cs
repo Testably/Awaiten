@@ -531,7 +531,8 @@ partial class AwaitenGenerator
 		string? member = registration.ProductionMember;
 		if (registration.Production is ProductionKind.Factory or ProductionKind.Instance && member is not null)
 		{
-			member = Wrapped(member, InInternals(MemberWrapperName(registration.Production == ProductionKind.Factory ? "Factory" : "Instance", member, registration.Implementation)));
+			string wrapper = InInternals(MemberWrapperName(registration.Production == ProductionKind.Factory ? "Factory" : "Instance", member, registration.Implementation));
+			member = !ReachesProductionMember(owner, registration.Production, member, registration.Implementation, compilation.Assembly, compilation) && Reachable(wrapper) ? wrapper : member;
 		}
 
 		bool hidden = IsHiddenInModule(registration.Implementation.OriginalDefinition, owner, compilation);

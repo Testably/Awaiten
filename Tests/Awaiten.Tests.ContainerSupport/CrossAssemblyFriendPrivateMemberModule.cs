@@ -120,6 +120,9 @@ public static partial class SupportFriendPrivateMemberModule
 	private static IFriendPrivateMemberCup MakeCup(IFriendPrivateMemberKettle kettle) => new FriendPrivateMemberPart { Kettle = kettle, };
 
 	private static IFriendPrivateMemberScale MakeScale() => new FriendPrivateMemberPart();
+
+	/// <summary>An overload of another type, which leaves the private factory the only one producing the scale.</summary>
+	internal static IFriendPrivateMemberState MakeScale(IFriendPrivateMemberCup cup) => cup;
 }
 
 /// <summary>A container in the module's own assembly that imports <see cref="SupportFriendPrivateMemberModule" />.</summary>

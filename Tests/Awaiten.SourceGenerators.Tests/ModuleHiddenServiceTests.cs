@@ -1716,6 +1716,42 @@ public class ModuleHiddenServiceTests
 		}
 
 		[Test]
+		public async Task OverloadOfAnotherService_EveryContainerBuildsItWithoutDiagnostics()
+		{
+			string Overloaded(bool grant) => Library(Factory, grant)
+				.Replace("[Singleton<Heater, IHeater>]", "[Singleton<IHeater>(Factory = nameof(Make))]")
+				.Replace("private static IKettle Make()", "internal static IHeater Make(IKettle kettle) => new Heater();\n    private static IKettle Make()")
+				.Replace("public User(IKettle kettle)", "public User(IKettle kettle, IHeater heater)");
+
+			await That(Generator.Run(Overloaded(grant: false)).Diagnostics).IsEmpty();
+			await That(ModuleSource(Generator.Run(Overloaded(grant: false)))).Contains($"internal static global::Lib.IKettle {Wrapper(Factory)}()")
+				.Because("the internal overload produces another service, so the private factory is still the only one of its service");
+			await That(Generator.Run(Overloaded(grant: true)).Diagnostics).IsEmpty();
+			await That(Generator.Run(Overloaded(grant: false) + Container).Diagnostics).IsEmpty()
+				.Because("a container in the module's own assembly calls the internal overload for its service and the internal wrapper for the other");
+			await That(Generator.RunWithGeneratedReferencedAssembly(Overloaded(grant: false), Consumer).Diagnostics).IsEmpty();
+			await That(Generator.RunWithGeneratedReferencedAssembly(Overloaded(grant: true), Consumer).Diagnostics).IsEmpty()
+				.Because("a friend calls the internal overload for its service and the internal wrapper for the other");
+		}
+
+		[Test]
+		public async Task OverloadOfAPublicService_GetsItsOwnPublicWrapper()
+		{
+			string Overloaded(bool grant) => Library(Factory, grant)
+				.Replace("[Singleton<User, IUser>]", "[Singleton<User, IUser>]\n[Singleton<IPublicKettle>(Factory = nameof(Make))]")
+				.Replace("private static IKettle Make()", "internal static IPublicKettle Make(IUser user) => new Kettle();\n    private static IKettle Make()");
+
+			string module = ModuleSource(Generator.Run(Overloaded(grant: false)));
+
+			await That(module).Contains($"internal static global::Lib.IKettle {Wrapper(Factory)}()")
+				.And.Contains($"public static global::Lib.IPublicKettle Factory_Make_{Fnv1a("Make\0global::Lib.IPublicKettle"):x8}(global::Lib.IUser @user)")
+				.Because("the wrappers of one member name differ by the service they produce, so the internal and the public one never collide");
+			await That(Generator.Run(Overloaded(grant: false) + Container).Diagnostics).IsEmpty();
+			await That(Generator.RunWithGeneratedReferencedAssembly(Overloaded(grant: false), Consumer).Diagnostics).IsEmpty();
+			await That(Generator.RunWithGeneratedReferencedAssembly(Overloaded(grant: true), Consumer).Diagnostics).IsEmpty();
+		}
+
+		[Test]
 		[Arguments(Factory)]
 		[Arguments(ImplementationFactory)]
 		public async Task PrivateHook_IsReportedInTheLibraryBuild(string production)

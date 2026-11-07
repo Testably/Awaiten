@@ -274,7 +274,7 @@ partial class AwaitenGenerator
 
 		MemberWrapper? InternalWrapper(ProductionKind production, string member, INamedTypeSymbol produced)
 		{
-			if (AccessibleMembers(module, member, compilation).Any(candidate => compilation.IsSymbolAccessibleWithin(candidate, module.ContainingAssembly)))
+			if (ReachesProductionMember(module, production, member, produced, module.ContainingAssembly, compilation))
 			{
 				return null;
 			}

@@ -1411,7 +1411,7 @@ partial class AwaitenGenerator
 		if (info is not { Origin: { } module, ProductionMember: { } member, Production: ProductionKind.Factory or ProductionKind.Instance, }
 		    || !SymbolEqualityComparer.Default.Equals(module.ContainingAssembly, compilation.Assembly)
 		    || !HasAwaitenAttribute(module.GetAttributes(), "ModuleAttribute")
-		    || AccessibleMembers(module, member, compilation).Any(candidate => compilation.IsSymbolAccessibleWithin(candidate, compilation.Assembly))
+		    || ReachesProductionMember(module, info.Production, member, info.Symbol, compilation.Assembly, compilation)
 		    || !ReceivesGeneratedMembers(module))
 		{
 			return null;
@@ -1423,6 +1423,15 @@ partial class AwaitenGenerator
 			? InInternals(name)
 			: null;
 	}
+
+	/// <summary>
+	///     Whether <paramref name="within" /> reaches a <c>Factory</c> member named <paramref name="member" /> that produces
+	///     <paramref name="produced" />, or any <c>Instance</c> member of that name, so a same-named overload of another
+	///     type does not count. The module's wrappers and the containers that call them decide alike through it.
+	/// </summary>
+	private static bool ReachesProductionMember(INamedTypeSymbol owner, ProductionKind production, string member, ITypeSymbol produced, IAssemblySymbol within, Compilation compilation)
+		=> (production == ProductionKind.Factory ? FindFactoryCandidates(owner, member, produced, compilation) : AccessibleMembers(owner, member, compilation))
+			.Any(candidate => compilation.IsSymbolAccessibleWithin(candidate, within));
 
 	/// <summary>
 	///     The <see cref="QualifiedProductionMember" /> the generated code calls, carrying the bound type arguments of a
