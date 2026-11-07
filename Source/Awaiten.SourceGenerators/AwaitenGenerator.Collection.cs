@@ -336,7 +336,7 @@ partial class AwaitenGenerator
 
 			RawRegistration? collected = fromModule && production == ProductionKind.Constructor && !conflictingDirectives
 				? SelfCompiledRegistration(registration, context, skipGeneratedScanRegistrations, ref reportedNotSelfCompiled)
-				: registration;
+				: ThroughMemberWrapper(registration, origin, context.Compilation, !skipGeneratedScanRegistrations);
 			if (collected is not null)
 			{
 				result.Add(collected);
@@ -470,6 +470,41 @@ partial class AwaitenGenerator
 		{
 			context.Diagnostics.Add(diagnostic);
 		}
+	}
+
+	/// <summary>
+	///     A registration of <paramref name="owner" /> rewritten to call the wrappers the owner generates for its
+	///     <c>Factory</c> or <c>Instance</c> member and its lifecycle hooks (see <see cref="CollectModuleMemberWrappers" />
+	///     and <see cref="RecordBaseWrappers" />), for each member this compilation cannot reach while it can reach the
+	///     wrapper. Only <paramref name="applies" /> to an owner in another assembly, whose generated members this
+	///     compilation can see. The hooks of an implementation hidden in its owner are left to its generated factory.
+	/// </summary>
+	private static RawRegistration ThroughMemberWrapper(RawRegistration registration, INamedTypeSymbol? owner, Compilation compilation, bool applies)
+	{
+		if (!applies || owner is null || registration.ConflictingDirectives)
+		{
+			return registration;
+		}
+
+		string? member = registration.ProductionMember;
+		if (registration.Production is ProductionKind.Factory or ProductionKind.Instance && member is not null)
+		{
+			member = Wrapped(member, MemberWrapperName(registration.Production == ProductionKind.Factory ? "Factory" : "Instance", member, registration.Implementation));
+		}
+
+		bool hidden = IsHiddenInModule(registration.Implementation.OriginalDefinition, owner, compilation);
+		return registration with
+		{
+			ProductionMember = member,
+			OnActivated = hidden || registration.OnActivated is not { } activation ? registration.OnActivated : Wrapped(activation, RegistrationHookWrapperName(registration.Implementation, release: false, activation)),
+			OnRelease = hidden || registration.OnRelease is not { } release ? registration.OnRelease : Wrapped(release, RegistrationHookWrapperName(registration.Implementation, release: true, release)),
+		};
+
+		string Wrapped(string name, string wrapper)
+			=> !Reachable(name) && Reachable(wrapper) ? wrapper : name;
+
+		bool Reachable(string name)
+			=> owner.GetMembers(name).Any(candidate => compilation.IsSymbolAccessibleWithin(candidate, compilation.Assembly));
 	}
 
 	/// <summary>

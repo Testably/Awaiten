@@ -105,14 +105,15 @@ internal static partial class Sources
 			EmitAsyncArrayHelper(builder, depth);
 		}
 
-		EmitBaseFactories(builder, depth, model.Factories.AsArray());
+		EmitBaseFactories(builder, depth, model.Factories.AsArray(), model.Wrappers.AsArray());
 	}
 
 	/// <summary>
 	///     Emits the <c>internal</c> factory and hook wrappers of each implementation private to the container, which a
-	///     container that extends it calls because its own generated code cannot name the private type.
+	///     container that extends it calls because its own generated code cannot name the private type, and the
+	///     <c>internal</c> wrapper of each private member its registrations name.
 	/// </summary>
-	private static void EmitBaseFactories(StringBuilder builder, int depth, RegistrationFactory[] factories)
+	private static void EmitBaseFactories(StringBuilder builder, int depth, RegistrationFactory[] factories, MemberWrapper[] wrappers)
 	{
 		foreach (RegistrationFactory factory in factories)
 		{
@@ -127,6 +128,14 @@ internal static partial class Sources
 					$"Generated for a container that extends this one: the {(hook.Release ? "OnRelease" : "OnActivated")} lifecycle wrapper, casting the",
 					"accessible type to the hook's own instance parameter type and forwarding to this container's hook.");
 			}
+		}
+
+		foreach (MemberWrapper wrapper in wrappers)
+		{
+			builder.AppendLine();
+			EmitMemberWrapper(builder, depth, wrapper, "internal",
+				"Generated for a container that extends this one: forwards to a private member of this container, which the",
+				"extending container cannot call.");
 		}
 	}
 

@@ -469,6 +469,8 @@ public static partial class CoffeeShop
 }
 ```
 
+An internal factory method of a module in another assembly isn't visible to the container either, unless the module generated a public wrapper for it (see [modules](./04-registration/07-modules.md)). It does so for a public, `partial` module, when the method's parameter and return types are public and the method isn't generic.
+
 **Fix:** Point `Factory` at a method on the container (or on the declaring module for an imported registration) that returns the registered service type, here `private static Grinder MakeGrinder() => new();`.
 
 ### AWT109
@@ -2262,6 +2264,8 @@ public static partial class CoffeeShop
 [Container(Extends = typeof(CoffeeShop))]
 public static partial class TestCoffeeShop;
 ```
+
+A base in another assembly that grants `InternalsVisibleTo` generates an internal wrapper for a private `Factory` or `Instance` member or lifecycle hook its registrations name, so the extending container calls the wrapper and reports nothing. This error stays for a member whose signature names a type private to the base, for a generic factory, and for an extending container in the base's own assembly.
 
 **Fix:** Make the member or type public, or internal and grant the assembly of the extending container `[InternalsVisibleTo]`. Replacing the registration on the extending container also removes the need for it.
 

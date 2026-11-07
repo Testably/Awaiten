@@ -17,6 +17,9 @@ partial class AwaitenGenerator
 	{
 		public List<RegistrationFactory> Factories { get; } = new();
 
+		/// <summary>The wrappers of the private members the container's registrations name (see <see cref="RecordBaseWrappers" />).</summary>
+		public List<MemberWrapper> Wrappers { get; } = new();
+
 		public Dictionary<string, FactoryFault> Faults { get; } = new(StringComparer.Ordinal);
 	}
 
@@ -186,13 +189,83 @@ partial class AwaitenGenerator
 		}
 	}
 
+	/// <summary>
+	///     Records an <c>internal</c> wrapper for each private <c>Factory</c> or <c>Instance</c> member and lifecycle hook a
+	///     registration of the container names, so a container that extends it in another assembly can call them. Only a
+	///     container without <c>Extends</c>, in an assembly that grants <c>InternalsVisibleTo</c> to some assembly, records
+	///     any: no other assembly could call an internal wrapper, and an extending container in the same assembly is
+	///     asked to make the member internal instead (AWT226). A member whose signature names a type private to the
+	///     container, or a generic factory, gets no wrapper. The hooks of an implementation private to the container are
+	///     wrapped by <see cref="RecordBaseFactory" />.
+	/// </summary>
+	private static void RecordBaseWrappers(ImplInfo info, IMethodSymbol? producer, IMethodSymbol? onActivated, IMethodSymbol? onRelease, BuildContext context)
+	{
+		INamedTypeSymbol container = context.ContainerSymbol;
+		Compilation compilation = context.Compilation;
+		if (context.Factories is not { } factories
+		    || info.Origin is not null
+		    || info.ConstructVia is not null
+		    || !GrantsInternalsVisibleTo(compilation.Assembly)
+		    || IsHiddenInModule(info.Symbol.OriginalDefinition, container, compilation))
+		{
+			return;
+		}
+
+		if (info.Production == ProductionKind.Factory && producer is { DeclaredAccessibility: Accessibility.Private, IsGenericMethod: false, })
+		{
+			Add(MethodWrapper(MemberWrapperName("Factory", producer.Name, info.Symbol), producer.Name, producer));
+		}
+
+		if (info.Production == ProductionKind.Instance
+		    && AccessibleMembers(container, info.ProductionMember!, compilation).FirstOrDefault(member => member is IFieldSymbol or IPropertySymbol) is { DeclaredAccessibility: Accessibility.Private, IsStatic: true, } instance)
+		{
+			ITypeSymbol type = instance is IFieldSymbol field ? field.Type : ((IPropertySymbol)instance).Type;
+			if (TypeHiddenInModule(type, container, compilation) is null)
+			{
+				Add(new MemberWrapper(MemberWrapperName("Instance", instance.Name, info.Symbol), type.ToDisplayString(FullyQualifiedWithNullability), instance.Name, default, IsProperty: true));
+			}
+		}
+
+		foreach ((IMethodSymbol? hook, string? name, bool release) in new[] { (onActivated, info.OnActivated, false), (onRelease, info.OnRelease, true), })
+		{
+			if (hook is { DeclaredAccessibility: Accessibility.Private, } && name is not null)
+			{
+				string target = hook.TypeArguments.Length == 0
+					? name
+					: $"{name}<{string.Join(", ", hook.TypeArguments.Select(argument => argument.ToDisplayString(FullyQualified)))}>";
+				Add(MethodWrapper(RegistrationHookWrapperName(info.Symbol, release, name), target, hook));
+			}
+		}
+
+		void Add(MemberWrapper? wrapper)
+		{
+			if (wrapper is not null && factories.Wrappers.All(existing => existing.Name != wrapper.Name))
+			{
+				factories.Wrappers.Add(wrapper);
+			}
+		}
+
+		MemberWrapper? MethodWrapper(string wrapperName, string target, IMethodSymbol method)
+			=> method.Parameters.Any(parameter => TypeHiddenInModule(parameter.Type, container, compilation) is not null || UnmirroredAttribute(parameter.GetAttributes()) is not null)
+			   || TypeHiddenInModule(method.ReturnType, container, compilation) is not null
+				? null
+				: new MemberWrapper(wrapperName, method.ReturnsVoid ? "void" : method.ReturnType.ToDisplayString(FullyQualifiedWithNullability), target, MirroredParameters(method.Parameters));
+	}
+
+	/// <summary>
+	///     A deterministic name for the wrapper of a <c>Factory</c> or <c>Instance</c> member, derived from the member and
+	///     the registered type it produces, so the owner's build and a consuming container agree on it.
+	/// </summary>
+	private static string MemberWrapperName(string kind, string member, INamedTypeSymbol produced)
+		=> $"Awaiten__{kind}_{member}_{Fnv1a($"{member}\0{produced.ToDisplayString(FullyQualified)}"):x8}";
+
 	/// <summary>The parameters of a constructor or hook, mirrored onto a generated factory or wrapper.</summary>
 	private static EquatableArray<FactoryParameter> MirroredParameters(IEnumerable<IParameterSymbol> parameters)
 		=> new(parameters.Select(MirrorParameter).ToArray());
 
 	/// <summary>
-	///     One constructor parameter mirrored onto a generated factory, with its <c>[Arg]</c> or <c>[FromKey]</c>, so a
-	///     consumer resolves the factory's parameter exactly as it would the constructor's.
+	///     One constructor, factory or hook parameter mirrored onto a generated factory or wrapper, with its <c>[Arg]</c>,
+	///     <c>[RequestingType]</c> or <c>[FromKey]</c>, so a consumer resolves the parameter exactly as it would the original.
 	/// </summary>
 	private static FactoryParameter MirrorParameter(IParameterSymbol parameter)
 	{
@@ -200,7 +273,9 @@ partial class AwaitenGenerator
 		return new FactoryParameter(
 			parameter.Type.ToDisplayString(FullyQualifiedWithNullability),
 			parameter.Name,
-			HasArgAttribute(attributes) ? "[global::Awaiten.Arg] " : KeyAttribute(FromKey(attributes)));
+			HasArgAttribute(attributes) ? "[global::Awaiten.Arg] "
+			: HasRequestingType(attributes) ? "[global::Awaiten.RequestingType] "
+			: KeyAttribute(FromKey(attributes)));
 	}
 
 	/// <summary>The <c>[FromKey]</c> a generated factory parameter carries for <paramref name="key" />, or <see langword="null" />.</summary>

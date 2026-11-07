@@ -62,6 +62,16 @@ public sealed partial class RegistrationFactoryShapeTests
 			await That(container.Resolve<IShapeNotifier>().Clock).IsSameAs(container.Resolve<IShapeClock>())
 				.Because("the factory takes the property as a parameter and assigns it");
 		}
+
+		[Test]
+		public async Task InternalFactoryAndInstanceMembers_AreCalledThroughTheirWrappers()
+		{
+			using ShapeContainer.Root container = new();
+
+			await That(container.Resolve<IShapeMenu>()).IsSameAs(container.Resolve<IShapeMenu>());
+			await That(container.Resolve<IShapeKettle>().Clock).IsSameAs(container.Resolve<IShapeClock>())
+				.Because("the public wrapper passes the graph's clock on to the module's internal factory");
+		}
 	}
 
 	public sealed class ModuleHidingTheImplementation
@@ -104,6 +114,16 @@ public sealed partial class RegistrationFactoryShapeTests
 			await That(report.KeyedClock).IsExactly<ShapeBaseUtcClock>();
 			await That(report.Clock).IsExactly<ShapeBaseSystemClock>()
 				.Because("the base's internal factory takes the keyed parameter and the injected property");
+		}
+
+		[Test]
+		public async Task AnExtendingContainerInAnotherAssembly_CallsThePrivateMembersThroughTheirWrappers()
+		{
+			using SupportShapeTestContainer.Root shop = new();
+
+			await That(shop.Resolve<IShapeBaseMenu>()).IsNotNull();
+			await That(shop.Resolve<ShapeBaseKettle>().Activated).IsTrue()
+				.Because("the base wraps its private factory and hook, and the wrappers reach the test assembly through InternalsVisibleTo");
 		}
 	}
 

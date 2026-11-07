@@ -116,6 +116,19 @@ internal static partial class Sources
 			}
 		}
 
+		foreach (MemberWrapper wrapper in model.Wrappers.AsArray())
+		{
+			if (!first)
+			{
+				builder.AppendLine();
+			}
+
+			first = false;
+			EmitMemberWrapper(builder, depth + 1, wrapper, "public",
+				"Generated from a module registration: forwards to the module's own member, which a consuming container in",
+				"another assembly cannot call.");
+		}
+
 		foreach (SkippedRegistration skipped in model.Skipped.AsArray())
 		{
 			if (!first)
@@ -261,6 +274,25 @@ internal static partial class Sources
 		Indent(builder, depth)
 			.Append("public const string ").Append(name).Append(" = ")
 			.Append(SymbolDisplay.FormatLiteral(reason, quote: true)).AppendLine(";");
+	}
+
+	/// <summary>
+	///     Emits a wrapper with the given accessibility that forwards to a member of its owner a consuming container
+	///     cannot call: a method passing its parameters on, or a property returning the member.
+	/// </summary>
+	private static void EmitMemberWrapper(StringBuilder builder, int depth, MemberWrapper wrapper, string accessibility, params string[] summary)
+	{
+		AppendXmlSummary(builder, depth, summary);
+		Indent(builder, depth).Append(accessibility).Append(" static ").Append(wrapper.ReturnType).Append(' ').Append(wrapper.Name);
+		if (wrapper.IsProperty)
+		{
+			builder.Append(" => ").Append(wrapper.Target).AppendLine(";");
+			return;
+		}
+
+		FactoryParameter[] parameters = wrapper.Parameters.AsArray();
+		builder.Append('(').Append(string.Join(", ", parameters.Select(MirroredParameter))).Append(") => ").Append(wrapper.Target)
+			.Append('(').Append(string.Join(", ", parameters.Select(parameter => $"@{parameter.Name}"))).AppendLine(");");
 	}
 
 	/// <summary>A mirrored parameter as it is declared on a generated factory or wrapper, with its attributes.</summary>

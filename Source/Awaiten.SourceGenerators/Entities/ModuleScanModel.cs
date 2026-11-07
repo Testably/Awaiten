@@ -28,7 +28,21 @@ internal sealed record ModuleScanModel(
 	bool DeclaresScan = true,
 	EquatableArray<RegistrationFactory> Registrations = default,
 	EquatableArray<SkippedRegistration> Skipped = default,
-	string? NotPartialMarker = null);
+	string? NotPartialMarker = null,
+	EquatableArray<MemberWrapper> Wrappers = default);
+
+/// <summary>
+///     A generated member that forwards to a <c>Factory</c> or <c>Instance</c> member or a lifecycle hook of its owner
+///     (a module or a base container) that a container in another assembly cannot call: a method taking
+///     <see cref="Parameters" /> and calling <see cref="Target" /> with them, or, for <see cref="IsProperty" />, a
+///     property returning it.
+/// </summary>
+internal sealed record MemberWrapper(
+	string Name,
+	string ReturnType,
+	string Target,
+	EquatableArray<FactoryParameter> Parameters,
+	bool IsProperty = false);
 
 /// <summary>
 ///     An implementation the module generates no factory for, because an assembly granted <c>InternalsVisibleTo</c>

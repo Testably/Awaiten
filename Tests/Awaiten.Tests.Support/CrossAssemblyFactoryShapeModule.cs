@@ -30,6 +30,23 @@ public interface IShapeNotifier
 	IShapeClock Clock { get; }
 }
 
+/// <summary>A menu the module hands out from an internal instance member.</summary>
+public interface IShapeMenu;
+
+/// <summary>A kettle the module builds through an internal factory member.</summary>
+public interface IShapeKettle
+{
+	/// <summary>The clock the factory received.</summary>
+	IShapeClock Clock { get; }
+}
+
+internal sealed class ShapeMenu : IShapeMenu;
+
+internal sealed class ShapeKettle(IShapeClock clock) : IShapeKettle
+{
+	public IShapeClock Clock => clock;
+}
+
 internal sealed class ShapeGreeter : IShapeFormalGreeter;
 
 internal sealed class ShapeReport([FromKey("utc")] IShapeClock clock) : IShapeReport
@@ -51,7 +68,7 @@ internal sealed class ShapeNotifier : IShapeNotifier
 /// <summary>
 ///     A <c>[Module]</c> whose internal implementations its generated factories build for a container in another
 ///     assembly without <c>InternalsVisibleTo</c>: one shared under two services, a keyed constructor parameter, a
-///     runtime argument and an injected property.
+///     runtime argument, an injected property, and internal factory and instance members.
 /// </summary>
 [Module]
 [Singleton<ShapeGreeter, IShapeGreeter>]
@@ -59,4 +76,11 @@ internal sealed class ShapeNotifier : IShapeNotifier
 [Singleton<ShapeReport, IShapeReport>]
 [Transient<ShapeLabel, IShapeLabel>]
 [Singleton<ShapeNotifier, IShapeNotifier>]
-public static partial class FactoryShapeModule;
+[Singleton<IShapeMenu>(Instance = nameof(Menu))]
+[Transient<IShapeKettle>(Factory = nameof(CreateKettle))]
+public static partial class FactoryShapeModule
+{
+	internal static readonly IShapeMenu Menu = new ShapeMenu();
+
+	internal static IShapeKettle CreateKettle(IShapeClock clock) => new ShapeKettle(clock);
+}

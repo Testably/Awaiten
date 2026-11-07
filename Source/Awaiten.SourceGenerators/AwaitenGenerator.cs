@@ -103,7 +103,11 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		Compilation compilation = context.SemanticModel.Compilation;
 		bool declaresScan = HasAwaitenAttribute(moduleSymbol.GetAttributes(), "ScanAttribute");
 		ModuleRegistration? selfCompiled = declaresScan ? null : FirstSelfCompiledRegistration(moduleSymbol, compilation);
-		if (!declaresScan && selfCompiled is null)
+
+		// A module that only needs member wrappers gets them when it can receive generated members, and stays as it is
+		// otherwise, since such a module built before wrappers existed.
+		List<MemberWrapper> wrappers = ReceivesGeneratedMembers(moduleSymbol) ? CollectModuleMemberWrappers(moduleSymbol, compilation) : new();
+		if (!declaresScan && selfCompiled is null && wrappers.Count == 0)
 		{
 			return null;
 		}
@@ -200,7 +204,8 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			declaresScan,
 			new EquatableArray<RegistrationFactory>(registrations.ToArray()),
 			new EquatableArray<SkippedRegistration>(skipped.ToArray()),
-			notPartialMarker);
+			notPartialMarker,
+			new EquatableArray<MemberWrapper>(expanded ? wrappers.ToArray() : []));
 	}
 
 	/// <summary>
@@ -298,7 +303,8 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			graph.External.ImportServices,
 			Dispatchable(graph.External.ServiceTypes, graph.External.ServiceTypes.Closed),
 			Dispatchable(graph.External.ServiceTypes, graph.External.ServiceTypes.Open),
-			new EquatableArray<RegistrationFactory>(graph.Factories.Factories.ToArray()));
+			new EquatableArray<RegistrationFactory>(graph.Factories.Factories.ToArray()),
+			new EquatableArray<MemberWrapper>(graph.Factories.Wrappers.ToArray()));
 	}
 
 	/// <summary>

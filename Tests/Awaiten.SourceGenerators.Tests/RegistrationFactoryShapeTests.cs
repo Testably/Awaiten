@@ -435,6 +435,203 @@ public class RegistrationFactoryShapeTests
 		}
 	}
 
+	public class MemberWrappers
+	{
+		private const string InternalMembersModule = """
+		                                             using Awaiten;
+
+		                                             namespace Lib;
+
+		                                             public interface IClock { }
+		                                             public interface IMenu { }
+		                                             public interface ILog { }
+		                                             internal sealed class Clock : IClock { }
+		                                             internal sealed class Menu : IMenu { }
+
+		                                             [Module]
+		                                             [Singleton<IClock>(Factory = nameof(CreateClock))]
+		                                             [Singleton<IMenu>(Instance = nameof(Menu))]
+		                                             public static partial class GreetingModule
+		                                             {
+		                                                 internal static IMenu Menu { get; } = new Lib.Menu();
+
+		                                                 internal static IClock CreateClock(ILog log) => new Clock();
+		                                             }
+		                                             """;
+
+		private const string LogConsumer = """
+		                                   using Awaiten;
+		                                   using Lib;
+
+		                                   namespace App;
+
+		                                   public sealed class Log : ILog { }
+
+		                                   [Container]
+		                                   [Import(typeof(GreetingModule))]
+		                                   [Singleton<Log, ILog>]
+		                                   public static partial class AppContainer
+		                                   {
+		                                   }
+		                                   """;
+
+		[Test]
+		public async Task AModule_WrapsItsInternalFactoryAndInstanceMembers()
+		{
+			GeneratorResult result = Generator.Run(InternalMembersModule);
+
+			await That(result.Diagnostics).IsEmpty();
+			await That(ModuleSource(result))
+				.Contains("public static global::Lib.IClock Awaiten__Factory_CreateClock_")
+				.And.Contains("(global::Lib.ILog @log) => CreateClock(@log);")
+				.And.Contains("public static global::Lib.IMenu Awaiten__Instance_Menu_")
+				.Because("a container in another assembly calls the public wrappers instead of the internal members");
+		}
+
+		[Test]
+		public async Task AModuleInAnotherAssembly_IsImportedWithoutInternalsVisibleTo()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(InternalMembersModule, LogConsumer);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("the consumer calls the wrappers, which it can see, instead of the internal members it cannot");
+		}
+
+		[Test]
+		public async Task AModuleInAnotherAssembly_IsImportedWithInternalsVisibleTo()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Granted(InternalMembersModule), LogConsumer);
+
+			await That(result.Diagnostics).IsEmpty();
+			await That(result.Sources.Single(source => source.Key.Contains("AppContainer")).Value).Contains("global::Lib.GreetingModule.CreateClock(")
+				.Because("a consumer that can reach the internal member calls it directly");
+		}
+
+		[Test]
+		public async Task AMemberWithAnInternalParameterType_GetsNoWrapper()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly("""
+			                                                                      using Awaiten;
+
+			                                                                      namespace Lib;
+
+			                                                                      public interface IClock { }
+			                                                                      internal interface ISource { }
+			                                                                      internal sealed class Clock : IClock { }
+
+			                                                                      [Module]
+			                                                                      [Singleton<IClock>(Factory = nameof(CreateClock))]
+			                                                                      public static partial class GreetingModule
+			                                                                      {
+			                                                                          internal static IClock CreateClock(ISource source) => new Clock();
+			                                                                      }
+			                                                                      """, Consumer);
+
+			await That(result.Diagnostics).Contains("*AWT108*CreateClock*").AsWildcard()
+				.Because("a public wrapper cannot expose the internal parameter type, so the consumer still cannot call the member");
+		}
+
+		[Test]
+		public async Task ANonPartialModule_KeepsBuildingWithoutWrappers()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace Lib;
+
+			                                       public interface IClock { }
+			                                       internal sealed class Clock : IClock { }
+
+			                                       [Module]
+			                                       [Singleton<IClock>(Factory = nameof(CreateClock))]
+			                                       public static class GreetingModule
+			                                       {
+			                                           internal static IClock CreateClock() => new Clock();
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("a module that cannot receive generated members built before wrappers existed and must keep building");
+			await That(result.Sources).IsEmpty();
+		}
+
+		private const string PrivateMembersBase = """
+		                                          using Awaiten;
+
+		                                          namespace Lib;
+
+		                                          public interface IClock { }
+		                                          public interface IMenu { }
+		                                          public sealed class Clock : IClock { }
+		                                          public sealed class Menu : IMenu { }
+		                                          public sealed class Grinder { }
+
+		                                          [Container]
+		                                          [Singleton<IClock>(Factory = nameof(CreateClock))]
+		                                          [Singleton<IMenu>(Instance = nameof(TheMenu))]
+		                                          [Singleton<Grinder>(OnActivated = nameof(Calibrate))]
+		                                          public static partial class Shop
+		                                          {
+		                                              private static readonly IMenu TheMenu = new Menu();
+
+		                                              private static IClock CreateClock() => new Clock();
+
+		                                              private static void Calibrate(Grinder grinder, IClock clock) { }
+		                                          }
+		                                          """;
+
+		[Test]
+		public async Task ABaseGrantingInternalsVisibleTo_WrapsItsPrivateMembers()
+		{
+			GeneratorResult result = Generator.Run(Granted(PrivateMembersBase));
+
+			await That(result.Diagnostics).IsEmpty();
+			await That(result.Sources.Single(source => source.Key.Contains("Shop")).Value)
+				.Contains("internal static global::Lib.IClock Awaiten__Factory_CreateClock_")
+				.And.Contains("internal static global::Lib.IMenu Awaiten__Instance_TheMenu_")
+				.And.Contains("(global::Lib.Grinder @grinder, global::Lib.IClock @clock) => Calibrate(@grinder, @clock);");
+		}
+
+		[Test]
+		public async Task ABaseNotGrantingInternalsVisibleTo_GeneratesNoWrappers()
+		{
+			GeneratorResult result = Generator.Run(PrivateMembersBase);
+
+			await That(result.Sources.Single(source => source.Key.Contains("Shop")).Value).DoesNotContain("Awaiten__")
+				.Because("no other assembly could call an internal wrapper");
+		}
+
+		[Test]
+		public async Task AnExtendingContainerInAnotherAssembly_CallsTheWrappers()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Granted(PrivateMembersBase), """
+			                                                                                                   using Awaiten;
+			                                                                                                   using Lib;
+
+			                                                                                                   namespace App;
+
+			                                                                                                   [Container(Extends = typeof(Shop))]
+			                                                                                                   public static partial class TestShop { }
+			                                                                                                   """);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("the extending container calls the base's internal wrappers instead of its private members");
+		}
+
+		[Test]
+		public async Task AnExtendingContainerInTheSameAssembly_StillReportsAwt226()
+		{
+			GeneratorResult result = Generator.Run(Granted(PrivateMembersBase) + """
+
+			                                                                     [Container(Extends = typeof(Shop))]
+			                                                                     public static partial class TestShop { }
+			                                                                     """);
+
+			await That(result.Diagnostics).Contains("*AWT226*The factory 'Lib.Shop.CreateClock'*").AsWildcard()
+				.Because("in the base's own assembly, an internal member already reaches the extending container");
+		}
+	}
+
 	public class BaseContainer
 	{
 		private const string PrivateBase = """

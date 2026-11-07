@@ -164,6 +164,95 @@ partial class AwaitenGenerator
 		}
 	}
 
+	/// <summary>
+	///     The public wrappers a module another assembly can name emits for the <c>Factory</c> and <c>Instance</c> members
+	///     its closed registrations name when a member is not public but its assembly can reach it, so a container in
+	///     another assembly calls the wrapper instead of the member it cannot see. A member gets one only when its
+	///     signature is public throughout, it is not generic, and no parameter carries an attribute the wrapper cannot
+	///     carry; otherwise a consumer reports the member as before (AWT108, AWT109).
+	/// </summary>
+	private static List<MemberWrapper> CollectModuleMemberWrappers(INamedTypeSymbol module, Compilation compilation)
+	{
+		List<MemberWrapper> wrappers = new();
+		if (!IsExternallyAccessible(module))
+		{
+			return wrappers;
+		}
+
+		foreach (AttributeData attribute in module.GetAttributes())
+		{
+			if (attribute.AttributeClass is not { Name: "SingletonAttribute" or "TransientAttribute" or "ScopedAttribute", } attributeClass
+			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace
+			    || ReadProduction(attribute) is not { Production: ProductionKind.Factory or ProductionKind.Instance, Member: { } member, Conflicting: false, } production
+			    || ProducedRegistrationType(attribute, attributeClass) is not { } produced
+			    || AccessibleMembers(module, member, compilation).Any(candidate => candidate.DeclaredAccessibility == Accessibility.Public))
+			{
+				continue;
+			}
+
+			MemberWrapper? wrapper = production.Production == ProductionKind.Factory
+				? FactoryWrapper(member, produced)
+				: InstanceWrapper(member, produced);
+			if (wrapper is not null && wrappers.All(existing => existing.Name != wrapper.Name))
+			{
+				wrappers.Add(wrapper);
+			}
+		}
+
+		return wrappers;
+
+		MemberWrapper? FactoryWrapper(string member, INamedTypeSymbol produced)
+		{
+			List<IMethodSymbol> candidates = FindFactoryCandidates(module, member, produced, compilation)
+				.Where(candidate => compilation.IsSymbolAccessibleWithin(candidate, module.ContainingAssembly))
+				.ToList();
+			return candidates.Count == 1
+			       && candidates[0] is { IsStatic: true, IsGenericMethod: false, } method
+			       && IsExternallyAccessible(method.ReturnType)
+			       && method.Parameters.All(parameter => IsExternallyAccessible(parameter.Type) && parameter.RefKind == RefKind.None && UnmirroredAttribute(parameter.GetAttributes()) is null)
+				? new MemberWrapper(MemberWrapperName("Factory", member, produced), method.ReturnType.ToDisplayString(FullyQualifiedWithNullability), member, MirroredParameters(method.Parameters))
+				: null;
+		}
+
+		MemberWrapper? InstanceWrapper(string member, INamedTypeSymbol produced)
+		{
+			foreach (ISymbol candidate in AccessibleMembers(module, member, compilation))
+			{
+				ITypeSymbol? type = candidate switch
+				{
+					IFieldSymbol { IsStatic: true, } field => field.Type,
+					IPropertySymbol { IsStatic: true, GetMethod: not null, } property => property.Type,
+					_ => null,
+				};
+				if (type is not null
+				    && compilation.IsSymbolAccessibleWithin(candidate, module.ContainingAssembly)
+				    && compilation.HasImplicitConversion(type, produced)
+				    && IsExternallyAccessible(type))
+				{
+					return new MemberWrapper(MemberWrapperName("Instance", member, produced), type.ToDisplayString(FullyQualifiedWithNullability), member, default, IsProperty: true);
+				}
+			}
+
+			return null;
+		}
+	}
+
+	/// <summary>
+	///     The type a closed lifetime registration produces: the implementation of the generic form, or of a closed
+	///     <c>typeof</c> pair, or <see langword="null" /> for an open or malformed one.
+	/// </summary>
+	private static INamedTypeSymbol? ProducedRegistrationType(AttributeData attribute, INamedTypeSymbol attributeClass)
+	{
+		if (attributeClass.IsGenericType)
+		{
+			return attributeClass.TypeArguments.FirstOrDefault() as INamedTypeSymbol;
+		}
+
+		return TryReadTypeofPair(attribute, out INamedTypeSymbol implementation, out _) && !implementation.IsUnboundGenericType
+			? implementation
+			: null;
+	}
+
 	/// <summary>The first registration of <paramref name="module" /> that is self-compiled, or <see langword="null" />.</summary>
 	private static ModuleRegistration? FirstSelfCompiledRegistration(INamedTypeSymbol module, Compilation compilation)
 		=> ConstructedModuleRegistrations(module, compilation)

@@ -133,6 +133,8 @@ The generated extending container calls the inherited factories, instance member
 [assembly: InternalsVisibleTo("CoffeeShop.Tests")]
 ```
 
+When the base's assembly grants `InternalsVisibleTo` to any assembly, the base generates an `internal` wrapper for each private `Factory` or `Instance` member and lifecycle hook its registrations name, and an extending container in another assembly calls the wrapper. So a private member works there as soon as the test assembly has access. A member whose signature names a type private to the base, and a generic factory, get no wrapper. An extending container in the base's own assembly doesn't use the wrappers: make the member internal there.
+
 The same applies to the base's `[Scan]`: it sweeps the base's assembly and matches what the base sees, and a match the extending container cannot access is an error rather than a silently missing service.
 
 An implementation nested privately in the base, or in a class that contains the base, is built by the base. The extending container cannot construct such a type, so the base generates an `internal` factory for it, and the extending container calls that factory. Everything else the registration declares still applies: the lifetime, `Eager`, keys, `WhenInjectedInto`, `Fallback`, collections, lifecycle hooks, async initialization and disposal. A private match of the base's scan is built the same way, so the test graph holds the same services as the production graph.
