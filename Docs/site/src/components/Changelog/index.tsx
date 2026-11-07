@@ -34,7 +34,7 @@ const categories: {category: Category; label: string; one: string; many: string}
 ];
 
 // Some tags name a package before the version (e.g. `core/v0.19.0`).
-const majorOf = (release: ChangelogRelease): number => parseInt(release.version.match(/\d+/)?.[0] ?? '0', 10);
+const majorOf = (release: ChangelogRelease): number => Number.parseInt(release.version.match(/\d+/)?.[0] ?? '0', 10);
 
 const formatDate = (date: string, options: Intl.DateTimeFormatOptions): string =>
   new Date(`${date}T12:00:00Z`).toLocaleDateString('en', {...options, timeZone: 'UTC'});

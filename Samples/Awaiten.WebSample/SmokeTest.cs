@@ -42,7 +42,7 @@ internal static class SmokeTest
 
 			foreach (string failure in failures)
 			{
-				Console.Error.WriteLine(failure);
+				await Console.Error.WriteLineAsync(failure).ConfigureAwait(false);
 			}
 
 			Console.WriteLine(failures.Count == 0

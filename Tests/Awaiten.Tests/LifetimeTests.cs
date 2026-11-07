@@ -144,7 +144,7 @@ public partial class LifetimeTests
 	public async Task ResolvingFromADisposedScope_Throws()
 	{
 		using LifetimeContainer.Root container = new();
-		IAwaitenScope scope = container.CreateScope();
+		LifetimeContainer.Scope scope = container.CreateScope();
 		scope.Dispose();
 
 		await That(() => scope.Resolve<IScopedService>()).Throws<ObjectDisposedException>();
@@ -154,7 +154,7 @@ public partial class LifetimeTests
 	public async Task ResolvingASingletonFromADisposedScope_Throws()
 	{
 		using LifetimeContainer.Root container = new();
-		IAwaitenScope scope = container.CreateScope();
+		LifetimeContainer.Scope scope = container.CreateScope();
 		scope.Dispose();
 
 		// A disposed scope rejects every resolution, not just its own scoped services: a root-owned singleton

@@ -60,7 +60,7 @@ app.MapGet("/receipt/{format}/{drink}", (
 
 if (!smoke)
 {
-	app.Run();
+	await app.RunAsync().ConfigureAwait(false);
 	return 0;
 }
 

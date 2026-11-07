@@ -309,7 +309,7 @@ public sealed partial class ExternalServiceResolveTests
 			HostResolver host = new((_, _) => new Clock());
 			using ImportingContainer.Root root = new(host);
 
-			await That(() => root.Resolve(typeof(IUnknown))).Throws<InvalidOperationException>()
+			await That(() => root.Resolve<IUnknown>()).Throws<InvalidOperationException>()
 				.WithMessage("No registration for type*IUnknown*").AsWildcard()
 				.Because("only an imported type goes to the host");
 			await That(host.Requests).IsEmpty();
