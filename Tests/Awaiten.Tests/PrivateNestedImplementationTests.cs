@@ -542,6 +542,36 @@ public sealed partial class PrivateNestedImplementationTests
 			await That(tracker.Events).IsEqualTo(["activated Greeter", "released Greeter",])
 				.Because("the container calls the module's public wrappers, which pass the private type to the module's private hooks");
 		}
+
+		[Test]
+		public async Task ImplementationPrivateToAClassEnclosingTheModule_IsBuiltThroughTheGeneratedFactory()
+		{
+			Tracker tracker;
+			using (EnclosedModuleShop.Root shop = new())
+			{
+				tracker = shop.Resolve<Tracker>();
+				IGreeter greeter = shop.Resolve<IGreeter>();
+				await That(NameOf(greeter)).IsEqualTo("EnclosedGreeter");
+				await That(shop.Resolve<IGreeter>()).IsSameAs(greeter);
+				await That(tracker.Events).IsEqualTo(["activated EnclosedGreeter",]);
+			}
+
+			await That(tracker.Events).IsEqualTo(["activated EnclosedGreeter", "released EnclosedGreeter", "enclosed greeter disposed",])
+				.Because("the container runs the module's private hooks through the wrappers and disposes the type the module's factory built");
+		}
+
+		[Test]
+		public async Task ImplementationPrivateTwoLevelsOutOfTheModule_IsBuiltThroughTheGeneratedFactory()
+		{
+			Tracker tracker;
+			using (DeeplyEnclosedModuleShop.Root shop = new())
+			{
+				tracker = shop.Resolve<Tracker>();
+				await That(NameOf(shop.Resolve<IGreeter>())).IsEqualTo("DeepGreeter");
+			}
+
+			await That(tracker.Events).IsEqualTo(["deep greeter disposed",]);
+		}
 	}
 
 	[Container]
@@ -857,4 +887,43 @@ public sealed partial class PrivateNestedImplementationTests
 	[Import(typeof(HookedGreeterModule))]
 	[Singleton<Tracker>]
 	public static partial class ModuleHookShop;
+
+	public static partial class GreeterFakes
+	{
+		private sealed class EnclosedGreeter(Tracker tracker) : IGreeter, IDisposable
+		{
+			public void Dispose() => tracker.Events.Add("enclosed greeter disposed");
+		}
+
+		private sealed class DeepGreeter(Tracker tracker) : IGreeter, IDisposable
+		{
+			public void Dispose() => tracker.Events.Add("deep greeter disposed");
+		}
+
+		[Module]
+		[Singleton<EnclosedGreeter, IGreeter>(OnActivated = nameof(Activate), OnRelease = nameof(Release))]
+		public static partial class EnclosedGreeterModule
+		{
+			private static void Activate(EnclosedGreeter greeter, Tracker tracker) => tracker.Events.Add($"activated {greeter.GetType().Name}");
+
+			private static void Release(EnclosedGreeter greeter, Tracker tracker) => tracker.Events.Add($"released {greeter.GetType().Name}");
+		}
+
+		public static partial class Deep
+		{
+			[Module]
+			[Singleton<DeepGreeter, IGreeter>]
+			public static partial class DeepGreeterModule;
+		}
+	}
+
+	[Container]
+	[Import(typeof(GreeterFakes.EnclosedGreeterModule))]
+	[Singleton<Tracker>]
+	public static partial class EnclosedModuleShop;
+
+	[Container]
+	[Import(typeof(GreeterFakes.Deep.DeepGreeterModule))]
+	[Singleton<Tracker>]
+	public static partial class DeeplyEnclosedModuleShop;
 }

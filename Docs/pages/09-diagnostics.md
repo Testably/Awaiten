@@ -214,7 +214,7 @@ public static partial class CoffeeShop;
 A registered implementation is, or contains, a private or protected nested type that the generated container cannot stand in for with an accessible type, or one of its `[Arg]` types is private or protected. The generated `Root` and `Scope` are public classes nested in the container: their resolver bodies may construct a private type, but their `internal` signatures cannot name it, which C# does not allow. For a `Factory` or `Instance` registration the registered type counts as the implementation.
 :::
 
-A private or protected implementation nested in the container, or in a class the container is nested in, is supported: the resolvers return an accessible type it converts to, while their bodies construct, initialize, hook and dispose it as its own type. That type is a registered service that covers its other services, else the most derived accessible base class that covers them, else the first such interface the implementation declares. An implementation nested privately in an imported module is built through the factory the module generates (see [internal implementations](./04-registration/07-modules.md#internal-implementations)). A private service type is fine as long as its implementation is accessible.
+A private or protected implementation nested in the container, or in a class the container is nested in, is supported: the resolvers return an accessible type it converts to, while their bodies construct, initialize, hook and dispose it as its own type. That type is a registered service that covers its other services, else the most derived accessible base class that covers them, else the first such interface the implementation declares. An implementation nested privately in an imported module, or in a class that contains the module, is built through the factory the module generates (see [internal implementations](./04-registration/07-modules.md#internal-implementations)). A private service type is fine as long as its implementation is accessible.
 
 AWT216 remains in these cases:
 
@@ -222,7 +222,7 @@ AWT216 remains in these cases:
 - **A private service.** The implementation is registered as itself, or under another private service, so there is nothing accessible to return. Register it under an accessible service, or make it `internal`.
 - **A private type argument.** A closed generic such as `Box<Content>` or `Handler<Message> : IHandler<Message>` carries the private type into every type it converts to. Make the type argument `internal`.
 - **A private `[Arg]` type.** The parameterized resolvers and the `Func<TArg, T>` a consumer asks for take the runtime argument in their signatures. Make the argument type `internal`.
-- **A type the container cannot reach.** The type is private to a class the container is not nested in, for example one that encloses an imported module but not the container. Nest the container beside it, or make it `internal`.
+- **A type the container cannot reach.** The container registers a type that is private to a class the container is not nested in. Nest the container beside it, or make it `internal`. A module builds such a type for the container only if it is a class, so a private struct registered by a module needs to be `internal`.
 
 ```csharp expect=AWT216
 [Container]

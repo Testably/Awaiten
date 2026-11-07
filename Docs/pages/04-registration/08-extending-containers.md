@@ -133,7 +133,7 @@ The generated extending container calls the inherited factories, instance member
 [assembly: InternalsVisibleTo("CoffeeShop.Tests")]
 ```
 
-The same applies to the base's `[Scan]`: it sweeps the base's assembly and matches what the base sees, and a match the extending container cannot access is an error rather than a silently missing service. It also applies to an implementation nested privately in the base: the extending container is not nested in the base, so it cannot construct it. A type nested privately in an imported module is fine, because every container builds it through the module's generated factory. Anything inherited that the extending container cannot reach is reported on its `Extends` argument ([AWT226](../09-diagnostics.md#awt226)).
+The same applies to the base's `[Scan]`: it sweeps the base's assembly and matches what the base sees, and a match the extending container cannot access is an error rather than a silently missing service. It also applies to an implementation nested privately in the base: the extending container is not nested in the base, so it cannot construct it. A type nested privately in an imported module, or in a class that contains the module, is fine, because every container builds it through the module's generated factory. Anything inherited that the extending container cannot reach is reported on its `Extends` argument ([AWT226](../09-diagnostics.md#awt226)).
 
 ## One level deep
 

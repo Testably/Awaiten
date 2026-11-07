@@ -20,40 +20,27 @@ partial class AwaitenGenerator
 	///     <c>public</c>. Its own build then emits a factory that constructs the implementation, so a container in
 	///     another assembly can import the module without <c>InternalsVisibleTo</c>. A module another assembly cannot
 	///     name, or a service it cannot name, never reaches such a container, so neither is self-compiled. An
-	///     implementation nested privately in the module under a service outside it is self-compiled whatever the
-	///     module's accessibility, since no container can construct it, not even one in the module's own assembly. The
-	///     module's build and every importing container ask this same question.
+	///     implementation hidden in the module (see <see cref="IsHiddenInModule" />) is self-compiled whatever the
+	///     module's accessibility, since only the module can construct it, unless the factory, which is as visible as
+	///     the module, could not return the service. The module's build and every importing container ask this same
+	///     question.
 	/// </summary>
-	private static bool SelfCompilesRegistration(INamedTypeSymbol module, INamedTypeSymbol implementation, INamedTypeSymbol service)
+	private static bool SelfCompilesRegistration(INamedTypeSymbol module, INamedTypeSymbol implementation, INamedTypeSymbol service, Compilation compilation)
 		=> implementation is { TypeKind: TypeKind.Class, IsAbstract: false, IsStatic: false, IsUnboundGenericType: false, }
 		   && ((IsExternallyAccessible(module)
 		        && IsExternallyAccessible(service)
 		        && !(IsExternallyAccessible(implementation)
 		             && implementation.InstanceConstructors.Any(constructor => constructor.DeclaredAccessibility == Accessibility.Public)))
-		       || (IsHiddenInModule(implementation, module) && !IsHiddenInModule(service, module)));
+		       || (IsHiddenInModule(implementation, module, compilation) && LessAccessibleThanContainer(service, module) is null));
 
 	/// <summary>
-	///     Whether <paramref name="type" /> is nested privately (or protected) within <paramref name="module" />, so no
-	///     container can construct it, not even one in the module's own assembly.
+	///     Whether <paramref name="module" /> can access <paramref name="type" /> but the rest of its assembly cannot,
+	///     because the type is nested privately (or protected) in the module or in a class containing it, at any depth.
+	///     A container constructs such a type only through the module's generated factory.
 	/// </summary>
-	private static bool IsHiddenInModule(INamedTypeSymbol type, INamedTypeSymbol module)
-	{
-		for (INamedTypeSymbol? current = type; current?.ContainingType is { } owner; current = owner)
-		{
-			if (current.DeclaredAccessibility is Accessibility.Private or Accessibility.Protected or Accessibility.ProtectedAndInternal)
-			{
-				for (INamedTypeSymbol? level = owner; level is not null; level = level.ContainingType)
-				{
-					if (SymbolEqualityComparer.Default.Equals(level, module))
-					{
-						return true;
-					}
-				}
-			}
-		}
-
-		return false;
-	}
+	private static bool IsHiddenInModule(INamedTypeSymbol type, INamedTypeSymbol module, Compilation compilation)
+		=> !compilation.IsSymbolAccessibleWithin(type, module.ContainingAssembly)
+		   && compilation.IsSymbolAccessibleWithin(type, module);
 
 	/// <summary>
 	///     What the modules in a container's own assembly generate, which the container cannot see because it is output
@@ -165,7 +152,7 @@ partial class AwaitenGenerator
 	/// <summary>The first registration of <paramref name="module" /> that is self-compiled, or <see langword="null" />.</summary>
 	private static ModuleRegistration? FirstSelfCompiledRegistration(INamedTypeSymbol module, Compilation compilation)
 		=> ConstructedModuleRegistrations(module, compilation)
-			.FirstOrDefault(registration => SelfCompilesRegistration(module, registration.Implementation, registration.Service));
+			.FirstOrDefault(registration => SelfCompilesRegistration(module, registration.Implementation, registration.Service, compilation));
 
 	/// <summary>
 	///     Builds the factory of every self-compiled registration of a module (see
@@ -189,7 +176,7 @@ partial class AwaitenGenerator
 		List<(ModuleRegistration First, List<ModuleRegistration> All)> implementations = new();
 		foreach (ModuleRegistration registration in ConstructedModuleRegistrations(module, compilation))
 		{
-			if (!SelfCompilesRegistration(module, registration.Implementation, registration.Service))
+			if (!SelfCompilesRegistration(module, registration.Implementation, registration.Service, compilation))
 			{
 				continue;
 			}

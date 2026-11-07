@@ -114,7 +114,7 @@ partial class AwaitenGenerator
 		(string? onActivated, EquatableArray<ParameterModel> activationParameters) = ResolveHook(info, info.OnActivated, release: false, context);
 		(string? onRelease, EquatableArray<ParameterModel> releaseParameters) = ResolveHook(info, info.OnRelease, release: true, context);
 
-		// A module-private implementation is built through the module's generated factory, which returns its service.
+		// An implementation hidden in its module is built through the module's factory, which returns its service.
 		bool viaModuleFactory = info.ConstructVia is not null;
 		return new InstanceModel(
 			info.ImplementationType,
@@ -352,9 +352,10 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     Reports <see cref="Diagnostics.RegisteredTypeLessAccessible">AWT216</see> for an implementation that is, or
 	///     contains, the private or protected <paramref name="narrower" /> and has no accessible resolver type (see
-	///     <see cref="AccessibleResolverType" />), naming the first reason that applies: the container cannot reach the
-	///     type, the type is a type argument every service carries, a service is itself private, or no accessible type
-	///     covers all of the services.
+	///     <see cref="AccessibleResolverType" />), naming the first reason that applies: the container cannot reach a
+	///     type it registers itself, the type is a type argument every service carries, a service is itself private, the
+	///     container cannot reach a type its module does not build for it (see <see cref="SelfCompilesRegistration" />),
+	///     or no accessible type covers all of the services.
 	/// </summary>
 	private static void ReportLessAccessibleImplementation(ImplInfo info, INamedTypeSymbol narrower, BuildContext context)
 	{
@@ -362,7 +363,8 @@ partial class AwaitenGenerator
 		string type = Display(narrower.ToDisplayString(FullyQualified));
 		(string reason, string remedy) = MissingResolverTypeReason(info, narrower, context) switch
 		{
-			{ Unreachable: true, } => ("the generated container cannot reach it", $"nest the container beside it, or make '{type}' internal"),
+			{ Unreachable: true, } when info.Origin is null => ("the generated container cannot reach it", $"nest the container beside it, or make '{type}' internal"),
+			{ Unreachable: true, } => ("the generated container cannot reach it", $"make '{type}' internal"),
 			{ TypeArgument: true, } => ($"'{implementation}' carries it as a type argument into every type it converts to", $"make '{type}' internal or public"),
 			{ PrivateService: { } service, } => ($"it is registered as the private service '{Display(service)}'", $"register it under an accessible service, or make '{type}' internal or public"),
 			_ => ("no accessible type it converts to covers all of its services", "register it under one service, or give it an accessible base type that covers its services"),
@@ -376,7 +378,8 @@ partial class AwaitenGenerator
 
 	private static (bool Unreachable, bool TypeArgument, string? PrivateService) MissingResolverTypeReason(ImplInfo info, INamedTypeSymbol narrower, BuildContext context)
 	{
-		if (!context.Compilation.IsSymbolAccessibleWithin(info.Symbol, context.ContainerSymbol))
+		bool reachable = context.Compilation.IsSymbolAccessibleWithin(info.Symbol, context.ContainerSymbol);
+		if (!reachable && info.Origin is null)
 		{
 			return (true, false, null);
 		}
@@ -397,7 +400,7 @@ partial class AwaitenGenerator
 			.Prepend(info.Symbol)
 			.FirstOrDefault(candidate => services.Contains(candidate.ToDisplayString(FullyQualified))
 			                             && LessAccessibleThanContainer(candidate, context.ContainerSymbol) is not null);
-		return (false, false, privateService?.ToDisplayString(FullyQualified));
+		return (!reachable && privateService is null, false, privateService?.ToDisplayString(FullyQualified));
 	}
 
 	/// <summary>
@@ -607,7 +610,7 @@ partial class AwaitenGenerator
 		// scan registrations with different origins can fill the two slots, and each name binds only on its owner.
 		INamedTypeSymbol? origin = release ? info.OnReleaseOrigin : info.OnActivatedOrigin;
 
-		// A module-private implementation keeps a hook only when its module generated the wrapper (see
+		// An implementation hidden in its module keeps a hook only when its module generated the wrapper (see
 		// SelfCompiledRegistration), so the module's own resolution found exactly one hook; the container runs that
 		// hook's wrapper, which takes the factory's return type and passes the module's private type on.
 		if (info.ConstructVia is not null && origin is not null)

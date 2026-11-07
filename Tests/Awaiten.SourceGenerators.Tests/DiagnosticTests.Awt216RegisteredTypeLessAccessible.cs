@@ -698,7 +698,7 @@ public partial class DiagnosticTests
 		}
 
 		[Test]
-		public async Task PrivateTypeTheContainerCannotReach_Reports()
+		public async Task PrivateNestedTypeOfAClassEnclosingTheModule_DoesNotReport()
 		{
 			GeneratorResult result = Generator.Run("""
 			                                       using Awaiten;
@@ -725,9 +725,287 @@ public partial class DiagnosticTests
 			                                       }
 			                                       """);
 
-			await That(result.Diagnostics).Contains("*error AWT216*'MyCode.Fakes.FakeClock'*the generated container cannot reach it*nest the container beside it, or make 'MyCode.Fakes.FakeClock' internal*").AsWildcard()
-				.Because("the type is private to a class that encloses the module but not the container, so neither the module nor the container can build it for the container");
+			await That(result.Diagnostics).IsEmpty()
+				.Because("the module may access the private types of the class it is nested in, so its generated factory builds the type for the container");
+			await That(result.Sources["Awaiten.MyCode.Shop.g.cs"]).Contains("global::MyCode.Fakes.ClockModule.Awaiten__Registration_FakeClock_");
+		}
+
+		[Test]
+		public async Task PrivateNestedTypeTwoLevelsOutOfTheModule_DoesNotReport()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IClock { }
+
+			                                       public static partial class Fakes
+			                                       {
+			                                           private sealed class FakeClock : IClock { }
+
+			                                           public static partial class Clocks
+			                                           {
+			                                               [Module]
+			                                               [Singleton<FakeClock, IClock>]
+			                                               public static partial class ClockModule
+			                                               {
+			                                               }
+			                                           }
+			                                       }
+
+			                                       [Container]
+			                                       [Import(typeof(Fakes.Clocks.ClockModule))]
+			                                       public static partial class Shop
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("a nested type may access the private types of every class around it, at any depth");
+			await That(result.Sources["Awaiten.MyCode.Shop.g.cs"]).Contains("global::MyCode.Fakes.Clocks.ClockModule.Awaiten__Registration_FakeClock_");
+		}
+
+		[Test]
+		public async Task ProtectedNestedTypeOfABaseOfAClassEnclosingTheModule_DoesNotReport()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IClock { }
+
+			                                       public abstract class FakesBase
+			                                       {
+			                                           protected sealed class FakeClock : IClock { }
+			                                       }
+
+			                                       public partial class Fakes : FakesBase
+			                                       {
+			                                           [Module]
+			                                           [Singleton<FakeClock, IClock>]
+			                                           public static partial class ClockModule
+			                                           {
+			                                           }
+			                                       }
+
+			                                       [Container]
+			                                       [Import(typeof(Fakes.ClockModule))]
+			                                       public static partial class Shop
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("a module nested in a derived class may access the protected types of its base");
+			await That(result.Sources["Awaiten.MyCode.Shop.g.cs"]).Contains("global::MyCode.Fakes.ClockModule.Awaiten__Registration_FakeClock_");
+		}
+
+		[Test]
+		public async Task PrivateNestedTypeOfAClassEnclosingAnInternalModule_DoesNotReport()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       internal interface IClock { }
+
+			                                       internal static partial class Fakes
+			                                       {
+			                                           private sealed class FakeClock : IClock { }
+
+			                                           [Module]
+			                                           [Singleton<FakeClock, IClock>]
+			                                           internal static partial class ClockModule
+			                                           {
+			                                           }
+			                                       }
+
+			                                       [Container]
+			                                       [Import(typeof(Fakes.ClockModule))]
+			                                       internal static partial class Shop
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("the module self-compiles a type no other code of its assembly can construct, whatever the module's own accessibility");
+		}
+
+		[Test]
+		public async Task PrivateNestedTypeOfAClassEnclosingTheModuleWithPrivateHooks_DoesNotReport()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IClock { }
+			                                       public sealed class Log { }
+
+			                                       public static partial class Fakes
+			                                       {
+			                                           private sealed class FakeClock : IClock { }
+
+			                                           [Module]
+			                                           [Singleton<FakeClock, IClock>(OnActivated = nameof(Start), OnRelease = nameof(Stop))]
+			                                           public static partial class ClockModule
+			                                           {
+			                                               private static void Start(FakeClock clock, Log log) { }
+
+			                                               private static void Stop(IClock clock) { }
+			                                           }
+			                                       }
+
+			                                       [Container]
+			                                       [Import(typeof(Fakes.ClockModule))]
+			                                       [Singleton<Log>]
+			                                       public static partial class Shop
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("the container runs the module's private hooks through the public wrappers the module generates");
+			await That(result.Sources["Awaiten.MyCode.Shop.g.cs"]).Contains("global::MyCode.Fakes.ClockModule.Awaiten__Hook_OnActivated_FakeClock_").And
+				.Contains("global::MyCode.Fakes.ClockModule.Awaiten__Hook_OnRelease_FakeClock_");
+		}
+
+		[Test]
+		public async Task PrivateNestedTypeOfANonPartialClassEnclosingTheModule_ReportsAwt194Only()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IClock { }
+
+			                                       public static class Fakes
+			                                       {
+			                                           private sealed class FakeClock : IClock { }
+
+			                                           [Module]
+			                                           [Singleton<FakeClock, IClock>]
+			                                           public static partial class ClockModule
+			                                           {
+			                                           }
+			                                       }
+
+			                                       [Container]
+			                                       [Import(typeof(Fakes.ClockModule))]
+			                                       public static partial class Shop
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*error AWT194*'MyCode.Fakes.ClockModule'*").AsWildcard()
+				.Because("the generated factory re-opens every class around the module");
+			await That(result.Diagnostics).DoesNotContain("*AWT216*").AsWildcard()
+				.Because("the container drops the registration whose factory the module could not receive");
 			await That(result.Diagnostics).DoesNotContain("*error CS*").AsWildcard();
+		}
+
+		[Test]
+		public async Task PrivateNestedTypeOfAClassEnclosingTheModuleAsAPrivateService_Reports()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public static partial class Fakes
+			                                       {
+			                                           private interface IClock { }
+
+			                                           private sealed class FakeClock : IClock { }
+
+			                                           [Module]
+			                                           [Singleton<FakeClock, IClock>]
+			                                           public static partial class ClockModule
+			                                           {
+			                                           }
+			                                       }
+
+			                                       [Container]
+			                                       [Import(typeof(Fakes.ClockModule))]
+			                                       public static partial class Shop
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*error AWT216*'MyCode.Fakes.FakeClock'*registered as the private service 'MyCode.Fakes.IClock'*register it under an accessible service*").AsWildcard()
+				.Because("the module's public factory cannot return a private service, so the module cannot build the type for the container");
+			await That(result.Diagnostics).DoesNotContain("*error CS*").AsWildcard();
+		}
+
+		[Test]
+		public async Task PrivateTypeTheModuleCannotReach_ReportsTheCompilerError()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IClock { }
+
+			                                       public static partial class Fakes
+			                                       {
+			                                           private sealed class FakeClock : IClock { }
+			                                       }
+
+			                                       [Module]
+			                                       [Singleton<Fakes.FakeClock, IClock>]
+			                                       public static partial class ClockModule
+			                                       {
+			                                       }
+
+			                                       [Container]
+			                                       [Import(typeof(ClockModule))]
+			                                       public static partial class Shop
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*error CS0122*").AsWildcard()
+				.Because("the module cannot name a type private to a class it is not nested in");
+			await That(result.Diagnostics).DoesNotContain("*nest the container beside it*").AsWildcard()
+				.Because("moving the container would not help a type the module registers");
+		}
+
+		[Test]
+		public async Task PrivateNestedStructOfAClassEnclosingTheModule_Reports()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace MyCode;
+
+			                                       public interface IClock { }
+
+			                                       public static partial class Fakes
+			                                       {
+			                                           private struct FakeClock : IClock { }
+
+			                                           [Module]
+			                                           [Singleton<FakeClock, IClock>]
+			                                           public static partial class ClockModule
+			                                           {
+			                                           }
+			                                       }
+
+			                                       [Container]
+			                                       [Import(typeof(Fakes.ClockModule))]
+			                                       public static partial class Shop
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*error AWT216*'MyCode.Fakes.FakeClock'*the generated container cannot reach it; make 'MyCode.Fakes.FakeClock' internal*").AsWildcard()
+				.Because("a module generates factories for classes only, so the container would have to construct the struct itself");
+			await That(result.Diagnostics).DoesNotContain("*nest the container beside it*").AsWildcard();
 		}
 
 		[Test]
