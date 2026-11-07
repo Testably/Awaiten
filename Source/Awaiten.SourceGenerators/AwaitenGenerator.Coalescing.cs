@@ -47,9 +47,10 @@ partial class AwaitenGenerator
 	/// </summary>
 	private static void ShareHandledInstances(List<RawRegistration> raw, INamedTypeSymbol container, Compilation compilation, List<DiagnosticInfo> diagnostics)
 	{
-		List<(RawRegistration Handle, int Index)> indexed = raw
+		List<(RawRegistration Handle, int Index, string Identity)> indexed = raw
 			.Select((registration, index) => (registration, index))
 			.Where(entry => entry.registration.Hidden is not null && entry.registration.ImplementationType.Contains(HiddenKeyMarker))
+			.Select(entry => (entry.registration, entry.index, TypeIdentity(entry.registration.Hidden!, compilation)))
 			.ToList();
 		if (indexed.Count > 0)
 		{
@@ -65,8 +66,10 @@ partial class AwaitenGenerator
 				continue;
 			}
 
+			string aliasMarker = AliasKeyMarker + TypeIdentity(implementation, compilation);
 			if (raw.FirstOrDefault(alias => alias.ServiceSymbol is { } aliased
-			                                && alias.ImplementationType == TypeIdentity(aliased, compilation) + AliasKeyMarker + TypeIdentity(implementation, compilation)
+			                                && alias.ImplementationType.EndsWith(aliasMarker, StringComparison.Ordinal)
+			                                && alias.ImplementationType == TypeIdentity(aliased, compilation) + aliasMarker
 			                                && compilation.HasImplicitConversion(aliased, service)) is { } alias)
 			{
 				raw[index] = match with
@@ -97,7 +100,6 @@ partial class AwaitenGenerator
 				continue;
 			}
 
-			string aliasMarker = AliasKeyMarker + TypeIdentity(implementation, compilation);
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.ScanMatchNotShared,
 				LocationInfo.From(match.Location),

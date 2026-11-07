@@ -314,7 +314,7 @@ partial class AwaitenGenerator
 	///     no longer share an identity, so the checks coalescing would run between them run here (AWT107, AWT111, AWT166).
 	///     A directive of the registration that the handle cannot run, or a missing alias, is AWT241.
 	/// </summary>
-	private static void ShareHandleWithRegistrations(List<RawRegistration> raw, List<(RawRegistration Handle, int Index)> handles, INamedTypeSymbol container, Compilation compilation, List<DiagnosticInfo> diagnostics)
+	private static void ShareHandleWithRegistrations(List<RawRegistration> raw, List<(RawRegistration Handle, int Index, string Identity)> handles, INamedTypeSymbol container, Compilation compilation, List<DiagnosticInfo> diagnostics)
 	{
 		HashSet<string> lifetimes = new(StringComparer.Ordinal);
 		HashSet<string> productions = new(StringComparer.Ordinal);
@@ -324,7 +324,7 @@ partial class AwaitenGenerator
 			RawRegistration registration = raw[index];
 			if (registration.Hidden is not null
 			    || registration.ScanImplementation is not null
-			    || handles.FirstOrDefault(entry => TypeIdentity(entry.Handle.Hidden!, compilation) == registration.ImplementationType) is not ({ } handle, int handleIndex))
+			    || handles.FirstOrDefault(entry => entry.Identity == registration.ImplementationType) is not ({ } handle, int handleIndex, _))
 			{
 				continue;
 			}
