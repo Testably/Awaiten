@@ -153,12 +153,18 @@ partial class AwaitenGenerator
 		private static readonly ConditionalWeakTable<Compilation, AssemblyModuleIndex> Cache = new();
 
 		private readonly Compilation _compilation;
+		private readonly Lazy<HashSet<INamedTypeSymbol>> _imported;
 		private readonly ConcurrentDictionary<INamedTypeSymbol, Lazy<HiddenServices?>> _probes = new(SymbolEqualityComparer.Default);
 
 		private AssemblyModuleIndex(Compilation compilation)
 		{
 			_compilation = compilation;
-			foreach (INamedTypeSymbol module in ModulesIn(compilation.Assembly.GlobalNamespace))
+			_imported = new Lazy<HashSet<INamedTypeSymbol>>(() => new HashSet<INamedTypeSymbol>(
+				TypesWith(compilation.Assembly.GlobalNamespace, "ContainerAttribute")
+					.SelectMany(container => CollectImportedModules(container, new List<DiagnosticInfo>()))
+					.Select(import => import.Symbol),
+				SymbolEqualityComparer.Default));
+			foreach (INamedTypeSymbol module in TypesWith(compilation.Assembly.GlobalNamespace, "ModuleAttribute"))
 			{
 				Registrations[module] = ConstructedModuleRegistrations(module, compilation, members: true).ToList();
 			}
@@ -222,6 +228,10 @@ partial class AwaitenGenerator
 
 		public static AssemblyModuleIndex Of(Compilation compilation)
 			=> Cache.GetValue(compilation, static created => new AssemblyModuleIndex(created));
+
+		/// <summary>Whether a <c>[Container]</c> of the assembly imports <paramref name="module" />, so it reports what its coalescing sees itself.</summary>
+		public bool ImportedByContainer(INamedTypeSymbol module)
+			=> _imported.Value.Contains(module);
 
 		/// <summary>The registrations of <paramref name="module" />, read once when it belongs to the assembly.</summary>
 		public List<ModuleRegistration> RegistrationsOf(INamedTypeSymbol module)
@@ -610,10 +620,16 @@ partial class AwaitenGenerator
 	///     (AWT111), or a later registration that sets a directive the first one does not (AWT166). A container in another
 	///     assembly serves every registration from one instance handle with the lifetime and directives of the first one,
 	///     so it would silently differ instead. An overridable default is left out, since only the importing container
-	///     knows whether it yields.
+	///     knows whether it yields. A container of the assembly that imports the module reports the same conflicts at
+	///     the same places, so the module leaves them to it.
 	/// </summary>
 	private static void ReportHandledConflicts(INamedTypeSymbol implementation, INamedTypeSymbol module, Compilation compilation, List<DiagnosticInfo> diagnostics)
 	{
+		if (AssemblyModuleIndex.Of(compilation).ImportedByContainer(module))
+		{
+			return;
+		}
+
 		List<ModuleRegistration> registrations = ConstructedModuleRegistrations(module, compilation, members: true)
 			.Where(registration => SymbolEqualityComparer.Default.Equals(registration.Implementation, implementation) && NamedFallback(registration.Attribute) == 0)
 			.ToList();
@@ -1139,28 +1155,28 @@ partial class AwaitenGenerator
 			]);
 	}
 
-	/// <summary>The <c>[Module]</c> classes declared in <paramref name="ns" /> and its nested namespaces and types.</summary>
-	private static IEnumerable<INamedTypeSymbol> ModulesIn(INamespaceOrTypeSymbol ns)
+	/// <summary>The classes with the Awaiten attribute <paramref name="attribute" /> declared in <paramref name="ns" /> and its nested namespaces and types.</summary>
+	private static IEnumerable<INamedTypeSymbol> TypesWith(INamespaceOrTypeSymbol ns, string attribute)
 	{
 		foreach (ISymbol member in ns.GetMembers())
 		{
 			if (member is INamespaceSymbol nested)
 			{
-				foreach (INamedTypeSymbol module in ModulesIn(nested))
+				foreach (INamedTypeSymbol found in TypesWith(nested, attribute))
 				{
-					yield return module;
+					yield return found;
 				}
 			}
 			else if (member is INamedTypeSymbol type)
 			{
-				if (HasAwaitenAttribute(type.GetAttributes(), "ModuleAttribute"))
+				if (HasAwaitenAttribute(type.GetAttributes(), attribute))
 				{
 					yield return type;
 				}
 
-				foreach (INamedTypeSymbol module in ModulesIn(type))
+				foreach (INamedTypeSymbol found in TypesWith(type, attribute))
 				{
-					yield return module;
+					yield return found;
 				}
 			}
 		}

@@ -1274,6 +1274,20 @@ public class ModuleHiddenServiceTests
 		}
 
 		[Test]
+		public async Task ConflictWithAContainerInTheLibrary_IsReportedOnce()
+		{
+			GeneratorResult result = RunLibrary(Library("[Singleton<Impl, IInternal>]\n[Transient<Impl, IPublic>]") + """
+
+				[Container]
+				[Import(typeof(CoffeeModule))]
+				public static partial class LibContainer;
+				""");
+
+			await That(result.Diagnostics.Count(diagnostic => diagnostic.Contains("AWT107"))).IsEqualTo(1)
+				.Because("the container of the library reports the conflict at the same place, so the module's build leaves it to the container");
+		}
+
+		[Test]
 		public async Task ConsistentRegistrations_DoNotReportAConflict()
 		{
 			GeneratorResult result = RunLibrary(Library("[Singleton<Impl, IInternal>(SuppressDisposal = true, OnActivated = nameof(Activate))]\n[Singleton<Impl, IPublic>]"));
