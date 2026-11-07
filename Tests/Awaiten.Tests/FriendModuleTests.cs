@@ -110,9 +110,39 @@ public partial class FriendModuleTests
 			.Because("the container registers the scan match itself, awaits its internal ValueTask hook and passes it the token");
 	}
 
+	[Test]
+	public async Task CallsTheHookOfAFactoryRegistrationWithAnInternalDependency()
+	{
+		using FriendFactoryHookContainer.Root container = new();
+
+		await That(container.Resolve<IFriendFactoryLamp>().Lit).IsTrue()
+			.Because("the container calls the module's internal hook directly instead of a wrapper the module could not generate");
+	}
+
+	[Test]
+	public async Task ImportsAnInternalModuleWithInternalExposuresAndHookParameters()
+	{
+		using InternalPluginContainer.Root container = new();
+
+		IFriendInternalPlugin plugin = await container.ResolveAsync<IFriendInternalPlugin>();
+
+		await That(plugin.Wired).IsTrue()
+			.Because("the internal module's factory exposes the match under its internal interface and its wrapper takes the internal log");
+		await That(plugin.Started).IsTrue()
+			.Because("the container runs the internal module's internal convention, whose parameter takes the internal log, on the match the factory builds");
+	}
+
 	[Container]
 	[Import(typeof(SupportFriendModule))]
 	public static partial class FriendContainer;
+
+	[Container]
+	[Import(typeof(SupportFriendFactoryHookModule))]
+	public static partial class FriendFactoryHookContainer;
+
+	[Container]
+	[Import(typeof(SupportInternalPluginModule))]
+	internal static partial class InternalPluginContainer;
 
 	[Container]
 	[Import(typeof(SupportFriendAsyncHookModule))]

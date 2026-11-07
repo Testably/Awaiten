@@ -336,7 +336,7 @@ partial class AwaitenGenerator
 
 			RawRegistration? collected = fromModule && production == ProductionKind.Constructor && !conflictingDirectives
 				? SelfCompiledRegistration(registration, context, skipGeneratedScanRegistrations, ref reportedNotSelfCompiled)
-				: ThroughMemberWrapper(registration, origin, context.Compilation, !skipGeneratedScanRegistrations);
+				: WithCallableHooks(ThroughMemberWrapper(registration, origin, context.Compilation, !skipGeneratedScanRegistrations), context, fromModule && !skipGeneratedScanRegistrations);
 			if (collected is not null)
 			{
 				result.Add(collected);
@@ -505,6 +505,48 @@ partial class AwaitenGenerator
 
 		bool Reachable(string name)
 			=> owner.GetMembers(name).Any(candidate => compilation.IsSymbolAccessibleWithin(candidate, compilation.Assembly));
+	}
+
+	/// <summary>
+	///     <paramref name="registration" />, or <see langword="null" /> after reporting AWT231 when it names a hook of an
+	///     imported module in another assembly that this container cannot call, and the module recorded why it generated
+	///     no wrapper for it (see <see cref="CollectModuleMemberWrappers" />). Only <paramref name="applies" /> to such a
+	///     module; one inherited through <c>Extends</c> keeps the registration.
+	/// </summary>
+	private static RawRegistration? WithCallableHooks(RawRegistration registration, LifetimeCollectionContext context, bool applies)
+	{
+		if (!applies || context.Inherited || registration.Origin is not { } module)
+		{
+			return registration;
+		}
+
+		Compilation compilation = context.Compilation;
+		foreach ((string? hook, bool release) in new[] { (registration.OnActivated, false), (registration.OnRelease, true), })
+		{
+			if (hook is not null
+			    && !module.GetMembers(hook).Any(candidate => compilation.IsSymbolAccessibleWithin(candidate, compilation.Assembly))
+			    && SkippedHookReason(module, registration.Implementation, release, hook) is { } reason)
+			{
+				DiagnosticInfo diagnostic = new(
+					Diagnostics.ModuleHookNotWrapped,
+					LocationInfo.From(context.FallbackLocation),
+					new EquatableArray<string>([
+						Display(module.ToDisplayString(FullyQualified)),
+						Display(registration.ImplementationType),
+						release ? "OnRelease" : "OnActivated",
+						hook,
+						reason,
+					]));
+				if (!context.Diagnostics.Contains(diagnostic))
+				{
+					context.Diagnostics.Add(diagnostic);
+				}
+
+				return null;
+			}
+		}
+
+		return registration;
 	}
 
 	/// <summary>

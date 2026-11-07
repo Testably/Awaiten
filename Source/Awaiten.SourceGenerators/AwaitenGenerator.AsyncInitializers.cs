@@ -301,8 +301,9 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     <see cref="Diagnostics.InaccessibleAsyncInitializer">AWT234</see> for a self-compiled implementation of the
-	///     module that one of the module's conventions initializes, when a consumer in another assembly could not call that
-	///     convention: its type or its method is not public. An assembly granted
+	///     module that one of the module's conventions initializes, when a consumer of the module could not call that
+	///     convention: its type or its method is not public, or, for an internal module, which only its own assembly and
+	///     the assemblies it grants <c>InternalsVisibleTo</c> import, not accessible in its assembly. An assembly granted
 	///     <c>InternalsVisibleTo</c> can, so like AWT195 the failure may be left to such an assembly (see
 	///     <see cref="SkipReason" />).
 	/// </summary>
@@ -312,11 +313,12 @@ partial class AwaitenGenerator
 		foreach (AsyncInitializerConvention convention in MatchingAsyncInitializers(conventions, type => IsOfConventionType(implementation, type)))
 		{
 			string? reason = null;
-			if (!IsExternallyAccessible(convention.Type))
+			if (!FitsFactorySignature(convention.Type, context))
 			{
 				reason = $"'{Display(convention.Type.ToDisplayString(FullyQualified))}' is not accessible outside the module's assembly";
 			}
-			else if (convention.Method.DeclaredAccessibility != Accessibility.Public)
+			else if (convention.Method.DeclaredAccessibility != Accessibility.Public
+			         && (IsExternallyAccessible(context.Module) || !context.Compilation.IsSymbolAccessibleWithin(convention.Method, context.Module.ContainingAssembly)))
 			{
 				reason = "the method is not accessible outside the module's assembly";
 			}

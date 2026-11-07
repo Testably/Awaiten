@@ -90,7 +90,8 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 	///     assembly grants <c>InternalsVisibleTo</c> (see <see cref="FriendsConstructEveryRegistration" />); when it is, its scans and registrations are
 	///     expanded into factories in its own build (see <see cref="CollectModuleScanFactories" /> and
 	///     <see cref="CollectModuleRegistrationFactories" />). A module that self-compiles nothing still gets a model
-	///     when one of its <c>[AsyncInitializer&lt;T&gt;]</c> conventions is unusable, which carries only that AWT233.
+	///     when one of its <c>[AsyncInitializer&lt;T&gt;]</c> conventions is unusable (AWT233) or the hook of a <c>Factory</c>
+	///     registration gets no wrapper (AWT203, AWT204), which carries only those diagnostics.
 	/// </summary>
 	private static ModuleScanModel? BuildModuleModel(GeneratorAttributeSyntaxContext context, CancellationToken cancellationToken)
 	{
@@ -114,9 +115,10 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		// Member wrappers and the factories of decorators are generated only into a module that can receive them, so a
 		// module that cannot keeps building without them, as it did before they existed.
 		bool receives = ReceivesGeneratedMembers(moduleSymbol);
-		List<MemberWrapper> wrappers = receives ? CollectModuleMemberWrappers(moduleSymbol, compilation) : new();
+		List<SkippedRegistration> skipped = new();
+		List<MemberWrapper> wrappers = receives ? CollectModuleMemberWrappers(moduleSymbol, compilation, diagnostics, skipped) : new();
 		List<RegistrationFactory> contributions = receives ? CollectModuleContributionFactories(moduleSymbol, compilation) : new();
-		if (!declaresScan && selfCompiled is null && wrappers.Count == 0 && contributions.Count == 0)
+		if (!declaresScan && selfCompiled is null && wrappers.Count == 0 && contributions.Count == 0 && skipped.Count == 0)
 		{
 			return diagnostics.Count == 0
 				? null
@@ -137,7 +139,6 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 
 		List<ModuleFactory> factories = new();
 		List<RegistrationFactory> registrations = new();
-		List<SkippedRegistration> skipped = new();
 		bool expanded = false;
 		string? notPartialMarker = null;
 		if (selfCompiled is not null && moduleSymbol.IsStatic && (HasOpenTypeParameters(moduleSymbol) || !isPartial) && FriendsConstructEveryRegistration(moduleSymbol, compilation))
@@ -183,6 +184,8 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			}
 
 			registrations = CollectModuleRegistrationFactories(moduleSymbol, compilation, diagnostics, factories, skipped);
+			wrappers.RemoveAll(wrapper => registrations.Any(registration => registration.Hooks.AsArray().Any(hook => hook.Hook.WrapperName == wrapper.Name)));
+			skipped = skipped.GroupBy(entry => entry.MarkerName, StringComparer.Ordinal).Select(group => group.First()).ToList();
 			registrations.AddRange(contributions);
 			expanded = true;
 		}

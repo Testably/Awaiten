@@ -1947,6 +1947,19 @@ internal static class Diagnostics
 		isEnabledByDefault: true);
 
 	/// <summary>
+	///     The form of <see cref="ModuleRegistrationNotSelfCompiled">AWT231</see> for a <c>Factory</c> registration: the
+	///     container can call the factory, but not the registration's hook, and the module's build generated no wrapper
+	///     for it.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ModuleHookNotWrapped = new(
+		"AWT231",
+		ModuleRegistrationNotSelfCompiled.Title,
+		"The imported module '{0}' registers '{1}' with the {2} hook '{3}', which this container cannot call, and the module's assembly generated no wrapper for it because {4}; grant this assembly InternalsVisibleTo in the module's assembly, or make the hook and its parameter types public",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
 	///     A lifecycle hook is asynchronous in a way the container cannot run: an <c>OnActivated</c> hook returns a
 	///     result (<c>Task&lt;T&gt;</c> or <c>ValueTask&lt;T&gt;</c>) the container would discard, or an asynchronous
 	///     <c>OnRelease</c> hook takes a <c>CancellationToken</c>, which <c>DisposeAsync</c> has none to pass to.
