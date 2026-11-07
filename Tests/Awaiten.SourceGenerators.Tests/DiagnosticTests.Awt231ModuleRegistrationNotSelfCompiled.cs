@@ -62,12 +62,10 @@ public partial class DiagnosticTests
 		{
 			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Library("Lib.Tests"), Consumer);
 
-			await That(result.Diagnostics).Contains("*AWT231*GreetingModule*'Lib.Greeter'*because its constructor parameter of type 'Lib.IFormatter' is not accessible outside the module's assembly*InternalsVisibleTo*public*").AsWildcard()
+			await That(result.Diagnostics).Contains("*AWT231*GreetingModule*'Lib.Welcome'*because its property 'Clock' is marked [Inject(Optional = true)]*InternalsVisibleTo*public*").AsWildcard()
 				.Because("the module skipped the factory on purpose, and the consumer names why and how to fix it");
-			await That(result.Diagnostics).Contains("*AWT231*GreetingModule*'Lib.Farewell'*because it is registered under several services (Lib.IFarewell, Lib.IWelcome)*").AsWildcard();
-			await That(result.Diagnostics).Contains("*AWT231*GreetingModule*'Lib.Welcome'*because its property 'Clock' is marked [Inject(Optional = true)]*").AsWildcard();
-			await That(result.Diagnostics.Where(diagnostic => diagnostic.Contains("AWT231"))).HasCount(3)
-				.Because("each implementation is reported once, even when it has several registrations");
+			await That(result.Diagnostics.Where(diagnostic => diagnostic.Contains("AWT231"))).HasCount(1)
+				.Because("the internal formatter of 'Lib.Greeter' and the one instance of 'Lib.Farewell' under several services reach the consumer through generated handles, so only 'Lib.Welcome' is skipped");
 			await That(result.Diagnostics).DoesNotContain("*AWT154*").AsWildcard()
 				.Because("the module was built with the generator, so it is not a module that was never expanded");
 		}

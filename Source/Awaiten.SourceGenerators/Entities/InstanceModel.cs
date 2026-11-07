@@ -66,8 +66,16 @@ internal sealed record InstanceModel(
 	string? ResolverType = null,
 	bool IsAsyncActivation = false,
 	bool IsAsyncRelease = false,
-	string? AsyncReleaseHookName = null)
+	string? AsyncReleaseHookName = null,
+	bool Unlisted = false)
 {
+	/// <summary>
+	///     The services the container offers for resolution: none for an <see cref="Unlisted" /> instance, the generated
+	///     handle of a service a module of another assembly registers under an internal type, which only dependencies
+	///     reach, so it gets no resolver interface, dispatch entry or advertised registration.
+	/// </summary>
+	public ServiceKey[] ListedServices => Unlisted ? [] : Services.AsArray();
+
 	/// <summary>
 	///     The type the generated resolvers return and the async cache holds: <see cref="ResolverType" /> for an
 	///     implementation private to the container, which only the resolver bodies may name, else

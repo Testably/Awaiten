@@ -1328,6 +1328,16 @@ partial class AwaitenGenerator
 			marker = implementationType.IndexOf(MemberKeyMarker, StringComparison.Ordinal);
 		}
 
+		if (marker < 0)
+		{
+			marker = implementationType.IndexOf(AliasKeyMarker, StringComparison.Ordinal);
+		}
+
+		if (marker < 0)
+		{
+			marker = implementationType.IndexOf(HiddenKeyMarker, StringComparison.Ordinal);
+		}
+
 		string type = marker >= 0 ? implementationType.Substring(0, marker) : implementationType;
 		int assembly = type.IndexOf(AssemblyMarker, StringComparison.Ordinal);
 		return Display(assembly >= 0 ? type.Substring(0, assembly) : type);

@@ -150,7 +150,8 @@ partial class AwaitenGenerator
 			ResolverType: resolverType,
 			IsAsyncActivation: activationHook is not null && IsAsyncHookReturn(activationHook.ReturnType, compilation),
 			IsAsyncRelease: asyncRelease,
-			AsyncReleaseHookName: asyncRelease && releaseHook is { } hook && hook.ContainingType.Name != InternalsClass ? hook.Name : null);
+			AsyncReleaseHookName: asyncRelease && releaseHook is { } hook && hook.ContainingType.Name != InternalsClass ? hook.Name : null,
+			Unlisted: info.Unlisted);
 
 		static bool ImplementsInterface(ITypeSymbol type, INamedTypeSymbol @interface)
 		{

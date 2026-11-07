@@ -256,7 +256,7 @@ internal static partial class Sources
 			// requesting consumer, so its arm passes null (mirroring the synchronous by-type dispatch).
 			bool requestingType = instances[i].IsRequestingTypeFactory;
 			// Keyed registrations are reached only by [FromKey] injection, never by-type resolution.
-			foreach (string service in instances[i].Services.AsArray().Where(serviceKey => serviceKey.Key is null).Select(serviceKey => serviceKey.Service))
+			foreach (string service in instances[i].ListedServices.Where(serviceKey => serviceKey.Key is null).Select(serviceKey => serviceKey.Service))
 			{
 				arms.Add((service, asyncResolver, rootOwned, requestingType, rootWithheld ? AsyncRootWithheldMessage(service) : null));
 			}
@@ -281,7 +281,7 @@ internal static partial class Sources
 			arms.Add((shape, method, false, false, rootWithheld ? CollectionAsyncRootWithheldMessage(shape) : null));
 		}
 
-		return arms;
+		return WithoutUnlisted(arms, instances, arm => arm.Service);
 	}
 
 	/// <summary>
@@ -679,6 +679,14 @@ internal static partial class Sources
 	{
 		foreach (AsyncInitializerModel initializer in instance.AsyncInitializers.AsArray())
 		{
+			if (initializer.Wrapper)
+			{
+				Indent(builder, depth).Append("await ").Append(initializer.Type).Append('.').Append(initializer.Method).Append('(').Append(variable)
+					.Append(HookArguments(initializer.Parameters, instance, context, asynchronous: true))
+					.AppendLine(").ConfigureAwait(false);");
+				continue;
+			}
+
 			Indent(builder, depth).Append("await ((").Append(initializer.Type).Append(')').Append(variable).Append(").")
 				.Append(initializer.Method).Append('(')
 				.Append(HookArgumentList(initializer.Parameters, instance, context, asynchronous: true))

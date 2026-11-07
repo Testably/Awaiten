@@ -252,7 +252,7 @@ internal static partial class Sources
 			}
 		}
 
-		return result;
+		return WithoutUnlisted(result, instances, entry => entry.Type);
 	}
 
 	/// <summary>
@@ -322,7 +322,7 @@ internal static partial class Sources
 				continue;
 			}
 
-			foreach (ServiceKey service in instances[i].Services.AsArray())
+			foreach (ServiceKey service in instances[i].ListedServices)
 			{
 				// Keyed registrations are reached only by [FromKey] injection, never by-type resolution.
 				if (service.Key is not null || !seen.Add(service.Service))

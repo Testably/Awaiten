@@ -258,7 +258,8 @@ partial class AwaitenGenerator
 		Location? fallbackLocation = context.FallbackLocation;
 		List<DiagnosticInfo> diagnostics = context.Diagnostics;
 		bool reportedNotSelfCompiled = false;
-		bool fromModule = origin is not null && HasAwaitenAttribute(context.Owner.GetAttributes(), "ModuleAttribute");
+		HashSet<INamedTypeSymbol> implicitHandles = new(SymbolEqualityComparer.Default);
+		bool fromModule =origin is not null && HasAwaitenAttribute(context.Owner.GetAttributes(), "ModuleAttribute");
 		foreach (AttributeData attribute in context.Owner.GetAttributes())
 		{
 			if (attribute.AttributeClass is not { } attributeClass
@@ -333,6 +334,13 @@ partial class AwaitenGenerator
 				OnRelease: NamedArgument(attribute, "OnRelease"),
 				SuppressDisposal: NamedFlag(attribute, "SuppressDisposal"),
 				WhenInjectedInto: whenInjectedInto);
+
+			if (fromModule && production == ProductionKind.Constructor && !conflictingDirectives && !skipGeneratedScanRegistrations
+			    && ThroughHandle(registration, context.Compilation, implicitHandles) is { } handled)
+			{
+				result.AddRange(handled);
+				continue;
+			}
 
 			RawRegistration? collected = fromModule && production == ProductionKind.Constructor && !conflictingDirectives
 				? SelfCompiledRegistration(registration, context, skipGeneratedScanRegistrations, ref reportedNotSelfCompiled)

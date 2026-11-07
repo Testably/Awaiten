@@ -321,6 +321,115 @@ public class ModuleHiddenServiceTests
 			.Because("a container in the module's own assembly names the internal service and never uses a handle");
 	}
 
+	public class Consumer
+	{
+		private const string Container = """
+		                                 using Awaiten;
+		                                 using Lib;
+
+		                                 namespace MyCode;
+
+		                                 [Container]
+		                                 [Import(typeof(CoffeeModule))]
+		                                 public static partial class MyContainer;
+		                                 """;
+
+		[Test]
+		public async Task RegistersTheHandleAsADependencyOnly()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly("""
+				using Awaiten;
+
+				namespace Lib;
+
+				public interface IGrinder { }
+				internal sealed class BeanStore { }
+				internal sealed class Grinder : IGrinder { public Grinder(BeanStore store) { } }
+
+				[Module]
+				[Singleton<BeanStore>]
+				[Singleton<Grinder, IGrinder>]
+				public static partial class CoffeeModule { }
+				""", Container);
+			string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+			string handle = Handle("global::Lib.BeanStore");
+
+			await That(result.Diagnostics).IsEmpty();
+			await That(source).Contains($"global::Lib.CoffeeModule.Internals.{HiddenFactory("global::Lib.BeanStore")}()")
+				.Because("the container builds the internal service through the module's handle factory");
+			await That(source).Contains("global::Awaiten.IAwaitenResolver<global::Lib.IGrinder>");
+			await That(source).DoesNotContain($"global::Awaiten.IAwaitenResolver<{handle}>")
+				.And.DoesNotContain($"typeof({handle})")
+				.And.DoesNotContain($"<{handle}>>")
+				.Because("a handle is never offered for resolution, advertised as a registration or dispatched by type");
+		}
+
+		[Test]
+		public async Task TwoModulesRegisteringOneInternalImplementation_KeepTheirHandlesApart()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly("""
+				using Awaiten;
+
+				namespace Lib;
+
+				public interface IGrinder { }
+				public interface IRoaster { }
+				internal sealed class BeanStore { }
+				internal sealed class Grinder : IGrinder { public Grinder(BeanStore store) { } }
+				internal sealed class Roaster : IRoaster { public Roaster(BeanStore store) { } }
+
+				[Module]
+				[Singleton<BeanStore>]
+				[Singleton<Grinder, IGrinder>]
+				public static partial class CoffeeModule { }
+
+				[Module]
+				[Singleton<BeanStore>]
+				[Singleton<Roaster, IRoaster>]
+				public static partial class RoastingModule { }
+				""", """
+				using Awaiten;
+				using Lib;
+
+				namespace MyCode;
+
+				[Container]
+				[Import(typeof(CoffeeModule))]
+				[Import(typeof(RoastingModule))]
+				public static partial class MyContainer;
+				""");
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("each module's handle is a registration of its own, so the two never conflict");
+		}
+
+		[Test]
+		public async Task ConsumerGrantedInternalsVisibleTo_ConstructsDirectly()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly("""
+				using Awaiten;
+
+				[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("TestAssembly")]
+
+				namespace Lib;
+
+				public interface IGrinder { }
+				internal sealed class BeanStore { }
+				internal sealed class Grinder : IGrinder { public Grinder(BeanStore store) { } }
+
+				[Module]
+				[Singleton<BeanStore>]
+				[Singleton<Grinder, IGrinder>]
+				public static partial class CoffeeModule { }
+				""", Container);
+			string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+			await That(result.Diagnostics).IsEmpty();
+			await That(source).Contains("new global::Lib.BeanStore()").And.DoesNotContain("Hidden_")
+				.Because("a container that can name the internal service constructs it itself and ignores the handles");
+		}
+	}
+
 	public class Diagnostics
 	{
 		[Test]

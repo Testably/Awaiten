@@ -150,7 +150,7 @@ internal static partial class Sources
 
 		foreach (InstanceModel owner in context.Instances)
 		{
-			foreach (ServiceKey serviceKey in owner.Services.AsArray())
+			foreach (ServiceKey serviceKey in owner.ListedServices)
 			{
 				// Only user-declared keys are reachable; the synthetic decorator/contextual keys stay internal.
 				if (!AwaitenGenerator.IsUserKey(serviceKey.Key) || !seen.Add(serviceKey))

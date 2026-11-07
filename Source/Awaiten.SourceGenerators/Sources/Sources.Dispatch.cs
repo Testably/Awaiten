@@ -39,7 +39,7 @@ internal static partial class Sources
 				continue;
 			}
 
-			foreach (ServiceKey service in instances[i].Services.AsArray())
+			foreach (ServiceKey service in instances[i].ListedServices)
 			{
 				// Keyed registrations are reached only by [FromKey] injection, never the typed resolver fast
 				// path, so they get no IAwaitenResolver<T> base or explicit typed resolution.
@@ -51,6 +51,17 @@ internal static partial class Sources
 				yield return (service.Service, i);
 			}
 		}
+	}
+
+	/// <summary>
+	///     <paramref name="entries" /> without those whose resolved type names the service of an unlisted instance (see
+	///     <see cref="InstanceModel.ListedServices" />), such as a collection or relationship over a generated handle,
+	///     which only dependencies reach. The list itself when the container has no unlisted instance.
+	/// </summary>
+	private static List<T> WithoutUnlisted<T>(List<T> entries, InstanceModel[] instances, Func<T, string> type)
+	{
+		string[] unlisted = instances.Where(instance => instance.Unlisted).SelectMany(instance => instance.Services.AsArray()).Select(service => service.Service).Distinct().ToArray();
+		return unlisted.Length == 0 ? entries : entries.Where(entry => !unlisted.Any(type(entry).Contains)).ToList();
 	}
 
 	/// <summary>
@@ -287,7 +298,7 @@ internal static partial class Sources
 			bool disposalSuppressed = AdvertisesSuppressedDisposal(instance, syncAfterInit);
 			// The synthetic decorator/contextual keys are internal wiring, never advertised. Unkeyed and
 			// user-keyed registrations are both advertised, the latter carrying its user-declared Key.
-			foreach (ServiceKey service in instance.Services.AsArray()
+			foreach (ServiceKey service in instance.ListedServices
 				         .Where(service => service.Key is null || AwaitenGenerator.IsUserKey(service.Key)))
 			{
 				EmitRegistrationEntry(builder, depth + 1, service, instance, requiresAsync, externallyOwned, disposalSuppressed);
@@ -865,7 +876,7 @@ internal static partial class Sources
 		// through an async arm.
 		AddAwaitedKeyedCollectionEntries(instances, names, serviceToIndex, membership, strict, entries, seen);
 
-		return entries;
+		return WithoutUnlisted(entries, instances, entry => entry.Type);
 	}
 
 	/// <summary>
@@ -1117,7 +1128,7 @@ internal static partial class Sources
 	{
 		bool rootOwned = IsRootOwned(instance);
 		string[] argTypes = instance.ArgTypes();
-		foreach (ServiceKey serviceKey in instance.Services.AsArray())
+		foreach (ServiceKey serviceKey in instance.ListedServices)
 		{
 			// Keyed registrations are reached only by [FromKey] injection, never the public dispatch table.
 			if (serviceKey.Key is not null)
@@ -1177,7 +1188,7 @@ internal static partial class Sources
 	private static void AddRelationshipEntries(InstanceModel instance, string resolver, List<DispatchEntry> entries, HashSet<string> seen, bool funcWithheld)
 	{
 		bool rootOwned = IsRootOwned(instance);
-		foreach (ServiceKey serviceKey in instance.Services.AsArray())
+		foreach (ServiceKey serviceKey in instance.ListedServices)
 		{
 			// Keyed registrations are reached only by [FromKey] injection, so they get no synthetic
 			// relationship entries either.
