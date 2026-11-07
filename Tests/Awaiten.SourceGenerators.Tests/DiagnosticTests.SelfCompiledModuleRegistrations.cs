@@ -258,6 +258,43 @@ public partial class DiagnosticTests
 			}
 
 			[Test]
+			[Arguments("IInternal", "IPublic", false, false)]
+			[Arguments("IInternal", "IOther", false, false)]
+			[Arguments("IPublic", "IFarewell", false, false)]
+			[Arguments("IInternal", "IPublic", true, false)]
+			[Arguments("IInternal", "IOther", true, false)]
+			[Arguments("IInternal", "IPublic", false, true)]
+			[Arguments("IInternal", "IOther", false, true)]
+			public async Task ReportsAPrivateImplementationUnderSeveralServicesWithItsReason(string first, string second, bool grant, bool container)
+			{
+				GeneratorResult result = Generator.Run($$"""
+					using Awaiten;
+
+					{{(grant ? "[assembly: System.Runtime.CompilerServices.InternalsVisibleTo(\"TestAssembly\")]" : "")}}
+
+					namespace Lib;
+
+					public interface IPublic { }
+					public interface IFarewell { }
+					internal interface IInternal { }
+					internal interface IOther { }
+
+					[Module]
+					[Singleton<GreetingModule.Greeter, {{first}}>]
+					[Singleton<GreetingModule.Greeter, {{second}}>]
+					public static partial class GreetingModule
+					{
+					    private sealed class Greeter : IPublic, IFarewell, IInternal, IOther { }
+					}
+
+					{{(container ? "[Container]\n[Import(typeof(GreetingModule))]\npublic static partial class MyContainer;" : "")}}
+					""");
+
+				await That(result.Diagnostics).Contains($"*AWT197*'Lib.GreetingModule.Greeter' is private to the module*(Lib.{first}, Lib.{second})*make it internal so every container shares one instance*").AsWildcard()
+					.Because("no container can name the private type to hold the one instance its services share, so the library build reports it whichever container imports the module");
+			}
+
+			[Test]
 			public async Task SharesAnImplementationUnderSeveralServicesThroughAHandleWhenTheAssemblyGrantsInternalsVisibleTo()
 			{
 				GeneratorResult result = Generator.Run("""
