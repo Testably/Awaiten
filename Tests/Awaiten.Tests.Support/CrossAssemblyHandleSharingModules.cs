@@ -101,6 +101,41 @@ internal sealed class OverriddenClock : IOverriddenClock, IOverriddenTick
 [Singleton<OverriddenClock, IOverriddenTick>]
 public static partial class CrossAssemblyOverriddenEagerModule;
 
+/// <summary>A clock <see cref="CrossAssemblyContextualEagerModule" /> registers as an eager overridable default for <see cref="ContextualWatch" />.</summary>
+public interface IContextualClock;
+
+/// <summary>Counts the constructions of the internal clock of <see cref="CrossAssemblyContextualEagerModule" />.</summary>
+public static class ContextualClockCounter
+{
+	private static int _constructed;
+
+	/// <summary>How often the clock was constructed.</summary>
+	public static int Constructed => System.Threading.Volatile.Read(ref _constructed);
+
+	internal static void Increment() => System.Threading.Interlocked.Increment(ref _constructed);
+}
+
+/// <summary>The consumer the eager clock of <see cref="CrossAssemblyContextualEagerModule" /> is injected into.</summary>
+public sealed class ContextualWatch(IContextualClock clock)
+{
+	/// <summary>The clock the watch received.</summary>
+	public IContextualClock Clock => clock;
+}
+
+internal interface IContextualTick;
+
+internal sealed class ContextualClock : IContextualClock, IContextualTick
+{
+	public ContextualClock() => ContextualClockCounter.Increment();
+}
+
+/// <summary>A <c>[Module]</c> whose eager registration is an overridable default only for the watch, beside a lazy one under an internal service.</summary>
+[Module]
+[Singleton<ContextualClock, IContextualClock>(Eager = true, Fallback = Fallback.Silent, WhenInjectedInto = typeof(ContextualWatch))]
+[Singleton<ContextualClock, IContextualTick>(Fallback = Fallback.Silent)]
+[Singleton<ContextualWatch>]
+public static partial class CrossAssemblyContextualEagerModule;
+
 /// <summary>A clock <see cref="CrossAssemblyDroppedEagerModule" /> registers as an eager overridable default.</summary>
 public interface IDroppedClock;
 

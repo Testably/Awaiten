@@ -1460,6 +1460,41 @@ public class ModuleHiddenServiceTests
 				await That(cross.Diagnostics).IsEmpty()
 					.Because("the container overrides the eager default, which then contributes nothing, as in the module's own assembly");
 			}
+
+			[Test]
+			public async Task ContextualDefaultBesideAnOverrideOfItsService_KeepsItsDirectives()
+			{
+				const string library = """
+					using Awaiten;
+
+					namespace Lib;
+
+					public interface IClock { }
+					public sealed class Watch { public Watch(IClock clock) { } }
+					internal interface ITick { }
+					internal sealed class Clock : IClock, ITick { }
+
+					[Module]
+					[Singleton<Clock, IClock>(Fallback = Fallback.Silent, WhenInjectedInto = typeof(Watch))]
+					[Singleton<Clock, ITick>(Fallback = Fallback.Silent, Eager = true)]
+					[Singleton<Watch>]
+					public static partial class ClockModule { }
+					""";
+				const string container = """
+					public sealed class MyClock : IClock { }
+
+					[Container]
+					[Import(typeof(ClockModule))]
+					[Singleton<MyClock, IClock>]
+					public static partial class MyContainer;
+					""";
+				GeneratorResult same = Generator.Run(library + container);
+				GeneratorResult cross = Generator.RunWithGeneratedReferencedAssembly(library, "using Awaiten;\nusing Lib;\n\nnamespace MyCode;\n\n" + container);
+
+				await That(same.Diagnostics).Contains("*AWT166*'Lib.Clock'*Eager*").AsWildcard();
+				await That(cross.Diagnostics).Contains("*AWT166*'Lib.Clock'*Eager*").AsWildcard()
+					.Because("the override claims the unkeyed service only, so the contextual default survives and comes first, as in the module's own assembly");
+			}
 		}
 
 		public class EveryRegistrationOverridden

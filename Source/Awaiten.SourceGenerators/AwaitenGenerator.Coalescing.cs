@@ -759,7 +759,7 @@ partial class AwaitenGenerator
 	///     The registrations (by index into <paramref name="raw" />) coalescing will drop in full: an overridable
 	///     default whose service key a higher-tier or earlier registration claims. Losing strong/synthesized/scan
 	///     registrations stay collection members. Sound to compute before open generic expansion (synthesized ranks
-	///     below defaults).
+	///     below defaults). A contextual registration claims its context key, as in coalescing.
 	/// </summary>
 	private static HashSet<int> DroppedOverridableDefaults(List<RawRegistration> raw)
 	{
@@ -767,7 +767,7 @@ partial class AwaitenGenerator
 		HashSet<int> dropped = new();
 		foreach ((RawRegistration registration, int index) in InPrecedenceOrder(raw))
 		{
-			if (!claimed.Add(new ServiceKey(registration.ServiceType, registration.Key)) && registration.Weak)
+			if (!claimed.Add(new ServiceKey(registration.ServiceType, registration.WhenInjectedInto is { } consumer ? ContextKey(consumer) : registration.Key)) && registration.Weak)
 			{
 				dropped.Add(index);
 			}

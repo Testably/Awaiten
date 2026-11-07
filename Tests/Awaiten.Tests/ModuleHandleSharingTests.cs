@@ -69,6 +69,17 @@ public class ModuleHandleSharingTests
 	}
 
 	[Test]
+	public async Task ContextualEagerDefaultBesideAnOverrideOfItsService_IsBuiltEagerly()
+	{
+		int before = ContextualClockCounter.Constructed;
+		using ContextualEagerContainer.Root container = new();
+
+		await That(ContextualClockCounter.Constructed - before).IsEqualTo(1)
+			.Because("the override claims the unkeyed service only, so the contextual eager default survives and comes first, as in the module's own assembly");
+		await That(container.Resolve<ContextualWatch>().Clock.GetType().Name).IsEqualTo("ContextualClock");
+	}
+
+	[Test]
 	public async Task DecoratorOfAnInternalServiceAnotherModuleRegisters_DecoratesIt()
 	{
 		IDecoratedTillUser user;
@@ -86,6 +97,14 @@ public class ModuleHandleSharingTests
 
 /// <summary>The clock this assembly registers over the eager default of <see cref="CrossAssemblyOverriddenEagerModule" />.</summary>
 public sealed class LocalClock : IOverriddenClock;
+
+/// <summary>The clock this assembly registers for every consumer but the watch of <see cref="CrossAssemblyContextualEagerModule" />.</summary>
+public sealed class LocalContextualClock : IContextualClock;
+
+[Container]
+[Import(typeof(CrossAssemblyContextualEagerModule))]
+[Singleton<LocalContextualClock, IContextualClock>]
+public static partial class ContextualEagerContainer;
 
 /// <summary>The clock and timer this assembly registers over the defaults of <see cref="CrossAssemblyDroppedEagerModule" />.</summary>
 public sealed class LocalClockAndTimer : IDroppedClock, IDroppedTimer;
