@@ -52,6 +52,33 @@ public partial class DiagnosticTests
 		}
 
 		[Test]
+		public async Task NamesAConventionTypePrivateToAnInternalModule()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+			                                       using System.Threading.Tasks;
+
+			                                       namespace Lib;
+
+			                                       public interface ITerminal { }
+
+			                                       [Module]
+			                                       [AsyncInitializer<TerminalModule.IStartable>(nameof(TerminalModule.IStartable.StartAsync))]
+			                                       [Singleton<TerminalModule.Terminal, ITerminal>]
+			                                       internal static partial class TerminalModule
+			                                       {
+			                                       	private interface IStartable { Task StartAsync(); }
+
+			                                       	private sealed class Terminal : ITerminal, IStartable { public Task StartAsync() => Task.CompletedTask; }
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*AWT234*Terminal*IStartable.StartAsync*'Lib.TerminalModule.IStartable' is private to the module*").AsWildcard()
+				.Because("the type is hidden even from the module's own assembly, so being outside that assembly is not the reason");
+			await That(result.Diagnostics).DoesNotContain("*outside the module's assembly*").AsWildcard();
+		}
+
+		[Test]
 		public async Task DoesNotReportAConventionOfAModuleWithNothingSelfCompiled()
 		{
 			GeneratorResult result = Generator.Run("""

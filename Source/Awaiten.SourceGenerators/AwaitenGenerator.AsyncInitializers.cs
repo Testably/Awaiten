@@ -351,7 +351,8 @@ partial class AwaitenGenerator
 			string? reason = null;
 			if (!FitsFactorySignature(convention.Type, context))
 			{
-				reason = $"'{Display(convention.Type.ToDisplayString(FullyQualified))}' is not accessible outside the module's assembly";
+				string where = IsHiddenInModule(convention.Type, context.Module, context.Compilation) ? "private to the module" : "not accessible outside the module's assembly";
+				reason = $"'{Display(convention.Type.ToDisplayString(FullyQualified))}' is {where}";
 			}
 			else if (convention.Method.DeclaredAccessibility != Accessibility.Public
 			         && (IsExternallyAccessible(context.Module) || !context.Compilation.IsSymbolAccessibleWithin(convention.Method, context.Module.ContainingAssembly)))

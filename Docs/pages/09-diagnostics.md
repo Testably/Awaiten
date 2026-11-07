@@ -2225,7 +2225,7 @@ An `[AsyncInitializer<T>]` convention initializes an implementation, but the cod
 
 A container calls a module's conventions itself. When the module lives in another assembly, `T` and its method must be public. The module's own build reports it for an implementation it [builds through a generated factory](./04-registration/07-modules.md#internal-implementations), and a container reports it for an implementation it constructs itself, such as one a module's `Factory` member returns.
 
-An `internal` module is imported only by its own assembly and by the assemblies it grants `InternalsVisibleTo`. So for such a module, an internal convention is accessible too.
+An `internal` module is imported only by its own assembly and by the assemblies it grants `InternalsVisibleTo`. So for such a module, an internal convention is accessible too. A convention type nested privately in the module is not, and the message says it is private to the module.
 
 ```csharp no-compile
 // In a referenced library:
