@@ -366,7 +366,8 @@ partial class AwaitenGenerator
 	///     <see cref="AccessibleResolverType" />), naming the first reason that applies: the container cannot reach a
 	///     type it registers itself, the type is a type argument every service carries, a service is itself private, the
 	///     container cannot reach a type its module does not build for it (see <see cref="SelfCompilesRegistration" />),
-	///     or no accessible type covers all of the services.
+	///     or no accessible type covers all of the services. For a struct the remedy says that implementations must be
+	///     classes, since no access modifier makes a struct one.
 	/// </summary>
 	private static void ReportLessAccessibleImplementation(ImplInfo info, INamedTypeSymbol narrower, BuildContext context)
 	{
@@ -380,6 +381,10 @@ partial class AwaitenGenerator
 			{ PrivateService: { } service, } => (RegisteredAsPrivateService(info.Symbol, service), $"register it under an accessible service, or make '{type}' internal or public"),
 			_ => ("no accessible type it converts to covers all of its services", "register it under one service, or give it an accessible base type that covers its services"),
 		};
+		if (info.Symbol.IsValueType)
+		{
+			remedy = $"an implementation must be a class, so wrap '{implementation}' in a class, or register an interface it implements with a Factory or Instance that returns it";
+		}
 
 		context.Diagnostics.Add(new DiagnosticInfo(
 			Diagnostics.RegisteredTypeLessAccessible,
