@@ -94,7 +94,8 @@ internal sealed record SkippedRegistration(string MarkerName, string Reason, boo
 ///     task type, and as a property for an <see cref="IsProperty" /> instance. The last
 ///     <see cref="OptionalMembers" />.Count parameters are optional and fill their properties only when a consumer
 ///     passes a service, and each of the <see cref="DeferredMembers" /> gets a setter wrapper a consumer calls after
-///     construction.
+///     construction. An <see cref="IsInternal" /> factory and its setters are internal, for the containers that can name
+///     the internal services the public factory takes through their handles.
 /// </summary>
 internal sealed record RegistrationFactory(
 	string FactoryName,
@@ -108,7 +109,8 @@ internal sealed record RegistrationFactory(
 	string? Awaited = null,
 	bool IsProperty = false,
 	EquatableArray<string> OptionalMembers = default,
-	EquatableArray<FactoryParameter> DeferredMembers = default);
+	EquatableArray<FactoryParameter> DeferredMembers = default,
+	bool IsInternal = false);
 
 /// <summary>One lifecycle-hook wrapper of a self-compiled module registration and whether it is the release hook.</summary>
 internal sealed record RegistrationHook(ModuleHook Hook, bool Release);

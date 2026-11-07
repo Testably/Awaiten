@@ -368,7 +368,7 @@ internal static partial class Sources
 	///     accessible type a consumer names in its stead.
 	/// </summary>
 	private static void EmitRegistrationFactory(StringBuilder builder, int depth, RegistrationFactory factory)
-		=> EmitRegistrationFactory(builder, depth, factory, "public",
+		=> EmitRegistrationFactory(builder, depth, factory, factory.IsInternal ? "internal" : "public",
 			"Generated from a module registration: constructs an implementation a consuming container cannot construct and",
 			"returns it as an accessible type, so a consuming container resolves it without naming the implementation.");
 
@@ -471,7 +471,7 @@ internal static partial class Sources
 			AppendXmlSummary(builder, depth,
 				"Generated from a module registration: assigns a property marked [Inject(Deferred = true)] after a consuming",
 				"container built and cached the instance, so it can break a cycle.");
-			Indent(builder, depth).Append("public static void ").Append(AwaitenGenerator.DeferredSetterName(factory.FactoryName, parameter.Name)).Append('(')
+			Indent(builder, depth).Append(factory.IsInternal ? "internal" : "public").Append(" static void ").Append(AwaitenGenerator.DeferredSetterName(factory.FactoryName, parameter.Name)).Append('(')
 				.Append(factory.ReturnType).Append(" @awaiten__instance, ").Append(MirroredParameter(parameter)).Append(") => ((")
 				.Append(factory.ImplementationType).Append(")@awaiten__instance").Append(factory.Handle is null ? string.Empty : ".Value").Append(").")
 				.Append(parameter.Name).Append(" = ").Append(parameter.ArgumentExpression).AppendLine(";");

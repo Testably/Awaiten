@@ -1220,6 +1220,79 @@ public class ModuleHiddenServiceTests
 		}
 	}
 
+	public class PrivateImplementationTakingAnInternalService
+	{
+		private static string Library(bool grant) => $$"""
+			using Awaiten;
+
+			{{(grant ? "[assembly: System.Runtime.CompilerServices.InternalsVisibleTo(\"TestAssembly\")]" : "")}}
+
+			namespace Lib;
+
+			public interface IGrinder { object Store { get; } }
+			internal interface IStore { }
+			internal sealed class Store : IStore { }
+
+			[Module]
+			[Singleton<Store, IStore>]
+			[Singleton<CoffeeModule.Grinder, IGrinder>]
+			public static partial class CoffeeModule
+			{
+			    private sealed class Grinder : IGrinder { public Grinder(IStore store) => Store = store; public object Store { get; } }
+			}
+			""";
+
+		private const string Container = """
+			[Container]
+			[Import(typeof(CoffeeModule))]
+			public static partial class MyContainer;
+			""";
+
+		[Test]
+		public async Task ContainerInTheModulesAssembly_BuildsItThroughAnInternalFactory()
+		{
+			GeneratorResult result = Generator.Run(Library(grant: false) + Container);
+
+			await That(result.Diagnostics).IsEmpty();
+			await That(result.Sources["Awaiten.Lib.MyContainer.g.cs"]).Contains($"global::Lib.CoffeeModule.Internals.Internal{Factory("global::Lib.CoffeeModule.Grinder")}(")
+				.Because("a container that can name the internal service calls the factory that takes it directly, since it registers no handle");
+			await That(ModuleSource(result)).Contains($"internal static global::Lib.IGrinder Internal{Factory("global::Lib.CoffeeModule.Grinder")}(global::Lib.IStore @store)")
+				.And.Contains($"public static global::Lib.IGrinder {Factory("global::Lib.CoffeeModule.Grinder")}({Handle("global::Lib.IStore")} @store)")
+				.Because("an assembly that cannot name the internal service still takes it through its handle");
+		}
+
+		[Test]
+		public async Task ContainerInAnAssemblyGrantedInternalsVisibleTo_BuildsItThroughTheInternalFactory()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Library(grant: true), "using Awaiten;\nusing Lib;\n\nnamespace MyCode;\n\n" + Container);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("a friend constructs the store itself and registers no handle, so it calls the factory that takes the store directly");
+			await That(result.Sources["Awaiten.MyCode.MyContainer.g.cs"]).Contains($"Internal{Factory("global::Lib.CoffeeModule.Grinder")}(");
+		}
+
+		[Test]
+		public async Task ContainerInAnotherAssembly_TakesItThroughTheHandle()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Library(grant: false), "using Awaiten;\nusing Lib;\n\nnamespace MyCode;\n\n" + Container);
+
+			await That(result.Diagnostics).IsEmpty();
+			await That(result.Sources["Awaiten.MyCode.MyContainer.g.cs"]).DoesNotContain($"Internal{Factory("global::Lib.CoffeeModule.Grinder")}")
+				.Because("the internal factory is not accessible to an assembly without InternalsVisibleTo");
+		}
+
+		[Test]
+		public async Task HookTakingTheInternalService_ReportsAwt203()
+		{
+			GeneratorResult result = Generator.Run(Library(grant: false)
+				.Replace("[Singleton<CoffeeModule.Grinder, IGrinder>]", "[Singleton<CoffeeModule.Grinder, IGrinder>(OnActivated = nameof(Activate))]")
+				.Replace("public object Store { get; } }", "public object Store { get; } }\n    private static void Activate(Grinder grinder, IStore store) { }"));
+
+			await That(result.Diagnostics).Contains("*AWT203*").AsWildcard()
+				.Because("the one wrapper of the hook serves the containers that register no handles too, so it cannot take the internal service through its handle");
+		}
+	}
+
 	public class Conflicts
 	{
 		private static string Library(string registrations) => $$"""

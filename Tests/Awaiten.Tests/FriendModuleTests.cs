@@ -24,6 +24,24 @@ public partial class FriendModuleTests
 	}
 
 	[Test]
+	public async Task PrivateImplementationTakingAnInternalService_SharesTheStoreTheContainerBuilds()
+	{
+		using FriendPrivateContainer.Root container = new();
+
+		await That(container.Resolve<IFriendPrivateGrinder>().Store).IsSameAs(container.Resolve<IFriendPrivateStore>())
+			.Because("the container builds the internal store itself and passes it to the internal factory of the private grinder");
+	}
+
+	[Test]
+	public async Task PrivateImplementationTakingAnInternalService_IsBuiltByAContainerInTheModulesAssembly()
+	{
+		using FriendPrivateLocalContainer.Root container = new();
+
+		await That(container.Resolve<IFriendPrivateGrinder>().Store).IsSameAs(container.Resolve<IFriendPrivateStore>())
+			.Because("a container in the module's own assembly builds the private grinder through the internal factory too");
+	}
+
+	[Test]
 	public async Task SharesAnImplementationAcrossItsServices()
 	{
 		using FriendContainer.Root container = new();
@@ -146,6 +164,10 @@ public partial class FriendModuleTests
 	[Container]
 	[Import(typeof(SupportFriendModule))]
 	public static partial class FriendContainer;
+
+	[Container]
+	[Import(typeof(SupportFriendPrivateModule))]
+	public static partial class FriendPrivateContainer;
 
 	[Container]
 	[Import(typeof(SupportFriendFactoryHookModule))]

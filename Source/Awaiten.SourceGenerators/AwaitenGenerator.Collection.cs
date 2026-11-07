@@ -419,7 +419,9 @@ partial class AwaitenGenerator
 			return registration;
 		}
 
-		if (GeneratedFactory(module, implementation, compilation) is not { } factory)
+		// A container granted InternalsVisibleTo builds the internal services itself and registers no handles, so it
+		// calls the internal factory that takes them directly, which the module generates when the public one takes handles.
+		if ((GeneratedFactoryNamed(module, InternalRegistrationFactoryName(implementation), compilation) ?? GeneratedFactory(module, implementation, compilation)) is not { } factory)
 		{
 			if (context.Inherited)
 			{

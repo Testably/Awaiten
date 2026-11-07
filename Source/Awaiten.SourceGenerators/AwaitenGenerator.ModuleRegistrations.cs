@@ -75,6 +75,7 @@ partial class AwaitenGenerator
 		private readonly Compilation _compilation;
 		private readonly Dictionary<INamedTypeSymbol, List<ModuleScanExpansion>> _scans = new(SymbolEqualityComparer.Default);
 		private readonly Dictionary<INamedTypeSymbol, List<RegistrationFactory>> _registrations = new(SymbolEqualityComparer.Default);
+		private readonly Dictionary<INamedTypeSymbol, List<RegistrationFactory>> _internalRegistrations = new(SymbolEqualityComparer.Default);
 		private readonly Dictionary<INamedTypeSymbol, List<RegistrationFactory>> _contributions = new(SymbolEqualityComparer.Default);
 
 		public SameCompilationModules(Compilation compilation) => _compilation = compilation;
@@ -104,8 +105,18 @@ partial class AwaitenGenerator
 					: new List<RegistrationFactory>();
 			}
 
+			// A module that builds internal services through handles gives a private implementation that takes one an
+			// internal factory too, which takes the services this container builds itself.
+			if (!_internalRegistrations.TryGetValue(module, out List<RegistrationFactory>? direct))
+			{
+				_internalRegistrations[module] = direct = ReceivesGeneratedMembers(module) && IsExternallyAccessible(module) && MayBuildThroughHandles(module, _compilation)
+					? CollectModuleRegistrationFactories(module, _compilation, new List<DiagnosticInfo>(), Scans(module).Select(expansion => expansion.Factory).ToList(), new List<SkippedRegistration>(), internalOnly: true)
+					: new List<RegistrationFactory>();
+			}
+
 			string name = RegistrationFactoryName(implementation);
-			return factories.FirstOrDefault(factory => factory.FactoryName == name);
+			string internalName = InternalRegistrationFactoryName(implementation);
+			return direct.FirstOrDefault(factory => factory.FactoryName == internalName) ?? factories.FirstOrDefault(factory => factory.FactoryName == name);
 		}
 
 		/// <summary>
@@ -407,10 +418,11 @@ partial class AwaitenGenerator
 	///     Whether <paramref name="type" /> may appear on a factory the module generates, which is as accessible as the
 	///     module: any type another assembly can name, and for a module another assembly cannot name (an internal one,
 	///     reached only from its own assembly or one granted <c>InternalsVisibleTo</c>), any type its assembly can name.
+	///     The same holds for an internal factory (see <see cref="ModuleScanContext.Internal" />).
 	/// </summary>
 	private static bool FitsFactorySignature(ITypeSymbol type, ModuleScanContext context)
 		=> IsExternallyAccessible(type)
-		   || (!IsExternallyAccessible(context.Module) && context.Compilation.IsSymbolAccessibleWithin(type, context.Module.ContainingAssembly));
+		   || ((context.Internal || !IsExternallyAccessible(context.Module)) && context.Compilation.IsSymbolAccessibleWithin(type, context.Module.ContainingAssembly));
 
 	/// <summary>
 	///     AWT203 for the first hook parameter after the instance whose type is private to the module or a class
@@ -477,7 +489,9 @@ partial class AwaitenGenerator
 	///     in <paramref name="skipped" />, since such an assembly calls it directly. In the module's own build,
 	///     <paramref name="hidden" /> lets a factory take the internal services the module registers through their handles,
 	///     and an implementation the module builds through a handle gets no factory of its own, unless it is private to
-	///     the module, whose factory a container in the module's assembly calls.
+	///     the module, whose factory a container in the module's assembly calls. Such a private implementation whose
+	///     factory takes a handle gets an internal factory too (see <see cref="InternalRegistrationFactory" />), the only
+	///     factories <paramref name="internalOnly" /> returns, with their hooks.
 	/// </summary>
 	private static List<RegistrationFactory> CollectModuleRegistrationFactories(
 		INamedTypeSymbol module,
@@ -485,7 +499,8 @@ partial class AwaitenGenerator
 		List<DiagnosticInfo> diagnostics,
 		IReadOnlyList<ModuleFactory> scanFactories,
 		List<SkippedRegistration> skipped,
-		HiddenServices? hidden = null)
+		HiddenServices? hidden = null,
+		bool internalOnly = false)
 	{
 		ModuleScanContext context = new(module, compilation, diagnostics, new HashSet<string>(StringComparer.Ordinal), hidden);
 		List<(ModuleRegistration First, List<ModuleRegistration> All)> implementations = new();
@@ -512,13 +527,38 @@ partial class AwaitenGenerator
 		List<RegistrationFactory> factories = new();
 		foreach ((ModuleRegistration first, List<ModuleRegistration> all) in implementations)
 		{
-			if (RegistrationFactoryOf(first, all, context, scanFactories, friendsCanConstruct, skipped) is { } factory)
+			RegistrationFactory? factory = internalOnly ? null : RegistrationFactoryOf(first, all, context, scanFactories, friendsCanConstruct, skipped);
+			RegistrationFactory? direct = (internalOnly || (hidden is not null && factory is not null)) && IsHiddenInModule(first.Implementation, module, compilation)
+				? InternalRegistrationFactory(first, all, context, scanFactories)
+				: null;
+			if (factory is not null)
 			{
 				factories.Add(factory);
+			}
+
+			if (direct is not null)
+			{
+				factories.Add(internalOnly ? direct : direct with { Hooks = default, });
 			}
 		}
 
 		return factories;
+	}
+
+	/// <summary>
+	///     The internal factory of an implementation private to a module another assembly can name, whose public factory
+	///     takes internal services through their handles, or <see langword="null" /> when the public factory takes none:
+	///     it takes those services directly, for a container in the module's own assembly or in one the assembly grants
+	///     <c>InternalsVisibleTo</c>, which builds the services itself and registers no handles. Its hooks are the public
+	///     factory's, which take no handles for such an implementation, so the module emits them once.
+	/// </summary>
+	private static RegistrationFactory? InternalRegistrationFactory(ModuleRegistration first, List<ModuleRegistration> all, ModuleScanContext context, IReadOnlyList<ModuleFactory> scanFactories)
+	{
+		ModuleScanContext plain = context with { Hidden = null, Diagnostics = new List<DiagnosticInfo>(), FailedHooks = new HashSet<string>(StringComparer.Ordinal), };
+		RegistrationFactory? direct = RegistrationFactoryOf(first, all, plain with { Internal = true, }, scanFactories, false, new List<SkippedRegistration>());
+		return direct is not null && direct != RegistrationFactoryOf(first, all, plain, scanFactories, false, new List<SkippedRegistration>())
+			? direct with { FactoryName = InternalRegistrationFactoryName(first.Implementation), IsInternal = true, }
+			: null;
 	}
 
 	/// <summary>
@@ -614,7 +654,10 @@ partial class AwaitenGenerator
 				ModuleHookRequest request = new(
 					implementation, hookName, registration.Location, release, RegistrationHookWrapperName(implementation, release, hookName), subject,
 					friendsCanConstruct && TypeHiddenInModule(implementation, context.Module, context.Compilation) is null);
-				if (ResolveModuleHookCore(request, null, context) is not { } resolved)
+
+				// The hooks of an implementation private to the module serve its internal factory too (see
+				// InternalRegistrationFactory), whose callers register no handles, so they take none.
+				if (ResolveModuleHookCore(request, null, IsHiddenInModule(implementation, context.Module, context.Compilation) ? context with { Hidden = null, } : context) is not { } resolved)
 				{
 					continue;
 				}
@@ -894,6 +937,10 @@ partial class AwaitenGenerator
 	/// </summary>
 	private static string RegistrationFactoryName(INamedTypeSymbol implementation)
 		=> $"Registration_{implementation.Name}_{Fnv1a(implementation.ToDisplayString(FullyQualified)):x8}";
+
+	/// <summary>A deterministic name for the internal factory of an implementation private to the module (see <see cref="InternalRegistrationFactory" />).</summary>
+	private static string InternalRegistrationFactoryName(INamedTypeSymbol implementation)
+		=> "Internal" + RegistrationFactoryName(implementation);
 
 	/// <summary>
 	///     A deterministic name for the constant that records why the module generates no factory for an

@@ -97,14 +97,16 @@ partial class AwaitenGenerator
 	///     slot merge needs the outcome) without repeating the first scan's diagnostic; a successful re-resolution
 	///     clears the record, so a later failure reports afresh (see <see cref="ResolveModuleHook" />).
 	///     <see cref="Hidden" /> holds the services the module registers under internal types, which a generated
-	///     factory takes through their handles, in the module's own build only.
+	///     factory takes through their handles, in the module's own build only. <see cref="Internal" /> marks a generated
+	///     factory that is internal, so it may take any type the module's assembly can name.
 	/// </summary>
 	private readonly record struct ModuleScanContext(
 		INamedTypeSymbol Module,
 		Compilation Compilation,
 		List<DiagnosticInfo> Diagnostics,
 		HashSet<string> FailedHooks,
-		HiddenServices? Hidden = null);
+		HiddenServices? Hidden = null,
+		bool Internal = false);
 
 	/// <summary>
 	///     Expands one module <c>[Scan]</c> over its candidates, mirroring <see cref="ExpandScan" /> but emitting a
