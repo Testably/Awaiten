@@ -2266,7 +2266,7 @@ public static partial class CoffeeShop
 A module's scan matches an implementation that another registration or scan match of the container names too, but the container can't share one instance between them, so it drops the match.
 :::
 
-A match of a module scan and every other registration of the same implementation [share one instance](./04-registration/07-modules.md#shared-instances). The container builds that instance through the registration that wins, as the type it produces. When the match's interface doesn't convert from that type, and the container can't construct the implementation itself, the match's generated factory would build a second instance. So the container reports this error at its `[Import]` and leaves the match out.
+A match of a module scan and every other registration of the same implementation [share one instance](./04-registration/07-modules.md#shared-instances). The container builds that instance through the registration that wins, as the type it produces. When the match's interface doesn't convert from that type, and the container can't construct the implementation itself, the match's generated factory would build a second instance. So the container reports this error at its `[Import]` and leaves the match out. A match that a `SkipUnconstructable` scan drops because the container can't construct it reports only [AWT141](#awt141).
 
 ```csharp no-compile
 // In a referenced library, which does not grant the application InternalsVisibleTo:

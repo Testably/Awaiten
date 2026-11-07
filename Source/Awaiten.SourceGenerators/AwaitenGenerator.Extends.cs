@@ -243,10 +243,10 @@ partial class AwaitenGenerator
 	///     An entry the container declares for the same property of the same implementation wins. The base's entry
 	///     faults are its own build's to report.
 	/// </summary>
-	private static void InheritInjectProperties(Inheritance inheritance, Dictionary<string, List<InjectPropertyEntry>> injectProperties)
+	private static void InheritInjectProperties(Inheritance inheritance, Dictionary<string, List<InjectPropertyEntry>> injectProperties, Compilation compilation)
 	{
 		LocationInfo? fallback = LocationInfo.From(inheritance.Location);
-		foreach (KeyValuePair<string, List<InjectPropertyEntry>> inherited in CollectInjectProperties(inheritance.Base, new List<DiagnosticInfo>()))
+		foreach (KeyValuePair<string, List<InjectPropertyEntry>> inherited in CollectInjectProperties(inheritance.Base, compilation, new List<DiagnosticInfo>()))
 		{
 			if (!injectProperties.TryGetValue(inherited.Key, out List<InjectPropertyEntry>? entries))
 			{

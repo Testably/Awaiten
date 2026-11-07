@@ -316,6 +316,31 @@ public partial class DiagnosticTests
 			}
 
 			[Test]
+			public async Task SkipsTheScanFactoryOfAPublicImplementationTheModuleRegistersAndScansUnderSeveralServices()
+			{
+				GeneratorResult result = Generator.Run("""
+					using Awaiten;
+
+					namespace Lib;
+
+					public interface IPlugin { }
+					public interface IHeater { }
+					public interface IGreeter { }
+					public sealed class Greeter : IPlugin, IHeater, IGreeter { }
+
+					[Module]
+					[Scan<IPlugin>(As = ScanAs.Marker)]
+					[Scan<IHeater>(As = ScanAs.Marker)]
+					[Singleton<Greeter, IGreeter>]
+					public static partial class GreetingModule { }
+					""");
+
+				await That(result.Diagnostics).IsEmpty()
+					.Because("every container constructs a public implementation for the registration and registers the match under each service itself");
+				await That(result.Sources.Values.Single()).Contains("public const string ScanSkipped_Greeter_").And.DoesNotContain("Scan_Greeter_");
+			}
+
+			[Test]
 			public async Task KeepsAnErrorOfAScanOverlapThatNoAssemblyCouldConstruct()
 			{
 				GeneratorResult result = Generator.Run("""

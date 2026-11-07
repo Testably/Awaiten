@@ -44,91 +44,107 @@ partial class AwaitenGenerator
 	///     that implementation too, so coalescing shares one instance between them, as a container in the module's own
 	///     assembly does. The instance is built by whichever of them coalescing picks first, so a match whose service the
 	///     instance's type does not convert to cannot share it. The container then constructs the implementation for all
-	///     of these matches when it can, and otherwise drops each such match after reporting AWT240, since its factory
-	///     would build a second instance.
+	///     of these matches when it can, and otherwise <see cref="DropUnsharedScanMatches" /> drops each such match.
+	///     Returns the identities of the shared implementations.
 	/// </summary>
-	private static void ShareScannedInstances(List<RawRegistration> raw, Compilation compilation, List<DiagnosticInfo> diagnostics)
+	private static List<string> ShareScannedInstances(List<RawRegistration> raw, Compilation compilation)
 	{
 		HashSet<string> named = new(raw.Where(registration => registration.ScanImplementation is null).Select(registration => registration.ImplementationType), StringComparer.Ordinal);
 		Dictionary<string, INamedTypeSymbol> shared = raw
 			.Where(registration => registration.ScanImplementation is not null)
-			.GroupBy(registration => registration.ScanImplementation!.ToDisplayString(FullyQualified), StringComparer.Ordinal)
+			.GroupBy(registration => TypeIdentity(registration.ScanImplementation!, compilation), StringComparer.Ordinal)
 			.Where(group => group.Count() > 1 || named.Contains(group.Key))
 			.ToDictionary(group => group.Key, group => group.First().ScanImplementation!, StringComparer.Ordinal);
 		if (shared.Count == 0)
 		{
-			return;
+			return [];
 		}
 
 		for (int index = 0; index < raw.Count; index++)
 		{
-			if (raw[index].ScanImplementation is { } implementation && shared.ContainsKey(implementation.ToDisplayString(FullyQualified)))
+			if (raw[index].ScanImplementation is { } implementation && shared.ContainsKey(TypeIdentity(implementation, compilation)))
 			{
-				raw[index] = raw[index] with { ImplementationType = implementation.ToDisplayString(FullyQualified), };
+				raw[index] = raw[index] with { ImplementationType = TypeIdentity(implementation, compilation), };
 			}
 		}
 
 		foreach (KeyValuePair<string, INamedTypeSymbol> entry in shared)
 		{
-			if (Unshared(entry.Key).Count == 0)
+			if (UnsharedScanMatches(raw, entry.Key, compilation).Count == 0 || !CanConstruct(entry.Value, compilation))
 			{
 				continue;
 			}
 
-			if (CanConstruct(entry.Value, compilation))
+			for (int index = 0; index < raw.Count; index++)
 			{
-				for (int index = 0; index < raw.Count; index++)
+				if (raw[index].ScanImplementation is { } implementation && SymbolEqualityComparer.Default.Equals(implementation, entry.Value))
 				{
-					if (raw[index].ScanImplementation is { } implementation && SymbolEqualityComparer.Default.Equals(implementation, entry.Value))
+					raw[index] = raw[index] with
 					{
-						raw[index] = raw[index] with
-						{
-							Implementation = implementation,
-							Production = ProductionKind.Constructor,
-							ProductionMember = null,
-							GreedyConstructor = true,
-							Traits = null,
-						};
-					}
+						Implementation = implementation,
+						Production = ProductionKind.Constructor,
+						ProductionMember = null,
+						GreedyConstructor = true,
+						Traits = null,
+					};
 				}
 			}
+		}
 
-			foreach ((RawRegistration match, INamedTypeSymbol builtAs) in Unshared(entry.Key))
+		return shared.Keys.ToList();
+	}
+
+	/// <summary>
+	///     Drops each scan match of a <paramref name="shared" /> implementation (see <see cref="ShareScannedInstances" />)
+	///     that cannot share its instance after reporting AWT240, since its factory would build a second instance. Runs
+	///     after the <c>SkipUnconstructable</c> pruning, so a match the pruning drops reports only AWT141. Returns whether
+	///     it dropped a match.
+	/// </summary>
+	private static bool DropUnsharedScanMatches(List<RawRegistration> raw, List<string> shared, Compilation compilation, List<DiagnosticInfo> diagnostics)
+	{
+		bool dropped = false;
+		foreach (string identity in shared)
+		{
+			foreach ((RawRegistration match, INamedTypeSymbol builtAs) in UnsharedScanMatches(raw, identity, compilation))
 			{
 				diagnostics.Add(new DiagnosticInfo(
 					Diagnostics.ScanMatchNotShared,
 					LocationInfo.From(match.Location),
 					new EquatableArray<string>([
-						Display(entry.Key),
+						DisplayInstance(identity),
 						Display(match.Origin!.ToDisplayString(FullyQualified)),
 						Display(match.ServiceType),
 						Display(builtAs.ToDisplayString(FullyQualified)),
 					])));
 				raw.RemoveAll(registration => ReferenceEquals(registration, match));
+				dropped = true;
 			}
 		}
 
-		// The generated scan matches of the implementation whose service the type of its shared instance does not
-		// convert to: coalescing builds the instance by the first registration in precedence order that it does not
-		// drop. An instance built as the implementation itself converts to every service a scan matched it under.
-		List<(RawRegistration Match, INamedTypeSymbol BuiltAs)> Unshared(string identity)
+		return dropped;
+	}
+
+	/// <summary>
+	///     The generated scan matches of the implementation <paramref name="identity" /> whose service the type of its
+	///     shared instance does not convert to: coalescing builds the instance by the first registration in precedence
+	///     order that it does not drop. An instance built as the implementation itself converts to every service a scan
+	///     matched it under.
+	/// </summary>
+	private static List<(RawRegistration Match, INamedTypeSymbol BuiltAs)> UnsharedScanMatches(List<RawRegistration> raw, string identity, Compilation compilation)
+	{
+		HashSet<int> dropped = DroppedOverridableDefaults(raw);
+		if (InPrecedenceOrder(raw).FirstOrDefault(candidate => !dropped.Contains(candidate.Index) && candidate.Registration.ImplementationType == identity).Registration?.Implementation is not { } builtAs
+		    || TypeIdentity(builtAs, compilation) == identity)
 		{
-			HashSet<int> dropped = DroppedOverridableDefaults(raw);
-			INamedTypeSymbol builtAs = InPrecedenceOrder(raw)
-				.First(candidate => !dropped.Contains(candidate.Index) && candidate.Registration.ImplementationType == identity)
-				.Registration.Implementation;
-			if (builtAs.ToDisplayString(FullyQualified) == identity)
-			{
-				return [];
-			}
-
-			return raw
-				.Where(registration => registration is { ScanImplementation: not null, ServiceSymbol: { } service, }
-				                       && registration.ImplementationType == identity
-				                       && !compilation.HasImplicitConversion(builtAs, service))
-				.Select(registration => (registration, builtAs))
-				.ToList();
+			return [];
 		}
+
+		return raw
+			.Where(registration => registration is { ScanImplementation: not null, ServiceSymbol: { } service, }
+			                       && registration.ImplementationType == identity
+			                       && !compilation.HasImplicitConversion(builtAs, service))
+			.Select(registration => (registration, builtAs))
+			.ToList();
 	}
 
 	/// <summary>
@@ -147,7 +163,7 @@ partial class AwaitenGenerator
 	///     implementation still conflict (AWT111). An open generic factory's closing is identified the same way, per
 	///     closing. Scan matches keep their own identities.
 	/// </summary>
-	private static void AssignMemberIdentities(List<RawRegistration> raw, INamedTypeSymbol containerSymbol)
+	private static void AssignMemberIdentities(List<RawRegistration> raw, INamedTypeSymbol containerSymbol, Compilation compilation)
 	{
 		HashSet<string> implementations = new(
 			raw.Where(registration => !NamesOnlyItsService(registration)).Select(registration => registration.ImplementationType),
@@ -159,14 +175,59 @@ partial class AwaitenGenerator
 			{
 				raw[index] = registration with
 				{
-					ImplementationType = $"{registration.ImplementationType}{MemberKeyMarker}{QualifiedMember(registration.Origin ?? containerSymbol, registration.ProductionMember)}",
+					ImplementationType = $"{registration.ImplementationType}{MemberKeyMarker}{TypeIdentity(registration.Origin ?? containerSymbol, compilation)}.{registration.ProductionMember}",
 				};
 			}
 		}
 
-		static bool NamesOnlyItsService(RawRegistration registration)
+		bool NamesOnlyItsService(RawRegistration registration)
 			=> registration is { Production: not ProductionKind.Constructor, IsScan: false, }
-			   && registration.ImplementationType == registration.ServiceType;
+			   && registration.ImplementationType == (registration.ServiceSymbol is { } service ? TypeIdentity(service, compilation) : registration.ServiceType);
+	}
+
+	/// <summary>
+	///     The marker inside the identity of a type that the compilation does not find by its name (see
+	///     <see cref="TypeIdentity" />). <c>DisplayInstance</c> trims it.
+	/// </summary>
+	private const string AssemblyMarker = "@assembly:";
+
+	/// <summary>
+	///     The identity that coalescing and every map keyed by an implementation know a type by: its fully qualified
+	///     name, followed by the assemblies of the type and of its type arguments when the compilation finds another
+	///     type or none by one of their names, as for two same-named types of different assemblies. Two different
+	///     types never share an identity, and a type the compilation finds by its name keeps that name.
+	/// </summary>
+	private static string TypeIdentity(INamedTypeSymbol type, Compilation compilation)
+	{
+		string name = type.ToDisplayString(FullyQualified);
+		List<INamedTypeSymbol> components = NamedComponents(type).ToList();
+		return components.All(component => component.TypeKind == TypeKind.Error
+		                                   || SymbolEqualityComparer.Default.Equals(compilation.GetTypeByMetadataName(MetadataNameOf(component.OriginalDefinition)), component.OriginalDefinition))
+			? name
+			: $"{name}{AssemblyMarker}{string.Join(",", components.Select(component => component.ContainingAssembly?.Name))}";
+	}
+
+	/// <summary>The named types that make up <paramref name="type" />: the type itself, then its and its containing types' type arguments.</summary>
+	private static IEnumerable<INamedTypeSymbol> NamedComponents(ITypeSymbol type)
+	{
+		if (type is IArrayTypeSymbol array)
+		{
+			foreach (INamedTypeSymbol component in NamedComponents(array.ElementType))
+			{
+				yield return component;
+			}
+		}
+		else if (type is INamedTypeSymbol named)
+		{
+			yield return named;
+			for (INamedTypeSymbol? owner = named; owner is not null; owner = owner.ContainingType)
+			{
+				foreach (INamedTypeSymbol component in owner.TypeArguments.SelectMany(NamedComponents))
+				{
+					yield return component;
+				}
+			}
+		}
 	}
 
 	/// <summary>
@@ -498,7 +559,7 @@ partial class AwaitenGenerator
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.ContextualBindingNeverApplies,
 				conditional.Location,
-				new EquatableArray<string>([Display(conditional.Service), Display(conditional.Consumer),])));
+				new EquatableArray<string>([Display(conditional.Service), DisplayInstance(conditional.Consumer),])));
 		}
 	}
 
@@ -851,7 +912,7 @@ partial class AwaitenGenerator
 		diagnostics.Add(new DiagnosticInfo(
 			Diagnostics.DuplicateContextualBinding,
 			LocationInfo.From(registration.Location),
-			new EquatableArray<string>([Display(registration.ServiceType), Display(consumer),])));
+			new EquatableArray<string>([Display(registration.ServiceType), DisplayInstance(consumer),])));
 	}
 
 	/// <summary>

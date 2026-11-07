@@ -507,7 +507,7 @@ partial class AwaitenGenerator
 
 		foreach (CompositeRegistration composite in composites)
 		{
-			string compositeType = composite.Composite.ToDisplayString(FullyQualified);
+			string compositeType = TypeIdentity(composite.Composite, compilation);
 			ServiceKey slot = new(composite.Service, composite.Key);
 
 			// AWT212: a keyed composite needs registrations under its key to front.
@@ -547,7 +547,7 @@ partial class AwaitenGenerator
 		=> diagnostics.Add(new DiagnosticInfo(
 			Diagnostics.CompositeKeyNotRegistered,
 			LocationInfo.From(location),
-			new EquatableArray<string>([Display(compositeType), Display(service), KeyDisplay(key),])));
+			new EquatableArray<string>([DisplayInstance(compositeType), Display(service), KeyDisplay(key),])));
 
 	/// <summary>
 	///     Redirects a keyed composite's unkeyed collection parameter of the composed service to the composite's key, so
@@ -618,7 +618,7 @@ partial class AwaitenGenerator
 					Diagnostics.CompositeMissingCollectionParameter,
 					LocationInfo.From(composite.Location),
 					new EquatableArray<string>([
-						Display(compositeType),
+						DisplayInstance(compositeType),
 						Display(composite.Service),
 					])));
 				return false;
@@ -628,7 +628,7 @@ partial class AwaitenGenerator
 					Diagnostics.CompositeCollectionNotOfComposedService,
 					LocationInfo.From(composite.Location),
 					new EquatableArray<string>([
-						Display(compositeType),
+						DisplayInstance(compositeType),
 						Display(relatedElement!),
 						Display(composite.Service),
 					])));
@@ -704,7 +704,7 @@ partial class AwaitenGenerator
 			Diagnostics.CompositeAlsoRegisteredAsMember,
 			LocationInfo.From(composite.Location),
 			new EquatableArray<string>([
-				Display(compositeType),
+				DisplayInstance(compositeType),
 				Display(composite.Service),
 			])));
 	}

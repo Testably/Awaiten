@@ -122,7 +122,7 @@ partial class AwaitenGenerator
 		}
 
 		string? key = NamedKeyArgument(attribute);
-		string? whenInjectedInto = NamedTypeArgument(attribute, "WhenInjectedInto");
+		string? whenInjectedInto = NamedTypeArgument(attribute, "WhenInjectedInto", context.Compilation);
 		ReportContextualBindingWithKey(key, whenInjectedInto, pair.Mapped, liveLocation, diagnostics);
 		ReportUnsupportedRegistrationKey(attribute, location, display, diagnostics);
 
@@ -543,7 +543,7 @@ partial class AwaitenGenerator
 			// so it must not seed expansion either (see DroppedOverridableDefaults for the explicit ones).
 			bool dropped = candidate.Weak && IsClaimedByStrongerRegistration(candidate, closedService, context.Raw);
 
-			RawRegistration registration = SynthesizeClosedRegistration(candidate, closed, closedService, closedImpl, closedImplName);
+			RawRegistration registration = SynthesizeClosedRegistration(candidate, closed, closedService, closedImpl, TypeIdentity(closedImpl, context.Inputs.Compilation));
 			context.Raw.Add(registration);
 			context.Synthesized++;
 
@@ -615,12 +615,12 @@ partial class AwaitenGenerator
 		INamedTypeSymbol closed,
 		string closedService,
 		INamedTypeSymbol closedImpl,
-		string closedImplName)
+		string closedImplIdentity)
 	{
 		IReadOnlyList<INamedTypeSymbol> markers = [closed,];
 		return new RawRegistration(
 			closedService,
-			closedImplName,
+			closedImplIdentity,
 			candidate.Lifetime,
 			closedImpl,
 			candidate.Location?.ToLocation(),
@@ -702,7 +702,7 @@ partial class AwaitenGenerator
 			ExpansionScan.Decorator => ParameterServiceTypes(work.Method!.Parameters.Where(parameter => !SymbolEqualityComparer.Default.Equals(parameter, work.Inner)))
 				.Concat(InjectedProperties(work.Implementation).Select(property => RequiredServiceType(property.Type))),
 			_ => (SelectExpansionConstructor(work.Implementation, context) is { } constructor ? ParameterServiceTypes(constructor.Parameters) : [])
-				.Concat(InjectedMemberServiceTypes(work.Implementation, context.Inputs.InjectProperties)),
+				.Concat(InjectedMemberServiceTypes(work.Implementation, context.Inputs)),
 		};
 
 	/// <summary>
@@ -722,7 +722,7 @@ partial class AwaitenGenerator
 	/// </summary>
 	private static IEnumerable<ITypeSymbol> InjectedMemberServiceTypes(
 		INamedTypeSymbol implementation,
-		Dictionary<string, List<InjectPropertyEntry>> injectProperties)
+		ExpansionInputs inputs)
 	{
 		HashSet<string> names = new(StringComparer.Ordinal);
 		foreach (IPropertySymbol property in InjectedProperties(implementation))
@@ -731,7 +731,7 @@ partial class AwaitenGenerator
 			yield return RequiredServiceType(property.Type);
 		}
 
-		foreach (string propertyName in InjectPropertyNames(implementation, injectProperties))
+		foreach (string propertyName in InjectPropertyNames(implementation, inputs))
 		{
 			if (names.Add(propertyName)
 			    && ResolveNamedInstanceMember(implementation, propertyName) is IPropertySymbol { IsIndexer: false, SetMethod: not null, } property)
@@ -747,10 +747,10 @@ partial class AwaitenGenerator
 	/// </summary>
 	private static IEnumerable<string> InjectPropertyNames(
 		INamedTypeSymbol implementation,
-		Dictionary<string, List<InjectPropertyEntry>> injectProperties)
-		=> new[] { implementation.ToDisplayString(FullyQualified), implementation.OriginalDefinition.ToDisplayString(FullyQualified), }
+		ExpansionInputs inputs)
+		=> new[] { TypeIdentity(implementation, inputs.Compilation), TypeIdentity(implementation.OriginalDefinition, inputs.Compilation), }
 			.Distinct(StringComparer.Ordinal)
-			.SelectMany(key => injectProperties.TryGetValue(key, out List<InjectPropertyEntry>? entries) ? entries : [])
+			.SelectMany(key => inputs.InjectProperties.TryGetValue(key, out List<InjectPropertyEntry>? entries) ? entries : [])
 			.Select(entry => entry.PropertyName);
 
 	/// <summary>

@@ -1306,6 +1306,7 @@ partial class AwaitenGenerator
 	///     <c>&lt;type&gt;@__dec:…</c> identity and a keyed composite a <c>&lt;type&gt;@__cmp:…</c> one; trim the
 	///     synthetic suffix so an error names the real decorator or composite type. A <c>Factory</c> or <c>Instance</c>
 	///     registration naming only its service carries a <c>&lt;service&gt;@member:…</c> one, trimmed to the service.
+	///     The assemblies a type's identity names when the compilation does not find it by its name are trimmed too.
 	/// </summary>
 	internal static string DisplayInstance(string implementationType)
 	{
@@ -1327,6 +1328,8 @@ partial class AwaitenGenerator
 			marker = implementationType.IndexOf(MemberKeyMarker, StringComparison.Ordinal);
 		}
 
-		return Display(marker >= 0 ? implementationType.Substring(0, marker) : implementationType);
+		string type = marker >= 0 ? implementationType.Substring(0, marker) : implementationType;
+		int assembly = type.IndexOf(AssemblyMarker, StringComparison.Ordinal);
+		return Display(assembly >= 0 ? type.Substring(0, assembly) : type);
 	}
 }

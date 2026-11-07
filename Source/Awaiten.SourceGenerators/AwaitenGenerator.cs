@@ -587,10 +587,10 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		// Container-side property injection: [InjectProperty<TImpl>] entries keyed by implementation type, so
 		// BuildInstance fills them wherever that implementation is constructed (including [Scan]-registered types).
 		// Read before Collect, since an injected property seeds open generic expansion like a constructor parameter.
-		Dictionary<string, List<InjectPropertyEntry>> injectProperties = CollectInjectProperties(containerSymbol, diagnostics);
+		Dictionary<string, List<InjectPropertyEntry>> injectProperties = CollectInjectProperties(containerSymbol, compilation, diagnostics);
 		if (inheritance is not null)
 		{
-			InheritInjectProperties(inheritance, injectProperties);
+			InheritInjectProperties(inheritance, injectProperties, compilation);
 		}
 
 		// Decorators and composites are read before Collect, since their parameters seed open generic expansion;
@@ -608,7 +608,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 
 		// A scan match a module's generated factory builds shares the instance of every other registration of its
 		// implementation, as it would in the module's own assembly.
-		ShareScannedInstances(raw, compilation, diagnostics);
+		List<string> sharedScanImplementations = ShareScannedInstances(raw, compilation);
 
 		// A scanned private nested type the resolvers cannot stand in for is skipped with AWT193, not the AWT216 error.
 		DropUnsupportedPrivateScanMatches(raw, containerSymbol, compilation, diagnostics);
@@ -616,11 +616,19 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		// [Scan(SkipUnconstructable = true)] trades the AWT101 error for a skip-with-warning (AWT141) on matches
 		// the container cannot construct. Scans without the opt-in, and explicit registrations, keep the error.
 		PruneUnconstructableScanMatches(raw, containerSymbol, compilation, external, constraintRejected, diagnostics);
+
+		// After the pruning, so a pruned match reports only AWT141. A dropped match can leave another opted-in match
+		// unconstructable, so the pruning runs again.
+		if (DropUnsharedScanMatches(raw, sharedScanImplementations, compilation, diagnostics))
+		{
+			PruneUnconstructableScanMatches(raw, containerSymbol, compilation, external, constraintRejected, diagnostics);
+		}
+
 		diagnostics.AddRange(wrapperDiagnostics);
 
 		// Coalesce registrations by (service type, key): first per key wins, and registrations of the same
 		// implementation share one instance. Conflicting lifetimes are AWT107; a duplicate key is AWT117.
-		AssignMemberIdentities(raw, containerSymbol);
+		AssignMemberIdentities(raw, containerSymbol, compilation);
 		(List<ImplInfo> implOrder, Dictionary<ServiceKey, string> serviceToImpl, Dictionary<ServiceKey, List<string>> serviceMembers, List<ServiceKey> serviceMemberOrder, List<(string ServiceType, INamedTypeSymbol Symbol)> varianceCandidates, Dictionary<string, List<KeyedMember>> keyedMembers, List<string> keyedMemberOrder) =
 			CoalesceByImplementation(raw, containerSymbol, diagnostics);
 		CoalescedGraph graph = new(serviceToImpl, implOrder, serviceMembers);
@@ -707,7 +715,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 
 		// AWT180: an [InjectProperty<TImpl>] entry whose implementation type matches no registration is never
 		// applied, reported now that every registered implementation has been seen.
-		ReportUnmatchedInjectProperties(injectProperties, implOrder, diagnostics);
+		ReportUnmatchedInjectProperties(injectProperties, implOrder, compilation, diagnostics);
 
 		// Variance for collections (Part C): union every variance-compatible registration's members into each
 		// requested closed-generic collection. Before the parameterized prune and edge building so the unioned
