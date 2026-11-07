@@ -22,14 +22,25 @@ dotnet add package Awaiten
 ```csharp
 using Awaiten;
 
+public interface IWarmUp                                  // your own interface, no Awaiten reference
+{
+    Task WarmUpAsync(CancellationToken cancellationToken);
+}
+
+public sealed class EspressoMachine : IWarmUp
+{
+    public Task WarmUpAsync(CancellationToken cancellationToken) => HeatBoilerAsync(cancellationToken);
+}
+
 [Container]
+[AsyncInitializer<IWarmUp>(nameof(IWarmUp.WarmUpAsync))]   // every IWarmUp is warmed up before use
 [Singleton<EspressoMachine>]
 [Scoped<Order>]
 [Transient<Cup>]
 public static partial class CoffeeShop;
 
 await using CoffeeShop.Root shop = new();
-await shop.InitializeAsync();        // async-initialized services are warmed up
+await shop.InitializeAsync();        // the espresso machine warms up
 Cup cup = shop.Resolve<Cup>();
 ```
 

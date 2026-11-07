@@ -38,24 +38,36 @@ A container is a `static partial` class marked with `[Container]`. You register 
 ```csharp title="Program.cs"
 using Awaiten;
 
-using CoffeeShop.Root shop = new();
+await using CoffeeShop.Root shop = new();
 
-Cup cup = shop.Resolve<Cup>();
+Cup cup = await shop.ResolveAsync<Cup>();   // the espresso machine warms up first
 
-public sealed class EspressoMachine;
+public interface IWarmUp
+{
+    Task WarmUpAsync(CancellationToken cancellationToken);
+}
+
+public sealed class EspressoMachine : IWarmUp
+{
+    public Task WarmUpAsync(CancellationToken cancellationToken) => HeatBoilerAsync(cancellationToken);
+}
+
 public sealed class Grinder;
 public sealed class Cup(EspressoMachine machine, Grinder grinder);
 
 [Container]
+[AsyncInitializer<IWarmUp>(nameof(IWarmUp.WarmUpAsync))]
 [Singleton<EspressoMachine>]
 [Singleton<Grinder>]
 [Transient<Cup>]
 public static partial class CoffeeShop;
 ```
 
-The generator emits a nested `Root` type for you. The `Root` is your composition root. It owns the singletons and it is the outermost scope. You create it, then ask it for services with `Resolve<T>()`.
+The generator emits a nested `Root` type for you. The `Root` is your composition root. It owns the singletons and it is the outermost scope. You create it, then ask it for services.
 
 Awaiten built the `Cup` for you and passed in the shared `EspressoMachine` and `Grinder`. You wrote no factory code.
+
+The espresso machine needs asynchronous setup before it can serve. `[AsyncInitializer<IWarmUp>]` tells the container that every `IWarmUp` is warmed up by `WarmUpAsync`, so the container awaits it once, before anything receives the machine. `IWarmUp` is your own interface, so the machine never references Awaiten. Because the `Cup` needs the machine, you resolve it with `ResolveAsync<T>()`. Resolving it synchronously with `Resolve<T>()` is a build error. Services without asynchronous setup resolve synchronously with `Resolve<T>()`.
 
 Dispose the `Root` when you are done. It disposes everything it owns. Use `await using` if any of your services are async-disposable.
 
@@ -117,4 +129,4 @@ Cyclic graphs, captive dependencies, and async services touched synchronously ar
 - [Complete example](./02-complete-example.md) for a full container that uses the main features together.
 - [Lifetimes](./03-core-concepts/01-lifetimes.md) for singleton, scoped, and transient in depth.
 - [Resolving services](./05-resolution/01-resolving-services.md) for the full resolve surface.
-- [Async initialization](./03-core-concepts/03-async-initialization.md) once a service needs async setup.
+- [Async initialization](./03-core-concepts/03-async-initialization.md) for conventions with parameters, asynchronous hooks, and warming up at startup.
