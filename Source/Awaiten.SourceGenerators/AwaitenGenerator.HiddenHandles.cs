@@ -385,8 +385,9 @@ partial class AwaitenGenerator
 	///     Rewrites a registration read off a module of another assembly whose implementation the module builds through
 	///     a generated handle (see <see cref="HiddenHandle" />), or returns <see langword="null" /> to leave it to the
 	///     other rules: the module has no such handle, or the module's assembly grants this container's assembly
-	///     <c>InternalsVisibleTo</c> and the container can name every service of the implementation and construct it, so
-	///     it builds the implementation itself. The first registration of the implementation also registers its instance
+	///     <c>InternalsVisibleTo</c> and the container can name every service of the implementation, so it builds the
+	///     internal services itself and registers no handles, as a container in the module's own assembly does, and
+	///     reports a member or constructor it cannot reach like that container. The first registration of the implementation also registers its instance
 	///     handle, built by the module's factory, as an unkeyed dependency-only service (<see cref="RawRegistration.Unlisted" />)
 	///     with the implementation's own disposal and the hooks and async initializers through their generated wrappers.
 	///     Its identity names the implementation and the module that declares the handle, so the registrations of every
@@ -411,9 +412,6 @@ partial class AwaitenGenerator
 		    || registrations[0].Member != registration.ProductionMember
 		    || Alias(service) is not { ReturnType: INamedTypeSymbol aliasType, } alias
 		    || (module.ContainingAssembly.GivesAccessTo(compilation.Assembly)
-		        && (registration.Production == ProductionKind.Constructor
-			        ? CanConstruct(implementation, compilation)
-			        : MembersNamed(module, registration.ProductionMember!).Any(member => compilation.IsSymbolAccessibleWithin(member, compilation.Assembly)))
 		        && registrations.All(candidate => compilation.IsSymbolAccessibleWithin(candidate.Service, compilation.Assembly))))
 		{
 			return null;

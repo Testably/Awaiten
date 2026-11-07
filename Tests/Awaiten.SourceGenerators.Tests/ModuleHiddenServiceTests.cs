@@ -1387,6 +1387,73 @@ public class ModuleHiddenServiceTests
 		}
 	}
 
+	public class PrivateProductionMemberOfAnInternalService
+	{
+		private const string Instance = "Instance = nameof(Default)";
+
+		private const string Factory = "Factory = nameof(Make)";
+
+		private const string Container = """
+			[Container]
+			[Import(typeof(CoffeeModule))]
+			public static partial class MyContainer;
+			""";
+
+		private static string Library(string production, bool grant = false) => $$"""
+			using Awaiten;
+
+			{{(grant ? "[assembly: System.Runtime.CompilerServices.InternalsVisibleTo(\"TestAssembly\")]" : "")}}
+
+			namespace Lib;
+
+			public interface IUser { }
+			internal interface IKettle { }
+			internal sealed class Kettle : IKettle { }
+			internal sealed class User : IUser { public User(IKettle kettle) { } }
+
+			[Module]
+			[Singleton<IKettle>({{production}})]
+			[Singleton<User, IUser>]
+			public static partial class CoffeeModule
+			{
+			    private static readonly IKettle Default = new Kettle();
+			    private static IKettle Make() => new Kettle();
+			}
+			""";
+
+		[Test]
+		[Arguments(Instance)]
+		[Arguments(Factory)]
+		public async Task ContainerInAnotherAssembly_TakesItThroughTheHandle(string production)
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Library(production), "using Awaiten;\nusing Lib;\n\nnamespace MyCode;\n\n" + Container);
+
+			await That(result.Diagnostics).IsEmpty();
+		}
+
+		[Test]
+		[Arguments(Instance, "Default")]
+		[Arguments(Factory, "Make")]
+		public async Task ContainerInTheModulesAssembly_ReportsAwt153(string production, string member)
+		{
+			GeneratorResult result = Generator.Run(Library(production) + Container);
+
+			await That(result.Diagnostics).HasSingle().Which.Contains($"*AWT153*'{member}'*").AsWildcard()
+				.Because("a container that builds the internal services itself cannot reach the private member");
+		}
+
+		[Test]
+		[Arguments(Instance, "AWT109", "Default")]
+		[Arguments(Factory, "AWT108", "Make")]
+		public async Task ContainerInAnAssemblyGrantedInternalsVisibleTo_NamesTheMemberItCannotReach(string production, string id, string member)
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Library(production, grant: true), "using Awaiten;\nusing Lib;\n\nnamespace MyCode;\n\n" + Container);
+
+			await That(result.Diagnostics).HasSingle().Which.Contains($"*{id}*'{member}'*").AsWildcard()
+				.Because("a friend builds the internal services itself and registers no handles, so it names the private member it cannot see instead of a missing service");
+		}
+	}
+
 	public class PrivateDecoratorTakingAnInternalService
 	{
 		private const string OfTheInternalService = """
