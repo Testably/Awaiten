@@ -1182,6 +1182,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Nov 6 19:04:14 2026 \u002B0100",
         "message": "fix!: identify an open generic factory\u0027s closing by its member (#271)"
+      },
+      {
+        "sha": "36756ef288eb78505552a9e5648d8dc82409a7bd",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 06:18:36 2026 \u002B0100",
+        "message": "fix!: count every declared import as used and wire the host for direct resolves (#274)"
       }
     ],
     "labels": [
@@ -1381,7 +1387,8 @@ window.BENCHMARK_DATA = {
       "3d9f796b",
       "edcf7d85",
       "26bbf037",
-      "02dfe2fe"
+      "02dfe2fe",
+      "36756ef2"
     ],
     "datasets": [
       {
@@ -1584,7 +1591,8 @@ window.BENCHMARK_DATA = {
           7.018871400218743,
           6.267832472920418,
           6.30139413688864,
-          5.512131631374359
+          5.512131631374359,
+          6.258720891816275
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -1596,6 +1604,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -2003,7 +2012,8 @@ window.BENCHMARK_DATA = {
           10.0166758703334,
           6.866493446486337,
           6.38517648478349,
-          6.615334737300873
+          6.615334737300873,
+          7.564080652381692
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -2015,6 +2025,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -2422,7 +2433,8 @@ window.BENCHMARK_DATA = {
           126.20132921536764,
           81.33027567068736,
           133.32464181582134,
-          84.2172568877538
+          84.2172568877538,
+          145.0333003447606
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -2434,6 +2446,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -2837,7 +2850,8 @@ window.BENCHMARK_DATA = {
           9.044105278452237,
           6.141371520360311,
           9.037038179238637,
-          6.571638016746594
+          6.571638016746594,
+          7.6732401723663015
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -2849,6 +2863,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -3248,7 +3263,8 @@ window.BENCHMARK_DATA = {
           11.01135744502147,
           8.626320712268353,
           11.600905577341715,
-          8.81596067349116
+          8.81596067349116,
+          10.939174892810675
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -3260,6 +3276,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -4648,6 +4665,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Nov 6 19:04:14 2026 \u002B0100",
         "message": "fix!: identify an open generic factory\u0027s closing by its member (#271)"
+      },
+      {
+        "sha": "36756ef288eb78505552a9e5648d8dc82409a7bd",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 06:18:36 2026 \u002B0100",
+        "message": "fix!: count every declared import as used and wire the host for direct resolves (#274)"
       }
     ],
     "labels": [
@@ -4847,7 +4870,8 @@ window.BENCHMARK_DATA = {
       "3d9f796b",
       "edcf7d85",
       "26bbf037",
-      "02dfe2fe"
+      "02dfe2fe",
+      "36756ef2"
     ],
     "datasets": [
       {
@@ -5050,7 +5074,8 @@ window.BENCHMARK_DATA = {
           7.7817118402038306,
           6.440045844515165,
           7.574618913729986,
-          6.3210582711866925
+          6.3210582711866925,
+          7.2576323539018635
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -5062,6 +5087,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -5469,7 +5495,8 @@ window.BENCHMARK_DATA = {
           8.678368679114751,
           6.4959253668785095,
           6.526979368925095,
-          6.484459442396958
+          6.484459442396958,
+          7.7947013431361745
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -5481,6 +5508,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -5888,7 +5916,8 @@ window.BENCHMARK_DATA = {
           113.28979624907176,
           81.893008406957,
           134.56417595545452,
-          81.34368291071483
+          81.34368291071483,
+          143.12616322721755
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -5900,6 +5929,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -6303,7 +6333,8 @@ window.BENCHMARK_DATA = {
           8.82715161373982,
           6.279686126325812,
           9.139574110507965,
-          6.517596201254771
+          6.517596201254771,
+          7.737891724476447
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -6315,6 +6346,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -6714,7 +6746,8 @@ window.BENCHMARK_DATA = {
           15.096653266747792,
           11.735946902384361,
           11.69046202989725,
-          8.7078672905763
+          8.7078672905763,
+          13.199643049637476
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -6726,6 +6759,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -8114,6 +8148,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Nov 6 19:04:14 2026 \u002B0100",
         "message": "fix!: identify an open generic factory\u0027s closing by its member (#271)"
+      },
+      {
+        "sha": "36756ef288eb78505552a9e5648d8dc82409a7bd",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 06:18:36 2026 \u002B0100",
+        "message": "fix!: count every declared import as used and wire the host for direct resolves (#274)"
       }
     ],
     "labels": [
@@ -8313,7 +8353,8 @@ window.BENCHMARK_DATA = {
       "3d9f796b",
       "edcf7d85",
       "26bbf037",
-      "02dfe2fe"
+      "02dfe2fe",
+      "36756ef2"
     ],
     "datasets": [
       {
@@ -8516,7 +8557,8 @@ window.BENCHMARK_DATA = {
           22.490938959519067,
           21.868636444211006,
           13.155675932765007,
-          15.060241228342056
+          15.060241228342056,
+          10.813336339592933
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -8678,6 +8720,7 @@ window.BENCHMARK_DATA = {
           144,
           144,
           144,
+          208,
           208,
           208,
           208,
@@ -8935,7 +8978,8 @@ window.BENCHMARK_DATA = {
           1594.301356379191,
           1662.7283014933269,
           872.1678094130295,
-          1018.6731882095337
+          1018.6731882095337,
+          802.0788377761841
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -8947,6 +8991,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          5688,
           5688,
           5688,
           5688,
@@ -9354,7 +9399,8 @@ window.BENCHMARK_DATA = {
           30271.95821707589,
           24604.612188720705,
           18674.01127319336,
-          17719.775435384116
+          17719.775435384116,
+          17677.889066256008
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -9562,7 +9608,8 @@ window.BENCHMARK_DATA = {
           32478,
           32476,
           32476,
-          32474
+          32474,
+          32476
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -9769,7 +9816,8 @@ window.BENCHMARK_DATA = {
           738.3558861187527,
           713.899149831136,
           436.70404059546337,
-          467.08490614096326
+          467.08490614096326,
+          386.71909405634955
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -9799,6 +9847,7 @@ window.BENCHMARK_DATA = {
           1472,
           1472,
           1472,
+          1528,
           1528,
           1528,
           1528,
@@ -10180,7 +10229,8 @@ window.BENCHMARK_DATA = {
           12333.0137163798,
           13036.762233479818,
           6513.34833254133,
-          7593.3054574330645
+          7593.3054574330645,
+          6586.469537353516
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -10384,6 +10434,7 @@ window.BENCHMARK_DATA = {
           24760,
           24761,
           24761,
+          24760,
           24760
         ],
         "borderColor": "#43A047",
@@ -11580,6 +11631,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Nov 6 19:04:14 2026 \u002B0100",
         "message": "fix!: identify an open generic factory\u0027s closing by its member (#271)"
+      },
+      {
+        "sha": "36756ef288eb78505552a9e5648d8dc82409a7bd",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 06:18:36 2026 \u002B0100",
+        "message": "fix!: count every declared import as used and wire the host for direct resolves (#274)"
       }
     ],
     "labels": [
@@ -11779,7 +11836,8 @@ window.BENCHMARK_DATA = {
       "3d9f796b",
       "edcf7d85",
       "26bbf037",
-      "02dfe2fe"
+      "02dfe2fe",
+      "36756ef2"
     ],
     "datasets": [
       {
@@ -11982,7 +12040,8 @@ window.BENCHMARK_DATA = {
           175.30598220458398,
           305.46560497283934,
           76.76242327690125,
-          167.03894913991292
+          167.03894913991292,
+          74.98039690937314
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -12144,6 +12203,7 @@ window.BENCHMARK_DATA = {
           2128,
           2128,
           2128,
+          4176,
           4176,
           4176,
           4176,
@@ -12401,7 +12461,8 @@ window.BENCHMARK_DATA = {
           15297.2802734375,
           15666.077026367188,
           7537.875168391636,
-          8636.87145451137
+          8636.87145451137,
+          7396.538390023367
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -12413,6 +12474,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          61016,
           61016,
           61016,
           61016,
@@ -12820,7 +12882,8 @@ window.BENCHMARK_DATA = {
           741659.4263392857,
           587804.5231770833,
           418478.8393066406,
-          398596.9561523438
+          398596.9561523438,
+          413878.8464518229
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -13028,7 +13091,8 @@ window.BENCHMARK_DATA = {
           721168,
           721081,
           718800,
-          738694
+          738694,
+          718408
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -13235,7 +13299,8 @@ window.BENCHMARK_DATA = {
           46138.00498860677,
           44385.010729980466,
           23695.11734822591,
-          25861.432836914064
+          25861.432836914064,
+          23253.86467566857
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -13439,7 +13504,8 @@ window.BENCHMARK_DATA = {
           80965,
           80512,
           80323,
-          79986
+          79986,
+          80350
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -13646,7 +13712,8 @@ window.BENCHMARK_DATA = {
           383271.23287760414,
           387293.8643624442,
           202025.6735514323,
-          228031.24091796874
+          228031.24091796874,
+          190356.49312918526
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -13850,7 +13917,8 @@ window.BENCHMARK_DATA = {
           573043,
           572305,
           573075,
-          571214
+          571214,
+          573120
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -15022,6 +15090,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Fri Nov 6 19:04:14 2026 \u002B0100",
         "message": "fix!: identify an open generic factory\u0027s closing by its member (#271)"
+      },
+      {
+        "sha": "36756ef288eb78505552a9e5648d8dc82409a7bd",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 06:18:36 2026 \u002B0100",
+        "message": "fix!: count every declared import as used and wire the host for direct resolves (#274)"
       }
     ],
     "labels": [
@@ -15217,7 +15291,8 @@ window.BENCHMARK_DATA = {
       "3d9f796b",
       "edcf7d85",
       "26bbf037",
-      "02dfe2fe"
+      "02dfe2fe",
+      "36756ef2"
     ],
     "datasets": [
       {
@@ -15416,7 +15491,8 @@ window.BENCHMARK_DATA = {
           178.5564998626709,
           212.9970986286799,
           216.96729780832928,
-          206.77925304266122
+          206.77925304266122,
+          252.62564863477434
         ],
         "borderColor": "#3949AB",
         "backgroundColor": "#3949AB",
@@ -15451,6 +15527,7 @@ window.BENCHMARK_DATA = {
           560,
           560,
           560,
+          568,
           568,
           568,
           568,
@@ -15827,7 +15904,8 @@ window.BENCHMARK_DATA = {
           435.16855506896974,
           459.0480000019073,
           472.35039278666176,
-          472.01354698034436
+          472.01354698034436,
+          454.65825172833036
         ],
         "borderColor": "#512BD4",
         "backgroundColor": "#512BD4",
@@ -15839,6 +15917,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          1104,
           1104,
           1104,
           1104,
@@ -16238,7 +16317,8 @@ window.BENCHMARK_DATA = {
           3776.9160035940317,
           4869.625035967146,
           5102.9551674979075,
-          5034.404929024832
+          5034.404929024832,
+          4780.296831003825
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -16322,6 +16402,7 @@ window.BENCHMARK_DATA = {
           13696,
           13696,
           13696,
+          10784,
           10784,
           10784,
           10784,
@@ -16649,7 +16730,8 @@ window.BENCHMARK_DATA = {
           281.724204158783,
           344.043853298823,
           354.9697928110758,
-          356.64506600697837
+          356.64506600697837,
+          326.88944840431213
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -16661,6 +16743,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          944,
           944,
           944,
           944,
@@ -17060,7 +17143,8 @@ window.BENCHMARK_DATA = {
           442.15090864045277,
           553.62123973029,
           566.473276201884,
-          584.0600894047664
+          584.0600894047664,
+          515.8929798762003
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -17072,6 +17156,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          1096,
           1096,
           1096,
           1096,
