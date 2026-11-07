@@ -31,7 +31,7 @@ public class ModuleHandleSharingTests
 	{
 		using AliasedDisposableContainer.Root container = new();
 
-		await That(container is IAwaitenResolver<IAliasedCup>).IsFalse()
+		await That((object)container is IAwaitenResolver<IAliasedCup>).IsFalse()
 			.Because("the root withholds a transient disposable under strict lifetime safety, also when an alias serves it from a handle");
 		await That(() => container.Resolve<IAliasedCup>()).Throws<InvalidOperationException>()
 			.WithMessage("*withheld*Owned<*").AsWildcard();

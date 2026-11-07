@@ -56,10 +56,13 @@ public interface IHandleHeater;
 
 internal sealed class HandleBoiler : IHandleAppliance, IHandleHeater;
 
-/// <summary>A <c>[Module]</c> that registers an internal boiler under two public services, which one handle shares.</summary>
+/// <summary>
+///     A <c>[Module]</c> that registers an internal boiler under two public services, which one handle shares. The
+///     marker registration is an overridable default, so it yields to the kettle module's without AWT155.
+/// </summary>
 [Module]
 [Singleton<HandleBoiler, IHandleHeater>]
-[Singleton<HandleBoiler, IHandleAppliance>]
+[Singleton<HandleBoiler, IHandleAppliance>(Fallback = Fallback.Silent)]
 public static partial class HandleBoilerModule;
 
 /// <summary>A <c>[Module]</c> whose scan matches the kettle and the boiler the other modules build through handles.</summary>
