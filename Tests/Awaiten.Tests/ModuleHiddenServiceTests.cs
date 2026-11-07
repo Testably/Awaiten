@@ -170,8 +170,8 @@ public class ModuleHiddenServiceTests
 #pragma warning disable AWT156
 		await That(() => container.Dispose()).Throws<InvalidOperationException>()
 #pragma warning restore AWT156
-			.WithMessage("*DisposeAsync*").AsWildcard()
-			.Because("the container knows the internal instance is only asynchronously disposable");
+			.WithMessage("*'Awaiten.Tests.Support.HiddenLock' requires asynchronous disposal*DisposeAsync*").AsWildcard()
+			.Because("the container knows the internal instance is only asynchronously disposable, and the guidance names the internal implementation instead of its handle");
 		await container.DisposeAsync();
 	}
 

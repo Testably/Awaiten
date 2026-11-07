@@ -294,6 +294,39 @@ public class ModuleHiddenServiceTests
 	}
 
 	[Test]
+	public async Task TwoConventionsReachingOneMethod_GetOneInitializerWrapper()
+	{
+		const string library = """
+			using System.Threading;
+			using System.Threading.Tasks;
+			using Awaiten;
+
+			namespace Lib;
+
+			public interface IGrinder { }
+			internal interface IStartable { Task StartAsync(CancellationToken cancellationToken); }
+			internal interface IWarmable { Task StartAsync(CancellationToken cancellationToken); }
+			internal sealed class BeanStore : IStartable, IWarmable { public Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask; }
+			internal sealed class Grinder : IGrinder { public Grinder(BeanStore store) { } }
+
+			[Module]
+			[AsyncInitializer<IStartable>(nameof(IStartable.StartAsync))]
+			[AsyncInitializer<IWarmable>(nameof(IWarmable.StartAsync))]
+			[Singleton<BeanStore>]
+			[Singleton<Grinder, IGrinder>]
+			public static partial class CoffeeModule { }
+			""";
+		GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(library, Consumer.Container);
+		string module = ModuleSource(RunLibrary(library));
+		string container = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+		await That(result.Diagnostics).IsEmpty();
+		await That(module.Split("HiddenInitializer_BeanStore_").Length - 1).IsEqualTo(1)
+			.Because("both conventions reach the one StartAsync of the internal bean store, which runs once, as in a container of the module's own assembly");
+		await That(container.Split("HiddenInitializer_BeanStore_").Length - 1).IsEqualTo(1);
+	}
+
+	[Test]
 	public async Task FactoryMember_IsWrappedIntoTheHandle()
 	{
 		GeneratorResult result = RunLibrary("""
@@ -535,7 +568,7 @@ public class ModuleHiddenServiceTests
 
 	public class Consumer
 	{
-		private const string Container = """
+		internal const string Container = """
 		                                 using Awaiten;
 		                                 using Lib;
 
