@@ -313,7 +313,7 @@ internal static partial class Sources
 			// The async ctor carries the closed generics the bridge projects with, so it never
 			// constructs Task<TService> or the Task<object>->Task<T> converter reflectively.
 			builder.Append(", typeof(global::System.Threading.Tasks.Task<").Append(service.Service).Append(">), ")
-				.Append("global::Awaiten.AwaitenTaskProjection.AsTask<").Append(service.Service).Append('>');
+				.Append("global::Awaiten.Internals.AwaitenTaskProjection.AsTask<").Append(service.Service).Append('>');
 		}
 		else if (disposalSuppressed)
 		{

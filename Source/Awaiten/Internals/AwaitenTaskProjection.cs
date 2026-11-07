@@ -1,7 +1,7 @@
 using System.ComponentModel;
 using System.Threading.Tasks;
 
-namespace Awaiten;
+namespace Awaiten.Internals;
 
 /// <summary>
 ///     Infrastructure for the <c>Awaiten.Extensions.DependencyInjection</c> bridge, referenced by generated

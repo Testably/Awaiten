@@ -59,7 +59,7 @@ public readonly struct AwaitenRegistration : IEquatable<AwaitenRegistration>
 	/// <param name="lifetime">The lifetime under which the container owns the service.</param>
 	/// <param name="asyncTaskType">The <c>typeof(Task&lt;TService&gt;)</c> the service is projected under.</param>
 	/// <param name="asyncTaskConverter">
-	///     A delegate bound to the closed <see cref="AwaitenTaskProjection.AsTask{T}" /> that adapts the container's
+	///     A delegate bound to the closed <see cref="Internals.AwaitenTaskProjection.AsTask{T}" /> that adapts the container's
 	///     <c>Task&lt;object&gt;</c> resolution to the <c>Task&lt;TService&gt;</c> the host asks for.
 	/// </param>
 	/// <param name="key">The key a keyed registration declares through its <c>Key</c> property, or <see langword="null" /> when unkeyed.</param>
@@ -124,7 +124,7 @@ public readonly struct AwaitenRegistration : IEquatable<AwaitenRegistration>
 	public Type? AsyncTaskType { get; }
 
 	/// <summary>
-	///     For an asynchronous registration, a delegate bound to the closed <see cref="AwaitenTaskProjection.AsTask{T}" />
+	///     For an asynchronous registration, a delegate bound to the closed <see cref="Internals.AwaitenTaskProjection.AsTask{T}" />
 	///     that adapts the container's <c>Task&lt;object&gt;</c> resolution to a <c>Task&lt;TService&gt;</c>, or
 	///     <see langword="null" /> otherwise. Derived from <see cref="ServiceType" />, so it takes no part in value equality.
 	/// </summary>

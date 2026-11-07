@@ -93,11 +93,6 @@ namespace Awaiten
             public Awaiten.AwaitenResolvability GetResolvability<T>() { }
         }
     }
-    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
-    public static class AwaitenTaskProjection
-    {
-        public static System.Threading.Tasks.Task<T> AsTask<T>(System.Threading.Tasks.Task<object> resolution) { }
-    }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
     public sealed class CompositeAttribute : System.Attribute
     {
@@ -454,6 +449,19 @@ namespace Awaiten
         public string? OnRelease { get; set; }
         public bool SuppressDisposal { get; set; }
         public System.Type? WhenInjectedInto { get; set; }
+    }
+}
+namespace Awaiten.Internals
+{
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
+    public static class AwaitenOwnedProjection
+    {
+        public static Awaiten.Owned<TResult> Map<T, TResult>(Awaiten.Owned<T> owned, System.Func<T, TResult> map) { }
+    }
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
+    public static class AwaitenTaskProjection
+    {
+        public static System.Threading.Tasks.Task<T> AsTask<T>(System.Threading.Tasks.Task<object> resolution) { }
     }
 }
 

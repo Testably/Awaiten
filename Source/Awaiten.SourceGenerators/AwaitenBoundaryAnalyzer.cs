@@ -94,12 +94,14 @@ public sealed class AwaitenBoundaryAnalyzer : DiagnosticAnalyzer
 	}
 
 	// AWT205: an Owned<T> built with its (scope, value) constructor in user code. Generated code is skipped by
-	// ConfigureGeneratedCodeAnalysis, and a parameterless new Owned<T>() is the harmless default handle.
+	// ConfigureGeneratedCodeAnalysis, and a parameterless new Owned<T>() is the harmless default handle. Awaiten
+	// itself builds one when it projects a handle (AwaitenOwnedProjection).
 	private static void ReportOwnedConstruction(OperationAnalysisContext context, INamedTypeSymbol ownedType)
 	{
 		IObjectCreationOperation creation = (IObjectCreationOperation)context.Operation;
 		if (creation.Constructor is not { Parameters.Length: > 0 } constructor
-		    || !SymbolEqualityComparer.Default.Equals(constructor.ContainingType.OriginalDefinition, ownedType))
+		    || !SymbolEqualityComparer.Default.Equals(constructor.ContainingType.OriginalDefinition, ownedType)
+		    || SymbolEqualityComparer.Default.Equals(context.Compilation.Assembly, ownedType.ContainingAssembly))
 		{
 			return;
 		}

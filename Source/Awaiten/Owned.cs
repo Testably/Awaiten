@@ -47,4 +47,7 @@ public readonly struct Owned<T> : IAsyncDisposable, IDisposable
 	/// </summary>
 	public ValueTask DisposeAsync()
 		=> _scope?.DisposeAsync() ?? default;
+
+	/// <summary>A handle over <paramref name="map" /> applied to <see cref="Value" />, owning the same scope.</summary>
+	internal Owned<TResult> Map<TResult>(Func<T, TResult> map) => new(_scope, map(Value));
 }
