@@ -1,11 +1,9 @@
 ---
 description: Benchmarks that compare Awaiten with other .NET dependency injection containers on build, resolve and per-request workloads.
+hide_table_of_contents: true
 ---
 
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
 import AwaitenBenchmarkResult from '@site/src/components/AwaitenBenchmarkResult';
-import AwaitenBenchmarkSummary from '@site/src/components/AwaitenBenchmarkSummary';
 
 # Benchmarks
 
@@ -13,50 +11,17 @@ Awaiten wires the graph at build time, so there is nothing to reflect over at ru
 [Microsoft.Extensions.DependencyInjection](https://learn.microsoft.com/dotnet/core/extensions/dependency-injection),
 [Autofac](https://autofac.org/),
 [DryIoc](https://github.com/dadhi/DryIoc) and
-[Simple Injector](https://simpleinjector.org/) across the same graphs.
+[Simple Injector](https://simpleinjector.org/) across the same graphs. Pick a scenario; every multiple is relative to Awaiten.
 
-<AwaitenBenchmarkSummary />
+<AwaitenBenchmarkResult />
 
-:::note[Methodology]
+<details>
+<summary>How these numbers are measured</summary>
 
 - **Suite**: [`Awaiten.Benchmarks`](https://github.com/awaiten-dev/Awaiten/tree/main/Benchmarks/Awaiten.Benchmarks) driven by [BenchmarkDotNet](https://benchmarkdotnet.org/).
 - **Job**: `MediumRun` with the in-process toolchain.
 - **Runner**: `ubuntu-latest` GitHub Actions agent, refreshed on every push to `main`.
-- Each row shows time and allocated memory, sorted fastest-first; bars are scaled within the row so length corresponds to magnitude. The Awaiten row is highlighted as the baseline; every other row shows its trend relative to Awaiten over the recent runs (dashed line: equal) and ends with the latest change, such as `+170%` for a container that takes 2.7× as long. **Lower is better.**
-- Click a row to hide that container so the others spread out. Build and Resolve are measured at container sizes of 8 and 256 registrations; switch between them with the inline tabs.
+- **Sizes**: Build and Resolve are measured at container sizes of 8 and 256 registrations.
+- **Trend**: the recent runs compare each container with Awaiten in the same run, so the line does not depend on the speed of the runner. The dashed line marks equal time.
 
-:::
-
-<Tabs groupId="awaitenBenchmark">
-
-<TabItem value="Realistic" label="Realistic" default>
-
-A per-request pattern, the shape a web app actually runs: open a scope, resolve a deep graph of mixed lifetimes rooted at a request handler, then dispose the scope.
-
-<AwaitenBenchmarkResult name="Realistic" />
-
-[View the benchmark source on GitHub →](https://github.com/awaiten-dev/Awaiten/blob/main/Benchmarks/Awaiten.Benchmarks/RealisticResolveBenchmarks.cs)
-
-</TabItem>
-
-<TabItem value="Resolve" label="Resolve">
-
-Steady-state resolution of a service by type once the container is built.
-
-<AwaitenBenchmarkResult name="Resolve" />
-
-[View the benchmark source on GitHub →](https://github.com/awaiten-dev/Awaiten/blob/main/Benchmarks/Awaiten.Benchmarks/ResolveBenchmarks.cs)
-
-</TabItem>
-
-<TabItem value="Build" label="Build">
-
-Container construction from cold, over a graph of singletons.
-
-<AwaitenBenchmarkResult name="Build" />
-
-[View the benchmark source on GitHub →](https://github.com/awaiten-dev/Awaiten/blob/main/Benchmarks/Awaiten.Benchmarks/BuildBenchmarks.cs)
-
-</TabItem>
-
-</Tabs>
+</details>

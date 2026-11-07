@@ -1,0 +1,403 @@
+.hero {
+  background: #0c1313;
+  color: #e3eded;
+  padding: 5rem 1.5rem 6rem;
+  text-align: center;
+}
+
+.heroInner {
+  max-width: 60rem;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.4rem;
+}
+
+.heroLogo {
+  width: 128px;
+  height: 128px;
+}
+
+.heroTitle {
+  margin: 0;
+  font-size: clamp(2.4rem, 6vw, 4rem);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  max-width: 13em;
+  color: #f4f8f8;
+  text-wrap: balance;
+}
+
+.warm {
+  color: #f5b85a;
+}
+
+.heroText {
+  margin: 0;
+  font-size: 1.2rem;
+  color: #a3b8b8;
+  max-width: 36em;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: center;
+}
+
+.primary,
+.primary:hover {
+  background: #3fb8b0;
+  color: #062020;
+  font-weight: 600;
+  padding: 0.8rem 1.4rem;
+  border-radius: 8px;
+  text-decoration: none;
+}
+
+.primary:hover {
+  background: #5cc3bc;
+}
+
+.secondary,
+.secondary:hover {
+  color: #e3eded;
+  font-weight: 500;
+  padding: 0.8rem 1.1rem;
+  border-radius: 8px;
+  border: 1px solid #2d4444;
+  text-decoration: none;
+}
+
+.secondary:hover {
+  border-color: #3fb8b0;
+}
+
+.container {
+  max-width: 68rem;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+.intro {
+  padding-top: 4.5rem;
+  padding-bottom: 2.5rem;
+}
+
+.intro h2 {
+  margin: 0 0 0.5rem;
+  font-size: 2.2rem;
+  letter-spacing: -0.015em;
+}
+
+.intro p,
+.muted {
+  margin: 0;
+  color: var(--ifm-color-emphasis-700);
+}
+
+.timeline {
+  padding-bottom: 4rem;
+}
+
+.step {
+  display: flex;
+  gap: 1.5rem;
+}
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: none;
+  width: 32px;
+}
+
+.node {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--ifm-color-primary);
+  flex: none;
+}
+
+.nodeWarm {
+  background: #e9962b;
+}
+
+.line {
+  width: 4px;
+  flex: 1;
+  background: var(--ifm-color-emphasis-200);
+}
+
+.stepBody {
+  flex: 1;
+  min-width: 0;
+  padding-bottom: 3.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.75rem;
+  align-items: flex-start;
+}
+
+.step:last-child .stepBody {
+  padding-bottom: 0;
+}
+
+.stepText {
+  flex: 1 1 300px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.stepText h3 {
+  margin: 0;
+  font-size: 1.85rem;
+  letter-spacing: -0.01em;
+}
+
+.stepVisual {
+  flex: 1.2 1 420px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.eyebrow {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  color: var(--ifm-color-primary);
+}
+
+.eyebrowWarm {
+  color: #9a5b0b;
+}
+
+[data-theme='dark'] .eyebrowWarm {
+  color: #f5b85a;
+}
+
+.code {
+  margin: 0;
+  background: #0f1a1a;
+  color: #cfe0e0;
+  border-radius: 12px;
+  padding: 1.1rem 1.35rem;
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.875rem;
+  line-height: 1.75;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+[data-theme='dark'] .code,
+[data-theme='dark'] .errorCard {
+  border: 1px solid #243838;
+}
+
+.kw {
+  color: #6fa8dc;
+}
+
+.attr {
+  color: #f5b85a;
+}
+
+.type {
+  color: #7fd8cf;
+}
+
+.comment {
+  color: #6e8c8c;
+}
+
+.squiggle {
+  text-decoration: underline wavy #ff6b6b;
+  text-underline-offset: 4px;
+}
+
+.errorCard {
+  background: #0f1a1a;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.errorCard .code {
+  border-radius: 0;
+  border: 0;
+}
+
+.error {
+  border-top: 1px solid #3a2424;
+  background: #1a1414;
+  padding: 0.9rem 1.25rem;
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  font-size: 0.875rem;
+  color: #f2d6d3;
+}
+
+.error code {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: #ffffff;
+}
+
+.errorId {
+  font-family: var(--ifm-font-family-monospace);
+  font-weight: 500;
+  color: #1a1414;
+  background: #ff8a80;
+  border-radius: 4px;
+  padding: 0 0.45rem;
+  flex: none;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.chip {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.8rem;
+  color: var(--ifm-color-primary-darkest);
+  background: var(--ifm-color-primary-contrast-background);
+  border-radius: 4px;
+  padding: 0.05rem 0.45rem;
+}
+
+[data-theme='dark'] .chip {
+  color: var(--ifm-color-primary-lightest);
+  background: rgba(63, 184, 176, 0.12);
+}
+
+.service {
+  display: flex;
+  gap: 0.9rem;
+  align-items: baseline;
+  flex-wrap: wrap;
+  border-radius: 12px;
+  padding: 0.9rem 1.1rem;
+  background: var(--ifm-color-emphasis-100);
+  border: 1px solid var(--ifm-color-emphasis-200);
+}
+
+.serviceWarm {
+  background: #fdf6ec;
+  border-color: #f0d6ae;
+}
+
+[data-theme='dark'] .serviceWarm {
+  background: #1e1a12;
+  border-color: #5c4419;
+}
+
+.serviceName {
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.lifetime {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.75rem;
+  color: var(--ifm-color-emphasis-700);
+}
+
+.services {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.services .service {
+  flex: 1 1 180px;
+}
+
+.features {
+  background: var(--ifm-color-emphasis-100);
+  border-top: 1px solid var(--ifm-color-emphasis-200);
+  border-bottom: 1px solid var(--ifm-color-emphasis-200);
+}
+
+.featureGrid {
+  padding-top: 4rem;
+  padding-bottom: 4rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 2rem;
+}
+
+.featureGrid h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1.35rem;
+}
+
+.closing {
+  padding-top: 4.5rem;
+  padding-bottom: 4.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.closing h2 {
+  margin: 0 0 0.4rem;
+  font-size: 2.1rem;
+}
+
+.closingText {
+  flex: 1 1 420px;
+  min-width: 0;
+}
+
+.button,
+.button:hover {
+  background: var(--ifm-color-primary);
+  color: #ffffff;
+  font-weight: 600;
+  padding: 0.8rem 1.4rem;
+  border-radius: 8px;
+  text-decoration: none;
+}
+
+.button:hover {
+  background: var(--ifm-color-primary-dark);
+}
+
+[data-theme='dark'] .button,
+[data-theme='dark'] .button:hover {
+  color: #062020;
+}
+
+.outline,
+.outline:hover {
+  color: var(--ifm-color-primary);
+  font-weight: 600;
+  padding: 0.8rem 1.1rem;
+  border-radius: 8px;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  text-decoration: none;
+}
+
+.outline:hover {
+  border-color: var(--ifm-color-primary);
+}
+
+.install {
+  flex: 1 1 100%;
+  min-width: 0;
+}
