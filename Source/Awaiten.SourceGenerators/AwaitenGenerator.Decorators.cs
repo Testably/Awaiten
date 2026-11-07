@@ -362,6 +362,8 @@ partial class AwaitenGenerator
 				ConstructVia = via?.Call,
 				ConstructViaType = via?.ReturnType,
 				Constructor = via?.Producer,
+				Hidden = chain.Ordered[linkIndex].ThroughHandle ? decorator : null,
+				Unlisted = chain.Ordered[linkIndex].ThroughHandle,
 			};
 			_byImpl[identity] = info;
 			_implOrder.Add(info);

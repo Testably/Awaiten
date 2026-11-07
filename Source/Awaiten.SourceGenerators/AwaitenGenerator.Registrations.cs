@@ -92,7 +92,8 @@ internal sealed record ImportedModule(INamedTypeSymbol Symbol, Location? ImportL
 ///     list is <c>AllKeys</c>). Expanded after coalescing into synthetic-keyed chain links. <see cref="Inherited" />
 ///     marks a decorator of an extended base, which stays inside every decorator of the extending container.
 ///     <see cref="Owner" /> is the module or base that declares it, whose async initializer conventions judge it, or
-///     <see langword="null" /> for the container's own.
+///     <see langword="null" /> for the container's own. <see cref="ThroughHandle" /> marks a decorator a module of
+///     another assembly builds into the handle of a service it registers under an internal type, which decorates that handle.
 /// </summary>
 /// <remarks>An intermediate type carrying a live Roslyn <see cref="Location" />; see <see cref="RawRegistration" />.</remarks>
 internal sealed record DecorateRegistration(
@@ -105,7 +106,8 @@ internal sealed record DecorateRegistration(
 	IReadOnlyList<string?>? Keys,
 	bool Inherited = false,
 	OwnerFactoryCall? Via = null,
-	INamedTypeSymbol? Owner = null);
+	INamedTypeSymbol? Owner = null,
+	bool ThroughHandle = false);
 
 /// <summary>
 ///     The generated factory of a module or base container (<see cref="Owner" />) that builds a decorator or composite

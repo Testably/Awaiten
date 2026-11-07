@@ -231,6 +231,22 @@ public class ModuleHiddenServiceTests
 	}
 
 	[Test]
+	public async Task DecoratorsOfAnInternalService_WrapItInOrderAndAreDisposedLinkByLink()
+	{
+		IHiddenBookkeeper bookkeeper;
+		await using (HiddenDecoratorContainer.Root container = new())
+		{
+			bookkeeper = container.Resolve<IHiddenBookkeeper>();
+			await That(bookkeeper.Chain).IsEqualTo("counting(audited(ledger))")
+				.Because("each decorator wraps the handle of the link before it, in declaration order");
+			await That(bookkeeper.Disposed).IsEqualTo([false, false, false,]);
+		}
+
+		await That(bookkeeper.Disposed).IsEqualTo([true, true, true,])
+			.Because("every link is an instance of its own that the container disposes as its implementation needs");
+	}
+
+	[Test]
 	public async Task EagerInternalSingleton_IsBuiltWithTheContainer()
 	{
 		int before = HiddenEagerCounter.Constructed;
@@ -248,3 +264,7 @@ public static partial class HiddenServiceContainer;
 [Container]
 [Import(typeof(CrossAssemblyHiddenAsyncDisposalModule))]
 public static partial class HiddenAsyncDisposalContainer;
+
+[Container]
+[Import(typeof(CrossAssemblyHiddenDecoratorModule))]
+public static partial class HiddenDecoratorContainer;

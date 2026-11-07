@@ -1201,8 +1201,13 @@ partial class AwaitenGenerator
 			{
 				if (ContributedPair(attribute, attributeClass) is ({ } decorator, { } service))
 				{
+					// A module of another assembly builds a decorator of an internal service into the service's handle, which the chain then decorates.
+					bool throughHandle = via?.Producer is { MethodKind: MethodKind.Ordinary, ReturnType: INamedTypeSymbol handle, }
+					                     && handle.Name == HiddenHandleName(service)
+					                     && !compilation.IsSymbolAccessibleWithin(service, compilation.Assembly);
+					INamedTypeSymbol decorated = throughHandle ? (INamedTypeSymbol)via!.Producer.ReturnType : service;
 					closed.Add(new DecorateRegistration(
-						service.ToDisplayString(FullyQualified), service, decorator, order, declarationOrder, location, keys, inherited, via, module));
+						decorated.ToDisplayString(FullyQualified), decorated, decorator, order, declarationOrder, location, keys, inherited, via, module, throughHandle));
 				}
 			}
 			else if (attribute.ConstructorArguments.Length == 2

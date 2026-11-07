@@ -346,13 +346,27 @@ partial class AwaitenGenerator
 		{
 			if (attribute.AttributeClass is not { Name: "DecorateAttribute" or "CompositeAttribute", } attributeClass
 			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace
-			    || ContributedPair(attribute, attributeClass) is not ({ } type, { } service)
-			    || !SelfCompilesRegistration(module, type, service, compilation))
+			    || ContributedPair(attribute, attributeClass) is not ({ } type, { } service))
 			{
 				continue;
 			}
 
 			string name = ContributionFactoryName(attributeClass.Name, type, service);
+			if (hidden is not null && attributeClass.Name == "DecorateAttribute" && hidden.Services.ContainsKey(service))
+			{
+				if (factories.All(factory => factory.FactoryName != name) && HiddenDecoratorFactory(type, service, name, context) is { } decorator)
+				{
+					factories.Add(decorator);
+				}
+
+				continue;
+			}
+
+			if (!SelfCompilesRegistration(module, type, service, compilation))
+			{
+				continue;
+			}
+
 			SelfCompiledSubject subject = RegistrationSubject(type.ToDisplayString(FullyQualified));
 			if (factories.Any(factory => factory.FactoryName == name)
 			    || FactoryReturnType(type, [service,], context) is not { } returnType

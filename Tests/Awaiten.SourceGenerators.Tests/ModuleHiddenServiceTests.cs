@@ -385,6 +385,62 @@ public class ModuleHiddenServiceTests
 	}
 
 	[Test]
+	public async Task DecoratorOfAnInternalService_IsBuiltIntoTheHandle()
+	{
+		GeneratorResult result = RunLibrary("""
+			using System;
+			using Awaiten;
+
+			namespace Lib;
+
+			public interface IGrinder { }
+			internal interface IBeanStore { }
+			internal sealed class BeanStore : IBeanStore { }
+			internal sealed class LoggingStore : IBeanStore, IDisposable { public LoggingStore(IBeanStore inner) { } public void Dispose() { } }
+			internal sealed class Grinder : IGrinder { public Grinder(IBeanStore store) { } }
+
+			[Module]
+			[Singleton<BeanStore, IBeanStore>]
+			[Singleton<Grinder, IGrinder>]
+			[Decorate<LoggingStore, IBeanStore>]
+			public static partial class CoffeeModule { }
+			""");
+		string handle = Handle("global::Lib.IBeanStore");
+		string decorator = $"Decorator_LoggingStore_{Fnv1a("global::Lib.LoggingStore\0global::Lib.IBeanStore"):x8}";
+
+		await That(result.Diagnostics).IsEmpty();
+		await That(ModuleSource(result)).Contains($"public static {handle} {decorator}({handle} @inner) => new {handle}.Disposable(new global::Lib.LoggingStore(@inner.Value));")
+			.Because("the decorator takes the inner link as a handle and is wrapped in a handle of its own, in its own disposal variant");
+	}
+
+	[Test]
+	public async Task DecoratorOfAnInternalServiceWhoseInstanceAnAliasShares_GetsNoFactory()
+	{
+		GeneratorResult result = RunLibrary("""
+			using Awaiten;
+
+			namespace Lib;
+
+			public interface IStock { }
+			public interface IGrinder { }
+			internal interface IBeanStore { }
+			internal sealed class BeanStore : IBeanStore, IStock { }
+			internal sealed class LoggingStore : IBeanStore { public LoggingStore(IBeanStore inner) { } }
+			internal sealed class Grinder : IGrinder { public Grinder(IBeanStore store) { } }
+
+			[Module]
+			[Singleton<BeanStore, IBeanStore>]
+			[Singleton<BeanStore, IStock>]
+			[Singleton<Grinder, IGrinder>]
+			[Decorate<LoggingStore, IBeanStore>]
+			public static partial class CoffeeModule { }
+			""");
+
+		await That(ModuleSource(result)).DoesNotContain("Decorator_LoggingStore_")
+			.Because("the alias of IStock unwraps the handle of IBeanStore, which must stay the undecorated instance");
+	}
+
+	[Test]
 	public async Task SameAssemblyContainer_ConstructsTheInternalServiceDirectly()
 	{
 		GeneratorResult result = Generator.Run("""
@@ -575,6 +631,41 @@ public class ModuleHiddenServiceTests
 				.And.Contains($"global::Lib.CoffeeModule.Internals.{HiddenFactory("global::Lib.IClock")}")
 				.And.Contains($"global::Lib.CoffeeModule.Internals.{Alias("global::Lib.BeanStore", "global::Lib.IStock")}(")
 				.Because("the container builds each internal service through the module's wrapper and serves the public service from the handle");
+		}
+
+		[Test]
+		public async Task DecoratorsOfAnInternalService_DecorateItsHandleInOrder()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly("""
+				using Awaiten;
+
+				namespace Lib;
+
+				public interface IGrinder { }
+				internal interface IBeanStore { }
+				internal sealed class BeanStore : IBeanStore { }
+				internal sealed class LoggingStore : IBeanStore { public LoggingStore(IBeanStore inner) { } }
+				internal sealed class CachingStore : IBeanStore { public CachingStore(IBeanStore inner) { } }
+				internal sealed class Grinder : IGrinder { public Grinder(IBeanStore store) { } }
+
+				[Module]
+				[Singleton<BeanStore, IBeanStore>]
+				[Singleton<Grinder, IGrinder>]
+				[Decorate<LoggingStore, IBeanStore>]
+				[Decorate<CachingStore, IBeanStore>]
+				public static partial class CoffeeModule { }
+				""", Container);
+			string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+			string handle = Handle("global::Lib.IBeanStore");
+			string logging = $"Decorator_LoggingStore_{Fnv1a("global::Lib.LoggingStore\0global::Lib.IBeanStore"):x8}";
+			string caching = $"Decorator_CachingStore_{Fnv1a("global::Lib.CachingStore\0global::Lib.IBeanStore"):x8}";
+
+			await That(result.Diagnostics).IsEmpty();
+			await That(source).Contains($"global::Lib.CoffeeModule.Internals.{logging}(")
+				.And.Contains($"global::Lib.CoffeeModule.Internals.{caching}(")
+				.Because("the container decorates the handle through the module's decorator factories");
+			await That(source).DoesNotContain($"global::Awaiten.IAwaitenResolver<{handle}>")
+				.Because("a decorated handle stays a dependency only");
 		}
 
 		[Test]

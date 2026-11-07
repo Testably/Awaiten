@@ -42,6 +42,12 @@ partial class AwaitenGenerator
 
 		public List<INamedTypeSymbol> Used { get; } = new();
 
+		/// <summary>The disposal traits of each decorator the module builds into the handle of an internal service, which the handle needs variants for.</summary>
+		public List<(INamedTypeSymbol Service, ImplementationTraits Traits)> DecoratorTraits { get; } = new();
+
+		/// <summary>The initializer wrappers of the decorators the module builds into handles.</summary>
+		public List<HiddenInitializer> DecoratorInitializers { get; } = new();
+
 		/// <summary>The other modules of the assembly, looked up once and only when a member needs an internal service the module does not register.</summary>
 		public List<INamedTypeSymbol>? OtherModules { get; set; }
 
@@ -272,7 +278,7 @@ partial class AwaitenGenerator
 		ModuleScanContext context = new(module, compilation, diagnostics, new HashSet<string>(StringComparer.Ordinal), hidden);
 		List<RegistrationFactory> factories = new();
 		List<HiddenAlias> aliases = new();
-		List<HiddenInitializer> initializers = new();
+		List<HiddenInitializer> initializers = new(hidden.DecoratorInitializers);
 		List<HiddenImplementation> built = new();
 		for (int index = 0; index < hidden.Used.Count; index++)
 		{
@@ -305,6 +311,7 @@ partial class AwaitenGenerator
 				ImplementationTraits[] traits = owned
 					.Where(candidate => candidate.Production == ProductionKind.Constructor)
 					.Select(candidate => TraitsOf(candidate.Implementation, []))
+					.Concat(hidden.DecoratorTraits.Where(decorator => SymbolEqualityComparer.Default.Equals(decorator.Service, service)).Select(decorator => decorator.Traits))
 					.ToArray();
 				bool wrap = owned.Any(candidate => candidate.Production == ProductionKind.Factory);
 				return new HiddenHandle(
@@ -372,48 +379,9 @@ partial class AwaitenGenerator
 			}
 		}
 
-		foreach (AsyncInitializerConvention convention in instance ? [] : MatchingAsyncInitializers(DeclaredAsyncInitializers(context.Module, context.Compilation, null), implementation, convention => IsOfConventionType(implementation, convention.Type)))
+		if (!instance && !TryAddHiddenInitializers(implementation, handle, context, location, subject, initializers))
 		{
-			List<FactoryParameter> mirrored = new();
-			foreach (IParameterSymbol parameter in convention.Method.Parameters)
-			{
-				if (MirrorHiddenService(parameter.Type, parameter.Name, parameter.GetAttributes(), context) is { } mirror)
-				{
-					if (mirror.Error is { } error)
-					{
-						context.Diagnostics.Add(error.WithLocation(location, subject, $"the parameter '{parameter.Name}' of its async initializer {convention.Display}"));
-						return null;
-					}
-
-					mirrored.Add(mirror.Parameter);
-				}
-				else if (!FitsFactorySignature(parameter.Type, context))
-				{
-					context.Diagnostics.Add(new DiagnosticInfo(
-						Diagnostics.InaccessibleAsyncInitializer,
-						LocationInfo.From(location),
-						new EquatableArray<string>([
-							subject.Subject,
-							Display(convention.Type.ToDisplayString(FullyQualified)),
-							convention.Method.Name,
-							$"its parameter of type '{Display(parameter.Type.ToDisplayString(FullyQualified))}' is not accessible outside the module's assembly, so a consumer in another assembly cannot resolve it",
-							"widen the parameter type's accessibility or register it in the module",
-						])));
-					return null;
-				}
-				else
-				{
-					mirrored.Add(new FactoryParameter(parameter.Type.ToDisplayString(FullyQualifiedWithNullability), parameter.Name));
-				}
-			}
-
-			initializers.Add(new HiddenInitializer(
-				HiddenInitializerName(implementation, convention),
-				handle,
-				convention.Type.ToDisplayString(FullyQualified),
-				convention.Method.Name,
-				convention.Method.ReturnType.ToDisplayString(FullyQualified),
-				new EquatableArray<FactoryParameter>(mirrored.ToArray())));
+			return null;
 		}
 
 		if (candidate.Production != ProductionKind.Constructor)
@@ -431,14 +399,6 @@ partial class AwaitenGenerator
 				instance);
 		}
 
-		ImplementationTraits traits = TraitsOf(implementation, []);
-		string variant = (traits.Disposable, traits.AsyncDisposable) switch
-		{
-			(true, true) => ".BothDisposable",
-			(true, false) => ".Disposable",
-			(false, true) => ".AsyncDisposable",
-			_ => string.Empty,
-		};
 		return new RegistrationFactory(
 			HiddenFactoryName(implementation),
 			handle,
@@ -446,7 +406,117 @@ partial class AwaitenGenerator
 			parameters,
 			new EquatableArray<RegistrationHook>(hooks.ToArray()),
 			members,
-			handle + variant);
+			handle + HandleVariant(TraitsOf(implementation, [])));
+	}
+
+	/// <summary>The nested handle variant that implements exactly the disposal interfaces of <paramref name="traits" />.</summary>
+	private static string HandleVariant(ImplementationTraits traits)
+		=> (traits.Disposable, traits.AsyncDisposable) switch
+		{
+			(true, true) => ".BothDisposable",
+			(true, false) => ".Disposable",
+			(false, true) => ".AsyncDisposable",
+			_ => string.Empty,
+		};
+
+	/// <summary>
+	///     Adds an initializer wrapper to <paramref name="initializers" /> for each convention of the module that
+	///     initializes <paramref name="implementation" />, which takes its <paramref name="handle" /> and runs the
+	///     convention on the instance it holds. Returns <see langword="false" /> after reporting a convention parameter
+	///     the wrapper cannot mirror.
+	/// </summary>
+	private static bool TryAddHiddenInitializers(
+		INamedTypeSymbol implementation,
+		string handle,
+		ModuleScanContext context,
+		Location? location,
+		SelfCompiledSubject subject,
+		List<HiddenInitializer> initializers)
+	{
+		foreach (AsyncInitializerConvention convention in MatchingAsyncInitializers(DeclaredAsyncInitializers(context.Module, context.Compilation, null), implementation, convention => IsOfConventionType(implementation, convention.Type)))
+		{
+			List<FactoryParameter> mirrored = new();
+			foreach (IParameterSymbol parameter in convention.Method.Parameters)
+			{
+				if (MirrorHiddenService(parameter.Type, parameter.Name, parameter.GetAttributes(), context) is { } mirror)
+				{
+					if (mirror.Error is { } error)
+					{
+						context.Diagnostics.Add(error.WithLocation(location, subject, $"the parameter '{parameter.Name}' of its async initializer {convention.Display}"));
+						return false;
+					}
+
+					mirrored.Add(mirror.Parameter);
+				}
+				else if (!FitsFactorySignature(parameter.Type, context))
+				{
+					context.Diagnostics.Add(new DiagnosticInfo(
+						Diagnostics.InaccessibleAsyncInitializer,
+						LocationInfo.From(location),
+						new EquatableArray<string>([
+							subject.Subject,
+							Display(convention.Type.ToDisplayString(FullyQualified)),
+							convention.Method.Name,
+							$"its parameter of type '{Display(parameter.Type.ToDisplayString(FullyQualified))}' is not accessible outside the module's assembly, so a consumer in another assembly cannot resolve it",
+							"widen the parameter type's accessibility or register it in the module",
+						])));
+					return false;
+				}
+				else
+				{
+					mirrored.Add(new FactoryParameter(parameter.Type.ToDisplayString(FullyQualifiedWithNullability), parameter.Name));
+				}
+			}
+
+			initializers.Add(new HiddenInitializer(
+				HiddenInitializerName(implementation, convention),
+				handle,
+				convention.Type.ToDisplayString(FullyQualified),
+				convention.Method.Name,
+				convention.Method.ReturnType.ToDisplayString(FullyQualified),
+				new EquatableArray<FactoryParameter>(mirrored.ToArray())));
+		}
+
+		return true;
+	}
+
+	/// <summary>
+	///     The factory of a decorator the module declares over an internal service it registers, or
+	///     <see langword="null" /> when it cannot be built, so a consuming container reports the decorator as before
+	///     (AWT230). It mirrors the constructor like any decorator factory, so the inner parameter takes the service's
+	///     handle, and wraps the decorator in a handle of the same service, in the variant that matches its disposal.
+	///     A consumer then keeps each link of the chain as an instance of its own, with its own disposal. Not for the
+	///     service that owns an implementation also served under other services, whose aliases need the undecorated
+	///     instance.
+	/// </summary>
+	private static RegistrationFactory? HiddenDecoratorFactory(INamedTypeSymbol decorator, INamedTypeSymbol service, string name, ModuleScanContext context)
+	{
+		HiddenServices hidden = context.Hidden!;
+		if (hidden.NonViable.Contains(service)
+		    || decorator is not { TypeKind: TypeKind.Class, IsAbstract: false, IsStatic: false, IsUnboundGenericType: false, }
+		    || hidden.Implementations.Any(candidate => candidate.Viable
+		                                               && SymbolEqualityComparer.Default.Equals(candidate.Owner, service)
+		                                               && candidate.Registrations.Any(registration => !SymbolEqualityComparer.Default.Equals(registration.Service, service))))
+		{
+			return null;
+		}
+
+		string typeName = decorator.ToDisplayString(FullyQualified);
+		SelfCompiledSubject subject = new(typeName, $"'{Display(typeName)}' decorates the internal service '{Display(service.ToDisplayString(FullyQualified))}', which a consuming container reaches through a generated handle", "register it in the module");
+		string handle = hidden.HandleType(service);
+		List<HiddenInitializer> initializers = new();
+		if (!TryMirrorFactoryParameters(decorator, context, null, subject, out EquatableArray<FactoryParameter> parameters, mirrorProperties: true)
+		    || !TryMirrorInjectedProperties(decorator, context, null, subject, ref parameters, out EquatableArray<string> members)
+		    || !TryAddHiddenInitializers(decorator, handle, context, null, subject, initializers))
+		{
+			return null;
+		}
+
+		ImplementationTraits traits = TraitsOf(decorator, []);
+		hidden.Use(service);
+		hidden.DecoratorTraits.Add((service, traits));
+		hidden.DecoratorInitializers.AddRange(initializers);
+		return new RegistrationFactory(name, handle, typeName, parameters, default, members, handle + HandleVariant(traits));
 	}
 
 	/// <summary>

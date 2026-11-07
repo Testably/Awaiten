@@ -385,6 +385,84 @@ internal sealed class HiddenVault(HiddenLock vaultLock) : IHiddenVault
 	public bool LockDisposed => vaultLock.Disposed;
 }
 
+/// <summary>A singleton that depends on an internal ledger the module decorates twice.</summary>
+public interface IHiddenBookkeeper
+{
+	/// <summary>The chain of the internal ledger, outermost link first.</summary>
+	string Chain { get; }
+
+	/// <summary>Whether the container disposed each link of the chain, outermost first.</summary>
+	IReadOnlyList<bool> Disposed { get; }
+}
+
+internal interface IHiddenLedger
+{
+	string Describe();
+
+	IEnumerable<IHiddenLedger> Links();
+
+	bool Disposed { get; }
+}
+
+internal sealed class HiddenLedger : IHiddenLedger, IDisposable
+{
+	public bool Disposed { get; private set; }
+
+	public string Describe() => "ledger";
+
+	public IEnumerable<IHiddenLedger> Links() => [this,];
+
+	public void Dispose() => Disposed = true;
+}
+
+internal sealed class AuditedLedger(IHiddenLedger inner) : IHiddenLedger, IDisposable
+{
+	public bool Disposed { get; private set; }
+
+	public string Describe() => "audited(" + inner.Describe() + ")";
+
+	public IEnumerable<IHiddenLedger> Links() => new IHiddenLedger[] { this, }.Concat(inner.Links());
+
+	public void Dispose() => Disposed = true;
+}
+
+/// <summary>A public decorator of the internal ledger, which only the module can construct.</summary>
+public sealed class CountingLedger : IHiddenLedger, IAsyncDisposable
+{
+	private readonly IHiddenLedger _inner;
+
+	internal CountingLedger(IHiddenLedger inner) => _inner = inner;
+
+	/// <summary>Whether the container disposed this link asynchronously.</summary>
+	public bool Disposed { get; private set; }
+
+	string IHiddenLedger.Describe() => "counting(" + _inner.Describe() + ")";
+
+	IEnumerable<IHiddenLedger> IHiddenLedger.Links() => new IHiddenLedger[] { this, }.Concat(_inner.Links());
+
+	/// <inheritdoc />
+	public ValueTask DisposeAsync()
+	{
+		Disposed = true;
+		return default;
+	}
+}
+
+internal sealed class HiddenBookkeeper(IHiddenLedger ledger) : IHiddenBookkeeper
+{
+	public string Chain => ledger.Describe();
+
+	public IReadOnlyList<bool> Disposed => ledger.Links().Select(link => link.Disposed).ToArray();
+}
+
+/// <summary>A <c>[Module]</c> that decorates an internal service with an internal and a public decorator.</summary>
+[Module]
+[Singleton<HiddenLedger, IHiddenLedger>]
+[Singleton<HiddenBookkeeper, IHiddenBookkeeper>]
+[Decorate<AuditedLedger, IHiddenLedger>]
+[Decorate<CountingLedger, IHiddenLedger>]
+public static partial class CrossAssemblyHiddenDecoratorModule;
+
 /// <summary>A <c>[Module]</c> with an internal async-only disposable, apart so the other importers dispose synchronously.</summary>
 [Module]
 [Singleton<HiddenLock>]
