@@ -60,8 +60,8 @@ public class SelfCompiledModuleScanTests
 			.Because("the module is re-opened as partial to receive the generated factory");
 		await That(module).Contains("[global::Awaiten.GeneratedScanExpansionAttribute]")
 			.Because("the expansion marker lets a consuming container tell an expanded scan from one built without the generator (AWT154)");
-		await That(module).Contains($"global::Awaiten.GeneratedScanRegistrationAttribute<global::Lib.IRoaster>(\"Internals.{FactoryName("global::Lib.Roaster")}\", Lifetime = global::Awaiten.Lifetime.Singleton)")
-			.Because("the match is registered under its accessible MatchingInterface, as a singleton scan match");
+		await That(module).Contains($"global::Awaiten.GeneratedScanRegistrationAttribute<global::Lib.IRoaster>(\"Internals.{FactoryName("global::Lib.Roaster")}\", Lifetime = global::Awaiten.Lifetime.Singleton, Implementation = \"Lib.Roaster\")")
+			.Because("the match is registered under its accessible MatchingInterface, as a singleton scan match, naming the implementation so a consumer shares its instance with other registrations of it");
 		await That(module).Contains($"public static global::Lib.IRoaster {FactoryName("global::Lib.Roaster")}(global::Lib.IClock @clock) => new global::Lib.Roaster(@clock);")
 			.Because("the factory returns the interface but constructs the internal implementation in the library, with verbatim-prefixed parameter names so keyword-named parameters stay legal");
 	}

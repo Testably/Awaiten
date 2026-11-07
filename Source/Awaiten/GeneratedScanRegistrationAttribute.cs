@@ -89,6 +89,14 @@ public sealed class GeneratedScanRegistrationAttribute<TService> : Attribute
 	///     that of a constructed type.
 	/// </summary>
 	public bool AsyncDisposable { get; set; }
+
+	/// <summary>
+	///     The metadata name of the match the generated factory constructs, so the consumer shares one instance between
+	///     this match and any other registration or scan match of the same implementation, as a container in the
+	///     module's own assembly does. Null when the module generates no factory for the match, since
+	///     <see cref="Factory" /> names the match then.
+	/// </summary>
+	public string? Implementation { get; set; }
 }
 
 #pragma warning restore S2326

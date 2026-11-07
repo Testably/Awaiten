@@ -39,6 +39,99 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
+	///     Gives the scan match of a module in another assembly the identity of the implementation its generated factory
+	///     builds (see <see cref="RawRegistration.ScanImplementation" />) when another registration or scan match names
+	///     that implementation too, so coalescing shares one instance between them, as a container in the module's own
+	///     assembly does. The instance is built by whichever of them coalescing picks first, so a match whose service the
+	///     instance's type does not convert to cannot share it. The container then constructs the implementation for all
+	///     of these matches when it can, and otherwise drops each such match after reporting AWT240, since its factory
+	///     would build a second instance.
+	/// </summary>
+	private static void ShareScannedInstances(List<RawRegistration> raw, Compilation compilation, List<DiagnosticInfo> diagnostics)
+	{
+		HashSet<string> named = new(raw.Where(registration => registration.ScanImplementation is null).Select(registration => registration.ImplementationType), StringComparer.Ordinal);
+		Dictionary<string, INamedTypeSymbol> shared = raw
+			.Where(registration => registration.ScanImplementation is not null)
+			.GroupBy(registration => registration.ScanImplementation!.ToDisplayString(FullyQualified), StringComparer.Ordinal)
+			.Where(group => group.Count() > 1 || named.Contains(group.Key))
+			.ToDictionary(group => group.Key, group => group.First().ScanImplementation!, StringComparer.Ordinal);
+		if (shared.Count == 0)
+		{
+			return;
+		}
+
+		for (int index = 0; index < raw.Count; index++)
+		{
+			if (raw[index].ScanImplementation is { } implementation && shared.ContainsKey(implementation.ToDisplayString(FullyQualified)))
+			{
+				raw[index] = raw[index] with { ImplementationType = implementation.ToDisplayString(FullyQualified), };
+			}
+		}
+
+		foreach (KeyValuePair<string, INamedTypeSymbol> entry in shared)
+		{
+			if (Unshared(entry.Key).Count == 0)
+			{
+				continue;
+			}
+
+			if (CanConstruct(entry.Value, compilation))
+			{
+				for (int index = 0; index < raw.Count; index++)
+				{
+					if (raw[index].ScanImplementation is { } implementation && SymbolEqualityComparer.Default.Equals(implementation, entry.Value))
+					{
+						raw[index] = raw[index] with
+						{
+							Implementation = implementation,
+							Production = ProductionKind.Constructor,
+							ProductionMember = null,
+							GreedyConstructor = true,
+							Traits = null,
+						};
+					}
+				}
+			}
+
+			foreach ((RawRegistration match, INamedTypeSymbol builtAs) in Unshared(entry.Key))
+			{
+				diagnostics.Add(new DiagnosticInfo(
+					Diagnostics.ScanMatchNotShared,
+					LocationInfo.From(match.Location),
+					new EquatableArray<string>([
+						Display(entry.Key),
+						Display(match.Origin!.ToDisplayString(FullyQualified)),
+						Display(match.ServiceType),
+						Display(builtAs.ToDisplayString(FullyQualified)),
+					])));
+				raw.RemoveAll(registration => ReferenceEquals(registration, match));
+			}
+		}
+
+		// The generated scan matches of the implementation whose service the type of its shared instance does not
+		// convert to: coalescing builds the instance by the first registration in precedence order that it does not
+		// drop. An instance built as the implementation itself converts to every service a scan matched it under.
+		List<(RawRegistration Match, INamedTypeSymbol BuiltAs)> Unshared(string identity)
+		{
+			HashSet<int> dropped = DroppedOverridableDefaults(raw);
+			INamedTypeSymbol builtAs = InPrecedenceOrder(raw)
+				.First(candidate => !dropped.Contains(candidate.Index) && candidate.Registration.ImplementationType == identity)
+				.Registration.Implementation;
+			if (builtAs.ToDisplayString(FullyQualified) == identity)
+			{
+				return [];
+			}
+
+			return raw
+				.Where(registration => registration is { ScanImplementation: not null, ServiceSymbol: { } service, }
+				                       && registration.ImplementationType == identity
+				                       && !compilation.HasImplicitConversion(builtAs, service))
+				.Select(registration => (registration, builtAs))
+				.ToList();
+		}
+	}
+
+	/// <summary>
 	///     The marker inside the implementation identity of a <c>Factory</c> or <c>Instance</c> registration that names
 	///     only its service (<c>&lt;service&gt;@member:&lt;owner&gt;.&lt;member&gt;</c>, see
 	///     <see cref="AssignMemberIdentities" />). <c>DisplayInstance</c> and <see cref="RegisteredType" /> trim it.

@@ -129,6 +129,7 @@
  AWT233  | Awaiten   | Error    | An [AsyncInitializer<T>] names a method that is missing, overloaded, static, generic or inaccessible, does not return Task or ValueTask, or has a ref or Awaiten-attributed parameter
  AWT234  | Awaiten   | Error    | An [AsyncInitializer<T>] convention initializes an implementation, but its type or method is not accessible where the container calls it
  AWT235  | Awaiten   | Error    | A [Module] or [Container] declares a member named Internals, which is reserved for the nested class that holds its generated members
+ AWT240  | Awaiten   | Error    | A scan match of an imported module in another assembly cannot share one instance with another registration of its implementation, which the container builds as a type that does not convert to the match's service
 
 ; AWT137 (an injected property marked [Arg]) is retired: [Arg] targets only parameters, so the compiler rejects it on a property. The id stays reserved and is never reused.
 ; AWT217 (a partially open [InjectProperty(typeof(...), name)] target) is retired before it shipped: AWT215 covers the typeof argument of [InjectProperty] and [ImportService] alike. The id stays reserved and is never reused.

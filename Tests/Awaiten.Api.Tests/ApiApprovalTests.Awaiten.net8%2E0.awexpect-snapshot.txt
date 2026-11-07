@@ -168,6 +168,7 @@ namespace Awaiten
         public System.Type[]? AsyncInitializers { get; set; }
         public bool Disposable { get; set; }
         public string Factory { get; }
+        public string? Implementation { get; set; }
         public Awaiten.Lifetime Lifetime { get; set; }
         public string? OnActivated { get; set; }
         public string? OnRelease { get; set; }

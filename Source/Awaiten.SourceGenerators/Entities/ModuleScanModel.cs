@@ -88,7 +88,8 @@ internal readonly record struct ImplementationTraits(EquatableArray<string> Asyn
 ///     <c>SkipUnconstructable</c> opt-in the scan declared, and the constructor parameters mirrored onto the
 ///     factory signature (resolved from the consuming container's graph, exactly like a hand-written module
 ///     factory's parameters). <see cref="Traits" /> tells the consumer how the match it cannot see is initialized
-///     and disposed. <see cref="Skip" /> marks a match the module emits no factory for.
+///     and disposed. <see cref="Skip" /> marks a match the module emits no factory for. <see cref="ImplementationMetadataName" />
+///     lets the consumer share one instance with every other registration of the implementation.
 /// </summary>
 internal sealed record ModuleFactory(
 	string FactoryName,
@@ -100,7 +101,8 @@ internal sealed record ModuleFactory(
 	ModuleHook? OnActivated = null,
 	ModuleHook? OnRelease = null,
 	ImplementationTraits Traits = default,
-	ScanSkip? Skip = null);
+	ScanSkip? Skip = null,
+	string? ImplementationMetadataName = null);
 
 /// <summary>
 ///     A module-scan match the module emits no factory for, because an assembly granted <c>InternalsVisibleTo</c>

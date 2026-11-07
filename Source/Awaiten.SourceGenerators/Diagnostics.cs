@@ -2023,4 +2023,18 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A scan match of an imported module in another assembly and another registration or scan match of the same
+	///     implementation, which a container in the module's own assembly shares as one instance. The container builds
+	///     that instance as a type that does not convert to the match's service, and it cannot construct the
+	///     implementation itself, so the match's generated factory would build a second instance. The match is dropped.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ScanMatchNotShared = new(
+		"AWT240",
+		"Scan match of another assembly cannot share its implementation's instance",
+		"'{0}' is matched by the [Scan] of the imported module '{1}' as '{2}', but this container builds its one instance of '{0}' as '{3}', which does not convert to '{2}', and cannot construct '{0}' itself; the match's generated factory would build a second instance, so the match is dropped; grant this assembly InternalsVisibleTo in the module's assembly, or exclude '{0}' from the scan",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

@@ -239,7 +239,8 @@ internal static partial class Sources
 			: string.Empty;
 		string disposable = factory.Traits.Disposable ? ", Disposable = true" : string.Empty;
 		string asyncDisposable = factory.Traits.AsyncDisposable ? ", AsyncDisposable = true" : string.Empty;
-		return $"global::Awaiten.GeneratedScanRegistrationAttribute<{factory.ServiceType}>(\"{RelativeName(factory.FactoryName, factory.Skip is null)}\", Lifetime = global::Awaiten.Lifetime.{factory.Lifetime}{skip}{onActivated}{onRelease}{asyncInitializable}{disposable}{asyncDisposable})";
+		string implementation = factory is { Skip: null, ImplementationMetadataName: { } name, } ? $", Implementation = \"{name}\"" : string.Empty;
+		return $"global::Awaiten.GeneratedScanRegistrationAttribute<{factory.ServiceType}>(\"{RelativeName(factory.FactoryName, factory.Skip is null)}\", Lifetime = global::Awaiten.Lifetime.{factory.Lifetime}{skip}{onActivated}{onRelease}{asyncInitializable}{disposable}{asyncDisposable}{implementation})";
 	}
 
 	/// <summary>

@@ -688,6 +688,7 @@ partial class AwaitenGenerator
 		bool skipUnconstructable = false;
 		string? onActivated = null;
 		string? onRelease = null;
+		string? implementationName = null;
 		string[] asyncInitializers = [];
 		foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
 		{
@@ -713,6 +714,10 @@ partial class AwaitenGenerator
 			else if (argument.Key == "OnRelease" && argument.Value.Value is string release)
 			{
 				onRelease = release;
+			}
+			else if (argument.Key == "Implementation" && argument.Value.Value is string name)
+			{
+				implementationName = name;
 			}
 		}
 
@@ -775,9 +780,21 @@ partial class AwaitenGenerator
 			// resolves its post-instance parameters from this container's graph.
 			OnActivated: onActivated,
 			OnRelease: onRelease,
-			Traits: traits.IsEmpty ? null : traits));
+			Traits: traits.IsEmpty ? null : traits,
+			ScanImplementation: origin is null || implementationName is null ? null : ScannedImplementation(origin, implementationName, context.Compilation)));
 		return true;
 	}
+
+	/// <summary>
+	///     The implementation of <paramref name="module" />'s assembly named <paramref name="metadataName" />, when this
+	///     compilation names no other type so, or <see langword="null" />. Its fully qualified name then identifies it
+	///     among every registration of the container.
+	/// </summary>
+	private static INamedTypeSymbol? ScannedImplementation(INamedTypeSymbol module, string metadataName, Compilation compilation)
+		=> module.ContainingAssembly.GetTypeByMetadataName(metadataName) is { } implementation
+		   && SymbolEqualityComparer.Default.Equals(compilation.GetTypeByMetadataName(metadataName), implementation)
+			? implementation
+			: null;
 
 	/// <summary>
 	///     AWT168: a contextual binding is stored under a synthetic per-consumer key (see <c>ContextKey</c>), which
