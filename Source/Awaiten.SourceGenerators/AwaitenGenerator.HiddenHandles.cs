@@ -275,6 +275,19 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
+	///     The instance handle an alias (see <see cref="ThroughAlias" />) serves its instance from, or
+	///     <paramref name="index" /> itself for any other instance, so a check of what a relationship reaches judges and
+	///     names the implementation, as a container in the module's own assembly does.
+	/// </summary>
+	private static int AliasedInstance(int index, List<InstanceModel> instances, Dictionary<ServiceKey, string> serviceToImpl, Dictionary<string, int> implToIndex)
+		=> instances[index].ImplementationType.Contains(AliasKeyMarker)
+		   && instances[index].ConstructorParameters.AsArray().FirstOrDefault(parameter => parameter.Kind == DependencyKind.Direct) is { } handle
+		   && serviceToImpl.TryGetValue(new ServiceKey(handle.ServiceType, handle.Key), out string? implementation)
+		   && implToIndex.TryGetValue(implementation, out int handleIndex)
+			? handleIndex
+			: index;
+
+	/// <summary>
 	///     <paramref name="registration" /> served through <paramref name="alias" />, the generated member of
 	///     <paramref name="module" /> that returns the instance of <paramref name="implementation" /> from its instance
 	///     handle. Its identity names the alias's type and the implementation, and it owns nothing.

@@ -434,7 +434,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			DetectSynchronousAsyncResolution(
 				graph.Instances, graph.Dependencies, graph.ServiceToImpl, graph.ImplToIndex, graph.InstanceLocations, diagnostics);
 			DetectSynchronousAsyncCollection(
-				graph.Instances, graph.Collections, graph.KeyedCollections, graph.ImplToIndex, graph.InstanceLocations, diagnostics);
+				graph.Instances, graph.Collections, graph.KeyedCollections, graph.ServiceToImpl, graph.ImplToIndex, graph.InstanceLocations, diagnostics);
 
 			// AWT161 (strict only): an async-tainted Eager singleton has no synchronous construction path, so it
 			// cannot be built in the root's synchronous constructor. AsyncSafety.SyncAfterInit allows it (blocking resolver).

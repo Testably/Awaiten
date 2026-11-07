@@ -2326,6 +2326,66 @@ public class ModuleHiddenServiceTests
 				.Because("an assembly granted InternalsVisibleTo constructs both itself, as before");
 		}
 
+		public class SynchronousShapeOfAnAsyncInitializedInternalService
+		{
+			private static string Library(string shape, bool grant = false) => $$"""
+				using System.Threading.Tasks;
+				using Awaiten;
+
+				{{(grant ? "[assembly: System.Runtime.CompilerServices.InternalsVisibleTo(\"TestAssembly\")]" : "")}}
+
+				namespace Lib;
+
+				public interface IReport { }
+				internal interface IStore { Task StartAsync(); }
+				internal sealed class Store : IStore { public Task StartAsync() => Task.CompletedTask; }
+				internal sealed class Report : IReport { public Report({{shape}} store) { } }
+
+				[Module]
+				[AsyncInitializer<IStore>(nameof(IStore.StartAsync))]
+				[Singleton<Store, IStore>]
+				[Transient<Report, IReport>]
+				public static partial class CoffeeModule { }
+				""";
+
+			private const string Container = """
+				[Container]
+				[Import(typeof(CoffeeModule))]
+				public static partial class MyContainer;
+				""";
+
+			private const string Consumer = "using Awaiten;\nusing Lib;\n\nnamespace MyCode;\n\n" + Container;
+
+			[Test]
+			[Arguments("System.Func<IStore>", "Func")]
+			[Arguments("System.Lazy<IStore>", "Lazy")]
+			[Arguments("Owned<IStore>", "Owned")]
+			[Arguments("System.Func<Owned<IStore>>", "Func")]
+			public async Task EveryContainer_ReportsAwt119(string shape, string relationship)
+			{
+				string expected = $"*AWT119*'Lib.Report' resolves 'Lib.Store' through a synchronous {relationship}<>*";
+
+				await That(Generator.Run(Library(shape) + Container).Diagnostics).Contains(expected).AsWildcard();
+				await That(Generator.RunWithGeneratedReferencedAssembly(Library(shape, grant: true), Consumer).Diagnostics).Contains(expected).AsWildcard();
+				await That(Generator.RunWithGeneratedReferencedAssembly(Library(shape), Consumer).Diagnostics).Contains(expected).AsWildcard()
+					.And.DoesNotContain("*AWT120*").AsWildcard()
+					.Because("the relationship reaches the async-initialized store through its handle, which a container in another assembly judges like the store itself");
+			}
+
+			[Test]
+			public async Task ACollection_ReportsAwt122InEveryContainer()
+			{
+				const string shape = "System.Collections.Generic.IEnumerable<IStore>";
+
+				const string expected = "*AWT122*'Lib.Report' resolves the collection of*the member 'Lib.Store' is async-tainted*";
+
+				await That(Generator.Run(Library(shape) + Container).Diagnostics).Contains(expected).AsWildcard();
+				await That(Generator.RunWithGeneratedReferencedAssembly(Library(shape, grant: true), Consumer).Diagnostics).Contains(expected).AsWildcard();
+				await That(Generator.RunWithGeneratedReferencedAssembly(Library(shape), Consumer).Diagnostics).Contains(expected).AsWildcard()
+					.Because("a container in another assembly names the async-initialized member behind the handle, as a container in the module's assembly does");
+			}
+		}
+
 		public class RegisteredByAnotherModuleToo
 		{
 			private static string Library(string aModule, string cModule) => $$"""
