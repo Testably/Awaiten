@@ -39,6 +39,8 @@ public sealed partial class PrivateNestedImplementationTests
 
 	public interface IPlugin;
 
+	public interface IEnclosedPlugin;
+
 	public sealed class Tracker
 	{
 		public List<string> Events { get; } = new();
@@ -615,6 +617,26 @@ public sealed partial class PrivateNestedImplementationTests
 			await That(tracker.Events).IsEqualTo(["activated ModulePlugin", "ModulePlugin disposed",])
 				.Because("the disposable trait is read from the private match, not from the marker the factory returns");
 		}
+
+		[Test]
+		public async Task ModuleScan_BuildsAMatchPrivateToAClassContainingTheModule()
+		{
+			Tracker tracker;
+			using (EnclosedScanShop.Root shop = new())
+			{
+				tracker = shop.Resolve<Tracker>();
+				IEnclosedPlugin plugin = shop.Resolve<IEnclosedPlugin>();
+
+				await That(NameOf(plugin)).IsEqualTo("EnclosedPlugin");
+				await That(shop.Resolve<IEnumerable<IEnclosedPlugin>>()).IsEqualTo([plugin,])
+					.Because("the scan registers the match once, as a singleton under its marker");
+				await That(tracker.Events).IsEqualTo(["activated EnclosedPlugin",])
+					.Because("the container runs the module's private hook through the generated wrapper");
+			}
+
+			await That(tracker.Events).IsEqualTo(["activated EnclosedPlugin", "EnclosedPlugin disposed",])
+				.Because("the container disposes the match the module's factory built for it");
+		}
 	}
 
 	[Container]
@@ -1001,4 +1023,24 @@ public sealed partial class PrivateNestedImplementationTests
 	[Import(typeof(ModulePluginModule))]
 	[Singleton<Tracker>]
 	public static partial class ModuleScanShop;
+
+	public static partial class PluginFakes
+	{
+		private sealed class EnclosedPlugin(Tracker tracker) : IEnclosedPlugin, IDisposable
+		{
+			public void Dispose() => tracker.Events.Add("EnclosedPlugin disposed");
+		}
+
+		[Module]
+		[Scan<IEnclosedPlugin>(As = ScanAs.Marker, Lifetime = Lifetime.Singleton, OnActivated = nameof(Activate))]
+		public static partial class EnclosedPluginModule
+		{
+			private static void Activate(EnclosedPlugin plugin, Tracker tracker) => tracker.Events.Add($"activated {plugin.GetType().Name}");
+		}
+	}
+
+	[Container]
+	[Import(typeof(PluginFakes.EnclosedPluginModule))]
+	[Singleton<Tracker>]
+	public static partial class EnclosedScanShop;
 }

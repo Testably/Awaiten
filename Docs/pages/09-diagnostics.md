@@ -1694,7 +1694,7 @@ A type nested privately in the container is a match like any other: the generate
 - **Registered as itself.** `ScanAs.Self` would make the private type its own service. Expose it through `ScanAs.Marker` or `ScanAs.MatchingInterface` instead.
 - **Several services without a common type.** No accessible type the match converts to covers all the interfaces it is registered under, including those of an explicit registration of the same type. Narrow the scan to one interface, or give the type an accessible base type that covers them. An explicit registration of the type stays as it is without the scan.
 - **Out of an extending container's reach.** A base container's scan registers a type nested privately in the base, which a container that [extends](./04-registration/08-extending-containers.md) it cannot construct. Make the type `internal`.
-- **Registered by its module.** A module scan matched a type nested privately in the module that the module also registers, and the type's single generated factory serves that registration.
+- **Registered by its module.** A module scan matched a type private to the module, or to a class that contains it, that the module also registers, and the type's single generated factory serves that registration.
 
 ```csharp expect=AWT193
 [Container]
@@ -1942,7 +1942,7 @@ The generated factory is a `public` method whose parameters are resolved from th
 
 **Fix:** Make the parameter type public, or exclude the match from the scan, or make a registered implementation and its constructor public.
 
-A parameter type nested privately in the module has a message of its own, because widening it is not the remedy for a type that is meant to stay private. No container can name such a type, so none can register a service of it or resolve the parameter, and the factory cannot build it either without bypassing the lifetime and disposal the graph gives it. Depend on an accessible service the private type implements, and register the type under that service:
+A parameter type private to the module, or to a class that contains it, has a message of its own, because widening it is not the remedy for a type that is meant to stay private. No container can register a service of such a type or resolve the parameter, and the factory cannot build it either without bypassing the lifetime and disposal the graph gives it. Depend on an accessible service the private type implements, and register the type under that service:
 
 ```csharp expect=AWT195
 [Module]

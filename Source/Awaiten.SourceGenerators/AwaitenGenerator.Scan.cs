@@ -522,7 +522,7 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     One type a <c>[Scan]</c> matched, and whether the scanning assembly cannot access it (internal to another
 	///     assembly, or a private/protected nested type). Such a type is registered only when the scanning container or
-	///     module itself can reach it, because it is nested privately within it.
+	///     module itself can reach it, because it is nested privately within it or within a class containing it.
 	/// </summary>
 	private readonly record struct ScanCandidate(INamedTypeSymbol Type, bool Inaccessible);
 

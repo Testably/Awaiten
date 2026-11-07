@@ -94,7 +94,7 @@
  AWT192  | Awaiten   | Error    | SuppressDisposal is set on a pre-built Instance, which the container does not own or dispose, so it has no effect
  AWT193  | Awaiten   | Warning  | A [Scan] matched a type that is inaccessible to the generated container, or a private nested type it cannot stand in for with an accessible type, so it is not registered
  AWT194  | Awaiten   | Error    | A [Module] that declares a [Scan] or a registration another assembly cannot construct is not partial (or is nested in a non-partial type), so it cannot be self-compiled
- AWT195  | Awaiten   | Error    | A self-compiled module [Scan] match or registration has a constructor parameter type inaccessible outside the module's assembly or nested privately in the module
+ AWT195  | Awaiten   | Error    | A self-compiled module [Scan] match or registration has a constructor parameter type inaccessible outside the module's assembly or private to the module or a class containing it
  AWT196  | Awaiten   | Warning  | A self-compiled module [Scan] match has no exposure interface accessible outside the module's assembly, so it is skipped
  AWT197  | Awaiten   | Error    | A self-compiled module [Scan] match or registration would be exposed under multiple interfaces, which a single-exposure factory cannot express
  AWT198  | Awaiten   | Error    | A generic lifecycle hook on an open-generic [Scan] marker could bind a match through more than one closed marker form, so its type arguments are ambiguous

@@ -918,5 +918,136 @@ public class SelfCompiledModuleScanTests
 				.Because("the prune asks about the constructor the module's factory mirrors, which the module can reach although the container cannot");
 			await That(result.Sources["Awaiten.Lib.Shop.g.cs"]).Contains(FactoryName("global::Lib.PluginModule.FakePlugin"));
 		}
+
+		[Test]
+		[Arguments(false)]
+		[Arguments(true)]
+		public async Task MatchPrivateToAClassContainingTheModule_IsBuiltThroughTheGeneratedFactory(bool twoLevelsOut)
+		{
+			const string moduleDeclaration = "[Module] [Scan<IPlugin>(As = ScanAs.Marker, OnActivated = nameof(Start))] public static partial class PluginModule { private static void Start(FakePlugin plugin) { } }";
+			string declaration = twoLevelsOut ? $"public static partial class Inner {{ {moduleDeclaration} }}" : moduleDeclaration;
+			string module = twoLevelsOut ? "Fakes.Inner.PluginModule" : "Fakes.PluginModule";
+			GeneratorResult result = Generator.Run($$"""
+			                                         using Awaiten;
+
+			                                         namespace Lib;
+
+			                                         public interface IPlugin { }
+
+			                                         public static partial class Fakes
+			                                         {
+			                                             private sealed class FakePlugin : IPlugin { }
+
+			                                             {{declaration}}
+			                                         }
+
+			                                         [Container]
+			                                         [Import(typeof({{module}}))]
+			                                         public static partial class Shop
+			                                         {
+			                                         }
+			                                         """);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("the module can reach a type private to a class containing it, so its scan matches the type and runs the private hook through the wrapper");
+			string source = result.Sources["Awaiten.Lib.Shop.g.cs"];
+			await That(source).Contains($"global::Lib.{module}.{FactoryName("global::Lib.Fakes.FakePlugin")}(")
+				.Because("only the module can construct the type, so the container calls the module's generated factory");
+			await That(source).DoesNotContain("new global::Lib.Fakes.FakePlugin");
+		}
+
+		[Test]
+		public async Task MatchPrivateToAClassContainingTheModuleInAnotherAssembly_IsBuiltThroughTheGeneratedFactory()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly("""
+				using Awaiten;
+
+				namespace Lib;
+
+				public interface IPlugin { }
+
+				public static partial class Fakes
+				{
+				    private sealed class FakePlugin : IPlugin { }
+
+				    [Module]
+				    [Scan<IPlugin>(As = ScanAs.Marker)]
+				    public static partial class PluginModule { }
+				}
+				""", """
+				using Awaiten;
+				using Lib;
+
+				namespace MyCode;
+
+				[Container]
+				[Import(typeof(Fakes.PluginModule))]
+				public static partial class Shop
+				{
+				}
+				""");
+
+			await That(result.Diagnostics).IsEmpty();
+			await That(result.Sources["Awaiten.MyCode.Shop.g.cs"]).Contains($"global::Lib.Fakes.PluginModule.{FactoryName("global::Lib.Fakes.FakePlugin")}(")
+				.Because("another assembly reads the generated scan registration of a type private to a class containing the module");
+		}
+
+		[Test]
+		public async Task MatchPrivateToAClassContainingTheModuleThatTheModuleRegisters_YieldsWithAwt193()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace Lib;
+
+			                                       public interface IClock { }
+			                                       public interface IPrinter { }
+
+			                                       public static partial class Fakes
+			                                       {
+			                                           private sealed class FakeClock : IClock, IPrinter { }
+
+			                                           [Module]
+			                                           [Scan<IPrinter>(As = ScanAs.Marker)]
+			                                           [Singleton<FakeClock, IClock>]
+			                                           public static partial class ShopModule { }
+			                                       }
+
+			                                       [Container]
+			                                       [Import(typeof(Fakes.ShopModule))]
+			                                       public static partial class Shop
+			                                       {
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).HasSingle().Matching(diagnostic => diagnostic.Contains("warning AWT193")
+			                                                                  && diagnostic.Contains("'Lib.Fakes.FakeClock' is private or protected and the module registers it explicitly"))
+				.Because("a type private to a class containing the module has the module's single factory too, so the scan match yields to the registration");
+			await That(result.Sources["Awaiten.Lib.Shop.g.cs"]).Contains("Awaiten__Registration_FakeClock_");
+		}
+
+		[Test]
+		public async Task MatchPrivateToAClassContainingANonPartialModule_ReportsAwt194()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace Lib;
+
+			                                       public interface IPlugin { }
+
+			                                       public static class Fakes
+			                                       {
+			                                           private sealed class FakePlugin : IPlugin { }
+
+			                                           [Module]
+			                                           [Scan<IPlugin>(As = ScanAs.Marker)]
+			                                           public static partial class PluginModule { }
+			                                       }
+			                                       """);
+
+			await That(result.Diagnostics).Contains("*error AWT194*'Lib.Fakes.PluginModule'*").AsWildcard()
+				.Because("the module's factory for the match is generated into the module, which needs every containing class to be partial");
+		}
 	}
 }

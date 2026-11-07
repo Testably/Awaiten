@@ -43,15 +43,16 @@ partial class AwaitenGenerator
 		   && compilation.IsSymbolAccessibleWithin(type, module);
 
 	/// <summary>
-	///     The type nested privately in <paramref name="module" /> (see <see cref="IsHiddenInModule" />) that
-	///     <paramref name="type" /> is, or carries as an array element or type argument, or <see langword="null" />.
+	///     The type hidden in <paramref name="module" /> (see <see cref="IsHiddenInModule" />) that
+	///     <paramref name="type" /> is, or carries as an array element or type argument, or <see langword="null" />. A
+	///     type argument is asked first, because a constructed type that carries a hidden one counts as hidden itself.
 	/// </summary>
-	private static INamedTypeSymbol? TypeHiddenInModule(ITypeSymbol type, INamedTypeSymbol module)
+	private static INamedTypeSymbol? TypeHiddenInModule(ITypeSymbol type, INamedTypeSymbol module, Compilation compilation)
 		=> type switch
 		{
-			IArrayTypeSymbol array => TypeHiddenInModule(array.ElementType, module),
-			INamedTypeSymbol named when IsHiddenInModule(named, module) => named,
-			INamedTypeSymbol named => named.TypeArguments.Select(argument => TypeHiddenInModule(argument, module)).FirstOrDefault(hidden => hidden is not null),
+			IArrayTypeSymbol array => TypeHiddenInModule(array.ElementType, module, compilation),
+			INamedTypeSymbol named => named.TypeArguments.Select(argument => TypeHiddenInModule(argument, module, compilation)).FirstOrDefault(hidden => hidden is not null)
+			                          ?? (IsHiddenInModule(named, module, compilation) ? named : null),
 			_ => null,
 		};
 

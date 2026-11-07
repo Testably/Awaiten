@@ -174,8 +174,9 @@ partial class AwaitenGenerator
 			// A private/protected nested type the module cannot name is skipped silently: unlike a container scan
 			// (AWT193), a module scans its own assembly, so an internal implementation is not inaccessible here and
 			// is the expected match. Only a truly unnameable candidate reaches this, which no author asked for. A type
-			// nested privately in the module itself is a match: its generated factory sits in the module and builds it.
-			if (candidate.Inaccessible && !(IsHiddenInModule(candidate.Type, context.Module) && context.Compilation.IsSymbolAccessibleWithin(candidate.Type, context.Module)))
+			// private to the module or a class containing it is a match: its generated factory sits in the module and
+			// builds it.
+			if (candidate.Inaccessible && !IsHiddenInModule(candidate.Type, context.Module, context.Compilation))
 			{
 				continue;
 			}
@@ -202,8 +203,8 @@ partial class AwaitenGenerator
 	///     another scan of this module already exposed the same way is deduped to the first factory, merging the
 	///     overlap's lifecycle hooks per slot like two container scans' (see <see cref="ResolveOverlap" />; a
 	///     differing lifetime across the overlap is AWT142, first scan wins); one another scan exposed under a
-	///     <em>different</em> interface is AWT197, since two factories would split the shared instance. A match nested
-	///     privately in the module that the module also registers yields to that registration with AWT193. Returns the
+	///     <em>different</em> interface is AWT197, since two factories would split the shared instance. A match hidden
+	///     in the module (see <see cref="IsHiddenInModule" />) that the module also registers yields to that registration with AWT193. Returns the
 	///     number of factories contributed (0 or 1).
 	/// </summary>
 	private static int RegisterModuleScanMatch(
@@ -242,8 +243,8 @@ partial class AwaitenGenerator
 
 		// A private match the module also registers would be AWT197, which an internal match is too, but a scan used
 		// to skip private types silently, so it yields to the registration with a warning instead of failing.
-		if (IsHiddenInModule(type, context.Module)
-		    && ConstructedModuleRegistrations(context.Module, context.Compilation).Any(registration => SymbolEqualityComparer.Default.Equals(registration.Implementation, type)))
+		if (IsHiddenInModule(type, context.Module, context.Compilation)
+		    &&ConstructedModuleRegistrations(context.Module, context.Compilation).Any(registration => SymbolEqualityComparer.Default.Equals(registration.Implementation, type)))
 		{
 			diagnostics.Add(new DiagnosticInfo(
 				Diagnostics.ScanTypePrivate,
@@ -800,8 +801,8 @@ partial class AwaitenGenerator
 	///     resolution arguments) a mirrored factory signature cannot express, so it is AWT200 rather than silently
 	///     dropped. A parameter whose type is not nameable outside the assembly is AWT195, the v1 limitation, because
 	///     it appears on the <c>public</c> factory signature and is resolved from the consumer's graph. A parameter type
-	///     nested privately in the module is AWT195 with its own remedy: no container can name it, so none could resolve
-	///     it, and building it in the factory would bypass the lifetime and disposal the graph gives it.
+	///     private to the module or a class containing it is AWT195 with its own remedy: no container can resolve it as
+	///     a service, and building it in the factory would bypass the lifetime and disposal the graph gives it.
 	/// </summary>
 	private static bool TryMirrorFactoryParameters(
 		INamedTypeSymbol type,
@@ -847,7 +848,7 @@ partial class AwaitenGenerator
 				return false;
 			}
 
-			if (TypeHiddenInModule(parameter.Type, context.Module) is { } hidden)
+			if (TypeHiddenInModule(parameter.Type, context.Module, context.Compilation) is { } hidden)
 			{
 				diagnostics.Add(new DiagnosticInfo(
 					Diagnostics.ModuleParameterHiddenInModule,
