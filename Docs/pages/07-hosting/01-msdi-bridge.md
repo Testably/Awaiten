@@ -50,7 +50,7 @@ public sealed class Router([FromKeyedServices("fast")] IChannel channel);
 
 ## Use it as the host's provider factory
 
-For the generic host or `WebApplicationBuilder`, plug in `AwaitenServiceProviderFactory<TRoot>`. Host registrations and Awaiten services coexist, so a host component can inject an Awaiten service and the other way round.
+For the generic host or `WebApplicationBuilder`, plug in `AwaitenServiceProviderFactory<TRoot>`. Host registrations and Awaiten services coexist, so a host component can inject an Awaiten service and the other way round. The factory wires the root to the host's provider as soon as it builds it, unless you set a resolver yourself, so the root resolves its [imported services](./02-external-services.mdx) from the start.
 
 ```csharp
 builder.Host.UseServiceProviderFactory(
@@ -74,7 +74,7 @@ That is also why a service built with `SuppressDisposal = true` cannot be projec
 
 ## Or let Awaiten own everything
 
-`AwaitenServiceProvider` adapts an Awaiten scope directly to `IServiceProvider`, `IKeyedServiceProvider`, and `IServiceScopeFactory`. Awaiten is then the single owner of construction and disposal. `GetService` maps to `TryResolve`, so a missing service returns `null`, and `GetKeyedService`/`GetRequiredKeyedService` reach a keyed registration by its key.
+`AwaitenServiceProvider` adapts an Awaiten scope directly to `IServiceProvider`, `IKeyedServiceProvider`, and `IServiceScopeFactory`. Awaiten is then the single owner of construction and disposal. `GetService` maps to `TryResolve`, so a missing service returns `null`, and `GetKeyedService`/`GetRequiredKeyedService` reach a keyed registration by its key. `GetRequiredService` and `GetRequiredKeyedService` throw the container's own `InvalidOperationException` for a missing service, which names the cause, for example an imported service the host does not provide, rather than a generic "no service" message.
 
 ```csharp
 using CoffeeShop.Root shop = new();

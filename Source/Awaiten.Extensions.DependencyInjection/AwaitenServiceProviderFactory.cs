@@ -45,6 +45,10 @@ public sealed class AwaitenServiceProviderFactory<TRoot> : IServiceProviderFacto
 	}
 
 	/// <inheritdoc />
+	/// <remarks>
+	///     Wires the root's <see cref="IAwaitenExternalResolverHost.ExternalResolver" /> to the built provider unless
+	///     one is set already, so the root's imported services resolve from the host before anything else resolves.
+	/// </remarks>
 	/// <exception cref="ArgumentNullException"><paramref name="containerBuilder" /> is <see langword="null" />.</exception>
 	/// <exception cref="InvalidOperationException">
 	///     <see cref="CreateBuilder" /> has not been called, or the container suppresses the disposal of a projected,
@@ -71,6 +75,14 @@ public sealed class AwaitenServiceProviderFactory<TRoot> : IServiceProviderFacto
 		// Resolving the owner up front makes the provider own the root even when the host only ever reaches the
 		// root directly, and puts it first in MS.DI's capture order, so the root is disposed last.
 		provider.GetRequiredService<AwaitenRootOwner<TRoot>>();
+
+		// Nothing has resolved yet, so this is the earliest the root can reach the host: a direct resolve of an
+		// import then works without a bridged resolution first.
+		if (containerBuilder.ExternalResolver is null)
+		{
+			containerBuilder.SetExternalResolver(new AwaitenServiceProviderExternalResolver(provider));
+		}
+
 		return provider;
 	}
 }
