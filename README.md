@@ -35,7 +35,7 @@ Cup cup = shop.Resolve<Cup>();
 
 ## Features
 
-- **Async initialization.** `IAsyncInitializable` services are initialized in dependency order, and reaching one synchronously is a compile error.
+- **Async initialization.** Services named by an async initializer convention or an asynchronous `OnActivated` hook are initialized in dependency order, and reaching one synchronously is a compile error.
 - **Compile-time safety.** More than 100 diagnostics turn wiring mistakes into build errors instead of startup crashes.
 - **No reflection.** The generated code is plain C#, so the container is native-AOT clean and trim-safe.
 - **A full toolbox.** Lifetimes, scopes, keyed services, decorators, composites, open generics, collections, factories, modules, assembly scanning, property injection, and `Owned<T>` for disposable transients.

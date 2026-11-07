@@ -92,12 +92,15 @@ public class EagerActivationTests
 
 		                                       namespace MyCode;
 
-		                                       public sealed class AsyncWarm : IAsyncInitializable
+		                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
+		                                       public sealed class AsyncWarm : IInitializable
 		                                       {
 		                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 		                                       }
 
 		                                       [Container]
+		                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		                                       [Singleton<AsyncWarm>(Eager = true)]
 		                                       public static partial class MyContainer
 		                                       {
@@ -118,12 +121,15 @@ public class EagerActivationTests
 
 		                                       namespace MyCode;
 
-		                                       public sealed class AsyncWarm : IAsyncInitializable
+		                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
+		                                       public sealed class AsyncWarm : IInitializable
 		                                       {
 		                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 		                                       }
 
 		                                       [Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
+		                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		                                       [Singleton<AsyncWarm>(Eager = true)]
 		                                       public static partial class MyContainer
 		                                       {
@@ -181,15 +187,18 @@ public class EagerActivationTests
 
 			                                       namespace MyCode;
 
+			                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
 			                                       public interface IClient { }
 			                                       public sealed class Client : IClient { }
-			                                       public sealed class AsyncMonitoring : IClient, IAsyncInitializable
+			                                       public sealed class AsyncMonitoring : IClient, IInitializable
 			                                       {
 			                                           public AsyncMonitoring(IClient inner) { }
 			                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 			                                       }
 
 			                                       [Container]
+			                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			                                       [Singleton<Client, IClient>(Eager = true)]
 			                                       [Decorate<AsyncMonitoring, IClient>]
 			                                       public static partial class MyContainer
@@ -212,14 +221,17 @@ public class EagerActivationTests
 
 			                                       namespace MyCode;
 
+			                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
 			                                       public interface IClient { }
-			                                       public sealed class AsyncClient : IClient, IAsyncInitializable
+			                                       public sealed class AsyncClient : IClient, IInitializable
 			                                       {
 			                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 			                                       }
 			                                       public sealed class Monitoring : IClient { public Monitoring(IClient inner) { } }
 
 			                                       [Container]
+			                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			                                       [Singleton<AsyncClient, IClient>(Eager = true)]
 			                                       [Decorate<Monitoring, IClient>]
 			                                       public static partial class MyContainer

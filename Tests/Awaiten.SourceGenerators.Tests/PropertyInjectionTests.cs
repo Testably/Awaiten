@@ -193,16 +193,19 @@ public class PropertyInjectionTests
 
 		                                       namespace MyCode;
 
+		                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
 		                                       // The owner is not itself async, but its deferred member targets an async-initialized service.
 		                                       // Taint must reach the owner so its deferred assignment awaits, rather than emitting a synchronous
 		                                       // resolve of an async-only service (which would not compile).
-		                                       public sealed class AsyncDep : IAsyncInitializable
+		                                       public sealed class AsyncDep : IInitializable
 		                                       {
 		                                           public Task InitializeAsync(CancellationToken ct) => Task.CompletedTask;
 		                                       }
 		                                       public sealed class Owner { [Inject(Deferred = true)] public AsyncDep Dep { get; set; } }
 
 		                                       [Container]
+		                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		                                       [Singleton<AsyncDep>]
 		                                       [Singleton<Owner>]
 		                                       public static partial class MyContainer

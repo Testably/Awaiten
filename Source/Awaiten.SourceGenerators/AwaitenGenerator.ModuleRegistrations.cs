@@ -375,10 +375,11 @@ partial class AwaitenGenerator
 	///     deterministic name and keeps reading every other option off the registration attribute itself. Each hook a
 	///     registration names gets a public wrapper, so a consumer runs the module's possibly internal hook. Rejects
 	///     what the factory cannot express: an inaccessible constructor parameter (AWT195), injection metadata a
-	///     parameter cannot carry (AWT200), hook parameters the wrapper cannot mirror (AWT203/AWT204), and an
-	///     inaccessible implementation under several services no accessible type covers, or also matched by one of the
-	///     module's scans (AWT197), since two factories would split the shared instance. When the module's assembly grants
-	///     <c>InternalsVisibleTo</c> to any assembly, an implementation that fails only with AWT195, AWT197 or AWT200
+	///     parameter cannot carry (AWT200), hook parameters the wrapper cannot mirror (AWT203/AWT204), a convention of
+	///     the module a consumer cannot call (AWT234), and an inaccessible implementation under several services no
+	///     accessible type covers, or also matched by one of the module's scans (AWT197), since two factories would split
+	///     the shared instance. When the module's assembly grants <c>InternalsVisibleTo</c> to any assembly, an
+	///     implementation that fails only with AWT195, AWT197, AWT200 or AWT234
 	///     gets no factory and no error: such an assembly constructs it itself. It lands in <paramref name="skipped" />
 	///     with the reason, which a consumer that cannot construct it reports (AWT231). A type hidden in the module
 	///     (see <see cref="TypeHiddenInModule" />) is never skipped, since no other assembly can construct it. A hook
@@ -463,6 +464,11 @@ partial class AwaitenGenerator
 		{
 			ReportRegistrationExposures(subject, $"{Display(scanned.ServiceType)}, {Display(returnName)}", "remove the registration or exclude the type from the scan", first.Location, rejections);
 			scannedToo = true;
+		}
+
+		if (ModuleAsyncInitializerFault(implementation, context, subject, first.Location) is { } initializerFault)
+		{
+			rejections.Add(initializerFault);
 		}
 
 		EquatableArray<string> members = default;
@@ -634,6 +640,12 @@ partial class AwaitenGenerator
 		if (rejection.Descriptor == Diagnostics.ModuleScanInjectionMetadata)
 		{
 			return rejection.MessageArgs.AsArray()[1];
+		}
+
+		if (rejection.Descriptor == Diagnostics.InaccessibleAsyncInitializer)
+		{
+			string[] arguments = rejection.MessageArgs.AsArray();
+			return $"it is initialized by the async initializer '{arguments[1]}.{arguments[2]}', but {arguments[3]}";
 		}
 
 		return rejection.Descriptor == Diagnostics.ModuleScanMultipleExposures

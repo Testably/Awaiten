@@ -22,7 +22,7 @@ public sealed partial class BridgeTests
 		public ScopedService Scoped { get; }
 	}
 
-	public sealed class AsyncService : IAsyncInitializable
+	public sealed class AsyncService : IInitializable
 	{
 		public bool Initialized { get; private set; }
 
@@ -48,6 +48,7 @@ public sealed partial class BridgeTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<SingletonService, IService>]
 	[Singleton<DisposableSingleton>]
 	[Singleton<AsyncService>]
@@ -60,6 +61,7 @@ public sealed partial class BridgeTests
 	public sealed class SecondScopedService;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Scoped<SecondScopedService>]
 	public static partial class SecondContainer;
 

@@ -4,8 +4,8 @@ namespace Awaiten.SourceGenerators.Tests;
 
 /// <summary>
 ///     Asynchronous factory methods: a factory returning <c>Task&lt;T&gt;</c> / <c>ValueTask&lt;T&gt;</c> produces
-///     service <c>T</c> and is an async-taint source (parallel to <c>IAsyncInitializable</c>), regardless of whether
-///     <c>T</c> implements <c>IAsyncInitializable</c>. The container awaits the factory on the async path; the
+///     service <c>T</c> and is an async-taint source (parallel to an async initializer convention), regardless of whether
+///     a convention matches <c>T</c>. The container awaits the factory on the async path; the
 ///     synchronous path cannot unwrap a <c>Task</c>, so AWT119 / strict withholding falls out for free.
 /// </summary>
 public class AsyncFactoryTests
@@ -149,12 +149,15 @@ public class AsyncFactoryTests
 
 		                                       namespace MyCode;
 
-		                                       public sealed class Foo : IAsyncInitializable
+		                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
+		                                       public sealed class Foo : IInitializable
 		                                       {
 		                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 		                                       }
 
 		                                       [Container]
+		                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		                                       [Singleton<Foo>(Factory = nameof(Create))]
 		                                       public static partial class MyContainer
 		                                       {

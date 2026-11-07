@@ -706,7 +706,7 @@ public partial class CollectionTests
 		public string Name => "beta";
 	}
 
-	public sealed class AsyncPlugin : IPlugin, IAsyncInitializable
+	public sealed class AsyncPlugin : IPlugin, IInitializable
 	{
 		public string Name => "async";
 
@@ -803,7 +803,7 @@ public partial class CollectionTests
 
 	// Captures the CancellationToken its initialization was handed, so a test can assert which token an awaited
 	// collection forwarded to its awaited members.
-	public sealed class TokenCapturingPlugin : IPlugin, IAsyncInitializable
+	public sealed class TokenCapturingPlugin : IPlugin, IInitializable
 	{
 		public string Name => "token";
 
@@ -818,7 +818,7 @@ public partial class CollectionTests
 
 	// A host that is itself async-initialized (so built on the async path) and injects an awaited collection: the
 	// awaited collection is therefore materialized on the async path, where it forwards the host's resolve-time token.
-	public sealed class AsyncAwaitedHost : IAsyncInitializable
+	public sealed class AsyncAwaitedHost : IInitializable
 	{
 		public AsyncAwaitedHost(Task<IReadOnlyList<IPlugin>> plugins) => Plugins = plugins;
 
@@ -837,7 +837,7 @@ public partial class CollectionTests
 
 	// The channel that itself requires asynchronous initialization: excluded from the synchronous dispatch, so the
 	// by-type slot it vacates there must throw its guidance rather than serve the synthesized view.
-	public sealed class AsyncPluginChannel : IAsyncEnumerable<IPlugin>, IAsyncInitializable
+	public sealed class AsyncPluginChannel : IAsyncEnumerable<IPlugin>, IInitializable
 	{
 		public bool Initialized { get; private set; }
 
@@ -909,7 +909,7 @@ public partial class CollectionTests
 	// A disposable transient that is also async-initialized: as a collection member it makes the collection both
 	// non-sync-materializable (so its IAsyncEnumerable<T> shape is served by the async arm) and root-withheld (a
 	// build-on-demand disposable would accumulate on the root), exercising the async collection's root-withholding.
-	public sealed class AsyncDisposableWidget : IWidget, IAsyncInitializable, IDisposable
+	public sealed class AsyncDisposableWidget : IWidget, IInitializable, IDisposable
 	{
 		public bool Disposed { get; private set; }
 
@@ -968,6 +968,7 @@ public partial class CollectionTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Alpha, IPlugin>]
 	[Singleton<Beta, IPlugin>]
 	[Singleton<PluginHost>]
@@ -982,6 +983,7 @@ public partial class CollectionTests
 	// synchronous materialization has no place to await the member's initialization); AsyncSafety.SyncAfterInit warms
 	// the graph so the collection is synchronously materializable after InitializeAsync.
 	[Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Alpha, IPlugin>]
 	[Singleton<AsyncPlugin, IPlugin>]
 	[Singleton<AsyncPluginHost>]
@@ -991,6 +993,7 @@ public partial class CollectionTests
 	// shape awaits each member, so the async member is legal (no AWT122) and the host that captures it is
 	// async-tainted, resolved through ResolveAsync.
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Alpha, IPlugin>]
 	[Singleton<AsyncPlugin, IPlugin>]
 	[Singleton<AsyncStreamHost>]
@@ -999,18 +1002,21 @@ public partial class CollectionTests
 	// Every member is synchronous, so the async collection is a synchronous expression and its host stays
 	// synchronously resolvable. The IAsyncEnumerable<T> shape does not by itself force the async path.
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Alpha, IPlugin>]
 	[Singleton<Beta, IPlugin>]
 	[Singleton<AsyncStreamHost>]
 	public static partial class SyncAsyncStreamContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<AsyncExtensionHost>]
 	public static partial class EmptyAsyncStreamContainer;
 
 	// A disposable scoped member consumed through an async collection: the member resolves off the scope and is
 	// tracked for disposal there, so the async-collection materialization respects scoping and disposal.
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Scoped<DisposableScopedPlugin, IPlugin>]
 	[Scoped<AsyncStreamHost>]
 	public static partial class ScopedAsyncStreamContainer;
@@ -1019,10 +1025,12 @@ public partial class CollectionTests
 	// accumulate the transients for the container's lifetime, so under strict lifetime safety the collection is
 	// withheld on the root (resolvable from a child scope, which bounds it). Loose keeps it root-resolvable.
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<DisposableWidget, IWidget>]
 	public static partial class DisposableCollectionContainer;
 
 	[Container(LifetimeSafety = LifetimeSafety.Loose)]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<DisposableWidget, IWidget>]
 	public static partial class LooseCollectionContainer;
 
@@ -1030,12 +1038,14 @@ public partial class CollectionTests
 	// collection is served by the async by-type resolver, and it is a build-on-demand disposable, so that resolver
 	// is withheld on the root (materializing it there would accumulate the transients for the container's lifetime).
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<AsyncDisposableWidget, IWidget>]
 	public static partial class AsyncDisposableCollectionContainer;
 
 	// Async collections under disjoint key buckets: 'primary' (alpha) and unkeyed (plain). A [FromKey] async
 	// collection resolves exactly the members of its bucket, like the synchronous shapes.
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Alpha, IPlugin>(Key = "primary")]
 	[Singleton<Plain, IPlugin>]
 	[Singleton<KeyedAsyncStreamHost>]
@@ -1045,6 +1055,7 @@ public partial class CollectionTests
 	// IPlugin registration whose synthesized async view would otherwise claim the same by-type slot on the async
 	// surface: the registration owns typeof(IAsyncEnumerable<IPlugin>) on both Resolve and ResolveAsync.
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<AsyncPlugin, IPlugin>]
 	[Singleton<PluginChannel, IAsyncEnumerable<IPlugin>>]
 	public static partial class ExplicitAsyncStreamContainer;
@@ -1053,6 +1064,7 @@ public partial class CollectionTests
 	// and the IPlugin members are synchronous, so the synthesized view could otherwise shadow the channel's
 	// vacated slot on the synchronous surface.
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Alpha, IPlugin>]
 	[Singleton<AsyncPluginChannel, IAsyncEnumerable<IPlugin>>]
 	public static partial class AsyncChannelContainer;
@@ -1062,6 +1074,7 @@ public partial class CollectionTests
 	// and, unlike the IAsyncEnumerable<T> shape, the members' taint is laundered, so the transient host stays
 	// synchronously resolvable.
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Alpha, IPlugin>]
 	[Singleton<AsyncPlugin, IPlugin>]
 	[Transient<AwaitedPluginHost>]
@@ -1070,6 +1083,7 @@ public partial class CollectionTests
 	// Same registrations as AwaitedStreamContainer, but the host receives the awaited collection through an
 	// [Inject] property rather than a constructor parameter.
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Alpha, IPlugin>]
 	[Singleton<AsyncPlugin, IPlugin>]
 	[Transient<AwaitedPropertyHost>]
@@ -1077,17 +1091,20 @@ public partial class CollectionTests
 
 	// Every member is synchronous, so the awaited collection is a completed Task.FromResult.
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Alpha, IPlugin>]
 	[Singleton<Beta, IPlugin>]
 	[Singleton<AwaitedPluginHost>]
 	public static partial class SyncAwaitedStreamContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<AwaitedExtensionHost>]
 	public static partial class EmptyAwaitedStreamContainer;
 
 	// Awaited collections under disjoint key buckets: 'primary' (alpha) and unkeyed (plain).
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Alpha, IPlugin>(Key = "primary")]
 	[Singleton<Plain, IPlugin>]
 	[Singleton<KeyedAwaitedPluginHost>]
@@ -1097,6 +1114,7 @@ public partial class CollectionTests
 	// async-tainted: the awaited collection is materialized on the async path, forwarding the host's resolve-time
 	// token to the awaited member, which captures it, so the test can assert the forwarding.
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<TokenCapturingPlugin, IPlugin>]
 	[Singleton<AsyncAwaitedHost>]
 	public static partial class AsyncPathAwaitedContainer;
@@ -1104,6 +1122,7 @@ public partial class CollectionTests
 	// IEnumerable<IPlugin> is registered directly (an opaque value); the individual IPlugin registrations would
 	// otherwise synthesize a collection of two, so the counts distinguish which one injection resolves to.
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Alpha, IPlugin>]
 	[Singleton<Beta, IPlugin>]
 	[Singleton<PluginBundle, IEnumerable<IPlugin>>]
@@ -1114,6 +1133,7 @@ public partial class CollectionTests
 	// A [FromKey] collection resolves exactly the members of its bucket. A key identifies at most one
 	// registration per service type (two would be AWT117), so each keyed collection holds its single member.
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Alpha, IPlugin>(Key = "primary")]
 	[Singleton<Gamma, IPlugin>(Key = "secondary")]
 	[Singleton<Plain, IPlugin>]

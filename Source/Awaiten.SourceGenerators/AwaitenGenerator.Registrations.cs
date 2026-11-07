@@ -83,6 +83,8 @@ internal sealed record ImportedModule(INamedTypeSymbol Symbol, Location? ImportL
 ///     <see cref="Keys" /> (a <see langword="null" /> entry is the unkeyed registration, a <see langword="null" />
 ///     list is <c>AllKeys</c>). Expanded after coalescing into synthetic-keyed chain links. <see cref="Inherited" />
 ///     marks a decorator of an extended base, which stays inside every decorator of the extending container.
+///     <see cref="Owner" /> is the module or base that declares it, whose async initializer conventions judge it, or
+///     <see langword="null" /> for the container's own.
 /// </summary>
 /// <remarks>An intermediate type carrying a live Roslyn <see cref="Location" />; see <see cref="RawRegistration" />.</remarks>
 internal sealed record DecorateRegistration(
@@ -94,7 +96,8 @@ internal sealed record DecorateRegistration(
 	Location? Location,
 	IReadOnlyList<string?>? Keys,
 	bool Inherited = false,
-	OwnerFactoryCall? Via = null);
+	OwnerFactoryCall? Via = null,
+	INamedTypeSymbol? Owner = null);
 
 /// <summary>
 ///     The generated factory of a module or base container (<see cref="Owner" />) that builds a decorator or composite
@@ -123,7 +126,8 @@ internal sealed record CompositeRegistration(
 	Lifetime Lifetime,
 	Location? Location,
 	string? Key,
-	OwnerFactoryCall? Via = null);
+	OwnerFactoryCall? Via = null,
+	INamedTypeSymbol? Owner = null);
 
 /// <summary>
 ///     A single open generic <c>[Decorate(typeof(D&lt;&gt;), typeof(IService&lt;&gt;))]</c> registration: the unbound
@@ -140,7 +144,8 @@ internal sealed record OpenDecorateRegistration(
 	int DeclarationOrder,
 	Location? Location,
 	IReadOnlyList<string?>? Keys,
-	bool Inherited = false);
+	bool Inherited = false,
+	INamedTypeSymbol? Owner = null);
 
 /// <summary>
 ///     A single open generic <c>[Composite(typeof(C&lt;&gt;), typeof(IService&lt;&gt;))]</c> registration: the unbound
@@ -153,7 +158,8 @@ internal sealed record OpenCompositeRegistration(
 	INamedTypeSymbol Composite,
 	Lifetime Lifetime,
 	Location? Location,
-	string? Key);
+	string? Key,
+	INamedTypeSymbol? Owner = null);
 
 partial class AwaitenGenerator
 {
@@ -224,6 +230,18 @@ partial class AwaitenGenerator
 		///     against and emitted qualified with this type rather than the container.
 		/// </summary>
 		public INamedTypeSymbol? Origin { get; init; }
+
+		/// <summary>
+		///     The module or base container that declares a decorator or composite, or <see langword="null" />. Its
+		///     <c>[AsyncInitializer&lt;T&gt;]</c> conventions judge the instance (see <see cref="ConventionScope" />).
+		/// </summary>
+		public INamedTypeSymbol? DeclaredBy { get; init; }
+
+		/// <summary>
+		///     The scope whose <c>[AsyncInitializer&lt;T&gt;]</c> conventions judge this instance: the module or base that
+		///     declares it, else <paramref name="container" />.
+		/// </summary>
+		public INamedTypeSymbol ConventionScope(INamedTypeSymbol container) => DeclaredBy ?? Origin ?? container;
 
 		/// <summary>
 		///     The names of the <c>static void M(TImplementation)</c> container methods to run once the instance

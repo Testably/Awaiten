@@ -28,7 +28,7 @@ public interface IAwaitenResolver
 	/// <summary>Attempts to resolve a service of the given <paramref name="serviceType" />, reporting whether it could be resolved synchronously.</summary>
 	/// <remarks>
 	///     This probes synchronous resolvability, not mere registration. In the strict default an async-tainted
-	///     service (one that is <see cref="IAsyncInitializable" /> or reaches one through its non-deferred
+	///     service (one that is async-initialized or reaches one through its non-deferred
 	///     dependencies) has no synchronous path, so this returns <see langword="false" /> even though the service
 	///     is registered. Resolve it through <see cref="IAwaitenAsyncResolver.ResolveAsync(Type, System.Threading.CancellationToken)" /> instead, or set
 	///     <c>AsyncSafety.SyncAfterInit</c> on the <c>[Container]</c> to make it synchronously resolvable after warm-up.

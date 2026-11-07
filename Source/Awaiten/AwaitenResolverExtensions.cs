@@ -95,8 +95,8 @@ public static class AwaitenResolverExtensions
 	extension(IAwaitenAsyncResolver resolver)
 	{
 		/// <summary>
-		///     Resolves a service of type <typeparamref name="T" /> asynchronously, awaiting its
-		///     <see cref="IAsyncInitializable.InitializeAsync" /> (and that of its non-deferred async
+		///     Resolves a service of type <typeparamref name="T" /> asynchronously, awaiting its asynchronous
+		///     initialization (and that of its non-deferred async
 		///     dependencies) where required. For a service that needs no asynchronous initialization this
 		///     completes synchronously. Throws if it is not registered.
 		/// </summary>
@@ -120,7 +120,7 @@ public static class AwaitenResolverExtensions
 
 		/// <summary>
 		///     Resolves the service of type <typeparamref name="T" /> registered under <paramref name="key" />
-		///     asynchronously, awaiting its <see cref="IAsyncInitializable.InitializeAsync" /> (and that of its
+		///     asynchronously, awaiting its asynchronous initialization (and that of its
 		///     non-deferred async dependencies) where required. Throws if it is not registered.
 		/// </summary>
 		public Task<T> ResolveAsync<T>(object key, CancellationToken cancellationToken = default)

@@ -541,7 +541,7 @@ partial class AwaitenGenerator
 			}
 
 			return HasWrapper(registration.OnActivated, release: false) && HasWrapper(registration.OnRelease, release: true)
-				? ThroughGeneratedFactory(registration, method)
+				? ThroughGeneratedFactory(registration, method, _compilation)
 				: null;
 
 			bool HasWrapper(string? hook, bool release)

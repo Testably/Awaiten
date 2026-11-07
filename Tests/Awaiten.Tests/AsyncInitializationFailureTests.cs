@@ -153,7 +153,7 @@ public partial class AsyncInitializationFailureTests
 		public int Attempts { get; set; }
 	}
 
-	public sealed class InitThrows : IAsyncInitializable, IDisposable
+	public sealed class InitThrows : IInitializable, IDisposable
 	{
 		private readonly Recorder _recorder;
 
@@ -168,7 +168,7 @@ public partial class AsyncInitializationFailureTests
 		public void Dispose() => _recorder.Disposed++;
 	}
 
-	public sealed class BadDep : IAsyncInitializable
+	public sealed class BadDep : IInitializable
 	{
 		public Task InitializeAsync(CancellationToken cancellationToken) => throw new InvalidOperationException("dep-boom");
 	}
@@ -189,7 +189,7 @@ public partial class AsyncInitializationFailureTests
 		public void Dispose() => _recorder.Disposed++;
 	}
 
-	public sealed class Flaky : IAsyncInitializable, IDisposable
+	public sealed class Flaky : IInitializable, IDisposable
 	{
 		private readonly Recorder _recorder;
 
@@ -216,13 +216,13 @@ public partial class AsyncInitializationFailureTests
 		public void Dispose() => _recorder.Disposed++;
 	}
 
-	public sealed class InitAndDisposeThrow : IAsyncInitializable, IDisposable
+	public sealed class InitAndDisposeThrow : IInitializable, IDisposable
 	{
 		public Task InitializeAsync(CancellationToken cancellationToken) => throw new InvalidOperationException("init-boom");
 		public void Dispose() => throw new InvalidOperationException("dispose-boom");
 	}
 
-	public sealed class AsyncInitThrowsAsyncDisposable : IAsyncInitializable, IAsyncDisposable
+	public sealed class AsyncInitThrowsAsyncDisposable : IInitializable, IAsyncDisposable
 	{
 		private readonly Recorder _recorder;
 
@@ -242,37 +242,44 @@ public partial class AsyncInitializationFailureTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Recorder>]
 	[Singleton<InitThrows>]
 	public static partial class SingletonOwnInitContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Recorder>]
 	[Singleton<BadDep>]
 	[Singleton<DeferredOwner>]
 	public static partial class SingletonDeferredContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Recorder>]
 	[Singleton<Flaky>]
 	public static partial class SingletonFlakyContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Recorder>]
 	[Transient<InitThrows>]
 	public static partial class TransientOwnInitContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Recorder>]
 	[Singleton<BadDep>]
 	[Transient<DeferredOwner>]
 	public static partial class TransientDeferredContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<InitAndDisposeThrow>]
 	public static partial class DisposeAlsoThrowsContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Recorder>]
 	[Singleton<AsyncInitThrowsAsyncDisposable>]
 	public static partial class SingletonAsyncDisposableInitContainer;

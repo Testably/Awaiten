@@ -292,16 +292,17 @@ These keep async-initialized services from being reached before they are ready.
 ### AWT106
 
 :::warning[Warning]
-A synchronous factory's body provably produces an `IAsyncInitializable` concrete type its declared return type hides.
+A synchronous factory's body provably produces a concrete type that an async initializer convention matches, while its declared return type does not.
 :::
 
 ```csharp expect=AWT106
-public sealed class AsyncBrewer : IBrewer, IAsyncInitializable
+public sealed class AsyncBrewer : IBrewer, IWarmUp
 {
-    public Task InitializeAsync(CancellationToken ct) => Task.CompletedTask;
+    public Task WarmUpAsync(CancellationToken ct) => Task.CompletedTask;
 }
 
 [Container]
+[AsyncInitializer<IWarmUp>(nameof(IWarmUp.WarmUpAsync))]
 [Singleton<IBrewer>(Factory = nameof(MakeBrewer))]
 public static partial class CoffeeShop
 {
@@ -319,13 +320,14 @@ A synchronous `Func`/`Lazy`/`Owned` relationship targets an async-initialized se
 :::
 
 ```csharp expect=AWT119
-public sealed class EspressoMachine : IAsyncInitializable
+public sealed class EspressoMachine : IWarmUp
 {
-    public Task InitializeAsync(CancellationToken ct) => Task.CompletedTask;
+    public Task WarmUpAsync(CancellationToken ct) => Task.CompletedTask;
 }
 public sealed class Barista(Func<EspressoMachine> machine);   // sync Func over an async service
 
 [Container]
+[AsyncInitializer<IWarmUp>(nameof(IWarmUp.WarmUpAsync))]
 [Singleton<EspressoMachine>]
 [Singleton<Barista>]
 public static partial class CoffeeShop;
@@ -349,14 +351,15 @@ A synchronous `Func`/`Lazy`/`Owned` relationship reaches an async-tainted servic
 :::
 
 ```csharp expect=AWT120
-public sealed class EspressoMachine : IAsyncInitializable
+public sealed class EspressoMachine : IWarmUp
 {
-    public Task InitializeAsync(CancellationToken ct) => Task.CompletedTask;
+    public Task WarmUpAsync(CancellationToken ct) => Task.CompletedTask;
 }
 public sealed class Grinder(EspressoMachine machine);   // async-tainted through the machine
 public sealed class Barista(Func<Grinder> grinder);      // sync Func reaches it transitively
 
 [Container]
+[AsyncInitializer<IWarmUp>(nameof(IWarmUp.WarmUpAsync))]
 [Singleton<EspressoMachine>]
 [Transient<Grinder>]
 [Singleton<Barista>]
@@ -372,13 +375,14 @@ A collection dependency has an async-tainted member but is materialized synchron
 :::
 
 ```csharp expect=AWT122
-public sealed class Latte : IDrink, IAsyncInitializable
+public sealed class Latte : IDrink, IWarmUp
 {
-    public Task InitializeAsync(CancellationToken ct) => Task.CompletedTask;
+    public Task WarmUpAsync(CancellationToken ct) => Task.CompletedTask;
 }
 public sealed class Menu(IEnumerable<IDrink> drinks);   // sync collection with an async member
 
 [Container]
+[AsyncInitializer<IWarmUp>(nameof(IWarmUp.WarmUpAsync))]
 [Transient<Latte, IDrink>]
 [Singleton<Menu>]
 public static partial class CoffeeShop;
@@ -416,12 +420,13 @@ An eager singleton is async-initialized and cannot be constructed synchronously 
 An eager singleton is built with its decorators, so an async-initialized decorator reports it too.
 
 ```csharp expect=AWT161
-public sealed class EspressoMachine : IAsyncInitializable
+public sealed class EspressoMachine : IWarmUp
 {
-    public Task InitializeAsync(CancellationToken ct) => Task.CompletedTask;
+    public Task WarmUpAsync(CancellationToken ct) => Task.CompletedTask;
 }
 
 [Container]
+[AsyncInitializer<IWarmUp>(nameof(IWarmUp.WarmUpAsync))]
 [Singleton<EspressoMachine>(Eager = true)]   // async service cannot be built eagerly at construction
 public static partial class CoffeeShop;
 ```
@@ -437,12 +442,13 @@ A typed `Resolve<T>()` or `ResolveAsync<T>()` on a generated `Root` or `Scope` n
 A receiver typed as `Scope` may hold the `Root` itself, because the `Root` derives from `Scope`, or a child scope, which serves what the `Root` withholds. So only a receiver typed as `Root` is checked for what the `Root` withholds, and a `Scope` variable that holds the `Root` throws at run time without a warning.
 
 ```csharp expect=AWT219
-public sealed class EspressoMachine : IAsyncInitializable
+public sealed class EspressoMachine : IWarmUp
 {
-    public Task InitializeAsync(CancellationToken ct) => Task.CompletedTask;
+    public Task WarmUpAsync(CancellationToken ct) => Task.CompletedTask;
 }
 
 [Container]
+[AsyncInitializer<IWarmUp>(nameof(IWarmUp.WarmUpAsync))]
 [Singleton<EspressoMachine>]
 public static partial class CoffeeShop;
 
@@ -451,6 +457,28 @@ root.Resolve<EspressoMachine>();   // async-initialized, so only ResolveAsync ha
 ```
 
 **Fix:** Follow the guidance in the message: resolve an async-initialized service with `await root.ResolveAsync<EspressoMachine>(cancellationToken)`, and a withheld transient through `Owned<T>` or from a child scope. Alternatively opt into `AsyncSafety.SyncAfterInit` or `LifetimeSafety.Loose` on the `[Container]`.
+
+### AWT233
+
+:::danger[Error]
+An `[AsyncInitializer<T>]` names a method the container cannot await through `T`.
+:::
+
+The method must be the only one of that name on `T`, its base types and interfaces. It must be an instance method that is not generic, that the container or module can access, and that returns `Task` or `ValueTask`. Its parameters are passed by value and carry no `[Arg]`, `[FromKey]` or `[Inject]`.
+
+```csharp expect=AWT233
+public interface IWarmable
+{
+    Task WarmUpAsync();
+    Task WarmUpAsync(CancellationToken ct);   // overloaded, so the container cannot choose
+}
+
+[Container]
+[AsyncInitializer<IWarmable>(nameof(IWarmable.WarmUpAsync))]
+public static partial class CoffeeShop;
+```
+
+**Fix:** Name a single method that returns `Task` or `ValueTask`, renaming an overload if needed. If the setup needs a keyed service or other Awaiten metadata, use an asynchronous [`OnActivated` hook](./06-lifetime/03-lifecycle-hooks.md#asynchronous-activation) instead, which keeps that metadata on the container.
 
 ## Factories and instances
 
@@ -1257,20 +1285,21 @@ A deferred property cycle includes an async-initialized service and cannot termi
 :::
 
 ```csharp expect=AWT146
-public sealed class A : IAsyncInitializable
+public sealed class A : IWarmUp
 {
     [Inject(Deferred = true)] public B? B { get; set; }
-    public Task InitializeAsync(CancellationToken ct) => Task.CompletedTask;
+    public Task WarmUpAsync(CancellationToken ct) => Task.CompletedTask;
 }
 public sealed class B { [Inject(Deferred = true)] public A? A { get; set; } }
 
 [Container]
+[AsyncInitializer<IWarmUp>(nameof(IWarmUp.WarmUpAsync))]
 [Singleton<A>]
 [Singleton<B>]
 public static partial class CoffeeShop;
 ```
 
-**Fix:** Break the cycle, or make every participant synchronous: not `IAsyncInitializable`, without an asynchronous `OnActivated` hook, and not dependent on an async service.
+**Fix:** Break the cycle, or make every participant synchronous: without an async initializer convention or an asynchronous `OnActivated` hook, and not dependent on an async service.
 
 ### AWT147
 
@@ -2177,9 +2206,33 @@ public static partial class EquipmentModule;
 public static partial class CoffeeShop;
 ```
 
-A module generates a factory for each [internal implementation](./04-registration/07-modules.md#internal-implementations) it registers. Some registrations are beyond what the factory supports: a constructor parameter type that isn't public ([AWT195](#awt195)), an `Optional` or `Deferred` injected property ([AWT200](#awt200)), or one implementation under several services that no public type covers ([AWT197](#awt197)). The same holds for a hook whose wrapper can't mirror its parameters ([AWT203](#awt203), [AWT204](#awt204)), for a match of the module's [`[Scan]`](./04-registration/07-modules.md#self-compiled-scans), and for every registration of a module that can't carry a factory at all, because it is generic ([AWT201](#awt201)) or not `partial` ([AWT194](#awt194)). When the library grants `InternalsVisibleTo` to any assembly, the module generates no factory or wrapper for such a registration or match and records why. An assembly the library grants `InternalsVisibleTo` constructs the implementation and calls its hooks itself. Any other container can't construct it, so it reports this error at its `[Import]`, names the reason, and leaves the registration out.
+A module generates a factory for each [internal implementation](./04-registration/07-modules.md#internal-implementations) it registers. Some registrations are beyond what the factory supports: a constructor parameter type that isn't public ([AWT195](#awt195)), an `Optional` or `Deferred` injected property ([AWT200](#awt200)), one implementation under several services that no public type covers ([AWT197](#awt197)), or an async initializer convention that isn't public ([AWT234](#awt234)). The same holds for a hook whose wrapper can't mirror its parameters ([AWT203](#awt203), [AWT204](#awt204)), for a match of the module's [`[Scan]`](./04-registration/07-modules.md#self-compiled-scans), and for every registration of a module that can't carry a factory at all, because it is generic ([AWT201](#awt201)) or not `partial` ([AWT194](#awt194)). When the library grants `InternalsVisibleTo` to any assembly, the module generates no factory or wrapper for such a registration or match and records why. An assembly the library grants `InternalsVisibleTo` constructs the implementation and calls its hooks itself. Any other container can't construct it, so it reports this error at its `[Import]`, names the reason, and leaves the registration out.
 
 **Fix:** Grant the container's assembly `InternalsVisibleTo` in the library. Or make the implementation, its constructor and the constructor's parameter types public, or, for a hook or a scan match, fix the reason the message names.
+
+### AWT234
+
+:::danger[Error]
+An `[AsyncInitializer<T>]` convention initializes an implementation, but the code that calls it cannot reach `T` or its method.
+:::
+
+A container calls a module's conventions itself. When the module lives in another assembly, `T` and its method must be public. The module's own build reports it for an implementation it [builds through a generated factory](./04-registration/07-modules.md#internal-implementations), and a container reports it for an implementation it constructs itself.
+
+```csharp no-compile
+// In a referenced library:
+internal interface IWarmUp { Task WarmUpAsync(CancellationToken ct); }
+internal sealed class EspressoMachine : IMachine, IWarmUp
+{
+    public Task WarmUpAsync(CancellationToken ct) => Task.CompletedTask;
+}
+
+[Module]
+[AsyncInitializer<IWarmUp>(nameof(IWarmUp.WarmUpAsync))]   // a container in another assembly cannot call it
+[Singleton<EspressoMachine, IMachine>]
+public static partial class EquipmentModule;
+```
+
+**Fix:** Make the convention type and its method public. Or grant the container's assembly `InternalsVisibleTo` in the library: the module then builds no factory for the implementation, and that assembly constructs and initializes it itself.
 
 ## Extending containers
 

@@ -111,18 +111,21 @@ public partial class DiagnosticTests
 
 			                                       namespace MyCode;
 
-			                                       public sealed class A : IAsyncInitializable
+			                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
+			                                       public sealed class A : IInitializable
 			                                       {
 			                                           public A(Task<B> b) { }
 			                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 			                                       }
-			                                       public sealed class B : IAsyncInitializable
+			                                       public sealed class B : IInitializable
 			                                       {
 			                                           public B(Task<A> a) { }
 			                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 			                                       }
 
 			                                       [Container]
+			                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			                                       [Singleton<A>]
 			                                       [Singleton<B>]
 			                                       public static partial class MyContainer
@@ -145,7 +148,9 @@ public partial class DiagnosticTests
 
 			                                       namespace MyCode;
 
-			                                       public sealed class A : IAsyncInitializable
+			                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
+			                                       public sealed class A : IInitializable
 			                                       {
 			                                           public A(Func<Task<B>> b) { }
 			                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
@@ -153,6 +158,7 @@ public partial class DiagnosticTests
 			                                       public sealed class B { public B(A a) { } }
 
 			                                       [Container]
+			                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			                                       [Singleton<A>]
 			                                       [Singleton<B>]
 			                                       public static partial class MyContainer

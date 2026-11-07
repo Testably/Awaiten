@@ -15,6 +15,8 @@ public partial class DiagnosticTests
 
 		                                      namespace MyCode;
 
+		                                      public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
 		                                      public interface IMilk;
 		                                      public sealed class OatMilk : IMilk;
 		                                      public sealed class WholeMilk : IMilk;
@@ -24,12 +26,12 @@ public partial class DiagnosticTests
 		                                      public interface ISyrup;
 		                                      public sealed class Vanilla : ISyrup;
 		                                      public interface IClock;
-		                                      public sealed class Database : IAsyncInitializable
+		                                      public sealed class Database : IInitializable
 		                                      {
 		                                      	public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 		                                      }
 		                                      public sealed class Lease : IDisposable { public void Dispose() { } }
-		                                      public sealed class AsyncLease : IAsyncInitializable, IDisposable
+		                                      public sealed class AsyncLease : IInitializable, IDisposable
 		                                      {
 		                                      	public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 		                                      	public void Dispose() { }
@@ -39,6 +41,7 @@ public partial class DiagnosticTests
 		                                      public static class Keys { public const string Oat = "Oat"; }
 
 		                                      [Container]
+		                                      [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		                                      [Singleton<OatMilk, IMilk>(Key = "Oat")]
 		                                      [Singleton<WholeMilk, IMilk>(Key = "Whole")]
 		                                      [Singleton<CardPayment, IPayment>(Key = PaymentKind.Card)]
@@ -287,16 +290,19 @@ public partial class DiagnosticTests
 
 		                                 namespace MyCode;
 
+		                                 public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
 		                                 public interface IGen<T>;
 		                                 public sealed class Gen<T> : IGen<T>;
 		                                 public interface IClock;
 		                                 public sealed class Consumer { public Consumer(IGen<int> numbers, IClock clock) { } }
-		                                 public sealed class Database : IAsyncInitializable
+		                                 public sealed class Database : IInitializable
 		                                 {
 		                                 	public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 		                                 }
 
 		                                 [Container]
+		                                 [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		                                 [Transient(typeof(Gen<>), typeof(IGen<>))]
 		                                 [Transient<Consumer>]
 		                                 [Singleton<Database>]

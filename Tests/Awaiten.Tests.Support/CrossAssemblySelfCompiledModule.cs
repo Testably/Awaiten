@@ -35,6 +35,14 @@ public interface ISelfCompiledAsyncResource
 	bool IsDisposed { get; }
 }
 
+/// <summary>A domain interface the modules of this assembly name as their async initializer convention.</summary>
+public interface ISelfCompiledStartable
+{
+	/// <summary>Starts the instance asynchronously.</summary>
+	/// <param name="cancellationToken">The token of the resolve that builds the instance.</param>
+	Task StartAsync(CancellationToken cancellationToken);
+}
+
 /// <summary>A singleton whose async-initialized implementation stays internal.</summary>
 public interface ISelfCompiledWarmup
 {
@@ -110,11 +118,11 @@ internal sealed class SelfCompiledAsyncResource : ISelfCompiledAsyncResource, IA
 	}
 }
 
-internal sealed class SelfCompiledWarmup : ISelfCompiledWarmup, IAsyncInitializable
+internal sealed class SelfCompiledWarmup : ISelfCompiledWarmup, ISelfCompiledStartable
 {
 	public bool IsInitialized { get; private set; }
 
-	public async Task InitializeAsync(CancellationToken cancellationToken)
+	public async Task StartAsync(CancellationToken cancellationToken)
 	{
 		await Task.Yield();
 		IsInitialized = true;
@@ -144,6 +152,7 @@ internal sealed class SelfCompiledEager : ISelfCompiledEager
 ///     implementation like a type it constructs itself.
 /// </summary>
 [Module]
+[AsyncInitializer<ISelfCompiledStartable>(nameof(ISelfCompiledStartable.StartAsync))]
 [Singleton<SelfCompiledClock, ISelfCompiledClock>(Fallback = Fallback.Warn)]
 [Singleton<SelfCompiledGreeter, ISelfCompiledGreeter>(OnActivated = nameof(Activate))]
 [Singleton<SelfCompiledGreeter, ISelfCompiledGreeter>(Key = "formal", OnActivated = nameof(Activate))]
@@ -175,11 +184,11 @@ public interface ISelfCompiledScanWarmup
 	bool IsInitialized { get; }
 }
 
-internal sealed class SelfCompiledScanWarmup : ISelfCompiledScanPlugin, ISelfCompiledScanWarmup, IAsyncInitializable
+internal sealed class SelfCompiledScanWarmup : ISelfCompiledScanPlugin, ISelfCompiledScanWarmup, ISelfCompiledStartable
 {
 	public bool IsInitialized { get; private set; }
 
-	public async Task InitializeAsync(CancellationToken cancellationToken)
+	public async Task StartAsync(CancellationToken cancellationToken)
 	{
 		await Task.Yield();
 		IsInitialized = true;
@@ -191,5 +200,6 @@ internal sealed class SelfCompiledScanWarmup : ISelfCompiledScanPlugin, ISelfCom
 ///     an importing container must initialize although it never sees the implementation.
 /// </summary>
 [Module]
+[AsyncInitializer<ISelfCompiledStartable>(nameof(ISelfCompiledStartable.StartAsync))]
 [Scan<ISelfCompiledScanPlugin>(As = ScanAs.MatchingInterface, Lifetime = Lifetime.Singleton)]
 public static partial class SelfCompiledScanWarmupModule;

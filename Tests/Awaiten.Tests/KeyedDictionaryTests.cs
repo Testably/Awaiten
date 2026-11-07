@@ -189,6 +189,7 @@ public partial class KeyedDictionaryTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<FastChannel, IChannel>(Key = "fast")]
 	[Singleton<SlowChannel, IChannel>(Key = "slow")]
 	[Singleton<PlainChannel, IChannel>]
@@ -240,6 +241,7 @@ public partial class KeyedDictionaryTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<DisposableWidget, IWidget>(Key = "a")]
 	public static partial class WidgetContainer;
 
@@ -248,6 +250,7 @@ public partial class KeyedDictionaryTests
 	public sealed class TwinChannel : ITwin;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<TwinChannel, ITwin>(Key = "a")]
 	[Singleton<TwinChannel, ITwin>(Key = "b")]
 	public static partial class TwinContainer;
@@ -262,6 +265,7 @@ public partial class KeyedDictionaryTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<FastChannel, IChannel>(Key = "fast")]
 	[Singleton<ChannelMap, IReadOnlyDictionary<string, IChannel>>]
 	[Singleton<MapConsumer>]
@@ -401,7 +405,7 @@ public partial class KeyedDictionaryTests
 
 	public sealed class SyncFeed : IFeed;
 
-	public sealed class AsyncFeed : IFeed, IAsyncInitializable
+	public sealed class AsyncFeed : IFeed, IInitializable
 	{
 		public bool Initialized { get; private set; }
 
@@ -443,6 +447,7 @@ public partial class KeyedDictionaryTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<SyncFeed, IFeed>(Key = "sync")]
 	[Singleton<AsyncFeed, IFeed>(Key = "async")]
 	[Transient<TransientFeed, ITransientFeed>(Key = "t")]
@@ -502,6 +507,7 @@ public partial class KeyedDictionaryTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<FastChannel, IChannel>(Key = "fast")]
 	[Singleton<KeyedChannelMap, IReadOnlyDictionary<string, IChannel>>(Key = "map")]
 	[Singleton<IntChannelMap, IReadOnlyDictionary<int, IChannel>>]

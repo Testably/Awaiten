@@ -219,7 +219,9 @@ internal static partial class Sources
 		string onRelease = factory.OnRelease is { } release ? $", OnRelease = \"{release.WrapperName}\"" : string.Empty;
 
 		// What the consumer cannot read off the match it never sees: async initialization and disposal.
-		string asyncInitializable = factory.Traits.AsyncInitializable ? ", AsyncInitializable = true" : string.Empty;
+		string asyncInitializable = factory.Traits.AsyncInitializers.Count > 0
+			? $", AsyncInitializers = new global::System.Type[] {{ {string.Join(", ", factory.Traits.AsyncInitializers.Select(type => $"typeof({type})"))} }}"
+			: string.Empty;
 		string disposable = factory.Traits.Disposable ? ", Disposable = true" : string.Empty;
 		string asyncDisposable = factory.Traits.AsyncDisposable ? ", AsyncDisposable = true" : string.Empty;
 		return $"global::Awaiten.GeneratedScanRegistrationAttribute<{factory.ServiceType}>(\"{factory.FactoryName}\", Lifetime = global::Awaiten.Lifetime.{factory.Lifetime}{skip}{onActivated}{onRelease}{asyncInitializable}{disposable}{asyncDisposable})";

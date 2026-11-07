@@ -15,14 +15,17 @@ public partial class DiagnosticTests
 
 			                                       namespace MyCode;
 
+			                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
 			                                       public interface IPlugin { }
-			                                       public sealed class AsyncPlugin : IPlugin, IAsyncInitializable
+			                                       public sealed class AsyncPlugin : IPlugin, IInitializable
 			                                       {
 			                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 			                                       }
 			                                       public sealed class Host { public Host(IEnumerable<IPlugin> plugins) { } }
 
 			                                       [Container]
+			                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			                                       [Singleton<AsyncPlugin, IPlugin>]
 			                                       [Singleton<Host>]
 			                                       public static partial class MyContainer
@@ -72,14 +75,17 @@ public partial class DiagnosticTests
 
 			                                       namespace MyCode;
 
+			                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
 			                                       public interface IPlugin { }
-			                                       public sealed class AsyncPlugin : IPlugin, IAsyncInitializable
+			                                       public sealed class AsyncPlugin : IPlugin, IInitializable
 			                                       {
 			                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 			                                       }
 			                                       public sealed class Host { public Host(IEnumerable<IPlugin> plugins) { } }
 
 			                                       [Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
+			                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			                                       [Singleton<AsyncPlugin, IPlugin>]
 			                                       [Singleton<Host>]
 			                                       public static partial class MyContainer
@@ -102,14 +108,17 @@ public partial class DiagnosticTests
 
 			                                       namespace MyCode;
 
+			                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
 			                                       public interface IPlugin { }
-			                                       public sealed class AsyncPlugin : IPlugin, IAsyncInitializable
+			                                       public sealed class AsyncPlugin : IPlugin, IInitializable
 			                                       {
 			                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 			                                       }
 			                                       public sealed class Host { public Host(IAsyncEnumerable<IPlugin> plugins) { } }
 
 			                                       [Container]
+			                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			                                       [Singleton<AsyncPlugin, IPlugin>]
 			                                       [Singleton<Host>]
 			                                       public static partial class MyContainer
@@ -132,14 +141,17 @@ public partial class DiagnosticTests
 
 			                                       namespace MyCode;
 
+			                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
 			                                       public interface IPlugin { }
-			                                       public sealed class AsyncPlugin : IPlugin, IAsyncInitializable
+			                                       public sealed class AsyncPlugin : IPlugin, IInitializable
 			                                       {
 			                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 			                                       }
 			                                       public sealed class Host { public Host(IReadOnlyDictionary<string, IPlugin> plugins) { } }
 
 			                                       [Container]
+			                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			                                       [Singleton<AsyncPlugin, IPlugin>(Key = "async")]
 			                                       [Singleton<Host>]
 			                                       public static partial class MyContainer
@@ -162,14 +174,17 @@ public partial class DiagnosticTests
 
 			                                       namespace MyCode;
 
+			                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
 			                                       public interface IPlugin { }
-			                                       public sealed class AsyncPlugin : IPlugin, IAsyncInitializable
+			                                       public sealed class AsyncPlugin : IPlugin, IInitializable
 			                                       {
 			                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 			                                       }
 			                                       public sealed class Host { public Host(Task<IReadOnlyDictionary<string, IPlugin>> plugins) { } }
 
 			                                       [Container]
+			                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			                                       [Singleton<AsyncPlugin, IPlugin>(Key = "async")]
 			                                       [Singleton<Host>]
 			                                       public static partial class MyContainer
@@ -192,14 +207,17 @@ public partial class DiagnosticTests
 
 			                                       namespace MyCode;
 
+			                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
 			                                       public interface IPlugin { }
-			                                       public sealed class AsyncPlugin : IPlugin, IAsyncInitializable
+			                                       public sealed class AsyncPlugin : IPlugin, IInitializable
 			                                       {
 			                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 			                                       }
 			                                       public sealed class Host { }
 
 			                                       [Container]
+			                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			                                       [Singleton<AsyncPlugin, IPlugin>]
 			                                       [Singleton<Host>(OnActivated = nameof(Started))]
 			                                       public static partial class MyContainer

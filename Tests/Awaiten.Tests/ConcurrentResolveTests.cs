@@ -424,11 +424,12 @@ public partial class ConcurrentResolveTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Counter>]
 	[Singleton<CountedService>]
 	public static partial class SyncContainer;
 
-	public sealed class AsyncCountedService : IAsyncInitializable, IDisposable
+	public sealed class AsyncCountedService : IInitializable, IDisposable
 	{
 		private int _initializeCount;
 		private int _disposeCount;
@@ -452,6 +453,7 @@ public partial class ConcurrentResolveTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Counter>]
 	[Singleton<AsyncCountedService>]
 	public static partial class AsyncContainer;
@@ -471,11 +473,12 @@ public partial class ConcurrentResolveTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Counter>]
 	[Scoped<ScopedCountedService>]
 	public static partial class ScopedContainer;
 
-	public sealed class AsyncScopedCountedService : IAsyncInitializable, IDisposable
+	public sealed class AsyncScopedCountedService : IInitializable, IDisposable
 	{
 		private int _disposeCount;
 		private int _initializeCount;
@@ -499,6 +502,7 @@ public partial class ConcurrentResolveTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Counter>]
 	[Scoped<AsyncScopedCountedService>]
 	public static partial class AsyncScopedContainer;
@@ -542,6 +546,7 @@ public partial class ConcurrentResolveTests
 	public sealed class HeteroD(HeteroCounter counter) : HeteroService(counter);
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<HeteroCounter>]
 	[Singleton<HeteroA>]
 	[Singleton<HeteroB>]
@@ -585,6 +590,7 @@ public partial class ConcurrentResolveTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<GraphCounter>]
 	[Singleton<GraphLeaf>]
 	[Singleton<GraphMid>]
@@ -628,6 +634,7 @@ public partial class ConcurrentResolveTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<GenericCounter>]
 	[Singleton(typeof(Cache<>), typeof(ICache<>))]
 	[Singleton<GenericSeed>]
@@ -669,6 +676,7 @@ public partial class ConcurrentResolveTests
 	public sealed class SlowKeyed(KeyedCounter counter) : KeyedServiceBase(counter);
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<KeyedCounter>]
 	[Singleton<FastKeyed, IKeyedService>(Key = "fast")]
 	[Singleton<SlowKeyed, IKeyedService>(Key = "slow")]
@@ -688,6 +696,7 @@ public partial class ConcurrentResolveTests
 	// Loose: the test resolves the disposable transient directly by type and asserts it is tracked by and
 	// disposed with its owning scope, the permissive path that strict lifetime safety withholds.
 	[Container(LifetimeSafety = LifetimeSafety.Loose)]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<ScopedTransient>]
 	public static partial class TransientScopeContainer;
 
@@ -713,7 +722,7 @@ public partial class ConcurrentResolveTests
 			.Because("the concurrently-resolved async-disposable singleton is drained through DisposeAsync exactly once on container teardown");
 	}
 
-	public sealed class AsyncDisposableSingleton : IAsyncInitializable, IAsyncDisposable
+	public sealed class AsyncDisposableSingleton : IInitializable, IAsyncDisposable
 	{
 		private int _initializeCount;
 		private int _disposeAsyncCount;
@@ -737,6 +746,7 @@ public partial class ConcurrentResolveTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<AsyncDisposableSingleton>]
 	public static partial class AsyncDisposableContainer;
 }

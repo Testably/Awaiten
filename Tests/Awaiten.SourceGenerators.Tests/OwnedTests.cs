@@ -133,7 +133,9 @@ public class OwnedTests
 
 		                                       namespace MyCode;
 
-		                                       public sealed class Widget : IAsyncInitializable, IDisposable
+		                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
+		                                       public sealed class Widget : IInitializable, IDisposable
 		                                       {
 		                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 		                                           public void Dispose() { }
@@ -141,6 +143,7 @@ public class OwnedTests
 		                                       public sealed class Workshop { public Workshop(Lazy<Task<Owned<Widget>>> widgets) { } }
 
 		                                       [Container]
+		                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		                                       [Transient<Widget>]
 		                                       [Singleton<Workshop>]
 		                                       public static partial class MyContainer

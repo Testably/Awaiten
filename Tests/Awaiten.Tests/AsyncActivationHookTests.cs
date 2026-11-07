@@ -8,9 +8,9 @@ namespace Awaiten.Tests;
 
 /// <summary>
 ///     Runtime behavior of an asynchronous <c>OnActivated</c> hook: a hook returning <c>Task</c> or <c>ValueTask</c>
-///     makes its service async-initialized like <c>IAsyncInitializable</c> does, without the service referencing
+///     makes its service async-initialized like an async initializer convention does, without the service referencing
 ///     Awaiten. The container awaits the hook once per instance, passes it the resolve-time token, and treats a failure
-///     like a failed <c>InitializeAsync</c>. Each container records into its own <see cref="Journal" /> singleton.
+///     like a failed convention. Each container records into its own <see cref="Journal" /> singleton.
 /// </summary>
 public sealed partial class AsyncActivationHookTests
 {
@@ -38,7 +38,7 @@ public sealed partial class AsyncActivationHookTests
 		public ITerminal Terminal => terminal;
 	}
 
-	public sealed class Oven(Journal journal) : IAsyncInitializable
+	public sealed class Oven(Journal journal) : IInitializable
 	{
 		public Task InitializeAsync(CancellationToken cancellationToken)
 		{
@@ -143,7 +143,7 @@ public sealed partial class AsyncActivationHookTests
 	}
 
 	[Test]
-	public async Task WithIAsyncInitializable_TheHookRunsFirst()
+	public async Task WithAConvention_TheHookRunsFirst()
 	{
 		using Shop.Root shop = new();
 		Journal journal = shop.Resolve<Journal>();
@@ -151,7 +151,7 @@ public sealed partial class AsyncActivationHookTests
 		await shop.ResolveAsync<Oven>();
 
 		await That(journal.Events).IsEqualTo(["preheated", "initialized",])
-			.Because("OnActivated keeps its place before InitializeAsync whether it is synchronous or asynchronous");
+			.Because("OnActivated runs before the async initializer conventions whether it is synchronous or asynchronous");
 	}
 
 	[Test]
@@ -273,6 +273,7 @@ public sealed partial class AsyncActivationHookTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Journal>]
 	[Singleton<PaymentTerminal, ITerminal>(OnActivated = nameof(Connect))]
 	[Singleton<PaymentTerminal, ITerminal>(Key = "backup", OnActivated = nameof(Connect))]
@@ -350,6 +351,7 @@ public sealed partial class AsyncActivationHookTests
 	}
 
 	[Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<PaymentTerminal, ITerminal>(OnActivated = nameof(Connect))]
 	public static partial class SyncAfterInitShop
 	{
@@ -361,10 +363,12 @@ public sealed partial class AsyncActivationHookTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Import(typeof(AsyncHookModule))]
 	public static partial class ModuleShop;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Journal>]
 	[Singleton<HiddenTerminal, ITerminal>(OnActivated = nameof(Connect))]
 	public static partial class BaseShop
@@ -383,8 +387,10 @@ public sealed partial class AsyncActivationHookTests
 	}
 
 	[Container(Extends = typeof(BaseShop))]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	public static partial class ExtendingShop;
 
 	[Container(Extends = typeof(SupportAsyncHookBaseContainer))]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	public static partial class ExtendingSupportShop;
 }

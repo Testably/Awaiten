@@ -38,6 +38,7 @@ public sealed partial class BridgeDisposalTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<OuterService>]
 	[Singleton<InnerDependency>]
 	public static partial class NestedSingletonContainer;
@@ -99,7 +100,7 @@ public sealed partial class BridgeDisposalTests
 			.Because("MS.DI disposes what each of the two factory descriptors returned, as it does for a plain factory relay, and the container root disposes its one instance once more");
 	}
 
-	public sealed class WarmedResource : IAsyncInitializable, IDisposable
+	public sealed class WarmedResource : IInitializable, IDisposable
 	{
 		public int DisposeCount { get; private set; }
 
@@ -109,6 +110,7 @@ public sealed partial class BridgeDisposalTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<WarmedResource>]
 	public static partial class WarmedContainer;
 
@@ -154,11 +156,13 @@ public sealed partial class BridgeDisposalTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Scoped<AsyncOnlyConsumer>]
 	[Scoped<AsyncOnlyDisposable>]
 	public static partial class NestedAsyncOnlyScopedContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<AsyncOnlyConsumer>]
 	[Singleton<AsyncOnlyDisposable>]
 	public static partial class NestedAsyncOnlySingletonContainer;
@@ -222,11 +226,13 @@ public sealed partial class BridgeDisposalTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<MultiService, IFirst>]
 	[Singleton<MultiService, ISecond>]
 	public static partial class MultiServiceContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Scoped<OuterService>]
 	[Scoped<InnerDependency>]
 	public static partial class NestedContainer;
@@ -272,6 +278,7 @@ public sealed partial class BridgeDisposalTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<DisposableTransient>]
 	public static partial class TransientContainer;
 
@@ -312,7 +319,7 @@ public sealed partial class BridgeDisposalTests
 		await That(Act).Throws<InvalidOperationException>();
 	}
 
-	public sealed class AsyncDisposableSingleton : IAsyncInitializable, IDisposable
+	public sealed class AsyncDisposableSingleton : IInitializable, IDisposable
 	{
 		public int DisposeCount { get; private set; }
 
@@ -321,7 +328,7 @@ public sealed partial class BridgeDisposalTests
 		public void Dispose() => DisposeCount++;
 	}
 
-	public sealed class AsyncDisposableScoped : IAsyncInitializable, IDisposable
+	public sealed class AsyncDisposableScoped : IInitializable, IDisposable
 	{
 		public int DisposeCount { get; private set; }
 
@@ -331,6 +338,7 @@ public sealed partial class BridgeDisposalTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<AsyncDisposableSingleton>]
 	[Scoped<AsyncDisposableScoped>]
 	public static partial class AsyncDisposalContainer;
@@ -377,7 +385,7 @@ public sealed partial class BridgeDisposalTests
 
 	// An async-initialized dependent of a sync-relayed disposable: on scope teardown it must be disposed
 	// before the dependency it was built on.
-	public sealed class OrderedAsyncService : IAsyncInitializable, IDisposable
+	public sealed class OrderedAsyncService : IInitializable, IDisposable
 	{
 		public OrderedAsyncService(OrderedDependency dependency) => _ = dependency;
 
@@ -387,6 +395,7 @@ public sealed partial class BridgeDisposalTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Scoped<OrderedAsyncService>]
 	[Scoped<OrderedDependency>]
 	public static partial class OrderedDisposalContainer;
@@ -421,6 +430,7 @@ public sealed partial class BridgeDisposalTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<ExternalProbe>(Instance = nameof(External))]
 	public static partial class ExternalInstanceContainer
 	{
@@ -456,6 +466,7 @@ public sealed partial class BridgeDisposalTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Scoped<AsyncOnlyDisposable>]
 	public static partial class AsyncOnlyDisposalContainer;
 

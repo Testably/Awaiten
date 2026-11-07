@@ -200,7 +200,8 @@ public partial class DiagnosticTests
 		public async Task AnAsyncInitializedEntry_IsReportedLikeAFunc()
 		{
 			GeneratorResult result = Generator.Run(DispatchTypes + """
-			                                                       public sealed class AsyncHandler : IHandler<Placed>, IAsyncInitializable
+			                                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+			                                                       public sealed class AsyncHandler : IHandler<Placed>, IInitializable
 			                                                       {
 			                                                           public object Handle(object message) => message;
 			                                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
@@ -208,6 +209,7 @@ public partial class DiagnosticTests
 			                                                       public sealed class Mediator { public Mediator(IReadOnlyDictionary<Type, Func<IHandler>> handlers) { } }
 
 			                                                       [Container]
+			                                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			                                                       [Singleton<AsyncHandler, IHandler<Placed>>]
 			                                                       [Singleton<Mediator>]
 			                                                       public static partial class MyContainer

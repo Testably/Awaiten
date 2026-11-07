@@ -24,7 +24,7 @@ public static class Program
 		string rendered = report.Render();
 		Console.WriteLine(rendered);
 
-		// Async path: an IAsyncInitializable service is bridged as Task<T> and initialized once. This is what
+		// Async path: an async-initialized service is bridged as Task<T> and initialized once. This is what
 		// previously forced runtime MakeGenericType/MakeGenericMethod.
 		Warmup warmup = await scope.ServiceProvider.GetRequiredService<Task<Warmup>>();
 		Console.WriteLine($"warmup ready: {warmup.Ready}");

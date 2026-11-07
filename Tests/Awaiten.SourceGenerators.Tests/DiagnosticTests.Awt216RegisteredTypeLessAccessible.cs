@@ -724,7 +724,10 @@ public partial class DiagnosticTests
 
 			                                         namespace MyCode;
 
+			                                         public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
 			                                         [Container]
+			                                         [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			                                         [{{lifetime}}<SystemClock, IClock>]
 			                                         [{{lifetime}}<WarmClock, IClock>]
 			                                         public static partial class Shop
@@ -733,7 +736,7 @@ public partial class DiagnosticTests
 
 			                                             public sealed class SystemClock : IClock { }
 
-			                                             public sealed class WarmClock : IClock, IAsyncInitializable
+			                                             public sealed class WarmClock : IClock, IInitializable
 			                                             {
 			                                                 public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 			                                             }
@@ -1182,17 +1185,20 @@ public partial class DiagnosticTests
 
 			                                                           namespace MyCode;
 
+			                                                           public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
 			                                                           public interface IClock { }
 			                                                           public interface ITimer { }
 
 			                                                           [Container]
+			                                                           [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			                                                           [Singleton<FakeClock, IClock>]
 			                                                           [Singleton<WarmTimer, ITimer>]
 			                                                           public static partial class Shop
 			                                                           {
 			                                                               private sealed class FakeClock : IClock { }
 
-			                                                               private sealed class WarmTimer : ITimer, IAsyncInitializable
+			                                                               private sealed class WarmTimer : ITimer, IInitializable
 			                                                               {
 			                                                                   public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 			                                                               }

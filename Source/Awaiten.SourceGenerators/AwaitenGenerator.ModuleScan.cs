@@ -206,8 +206,9 @@ partial class AwaitenGenerator
 	///     overlap's lifecycle hooks per slot like two container scans' (see <see cref="ResolveOverlap" />; a
 	///     differing lifetime across the overlap is AWT142, first scan wins); one another scan exposed under a
 	///     <em>different</em> interface is AWT197, since two factories would split the shared instance. A match hidden
-	///     in the module (see <see cref="IsHiddenInModule" />) that the module also registers yields to that registration with AWT193. A match
-	///     that fails only with AWT195, AWT197 or AWT200 while an assembly granted <c>InternalsVisibleTo</c> could
+	///     in the module (see <see cref="IsHiddenInModule" />) that the module also registers yields to that registration with AWT193. A
+	///     convention of the module that initializes the match but that a consumer cannot call is AWT234. A match
+	///     that fails only with AWT195, AWT197, AWT200 or AWT234 while an assembly granted <c>InternalsVisibleTo</c> could
 	///     construct it (see <see cref="FriendsCanConstruct" />) is recorded instead, with no factory and no error.
 	///     Returns the number of factories contributed (0 or 1).
 	/// </summary>
@@ -285,6 +286,16 @@ partial class AwaitenGenerator
 			}
 		}
 
+		if (skipReason is null && ModuleAsyncInitializerFault(type, context, ScanSubject(typeName), match.Location) is { } initializerFault)
+		{
+			skipReason = skippable ? SkipReason(initializerFault, []) : null;
+			if (skipReason is null)
+			{
+				diagnostics.Add(initializerFault);
+				return 0;
+			}
+		}
+
 		// The scan's hooks, resolved and (for a generic hook) closed in the module's own build. Each becomes a
 		// public wrapper the module emits beside the factory, so a cross-assembly consumer runs it without naming the
 		// module's (possibly internal) hook; the closed marker forms let a same-compilation container bind that hook
@@ -306,7 +317,7 @@ partial class AwaitenGenerator
 				parameters,
 				onActivated?.Wrapper,
 				onRelease?.Wrapper,
-				TraitsOf(type),
+				TraitsOf(type, DeclaredAsyncInitializers(context.Module, context.Compilation, null)),
 				skipReason is null ? null : SkipOf(type, skipReason, distinct)),
 			service,
 			type,
@@ -1085,14 +1096,18 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     What a consumer in another assembly must know about a self-compiled implementation it cannot see: whether
-	///     it is initialized asynchronously and how it is disposed. Read off the implementation in the module's build.
+	///     What a consumer in another assembly must know about a self-compiled implementation it cannot see: which of its
+	///     owner's <paramref name="conventions" /> initialize it and how it is disposed. Read off the implementation.
 	/// </summary>
-	private static ImplementationTraits TraitsOf(INamedTypeSymbol type)
+	private static ImplementationTraits TraitsOf(INamedTypeSymbol type, IEnumerable<AsyncInitializerConvention> conventions)
 	{
 		bool Implements(string name) => type.AllInterfaces.Any(contract => contract.ToDisplayString(FullyQualified) == name);
+		string[] initializers = MatchingAsyncInitializers(conventions, convention => IsOfConventionType(type, convention))
+			.Select(convention => convention.Type.ToDisplayString(FullyQualified))
+			.Distinct()
+			.ToArray();
 		return new ImplementationTraits(
-			Implements("global::Awaiten.IAsyncInitializable"),
+			new EquatableArray<string>(initializers),
 			Implements("global::System.IDisposable"),
 			Implements("global::System.IAsyncDisposable"));
 	}

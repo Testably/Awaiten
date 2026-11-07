@@ -4,7 +4,7 @@ using System.Threading;
 namespace Awaiten.Tests;
 
 /// <summary>
-///     Runtime behavior of async initialization: <see cref="IAsyncInitializable" /> services are
+///     Runtime behavior of async initialization: <see cref="IInitializable" /> services are
 ///     constructed and initialized through <c>ResolveAsync</c> / <c>InitializeAsync</c> /
 ///     <c>CreateScopeAsync</c>, exactly once, in dependency order, and thread-safely. In the strict
 ///     default an async-tainted service is reachable only asynchronously; <c>AsyncSafety.SyncAfterInit</c>
@@ -198,7 +198,7 @@ public partial class AsyncInitializationTests
 	{
 		using OrderedContainer.Root container = new();
 
-		// Consumer is not itself IAsyncInitializable, but it depends on Repository (which is). Resolving it
+		// Consumer is not itself IInitializable, but it depends on Repository (which is). Resolving it
 		// asynchronously initializes the whole chain; resolving it synchronously is withheld in strict mode.
 		Consumer consumer = await container.ResolveAsync<Consumer>(Ct);
 
@@ -345,7 +345,7 @@ public partial class AsyncInitializationTests
 	public async Task ResolveAsync_OfAFactoryHidingAnAsyncDisposable_InitializesAndDisposesItExactlyOnce()
 	{
 		// The factory is declared to return a non-async, non-disposable interface yet builds a concrete type
-		// that is both IAsyncInitializable and IDisposable. The async-taint follows the concrete return type
+		// that is both IInitializable and IDisposable. The async-taint follows the concrete return type
 		// (so the container drives InitializeAsync), and disposal is tracked by the generated runtime
 		// `is IDisposable` check on the realized instance, exercising the async creator path that the
 		// synchronous hidden-disposable tests do not reach.
@@ -354,7 +354,7 @@ public partial class AsyncInitializationTests
 		{
 			hidden = (AsyncHiddenDisposable)await container.ResolveAsync<IAsyncHidden>(Ct);
 			await That(hidden.Initialized).IsTrue()
-				.Because("the factory's concrete return type is IAsyncInitializable, so the container drives its initialization");
+				.Because("the factory's concrete return type is IInitializable, so the container drives its initialization");
 			await That(hidden.DisposeCount).IsEqualTo(0)
 				.Because("the container still owns the instance");
 		}
@@ -408,7 +408,7 @@ public partial class AsyncInitializationTests
 		await That(() => { _ = container.ResolveAsync<Connection>(Ct); }).Throws<ObjectDisposedException>();
 	}
 
-	public sealed class Connection : IAsyncInitializable
+	public sealed class Connection : IInitializable
 	{
 		public bool Initialized { get; private set; }
 
@@ -422,7 +422,7 @@ public partial class AsyncInitializationTests
 		}
 	}
 
-	public sealed class ScopedConnection : IAsyncInitializable
+	public sealed class ScopedConnection : IInitializable
 	{
 		public bool Initialized { get; private set; }
 
@@ -433,7 +433,7 @@ public partial class AsyncInitializationTests
 		}
 	}
 
-	public sealed class Worker : IAsyncInitializable
+	public sealed class Worker : IInitializable
 	{
 		public bool Initialized { get; private set; }
 
@@ -447,6 +447,7 @@ public partial class AsyncInitializationTests
 	public sealed class Plain;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Connection>]
 	[Scoped<ScopedConnection>]
 	[Transient<Worker>]
@@ -454,15 +455,17 @@ public partial class AsyncInitializationTests
 	public static partial class AsyncContainer;
 
 	[Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Connection>]
 	[Transient<Worker>]
 	public static partial class PragmaticContainer;
 
 	[Container(AsyncSafety = AsyncSafety.Strict)]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Connection>]
 	public static partial class ExplicitStrictContainer;
 
-	public sealed class Database : IAsyncInitializable
+	public sealed class Database : IInitializable
 	{
 		public bool Ready { get; private set; }
 
@@ -477,7 +480,7 @@ public partial class AsyncInitializationTests
 		}
 	}
 
-	public sealed class Repository : IAsyncInitializable
+	public sealed class Repository : IInitializable
 	{
 		private readonly Database _database;
 
@@ -501,13 +504,14 @@ public partial class AsyncInitializationTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Database>]
 	[Singleton<Repository>]
 	[Singleton<Consumer>]
 	public static partial class OrderedContainer;
 
 	// A scoped service whose initialization throws, so CreateScopeAsync must dispose the half-built scope.
-	public sealed class FailingScoped : IAsyncInitializable, IDisposable
+	public sealed class FailingScoped : IInitializable, IDisposable
 	{
 		public static bool Disposed { get; private set; }
 
@@ -520,11 +524,12 @@ public partial class AsyncInitializationTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Scoped<FailingScoped>]
 	public static partial class FailingScopeContainer;
 
 	// Fails its first initialization, then succeeds, to prove a faulted task is not memoized.
-	public sealed class FlakyConnection : IAsyncInitializable
+	public sealed class FlakyConnection : IInitializable
 	{
 		public static int Attempts { get; private set; }
 
@@ -546,12 +551,13 @@ public partial class AsyncInitializationTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<FlakyConnection>]
 	public static partial class FlakyContainer;
 
 	// Blocks (honoring cancellation) on its first initialization, then succeeds, to prove a canceled task is
 	// not memoized and a later caller with a live token can still initialize it.
-	public sealed class SlowConnection : IAsyncInitializable
+	public sealed class SlowConnection : IInitializable
 	{
 		public static int Attempts { get; private set; }
 
@@ -572,10 +578,11 @@ public partial class AsyncInitializationTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<SlowConnection>]
 	public static partial class SlowContainer;
 
-	public sealed class DisposableConnection : IAsyncInitializable, IDisposable
+	public sealed class DisposableConnection : IInitializable, IDisposable
 	{
 		public static int DisposeCount { get; private set; }
 
@@ -593,13 +600,14 @@ public partial class AsyncInitializationTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<DisposableConnection>]
 	public static partial class DisposableAsyncContainer;
 
 	// An async-but-not-disposable service interface: the factory's declared return type, so async-taint is
-	// statically visible (it extends IAsyncInitializable) while the concrete IDisposable stays hidden behind
+	// statically visible (it extends IInitializable) while the concrete IDisposable stays hidden behind
 	// it. Exactly the split that drives the async creator yet needs the runtime disposal check.
-	public interface IAsyncHidden : IAsyncInitializable;
+	public interface IAsyncHidden : IInitializable;
 
 	// A concrete type that is both async-initialized (through IAsyncHidden) and IDisposable. A factory
 	// declared to return IAsyncHidden still both drives its async initialization and disposes it.
@@ -620,6 +628,7 @@ public partial class AsyncInitializationTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<IAsyncHidden>(Factory = nameof(MakeAsyncHidden))]
 	public static partial class AsyncHiddenDisposableContainer
 	{
@@ -630,7 +639,7 @@ public partial class AsyncInitializationTests
 
 	// A disposable async transient: withheld from ResolveAsync on the Root (it would accumulate there), but
 	// resolvable from a child scope, which bounds and disposes it.
-	public sealed class DisposableWorker : IAsyncInitializable, IDisposable
+	public sealed class DisposableWorker : IInitializable, IDisposable
 	{
 		public bool Initialized { get; private set; }
 
@@ -646,6 +655,7 @@ public partial class AsyncInitializationTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<DisposableWorker>]
 	public static partial class DisposableWorkerContainer;
 
@@ -731,14 +741,14 @@ public partial class AsyncInitializationTests
 	}
 
 	[Test]
-	public async Task AsyncFactory_MayAwaitInternalInitializationItself_WithoutImplementingIAsyncInitializable()
+	public async Task AsyncFactory_MayAwaitInternalInitializationItself_WithoutImplementingIInitializable()
 	{
 		using SelfInitializingFactoryContainer.Root container = new();
 
 		SelfInitializingService service = await container.ResolveAsync<SelfInitializingService>(Ct);
 
 		await That(service.Initialized).IsTrue()
-			.Because("the factory body did its own async work; the container did not call InitializeAsync (the type is not IAsyncInitializable), yet the instance is fully initialized");
+			.Because("the factory body did its own async work; the container did not call InitializeAsync (the type is not IInitializable), yet the instance is fully initialized");
 	}
 
 	[Test]
@@ -780,6 +790,7 @@ public partial class AsyncInitializationTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<AsyncFactoryService, IAsyncFactoryService>(Factory = nameof(CreateAsync))]
 	public static partial class AsyncFactoryContainer
 	{
@@ -801,6 +812,7 @@ public partial class AsyncInitializationTests
 	}
 
 	[Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<PragmaticAsyncFactoryService>(Factory = nameof(CreateAsync))]
 	public static partial class PragmaticAsyncFactoryContainer
 	{
@@ -815,15 +827,16 @@ public partial class AsyncInitializationTests
 	public sealed class TransientAsyncFactoryService;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<TransientAsyncFactoryService>(Factory = nameof(CreateAsync))]
 	public static partial class TransientAsyncFactoryContainer
 	{
 		private static Task<TransientAsyncFactoryService> CreateAsync() => Task.FromResult(new TransientAsyncFactoryService());
 	}
 
-	// The factory result is itself IAsyncInitializable: the container awaits the factory, then awaits
+	// The factory result is itself IInitializable: the container awaits the factory, then awaits
 	// InitializeAsync, so it is built and initialized exactly once each, with no double-initialization.
-	public sealed class InitializingAsyncFactoryService : IAsyncInitializable
+	public sealed class InitializingAsyncFactoryService : IInitializable
 	{
 		public bool Initialized { get; private set; }
 
@@ -838,6 +851,7 @@ public partial class AsyncInitializationTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<InitializingAsyncFactoryService>(Factory = nameof(CreateAsync))]
 	public static partial class InitializingAsyncFactoryContainer
 	{
@@ -845,7 +859,7 @@ public partial class AsyncInitializationTests
 			=> Task.FromResult(new InitializingAsyncFactoryService());
 	}
 
-	// The factory does its own async initialization without the type implementing IAsyncInitializable.
+	// The factory does its own async initialization without the type implementing IInitializable.
 	public sealed class SelfInitializingService
 	{
 		public bool Initialized { get; private set; }
@@ -854,6 +868,7 @@ public partial class AsyncInitializationTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<SelfInitializingService>(Factory = nameof(CreateAsync))]
 	public static partial class SelfInitializingFactoryContainer
 	{
@@ -867,7 +882,7 @@ public partial class AsyncInitializationTests
 	}
 
 	// A non-disposable service interface hiding a concrete IDisposable, produced by an async Task<T> factory.
-	// Async-taint comes purely from the factory being asynchronous (the type is not IAsyncInitializable), and
+	// Async-taint comes purely from the factory being asynchronous (the type is not IInitializable), and
 	// the disposable stays hidden behind the interface and the Task, so disposal can only be tracked by the
 	// generated runtime is-IDisposable check on the awaited result. DisposeCount (not a bool) proves exactly once.
 	public interface IHiddenDisposableFactoryService;
@@ -880,6 +895,7 @@ public partial class AsyncInitializationTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<IHiddenDisposableFactoryService>(Factory = nameof(CreateAsync))]
 	public static partial class HiddenDisposableAsyncFactoryContainer
 	{
@@ -895,6 +911,7 @@ public partial class AsyncInitializationTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<TokenAwareService>(Factory = nameof(CreateAsync))]
 	public static partial class TokenForwardingContainer
 	{
@@ -959,11 +976,12 @@ public partial class AsyncInitializationTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Connection>]
 	[Singleton<Pool>]
 	public static partial class RelationshipContainer;
 
-	public sealed class Robot : IAsyncInitializable
+	public sealed class Robot : IInitializable
 	{
 		public Robot([Arg] int id) => Id = id;
 
@@ -988,6 +1006,7 @@ public partial class AsyncInitializationTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<Robot>]
 	[Singleton<RobotFactory>]
 	public static partial class ParameterizedAsyncContainer;
@@ -1034,7 +1053,7 @@ public partial class AsyncInitializationTests
 		await That(handle.Value.Disposed).IsTrue();
 	}
 
-	public sealed class Gizmo : IAsyncInitializable, IDisposable
+	public sealed class Gizmo : IInitializable, IDisposable
 	{
 		public bool Initialized { get; private set; }
 
@@ -1059,11 +1078,12 @@ public partial class AsyncInitializationTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<Gizmo>]
 	[Singleton<GizmoPlant>]
 	public static partial class AsyncOwnedContainer;
 
-	public sealed class Widget : IAsyncInitializable, IDisposable
+	public sealed class Widget : IInitializable, IDisposable
 	{
 		public Widget([Arg] int id) => Id = id;
 
@@ -1092,6 +1112,7 @@ public partial class AsyncInitializationTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<Widget>]
 	[Singleton<WidgetPlant>]
 	public static partial class ParameterizedAsyncOwnedContainer;
@@ -1146,7 +1167,7 @@ public partial class AsyncInitializationTests
 #pragma warning restore AWT156
 	}
 
-	public sealed class Valve : IAsyncInitializable, IAsyncDisposable
+	public sealed class Valve : IInitializable, IAsyncDisposable
 	{
 		public bool Initialized { get; private set; }
 
@@ -1175,11 +1196,13 @@ public partial class AsyncInitializationTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<Valve>]
 	[Singleton<ValvePlant>]
 	public static partial class AsyncDisposableOwnedContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Valve>]
 	public static partial class ValveSingletonContainer;
 
@@ -1257,7 +1280,7 @@ public partial class AsyncInitializationTests
 		public Exception? SecondDisposalFailure { get; set; }
 	}
 
-	public sealed class WarmedAsyncDisposable(WarmUpRecorder recorder) : IAsyncInitializable, IAsyncDisposable
+	public sealed class WarmedAsyncDisposable(WarmUpRecorder recorder) : IInitializable, IAsyncDisposable
 	{
 		public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
@@ -1268,7 +1291,7 @@ public partial class AsyncInitializationTests
 		}
 	}
 
-	public sealed class WarmedThrowingAsyncDisposable(WarmUpRecorder recorder) : IAsyncInitializable, IAsyncDisposable
+	public sealed class WarmedThrowingAsyncDisposable(WarmUpRecorder recorder) : IInitializable, IAsyncDisposable
 	{
 		public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
@@ -1279,7 +1302,7 @@ public partial class AsyncInitializationTests
 		}
 	}
 
-	public sealed class SecondWarmedThrowingAsyncDisposable(WarmUpRecorder recorder) : IAsyncInitializable, IAsyncDisposable
+	public sealed class SecondWarmedThrowingAsyncDisposable(WarmUpRecorder recorder) : IInitializable, IAsyncDisposable
 	{
 		public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
@@ -1290,7 +1313,7 @@ public partial class AsyncInitializationTests
 		}
 	}
 
-	public sealed class FailingWarmUp(WarmUpRecorder recorder) : IAsyncInitializable
+	public sealed class FailingWarmUp(WarmUpRecorder recorder) : IInitializable
 	{
 		public Task InitializeAsync(CancellationToken cancellationToken)
 		{
@@ -1299,7 +1322,7 @@ public partial class AsyncInitializationTests
 		}
 	}
 
-	public sealed class CanceledWarmUp(WarmUpRecorder recorder) : IAsyncInitializable
+	public sealed class CanceledWarmUp(WarmUpRecorder recorder) : IInitializable
 	{
 		public async Task InitializeAsync(CancellationToken cancellationToken)
 		{
@@ -1316,24 +1339,28 @@ public partial class AsyncInitializationTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<WarmUpRecorder>]
 	[Scoped<WarmedAsyncDisposable>]
 	[Scoped<FailingWarmUp>]
 	public static partial class FailingWarmUpContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<WarmUpRecorder>]
 	[Scoped<WarmedAsyncDisposable>]
 	[Scoped<CanceledWarmUp>]
 	public static partial class CanceledWarmUpContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<WarmUpRecorder>]
 	[Scoped<WarmedThrowingAsyncDisposable>]
 	[Scoped<FailingWarmUp>]
 	public static partial class FailingWarmUpAndDisposalContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<WarmUpRecorder>]
 	[Scoped<WarmedThrowingAsyncDisposable>]
 	[Scoped<SecondWarmedThrowingAsyncDisposable>]

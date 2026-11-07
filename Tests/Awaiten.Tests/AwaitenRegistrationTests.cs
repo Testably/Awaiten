@@ -210,7 +210,7 @@ public sealed partial class AwaitenRegistrationTests
 		}
 	}
 
-	public sealed class SuppressedAsync : IAsyncInitializable, IDisposable
+	public sealed class SuppressedAsync : IInitializable, IDisposable
 	{
 		public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
@@ -227,6 +227,7 @@ public sealed partial class AwaitenRegistrationTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<SuppressedDisposable>(SuppressDisposal = true)]
 	[Singleton<IHidden>(Factory = nameof(MakeHidden), SuppressDisposal = true)]
 	[Singleton<SuppressedPlain>(SuppressDisposal = true)]

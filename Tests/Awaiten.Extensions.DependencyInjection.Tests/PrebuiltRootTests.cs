@@ -40,6 +40,7 @@ public sealed partial class PrebuiltRootTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<OuterService>]
 	[Singleton<InnerDependency>]
 	[Scoped<ScopedConsumer>]
@@ -65,7 +66,7 @@ public sealed partial class PrebuiltRootTests
 		public IClock Clock { get; }
 	}
 
-	public sealed class WarmedReporter : IAsyncInitializable
+	public sealed class WarmedReporter : IInitializable
 	{
 		public WarmedReporter(IClock clock) => Clock = clock;
 
@@ -75,16 +76,18 @@ public sealed partial class PrebuiltRootTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[ImportService<IClock>]
 	[Singleton<TimeReporter>]
 	public static partial class ExternalContainer;
 
 	[Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[ImportService<IClock>]
 	[Singleton<WarmedReporter>]
 	public static partial class WarmedExternalContainer;
 
-	public sealed class WarmedResource : IAsyncInitializable, IDisposable
+	public sealed class WarmedResource : IInitializable, IDisposable
 	{
 		public int DisposeCount { get; private set; }
 
@@ -94,6 +97,7 @@ public sealed partial class PrebuiltRootTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<WarmedResource>]
 	public static partial class WarmedContainer;
 

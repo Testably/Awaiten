@@ -11,11 +11,13 @@ This page assembles a full coffee shop from the pieces in the rest of the docs. 
 ```csharp
 using Awaiten;
 
-// Shared equipment. The machine warms up asynchronously.
-public sealed class EspressoMachine : IAsyncInitializable
+// Shared equipment. The machine warms up asynchronously, through an interface of the domain.
+public interface IWarmUp { Task WarmUpAsync(CancellationToken ct); }
+
+public sealed class EspressoMachine : IWarmUp
 {
     public bool IsHot { get; private set; }
-    public async Task InitializeAsync(CancellationToken ct)
+    public async Task WarmUpAsync(CancellationToken ct)
     {
         await HeatBoilerAsync(ct);
         IsHot = true;
@@ -75,6 +77,7 @@ public static class PaymentModule;
 
 ```csharp
 [Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
+[AsyncInitializer<IWarmUp>(nameof(IWarmUp.WarmUpAsync))]
 [Import(typeof(PaymentModule))]
 
 // equipment
@@ -102,7 +105,7 @@ public static partial class CoffeeShop
 }
 ```
 
-A `Cup` needs the async `EspressoMachine`, so in the strict default it could only be resolved asynchronously. The order below takes its cup through a synchronous `Func<string, Cup>`, so the container opts into [`AsyncSafety.SyncAfterInit`](./03-core-concepts/03-async-initialization.md#relax-the-rule-when-you-need-to). Once the machine is warmed at startup, that synchronous resolve returns immediately.
+The `[AsyncInitializer<IWarmUp>]` convention makes every `IWarmUp` of the shop [async](./03-core-concepts/03-async-initialization.md#mark-a-service-as-async). A `Cup` needs the async `EspressoMachine`, so in the strict default it could only be resolved asynchronously. The order below takes its cup through a synchronous `Func<string, Cup>`, so the container opts into [`AsyncSafety.SyncAfterInit`](./03-core-concepts/03-async-initialization.md#relax-the-rule-when-you-need-to). Once the machine is warmed at startup, that synchronous resolve returns immediately.
 
 ## Opening the shop
 

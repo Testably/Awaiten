@@ -20,15 +20,17 @@ public sealed partial class VerificationTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[ImportService<IHandler<IEvent>>]
 	[Singleton<Dispatcher>]
 	public static partial class ImportingContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<DerivedHandler, IHandler<DerivedEvent>>]
 	public static partial class ProvidingContainer;
 
-	public sealed class AsyncService : IAsyncInitializable
+	public sealed class AsyncService : IInitializable
 	{
 		public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 	}
@@ -40,10 +42,12 @@ public sealed partial class VerificationTests
 
 	/// <summary>Provides the import, but only asynchronously, so it is withheld from the synchronous path.</summary>
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<AsyncService>]
 	public static partial class AsyncProvidingContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[ImportService<AsyncService>]
 	[Singleton<AsyncConsumer>]
 	public static partial class AsyncImportingContainer;
@@ -93,6 +97,7 @@ public sealed partial class VerificationTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<DerivedEvent>]
 	public static partial class ConformanceOnlyContainer;
 

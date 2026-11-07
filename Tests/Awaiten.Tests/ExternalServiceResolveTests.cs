@@ -56,32 +56,37 @@ public sealed partial class ExternalServiceResolveTests
 		public IHandler<Order> Handler { get; } = handler;
 	}
 
-	public sealed class SlowService : IAsyncInitializable
+	public sealed class SlowService : IInitializable
 	{
 		public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[ImportService<IClock>]
 	[Transient<Reporter>]
 	[Transient<KeyedReporter>]
 	public static partial class ImportingContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[ImportService(typeof(ILog<>))]
 	[Transient<LoggingReporter>]
 	public static partial class OpenImportingContainer;
 
 	[Container(Extends = typeof(ImportingContainer))]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	public static partial class ExtendingContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[ImportService<IHandler<Order>>]
 	[Singleton<AnyHandler, IHandler<object>>]
 	[Transient<OrderDesk>]
 	public static partial class VariantImportingContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[ImportServices]
 	[Transient<Reporter>]
 	[Singleton<SlowService>]

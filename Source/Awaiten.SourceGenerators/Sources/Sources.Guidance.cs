@@ -148,15 +148,16 @@ internal static partial class Sources
 
 	/// <summary>
 	///     The guidance message (a quoted string literal) thrown by Resolve(Type) when an async-tainted service is
-	///     requested by type: it is async-initialized. It implements IAsyncInitializable, is produced by an
-	///     asynchronous Task&lt;T&gt; / ValueTask&lt;T&gt; factory, or reaches one through its non-deferred
+	///     requested by type: it is async-initialized. An async initializer or an asynchronous OnActivated hook
+	///     initializes it, it is produced by an asynchronous Task&lt;T&gt; / ValueTask&lt;T&gt; factory, or it reaches
+	///     one through its non-deferred
 	///     dependencies, so it has no synchronous resolution path in the strict default and must be obtained
 	///     asynchronously.
 	/// </summary>
 	private static string AsyncWithheldMessage(string service)
 	{
 		string display = service.Replace("global::", string.Empty);
-		return $"\"Awaiten: '{display}' requires asynchronous initialization (it is IAsyncInitializable, is produced by an async Task<T> factory, or depends on one) and cannot be resolved synchronously; resolve it through ResolveAsync (or warm it through InitializeAsync / CreateScopeAsync), or set AsyncSafety.SyncAfterInit on the [Container].\"";
+		return $"\"Awaiten: '{display}' requires asynchronous initialization (an async initializer or an asynchronous OnActivated hook initializes it, it is produced by an async Task<T> factory, or it depends on such a service) and cannot be resolved synchronously; resolve it through ResolveAsync (or warm it through InitializeAsync / CreateScopeAsync), or set AsyncSafety.SyncAfterInit on the [Container].\"";
 	}
 
 	/// <summary>

@@ -4,7 +4,7 @@ namespace Awaiten.SourceGenerators.Tests;
 
 /// <summary>
 ///     An <c>OnActivated</c> hook returning <c>Task</c> or <c>ValueTask</c> makes its service async-initialized, exactly
-///     like implementing <c>IAsyncInitializable</c>, so the generator applies every async-taint rule to it.
+///     like matching an async initializer convention, so the generator applies every async-taint rule to it.
 /// </summary>
 public class AsyncActivationHookTests
 {
@@ -90,7 +90,7 @@ public class AsyncActivationHookTests
 		                                                  """);
 
 		await That(result.Diagnostics).IsEmpty()
-			.Because("SyncAfterInit lets the eager build block on the async path, as for an IAsyncInitializable singleton");
+			.Because("SyncAfterInit lets the eager build block on the async path, as for a singleton with an async initializer convention");
 	}
 
 	[Test]

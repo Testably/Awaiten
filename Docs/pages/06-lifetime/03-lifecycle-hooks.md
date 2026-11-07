@@ -22,7 +22,7 @@ public static partial class CoffeeShop
 
 You can type the parameter as `object` instead when one hook serves several implementations.
 
-`OnActivated` runs once, right after construction. For an async service it runs before `InitializeAsync`. `OnRelease` runs when the owner or scope is disposed, before the instance's own `Dispose`, and in reverse creation order. By default it runs *in addition to* that disposal; pair it with [`SuppressDisposal`](../03-core-concepts/04-disposal.md#suppressing-disposal) to replace disposal entirely, as when a hook returns an object to a pool.
+`OnActivated` runs once, right after construction. For an async service it runs before the async initializer conventions. `OnRelease` runs when the owner or scope is disposed, before the instance's own `Dispose`, and in reverse creation order. By default it runs *in addition to* that disposal; pair it with [`SuppressDisposal`](../03-core-concepts/04-disposal.md#suppressing-disposal) to replace disposal entirely, as when a hook returns an object to a pool.
 
 ## Hook parameters
 
@@ -48,7 +48,7 @@ Hook parameters participate in the graph like any other dependency: an unregiste
 
 ## Asynchronous activation
 
-An `OnActivated` hook may return `Task` or `ValueTask`. The container awaits it, so the service becomes [async-initialized](../03-core-concepts/03-async-initialization.md#keep-the-service-free-of-awaiten), exactly as if it implemented `IAsyncInitializable`. Connect the payment terminal without putting Awaiten on it.
+An `OnActivated` hook may return `Task` or `ValueTask`. The container awaits it, so the service becomes [async-initialized](../03-core-concepts/03-async-initialization.md#use-an-activation-hook), like a service an async initializer convention matches. Connect the payment terminal without putting Awaiten on it.
 
 ```csharp
 [Container]
@@ -71,7 +71,7 @@ Only `Task` and `ValueTask` are awaited. A hook that returns `Task<T>` or `Value
 
 ## Ordering and failure
 
-Activation happens before initialization and before the instance is ever handed out, so a concurrent resolve never sees a service that has not been activated. An asynchronous hook keeps the same place: the container awaits it, then calls `InitializeAsync` if the service also implements `IAsyncInitializable`. If `OnActivated` throws or its task faults, the instance is not published. After a failed asynchronous hook, a disposable instance is disposed, as after a failed `InitializeAsync`. A later resolve builds a fresh one and tries again. Release is only queued once activation succeeds.
+Activation happens before the instance is ever handed out, so a concurrent resolve never sees a service that has not been activated. The hook runs first, synchronous or asynchronous. Then the container awaits each [async initializer convention](../03-core-concepts/03-async-initialization.md#order-of-several-initializers) the service matches, in declaration order. If `OnActivated` or a convention throws or its task faults, the instance is not published, and a disposable instance is disposed. A later resolve builds a fresh one and tries again. Release is only queued once activation succeeds.
 
 If `OnRelease` throws, the teardown goes on: the other release hooks still run, and every instance is still disposed, including the one whose hook failed. The failure surfaces once the teardown is complete, together with any other teardown failure. See [Disposal → When teardown fails](../03-core-concepts/04-disposal.md#when-teardown-fails).
 
@@ -99,6 +99,6 @@ This holds for a `[Scan]` on a `[Module]` too, where a library keeps its impleme
 
 ## Where to go next
 
-- [Async initialization](../03-core-concepts/03-async-initialization.md) for `InitializeAsync`.
+- [Async initialization](../03-core-concepts/03-async-initialization.md) for async initializer conventions.
 - [Disposal](../03-core-concepts/04-disposal.md) for teardown order.
 - [Scanning](../04-registration/06-scanning.md#lifecycle-hooks) to apply a hook to a whole matched family.

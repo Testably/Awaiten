@@ -89,7 +89,8 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 	///     generated factories and registration attributes (AWT194), unless it declares no <c>[Scan]</c> and its
 	///     assembly grants <c>InternalsVisibleTo</c> (see <see cref="FriendsConstructEveryRegistration" />); when it is, its scans and registrations are
 	///     expanded into factories in its own build (see <see cref="CollectModuleScanFactories" /> and
-	///     <see cref="CollectModuleRegistrationFactories" />).
+	///     <see cref="CollectModuleRegistrationFactories" />). A module that self-compiles nothing still gets a model
+	///     when one of its <c>[AsyncInitializer&lt;T&gt;]</c> conventions is unusable, which carries only that AWT233.
 	/// </summary>
 	private static ModuleScanModel? BuildModuleModel(GeneratorAttributeSyntaxContext context, CancellationToken cancellationToken)
 	{
@@ -101,6 +102,12 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		// Only a module that declares a [Scan] or a registration another assembly cannot construct self-compiles; any
 		// other [Module] carries no generated code (and pays no analysis cost beyond this check).
 		Compilation compilation = context.SemanticModel.Compilation;
+
+		// The module's [AsyncInitializer<T>] conventions are reported here (AWT233), once, rather than by every
+		// container that imports the module.
+		List<DiagnosticInfo> diagnostics = new();
+		DeclaredAsyncInitializers(moduleSymbol, compilation, diagnostics);
+
 		bool declaresScan = HasAwaitenAttribute(moduleSymbol.GetAttributes(), "ScanAttribute");
 		ModuleRegistration? selfCompiled = declaresScan ? null : FirstSelfCompiledRegistration(moduleSymbol, compilation);
 
@@ -111,13 +118,14 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		List<RegistrationFactory> contributions = receives ? CollectModuleContributionFactories(moduleSymbol, compilation) : new();
 		if (!declaresScan && selfCompiled is null && wrappers.Count == 0 && contributions.Count == 0)
 		{
-			return null;
+			return diagnostics.Count == 0
+				? null
+				: new ModuleScanModel(null, default, moduleSymbol.Name, string.Empty, false, default, new EquatableArray<DiagnosticInfo>(diagnostics.ToArray()), false, default, default, null);
 		}
 
 		string reason = selfCompiled is null
 			? "declares a [Scan]"
 			: $"registers '{Display(selfCompiled.Implementation.ToDisplayString(FullyQualified))}', which another assembly cannot construct,";
-		List<DiagnosticInfo> diagnostics = new();
 
 		// The module must be partial for the generator to add the factories and registration attributes. Every part
 		// of a partial type carries the partial modifier, so the declaration bearing the [Module] attribute suffices.
@@ -372,14 +380,13 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		=> new(types.Where(type => !serviceTypes.Inaccessible.Contains(type)).OrderBy(type => type, StringComparer.Ordinal).ToArray());
 
 	/// <summary>
-	///     The framework/Awaiten interface symbols an instance is matched against, looked up once:
-	///     <c>System.IDisposable</c>, the async-disposal symbol (non-null only when the runtime exposes it)
-	///     and <c>Awaiten.IAsyncInitializable</c>. Any may be <see langword="null" />.
+	///     The framework interface symbols an instance is matched against, looked up once:
+	///     <c>System.IDisposable</c> and the async-disposal symbol (non-null only when the runtime exposes it).
+	///     Either may be <see langword="null" />.
 	/// </summary>
 	private sealed record WellKnownTypes(
 		INamedTypeSymbol? Disposable,
-		INamedTypeSymbol? AsyncDisposable,
-		INamedTypeSymbol? AsyncInitializable);
+		INamedTypeSymbol? AsyncDisposable);
 
 	/// <summary>
 	///     The container's external-resolution surface, consulted during constructor selection and open-generic/scan
@@ -474,7 +481,8 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		List<(string ServiceType, INamedTypeSymbol Symbol)> DispatchCandidates,
 		List<DiagnosticInfo> Diagnostics,
 		ServedTypes ServedTypes,
-		BaseFactories? Factories);
+		BaseFactories? Factories,
+		AsyncInitializerScopes AsyncInitializers);
 
 	/// <summary>
 	///     The mutable coalesced graph state the decorator-chain and composite builders rewrite in place: the
@@ -500,8 +508,11 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		// (see AsyncDisposableSupport).
 		WellKnownTypes wellKnown = new(
 			compilation.GetTypeByMetadataName("System.IDisposable"),
-			AsyncDisposableSupport(compilation),
-			compilation.GetTypeByMetadataName("Awaiten.IAsyncInitializable"));
+			AsyncDisposableSupport(compilation));
+
+		// The container's own [AsyncInitializer<T>] conventions are its to report (AWT233); a base or module reports
+		// its own in its own build.
+		DeclaredAsyncInitializers(containerSymbol, compilation, diagnostics);
 
 		// The imported modules, resolved once. Import validation (AWT149-152) is reported while collecting.
 		List<ImportedModule> modules = CollectImportedModules(containerSymbol, diagnostics);
@@ -634,7 +645,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		// closings of an open import are checked once the instances are built (ReportOpenExternalServices).
 		ReportContradictingExternalServices(externalServiceTypes.Closed, serviceToImpl, containerSymbol, diagnostics);
 
-		BuildContext buildContext = new(containerSymbol, compilation, serviceToImpl, decoratorInner, compositeCollections, wellKnown, constraintRejected, external, variance, consumedConditionals, injectProperties, CollectDispatchCandidates(raw, serviceToImpl), diagnostics, ServedTypesOf(raw, serviceMembers, keyedMembers), factories);
+		BuildContext buildContext = new(containerSymbol, compilation, serviceToImpl, decoratorInner, compositeCollections, wellKnown, constraintRejected, external, variance, consumedConditionals, injectProperties, CollectDispatchCandidates(raw, serviceToImpl), diagnostics, ServedTypesOf(raw, serviceMembers, keyedMembers), factories, new AsyncInitializerScopes(compilation));
 
 		// Validate each implementation, select its constructor and build the instance.
 		foreach (ImplInfo info in implOrder)

@@ -33,6 +33,11 @@ public static class Prelude
 public interface IMachine;
 public interface IWarmable;
 
+public interface IWarmUp
+{
+	Task WarmUpAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+}
+
 public sealed class EspressoMachine : IMachine, IWarmable
 {
 	public Cup Pull() => new();
@@ -67,9 +72,8 @@ public sealed class BrewSession : IDisposable
 	public void Dispose() { }
 }
 
-public sealed class Valve : IAsyncInitializable, IAsyncDisposable
+public sealed class Valve : IAsyncDisposable
 {
-	public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 	public ValueTask DisposeAsync() => default;
 }
 

@@ -7,6 +7,12 @@ namespace Awaiten
     {
         public ArgAttribute() { }
     }
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
+    public sealed class AsyncInitializerAttribute<T> : System.Attribute where T : class
+    {
+        public AsyncInitializerAttribute(string method) { }
+        public string Method { get; }
+    }
     public enum AsyncSafety
     {
         Strict = 0,
@@ -159,17 +165,13 @@ namespace Awaiten
     {
         public GeneratedScanRegistrationAttribute(string factory) { }
         public bool AsyncDisposable { get; set; }
-        public bool AsyncInitializable { get; set; }
+        public System.Type[]? AsyncInitializers { get; set; }
         public bool Disposable { get; set; }
         public string Factory { get; }
         public Awaiten.Lifetime Lifetime { get; set; }
         public string? OnActivated { get; set; }
         public string? OnRelease { get; set; }
         public bool SkipUnconstructable { get; set; }
-    }
-    public interface IAsyncInitializable
-    {
-        System.Threading.Tasks.Task InitializeAsync(System.Threading.CancellationToken cancellationToken);
     }
     public interface IAwaitenAsyncResolver : Awaiten.IAwaitenResolver
     {

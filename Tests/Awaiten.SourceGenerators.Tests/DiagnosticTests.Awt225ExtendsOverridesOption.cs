@@ -58,10 +58,14 @@ public partial class DiagnosticTests
 			GeneratorResult result = Generator.Run("""
 			                                       using System;
 			                                       using Awaiten;
+			                                       using System.Threading;
+			                                       using System.Threading.Tasks;
 
 			                                       namespace MyCode;
 
-			                                       public sealed class Connection : IAsyncInitializable
+			                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
+			                                       public sealed class Connection : IInitializable
 			                                       {
 			                                           public System.Threading.Tasks.Task InitializeAsync(System.Threading.CancellationToken cancellationToken) => System.Threading.Tasks.Task.CompletedTask;
 			                                       }
@@ -72,12 +76,14 @@ public partial class DiagnosticTests
 			                                       }
 
 			                                       [Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
+			                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			                                       [Singleton<Connection>]
 			                                       public static partial class Shop
 			                                       {
 			                                       }
 
 			                                       [Container(Extends = typeof(Shop))]
+			                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			                                       [Singleton<Consumer>]
 			                                       public static partial class TestShop
 			                                       {

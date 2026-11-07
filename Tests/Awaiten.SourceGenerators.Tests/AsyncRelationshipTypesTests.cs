@@ -20,7 +20,9 @@ public class AsyncRelationshipTypesTests
 
 		                                       namespace MyCode;
 
-		                                       public sealed class Connection : IAsyncInitializable
+		                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
+		                                       public sealed class Connection : IInitializable
 		                                       {
 		                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 		                                       }
@@ -30,6 +32,7 @@ public class AsyncRelationshipTypesTests
 		                                       }
 
 		                                       [Container]
+		                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		                                       [Singleton<Connection>]
 		                                       [Singleton<Pool>]
 		                                       public static partial class MyContainer
@@ -58,7 +61,9 @@ public class AsyncRelationshipTypesTests
 
 		                                       namespace MyCode;
 
-		                                       public sealed class Robot : IAsyncInitializable
+		                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
+		                                       public sealed class Robot : IInitializable
 		                                       {
 		                                           public Robot([Arg] int id) { }
 		                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
@@ -69,6 +74,7 @@ public class AsyncRelationshipTypesTests
 		                                       }
 
 		                                       [Container]
+		                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		                                       [Transient<Robot>]
 		                                       [Singleton<Factory>]
 		                                       public static partial class MyContainer
@@ -99,7 +105,9 @@ public class AsyncRelationshipTypesTests
 
 		                                       namespace MyCode;
 
-		                                       public sealed class Robot : IAsyncInitializable
+		                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
+		                                       public sealed class Robot : IInitializable
 		                                       {
 		                                           public Robot([Arg] int id) { }
 		                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
@@ -110,6 +118,7 @@ public class AsyncRelationshipTypesTests
 		                                       }
 
 		                                       [Container]
+		                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		                                       [Transient<Robot>]
 		                                       [Singleton<Factory>]
 		                                       public static partial class MyContainer
@@ -132,7 +141,9 @@ public class AsyncRelationshipTypesTests
 
 		                                       namespace MyCode;
 
-		                                       public sealed class Robot : IAsyncInitializable
+		                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
+		                                       public sealed class Robot : IInitializable
 		                                       {
 		                                           public Robot([Arg] int id) { }
 		                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
@@ -143,6 +154,7 @@ public class AsyncRelationshipTypesTests
 		                                       }
 
 		                                       [Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
+		                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		                                       [Transient<Robot>]
 		                                       [Singleton<Factory>]
 		                                       public static partial class MyContainer
@@ -170,7 +182,9 @@ public class AsyncRelationshipTypesTests
 
 		                                       namespace MyCode;
 
-		                                       public sealed class Robot : IAsyncInitializable
+		                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
+		                                       public sealed class Robot : IInitializable
 		                                       {
 		                                           public Robot([Arg] int id) { }
 		                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
@@ -181,6 +195,7 @@ public class AsyncRelationshipTypesTests
 		                                       }
 
 		                                       [Container]
+		                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		                                       [Transient<Robot>]
 		                                       [Singleton<Factory>]
 		                                       public static partial class MyContainer
@@ -203,7 +218,9 @@ public class AsyncRelationshipTypesTests
 
 		                                       namespace MyCode;
 
-		                                       public sealed class Connection : IAsyncInitializable, IDisposable
+		                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
+		                                       public sealed class Connection : IInitializable, IDisposable
 		                                       {
 		                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 		                                           public void Dispose() { }
@@ -211,6 +228,7 @@ public class AsyncRelationshipTypesTests
 		                                       public sealed class Pool { public Pool(Func<Task<Owned<Connection>>> open) { } }
 
 		                                       [Container]
+		                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		                                       [Transient<Connection>]
 		                                       [Singleton<Pool>]
 		                                       public static partial class MyContainer
@@ -240,13 +258,16 @@ public class AsyncRelationshipTypesTests
 
 		                                       namespace MyCode;
 
-		                                       public sealed class Connection : IAsyncInitializable, IAsyncDisposable
+		                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
+		                                       public sealed class Connection : IInitializable, IAsyncDisposable
 		                                       {
 		                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 		                                           public ValueTask DisposeAsync() => default;
 		                                       }
 
 		                                       [Container]
+		                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		                                       [Singleton<Connection>]
 		                                       public static partial class MyContainer
 		                                       {

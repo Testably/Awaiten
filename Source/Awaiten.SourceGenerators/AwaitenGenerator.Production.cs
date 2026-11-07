@@ -93,18 +93,13 @@ partial class AwaitenGenerator
 		                            && !asyncDisposable
 		                            && CouldHideDisposable(disposalType);
 
-		// Async initialization follows the owned type (a factory's concrete return type or the constructed impl),
-		// mirroring the disposal-type choice above. When it is IAsyncInitializable, the container awaits its
-		// InitializeAsync after construction. (An async factory is async-tainted regardless; see PropagateAsyncTaint.)
-		bool asyncInit = wellKnown.AsyncInitializable is not null && (traits?.AsyncInitializable ?? ImplementsInterface(disposalType, wellKnown.AsyncInitializable));
-
 		// Best-effort lint (AWT106): a sync factory whose declared return type hides the async initialization
-		// its body provably produces. Async-init taint is read off producer.ReturnType (above), so a concrete
-		// IAsyncInitializable returned behind a plainer interface is never initialized. Not reported for an
+		// its body provably produces. The conventions are matched against the owned type, so a concrete type a
+		// convention initializes returned behind a plainer interface is never initialized. Not reported for an
 		// async factory (it awaits its own initialization) nor a hidden IDisposable (disposed via RuntimeDisposalCheck).
 		if (info.Production == ProductionKind.Factory && !asyncFactory && traits is null)
 		{
-			ReportFactoryHidingAsyncInitialization(producer, compilation, wellKnown.AsyncInitializable, diagnostics);
+			ReportFactoryHidingAsyncInitialization(producer, compilation, context.AsyncInitializers.Of(info.ConventionScope(containerSymbol)), diagnostics);
 		}
 
 		// Lifecycle hooks (AWT164 when a named member is not a usable static void M(TImplementation, …)). Applied to
@@ -114,6 +109,11 @@ partial class AwaitenGenerator
 		// release hook), resolved like a constructor's.
 		(string? onActivated, EquatableArray<ParameterModel> activationParameters, IMethodSymbol? activationHook) = ResolveHook(info, info.OnActivated, release: false, context);
 		(string? onRelease, EquatableArray<ParameterModel> releaseParameters, IMethodSymbol? releaseHook) = ResolveHook(info, info.OnRelease, release: true, context);
+
+		// Async initialization follows the owned type (a factory's concrete return type or the constructed impl),
+		// mirroring the disposal-type choice above: the container awaits each matching convention after OnActivated.
+		// (An async factory is async-tainted regardless; see PropagateAsyncTaint.)
+		EquatableArray<AsyncInitializerModel> asyncInitializers = BuildAsyncInitializers(info, disposalType, context);
 
 		RecordBaseFactory(new BaseFactoryRequest(info, producer, resolverType, members, activationHook, releaseHook), context);
 		RecordBaseWrappers(info, producer, activationHook, releaseHook, context);
@@ -130,7 +130,7 @@ partial class AwaitenGenerator
 			info.Symbol.IsReferenceType,
 			viaModuleFactory ? ProductionKind.Factory : info.Production,
 			viaModuleFactory ? info.ConstructVia : ProducerCall(info, producer),
-			asyncInit,
+			asyncInitializers,
 			IsAsyncFactory: asyncFactory,
 			RuntimeDisposalCheck: runtimeDisposalCheck,
 			IsAsyncDisposable: asyncDisposable,
@@ -822,11 +822,18 @@ partial class AwaitenGenerator
 	///     here and a <c>System.Type</c> so marked surfaces as an unregistered dependency (AWT101).
 	/// </summary>
 	private static EquatableArray<ParameterModel> ClassifyHookParameters(IMethodSymbol hook, ImplInfo info, bool release, BuildContext context)
-	{
 		// An awaited hook runs on the async path, so like an async factory it receives the resolve-time token.
-		bool asynchronous = IsAsyncHookReturn(hook.ReturnType, context.Compilation);
+		=> ClassifyHookParameterSymbols(hook.Parameters.Skip(1), IsAsyncHookReturn(hook.ReturnType, context.Compilation), release, info, context);
+
+	/// <summary>
+	///     Classifies the graph-resolved <paramref name="hookParameters" /> of a lifecycle hook or an async initializer
+	///     (see <see cref="ClassifyHookParameters" />). An <paramref name="asynchronous" /> one runs on the async path
+	///     and receives the resolve-time token.
+	/// </summary>
+	private static EquatableArray<ParameterModel> ClassifyHookParameterSymbols(IEnumerable<IParameterSymbol> hookParameters, bool asynchronous, bool release, ImplInfo info, BuildContext context)
+	{
 		List<ParameterModel> parameters = new();
-		foreach (IParameterSymbol parameter in hook.Parameters.Skip(1))
+		foreach (IParameterSymbol parameter in hookParameters)
 		{
 			ParameterModel parameterModel = ClassifyParameter(parameter, asynchronous, context.External.ServiceTypes);
 
@@ -1100,32 +1107,27 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     Reports <see cref="Diagnostics.FactoryHidesAsyncInitialization">AWT106</see> when a synchronous
-	///     factory method's body provably returns a concrete type that implements <c>IAsyncInitializable</c>
-	///     while the declared return type does not, so the initialization is invisible to the container and
-	///     never runs.
+	///     factory method's body provably returns a concrete type that a convention of the declaring scope
+	///     (<paramref name="conventions" />) initializes while the declared return type is not of that convention's
+	///     type, so the initialization is invisible to the container and never runs.
 	/// </summary>
 	/// <remarks>
 	///     Conservative by design: it inspects only the producer's own <c>return</c> expressions, never descending
 	///     into nested lambdas or local functions, and fires only when the returned static type is a non-abstract,
-	///     non-interface async-initializable type. An unanalyzable return type yields no diagnostic. False negatives
+	///     non-interface type a convention matches. An unanalyzable return type yields no diagnostic. False negatives
 	///     are accepted; false positives are not.
 	/// </remarks>
 	private static void ReportFactoryHidingAsyncInitialization(
 		IMethodSymbol producer,
 		Compilation compilation,
-		INamedTypeSymbol? asyncInitializableSymbol,
+		List<AsyncInitializerConvention> conventions,
 		List<DiagnosticInfo> diagnostics)
 	{
-		if (asyncInitializableSymbol is null)
-		{
-			return;
-		}
-
 		ITypeSymbol declaredReturnType = producer.ReturnType;
 
-		// When the declared return type is itself async-initializable the container already sees the
-		// initialization, so nothing is hidden and there is no diagnostic to report.
-		if (Implements(declaredReturnType, asyncInitializableSymbol))
+		// A convention the declared return type is already of runs anyway, so only the others can be hidden.
+		List<AsyncInitializerConvention> hideable = conventions.FindAll(convention => !IsOfConventionType(declaredReturnType, convention.Type));
+		if (hideable.Count == 0)
 		{
 			return;
 		}
@@ -1152,8 +1154,8 @@ partial class AwaitenGenerator
 				    || concrete.TypeKind == TypeKind.Interface
 				    || concrete.IsAbstract
 				    || concrete.TypeKind == TypeKind.Error
-				    || !reported.Add(concrete)
-				    || !Implements(concrete, asyncInitializableSymbol))
+				    || hideable.Find(convention => IsOfConventionType(concrete, convention.Type)) is not { } hidden
+				    || !reported.Add(concrete))
 				{
 					continue;
 				}
@@ -1165,14 +1167,9 @@ partial class AwaitenGenerator
 						producer.Name,
 						Display(concrete.ToDisplayString(FullyQualified)),
 						Display(declaredReturnType.ToDisplayString(FullyQualified)),
+						hidden.Display,
 					])));
 			}
-		}
-
-		static bool Implements(ITypeSymbol type, INamedTypeSymbol @interface)
-		{
-			return SymbolEqualityComparer.Default.Equals(type, @interface)
-			       || type.AllInterfaces.Any(implemented => SymbolEqualityComparer.Default.Equals(implemented, @interface));
 		}
 	}
 

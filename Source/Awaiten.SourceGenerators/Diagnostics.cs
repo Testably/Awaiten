@@ -69,10 +69,10 @@ internal static class Diagnostics
 
 	/// <summary>
 	///     A synchronous <c>Factory</c> method's body provably constructs (or returns a local of) a concrete
-	///     type that implements <c>IAsyncInitializable</c>, while its declared return type does not expose it.
-	///     The container reads async-initialization taint off the declared return type, so it cannot see that
-	///     the produced instance needs initialization, so the hidden <c>InitializeAsync</c> never runs and the
-	///     instance is handed out uninitialized. A hidden <c>IDisposable</c> is <em>not</em> reported: the
+	///     type that an <c>[AsyncInitializer&lt;T&gt;]</c> convention of the declaring container or module matches,
+	///     while its declared return type does not. The container matches the conventions against the declared
+	///     return type, so it cannot see that the produced instance needs initialization, so the hidden initializer
+	///     never runs and the instance is handed out uninitialized. A hidden <c>IDisposable</c> is <em>not</em> reported: the
 	///     container disposes factory outputs behind a runtime check, so it does not leak. An asynchronous
 	///     <c>Task&lt;T&gt;</c> / <c>ValueTask&lt;T&gt;</c> factory is <em>not</em> reported either: it owns its
 	///     own initialization (the container awaits the factory itself). This is a best-effort lint (Warning):
@@ -83,7 +83,7 @@ internal static class Diagnostics
 	public static readonly DiagnosticDescriptor FactoryHidesAsyncInitialization = new(
 		"AWT106",
 		"Factory hides asynchronous initialization behind its declared return type",
-		"The factory '{0}' constructs '{1}', which is async-initialized, but declares return type '{2}'; the container cannot see that it needs initialization, so its InitializeAsync never runs. Return '{1}', or make the factory 'async Task<{2}>' and handle initialization inside it.",
+		"The factory '{0}' constructs '{1}', which is async-initialized by '{3}', but declares return type '{2}'; the container cannot see that it needs initialization, so the initializer never runs. Return '{1}', or make the factory 'async Task<{2}>' and handle initialization inside it.",
 		"Awaiten",
 		DiagnosticSeverity.Warning,
 		isEnabledByDefault: true);
@@ -279,7 +279,7 @@ internal static class Diagnostics
 
 	/// <summary>
 	///     A synchronous <c>Func&lt;T&gt;</c> / <c>Lazy&lt;T&gt;</c> / <c>Owned&lt;T&gt;</c> relationship
-	///     targets a service that is itself async-initialized (<c>IAsyncInitializable</c>, produced by an async factory or
+	///     targets a service that is itself async-initialized (by an async initializer convention, produced by an async factory or
 	///     activated by an asynchronous <c>OnActivated</c> hook): it would resolve the service
 	///     without awaiting its initialization. Resolve it through <c>ResolveAsync</c>, or set
 	///     <c>AsyncSafety.SyncAfterInit</c> on the <c>[Container]</c> to allow synchronous resolution after warm-up.
@@ -657,8 +657,8 @@ internal static class Diagnostics
 
 	/// <summary>
 	///     A cycle of <c>[Inject(Deferred = true)]</c> properties includes an async-tainted participant (one that
-	///     is <c>IAsyncInitializable</c>, produced by an async factory, activated by an asynchronous <c>OnActivated</c>
-	///     hook, or reaches one). A deferred property
+	///     is initialized by an async initializer convention, produced by an async factory, activated by an asynchronous
+	///     <c>OnActivated</c> hook, or reaches one). A deferred property
 	///     breaks a cycle only when a re-entrant resolve returns the already-cached instance; an async resolver
 	///     publishes its memoized task only after that re-entrant resolve has returned, so the cycle overflows the
 	///     stack or deadlocks at runtime rather than terminating. Break the cycle, or make its participants
@@ -667,7 +667,7 @@ internal static class Diagnostics
 	public static readonly DiagnosticDescriptor DeferredAsyncCycle = new(
 		"AWT146",
 		"Non-terminating deferred async cycle",
-		"Deferred property cycle through an async-initialized service detected: {0}. A deferred property breaks a cycle only when a re-entrant resolve returns the already-cached instance; an async resolver publishes its memoized task only after that re-entrant resolve has returned, so this cycle would overflow the stack or deadlock at runtime. Break the cycle, or make its participants synchronous (not IAsyncInitializable, without an asynchronous OnActivated hook, and not dependent on an async service).",
+		"Deferred property cycle through an async-initialized service detected: {0}. A deferred property breaks a cycle only when a re-entrant resolve returns the already-cached instance; an async resolver publishes its memoized task only after that re-entrant resolve has returned, so this cycle would overflow the stack or deadlock at runtime. Break the cycle, or make its participants synchronous (without an async initializer or an asynchronous OnActivated hook, and not dependent on an async service).",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
@@ -1954,6 +1954,33 @@ internal static class Diagnostics
 		"AWT232",
 		"Unsupported asynchronous lifecycle hook",
 		"'{0}' cannot use the lifecycle hook '{1}': {2}",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     An <c>[AsyncInitializer&lt;T&gt;(method)]</c> names no method the container can await through <c>T</c>: there is
+	///     none of that name, it is overloaded, static, generic or not accessible from the declaring container or module,
+	///     it does not return <c>Task</c> or <c>ValueTask</c>, or a parameter is passed by reference or carries
+	///     <c>[Arg]</c>, <c>[FromKey]</c> or <c>[Inject]</c>, which would put Awaiten back into the domain type.
+	/// </summary>
+	public static readonly DiagnosticDescriptor InvalidAsyncInitializer = new(
+		"AWT233",
+		"Invalid async initializer",
+		"The async initializer '{0}.{1}' cannot be used: {2}",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     An <c>[AsyncInitializer&lt;T&gt;]</c> convention initializes an implementation, but the code that has to call it
+	///     cannot reach its type or its method: a container that runs a module's convention, or, in a
+	///     module's own build, a consumer in another assembly that runs it on a self-compiled implementation.
+	/// </summary>
+	public static readonly DiagnosticDescriptor InaccessibleAsyncInitializer = new(
+		"AWT234",
+		"Inaccessible async initializer",
+		"{0} is initialized by the async initializer '{1}.{2}', but {3}; {4}",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);

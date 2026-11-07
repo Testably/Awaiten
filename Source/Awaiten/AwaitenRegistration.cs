@@ -91,7 +91,7 @@ public readonly struct AwaitenRegistration : IEquatable<AwaitenRegistration>
 	public object? Key { get; }
 
 	/// <summary>
-	///     Whether the service must be resolved asynchronously. It is <c>IAsyncInitializable</c>, is produced by an
+	///     Whether the service must be resolved asynchronously. It is initialized by an async initializer or an asynchronous <c>OnActivated</c> hook, is produced by an
 	///     async factory, or reaches one through its non-deferred dependencies, so it has no synchronous path and is
 	///     projected as a <c>Task&lt;T&gt;</c>.
 	/// </summary>

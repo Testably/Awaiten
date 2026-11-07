@@ -16,14 +16,17 @@ public partial class DiagnosticTests
 
 			                                       namespace MyCode;
 
+			                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
 			                                       public interface IFoo { }
 
-			                                       public sealed class FooImpl : IFoo, IAsyncInitializable
+			                                       public sealed class FooImpl : IFoo, IInitializable
 			                                       {
 			                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 			                                       }
 
 			                                       [Container]
+			                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			                                       [Singleton<IFoo>(Factory = nameof(Create))]
 			                                       public static partial class MyContainer
 			                                       {
@@ -32,7 +35,7 @@ public partial class DiagnosticTests
 			                                       """);
 
 			await That(result.Diagnostics).Contains("*AWT106*").AsWildcard()
-				.Because("the factory provably constructs an IAsyncInitializable type its declared return type hides");
+				.Because("the factory provably constructs a type a convention initializes, which its declared return type hides");
 
 			string diagnostic = result.Diagnostics.Single(d => d.Contains("AWT106"));
 			await That(diagnostic).Contains("MyCode.FooImpl")
@@ -53,14 +56,17 @@ public partial class DiagnosticTests
 
 			                                       namespace MyCode;
 
+			                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
 			                                       public interface IFoo { }
 
-			                                       public sealed class FooImpl : IFoo, IAsyncInitializable
+			                                       public sealed class FooImpl : IFoo, IInitializable
 			                                       {
 			                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 			                                       }
 
 			                                       [Container]
+			                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			                                       [Singleton<IFoo>(Factory = nameof(Create))]
 			                                       public static partial class MyContainer
 			                                       {
@@ -86,14 +92,17 @@ public partial class DiagnosticTests
 
 			                                       namespace MyCode;
 
+			                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
 			                                       public interface IFoo { }
 
-			                                       public sealed class FooImpl : IFoo, IAsyncInitializable
+			                                       public sealed class FooImpl : IFoo, IInitializable
 			                                       {
 			                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 			                                       }
 
 			                                       [Container]
+			                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			                                       [Singleton<IFoo>(Factory = nameof(Create))]
 			                                       public static partial class MyContainer
 			                                       {
@@ -124,12 +133,15 @@ public partial class DiagnosticTests
 
 			                                       namespace MyCode;
 
-			                                       public sealed class FooImpl : IAsyncInitializable
+			                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
+			                                       public sealed class FooImpl : IInitializable
 			                                       {
 			                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 			                                       }
 
 			                                       [Container]
+			                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			                                       [Singleton<FooImpl>(Factory = nameof(Create))]
 			                                       public static partial class MyContainer
 			                                       {
@@ -141,7 +153,7 @@ public partial class DiagnosticTests
 		}
 
 		[Test]
-		public async Task DoesNotReport_WhenTheDeclaredInterfaceExtendsIAsyncInitializable()
+		public async Task DoesNotReport_WhenTheDeclaredInterfaceExtendsTheConventionType()
 		{
 			GeneratorResult result = Generator.Run("""
 			                                       using Awaiten;
@@ -150,7 +162,9 @@ public partial class DiagnosticTests
 
 			                                       namespace MyCode;
 
-			                                       public interface IFooAsync : IAsyncInitializable { }
+			                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
+			                                       public interface IFooAsync : IInitializable { }
 
 			                                       public sealed class FooImpl : IFooAsync
 			                                       {
@@ -158,6 +172,7 @@ public partial class DiagnosticTests
 			                                       }
 
 			                                       [Container]
+			                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			                                       [Singleton<IFooAsync>(Factory = nameof(Create))]
 			                                       public static partial class MyContainer
 			                                       {
@@ -201,14 +216,17 @@ public partial class DiagnosticTests
 
 			                                       namespace MyCode;
 
+			                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
 			                                       public interface IFoo { }
 
-			                                       public sealed class FooImpl : IFoo, IAsyncInitializable
+			                                       public sealed class FooImpl : IFoo, IInitializable
 			                                       {
 			                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 			                                       }
 
 			                                       [Container]
+			                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			                                       [Singleton<IFoo>(Factory = nameof(Create))]
 			                                       public static partial class MyContainer
 			                                       {
@@ -231,12 +249,15 @@ public partial class DiagnosticTests
 
 			                                       namespace MyCode;
 
-			                                       public sealed class FooImpl : IAsyncInitializable
+			                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
+			                                       public sealed class FooImpl : IInitializable
 			                                       {
 			                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 			                                       }
 
 			                                       [Container]
+			                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			                                       [Singleton<FooImpl>]
 			                                       public static partial class MyContainer
 			                                       {
@@ -258,14 +279,17 @@ public partial class DiagnosticTests
 
 			                                       namespace MyCode;
 
+			                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
 			                                       public interface IFoo { }
 
-			                                       public sealed class FooImpl : IFoo, IAsyncInitializable
+			                                       public sealed class FooImpl : IFoo, IInitializable
 			                                       {
 			                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 			                                       }
 
 			                                       [Container]
+			                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			                                       [Singleton<IFoo>(Factory = nameof(Create))]
 			                                       public static partial class MyContainer
 			                                       {
@@ -292,14 +316,17 @@ public partial class DiagnosticTests
 
 			                                       namespace MyCode;
 
+			                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
 			                                       public interface IFoo { }
 
-			                                       public sealed class FooImpl : IFoo, IAsyncInitializable
+			                                       public sealed class FooImpl : IFoo, IInitializable
 			                                       {
 			                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 			                                       }
 
 			                                       [Container]
+			                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			                                       [Singleton<IFoo>(Factory = nameof(Create))]
 			                                       public static partial class MyContainer
 			                                       {
@@ -326,14 +353,17 @@ public partial class DiagnosticTests
 
 			                                       namespace MyCode;
 
+			                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
 			                                       public interface IFoo { }
 
-			                                       public sealed class FooImpl : IFoo, IAsyncInitializable
+			                                       public sealed class FooImpl : IFoo, IInitializable
 			                                       {
 			                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 			                                       }
 
 			                                       [Container]
+			                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			                                       [Singleton<IFoo>(Factory = nameof(Create))]
 			                                       public static partial class MyContainer
 			                                       {
@@ -388,15 +418,18 @@ public partial class DiagnosticTests
 
 			                                       namespace MyCode;
 
+			                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
 			                                       public interface IFoo { }
 
-			                                       public sealed class FooImpl : IFoo, IAsyncInitializable, IDisposable
+			                                       public sealed class FooImpl : IFoo, IInitializable, IDisposable
 			                                       {
 			                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 			                                           public void Dispose() { }
 			                                       }
 
 			                                       [Container]
+			                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			                                       [Singleton<IFoo>(Factory = nameof(Create))]
 			                                       public static partial class MyContainer
 			                                       {

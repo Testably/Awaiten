@@ -9,7 +9,7 @@ namespace Awaiten.Tests;
 ///     singleton is constructed in the generated container root's constructor (before any <c>Resolve</c>) in
 ///     registration order, it is cached (so a later resolve hands back the same instance), and a disposable
 ///     eager singleton is tracked for disposal by that eager construction alone (no resolve needed). In
-///     pragmatic <c>AsyncSafety.SyncAfterInit</c> mode an eager <c>IAsyncInitializable</c> singleton is even
+///     pragmatic <c>AsyncSafety.SyncAfterInit</c> mode an eager <c>IInitializable</c> singleton is even
 ///     constructed and initialized at build time through its blocking synchronous resolver. Construction,
 ///     initialization and disposal are observed through a static probe because the container is a static
 ///     definition and the usable instance is <c>new …Root()</c>.
@@ -152,7 +152,7 @@ public partial class EagerActivationTests
 		public void Dispose() => Probe.Disposed.Add("ProbeDisposable");
 	}
 
-	public sealed class AsyncEager : IAsyncInitializable
+	public sealed class AsyncEager : IInitializable
 	{
 		public AsyncEager() => Probe.Constructed.Add("AsyncEager");
 
@@ -167,28 +167,34 @@ public partial class EagerActivationTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Eager>(Eager = true)]
 	public static partial class EagerContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Eager>(Eager = true)]
 	[Singleton<Lazy>]
 	public static partial class MixedContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<First>(Eager = true)]
 	[Singleton<Second>(Eager = true)]
 	public static partial class OrderedContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Disposable>(Eager = true)]
 	public static partial class DisposableContainer;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<ProbeDisposable>(Eager = true)]
 	public static partial class ProbeDisposableContainer;
 
 	[Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<AsyncEager>(Eager = true)]
 	public static partial class PragmaticEagerContainer;
 }

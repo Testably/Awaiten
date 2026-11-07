@@ -72,10 +72,12 @@ public sealed partial class NestedTypeAccessibilityTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<FakeClock, IClock>]
 	private static partial class TestShop;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<SystemClock, IPrivateClock>]
 	[Singleton<WarmClock, IPrivateWarmClock>]
 	[Scoped<PlainLedger, IPrivateLedger>]
@@ -90,7 +92,7 @@ public sealed partial class NestedTypeAccessibilityTests
 
 		public sealed class SystemClock : IPrivateClock;
 
-		public sealed class WarmClock : IPrivateWarmClock, IAsyncInitializable
+		public sealed class WarmClock : IPrivateWarmClock, IInitializable
 		{
 			public bool Initialized { get; private set; }
 
@@ -103,7 +105,7 @@ public sealed partial class NestedTypeAccessibilityTests
 
 		public sealed class PlainLedger : IPrivateLedger;
 
-		public sealed class WarmLedger : IPrivateLedger, IAsyncInitializable
+		public sealed class WarmLedger : IPrivateLedger, IInitializable
 		{
 			public bool Initialized { get; private set; }
 

@@ -585,7 +585,7 @@ internal static partial class Sources
 		// The construction-and-initialization is a local async function so the synchronous disposed-guard above
 		// runs eagerly; it captures `__s` and `cancellationToken`. Deferred members are wired before the owner's
 		// own disposal registration, so a dependency first built during wiring registers earlier and is disposed
-		// later than this owner (reverse teardown order). A failed wiring or InitializeAsync faults the memoized
+		// later than this owner (reverse teardown order). A failed wiring or initializer faults the memoized
 		// task, which the resolver evicts, so a later call retries; the constructed instance is disposed on that
 		// failure (see EmitGuardedWiringAndInit) rather than leaking, since it is registered only on success.
 		Indent(builder, depth + 1).Append("async ").Append(task).Append('<').Append(type).Append("> ").Append(creator).AppendLine("()");
@@ -598,7 +598,7 @@ internal static partial class Sources
 	}
 
 	/// <summary>
-	///     Wires the deferred members, runs <c>OnActivated</c> and awaits <c>InitializeAsync</c> for a freshly built
+	///     Wires the deferred members, runs <c>OnActivated</c> and awaits the async initializers for a freshly built
 	///     <c>created</c> instance, then registers it for disposal and queues <c>OnRelease</c>. Shared by the
 	///     transient and memoized async resolvers so both handle failure identically. For a disposable instance,
 	///     wiring, activation and initialization run inside a <c>try</c> whose <c>catch</c> disposes <c>created</c>
@@ -612,7 +612,7 @@ internal static partial class Sources
 		{
 			emitDeferred?.Invoke(depth);
 			EmitActivation(builder, depth, instance, "created", context, asynchronous: true);
-			EmitAsyncInitialization(builder, depth, instance, "created");
+			EmitAsyncInitialization(builder, depth, instance, "created", context);
 			EmitFreshReleaseRegistration(builder, depth, instance, context, asynchronous: true);
 			return;
 		}
@@ -623,7 +623,7 @@ internal static partial class Sources
 		// OnActivated runs post-construction, before initialization; inside the guarded try, so a throwing
 		// activation tears the constructed instance down (like a throwing wiring/init) rather than leaking it.
 		EmitActivation(builder, depth + 1, instance, "created", context, asynchronous: true);
-		EmitAsyncInitialization(builder, depth + 1, instance, "created");
+		EmitAsyncInitialization(builder, depth + 1, instance, "created", context);
 		Indent(builder, depth).AppendLine("}");
 		Indent(builder, depth).AppendLine("catch (global::System.Exception __failure)");
 		Indent(builder, depth).AppendLine("{");
@@ -670,16 +670,19 @@ internal static partial class Sources
 	}
 
 	/// <summary>
-	///     Awaits the instance's own <c>IAsyncInitializable.InitializeAsync</c> when its implementation is
-	///     async-initialized (an instance that is only async-tainted through a dependency has nothing of its
+	///     Awaits each of the instance's own async initializers in order, called through the convention type so an
+	///     explicit interface implementation or an override runs, with its parameters resolved like those of an
+	///     asynchronous activation hook (an instance that is only async-tainted through a dependency has nothing of its
 	///     own to initialize; its async dependency was already awaited during construction).
 	/// </summary>
-	private static void EmitAsyncInitialization(StringBuilder builder, int depth, InstanceModel instance, string variable)
+	private static void EmitAsyncInitialization(StringBuilder builder, int depth, InstanceModel instance, string variable, EmitContext context)
 	{
-		if (instance.IsAsyncInitializable)
+		foreach (AsyncInitializerModel initializer in instance.AsyncInitializers.AsArray())
 		{
-			Indent(builder, depth).Append("await ((global::Awaiten.IAsyncInitializable)").Append(variable)
-				.AppendLine(").InitializeAsync(cancellationToken).ConfigureAwait(false);");
+			Indent(builder, depth).Append("await ((").Append(initializer.Type).Append(')').Append(variable).Append(").")
+				.Append(initializer.Method).Append('(')
+				.Append(HookArgumentList(initializer.Parameters, instance, context, asynchronous: true))
+				.AppendLine(").ConfigureAwait(false);");
 		}
 	}
 

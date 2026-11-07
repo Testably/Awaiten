@@ -342,7 +342,7 @@ partial class AwaitenGenerator
 	///     container initializes, disposes and shares it exactly as it would a type it constructs. Every other option of
 	///     the registration stays.
 	/// </summary>
-	private static RawRegistration ThroughGeneratedFactory(RawRegistration registration, IMethodSymbol factory)
+	private static RawRegistration ThroughGeneratedFactory(RawRegistration registration, IMethodSymbol factory, Compilation compilation)
 	{
 		INamedTypeSymbol implementation = registration.Implementation;
 		return registration with
@@ -352,7 +352,7 @@ partial class AwaitenGenerator
 			ProductionMember = factory.Name,
 			OnActivated = registration.OnActivated is { } activation ? RegistrationHookWrapperName(implementation, release: false, activation) : null,
 			OnRelease = registration.OnRelease is { } release ? RegistrationHookWrapperName(implementation, release: true, release) : null,
-			Traits = TraitsOf(implementation),
+			Traits = TraitsOf(implementation, DeclaredAsyncInitializers(registration.Origin!, compilation, null)),
 			TraitsExact = true,
 		};
 	}

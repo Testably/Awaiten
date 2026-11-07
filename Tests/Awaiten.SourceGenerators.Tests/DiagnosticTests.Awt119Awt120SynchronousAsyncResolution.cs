@@ -17,7 +17,9 @@ public partial class DiagnosticTests
 
 			                                       namespace MyCode;
 
-			                                       public sealed class Connection : IAsyncInitializable
+			                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
+			                                       public sealed class Connection : IInitializable
 			                                       {
 			                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 			                                       }
@@ -25,6 +27,7 @@ public partial class DiagnosticTests
 			                                       public sealed class Consumer { public Consumer(Func<Connection> connection) { } }
 
 			                                       [Container]
+			                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			                                       [Singleton<Consumer>]
 			                                       [Singleton<Connection>]
 			                                       public static partial class MyContainer
@@ -47,7 +50,9 @@ public partial class DiagnosticTests
 
 			                                       namespace MyCode;
 
-			                                       public sealed class Connection : IAsyncInitializable
+			                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
+			                                       public sealed class Connection : IInitializable
 			                                       {
 			                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 			                                       }
@@ -58,6 +63,7 @@ public partial class DiagnosticTests
 			                                       public sealed class Consumer { [Inject] public Func<Connection> Connection { get; set; } }
 
 			                                       [Container]
+			                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			                                       [Singleton<Consumer>]
 			                                       [Singleton<Connection>]
 			                                       public static partial class MyContainer
@@ -80,7 +86,9 @@ public partial class DiagnosticTests
 
 			                                       namespace MyCode;
 
-			                                       public sealed class Connection : IAsyncInitializable
+			                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
+			                                       public sealed class Connection : IInitializable
 			                                       {
 			                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 			                                       }
@@ -91,6 +99,7 @@ public partial class DiagnosticTests
 			                                       public sealed class Consumer { [Inject(Deferred = true)] public Func<Connection> Connection { get; set; } }
 
 			                                       [Container]
+			                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			                                       [Singleton<Consumer>]
 			                                       [Singleton<Connection>]
 			                                       public static partial class MyContainer
@@ -113,7 +122,9 @@ public partial class DiagnosticTests
 
 			                                       namespace MyCode;
 
-			                                       public sealed class Connection : IAsyncInitializable
+			                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
+			                                       public sealed class Connection : IInitializable
 			                                       {
 			                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 			                                       }
@@ -121,6 +132,7 @@ public partial class DiagnosticTests
 			                                       public sealed class Consumer { public Consumer(Lazy<Connection> connection) { } }
 
 			                                       [Container]
+			                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			                                       [Singleton<Consumer>]
 			                                       [Singleton<Connection>]
 			                                       public static partial class MyContainer
@@ -142,7 +154,9 @@ public partial class DiagnosticTests
 
 			                                       namespace MyCode;
 
-			                                       public sealed class Connection : IAsyncInitializable
+			                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
+			                                       public sealed class Connection : IInitializable
 			                                       {
 			                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 			                                       }
@@ -150,6 +164,7 @@ public partial class DiagnosticTests
 			                                       public sealed class Consumer { public Consumer(Owned<Connection> connection) { } }
 
 			                                       [Container]
+			                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			                                       [Singleton<Consumer>]
 			                                       [Transient<Connection>]
 			                                       public static partial class MyContainer
@@ -172,7 +187,9 @@ public partial class DiagnosticTests
 
 			                                       namespace MyCode;
 
-			                                       public sealed class Connection : IAsyncInitializable
+			                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
+			                                       public sealed class Connection : IInitializable
 			                                       {
 			                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 			                                       }
@@ -181,6 +198,7 @@ public partial class DiagnosticTests
 			                                       public sealed class Consumer { public Consumer(Func<Repository> repository) { } }
 
 			                                       [Container]
+			                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			                                       [Singleton<Consumer>]
 			                                       [Singleton<Repository>]
 			                                       [Singleton<Connection>]
@@ -203,7 +221,9 @@ public partial class DiagnosticTests
 
 			                                       namespace MyCode;
 
-			                                       public sealed class Connection : IAsyncInitializable
+			                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
+			                                       public sealed class Connection : IInitializable
 			                                       {
 			                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 			                                       }
@@ -211,6 +231,7 @@ public partial class DiagnosticTests
 			                                       public sealed class Consumer { public Consumer(Connection connection) { } }
 
 			                                       [Container]
+			                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			                                       [Singleton<Consumer>]
 			                                       [Singleton<Connection>]
 			                                       public static partial class MyContainer
@@ -235,7 +256,9 @@ public partial class DiagnosticTests
 
 			                                       namespace MyCode;
 
-			                                       public sealed class Connection : IAsyncInitializable
+			                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
+			                                       public sealed class Connection : IInitializable
 			                                       {
 			                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 			                                       }
@@ -243,6 +266,7 @@ public partial class DiagnosticTests
 			                                       public sealed class Consumer { public Consumer(Func<Connection> connection) { } }
 
 			                                       [Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
+			                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			                                       [Singleton<Consumer>]
 			                                       [Singleton<Connection>]
 			                                       public static partial class MyContainer
@@ -266,7 +290,9 @@ public partial class DiagnosticTests
 
 			                                       namespace MyCode;
 
-			                                       public sealed class Connection : IAsyncInitializable
+			                                       public interface IInitializable { Task InitializeAsync(CancellationToken cancellationToken); }
+
+			                                       public sealed class Connection : IInitializable
 			                                       {
 			                                           public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 			                                       }
@@ -274,6 +300,7 @@ public partial class DiagnosticTests
 			                                       public sealed class Service { }
 
 			                                       [Container]
+			                                       [AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			                                       [Singleton<Connection>]
 			                                       [Singleton<Service>(OnActivated = nameof(Started))]
 			                                       public static partial class MyContainer

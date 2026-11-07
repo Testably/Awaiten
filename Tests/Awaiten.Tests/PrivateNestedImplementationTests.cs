@@ -640,6 +640,7 @@ public sealed partial class PrivateNestedImplementationTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Tracker>]
 	[Singleton<FakeClock, IClock>]
 	[Scoped<FakeLedger, ILedger>]
@@ -663,6 +664,7 @@ public sealed partial class PrivateNestedImplementationTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<SystemClock, IClock>]
 	[Singleton<FakeClock, IClock>]
 	[Singleton<KeyedClock, IClock>(Key = "keyed")]
@@ -679,10 +681,12 @@ public sealed partial class PrivateNestedImplementationTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<SystemClock, IClock>]
 	public static partial class BaseShop;
 
 	[Container(Extends = typeof(BaseShop))]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<FakeClock, IClock>]
 	public static partial class ExtendingTestShop
 	{
@@ -690,10 +694,12 @@ public sealed partial class PrivateNestedImplementationTests
 	}
 
 	[Module]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<SystemClock, IClock>(Fallback = Fallback.Silent)]
 	public static partial class DefaultClockModule;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Import(typeof(DefaultClockModule))]
 	[Singleton<FakeClock, IClock>]
 	public static partial class OverridingShop
@@ -702,10 +708,11 @@ public sealed partial class PrivateNestedImplementationTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<WarmClock, IClock>]
 	public static partial class AsyncShop
 	{
-		private sealed class WarmClock : IClock, IWarm, IAsyncInitializable
+		private sealed class WarmClock : IClock, IWarm, IInitializable
 		{
 			public bool Initialized { get; private set; }
 
@@ -718,10 +725,11 @@ public sealed partial class PrivateNestedImplementationTests
 	}
 
 	[Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<WarmClock, IClock>]
 	public static partial class SyncAfterInitShop
 	{
-		private sealed class WarmClock : IClock, IWarm, IAsyncInitializable
+		private sealed class WarmClock : IClock, IWarm, IInitializable
 		{
 			public bool Initialized { get; private set; }
 
@@ -734,6 +742,7 @@ public sealed partial class PrivateNestedImplementationTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Tracker>]
 	[Scoped<DisposableLedger, ILedger>]
 	[Scoped<AsyncDisposableReceipt, IReceipt>]
@@ -763,6 +772,7 @@ public sealed partial class PrivateNestedImplementationTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Tracker>]
 	[Singleton<FakeClock, IClock>(OnActivated = nameof(Activate), OnRelease = nameof(Release))]
 	public static partial class HookShop
@@ -775,6 +785,7 @@ public sealed partial class PrivateNestedImplementationTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<FakeClock, IClock>]
 	[Decorate<LoggingClock, IClock>]
 	public static partial class DecoratedShop
@@ -783,6 +794,7 @@ public sealed partial class PrivateNestedImplementationTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<SystemClock, IClock>]
 	[Decorate<AuditingClock, IClock>]
 	public static partial class PrivateDecoratorShop
@@ -794,6 +806,7 @@ public sealed partial class PrivateNestedImplementationTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<SystemClock, IClock>]
 	[Composite<CompositeClock, IClock>]
 	public static partial class PrivateCompositeShop
@@ -805,6 +818,7 @@ public sealed partial class PrivateNestedImplementationTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<SystemClock>]
 	[Singleton<SystemClock, IClock>(Key = "keyed")]
 	[Singleton<FactoryClock, IClock>(Factory = nameof(CreateClock))]
@@ -833,6 +847,7 @@ public sealed partial class PrivateNestedImplementationTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<DualClock, IClock>]
 	[Singleton<DualClock, ITimer>]
 	[Transient(typeof(Repository<>), typeof(IRepository<>))]
@@ -845,6 +860,7 @@ public sealed partial class PrivateNestedImplementationTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Tracker>]
 	[Transient<CategoryLogger, ICategorized>(Factory = nameof(CreateLogger))]
 	[Transient<LoggerUser>]
@@ -897,6 +913,7 @@ public sealed partial class PrivateNestedImplementationTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<CategoryLogger, ICategorized>(Factory = nameof(CreateLoggerAsync))]
 	[Transient<LoggerUser>]
 	[Singleton<WarmClock, IClock>]
@@ -910,7 +927,7 @@ public sealed partial class PrivateNestedImplementationTests
 			public string Category => category;
 		}
 
-		private sealed class WarmClock : IClock, IWarm, IAsyncInitializable
+		private sealed class WarmClock : IClock, IWarm, IInitializable
 		{
 			public bool Initialized { get; private set; }
 
@@ -923,6 +940,7 @@ public sealed partial class PrivateNestedImplementationTests
 	}
 
 	[Module]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Greeter, IGreeter>]
 	public static partial class GreeterModule
 	{
@@ -933,11 +951,13 @@ public sealed partial class PrivateNestedImplementationTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Import(typeof(GreeterModule))]
 	[Singleton<Tracker>]
 	public static partial class ModuleShop;
 
 	[Module]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Greeter, IGreeter>(OnActivated = nameof(Activate), OnRelease = nameof(Release))]
 	public static partial class HookedGreeterModule
 	{
@@ -949,6 +969,7 @@ public sealed partial class PrivateNestedImplementationTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Import(typeof(HookedGreeterModule))]
 	[Singleton<Tracker>]
 	public static partial class ModuleHookShop;
@@ -966,6 +987,7 @@ public sealed partial class PrivateNestedImplementationTests
 		}
 
 		[Module]
+		[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		[Singleton<EnclosedGreeter, IGreeter>(OnActivated = nameof(Activate), OnRelease = nameof(Release))]
 		public static partial class EnclosedGreeterModule
 		{
@@ -977,22 +999,26 @@ public sealed partial class PrivateNestedImplementationTests
 		public static partial class Deep
 		{
 			[Module]
+			[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 			[Singleton<DeepGreeter, IGreeter>]
 			public static partial class DeepGreeterModule;
 		}
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Import(typeof(GreeterFakes.EnclosedGreeterModule))]
 	[Singleton<Tracker>]
 	public static partial class EnclosedModuleShop;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Import(typeof(GreeterFakes.Deep.DeepGreeterModule))]
 	[Singleton<Tracker>]
 	public static partial class DeeplyEnclosedModuleShop;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Tracker>]
 	[Scan<IPlugin>(As = ScanAs.Marker, Lifetime = Lifetime.Singleton, NamePatterns = new[] { "!ModulePlugin", }, OnActivated = nameof(Activate))]
 	public static partial class ScanShop
@@ -1008,6 +1034,7 @@ public sealed partial class PrivateNestedImplementationTests
 	}
 
 	[Module]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Scan<IPlugin>(As = ScanAs.Marker, Lifetime = Lifetime.Singleton, OnActivated = nameof(Activate))]
 	public static partial class ModulePluginModule
 	{
@@ -1020,6 +1047,7 @@ public sealed partial class PrivateNestedImplementationTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Import(typeof(ModulePluginModule))]
 	[Singleton<Tracker>]
 	public static partial class ModuleScanShop;
@@ -1032,6 +1060,7 @@ public sealed partial class PrivateNestedImplementationTests
 		}
 
 		[Module]
+		[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 		[Scan<IEnclosedPlugin>(As = ScanAs.Marker, Lifetime = Lifetime.Singleton, OnActivated = nameof(Activate))]
 		public static partial class EnclosedPluginModule
 		{
@@ -1040,6 +1069,7 @@ public sealed partial class PrivateNestedImplementationTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Import(typeof(PluginFakes.EnclosedPluginModule))]
 	[Singleton<Tracker>]
 	public static partial class EnclosedScanShop;

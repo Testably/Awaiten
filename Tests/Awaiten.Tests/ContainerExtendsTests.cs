@@ -455,7 +455,7 @@ public partial class ContainerExtendsTests
 		public void Dispose() => Disposed = true;
 	}
 
-	public sealed class Inventory : IAsyncInitializable
+	public sealed class Inventory : IInitializable
 	{
 		public bool Loaded { get; private set; }
 
@@ -496,21 +496,25 @@ public partial class ContainerExtendsTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[ImportService<ISettings>]
 	[Singleton<SystemClock, IClock>]
 	[Singleton<SettingsReader>]
 	public static partial class HostedShop;
 
 	[Container(Extends = typeof(HostedShop))]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<FakeSettings, ISettings>]
 	[ImportService<IClock>]
 	public static partial class HostedTestShop;
 
 	[Module]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<BankGateway, IPaymentGateway>]
 	public static class PaymentModule;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Import(typeof(PaymentModule))]
 	[Singleton<SystemClock, IClock>]
 	[Singleton<Barista>]
@@ -544,6 +548,7 @@ public partial class ContainerExtendsTests
 	}
 
 	[Container(Extends = typeof(ProductionShop))]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<FakeClock, IClock>]
 	[Singleton<FakeGateway, IPaymentGateway>]
 	[Singleton<IRandom>(Instance = nameof(FixedRandom))]
@@ -560,22 +565,27 @@ public partial class ContainerExtendsTests
 	}
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<SystemClock, IClock>]
 	[Singleton<ConnectionWarmup, IWarmup>(Eager = true)]
 	public static partial class EagerShop;
 
 	[Container(Extends = typeof(EagerShop))]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<FakeWarmup, IWarmup>]
 	public static partial class EagerTestShop;
 
 	[Container(AsyncSafety = AsyncSafety.SyncAfterInit)]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<Inventory>]
 	public static partial class LenientShop;
 
 	[Container(Extends = typeof(LenientShop))]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	public static partial class LenientTestShop;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<SystemClock, IClock>]
 	[Singleton<UtcClock, IClock>(WhenInjectedInto = typeof(Auditor))]
 	[Singleton<Barista>]
@@ -583,32 +593,39 @@ public partial class ContainerExtendsTests
 	public static partial class ContextShop;
 
 	[Container(Extends = typeof(ContextShop))]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<FakeClock, IClock>(WhenInjectedInto = typeof(Auditor))]
 	public static partial class ContextTestShop;
 
 	[Container(Extends = typeof(ContextShop))]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<FakeClock, IClock>]
 	public static partial class PlainContextTestShop;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton(typeof(Repository<>), typeof(IRepository<>))]
 	[Singleton<RepositoryUser>]
 	public static partial class OpenShop;
 
 	[Container(Extends = typeof(OpenShop))]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton(typeof(InMemoryRepository<>), typeof(IRepository<>))]
 	public static partial class OpenTestShop;
 
 	[Container]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Transient<PlainFormatter, IFormatter>]
 	[Decorate<LoggingFormatter, IFormatter>(Order = 10)]
 	public static partial class DecoratedShop;
 
 	[Container(Extends = typeof(DecoratedShop))]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Decorate<TracingFormatter, IFormatter>]
 	public static partial class DecoratedTestShop;
 
 	[Container(Extends = typeof(SupportBaseContainer))]
+	[AsyncInitializer<IInitializable>(nameof(IInitializable.InitializeAsync))]
 	[Singleton<FakeSupportClock, ISupportBaseClock>]
 	public static partial class SupportTestContainer;
 }
