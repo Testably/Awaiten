@@ -99,18 +99,22 @@ internal readonly record struct FactoryParameter(string Type, string Name);
 /// <summary>
 ///     One generated lifecycle-hook wrapper the module emits beside a match's factory. The module resolves and
 ///     (for a generic hook) closes its own <c>OnActivated</c>/<c>OnRelease</c> hook at its build, then emits a
-///     <c>public static void</c> wrapper so a consumer can run it without naming the module's (possibly
+///     <c>public static</c> wrapper so a consumer can run it without naming the module's (possibly
 ///     <c>internal</c>) hook. The wrapper takes the accessible exposure interface as its first parameter, casts it
 ///     to <see cref="InstanceCast" /> (the concrete implementation, or the closed marker form for a generic hook)
 ///     and forwards it, plus <see cref="Parameters" /> (mirrored like factory parameters and resolved from the
 ///     consumer's graph), to <see cref="Target" /> - the user hook, carrying its bound type arguments for a generic
 ///     one. The consumer reads <see cref="WrapperName" /> off the <c>[GeneratedScanRegistration]</c> and runs it
-///     through the ordinary hook pipeline. A hook with a <see cref="SkipReason" /> gets no wrapper, because an assembly
-///     granted <c>InternalsVisibleTo</c> calls it directly: <see cref="WrapperName" /> is then the user hook's own name.
+///     through the ordinary hook pipeline. <see cref="ReturnType" /> is the user hook's (<c>void</c> for most), so the
+///     wrapper of an asynchronous hook returns its task, and forwards a mirrored <c>CancellationToken</c> parameter,
+///     for the consumer to await; a <c>void</c> wrapper would silently discard the task.
+///     A hook with a <see cref="SkipReason" /> gets no wrapper, because an assembly granted <c>InternalsVisibleTo</c>
+///     calls it directly: <see cref="WrapperName" /> is then the user hook's own name.
 /// </summary>
 internal sealed record ModuleHook(
 	string WrapperName,
 	string Target,
 	string InstanceCast,
 	EquatableArray<FactoryParameter> Parameters,
+	string ReturnType,
 	string? SkipReason = null);

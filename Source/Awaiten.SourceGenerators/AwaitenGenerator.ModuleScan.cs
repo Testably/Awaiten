@@ -488,13 +488,23 @@ partial class AwaitenGenerator
 		}
 
 		IMethodSymbol hook = matches[0];
+		if (UnsupportedAsyncHook(hook, release, context.Compilation) is { } reason)
+		{
+			context.Diagnostics.Add(new DiagnosticInfo(
+				Diagnostics.UnsupportedAsyncLifecycleHook,
+				LocationInfo.From(location),
+				new EquatableArray<string>([Display(typeName), hookName, reason,])));
+			return null;
+		}
+
 		string instanceCast = hook.Parameters[0].Type.ToDisplayString(FullyQualified);
+		string returnType = hook.ReturnType.ToDisplayString(FullyQualified);
 		List<DiagnosticInfo> rejections = new();
 		if (!TryMirrorHookParameters(request.Subject, hook, release, location, rejections, out EquatableArray<FactoryParameter> parameters))
 		{
-			if (request.Skippable && HookSkipReason(rejections[0], hook, release) is { } reason)
+			if (request.Skippable && HookSkipReason(rejections[0], hook, release) is { } skipReason)
 			{
-				return new ResolvedModuleHook(hookName, new ModuleHook(hookName, hookName, instanceCast, default, reason));
+				return new ResolvedModuleHook(hookName, new ModuleHook(hookName, hookName, instanceCast, default, returnType, skipReason));
 			}
 
 			context.Diagnostics.AddRange(rejections);
@@ -507,13 +517,13 @@ partial class AwaitenGenerator
 		string target = hook.TypeArguments.Length == 0
 			? hookName
 			: $"{hookName}<{string.Join(", ", hook.TypeArguments.Select(argument => argument.ToDisplayString(FullyQualified)))}>";
-		return new ResolvedModuleHook(hookName, new ModuleHook(request.WrapperName, target, instanceCast, parameters));
+		return new ResolvedModuleHook(hookName, new ModuleHook(request.WrapperName, target, instanceCast, parameters, returnType));
 	}
 
 	/// <summary>
 	///     The usable overloads of a module hook (see <see cref="ResolveModuleHook" />): the module's own
-	///     <c>static void</c> methods of that name whose first parameter accepts the match (a non-generic one
-	///     directly, a generic one bound to exactly one closed marker form), plus separately the closed-form sets of
+	///     static methods of that name returning what a hook may (see <see cref="IsHookReturn" />) whose first
+	///     parameter accepts the match (a non-generic one directly, a generic one bound to exactly one closed marker form), plus separately the closed-form sets of
 	///     any generic overload several forms could bind (AWT198 when it is the only candidate). A hook must be
 	///     accessible from a separate type in the module's assembly (<c>internal</c> or wider): the wrapper could
 	///     call even a <c>private</c> hook, but a same-compilation container binding the hook directly could not, so a
@@ -539,7 +549,8 @@ partial class AwaitenGenerator
 			// hook directly, so a private hook usable one way and AWT164 the other would be inconsistent; a private
 			// method is not a usable hook, falling through to AWT164 in both. A type hidden in the module is
 			// the exception: every container runs its hooks through the wrapper, so a private hook is usable there.
-			if (member is not IMethodSymbol { MethodKind: MethodKind.Ordinary, IsStatic: true, ReturnsVoid: true, Parameters.Length: >= 1, } method
+			if (member is not IMethodSymbol { MethodKind: MethodKind.Ordinary, IsStatic: true, Parameters.Length: >= 1, } method
+			    || !IsHookReturn(method, compilation)
 			    || (!wrappedEverywhere && !compilation.IsSymbolAccessibleWithin(method, context.Module.ContainingAssembly))
 			    || method.Parameters.Any(parameter => parameter.RefKind != RefKind.None))
 			{

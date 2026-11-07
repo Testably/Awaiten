@@ -322,7 +322,7 @@ public class ModuleProductionTests
 		                                       }
 		                                       """);
 
-		await That(result.Diagnostics).Contains("*AWT164*the module 'MyCode.ClockModule' has no accessible static void method 'Started'*").AsWildcard()
+		await That(result.Diagnostics).Contains("*AWT164*the module 'MyCode.ClockModule' has no accessible static method 'Started'*").AsWildcard()
 			.Because("a private module hook cannot be called from the generated container, so it is not a usable hook");
 	}
 
@@ -343,7 +343,7 @@ public class ModuleProductionTests
 		                                       }
 		                                       """);
 
-		await That(result.Diagnostics).Contains("*AWT164*the container has no accessible static void method 'Started'*").AsWildcard()
+		await That(result.Diagnostics).Contains("*AWT164*the container has no accessible static method 'Started'*").AsWildcard()
 			.Because("the container's own registrations keep the container wording");
 	}
 }

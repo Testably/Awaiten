@@ -279,7 +279,8 @@ internal static class Diagnostics
 
 	/// <summary>
 	///     A synchronous <c>Func&lt;T&gt;</c> / <c>Lazy&lt;T&gt;</c> / <c>Owned&lt;T&gt;</c> relationship
-	///     targets a service whose implementation is <c>IAsyncInitializable</c>: it would resolve the service
+	///     targets a service that is itself async-initialized (<c>IAsyncInitializable</c>, produced by an async factory or
+	///     activated by an asynchronous <c>OnActivated</c> hook): it would resolve the service
 	///     without awaiting its initialization. Resolve it through <c>ResolveAsync</c>, or set
 	///     <c>AsyncSafety.SyncAfterInit</c> on the <c>[Container]</c> to allow synchronous resolution after warm-up.
 	/// </summary>
@@ -656,7 +657,8 @@ internal static class Diagnostics
 
 	/// <summary>
 	///     A cycle of <c>[Inject(Deferred = true)]</c> properties includes an async-tainted participant (one that
-	///     is <c>IAsyncInitializable</c>, produced by an async factory, or reaches one). A deferred property
+	///     is <c>IAsyncInitializable</c>, produced by an async factory, activated by an asynchronous <c>OnActivated</c>
+	///     hook, or reaches one). A deferred property
 	///     breaks a cycle only when a re-entrant resolve returns the already-cached instance; an async resolver
 	///     publishes its memoized task only after that re-entrant resolve has returned, so the cycle overflows the
 	///     stack or deadlocks at runtime rather than terminating. Break the cycle, or make its participants
@@ -665,7 +667,7 @@ internal static class Diagnostics
 	public static readonly DiagnosticDescriptor DeferredAsyncCycle = new(
 		"AWT146",
 		"Non-terminating deferred async cycle",
-		"Deferred property cycle through an async-initialized service detected: {0}. A deferred property breaks a cycle only when a re-entrant resolve returns the already-cached instance; an async resolver publishes its memoized task only after that re-entrant resolve has returned, so this cycle would overflow the stack or deadlock at runtime. Break the cycle, or make its participants synchronous (not IAsyncInitializable and not dependent on an async service).",
+		"Deferred property cycle through an async-initialized service detected: {0}. A deferred property breaks a cycle only when a re-entrant resolve returns the already-cached instance; an async resolver publishes its memoized task only after that re-entrant resolve has returned, so this cycle would overflow the stack or deadlock at runtime. Break the cycle, or make its participants synchronous (not IAsyncInitializable, without an asynchronous OnActivated hook, and not dependent on an async service).",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
@@ -950,13 +952,13 @@ internal static class Diagnostics
 
 	/// <summary>
 	///     An <c>OnActivated</c> / <c>OnRelease</c> registration names a member that is not a usable lifecycle
-	///     hook on the container: there is no accessible <c>static void</c> method of that name accepting the
-	///     registered implementation type.
+	///     hook on the container: there is no accessible static method of that name returning <c>void</c>,
+	///     <c>Task</c> or <c>ValueTask</c> and accepting the registered implementation type.
 	/// </summary>
 	public static readonly DiagnosticDescriptor InvalidLifecycleHook = new(
 		"AWT164",
 		"Invalid lifecycle hook",
-		"'{0}' cannot use the lifecycle hook '{1}': {2} has no accessible static void method '{1}' accepting '{0}'",
+		"'{0}' cannot use the lifecycle hook '{1}': {2} has no accessible static method '{1}' accepting '{0}' and returning void, Task or ValueTask",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
@@ -1926,6 +1928,19 @@ internal static class Diagnostics
 		"AWT231",
 		"Module registration has no generated factory or hook wrapper",
 		"The imported module '{0}' registers '{1}', which this container cannot construct, and the module's assembly generated no {2} for it because {3}; grant this assembly InternalsVisibleTo in the module's assembly, or {4}",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A lifecycle hook is asynchronous in a way the container cannot run: an <c>OnActivated</c> hook returns a
+	///     result (<c>Task&lt;T&gt;</c> or <c>ValueTask&lt;T&gt;</c>) the container would discard, or an
+	///     <c>OnRelease</c> hook returns a task that teardown would never await.
+	/// </summary>
+	public static readonly DiagnosticDescriptor UnsupportedAsyncLifecycleHook = new(
+		"AWT232",
+		"Unsupported asynchronous lifecycle hook",
+		"'{0}' cannot use the lifecycle hook '{1}': {2}",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);

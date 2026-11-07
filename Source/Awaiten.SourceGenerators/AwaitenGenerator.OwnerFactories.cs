@@ -78,7 +78,7 @@ partial class AwaitenGenerator
 					? name
 					: $"{name}<{string.Join(", ", hook.TypeArguments.Select(argument => argument.ToDisplayString(FullyQualified)))}>";
 				hooks.Add(new RegistrationHook(
-					new ModuleHook(RegistrationHookWrapperName(info.Symbol, release, name), target, hook.Parameters[0].Type.ToDisplayString(FullyQualified), MirroredParameters(hook.Parameters.Skip(1))),
+					new ModuleHook(RegistrationHookWrapperName(info.Symbol, release, name), target, hook.Parameters[0].Type.ToDisplayString(FullyQualified), MirroredParameters(hook.Parameters.Skip(1)), hook.ReturnType.ToDisplayString(FullyQualified)),
 					release));
 			}
 		}

@@ -62,22 +62,33 @@ internal static partial class Sources
 	///     exactly like a factory method. Any parameters after the instance are graph dependencies resolved inline
 	///     here, the same way a constructor argument is (awaited on the async path when async-tainted). Emitted only
 	///     on the success path (a raced fresh resolve throws before reaching it), so an instance that was torn down
-	///     during a concurrent dispose is never activated. Nothing when the instance names no activation hook.
+	///     during a concurrent dispose is never activated. Nothing when the instance names no activation hook. An
+	///     asynchronous hook is awaited; it makes the instance async-tainted, so it is only ever emitted on the async path.
 	/// </summary>
 	private static void EmitActivation(StringBuilder builder, int depth, InstanceModel instance, string variable, EmitContext context, bool asynchronous)
 	{
-		if (instance.OnActivated is not null)
+		if (instance.OnActivated is null)
 		{
-			Indent(builder, depth).Append(instance.OnActivated).Append('(').Append(variable)
-				.Append(HookArguments(instance.ActivationParameters, instance, context, asynchronous)).AppendLine(");");
+			return;
 		}
+
+		Indent(builder, depth);
+		if (instance.IsAsyncActivation)
+		{
+			builder.Append("await ");
+		}
+
+		builder.Append(instance.OnActivated).Append('(').Append(variable)
+			.Append(HookArguments(instance.ActivationParameters, instance, context, asynchronous))
+			.AppendLine(instance.IsAsyncActivation ? ").ConfigureAwait(false);" : ");");
 	}
 
 	/// <summary>
 	///     The comma-prefixed argument list for a lifecycle hook's graph-resolved parameters (those after the
 	///     instance), each resolved through <see cref="DependencyValue" /> exactly like a constructor argument.
 	///     Empty when the hook takes only the instance. The instance presents its own <c>typeof(…)</c> as the
-	///     requesting type to any requesting-type factory a parameter consumes, mirroring construction.
+	///     requesting type to any requesting-type factory a parameter consumes, mirroring construction. An asynchronous
+	///     hook's <c>CancellationToken</c> parameter receives the resolve-time token.
 	/// </summary>
 	private static string HookArguments(EquatableArray<ParameterModel> parameters, InstanceModel instance, EmitContext context, bool asynchronous)
 	{
@@ -91,7 +102,9 @@ internal static partial class Sources
 		StringBuilder arguments = new();
 		foreach (ParameterModel parameter in hookParameters)
 		{
-			arguments.Append(", ").Append(DependencyValue(parameter, context.Instances, context.Names, context.ServiceToIndex, asynchronous, requestingType));
+			arguments.Append(", ").Append(parameter.Kind == DependencyKind.CancellationToken
+				? "cancellationToken"
+				: DependencyValue(parameter, context.Instances, context.Names, context.ServiceToIndex, asynchronous, requestingType));
 		}
 
 		return arguments.ToString();

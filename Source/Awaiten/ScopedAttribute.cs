@@ -75,9 +75,10 @@ public sealed class ScopedAttribute : Attribute
 	public Fallback Fallback { get; set; }
 
 	/// <summary>
-	///     The name of a <c>static void</c> method on the container accepting the implementation, invoked once the
+	///     The name of a static method on the container accepting the implementation, invoked once the
 	///     instance has been constructed. For an open generic the method may be generic over the service's type
-	///     arguments.
+	///     arguments. A method returning <c>Task</c> or <c>ValueTask</c> is awaited and makes the service
+	///     async-initialized.
 	/// </summary>
 	public string? OnActivated { get; set; }
 
@@ -144,9 +145,10 @@ public sealed class ScopedAttribute<TImplementation> : Attribute
 	public Fallback Fallback { get; set; }
 
 	/// <summary>
-	///     The name of a <c>static void</c> method on the container accepting a
+	///     The name of a static method on the container accepting a
 	///     <typeparamref name="TImplementation" />, invoked once the instance has been constructed - a
-	///     synchronous post-construction initialization hook.
+	///     post-construction initialization hook. A method returning <c>Task</c> or <c>ValueTask</c> is awaited and
+	///     makes the service async-initialized.
 	/// </summary>
 	public string? OnActivated { get; set; }
 
@@ -211,9 +213,10 @@ public sealed class ScopedAttribute<TImplementation, TService> : Attribute
 	public Fallback Fallback { get; set; }
 
 	/// <summary>
-	///     The name of a <c>static void</c> method on the container accepting a
+	///     The name of a static method on the container accepting a
 	///     <typeparamref name="TImplementation" />, invoked once the instance has been constructed - a
-	///     synchronous post-construction initialization hook.
+	///     post-construction initialization hook. A method returning <c>Task</c> or <c>ValueTask</c> is awaited and
+	///     makes the service async-initialized.
 	/// </summary>
 	public string? OnActivated { get; set; }
 

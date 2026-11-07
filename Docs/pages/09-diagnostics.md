@@ -596,7 +596,7 @@ public static partial class CoffeeShop
 }
 ```
 
-**Fix:** Point the hook at an accessible `static void` method whose first parameter accepts the implementation: `private static void Ready(EspressoMachine machine) { }`.
+**Fix:** Point the hook at an accessible static method that returns `void`, `Task` or `ValueTask` and whose first parameter accepts the implementation: `private static void Ready(EspressoMachine machine) { }`.
 
 ### AWT165
 
@@ -693,6 +693,26 @@ public static partial class CoffeeShop
 ```
 
 **Fix:** Take the dependency directly: `ReturnToPool(Buffer buffer, BufferPool pool)`.
+
+### AWT232
+
+:::danger[Error]
+A lifecycle hook is asynchronous in a way the container cannot run.
+:::
+
+The container awaits an `OnActivated` hook that returns `Task` or `ValueTask`. A hook that returns `Task<T>` or `ValueTask<T>` has a result the container would throw away. Teardown does not await an `OnRelease` hook, so a release hook that returns `Task` or `ValueTask` would never finish its work.
+
+```csharp expect=AWT232
+[Container]
+[Singleton<PaymentTerminal>(OnActivated = nameof(ConnectAsync), OnRelease = nameof(DisconnectAsync))]
+public static partial class CoffeeShop
+{
+    private static Task<bool> ConnectAsync(PaymentTerminal terminal) => Task.FromResult(true);   // the result has nowhere to go
+    private static Task DisconnectAsync(PaymentTerminal terminal) => Task.CompletedTask;   // teardown does not await it
+}
+```
+
+**Fix:** Return `Task` or `ValueTask` from an `OnActivated` hook. Return `void` from an `OnRelease` hook, and put asynchronous cleanup in the service's `DisposeAsync`.
 
 ## Runtime arguments
 
@@ -1248,7 +1268,7 @@ public sealed class B { [Inject(Deferred = true)] public A? A { get; set; } }
 public static partial class CoffeeShop;
 ```
 
-**Fix:** Break the cycle, or make every participant synchronous: neither `IAsyncInitializable` nor dependent on an async service.
+**Fix:** Break the cycle, or make every participant synchronous: not `IAsyncInitializable`, without an asynchronous `OnActivated` hook, and not dependent on an async service.
 
 ### AWT147
 
