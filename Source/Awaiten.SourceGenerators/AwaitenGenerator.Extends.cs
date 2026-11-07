@@ -261,11 +261,11 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     The reason an inherited composite or open generic registration private to the base cannot be built
+	///     The reason an inherited open generic registration private to the base cannot be built
 	///     by the extending container.
 	/// </summary>
 	private const string UnsupportedPrivateShape =
-		"the base generates factories only for constructed registrations and decorators of its private implementations, not for a composite or open generic registration";
+		"the base generates factories only for constructed registrations, decorators and composites of its private implementations, not for an open generic registration";
 
 	/// <summary>
 	///     Rewrites every inherited registration of an implementation private to the base, or to a class containing the

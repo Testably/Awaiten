@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using Awaiten.Tests.ContainerSupport;
 using Awaiten.Tests.Support;
 
@@ -32,6 +34,21 @@ public sealed partial class RegistrationFactoryShapeTests
 	public sealed class Bell : IBell
 	{
 		public IBell? Inner => null;
+	}
+
+	public interface IChime
+	{
+		int Count { get; }
+	}
+
+	public sealed class HighChime : IChime
+	{
+		public int Count => 1;
+	}
+
+	public sealed class LowChime : IChime
+	{
+		public int Count => 1;
 	}
 
 	public sealed class ModuleInAnotherAssembly
@@ -95,6 +112,16 @@ public sealed partial class RegistrationFactoryShapeTests
 			await That(container.Resolve<IShapeBell>()).IsSameAs(bell)
 				.Because("the decorator takes the lifetime of the singleton it wraps");
 		}
+
+		[Test]
+		public async Task AnInternalComposite_FrontsTheOtherRegistrations()
+		{
+			using ShapeContainer.Root container = new();
+
+			await That(container.Resolve<IShapeChime>().Count).IsEqualTo(2)
+				.Because("the composite factory receives the collection of the two other chimes");
+			await That(container.Resolve<IEnumerable<IShapeChime>>()).HasCount(2);
+		}
 	}
 
 	public sealed class ModuleHidingTheImplementation
@@ -121,6 +148,14 @@ public sealed partial class RegistrationFactoryShapeTests
 
 			await That(bell.GetType().Name).IsEqualTo("LoudBell");
 			await That(bell.Inner).IsExactly<Bell>();
+		}
+
+		[Test]
+		public async Task APrivateComposite_FrontsTheOtherRegistrations()
+		{
+			using HiddenContainer.Root container = new();
+
+			await That(container.Resolve<IChime>().Count).IsEqualTo(2);
 		}
 	}
 
@@ -150,6 +185,14 @@ public sealed partial class RegistrationFactoryShapeTests
 		}
 
 		[Test]
+		public async Task AnExtendingContainerInTheSameAssembly_AppliesThePrivateComposite()
+		{
+			using TestShop.Root shop = new();
+
+			await That(shop.Resolve<IChime>().Count).IsEqualTo(2);
+		}
+
+		[Test]
 		public async Task AnExtendingContainerInAnotherAssembly_BuildsThePrivateImplementation()
 		{
 			using SupportShapeTestContainer.Root shop = new();
@@ -161,6 +204,8 @@ public sealed partial class RegistrationFactoryShapeTests
 				.Because("the base's internal factory takes the keyed parameter and the injected property");
 			await That(report.GetType().Name).IsEqualTo("AuditedReport")
 				.Because("the base's private decorator wraps the report through its generated factory");
+			await That(shop.Resolve<IShapeBaseChime>().Count).IsEqualTo(2)
+				.Because("the base's private composite fronts both chimes through its generated factory");
 		}
 
 		[Test]
@@ -190,8 +235,16 @@ public sealed partial class RegistrationFactoryShapeTests
 	[Singleton<HiddenGreetingModule.Greeter, IFormalGreeter>]
 	[Singleton<Bell, IBell>]
 	[Decorate<HiddenGreetingModule.LoudBell, IBell>]
+	[Transient<HighChime, IChime>]
+	[Transient<LowChime, IChime>]
+	[Composite<HiddenGreetingModule.AllChimes, IChime>]
 	public static partial class HiddenGreetingModule
 	{
+		private sealed class AllChimes(IEnumerable<IChime> chimes) : IChime
+		{
+			public int Count => chimes.Sum(chime => chime.Count);
+		}
+
 		private sealed class LoudBell(IBell inner) : IBell
 		{
 			public IBell? Inner => inner;
@@ -219,8 +272,16 @@ public sealed partial class RegistrationFactoryShapeTests
 	[Singleton<Shop.Greeter, IFormalGreeter>]
 	[Singleton<Bell, IBell>]
 	[Decorate<Shop.QuietBell, IBell>]
+	[Transient<HighChime, IChime>]
+	[Transient<LowChime, IChime>]
+	[Composite<Shop.AllChimes, IChime>]
 	public static partial class Shop
 	{
+		private sealed class AllChimes(IEnumerable<IChime> chimes) : IChime
+		{
+			public int Count => chimes.Sum(chime => chime.Count);
+		}
+
 		private sealed class QuietBell(IBell inner) : IBell
 		{
 			public IBell? Inner => inner;

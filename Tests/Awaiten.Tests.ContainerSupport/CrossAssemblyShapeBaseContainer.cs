@@ -19,6 +19,27 @@ public sealed class ShapeBaseUtcClock : IShapeBaseClock;
 /// <summary>The unkeyed clock.</summary>
 public sealed class ShapeBaseSystemClock : IShapeBaseClock;
 
+/// <summary>A chime the base fronts with a private composite.</summary>
+public interface IShapeBaseChime
+{
+	/// <summary>How many chimes ring.</summary>
+	int Count { get; }
+}
+
+/// <summary>One chime.</summary>
+public sealed class ShapeBaseHighChime : IShapeBaseChime
+{
+	/// <inheritdoc />
+	public int Count => 1;
+}
+
+/// <summary>Another chime.</summary>
+public sealed class ShapeBaseLowChime : IShapeBaseChime
+{
+	/// <inheritdoc />
+	public int Count => 1;
+}
+
 /// <summary>A menu the base hands out from a private instance member.</summary>
 public interface IShapeBaseMenu;
 
@@ -41,8 +62,16 @@ public sealed class ShapeBaseKettle
 [Singleton<IShapeBaseMenu>(Instance = nameof(TheMenu))]
 [Transient<ShapeBaseKettle>(Factory = nameof(CreateKettle), OnActivated = nameof(Activate))]
 [Decorate<AuditedReport, IShapeBaseReport>]
+[Transient<ShapeBaseHighChime, IShapeBaseChime>]
+[Transient<ShapeBaseLowChime, IShapeBaseChime>]
+[Composite<AllChimes, IShapeBaseChime>]
 public static partial class SupportShapeBaseContainer
 {
+	private sealed class AllChimes(System.Collections.Generic.IEnumerable<IShapeBaseChime> chimes) : IShapeBaseChime
+	{
+		public int Count => System.Linq.Enumerable.Sum(chimes, chime => chime.Count);
+	}
+
 	private sealed class AuditedReport(IShapeBaseReport inner) : IShapeBaseReport
 	{
 		public IShapeBaseClock KeyedClock => inner.KeyedClock;

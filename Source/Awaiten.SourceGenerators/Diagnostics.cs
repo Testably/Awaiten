@@ -1902,7 +1902,7 @@ internal static class Diagnostics
 	/// <summary>
 	///     An imported module of another assembly declares a decorator, a composite or an open generic registration
 	///     whose type this container cannot construct (it, or every constructor, is not accessible here). A module
-	///     generated no factory for it (it generates them for its scans, closed registrations and closed decorators,
+	///     generated no factory for it (it generates them for its scans, closed registrations, decorators and composites,
 	///     where the factory can express the type), so nothing constructs this type for the container.
 	///     Reported at the consumer's <c>[Import]</c> instead of a misleading constructor diagnostic, and the
 	///     contribution is skipped.

@@ -110,12 +110,18 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     The name of the factory a base container generates for an instance it builds: the registration's for an
-	///     instance identified by its type, the decorator's for a link of a decorator chain, or <see langword="null" />
+	///     instance identified by its type, the decorator's for a link of a decorator chain, the composite's for a
+	///     composite, or <see langword="null" />
 	///     for any other instance, which an extending container builds otherwise.
 	/// </summary>
 	private static string? BaseFactoryName(ImplInfo info)
 	{
-		if (info.ImplementationType == info.Symbol.ToDisplayString(FullyQualified) && !info.IsComposite)
+		if (info.IsComposite)
+		{
+			return info.Services.Count > 0 ? ContributionFactoryName("CompositeAttribute", info.Symbol, info.Services[0].Service) : null;
+		}
+
+		if (info.ImplementationType == info.Symbol.ToDisplayString(FullyQualified))
 		{
 			return RegistrationFactoryName(info.Symbol);
 		}

@@ -122,7 +122,8 @@ internal sealed record CompositeRegistration(
 	INamedTypeSymbol Composite,
 	Lifetime Lifetime,
 	Location? Location,
-	string? Key);
+	string? Key,
+	OwnerFactoryCall? Via = null);
 
 /// <summary>
 ///     A single open generic <c>[Decorate(typeof(D&lt;&gt;), typeof(IService&lt;&gt;))]</c> registration: the unbound

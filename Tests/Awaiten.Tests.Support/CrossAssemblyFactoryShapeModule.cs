@@ -1,3 +1,6 @@
+using System.Collections.Generic;
+using System.Linq;
+
 namespace Awaiten.Tests.Support;
 
 /// <summary>A clock an importing container registers for the internal implementations of <see cref="FactoryShapeModule" />.</summary>
@@ -59,6 +62,28 @@ internal sealed class LoudShapeBell(IShapeBell inner, IShapeClock clock) : IShap
 	public IShapeClock Clock => clock;
 }
 
+/// <summary>A chime whose internal implementations an internal composite fronts.</summary>
+public interface IShapeChime
+{
+	/// <summary>How many chimes ring.</summary>
+	int Count { get; }
+}
+
+internal sealed class ShapeHighChime : IShapeChime
+{
+	public int Count => 1;
+}
+
+internal sealed class ShapeLowChime : IShapeChime
+{
+	public int Count => 1;
+}
+
+internal sealed class AllShapeChimes(IEnumerable<IShapeChime> chimes) : IShapeChime
+{
+	public int Count => chimes.Sum(chime => chime.Count);
+}
+
 internal sealed class ShapeMenu : IShapeMenu;
 
 internal sealed class ShapeKettle(IShapeClock clock) : IShapeKettle
@@ -87,7 +112,8 @@ internal sealed class ShapeNotifier : IShapeNotifier
 /// <summary>
 ///     A <c>[Module]</c> whose internal implementations its generated factories build for a container in another
 ///     assembly without <c>InternalsVisibleTo</c>: one shared under two services, a keyed constructor parameter, a
-///     runtime argument, an injected property, internal factory and instance members, and an internal decorator.
+///     runtime argument, an injected property, internal factory and instance members, an internal decorator and an
+///     internal composite.
 /// </summary>
 [Module]
 [Singleton<ShapeGreeter, IShapeGreeter>]
@@ -99,6 +125,9 @@ internal sealed class ShapeNotifier : IShapeNotifier
 [Transient<IShapeKettle>(Factory = nameof(CreateKettle))]
 [Singleton<ShapeBell, IShapeBell>]
 [Decorate<LoudShapeBell, IShapeBell>]
+[Transient<ShapeHighChime, IShapeChime>]
+[Transient<ShapeLowChime, IShapeChime>]
+[Composite<AllShapeChimes, IShapeChime>]
 public static partial class FactoryShapeModule
 {
 	internal static readonly IShapeMenu Menu = new ShapeMenu();

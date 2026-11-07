@@ -255,11 +255,12 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     The factories a module generates for its closed decorators whose type another assembly cannot construct (see
-	///     <see cref="SelfCompilesRegistration" />), one per type and decorated service. Each mirrors the constructor and
-	///     the injected properties like the factory of a registration, so its inner parameter stays the one a container
-	///     redirects to the next link of the chain. A decorator the factory cannot express gets none and no error in the
-	///     module's build: a container that cannot construct it reports it at its <c>[Import]</c> (AWT230), as before.
+	///     The factories a module generates for its closed decorators and composites whose type another assembly cannot
+	///     construct (see <see cref="SelfCompilesRegistration" />), one per type and service. Each mirrors the constructor
+	///     and the injected properties like the factory of a registration, so a decorator's inner parameter stays the one
+	///     a container redirects to the next link of the chain, and a composite's collection parameter the one it fills.
+	///     A type the factory cannot express gets none and no error in the module's build: a container that cannot
+	///     construct it reports it at its <c>[Import]</c> (AWT230), as before.
 	/// </summary>
 	private static List<RegistrationFactory> CollectModuleContributionFactories(INamedTypeSymbol module, Compilation compilation)
 	{
@@ -267,7 +268,7 @@ partial class AwaitenGenerator
 		ModuleScanContext context = new(module, compilation, new List<DiagnosticInfo>(), new HashSet<string>(StringComparer.Ordinal));
 		foreach (AttributeData attribute in module.GetAttributes())
 		{
-			if (attribute.AttributeClass is not { Name: "DecorateAttribute", } attributeClass
+			if (attribute.AttributeClass is not { Name: "DecorateAttribute" or "CompositeAttribute", } attributeClass
 			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace
 			    || ContributedPair(attribute, attributeClass) is not ({ } type, { } service)
 			    || !SelfCompilesRegistration(module, type, service, compilation))

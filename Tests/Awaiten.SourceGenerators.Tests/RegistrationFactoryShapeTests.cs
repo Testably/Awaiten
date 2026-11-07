@@ -816,6 +816,139 @@ public class RegistrationFactoryShapeTests
 		}
 	}
 
+	public class Composites
+	{
+		private const string CompositeModule = """
+		                                       using System.Collections.Generic;
+		                                       using Awaiten;
+
+		                                       namespace Lib;
+
+		                                       public interface IGreeter { }
+		                                       internal sealed class Greeter : IGreeter { }
+		                                       internal sealed class Farewell : IGreeter { }
+		                                       internal sealed class AllGreeters : IGreeter
+		                                       {
+		                                           public AllGreeters(IEnumerable<IGreeter> greeters) { }
+		                                       }
+
+		                                       [Module]
+		                                       [Singleton<Greeter, IGreeter>]
+		                                       [Singleton<Farewell, IGreeter>]
+		                                       [Composite<AllGreeters, IGreeter>]
+		                                       public static partial class GreetingModule { }
+		                                       """;
+
+		[Test]
+		public async Task AModule_GeneratesAFactoryThatTakesTheCollection()
+		{
+			GeneratorResult result = Generator.Run(CompositeModule);
+
+			await That(result.Diagnostics).IsEmpty();
+			await That(ModuleSource(result)).Contains("public static global::Lib.IGreeter Awaiten__Composite_AllGreeters_")
+				.And.Contains("(global::System.Collections.Generic.IEnumerable<global::Lib.IGreeter> @greeters) => new global::Lib.AllGreeters(@greeters);");
+		}
+
+		[Test]
+		public async Task AModuleInAnotherAssembly_IsComposedWithoutInternalsVisibleTo()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(CompositeModule, Consumer);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("the consumer calls the composite's factory with the collection instead of reporting AWT230");
+		}
+
+		[Test]
+		public async Task AModuleInAnotherAssembly_IsComposedWithInternalsVisibleTo()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Granted(CompositeModule), Consumer);
+
+			await That(result.Diagnostics).IsEmpty();
+		}
+
+		[Test]
+		public async Task ACompositeHiddenInTheModule_IsBuiltForAContainerInTheSameAssembly()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using System.Collections.Generic;
+			                                       using Awaiten;
+
+			                                       namespace Lib;
+
+			                                       public interface IGreeter { }
+			                                       public sealed class Greeter : IGreeter { }
+
+			                                       [Module]
+			                                       [Singleton<Greeter, IGreeter>]
+			                                       [Composite<GreetingModule.AllGreeters, IGreeter>]
+			                                       public static partial class GreetingModule
+			                                       {
+			                                           private sealed class AllGreeters : IGreeter
+			                                           {
+			                                               public AllGreeters(IEnumerable<IGreeter> greeters) { }
+			                                           }
+			                                       }
+
+			                                       [Container]
+			                                       [Import(typeof(GreetingModule))]
+			                                       public static partial class AppContainer { }
+			                                       """);
+
+			await That(result.Diagnostics).IsEmpty();
+		}
+
+		private const string PrivateCompositeBase = """
+		                                            using System.Collections.Generic;
+		                                            using Awaiten;
+
+		                                            namespace Lib;
+
+		                                            public interface IGreeter { }
+		                                            public sealed class Greeter : IGreeter { }
+
+		                                            [Container]
+		                                            [Singleton<Greeter, IGreeter>]
+		                                            [Composite<Shop.AllGreeters, IGreeter>]
+		                                            public static partial class Shop
+		                                            {
+		                                                private sealed class AllGreeters : IGreeter
+		                                                {
+		                                                    public AllGreeters(IEnumerable<IGreeter> greeters) { }
+		                                                }
+		                                            }
+		                                            """;
+
+		[Test]
+		public async Task AnExtendingContainerInTheSameAssembly_BuildsThePrivateComposite()
+		{
+			GeneratorResult result = Generator.Run(PrivateCompositeBase + """
+
+			                                                              [Container(Extends = typeof(Shop))]
+			                                                              public static partial class TestShop { }
+			                                                              """);
+
+			await That(result.Diagnostics).IsEmpty();
+			await That(result.Sources.Single(source => source.Key.EndsWith("Lib.Shop.g.cs", StringComparison.Ordinal)).Value)
+				.Contains("internal static global::Lib.IGreeter Awaiten__Composite_AllGreeters_");
+		}
+
+		[Test]
+		public async Task AnExtendingContainerInAnotherAssembly_BuildsThePrivateComposite()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Granted(PrivateCompositeBase), """
+			                                                                                                     using Awaiten;
+			                                                                                                     using Lib;
+
+			                                                                                                     namespace App;
+
+			                                                                                                     [Container(Extends = typeof(Shop))]
+			                                                                                                     public static partial class TestShop { }
+			                                                                                                     """);
+
+			await That(result.Diagnostics).IsEmpty();
+		}
+	}
+
 	public class BaseContainer
 	{
 		private const string PrivateBase = """

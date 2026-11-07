@@ -64,7 +64,8 @@ public partial class DiagnosticTests
 				public static class GreetingModule { }
 				""", Consumer);
 
-			await That(result.Diagnostics).Contains("*AWT230*GreetingModule*the composite 'Lib.AllGreeters'*").AsWildcard();
+			await That(result.Diagnostics).Contains("*AWT230*GreetingModule*the composite 'Lib.AllGreeters'*").AsWildcard()
+				.Because("a module that is not partial carries no factory for its internal composite");
 		}
 
 		[Test]

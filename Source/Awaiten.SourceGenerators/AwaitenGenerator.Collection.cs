@@ -1208,11 +1208,11 @@ partial class AwaitenGenerator
 	{
 		List<CompositeRegistration> closed = new();
 		List<OpenCompositeRegistration> open = new();
+		SameCompilationModules sameCompilationModules = new(compilation);
 		foreach ((AttributeData attribute, Location? fallbackLocation, bool inherited, INamedTypeSymbol? module) in AttributesOf(containerSymbol, modules))
 		{
 			if (attribute.AttributeClass is not { Name: "CompositeAttribute", } attributeClass
-			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace
-			    || (inherited && InaccessibleInheritedType(attribute, attributeClass, inheritance!, diagnostics, out _)))
+			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace)
 			{
 				continue;
 			}
@@ -1233,20 +1233,18 @@ partial class AwaitenGenerator
 			ReportUnsupportedRegistrationKey(attribute, LocationInfo.From(location), AttributeTypeArgument(attribute, attributeClass, 0), diagnostics);
 			string? key = NamedKeyArgument(attribute);
 
-			if (ContributedType(attribute, attributeClass) is { } compositeType
-			    && IsUnconstructibleModuleContribution(module, compositeType, "the composite", location, compilation, diagnostics))
+			ContributionContext contribution = new(module, inherited ? inheritance : null, location, compilation, sameCompilationModules, diagnostics);
+			if (UnavailableContribution(contribution, attribute, attributeClass, out OwnerFactoryCall? via))
 			{
 				continue;
 			}
 
 			if (attributeClass.IsGenericType)
 			{
-				if (attributeClass.TypeArguments.Length == 2
-				    && attributeClass.TypeArguments[0] is INamedTypeSymbol composite
-				    && attributeClass.TypeArguments[1] is INamedTypeSymbol service)
+				if (ContributedPair(attribute, attributeClass) is ({ } composite, { } service))
 				{
 					closed.Add(new CompositeRegistration(
-						service.ToDisplayString(FullyQualified), service, composite, lifetime, location, key));
+						service.ToDisplayString(FullyQualified), service, composite, lifetime, location, key, via));
 				}
 			}
 			else if (attribute.ConstructorArguments.Length == 2

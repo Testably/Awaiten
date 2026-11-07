@@ -721,7 +721,7 @@ public class ContainerExtendsTests
 		}
 
 		[Test]
-		public async Task APrivateCompositeOrOpenGenericOfTheBase_ReportsAwt226()
+		public async Task APrivateOpenGenericOfTheBase_ReportsAwt226()
 		{
 			GeneratorResult result = Generator.Run("""
 			                                       using Awaiten;
@@ -760,9 +760,10 @@ public class ContainerExtendsTests
 
 			await That(result.Diagnostics).DoesNotContain("*AuditedClock*").AsWildcard()
 				.Because("the base generates a factory for its private decorator");
-			await That(result.Diagnostics).Contains("*error AWT226*The composite 'MyCode.Shop.AllPlugins'*make 'MyCode.Shop.AllPlugins' internal*").AsWildcard();
+			await That(result.Diagnostics).DoesNotContain("*AllPlugins*").AsWildcard()
+				.Because("the base generates a factory for its private composite");
 			await That(result.Diagnostics).Contains("*error AWT226*'MyCode.Shop.Repository<string>'*make 'MyCode.Shop.Repository<T>' internal*").AsWildcard()
-				.Because("composites and open generics private to the base are not built through a generated factory yet");
+				.Because("open generics private to the base are not built through a generated factory yet");
 			await That(result.Diagnostics).DoesNotContain("*error CS*").AsWildcard();
 		}
 	}
