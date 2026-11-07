@@ -1389,6 +1389,75 @@ public class ModuleHiddenServiceTests
 			}
 		}
 
+		public class OverridableDefaultsOfAModule
+		{
+			private const string Library = """
+				using Awaiten;
+
+				namespace Lib;
+
+				public interface IA { }
+				public interface IB { }
+				internal interface IStore { }
+				internal sealed class Store : IA, IB, IStore { }
+
+				[Module]
+				[Transient<Store, IA>(Fallback = Fallback.Silent)]
+				[Transient<Store, IB>(Fallback = Fallback.Silent)]
+				public static partial class AModule { }
+
+				[Module]
+				[Singleton<Store, IStore>]
+				public static partial class BModule { }
+				""";
+
+			private static string Container(params string[] modules) => $$"""
+				[Container]
+				{{string.Join("\n", modules.Select(module => $"[Import(typeof({module}))]"))}}
+				public static partial class MyContainer;
+				""";
+
+			[Test]
+			[Arguments("AModule", "BModule")]
+			[Arguments("BModule", "AModule")]
+			public async Task LifetimeConflictWithAnotherModule_ReportsAwt107LikeTheModulesOwnAssembly(string first, string second)
+			{
+				GeneratorResult same = Generator.Run(Library + Container(first, second));
+				GeneratorResult cross = Generator.RunWithGeneratedReferencedAssembly(Library, "using Awaiten;\nusing Lib;\n\nnamespace MyCode;\n\n" + Container(first, second));
+
+				await That(same.Diagnostics).Contains("*AWT107*'Lib.Store'*Singleton*Transient*").AsWildcard();
+				await That(cross.Diagnostics).Contains("*AWT107*'Lib.Store'*Singleton*Transient*").AsWildcard()
+					.Because("nothing contests the services of the overridable defaults, so they survive and contradict the singleton of the other module, as in the module's own assembly");
+			}
+
+			[Test]
+			public async Task LifetimeConflictWithinTheModule_ReportsAwt107LikeTheModulesOwnAssembly()
+			{
+				const string library = """
+					using Awaiten;
+
+					namespace Lib;
+
+					public interface IA { }
+					internal interface IStore { }
+					internal sealed class Store : IA, IStore { }
+
+					[Module]
+					[Transient<Store, IA>(Fallback = Fallback.Silent)]
+					[Singleton<Store, IStore>]
+					public static partial class AModule { }
+					""";
+				GeneratorResult same = Generator.Run(library + Container("AModule"));
+				GeneratorResult cross = Generator.RunWithGeneratedReferencedAssembly(library, "using Awaiten;\nusing Lib;\n\nnamespace MyCode;\n\n" + Container("AModule"));
+
+				await That(Generator.Run(library).Diagnostics).IsEmpty()
+					.Because("only the importing container knows whether the overridable default survives");
+				await That(same.Diagnostics).Contains("*AWT107*'Lib.Store'*Singleton*Transient*").AsWildcard();
+				await That(cross.Diagnostics).Contains("*AWT107*'Lib.Store'*Singleton*Transient*").AsWildcard()
+					.Because("the surviving default contradicts the lifetime of the strong registration, which the handle takes, as in the module's own assembly");
+			}
+		}
+
 		private const string DirectiveModules = """
 			using Awaiten;
 

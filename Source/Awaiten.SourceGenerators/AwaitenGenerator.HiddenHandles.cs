@@ -199,16 +199,12 @@ partial class AwaitenGenerator
 				.Where(alias => SymbolEqualityComparer.Default.Equals(alias.Origin, module) && alias.ImplementationType.EndsWith(marker, StringComparison.Ordinal))
 				.Select(alias => alias.Aliased!)
 				.ToList();
-			HashSet<string> reported = new(StringComparer.Ordinal);
+			HashSet<string> lifetimes = new(StringComparer.Ordinal);
+			HashSet<string> productions = new(StringComparer.Ordinal);
+			HashSet<string> directives = new(StringComparer.Ordinal);
 			foreach (RawRegistration later in own.Skip(1).Where(later => later.Weak || own[0].Weak))
 			{
-				foreach ((string directive, string winner, string loser) in ConflictingDirectives(NewImplInfo(own[0]), later, container).Where(directive => reported.Add(directive.Directive)))
-				{
-					diagnostics.Add(new DiagnosticInfo(
-						Diagnostics.ConflictingLifecycleDirectives,
-						LocationInfo.From(later.Location),
-						new EquatableArray<string>([DisplayInstance(later.ImplementationType), directive, winner, loser,])));
-				}
+				ReportCoalescingConflicts(NewImplInfo(own[0]), later, container, lifetimes, productions, directives, diagnostics);
 			}
 
 			raw[index] = own.Count == 0
@@ -216,6 +212,7 @@ partial class AwaitenGenerator
 				: handle with
 				{
 					Weak = own.All(registration => registration.Weak),
+					Lifetime = own[0].Lifetime,
 					Eager = own[0].Eager,
 					SuppressDisposal = own[0].SuppressDisposal,
 					OnActivated = own[0].OnActivated,

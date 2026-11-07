@@ -379,8 +379,10 @@ partial class AwaitenGenerator
 			// checked before the per-service dedup below (else re-registering a service type differently would drop
 			// the contradiction silently). A scan yields to an explicit registration and is exempt, but two scans
 			// with different lifetimes are AWT142. An overridable default losing its key yields transparently; every
-			// other default is checked like an explicit registration.
-			if (!registration.IsScan && (!registration.Weak || !alreadyChosen || winner!.Weak))
+			// other default is checked like an explicit registration. The instance handle of a module of another
+			// assembly shares its key with the handles of the other modules that build the implementation, so it is
+			// checked whenever it is kept, which it is only while one of its aliases survives (see SettleHandleDirectives).
+			if (!registration.IsScan && (!registration.Weak || !alreadyChosen || winner!.Weak || registration.Hidden is not null))
 			{
 				ReportCoalescingConflicts(info, registration, containerSymbol, reportedConflicts, reportedProductionConflicts, reportedDirectiveConflicts, diagnostics);
 			}
