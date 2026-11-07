@@ -199,5 +199,72 @@ public partial class DiagnosticTests
 					.And.Contains("global::Lib.PluginModule.Internals.ScanHook_OnActivated_Roaster_");
 			}
 		}
+
+		public class RegisteredAndScanned
+		{
+			private static string Library(string? friend, string implementation = "internal sealed class Greeter : IPlugin, IGreeter { }") => $$"""
+				using Awaiten;
+
+				{{(friend is null ? "" : $"[assembly: System.Runtime.CompilerServices.InternalsVisibleTo(\"{friend}\")]")}}
+
+				namespace Lib;
+
+				public interface IPlugin { }
+				public interface IGreeter { }
+				{{implementation}}
+
+				[Module]
+				[Scan<IPlugin>(As = ScanAs.Marker, Lifetime = Lifetime.Singleton)]
+				[Singleton<Greeter, IGreeter>]
+				public static partial class PluginModule { }
+				""";
+
+			[Test]
+			public async Task WithoutAnInternalsVisibleToGrant_ReportsTheOverlap()
+			{
+				GeneratorResult result = Generator.Run(Library(null));
+
+				await That(result.Diagnostics).Contains("*AWT197*Lib.Greeter*").AsWildcard()
+					.Because("no other assembly can construct the implementation, and two factories would split its instance");
+			}
+
+			[Test]
+			public async Task WithoutInternalsVisibleTo_ReportsTheRegistrationAndTheScanMatch()
+			{
+				GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Library("Lib.Tests"), Consumer);
+
+				await That(result.Diagnostics).Contains("*AWT231*PluginModule*'Lib.Greeter'*because it is also matched by the module's [Scan]*").AsWildcard()
+					.Because("the module skipped the registration's factory, so the consumer names why");
+				await That(result.Diagnostics).Contains("*AWT231*PluginModule*'Lib.Greeter'*because it is also registered explicitly by the module*").AsWildcard()
+					.Because("the module skipped the scan's factory too");
+				await That(result.Diagnostics.Where(diagnostic => diagnostic.Contains("AWT231"))).HasCount(2);
+				await That(result.Diagnostics).DoesNotContain("*AWT154*").AsWildcard();
+			}
+
+			[Test]
+			public async Task WithInternalsVisibleTo_ConstructsOneSharedInstance()
+			{
+				GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Library("TestAssembly"), Consumer);
+
+				await That(result.Diagnostics).IsEmpty()
+					.Because("InternalsVisibleTo lets the consumer construct the implementation for the registration and the scan match");
+				string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+				await That(source).Contains("new global::Lib.Greeter(").Exactly(1)
+					.Because("the scan match coalesces with the registration on the implementation, as in the module's own assembly");
+				await That(source).DoesNotContain("Scan_Greeter_");
+			}
+
+			[Test]
+			public async Task OfAPublicImplementation_ConstructsOneSharedInstanceWithoutAGrant()
+			{
+				GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Library(null, "public sealed class Greeter : IPlugin, IGreeter { }"), Consumer);
+
+				await That(result.Diagnostics).IsEmpty();
+				string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+				await That(source).Contains("new global::Lib.Greeter(").Exactly(1)
+					.Because("every consumer can construct a public implementation, so the scan match coalesces with the registration instead of calling a factory that builds a second instance");
+				await That(source).DoesNotContain("Scan_Greeter_");
+			}
+		}
 	}
 }

@@ -130,8 +130,11 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 				: new ModuleScanModel(null, default, moduleSymbol.Name, string.Empty, false, default, new EquatableArray<DiagnosticInfo>(diagnostics.ToArray()), false, default, default, null);
 		}
 
+		// Under a grant a registration-only module builds anyway, so the message says why a scan module does not.
 		string reason = selfCompiled is null
-			? "declares a [Scan]"
+			? GrantsInternalsVisibleTo(compilation.Assembly)
+				? "declares a [Scan], whose matches a consumer reads from generated metadata even when the assembly grants InternalsVisibleTo,"
+				: "declares a [Scan]"
 			: $"registers '{Display(selfCompiled.Implementation.ToDisplayString(FullyQualified))}', which another assembly cannot construct,";
 
 		// The module must be partial for the generator to add the factories and registration attributes. Every part

@@ -1,3 +1,4 @@
+using System.Linq;
 using Awaiten.Tests.Support;
 
 namespace Awaiten.Tests;
@@ -64,6 +65,15 @@ public partial class CrossAssemblyModuleTests
 		await That(container.Resolve<SupportCache>()).IsSameAs(CrossAssemblySupportModule.Cache);
 	}
 
+	[Test]
+	public async Task PublicImplementationTheModuleRegistersAndScans_IsOneSharedInstance()
+	{
+		using RegisteredScanContainer.Root container = new();
+
+		await That((object)container.Resolve<ISupportKettle>()).IsSameAs(container.Resolve<ISupportAppliance[]>().Single())
+			.Because("the module's scan generates no factory for a type it also registers, so the container constructs it once for both");
+	}
+
 	/// <summary>The container's own clock, overriding the module's cross-assembly default.</summary>
 	public sealed class TestClock : ICrossAssemblyClock;
 
@@ -75,4 +85,8 @@ public partial class CrossAssemblyModuleTests
 	[Import(typeof(CrossAssemblySupportModule))]
 	[Singleton<TestClock, ICrossAssemblyClock>]
 	public static partial class OverrideContainer;
+
+	[Container]
+	[Import(typeof(RegisteredScanModule))]
+	public static partial class RegisteredScanContainer;
 }

@@ -101,6 +101,28 @@ public partial class DiagnosticTests
 					.Because("an assembly granted InternalsVisibleTo constructs the implementation itself, and any other consumer sees from metadata that the module is generic");
 				await That(result.Sources).IsEmpty();
 			}
+
+			[Test]
+			[Arguments(NotPartial, "AWT194", "add the partial modifier")]
+			[Arguments(Generic, "AWT201", "move it onto a non-generic module")]
+			public async Task WithAScanAndAnInternalsVisibleToGrant_ExplainsWhyTheGrantDoesNotHelp(string module, string id, string remedy)
+			{
+				GeneratorResult result = Generator.Run(Library("App", $"[Scan<IGreeter>(As = ScanAs.Marker)]\n{module}"));
+
+				await That(result.Diagnostics).Contains($"*{id}*GreetingModule*declares a [Scan], whose matches a consumer reads from generated metadata even when the assembly grants InternalsVisibleTo,*{remedy}*").AsWildcard()
+					.Because("a registration-only module builds under the grant, so the message names why a scan module does not");
+			}
+
+			[Test]
+			[Arguments(NotPartial, "AWT194")]
+			[Arguments(Generic, "AWT201")]
+			public async Task WithAScanAndNoGrant_KeepsTheShortMessage(string module, string id)
+			{
+				GeneratorResult result = Generator.Run(Library(null, $"[Scan<IGreeter>(As = ScanAs.Marker)]\n{module}"));
+
+				await That(result.Diagnostics).Contains($"*{id}*GreetingModule*declares a [Scan] but is*").AsWildcard()
+					.Because("without a grant, InternalsVisibleTo plays no part, so the message does not bring it up");
+			}
 		}
 
 		public class CrossAssemblyConsumer

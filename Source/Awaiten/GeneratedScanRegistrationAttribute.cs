@@ -36,7 +36,10 @@ public sealed class GeneratedScanRegistrationAttribute<TService> : Attribute
 		Factory = factory;
 	}
 
-	/// <summary>The generated factory method that constructs the match.</summary>
+	/// <summary>
+	///     The generated factory method that constructs the match, or the match's metadata name when the module
+	///     generates no factory for it.
+	/// </summary>
 	public string Factory { get; }
 
 	/// <summary>The lifetime the scan declared. Defaults to <see cref="Lifetime.Transient" />, matching <c>[Scan]</c>.</summary>
@@ -54,16 +57,17 @@ public sealed class GeneratedScanRegistrationAttribute<TService> : Attribute
 	///     is constructed. The module resolves and closes its (possibly <c>internal</c>) <c>OnActivated</c> hook at
 	///     its own build and emits this public wrapper so the consumer can run it without naming the internal hook;
 	///     the wrapper's parameters after the instance resolve from the consumer's graph. It returns what the hook
-	///     returns, so the consumer awaits a <c>Task</c> or <c>ValueTask</c> one. Null when the scan declared no
-	///     activation hook.
+	///     returns, so the consumer awaits a <c>Task</c> or <c>ValueTask</c> one. When the module generates no wrapper
+	///     for the hook, because an assembly it grants <c>InternalsVisibleTo</c> calls the hook directly, the name of
+	///     the module's own hook instead. Null when the scan declared no activation hook.
 	/// </summary>
 	public string? OnActivated { get; set; }
 
 	/// <summary>
-	///     The name of the generated <c>public static void</c> release wrapper, relative to the module like
+	///     The name of the generated <c>public static</c> release wrapper, relative to the module like
 	///     <see cref="Factory" />, run when the match's
-	///     owner is disposed. The module counterpart of <see cref="OnActivated" /> for the <c>OnRelease</c> hook.
-	///     Null when the scan declared no release hook.
+	///     owner is disposed. The module counterpart of <see cref="OnActivated" /> for the <c>OnRelease</c> hook,
+	///     including the module's own hook when it generates no wrapper. Null when the scan declared no release hook.
 	/// </summary>
 	public string? OnRelease { get; set; }
 

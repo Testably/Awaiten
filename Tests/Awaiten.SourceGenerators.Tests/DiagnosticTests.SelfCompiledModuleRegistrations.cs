@@ -283,7 +283,7 @@ public partial class DiagnosticTests
 			}
 
 			[Test]
-			public async Task ReportsAScanOverlapEvenWhenTheAssemblyGrantsInternalsVisibleTo()
+			public async Task SkipsBothFactoriesOfAScanOverlapWhenTheAssemblyGrantsInternalsVisibleTo()
 			{
 				GeneratorResult result = Generator.Run("""
 					using Awaiten;
@@ -297,13 +297,77 @@ public partial class DiagnosticTests
 					internal sealed class Greeter : IPlugin, IGreeter { }
 
 					[Module]
-					[Scan<IPlugin>(As = ScanAs.MatchingInterface)]
+					[Scan<IPlugin>(As = ScanAs.Marker)]
 					[Singleton<Greeter, IGreeter>]
 					public static partial class GreetingModule { }
 					""");
 
-				await That(result.Diagnostics).Contains("*AWT197*Lib.Greeter*self-compiled from a module registration*").AsWildcard()
-					.Because("the scan's factory builds the type for every consumer, so a consumer constructing the registration itself would still split the instance");
+				await That(result.Diagnostics).IsEmpty()
+					.Because("an assembly granted InternalsVisibleTo constructs the implementation itself and shares it across the registration and the scan");
+				string source = result.Sources.Values.Single();
+				await That(source).Contains("public const string RegistrationSkipped_Greeter_")
+					.And.Contains("\"it is also matched by the module's [Scan]\"")
+					.And.Contains("public const string ScanSkipped_Greeter_")
+					.And.Contains("\"it is also registered explicitly by the module\"")
+					.And.Contains("[global::Awaiten.GeneratedScanRegistrationAttribute<global::Lib.IPlugin>(\"Lib.Greeter\"")
+					.Because("the module records both, so a consumer without access names why it cannot construct the implementation");
+				await That(source).DoesNotContain("Registration_Greeter_").And.DoesNotContain("Scan_Greeter_")
+					.Because("two factories would build two instances of what a container treats as one implementation");
+			}
+
+			[Test]
+			public async Task KeepsAnErrorOfAScanOverlapThatNoAssemblyCouldConstruct()
+			{
+				GeneratorResult result = Generator.Run("""
+					using Awaiten;
+
+					[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("App")]
+
+					namespace Lib;
+
+					public interface IPlugin { }
+					public interface IGreeter { }
+					internal sealed class Greeter : IPlugin, IGreeter
+					{
+					    private Greeter() { }
+					}
+
+					[Module]
+					[Scan<IPlugin>(As = ScanAs.Marker)]
+					[Singleton<Greeter, IGreeter>]
+					public static partial class GreetingModule { }
+					""");
+
+				await That(result.Diagnostics).Contains("*AWT104*Lib.Greeter*").AsWildcard()
+					.Because("an assembly granted InternalsVisibleTo could not construct the implementation either, so skipping both factories would hide the error");
+				await That(result.Sources.Values.Single()).DoesNotContain("RegistrationSkipped_Greeter_");
+			}
+
+			[Test]
+			public async Task ReportsAScanOverlapWhenTheAssemblyGrantsInternalsVisibleToAPrivateType()
+			{
+				GeneratorResult result = Generator.Run("""
+					using Awaiten;
+
+					[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("App")]
+
+					namespace Lib;
+
+					public interface IPlugin { }
+					public interface IGreeter { }
+
+					[Module]
+					[Scan<IPlugin>(As = ScanAs.Marker)]
+					[Singleton<Greeter, IGreeter>]
+					public static partial class GreetingModule
+					{
+					    private sealed class Greeter : IPlugin, IGreeter { }
+					}
+					""");
+
+				await That(result.Diagnostics).Contains("*AWT193*Greeter*").AsWildcard()
+					.Because("no other assembly can construct a type private to the module, so the scan still yields to the registration's factory");
+				await That(result.Sources.Values.Single()).Contains("Registration_Greeter_").And.DoesNotContain("Skipped_Greeter_");
 			}
 
 			[Test]

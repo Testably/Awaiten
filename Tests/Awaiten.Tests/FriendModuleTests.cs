@@ -67,6 +67,17 @@ public partial class FriendModuleTests
 	}
 
 	[Test]
+	public async Task SharesAnImplementationTheModuleRegistersAndScans()
+	{
+		using FriendRegisteredScanContainer.Root container = new();
+
+		IFriendAppliance appliance = container.Resolve<IEnumerable<IFriendAppliance>>().Single();
+
+		await That((object)container.Resolve<IFriendKettle>()).IsSameAs(appliance)
+			.Because("the container constructs the implementation for the registration and the scan match and shares one instance, as in the module's own assembly");
+	}
+
+	[Test]
 	public async Task ConstructsTheImplementationOfAModuleThatIsNotPartial()
 	{
 		using FriendShapeContainer.Root container = new();
@@ -162,4 +173,8 @@ public partial class FriendModuleTests
 	[Container]
 	[Import(typeof(SupportFriendScanModule))]
 	public static partial class FriendScanContainer;
+
+	[Container]
+	[Import(typeof(SupportFriendRegisteredScanModule))]
+	public static partial class FriendRegisteredScanContainer;
 }

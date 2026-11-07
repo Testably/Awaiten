@@ -103,5 +103,42 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).DoesNotContain("*AWT151*").AsWildcard()
 				.Because("the empty scan was already reported in the module's own build, not blamed on the consumer's [Import]");
 		}
+
+		[Test]
+		[Arguments("\"Lib.Roaster\"", "'Lib.Roaster'")]
+		[Arguments("\"Internals.Scan_Roaster_00000000\"", "'Internals.Scan_Roaster_00000000'")]
+		[Arguments("null", "'null'")]
+		public async Task ReportsAScanRecordThatNamesNoFactoryOrSkippedMatch(string factory, string named)
+		{
+			GeneratorResult result = Generator.RunWithReferencedAssembly($$"""
+				using Awaiten;
+
+				namespace Lib;
+
+				public interface IPlugin { }
+				internal sealed class Roaster : IPlugin { }
+
+				[Module]
+				[Scan<IPlugin>(As = ScanAs.Marker)]
+				[GeneratedScanExpansion]
+				[GeneratedScanRegistration<IPlugin>({{factory}}, Lifetime = Lifetime.Singleton)]
+				public static partial class PluginModule { }
+				""", """
+				using Awaiten;
+				using Lib;
+
+				namespace MyCode;
+
+				[Container]
+				[Import(typeof(PluginModule))]
+				public static partial class MyContainer
+				{
+				}
+				""");
+
+			await That(result.Diagnostics).HasCount(1);
+			await That(result.Diagnostics).Contains($"*AWT154*'Lib.PluginModule' carries a generated scan registration of 'Lib.IPlugin' whose factory {named} names no factory or skipped match*another version of the Awaiten source generator*").AsWildcard()
+				.Because("a record another version of the generator wrote is reported as such, instead of as a missing factory method or not at all");
+		}
 	}
 }
