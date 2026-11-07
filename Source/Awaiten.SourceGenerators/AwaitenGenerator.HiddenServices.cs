@@ -242,9 +242,24 @@ partial class AwaitenGenerator
 		/// <summary>
 		///     The internal services <paramref name="module" /> can build on its own, judged without its cross-module
 		///     dependencies, once per compilation, so whether another module may take one of its handles never recurses.
+		///     Like the module's own build, it rejects an implementation one of the module's scans matches too.
 		/// </summary>
 		public HiddenServices? Probe(INamedTypeSymbol module)
-			=> _probes.GetOrAdd(module, key => new Lazy<HiddenServices?>(() => CollectHiddenServices(key, _compilation, crossModule: false))).Value;
+			=> _probes.GetOrAdd(module, key => new Lazy<HiddenServices?>(() => BuildProbe(key))).Value;
+
+		private HiddenServices? BuildProbe(INamedTypeSymbol module)
+		{
+			HiddenServices? probe = CollectHiddenServices(module, _compilation, crossModule: false);
+			if (probe is not null && HasAwaitenAttribute(module.GetAttributes(), "ScanAttribute"))
+			{
+				List<ModuleFactory> scanned = CollectModuleScanFactories(module, _compilation, new List<DiagnosticInfo>(), CancellationToken.None, probe.Friends ? null : probe)
+					.Select(expansion => expansion.Factory)
+					.ToList();
+				RejectScannedHiddenImplementations(probe, scanned, new List<DiagnosticInfo>());
+			}
+
+			return probe;
+		}
 	}
 
 	/// <summary>

@@ -77,6 +77,48 @@ public partial class DiagnosticTests
 				.Because("an assembly granted InternalsVisibleTo constructs the implementation itself");
 		}
 
+		[Test]
+		public async Task ProviderWhoseScanAlsoMatchesTheImplementation_IsNotTaken()
+		{
+			const string library = """
+				using Awaiten;
+
+				[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("Friend")]
+
+				namespace Lib;
+
+				public interface IKettle { }
+				public interface IBrewer { }
+				internal interface IHeater { }
+				internal sealed class Kettle : IKettle, IHeater { }
+				internal sealed class Brewer : IBrewer { public Brewer(IHeater heater) { } }
+
+				[Module]
+				[Scan<IKettle>(As = ScanAs.Marker)]
+				[Singleton<Kettle, IHeater>]
+				public static partial class AModule { }
+
+				[Module]
+				[Singleton<Brewer, IBrewer>]
+				public static partial class BModule { }
+				""";
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(library, """
+				using Awaiten;
+				using Lib;
+
+				namespace MyCode;
+
+				[Container]
+				[Import(typeof(AModule))]
+				[Import(typeof(BModule))]
+				public static partial class MyContainer;
+				""");
+
+			await That(result.Diagnostics).DoesNotContain("*AWT101*").AsWildcard()
+				.And.Contains("*AWT231*'Lib.Brewer'*").AsWildcard()
+				.Because("the providing module builds no handle factory for an implementation its scan matches too, so the other module leaves the brewer to the assemblies it grants InternalsVisibleTo instead of taking a handle nothing serves");
+		}
+
 		public class SeveralRegisteringModules
 		{
 			private static string Library(string first) => $$"""
