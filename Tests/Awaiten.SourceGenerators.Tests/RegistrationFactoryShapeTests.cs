@@ -1053,6 +1053,282 @@ public class RegistrationFactoryShapeTests
 		}
 	}
 
+	public class InternalModules
+	{
+		private const string InternalHookModule = """
+		                                          using Awaiten;
+
+		                                          namespace Lib;
+
+		                                          public interface IPlugin { }
+		                                          public interface IBell { }
+		                                          internal interface ILog { }
+		                                          internal sealed class Log : ILog { }
+		                                          internal sealed class Roaster : IPlugin { }
+
+		                                          [Module]
+		                                          [Singleton<Log, ILog>]
+		                                          [Singleton<PluginModule.Bell, IBell>(OnActivated = nameof(Ring))]
+		                                          [Scan<IPlugin>(As = ScanAs.Marker, OnActivated = nameof(Wire))]
+		                                          internal static partial class PluginModule
+		                                          {
+		                                              private sealed class Bell : IBell { }
+
+		                                              private static void Ring(Bell bell, ILog log) { }
+
+		                                              internal static void Wire(Roaster roaster, ILog log) { }
+		                                          }
+		                                          """;
+
+		private const string InternalConsumer = """
+		                                        using Awaiten;
+		                                        using Lib;
+
+		                                        namespace App;
+
+		                                        [Container]
+		                                        [Import(typeof(PluginModule))]
+		                                        internal static partial class AppContainer { }
+		                                        """;
+
+		[Test]
+		public async Task AnInternalModule_TakesInternalHookParameterTypesOnItsWrappers()
+		{
+			GeneratorResult result = Generator.Run(InternalHookModule + """
+
+			                                                            [Container]
+			                                                            [Import(typeof(PluginModule))]
+			                                                            internal static partial class AppContainer { }
+			                                                            """);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("the wrappers of an internal module are reached only where the internal parameter type is too");
+			await That(ModuleSource(result))
+				.Contains("(global::Lib.IPlugin @awaiten__instance, global::Lib.ILog @log) => Wire((global::Lib.Roaster)@awaiten__instance, @log);")
+				.And.Contains("(global::Lib.IBell @awaiten__instance, global::Lib.ILog @log) => Ring((global::Lib.PluginModule.Bell)@awaiten__instance, @log);");
+		}
+
+		[Test]
+		public async Task AnInternalModule_WithInternalHookParameterTypes_IsImportedByAnAssemblyGrantedInternalsVisibleTo()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Granted(InternalHookModule), InternalConsumer);
+
+			await That(result.Diagnostics).IsEmpty();
+		}
+
+		private const string InternalExposureModule = """
+		                                              using Awaiten;
+
+		                                              namespace Lib;
+
+		                                              internal interface IPlugin { }
+		                                              internal interface IRoaster { }
+		                                              internal sealed class Roaster : IPlugin, IRoaster { }
+
+		                                              [Module]
+		                                              [Scan<IPlugin>(As = ScanAs.MatchingInterface)]
+		                                              internal static partial class PluginModule;
+		                                              """;
+
+		[Test]
+		public async Task AnInternalModule_ExposesAMatchUnderAnInternalInterface()
+		{
+			GeneratorResult result = Generator.Run(InternalExposureModule + """
+
+			                                                                [Container]
+			                                                                [Import(typeof(PluginModule))]
+			                                                                internal static partial class AppContainer { }
+			                                                                """);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("an internal module is imported only where its internal interfaces can be named, so they are no reason for AWT196");
+			await That(ModuleSource(result)).Contains("GeneratedScanRegistrationAttribute<global::Lib.IRoaster>");
+		}
+
+		[Test]
+		public async Task AnInternalModule_ExposesAnInternalMatchAsItself()
+		{
+			GeneratorResult result = Generator.Run(InternalExposureModule.Replace("ScanAs.MatchingInterface", "ScanAs.Self"));
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("an internal module may register an internal match as itself");
+			await That(ModuleSource(result)).Contains("GeneratedScanRegistrationAttribute<global::Lib.Roaster>");
+		}
+
+		[Test]
+		public async Task AnInternalModule_WithInternalExposures_IsImportedByAnAssemblyGrantedInternalsVisibleTo()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Granted(InternalExposureModule), InternalConsumer);
+
+			await That(result.Diagnostics).IsEmpty();
+			await That(result.Sources.Single(source => source.Key.Contains("AppContainer")).Value).Contains("global::Lib.PluginModule.Awaiten__Scan_Roaster_")
+				.Because("the consumer resolves the match under the internal interface through the module's factory");
+		}
+
+		[Test]
+		public async Task APublicModule_StillSkipsAMatchWithOnlyInternalInterfaces()
+		{
+			GeneratorResult result = Generator.Run(InternalExposureModule.Replace("internal static partial class PluginModule", "public static partial class PluginModule"));
+
+			await That(result.Diagnostics).Contains("*AWT196*Lib.Roaster*").AsWildcard()
+				.Because("a container in another assembly could not name the internal interface");
+		}
+	}
+
+	public class FactoryMemberHooks
+	{
+		private const string HookedFactoryModule = """
+		                                           using Awaiten;
+
+		                                           namespace Lib;
+
+		                                           public interface IClock { }
+		                                           public interface IKettle { }
+		                                           public interface IMenu { }
+		                                           internal sealed class Kettle : IKettle { }
+		                                           internal sealed class Menu : IMenu { }
+
+		                                           [Module]
+		                                           [Singleton<IKettle>(Factory = nameof(CreateKettle), OnActivated = nameof(Boil))]
+		                                           [Singleton<IMenu>(Factory = nameof(CreateMenu), OnRelease = nameof(Clear))]
+		                                           public static partial class GreetingModule
+		                                           {
+		                                               public static IKettle CreateKettle() => new Kettle();
+
+		                                               internal static IMenu CreateMenu() => new Menu();
+
+		                                               internal static void Boil(IKettle kettle, IClock clock) { }
+
+		                                               internal static void Clear(IMenu menu) { }
+		                                           }
+		                                           """;
+
+		[Test]
+		public async Task AModule_WrapsTheInternalHooksOfFactoryRegistrations()
+		{
+			GeneratorResult result = Generator.Run(HookedFactoryModule);
+
+			await That(result.Diagnostics).IsEmpty();
+			await That(ModuleSource(result))
+				.Contains("public static void Awaiten__Hook_OnActivated_IKettle_*(global::Lib.IKettle @awaiten__instance, global::Lib.IClock @clock) => Boil(@awaiten__instance, @clock);").AsWildcard()
+				.And.Contains("public static void Awaiten__Hook_OnRelease_IMenu_*(global::Lib.IMenu @awaiten__instance) => Clear(@awaiten__instance);").AsWildcard()
+				.Because("a container in another assembly calls the public wrappers instead of the internal hooks");
+		}
+
+		[Test]
+		public async Task AModuleInAnotherAssembly_IsImportedWithoutInternalsVisibleTo()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(HookedFactoryModule, ClockConsumer);
+
+			await That(result.Diagnostics).IsEmpty();
+			string source = result.Sources.Single(source => source.Key.Contains("AppContainer")).Value;
+			await That(source).Contains("global::Lib.GreetingModule.Awaiten__Hook_OnActivated_IKettle_").And.Contains("global::Lib.GreetingModule.Awaiten__Hook_OnRelease_IMenu_")
+				.Because("the consumer runs the wrappers, which it can see, instead of the internal hooks it cannot");
+		}
+
+		[Test]
+		public async Task AModuleInAnotherAssembly_IsImportedWithInternalsVisibleTo()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Granted(HookedFactoryModule), ClockConsumer);
+
+			await That(result.Diagnostics).IsEmpty();
+			await That(result.Sources.Single(source => source.Key.Contains("AppContainer")).Value).Contains("global::Lib.GreetingModule.Boil(")
+				.Because("a consumer that can reach the internal hook calls it directly");
+		}
+
+		private const string InternalParameterHookModule = """
+		                                                   using Awaiten;
+
+		                                                   namespace Lib;
+
+		                                                   public interface IKettle { }
+		                                                   internal sealed class Log { }
+		                                                   internal sealed class Kettle : IKettle { }
+
+		                                                   [Module]
+		                                                   [Singleton<Log>]
+		                                                   [Singleton<IKettle>(Factory = nameof(CreateKettle), OnActivated = nameof(Boil))]
+		                                                   public static partial class GreetingModule
+		                                                   {
+		                                                       public static IKettle CreateKettle() => new Kettle();
+
+		                                                       internal static void Boil(IKettle kettle, Log log) { }
+		                                                   }
+		                                                   """;
+
+		[Test]
+		public async Task AHookWithAnInternalParameterType_ReportsAwt203()
+		{
+			GeneratorResult result = Generator.Run(InternalParameterHookModule);
+
+			await That(result.Diagnostics).Contains("*AWT203*OnActivated*Lib.Log*").AsWildcard()
+				.Because("a public wrapper cannot expose the internal parameter type");
+		}
+
+		[Test]
+		public async Task AHookWithAnInternalParameterType_IsCalledDirectlyByAnAssemblyGrantedInternalsVisibleTo()
+		{
+			GeneratorResult library = Generator.Run(Granted(InternalParameterHookModule));
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Granted(InternalParameterHookModule), Consumer);
+
+			await That(library.Diagnostics).IsEmpty()
+				.Because("an assembly granted InternalsVisibleTo calls the hook directly, so the module needs no wrapper");
+			await That(ModuleSource(library)).Contains("public const string Awaiten__HookSkipped_OnActivated_IKettle_").And.DoesNotContain("Awaiten__Hook_OnActivated_IKettle_");
+			await That(result.Diagnostics).IsEmpty();
+			await That(result.Sources.Single(source => source.Key.Contains("AppContainer")).Value).Contains("global::Lib.GreetingModule.Boil(");
+		}
+
+		[Test]
+		public async Task AHookWithAnInternalParameterType_ReportsAwt231ToAnAssemblyNotGrantedInternalsVisibleTo()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(
+				Granted(InternalParameterHookModule).Replace("\"TestAssembly\"", "\"OtherAssembly\""), Consumer);
+
+			await That(result.Diagnostics).Contains("*AWT231*Lib.GreetingModule*OnActivated hook 'Boil'*Lib.Log*").AsWildcard()
+				.Because("the consumer can neither call the internal hook nor a wrapper the module did not generate");
+		}
+
+		private const string AsyncHookedFactoryModule = """
+		                                                using System.Threading;
+		                                                using System.Threading.Tasks;
+		                                                using Awaiten;
+
+		                                                namespace Lib;
+
+		                                                public interface IKettle { }
+		                                                internal sealed class Kettle : IKettle { }
+
+		                                                [Module]
+		                                                [Singleton<IKettle>(Factory = nameof(CreateKettle), OnActivated = nameof(BoilAsync))]
+		                                                public static partial class GreetingModule
+		                                                {
+		                                                    public static IKettle CreateKettle() => new Kettle();
+
+		                                                    internal static Task BoilAsync(IKettle kettle, CancellationToken cancellationToken) => Task.CompletedTask;
+		                                                }
+		                                                """;
+
+		[Test]
+		public async Task AModule_WrapsTheInternalAsyncHookOfAFactoryRegistrationWithItsTaskAndToken()
+		{
+			GeneratorResult result = Generator.Run(AsyncHookedFactoryModule);
+
+			await That(result.Diagnostics).IsEmpty();
+			await That(ModuleSource(result))
+				.Contains("public static global::System.Threading.Tasks.Task Awaiten__Hook_OnActivated_IKettle_*(global::Lib.IKettle @awaiten__instance, global::System.Threading.CancellationToken @cancellationToken) => BoilAsync(@awaiten__instance, @cancellationToken);").AsWildcard();
+		}
+
+		[Test]
+		public async Task AModuleInAnotherAssembly_AwaitsTheWrappedHookWithTheResolveToken()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(AsyncHookedFactoryModule, Consumer);
+
+			await That(result.Diagnostics).IsEmpty();
+			await That(result.Sources.Single(source => source.Key.Contains("AppContainer")).Value)
+				.Contains("await global::Lib.GreetingModule.Awaiten__Hook_OnActivated_IKettle_*(*, cancellationToken)").AsWildcard();
+		}
+	}
+
 	public class BaseContainer
 	{
 		private const string PrivateBase = """

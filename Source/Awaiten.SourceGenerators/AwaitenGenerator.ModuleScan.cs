@@ -197,7 +197,7 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     Emits the factory for one module-scan match, or reports why it cannot: the exposure must resolve to a
-	///     single interface a consumer in another assembly can name (AWT196 when none, AWT197 when several, since a
+	///     single interface every consumer of the module can name (AWT196 when none, AWT197 when several, since a
 	///     factory returns one accessible type and a shared instance across interfaces cannot be expressed), and the
 	///     constructor's parameters must all be accessible outside the assembly (AWT195), because they appear on the
 	///     generated <c>public</c> factory and are resolved from the consumer's graph. A match carrying injection
@@ -222,7 +222,7 @@ partial class AwaitenGenerator
 		List<DiagnosticInfo> diagnostics = context.Diagnostics;
 		string typeName = type.ToDisplayString(FullyQualified);
 
-		List<INamedTypeSymbol> distinct = AccessibleExposures(type, match, markerInfo, context.Compilation);
+		List<INamedTypeSymbol> distinct = AccessibleExposures(type, match, markerInfo, context);
 
 		if (distinct.Count == 0)
 		{
@@ -517,7 +517,7 @@ partial class AwaitenGenerator
 		string instanceCast = hook.Parameters[0].Type.ToDisplayString(FullyQualified);
 		string returnType = hook.ReturnType.ToDisplayString(FullyQualified);
 		List<DiagnosticInfo> rejections = new();
-		if (!TryMirrorHookParameters(request.Subject, hook, release, location, rejections, out EquatableArray<FactoryParameter> parameters))
+		if (!TryMirrorHookParameters(request.Subject, hook, release, location, context with { Diagnostics = rejections, }, out EquatableArray<FactoryParameter> parameters))
 		{
 			if (request.Skippable && HookSkipReason(rejections[0], hook, release) is { } skipReason)
 			{
@@ -604,8 +604,8 @@ partial class AwaitenGenerator
 	///     <see cref="ResolveModuleHook" />), or reports why it cannot and returns <see langword="false" /> (the hook
 	///     is dropped). Each parameter is resolved from the consumer's graph like a factory's, so a runtime
 	///     <c>[Arg]</c> is <see cref="Diagnostics.HookParameterIsArg">AWT189</see>, a <c>Func</c>/<c>Lazy</c> on a
-	///     release hook is <see cref="Diagnostics.ReleaseHookDeferredParameter">AWT191</see>, a type not nameable
-	///     outside the assembly is <see cref="Diagnostics.ModuleScanHookParameterInaccessible">AWT203</see> (the
+	///     release hook is <see cref="Diagnostics.ReleaseHookDeferredParameter">AWT191</see>, a type that may not
+	///     appear on the wrapper (see <see cref="FitsFactorySignature" />) is <see cref="Diagnostics.ModuleScanHookParameterInaccessible">AWT203</see> (the
 	///     hook-parameter twin of the factory-parameter AWT195), and <c>[FromKey]</c>/<c>[Inject]</c> metadata the
 	///     bare wrapper signature would silently drop is
 	///     <see cref="Diagnostics.ModuleScanHookInjectionMetadata">AWT204</see> (the twin of AWT200). The instance
@@ -617,16 +617,16 @@ partial class AwaitenGenerator
 		IMethodSymbol hook,
 		bool release,
 		Location? location,
-		List<DiagnosticInfo> diagnostics,
+		ModuleScanContext context,
 		out EquatableArray<FactoryParameter> parameters)
 	{
 		parameters = default;
 		List<FactoryParameter> mirrored = new();
 		foreach (IParameterSymbol parameter in hook.Parameters.Skip(1))
 		{
-			if (HookParameterMirrorError(subject, parameter, release, location) is { } error)
+			if (HookParameterMirrorError(subject, parameter, release, location, context) is { } error)
 			{
-				diagnostics.Add(error);
+				context.Diagnostics.Add(error);
 				return false;
 			}
 
@@ -670,7 +670,7 @@ partial class AwaitenGenerator
 	///     Why one hook parameter cannot be mirrored onto the public wrapper (see
 	///     <see cref="TryMirrorHookParameters" />), or <see langword="null" /> when it can.
 	/// </summary>
-	private static DiagnosticInfo? HookParameterMirrorError(SelfCompiledSubject subject, IParameterSymbol parameter, bool release, Location? location)
+	private static DiagnosticInfo? HookParameterMirrorError(SelfCompiledSubject subject, IParameterSymbol parameter, bool release, Location? location, ModuleScanContext context)
 	{
 		string typeName = subject.TypeName;
 		ImmutableArray<AttributeData> attributes = parameter.GetAttributes();
@@ -707,7 +707,7 @@ partial class AwaitenGenerator
 				new EquatableArray<string>([parameter.Name, Display(typeName),]));
 		}
 
-		if (!IsExternallyAccessible(parameter.Type))
+		if (!FitsFactorySignature(parameter.Type, context))
 		{
 			return new DiagnosticInfo(
 				Diagnostics.ModuleScanHookParameterInaccessible,
@@ -735,19 +735,20 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     The interfaces one module-scan match would expose, restricted to those a consumer in any assembly can
-	///     name and deduped by name. <c>Self</c> exposes the concrete type (externally usable only when it is
-	///     itself public); <c>Marker</c> and <c>MatchingInterface</c> contribute their accessible interfaces. A
-	///     combined <c>Marker | MatchingInterface</c> can select the same interface twice, hence the dedup.
+	///     The interfaces one module-scan match would expose, restricted to those that may appear on the module's
+	///     factory (see <see cref="FitsFactorySignature" />), so every consumer of the module can name them, and
+	///     deduped by name. <c>Self</c> exposes the concrete type; <c>Marker</c> and <c>MatchingInterface</c>
+	///     contribute their interfaces. A combined <c>Marker | MatchingInterface</c> can select the same interface
+	///     twice, hence the dedup.
 	/// </summary>
 	private static List<INamedTypeSymbol> AccessibleExposures(
 		INamedTypeSymbol type,
 		ScanMatch match,
 		ScanMarkerInfo markerInfo,
-		Compilation compilation)
+		ModuleScanContext context)
 	{
 		List<INamedTypeSymbol> exposures = new();
-		if (match.RegisterSelf && IsExternallyAccessible(type))
+		if (match.RegisterSelf && FitsFactorySignature(type, context))
 		{
 			exposures.Add(type);
 		}
@@ -757,13 +758,13 @@ partial class AwaitenGenerator
 			exposures.AddRange(
 				(markerInfo.Open
 					? ClosedMarkerInterfaces(type, markerInfo.Definition!)
-					: MarkerInterfaces(type, markerInfo.Marker, compilation))
-				.Where(IsExternallyAccessible));
+					: MarkerInterfaces(type, markerInfo.Marker, context.Compilation))
+				.Where(exposure => FitsFactorySignature(exposure, context)));
 		}
 
 		if (match.RegisterMatchingInterface)
 		{
-			exposures.AddRange(MatchingInterfaces(type).Where(IsExternallyAccessible));
+			exposures.AddRange(MatchingInterfaces(type).Where(exposure => FitsFactorySignature(exposure, context)));
 		}
 
 		HashSet<string> seen = new(StringComparer.Ordinal);

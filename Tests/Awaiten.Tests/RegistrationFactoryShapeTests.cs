@@ -123,6 +123,29 @@ public sealed partial class RegistrationFactoryShapeTests
 				.Because("the composite factory receives the collection of the two other chimes");
 			await That(container.Resolve<IEnumerable<IShapeChime>>()).HasCount(2);
 		}
+
+		[Test]
+		public async Task TheInternalHookOfAFactoryRegistration_RunsThroughItsWrapper()
+		{
+			using FactoryHookContainer.Root container = new();
+
+			await That(container.Resolve<IFactoryHookedLamp>().Clock).IsSameAs(container.Resolve<IShapeClock>())
+				.Because("the public wrapper passes the graph's clock on to the module's internal hook");
+		}
+
+		[Test]
+		public async Task TheInternalAsyncHookOfAFactoryRegistration_IsAwaitedThroughItsWrapper()
+		{
+			using CancellationTokenSource cancellation = new();
+			using FactoryHookContainer.Root container = new();
+
+			IFactoryHookedRouter router = await container.ResolveAsync<IFactoryHookedRouter>(cancellation.Token);
+
+			await That(router.Token).IsEqualTo(cancellation.Token)
+				.Because("the wrapper returns the hook's Task and forwards the resolve-time token");
+			await That(container.GetResolvability<IFactoryHookedRouter>().Status).IsEqualTo(AwaitenResolvabilityStatus.AsyncOnly)
+				.Because("the wrapped asynchronous hook makes the router async-initialized");
+		}
 	}
 
 	public sealed class ModuleHidingTheImplementation
@@ -259,6 +282,11 @@ public sealed partial class RegistrationFactoryShapeTests
 
 		public sealed class ShapeSystemClock : IShapeClock;
 	}
+
+	[Container]
+	[Import(typeof(FactoryHookModule))]
+	[Singleton<ShapeContainer.ShapeSystemClock, IShapeClock>]
+	public static partial class FactoryHookContainer;
 
 	[Module]
 	[Singleton<HiddenGreetingModule.Greeter, IGreeter>]

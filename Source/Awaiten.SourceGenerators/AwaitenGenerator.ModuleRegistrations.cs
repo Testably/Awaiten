@@ -186,9 +186,17 @@ partial class AwaitenGenerator
 	///     its closed registrations name when a member is not public but its assembly can reach it, so a container in
 	///     another assembly calls the wrapper instead of the member it cannot see. A member gets one only when its
 	///     signature is public throughout, it is not generic, and no parameter carries an attribute the wrapper cannot
-	///     carry; otherwise a consumer reports the member as before (AWT108, AWT109).
+	///     carry; otherwise a consumer reports the member as before (AWT108, AWT109). A hook of a <c>Factory</c>
+	///     registration that is not public gets a public wrapper too, resolved and checked like the hook of a
+	///     self-compiled registration (AWT203, AWT204), unless the registered type is not public. When the module's
+	///     assembly grants <c>InternalsVisibleTo</c> to any assembly, a hook whose wrapper fails only with AWT203 or
+	///     AWT204 lands in <paramref name="skipped" /> instead, since such an assembly calls it directly.
 	/// </summary>
-	private static List<MemberWrapper> CollectModuleMemberWrappers(INamedTypeSymbol module, Compilation compilation)
+	private static List<MemberWrapper> CollectModuleMemberWrappers(
+		INamedTypeSymbol module,
+		Compilation compilation,
+		List<DiagnosticInfo> diagnostics,
+		List<SkippedRegistration> skipped)
 	{
 		List<MemberWrapper> wrappers = new();
 		if (!IsExternallyAccessible(module))
@@ -196,27 +204,84 @@ partial class AwaitenGenerator
 			return wrappers;
 		}
 
+		ModuleScanContext context = new(module, compilation, diagnostics, new HashSet<string>(StringComparer.Ordinal));
 		foreach (AttributeData attribute in module.GetAttributes())
 		{
 			if (attribute.AttributeClass is not { Name: "SingletonAttribute" or "TransientAttribute" or "ScopedAttribute", } attributeClass
 			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace
 			    || ReadProduction(attribute) is not { Production: ProductionKind.Factory or ProductionKind.Instance, Member: { } member, Conflicting: false, } production
-			    || ProducedRegistrationType(attribute, attributeClass) is not { } produced
-			    || AccessibleMembers(module, member, compilation).Any(candidate => candidate.DeclaredAccessibility == Accessibility.Public))
+			    || ProducedRegistrationType(attribute, attributeClass) is not { } produced)
 			{
 				continue;
 			}
 
-			MemberWrapper? wrapper = production.Production == ProductionKind.Factory
-				? FactoryWrapper(member, produced)
-				: InstanceWrapper(member, produced);
+			if (!AccessibleMembers(module, member, compilation).Any(candidate => candidate.DeclaredAccessibility == Accessibility.Public))
+			{
+				Add(production.Production == ProductionKind.Factory
+					? FactoryWrapper(member, produced)
+					: InstanceWrapper(member, produced));
+			}
+
+			foreach (bool release in new[] { false, true, })
+			{
+				if (production.Production == ProductionKind.Factory && NamedArgument(attribute, release ? "OnRelease" : "OnActivated") is { } hookName)
+				{
+					Add(HookWrapper(hookName, produced, release, $"'{Display(produced.ToDisplayString(FullyQualified))}' is registered through the module's factory '{member}'",
+						attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation()));
+				}
+			}
+		}
+
+		return wrappers;
+
+		void Add(MemberWrapper? wrapper)
+		{
 			if (wrapper is not null && wrappers.All(existing => existing.Name != wrapper.Name))
 			{
 				wrappers.Add(wrapper);
 			}
 		}
 
-		return wrappers;
+		MemberWrapper? HookWrapper(string hookName, INamedTypeSymbol produced, bool release, string subject, Location? location)
+		{
+			string name = RegistrationHookWrapperName(produced, release, hookName);
+			string skippedName = RegistrationHookSkippedName(produced, release, hookName);
+			if (!IsExternallyAccessible(produced)
+			    || wrappers.Any(existing => existing.Name == name)
+			    || skipped.Any(existing => existing.MarkerName == skippedName)
+			    || AccessibleMembers(module, hookName, compilation).Any(candidate => candidate.DeclaredAccessibility == Accessibility.Public))
+			{
+				return null;
+			}
+
+			ModuleHookRequest request = new(
+				produced, hookName, location, release, name, new SelfCompiledSubject(produced.ToDisplayString(FullyQualified), subject, "make the hook public"),
+				GrantsInternalsVisibleTo(compilation.Assembly));
+			if (ResolveModuleHookCore(request, null, context) is not { Wrapper: var hook, })
+			{
+				return null;
+			}
+
+			if (hook.SkipReason is { } reason)
+			{
+				skipped.Add(new SkippedRegistration(skippedName, reason, Hook: true));
+				return null;
+			}
+
+			// The wrapper takes the registered type, which converts to the hook's instance parameter, so it needs no cast.
+			FactoryParameter[] parameters = hook.Parameters.AsArray();
+			string instance = "awaiten__instance";
+			while (parameters.Any(parameter => parameter.Name == instance))
+			{
+				instance += "_";
+			}
+
+			return new MemberWrapper(
+				name,
+				hook.ReturnType,
+				hook.Target,
+				new EquatableArray<FactoryParameter>([new FactoryParameter(produced.ToDisplayString(FullyQualifiedWithNullability), instance), ..parameters,]));
+		}
 
 		MemberWrapper? FactoryWrapper(string member, INamedTypeSymbol produced)
 		{
