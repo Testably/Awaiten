@@ -1090,16 +1090,17 @@ partial class AwaitenGenerator
 	/// <summary>
 	///     How a self-compilation diagnostic names the implementation it is about: its fully-qualified
 	///     <see cref="TypeName" />, the <see cref="Subject" /> phrase a message opens with, and the
-	///     <see cref="Remedy" /> that keeps the implementation out of self-compilation.
+	///     <see cref="Remedy" /> that keeps the implementation out of self-compilation. <see cref="Participle" /> describes
+	///     the implementation in a clause after its name, for a message that goes on to say what it is.
 	/// </summary>
-	private readonly record struct SelfCompiledSubject(string TypeName, string Subject, string Remedy);
+	private readonly record struct SelfCompiledSubject(string TypeName, string Subject, string Remedy, string? Participle = null);
 
 	/// <summary>The remedy of AWT197 for a scan match exposed under several interfaces.</summary>
 	private const string ScanSingleExposureRemedy = "narrow the As to one interface or exclude the type from the scan";
 
 	/// <summary>The subject of a self-compilation diagnostic about a module <c>[Scan]</c> match.</summary>
 	private static SelfCompiledSubject ScanSubject(string typeName)
-		=> new(typeName, $"'{Display(typeName)}' matched the module scan", "exclude the type from the scan");
+		=> new(typeName, $"'{Display(typeName)}' matched the module scan", "exclude the type from the scan", "matched by the module scan");
 
 	/// <summary>
 	///     The <c>[Inject]</c>, <c>[Arg]</c> or <c>[FromKey]</c> attribute on a constructor parameter that a

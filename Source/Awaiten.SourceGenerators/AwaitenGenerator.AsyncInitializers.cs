@@ -366,7 +366,7 @@ partial class AwaitenGenerator
 					Diagnostics.InaccessibleAsyncInitializer,
 					LocationInfo.From(location),
 					new EquatableArray<string>([
-						subject.Subject,
+						$"'{Display(subject.TypeName)}', {subject.Participle},",
 						Display(convention.Type.ToDisplayString(FullyQualified)),
 						convention.Method.Name,
 						$"{reason}, so a consumer in another assembly cannot call it",
