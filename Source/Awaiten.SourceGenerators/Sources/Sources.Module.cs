@@ -87,13 +87,13 @@ internal static partial class Sources
 
 			// The lifecycle-hook wrappers, emitted beside the factory: public so a cross-assembly consumer can run
 			// them, but bodied inside the module so they may cast to and call its internal implementation and hook.
-			if (factory.OnActivated is { } activation)
+			if (factory.OnActivated is { SkipReason: null, } activation)
 			{
 				builder.AppendLine();
 				EmitModuleHook(builder, depth + 1, factory.ServiceType, activation, release: false, ScanOrigin);
 			}
 
-			if (factory.OnRelease is { } release)
+			if (factory.OnRelease is { SkipReason: null, } release)
 			{
 				builder.AppendLine();
 				EmitModuleHook(builder, depth + 1, factory.ServiceType, release, release: true, ScanOrigin);
@@ -124,9 +124,18 @@ internal static partial class Sources
 			}
 
 			first = false;
-			EmitSkipReason(builder, depth + 1, skipped.MarkerName, skipped.Reason,
-				"Generated from a module registration: why no factory constructs this implementation. An assembly granted",
-				"InternalsVisibleTo constructs it itself; a consuming container that cannot reports this reason.");
+			if (skipped.Hook)
+			{
+				EmitSkipReason(builder, depth + 1, skipped.MarkerName, skipped.Reason,
+					"Generated from a module registration: why no wrapper runs this lifecycle hook. An assembly granted",
+					"InternalsVisibleTo calls the hook itself; a consuming container that cannot reports this reason.");
+			}
+			else
+			{
+				EmitSkipReason(builder, depth + 1, skipped.MarkerName, skipped.Reason,
+					"Generated from a module registration: why no factory constructs this implementation. An assembly granted",
+					"InternalsVisibleTo constructs it itself; a consuming container that cannot reports this reason.");
+			}
 		}
 
 		Indent(builder, depth).AppendLine("}");

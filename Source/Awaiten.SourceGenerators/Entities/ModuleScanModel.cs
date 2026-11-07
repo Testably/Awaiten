@@ -33,9 +33,10 @@ internal sealed record ModuleScanModel(
 /// <summary>
 ///     An implementation the module generates no factory for, because an assembly granted <c>InternalsVisibleTo</c>
 ///     constructs it itself: the name of the emitted constant and the reason it holds, which a consumer that cannot
-///     construct the implementation reports.
+///     construct the implementation reports. <see cref="Hook" /> marks a hook whose wrapper the module leaves out
+///     instead, beside a factory it still emits.
 /// </summary>
-internal sealed record SkippedRegistration(string MarkerName, string Reason);
+internal sealed record SkippedRegistration(string MarkerName, string Reason, bool Hook = false);
 
 /// <summary>
 ///     The generated factory of an implementation that only its owner can construct: a self-compiled module
@@ -104,10 +105,12 @@ internal readonly record struct FactoryParameter(string Type, string Name);
 ///     and forwards it, plus <see cref="Parameters" /> (mirrored like factory parameters and resolved from the
 ///     consumer's graph), to <see cref="Target" /> - the user hook, carrying its bound type arguments for a generic
 ///     one. The consumer reads <see cref="WrapperName" /> off the <c>[GeneratedScanRegistration]</c> and runs it
-///     through the ordinary hook pipeline.
+///     through the ordinary hook pipeline. A hook with a <see cref="SkipReason" /> gets no wrapper, because an assembly
+///     granted <c>InternalsVisibleTo</c> calls it directly: <see cref="WrapperName" /> is then the user hook's own name.
 /// </summary>
 internal sealed record ModuleHook(
 	string WrapperName,
 	string Target,
 	string InstanceCast,
-	EquatableArray<FactoryParameter> Parameters);
+	EquatableArray<FactoryParameter> Parameters,
+	string? SkipReason = null);

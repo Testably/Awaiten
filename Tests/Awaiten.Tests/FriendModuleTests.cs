@@ -83,9 +83,24 @@ public partial class FriendModuleTests
 			.Because("the container constructs the internal implementation of a generic module itself");
 	}
 
+	[Test]
+	public async Task CallsAHookWithAnInternalDependency()
+	{
+		using FriendHookContainer.Root container = new();
+
+		await That(container.Resolve<IFriendActivated>().Activated).IsTrue()
+			.Because("the container calls the module's internal hook directly instead of a wrapper the module could not generate");
+		await That(container.Resolve<IFriendHookedPlugin>().Activated).IsTrue()
+			.Because("the container registers the scan match itself and calls its internal hook directly");
+	}
+
 	[Container]
 	[Import(typeof(SupportFriendModule))]
 	public static partial class FriendContainer;
+
+	[Container]
+	[Import(typeof(SupportFriendHookModule))]
+	public static partial class FriendHookContainer;
 
 	[Container]
 	[Import(typeof(SupportFriendNotPartialModule))]

@@ -294,6 +294,7 @@ partial class AwaitenGenerator
 		IReadOnlyList<INamedTypeSymbol>? hookMarkers = ScanHookMarkers(type, match, markerInfo.Open, markerInfo.Definition);
 		ResolvedModuleHook? onActivated = ResolveModuleHook(type, match, release: false, hookMarkers, context);
 		ResolvedModuleHook? onRelease = ResolveModuleHook(type, match, release: true, hookMarkers, context);
+		skipReason ??= onActivated?.Wrapper.SkipReason ?? onRelease?.Wrapper.SkipReason;
 
 		factories.Add(new ModuleScanExpansion(
 			new ModuleFactory(
@@ -414,7 +415,7 @@ partial class AwaitenGenerator
 		// widened union is a new outcome and must report, not hide behind the stale entry.
 		string attempt = matchType.ToDisplayString(FullyQualified) + "\0" + (release ? "OnRelease" : "OnActivated") + "\0" + hookName;
 		ResolvedModuleHook? resolved = ResolveModuleHookCore(
-			new ModuleHookRequest(matchType, hookName, match.Location, release, ModuleHookWrapperName(matchType, release), ScanSubject(matchType.ToDisplayString(FullyQualified))),
+			new ModuleHookRequest(matchType, hookName, match.Location, release, ModuleHookWrapperName(matchType, release), ScanSubject(matchType.ToDisplayString(FullyQualified)), FriendsCanConstruct(matchType, context)),
 			closedMarkers,
 			context.FailedHooks.Contains(attempt) ? context with { Diagnostics = new List<DiagnosticInfo>(), } : context);
 		if (resolved is null)
@@ -440,18 +441,22 @@ partial class AwaitenGenerator
 		Location? Location,
 		bool Release,
 		string WrapperName,
-		SelfCompiledSubject Subject);
+		SelfCompiledSubject Subject,
+		bool Skippable = false);
 
 	/// <summary>
 	///     The resolution behind <see cref="ResolveModuleHook" />, reporting every failure into the context's sink;
-	///     the wrapper dedupes repeated failures of one already-reported attempt across overlapping scans.
+	///     the wrapper dedupes repeated failures of one already-reported attempt across overlapping scans. A
+	///     <see cref="ModuleHookRequest.Skippable" /> hook whose wrapper fails only with AWT203 or AWT204 resolves to a
+	///     hook with a <see cref="ModuleHook.SkipReason" /> instead: an assembly granted <c>InternalsVisibleTo</c> calls
+	///     it directly, so the module emits no wrapper and reports no error.
 	/// </summary>
 	private static ResolvedModuleHook? ResolveModuleHookCore(
 		ModuleHookRequest request,
 		IReadOnlyList<INamedTypeSymbol>? closedMarkers,
 		ModuleScanContext context)
 	{
-		(INamedTypeSymbol matchType, string hookName, Location? location, bool release, _, _) = request;
+		(INamedTypeSymbol matchType, string hookName, Location? location, bool release, _, _, _) = request;
 		string typeName = matchType.ToDisplayString(FullyQualified);
 		(List<IMethodSymbol> matches, List<IReadOnlyList<INamedTypeSymbol>> ambiguous) =
 			CollectModuleHookOverloads(matchType, hookName, closedMarkers, context);
@@ -483,15 +488,22 @@ partial class AwaitenGenerator
 		}
 
 		IMethodSymbol hook = matches[0];
-		if (!TryMirrorHookParameters(request.Subject, hook, release, location, context.Diagnostics, out EquatableArray<FactoryParameter> parameters))
+		string instanceCast = hook.Parameters[0].Type.ToDisplayString(FullyQualified);
+		List<DiagnosticInfo> rejections = new();
+		if (!TryMirrorHookParameters(request.Subject, hook, release, location, rejections, out EquatableArray<FactoryParameter> parameters))
 		{
+			if (request.Skippable && HookSkipReason(rejections[0], hook, release) is { } reason)
+			{
+				return new ResolvedModuleHook(hookName, new ModuleHook(hookName, hookName, instanceCast, default, reason));
+			}
+
+			context.Diagnostics.AddRange(rejections);
 			return null;
 		}
 
 		// The wrapper casts the exposure interface it receives to the hook's first-parameter type (the internal
 		// concrete match, or the closed marker form of a generic hook) and forwards it to the user hook, carrying its
 		// bound type arguments for a generic one - all legal because the wrapper compiles inside the module.
-		string instanceCast = hook.Parameters[0].Type.ToDisplayString(FullyQualified);
 		string target = hook.TypeArguments.Length == 0
 			? hookName
 			: $"{hookName}<{string.Join(", ", hook.TypeArguments.Select(argument => argument.ToDisplayString(FullyQualified)))}>";
@@ -598,6 +610,35 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
+	///     Why the module emits no wrapper for <paramref name="hook" />, from the diagnostic the wrapper would have
+	///     failed with, or <see langword="null" /> when a direct call would fail too: the hook is generic, which a
+	///     consumer could not close, or a parameter is an <c>[Arg]</c> or a deferred release dependency (AWT189, AWT191).
+	/// </summary>
+	private static string? HookSkipReason(DiagnosticInfo rejection, IMethodSymbol hook, bool release)
+	{
+		if (hook.Arity > 0
+		    || hook.Parameters.Skip(1).Any(parameter => HasArgAttribute(parameter.GetAttributes()) || (release && IsDeferred(parameter))))
+		{
+			return null;
+		}
+
+		string[] arguments = rejection.MessageArgs.AsArray();
+		if (rejection.Descriptor == Diagnostics.ModuleScanHookParameterInaccessible)
+		{
+			return $"its {arguments[1]} hook's parameter of type '{arguments[2]}' is not accessible outside the module's assembly";
+		}
+
+		return rejection.Descriptor == Diagnostics.ModuleScanHookInjectionMetadata
+			? $"its {arguments[1]} hook's parameter '{arguments[2]}' is marked {arguments[3]}"
+			: null;
+	}
+
+	/// <summary>Whether a hook parameter resolves its dependency later, which a release hook cannot (AWT191).</summary>
+	private static bool IsDeferred(IParameterSymbol parameter)
+		=> ClassifyParameter(parameter, asyncFactory: false, new ExternalServiceTypes()).Kind
+			is DependencyKind.Func or DependencyKind.Lazy or DependencyKind.FuncTask or DependencyKind.LazyTask or DependencyKind.TypeDispatch;
+
+	/// <summary>
 	///     Why one hook parameter cannot be mirrored onto the public wrapper (see
 	///     <see cref="TryMirrorHookParameters" />), or <see langword="null" /> when it can.
 	/// </summary>
@@ -630,9 +671,7 @@ partial class AwaitenGenerator
 				]));
 		}
 
-		if (release
-		    && ClassifyParameter(parameter, asyncFactory: false, new ExternalServiceTypes()).Kind
-			    is DependencyKind.Func or DependencyKind.Lazy or DependencyKind.FuncTask or DependencyKind.LazyTask or DependencyKind.TypeDispatch)
+		if (release && IsDeferred(parameter))
 		{
 			return new DiagnosticInfo(
 				Diagnostics.ReleaseHookDeferredParameter,
@@ -769,7 +808,7 @@ partial class AwaitenGenerator
 			new ModuleHookSlot(overlapping.OnRelease, overlapping.Factory.OnRelease, overlapping.OnReleaseMarkers),
 			type, match, release: true, markers, context);
 
-		return overlapping with
+		ModuleScanExpansion merged = overlapping with
 		{
 			Factory = overlapping.Factory with { OnActivated = onActivated.Wrapper, OnRelease = onRelease.Wrapper, },
 			OnActivated = onActivated.Name,
@@ -777,6 +816,13 @@ partial class AwaitenGenerator
 			OnActivatedMarkers = onActivated.Markers,
 			OnReleaseMarkers = onRelease.Markers,
 		};
+		return merged.Factory.Skip is null && (onActivated.Wrapper?.SkipReason ?? onRelease.Wrapper?.SkipReason) is { } reason
+			? merged with
+			{
+				Factory = merged.Factory with { Parameters = default, Skip = SkipOf(type, reason, [merged.Service,]), },
+				SkippedServices = [merged.Service,],
+			}
+			: merged;
 	}
 
 	/// <summary>

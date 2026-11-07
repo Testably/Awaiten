@@ -182,7 +182,9 @@ partial class AwaitenGenerator
 	///     <c>InternalsVisibleTo</c> to any assembly, an implementation that fails only with AWT195, AWT197 or AWT200
 	///     gets no factory and no error: such an assembly constructs it itself. It lands in <paramref name="skipped" />
 	///     with the reason, which a consumer that cannot construct it reports (AWT231). A type hidden in the module
-	///     (see <see cref="TypeHiddenInModule" />) is never skipped, since no other assembly can construct it.
+	///     (see <see cref="TypeHiddenInModule" />) is never skipped, since no other assembly can construct it. A hook
+	///     whose wrapper fails only with AWT203 or AWT204 is skipped the same way: the factory stays, and the hook lands
+	///     in <paramref name="skipped" />, since such an assembly calls it directly.
 	/// </summary>
 	private static List<RegistrationFactory> CollectModuleRegistrationFactories(
 		INamedTypeSymbol module,
@@ -293,8 +295,19 @@ partial class AwaitenGenerator
 					continue;
 				}
 
-				ModuleHookRequest request = new(implementation, hookName, registration.Location, release, RegistrationHookWrapperName(implementation, release, hookName), subject);
-				if (ResolveModuleHookCore(request, null, context) is { } resolved)
+				ModuleHookRequest request = new(
+					implementation, hookName, registration.Location, release, RegistrationHookWrapperName(implementation, release, hookName), subject,
+					friendsCanConstruct && TypeHiddenInModule(implementation, context.Module, context.Compilation) is null);
+				if (ResolveModuleHookCore(request, null, context) is not { } resolved)
+				{
+					continue;
+				}
+
+				if (resolved.Wrapper.SkipReason is { } reason)
+				{
+					skipped.Add(new SkippedRegistration(RegistrationHookSkippedName(implementation, release, hookName), reason, Hook: true));
+				}
+				else
 				{
 					hooks.Add(new RegistrationHook(resolved.Wrapper, release));
 				}
@@ -424,6 +437,23 @@ partial class AwaitenGenerator
 		string slot = release ? "OnRelease" : "OnActivated";
 		return $"Awaiten__Hook_{slot}_{implementation.Name}_{Fnv1a($"{implementation.ToDisplayString(FullyQualified)}\0{slot}\0{hookName}"):x8}";
 	}
+
+	/// <summary>
+	///     A deterministic name for the constant that records why the module emits no wrapper for a hook of a
+	///     self-compiled registration, derived like <see cref="RegistrationHookWrapperName" />.
+	/// </summary>
+	private static string RegistrationHookSkippedName(INamedTypeSymbol implementation, bool release, string hookName)
+		=> "Awaiten__HookSkipped_" + RegistrationHookWrapperName(implementation, release, hookName).Substring("Awaiten__Hook_".Length);
+
+	/// <summary>
+	///     Why the imported module of another assembly generated no wrapper for a hook of a registration of
+	///     <paramref name="implementation" />, or <see langword="null" /> when it records no such skip.
+	/// </summary>
+	private static string? SkippedHookReason(INamedTypeSymbol module, INamedTypeSymbol implementation, bool release, string hookName)
+		=> module.GetMembers(RegistrationHookSkippedName(implementation, release, hookName))
+			.OfType<IFieldSymbol>()
+			.Select(field => field.ConstantValue as string)
+			.FirstOrDefault(reason => reason is not null);
 
 	private static uint Fnv1a(string text)
 	{

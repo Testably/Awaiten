@@ -429,6 +429,23 @@ partial class AwaitenGenerator
 			return null;
 		}
 
+		foreach ((string? hook, bool release) in new[] { (registration.OnActivated, false), (registration.OnRelease, true), })
+		{
+			if (hook is not null
+			    && module.GetMembers(RegistrationHookWrapperName(implementation, release, hook)).IsEmpty
+			    && SkippedHookReason(module, implementation, release, hook) is { } hookReason)
+			{
+				if (context.Inherited)
+				{
+					return registration;
+				}
+
+				string slot = release ? "OnRelease" : "OnActivated";
+				ReportNotSelfCompiled(context, module, implementation, $"{slot} hook wrapper", hookReason, $"make '{Display(registration.ImplementationType)}', its constructor and its {slot} hook public");
+				return null;
+			}
+		}
+
 		return ThroughGeneratedFactory(registration, factory);
 	}
 
