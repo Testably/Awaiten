@@ -61,7 +61,8 @@ public interface IAwaitenRoot : IAwaitenScope, IAwaitenExternalResolverHost
 	///         advertises: the relationship shapes (<c>Func&lt;T&gt;</c>, <c>Lazy&lt;T&gt;</c>,
 	///         <c>Owned&lt;T&gt;</c>), the synthesized collections and keyed dictionaries, the awaited views over
 	///         them, and a variance-compatible closing of a registered variant generic interface, which reports its
-	///         nearest candidate's answer.
+	///         nearest candidate's answer. A type the container routes to its external resolver reports
+	///         <see cref="AwaitenResolvabilityStatus.External" />.
 	///     </para>
 	///     <para>
 	///         The answer belongs to the root: a child scope builds a service the root withholds

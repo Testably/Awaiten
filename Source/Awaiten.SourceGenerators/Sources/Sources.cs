@@ -250,7 +250,7 @@ internal static partial class Sources
 		// helper with the async dispatch above.
 		bool hasKeyedEntries = EmitKeyedResolutionApi(regions, body, context, strict, syncAfterInit, asObjectEmitted);
 		// The resolvability probe reads the dispatch tables both surfaces just emitted, so it comes after both.
-		bool hasResolvabilityProbe = EmitResolvabilityApi(regions, body, dispatch, hasKeyedEntries);
+		bool hasResolvabilityProbe = EmitResolvabilityApi(regions, body, dispatch, hasKeyedEntries, context.Imports);
 
 		Separate(members);
 		EmitCreateScopeAsync(members, body, asyncDisposal);

@@ -565,12 +565,13 @@ internal static partial class Sources
 	///     <c>Resolve</c> throws there; a child scope's <c>Resolve</c> asks only after its <c>TryResolve</c> missed,
 	///     which such a slot never does there. A withheld type without a synchronous slot is served only asynchronously. A
 	///     variance-compatible closing answers like its nearest candidate, which always has a slot, as
-	///     <c>TryResolve</c> and <c>Resolve</c> route it there too.
+	///     <c>TryResolve</c> and <c>Resolve</c> route it there too. A miss the by-type dispatch routes to the host
+	///     (<c>__IsImported</c>) answers <c>External</c>.
 	/// </remarks>
 	private static bool EmitResolvabilityApi(
-		ApiRegions regions, int depth, DispatchShape dispatch, bool hasKeyedEntries)
+		ApiRegions regions, int depth, DispatchShape dispatch, bool hasKeyedEntries, bool imports)
 	{
-		if (!dispatch.HasBuckets && !dispatch.HasWithheld && !hasKeyedEntries)
+		if (!dispatch.HasBuckets && !dispatch.HasWithheld && !hasKeyedEntries && !imports)
 		{
 			return false;
 		}
@@ -578,6 +579,9 @@ internal static partial class Sources
 		const string resolvable = "new global::Awaiten.AwaitenResolvability(global::Awaiten.AwaitenResolvabilityStatus.Resolvable, null)";
 		const string asyncOnly = "new global::Awaiten.AwaitenResolvability(global::Awaiten.AwaitenResolvabilityStatus.AsyncOnly, ";
 		const string withheldOnRoot = "new global::Awaiten.AwaitenResolvability(global::Awaiten.AwaitenResolvabilityStatus.WithheldOnRoot, ";
+		string miss = imports
+			? "return __IsImported(serviceType, key) ? new global::Awaiten.AwaitenResolvability(global::Awaiten.AwaitenResolvabilityStatus.External, null) : default;"
+			: "return default;";
 
 		StringBuilder builder = regions.Helpers;
 		Separate(builder);
@@ -590,7 +594,7 @@ internal static partial class Sources
 		{
 			Indent(builder, depth + 2).AppendLine("if (!__keyed.TryGetValue(new __KeyedKey(serviceType, key), out __KeyedEntry __entry))");
 			Indent(builder, depth + 2).AppendLine("{");
-			Indent(builder, depth + 3).AppendLine("return default;");
+			Indent(builder, depth + 3).AppendLine(miss);
 			Indent(builder, depth + 2).AppendLine("}");
 			builder.AppendLine();
 			Indent(builder, depth + 2).AppendLine("if (__entry.Sync is null)");
@@ -604,7 +608,7 @@ internal static partial class Sources
 		}
 		else
 		{
-			Indent(builder, depth + 2).AppendLine("return default;");
+			Indent(builder, depth + 2).AppendLine(miss);
 		}
 
 		Indent(builder, depth + 1).AppendLine("}");
@@ -660,7 +664,7 @@ internal static partial class Sources
 			builder.AppendLine();
 		}
 
-		Indent(builder, depth + 1).AppendLine("return default;");
+		Indent(builder, depth + 1).AppendLine(miss);
 		Indent(builder, depth).AppendLine("}");
 		return true;
 	}

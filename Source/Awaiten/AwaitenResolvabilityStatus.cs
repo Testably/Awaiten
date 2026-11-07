@@ -25,4 +25,11 @@ public enum AwaitenResolvabilityStatus
 	///     one). A child scope resolves it. <see cref="AwaitenResolvability.Reason" /> names the fix.
 	/// </summary>
 	WithheldOnRoot = 3,
+
+	/// <summary>
+	///     The container has no registration for the service type under the key, but imports it with
+	///     <c>[ImportService]</c> or <c>[ImportServices]</c>, so resolving it asks the external resolver. Whether the
+	///     host has the service is the host's answer.
+	/// </summary>
+	External = 4,
 }

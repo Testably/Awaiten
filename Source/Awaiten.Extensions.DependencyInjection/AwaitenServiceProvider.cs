@@ -218,7 +218,9 @@ public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScop
 	///     <see cref="GetService" /> still answers them with something other than <see langword="null" />: the
 	///     bridge's own <c>Task&lt;T&gt;</c> projection, a service withheld with a reason, and an
 	///     <c>IEnumerable&lt;T&gt;</c> served as an empty sequence. So the probe cannot drift from what
-	///     <see cref="GetService" /> does. A keyed
+	///     <see cref="GetService" /> does. A type the container imports from the host
+	///     (<see cref="AwaitenResolvabilityStatus.External" />) is reported when the host's own
+	///     <see cref="IServiceProviderIsService" /> reports it, because <see cref="GetService" /> asks the host for it. A keyed
 	///     registration is not reported here, mirroring how <see cref="GetService" /> resolves only the unkeyed
 	///     one; ask <see cref="IsKeyedService" /> for those.
 	/// </remarks>
@@ -243,7 +245,8 @@ public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScop
 	///     like <see cref="IsService" />. <see cref="KeyedService.AnyKey" /> reports <see langword="false" />,
 	///     because <see cref="GetKeyedService" /> declines it: Awaiten has no wildcard-key semantics. A keyed
 	///     service the container withholds is reported, as on the unkeyed surface, because
-	///     <see cref="GetKeyedService" /> answers it with its guidance rather than <see langword="null" />.
+	///     <see cref="GetKeyedService" /> answers it with its guidance rather than <see langword="null" />. A keyed
+	///     import is reported when the host's <see cref="IServiceProviderIsKeyedService" /> reports it.
 	/// </remarks>
 	/// <exception cref="ArgumentNullException"><paramref name="serviceType" /> is <see langword="null" />.</exception>
 	public bool IsKeyedService(Type serviceType, object? serviceKey)
@@ -316,7 +319,10 @@ public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScop
 			return false;
 		}
 
-		if (_metadata.GetResolvability(serviceType, key).Status != AwaitenResolvabilityStatus.NotRegistered)
+		AwaitenResolvabilityStatus status = _metadata.GetResolvability(serviceType, key).Status;
+		if (status == AwaitenResolvabilityStatus.External
+		    ? IsHostService(serviceType, key)
+		    : status != AwaitenResolvabilityStatus.NotRegistered)
 		{
 			return true;
 		}
@@ -328,6 +334,17 @@ public sealed class AwaitenServiceProvider : IKeyedServiceProvider, IServiceScop
 		       && serviceType.GetGenericTypeDefinition() == typeof(Task<>)
 		       && AsyncConverterFor(serviceType.GenericTypeArguments[0], key) is not null;
 	}
+
+	/// <summary>
+	///     Whether the host the container routes <paramref name="serviceType" /> to has it, asked of the external
+	///     resolver this scope resolves through, picked as the container picks it: the scope's own, else the root's.
+	///     Only a resolver over an <see cref="IServiceProvider" /> can answer, so any other one reports
+	///     <see langword="false" /> rather than claim a service the host may lack.
+	/// </summary>
+	private bool IsHostService(Type serviceType, object? key)
+		=> ((_container as IAwaitenExternalResolverHost)?.ExternalResolver ?? _metadata!.ExternalResolver)
+		   is AwaitenServiceProviderExternalResolver host
+		   && host.IsService(serviceType, key);
 
 	/// <summary>
 	///     The element type of an <c>IEnumerable&lt;T&gt;</c> the container has no unkeyed registration for, which

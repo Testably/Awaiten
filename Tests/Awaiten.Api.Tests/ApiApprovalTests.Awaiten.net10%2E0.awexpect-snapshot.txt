@@ -65,6 +65,7 @@ namespace Awaiten
         Resolvable = 1,
         AsyncOnly = 2,
         WithheldOnRoot = 3,
+        External = 4,
     }
     public static class AwaitenResolverExtensions
     {
