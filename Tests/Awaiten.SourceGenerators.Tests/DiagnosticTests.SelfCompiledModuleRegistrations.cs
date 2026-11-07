@@ -235,7 +235,7 @@ public partial class DiagnosticTests
 		public class Awt197
 		{
 			[Test]
-			public async Task ReportsAnInaccessibleImplementationUnderSeveralServices()
+			public async Task ReportsAnInaccessibleImplementationUnderSeveralServicesThatNoHandleCanBuild()
 			{
 				GeneratorResult result = Generator.Run("""
 					using Awaiten;
@@ -244,7 +244,8 @@ public partial class DiagnosticTests
 
 					public interface IGreeter { }
 					public interface IFarewell { }
-					internal sealed class Greeter : IGreeter, IFarewell { }
+					internal sealed class Secret { }
+					internal sealed class Greeter : IGreeter, IFarewell { public Greeter(Secret secret) { } }
 
 					[Module]
 					[Singleton<Greeter, IGreeter>]
@@ -253,11 +254,11 @@ public partial class DiagnosticTests
 					""");
 
 				await That(result.Diagnostics).Contains("*AWT197*Lib.Greeter*Lib.IGreeter, Lib.IFarewell*").AsWildcard()
-					.Because("one factory returns one service, so a second service would split the singleton a container shares across both");
+					.Because("one factory returns one service, so a second service would split the singleton a container shares across both, and no handle can share it since the implementation cannot be built");
 			}
 
 			[Test]
-			public async Task DoesNotReportSeveralServicesWhenTheAssemblyGrantsInternalsVisibleTo()
+			public async Task SharesAnImplementationUnderSeveralServicesThroughAHandleWhenTheAssemblyGrantsInternalsVisibleTo()
 			{
 				GeneratorResult result = Generator.Run("""
 					using Awaiten;
@@ -276,10 +277,10 @@ public partial class DiagnosticTests
 					public static partial class GreetingModule { }
 					""");
 
-				await That(result.Diagnostics).IsEmpty()
-					.Because("an assembly granted InternalsVisibleTo constructs the implementation itself and shares it across both services");
-				await That(result.Sources.Values.Single()).Contains("it is registered under several services (Lib.IGreeter, Lib.IFarewell)")
-					.And.DoesNotContain("Registration_");
+				await That(result.Diagnostics).IsEmpty();
+				await That(result.Sources.Values.Single()).Contains("HiddenRegistration_Greeter_")
+					.And.DoesNotContain("RegistrationSkipped_")
+					.Because("a handle shares the instance across both services for an assembly without InternalsVisibleTo, while a friend still constructs it itself");
 			}
 
 			[Test]

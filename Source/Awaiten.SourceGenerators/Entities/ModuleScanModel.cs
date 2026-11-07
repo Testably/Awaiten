@@ -29,7 +29,33 @@ internal sealed record ModuleScanModel(
 	EquatableArray<RegistrationFactory> Registrations = default,
 	EquatableArray<SkippedRegistration> Skipped = default,
 	string? NotPartialMarker = null,
-	EquatableArray<MemberWrapper> Wrappers = default);
+	EquatableArray<MemberWrapper> Wrappers = default,
+	EquatableArray<HiddenHandle> Handles = default,
+	EquatableArray<HiddenAlias> Aliases = default,
+	EquatableArray<HiddenInitializer> Initializers = default);
+
+/// <summary>
+///     The generated public handle of a service the module registers under an internal type: a class nested in the
+///     module's <c>Internals</c> that holds the instance as <see cref="ValueType" /> behind an internal constructor and
+///     property, so a container in another assembly depends on it without naming the service. A consumer registers it
+///     as a dependency-only service. One sealed variant per disposal shape an implementation needs
+///     (<see cref="Disposable" />, <see cref="AsyncDisposable" />, <see cref="BothDisposable" />) implements the
+///     interfaces and forwards them, so a container disposes exactly what the implementation implements.
+/// </summary>
+internal sealed record HiddenHandle(string Name, string ValueType, bool Disposable, bool AsyncDisposable, bool BothDisposable);
+
+/// <summary>
+///     A generated factory that serves one more service of an implementation registered under an internal service: it
+///     takes the handle that owns the instance (with the key of its owning registration in <see cref="Attributes" />)
+///     and returns <see cref="Body" />, the instance as <see cref="ReturnType" />, so every service shares one instance.
+/// </summary>
+internal sealed record HiddenAlias(string Name, string ReturnType, string HandleType, string? Attributes, string Body);
+
+/// <summary>
+///     A generated wrapper that runs one <c>[AsyncInitializer&lt;T&gt;]</c> convention of the module on the instance a
+///     handle holds, so a container in another assembly initializes it without naming the service or the convention.
+/// </summary>
+internal sealed record HiddenInitializer(string Name, string HandleType, string ConventionType, string Method, string ReturnType, EquatableArray<FactoryParameter> Parameters);
 
 /// <summary>
 ///     A generated member that forwards to a <c>Factory</c> or <c>Instance</c> member or a lifecycle hook of its owner
@@ -58,7 +84,9 @@ internal sealed record SkippedRegistration(string MarkerName, string Reason, boo
 ///     emitted method name, the accessible type it returns, the implementation it constructs, the constructor
 ///     parameters mirrored onto its signature and the lifecycle-hook wrappers emitted beside it, one per hook a
 ///     registration of the implementation names. The last <see cref="Members" />.Count parameters fill the injected
-///     properties of the same names through an object initializer.
+///     properties of the same names through an object initializer. <see cref="Handle" /> is the handle type (or one of
+///     its disposable variants) the factory wraps the instance in, for an implementation registered under an internal
+///     service (see <see cref="HiddenHandle" />), and the hooks then take that handle.
 /// </summary>
 internal sealed record RegistrationFactory(
 	string FactoryName,
@@ -66,7 +94,8 @@ internal sealed record RegistrationFactory(
 	string ImplementationType,
 	EquatableArray<FactoryParameter> Parameters,
 	EquatableArray<RegistrationHook> Hooks,
-	EquatableArray<string> Members = default);
+	EquatableArray<string> Members = default,
+	string? Handle = null);
 
 /// <summary>One lifecycle-hook wrapper of a self-compiled module registration and whether it is the release hook.</summary>
 internal sealed record RegistrationHook(ModuleHook Hook, bool Release);
@@ -136,9 +165,14 @@ internal sealed record ScanSkip(string MarkerName, string ImplementationMetadata
 /// <summary>
 ///     A mirrored constructor parameter on a generated factory: its fully-qualified type, its name and the
 ///     <c>[FromKey]</c> or <c>[Arg]</c> attribute it carries (<c>[global::Awaiten.FromKey("utc")] </c>), so a consumer
-///     resolves the parameter as the constructor would.
+///     resolves the parameter as the constructor would. <see cref="Argument" /> is the expression passed on in its
+///     place, which unwraps a generated handle, or <see langword="null" /> to pass the parameter itself.
 /// </summary>
-internal readonly record struct FactoryParameter(string Type, string Name, string? Attributes = null);
+internal readonly record struct FactoryParameter(string Type, string Name, string? Attributes = null, string? Argument = null)
+{
+	/// <summary>The expression the generated member passes on for this parameter.</summary>
+	public string ArgumentExpression => Argument ?? $"@{Name}";
+}
 
 /// <summary>
 ///     One generated lifecycle-hook wrapper the module emits beside a match's factory. The module resolves and

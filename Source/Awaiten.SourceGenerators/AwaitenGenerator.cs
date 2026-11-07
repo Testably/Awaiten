@@ -122,7 +122,8 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		bool receives = ReceivesGeneratedMembers(moduleSymbol);
 		List<SkippedRegistration> skipped = new();
 		List<MemberWrapper> wrappers = receives ? CollectModuleMemberWrappers(moduleSymbol, compilation, diagnostics, skipped) : new();
-		List<RegistrationFactory> contributions = receives ? CollectModuleContributionFactories(moduleSymbol, compilation) : new();
+		HiddenServices? hidden = receives ? CollectHiddenServices(moduleSymbol, compilation) : null;
+		List<RegistrationFactory> contributions = receives ? CollectModuleContributionFactories(moduleSymbol, compilation, hidden) : new();
 		if (!declaresScan && selfCompiled is null && wrappers.Count == 0 && contributions.Count == 0 && skipped.Count == 0)
 		{
 			return diagnostics.Count == 0
@@ -147,6 +148,9 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 
 		List<ModuleFactory> factories = new();
 		List<RegistrationFactory> registrations = new();
+		List<HiddenHandle> handles = new();
+		List<HiddenAlias> aliases = new();
+		List<HiddenInitializer> initializers = new();
 		bool expanded = false;
 		string? notPartialMarker = null;
 		if (selfCompiled is not null && moduleSymbol.IsStatic && (HasOpenTypeParameters(moduleSymbol) || !isPartial) && FriendsConstructEveryRegistration(moduleSymbol, compilation))
@@ -186,15 +190,25 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		{
 			if (declaresScan)
 			{
-				factories = CollectModuleScanFactories(moduleSymbol, compilation, diagnostics, cancellationToken)
+				// An assembly granted InternalsVisibleTo calls the scan factories too, and it resolves the internal
+				// services themselves rather than their handles, so scans take handles only without such a grant.
+				factories = CollectModuleScanFactories(moduleSymbol, compilation, diagnostics, cancellationToken, hidden is { Friends: false, } ? hidden : null)
 					.Select(expansion => expansion.Factory)
 					.ToList();
 			}
 
-			registrations = CollectModuleRegistrationFactories(moduleSymbol, compilation, diagnostics, factories, skipped);
+			hidden?.Implementations.RemoveAll(candidate => candidate.Shared
+			                                              && factories.Any(factory => factory.ImplementationType == candidate.Implementation.ToDisplayString(FullyQualified) && factory.Skip is null));
+			registrations = CollectModuleRegistrationFactories(moduleSymbol, compilation, diagnostics, factories, skipped, hidden);
 			wrappers.RemoveAll(wrapper => registrations.Any(registration => registration.Hooks.AsArray().Any(hook => hook.Hook.WrapperName == wrapper.Name)));
 			skipped = skipped.GroupBy(entry => entry.MarkerName, StringComparer.Ordinal).Select(group => group.First()).ToList();
 			registrations.AddRange(contributions);
+			if (hidden is not null)
+			{
+				(List<RegistrationFactory> hiddenFactories, handles, aliases, initializers) = CompleteHiddenServices(hidden, compilation, diagnostics);
+				registrations.AddRange(hiddenFactories);
+			}
+
 			expanded = true;
 		}
 
@@ -227,7 +241,10 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			new EquatableArray<RegistrationFactory>(registrations.ToArray()),
 			new EquatableArray<SkippedRegistration>(skipped.ToArray()),
 			notPartialMarker,
-			new EquatableArray<MemberWrapper>(expanded ? wrappers.ToArray() : []));
+			new EquatableArray<MemberWrapper>(expanded ? wrappers.ToArray() : []),
+			new EquatableArray<HiddenHandle>(handles.ToArray()),
+			new EquatableArray<HiddenAlias>(aliases.ToArray()),
+			new EquatableArray<HiddenInitializer>(initializers.ToArray()));
 	}
 
 	/// <summary>

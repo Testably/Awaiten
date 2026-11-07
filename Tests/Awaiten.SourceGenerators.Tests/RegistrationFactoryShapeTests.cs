@@ -155,7 +155,7 @@ public class RegistrationFactoryShapeTests
 		}
 
 		[Test]
-		public async Task WithoutACoveringType_StillReportsAwt197()
+		public async Task WithoutACoveringType_SharesTheInstanceThroughAHandle()
 		{
 			GeneratorResult result = Generator.Run("""
 			                                       using Awaiten;
@@ -172,8 +172,9 @@ public class RegistrationFactoryShapeTests
 			                                       public static partial class GreetingModule { }
 			                                       """);
 
-			await That(result.Diagnostics).Contains("*AWT197*Lib.Greeter*Lib.IGreeter, Lib.IFarewell*covers*").AsWildcard()
-				.Because("no type the factory may return converts to both services");
+			await That(result.Diagnostics).IsEmpty();
+			await That(result.Sources.Values.Single()).Contains("HiddenRegistration_Greeter_").And.Contains("Alias_Greeter_")
+				.Because("no type the factory may return converts to both services, so a handle owns the instance and both services are aliases of it");
 		}
 	}
 

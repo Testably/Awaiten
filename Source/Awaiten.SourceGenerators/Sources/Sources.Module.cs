@@ -66,7 +66,8 @@ internal static partial class Sources
 		Indent(builder, depth).Append("static partial class ").AppendLine(model.TypeName);
 		Indent(builder, depth).AppendLine("{");
 
-		bool hasMembers = model.Factories.Count > 0 || model.Registrations.Count > 0 || model.Wrappers.Count > 0 || model.Skipped.Count > 0;
+		bool hasMembers = model.Factories.Count > 0 || model.Registrations.Count > 0 || model.Wrappers.Count > 0 || model.Skipped.Count > 0
+		                  || model.Handles.Count > 0;
 		if (hasMembers)
 		{
 			OpenInternals(builder, depth + 1, "public",
@@ -121,8 +122,37 @@ internal static partial class Sources
 			foreach (RegistrationHook hook in registration.Hooks.AsArray())
 			{
 				builder.AppendLine();
-				EmitModuleHook(builder, depth + 2, registration.ReturnType, hook.Hook, hook.Release, RegistrationOrigin);
+				EmitModuleHook(builder, depth + 2, registration.ReturnType, hook.Hook, hook.Release, RegistrationOrigin, registration.Handle is not null);
 			}
+		}
+
+		foreach (HiddenHandle handle in model.Handles.AsArray())
+		{
+			builder.AppendLine();
+			EmitHiddenHandle(builder, depth + 2, handle);
+		}
+
+		foreach (HiddenAlias alias in model.Aliases.AsArray())
+		{
+			builder.AppendLine();
+			AppendXmlSummary(builder, depth + 2,
+				"Generated from a module registration: serves another service of an implementation the module registers under an",
+				"internal service, from the handle that owns its instance, so every service shares the one instance.");
+			Indent(builder, depth + 2).Append("public static ").Append(alias.ReturnType).Append(' ').Append(alias.Name).Append('(')
+				.Append(alias.Attributes).Append(alias.HandleType).Append(" @awaiten__handle) => ").Append(alias.Body).AppendLine(";");
+		}
+
+		foreach (HiddenInitializer initializer in model.Initializers.AsArray())
+		{
+			builder.AppendLine();
+			AppendXmlSummary(builder, depth + 2,
+				"Generated from a module [AsyncInitializer]: runs the convention on the instance a handle holds, so a consuming",
+				"container initializes a service the module registers under an internal service type.");
+			FactoryParameter[] parameters = initializer.Parameters.AsArray();
+			Indent(builder, depth + 2).Append("public static ").Append(initializer.ReturnType).Append(' ').Append(initializer.Name).Append('(')
+				.Append(initializer.HandleType).Append(" @awaiten__instance").Append(string.Concat(parameters.Select(parameter => $", {MirroredParameter(parameter)}")))
+				.Append(") => ((").Append(initializer.ConventionType).Append(")@awaiten__instance.Value).").Append(initializer.Method).Append('(')
+				.Append(string.Join(", ", parameters.Select(parameter => parameter.ArgumentExpression))).AppendLine(");");
 		}
 
 		foreach (MemberWrapper wrapper in model.Wrappers.AsArray())
@@ -263,6 +293,57 @@ internal static partial class Sources
 		Indent(builder, depth).AppendLine("{");
 	}
 
+	/// <summary>
+	///     Emits the handle of a service the module registers under an internal type (see <see cref="HiddenHandle" />): a
+	///     public class another assembly can name but neither create nor unwrap, plus a sealed variant for each disposal
+	///     shape an implementation of the service needs, which forwards disposal to the instance.
+	/// </summary>
+	private static void EmitHiddenHandle(StringBuilder builder, int depth, HiddenHandle handle)
+	{
+		AppendXmlSummary(builder, depth,
+			"Generated from a module registration: holds an instance of a service the module registers under an internal",
+			"type, so a consuming container in another assembly depends on it without naming the service. Not intended to be used directly.");
+		Indent(builder, depth).AppendLine("[global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]");
+		Indent(builder, depth).Append("public class ").AppendLine(handle.Name);
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).Append("internal ").Append(handle.Name).Append('(').Append(handle.ValueType).AppendLine(" value) => Value = value;");
+		builder.AppendLine();
+		Indent(builder, depth + 1).Append("internal ").Append(handle.ValueType).AppendLine(" Value { get; }");
+		const string dispose = "void global::System.IDisposable.Dispose() => ((global::System.IDisposable)Value).Dispose();";
+		const string disposeAsync = "global::System.Threading.Tasks.ValueTask global::System.IAsyncDisposable.DisposeAsync() => ((global::System.IAsyncDisposable)Value).DisposeAsync();";
+		if (handle.Disposable)
+		{
+			EmitHandleVariant(builder, depth + 1, handle, "Disposable", "global::System.IDisposable", dispose);
+		}
+
+		if (handle.AsyncDisposable)
+		{
+			EmitHandleVariant(builder, depth + 1, handle, "AsyncDisposable", "global::System.IAsyncDisposable", disposeAsync);
+		}
+
+		if (handle.BothDisposable)
+		{
+			EmitHandleVariant(builder, depth + 1, handle, "BothDisposable", "global::System.IDisposable, global::System.IAsyncDisposable", dispose, disposeAsync);
+		}
+
+		Indent(builder, depth).AppendLine("}");
+	}
+
+	private static void EmitHandleVariant(StringBuilder builder, int depth, HiddenHandle handle, string name, string interfaces, params string[] members)
+	{
+		builder.AppendLine();
+		Indent(builder, depth).Append("internal sealed class ").Append(name).Append(" : ").Append(handle.Name).Append(", ").AppendLine(interfaces);
+		Indent(builder, depth).AppendLine("{");
+		Indent(builder, depth + 1).Append("internal ").Append(name).Append('(').Append(handle.ValueType).AppendLine(" value) : base(value) { }");
+		foreach (string member in members)
+		{
+			builder.AppendLine();
+			Indent(builder, depth + 1).AppendLine(member);
+		}
+
+		Indent(builder, depth).AppendLine("}");
+	}
+
 	private const string ScanOrigin = "a module [Scan]";
 
 	private const string RegistrationOrigin = "a module registration";
@@ -288,18 +369,24 @@ internal static partial class Sources
 		FactoryParameter[] parameters = factory.Parameters.AsArray();
 		string[] members = factory.Members.AsArray();
 		string signature = string.Join(", ", parameters.Select(MirroredParameter));
-		string arguments = string.Join(", ", parameters.Take(parameters.Length - members.Length).Select(parameter => $"@{parameter.Name}"));
+		string arguments = string.Join(", ", parameters.Take(parameters.Length - members.Length).Select(parameter => parameter.ArgumentExpression));
 
 		Indent(builder, depth)
 			.Append(accessibility).Append(" static ").Append(factory.ReturnType).Append(' ').Append(factory.FactoryName)
-			.Append('(').Append(signature).Append(") => new ").Append(factory.ImplementationType)
-			.Append('(').Append(arguments).Append(')');
-		if (members.Length > 0)
+			.Append('(').Append(signature).Append(") => ");
+		if (factory.Handle is not null)
 		{
-			builder.Append(" { ").Append(string.Join(", ", members.Select(member => $"{member} = @{member}"))).Append(" }");
+			builder.Append("new ").Append(factory.Handle).Append('(');
 		}
 
-		builder.AppendLine(";");
+		builder.Append("new ").Append(factory.ImplementationType).Append('(').Append(arguments).Append(')');
+		if (members.Length > 0)
+		{
+			FactoryParameter[] memberParameters = parameters.Skip(parameters.Length - members.Length).ToArray();
+			builder.Append(" { ").Append(string.Join(", ", members.Select((member, index) => $"{member} = {memberParameters[index].ArgumentExpression}"))).Append(" }");
+		}
+
+		builder.AppendLine(factory.Handle is null ? ";" : ");");
 	}
 
 	/// <summary>
@@ -347,7 +434,7 @@ internal static partial class Sources
 		// reserved keyword ('@event'), whose symbol name carries no '@', and the prefix is harmless otherwise.
 		FactoryParameter[] parameters = factory.Parameters.AsArray();
 		string signature = string.Join(", ", parameters.Select(MirroredParameter));
-		string arguments = string.Join(", ", parameters.Select(parameter => $"@{parameter.Name}"));
+		string arguments = string.Join(", ", parameters.Select(parameter => parameter.ArgumentExpression));
 
 		Indent(builder, depth)
 			.Append("public static ").Append(factory.ServiceType).Append(' ').Append(factory.FactoryName)
@@ -363,21 +450,21 @@ internal static partial class Sources
 	///     cast and the call compile because the wrapper body sits in the module's own assembly, while the
 	///     <c>public</c> signature is all a consumer needs to run it.
 	/// </summary>
-	private static void EmitModuleHook(StringBuilder builder, int depth, string instanceType, ModuleHook hook, bool release, string origin)
-		=> EmitHookWrapper(builder, depth, "public", instanceType, hook,
+	private static void EmitModuleHook(StringBuilder builder, int depth, string instanceType, ModuleHook hook, bool release, string origin, bool fromHandle = false)
+		=> EmitHookWrapper(builder, depth, "public", instanceType, hook, fromHandle,
 			$"Generated from {origin}: the {(release ? "OnRelease" : "OnActivated")} lifecycle wrapper, casting the exposure",
 			"interface to the hook's own instance parameter type and forwarding to the module's own hook, so a consumer runs it without naming the internal hook.");
 
 	/// <summary>
 	///     Emits a lifecycle-hook wrapper with the given accessibility and summary (see <see cref="EmitModuleHook" />).
 	/// </summary>
-	private static void EmitHookWrapper(StringBuilder builder, int depth, string accessibility, string instanceType, ModuleHook hook, params string[] summary)
+	private static void EmitHookWrapper(StringBuilder builder, int depth, string accessibility, string instanceType, ModuleHook hook, bool fromHandle, params string[] summary)
 	{
 		AppendXmlSummary(builder, depth, summary);
 
 		FactoryParameter[] parameters = hook.Parameters.AsArray();
 		string signature = string.Concat(parameters.Select(parameter => $", {MirroredParameter(parameter)}"));
-		string arguments = string.Concat(parameters.Select(parameter => $", @{parameter.Name}"));
+		string arguments = string.Concat(parameters.Select(parameter => $", {parameter.ArgumentExpression}"));
 
 		// The synthetic instance parameter starts from an awaiten__ prefix so it is very unlikely to collide with a
 		// mirrored user hook parameter (a plain name like "instance" would be a duplicate-parameter error in the
@@ -393,6 +480,6 @@ internal static partial class Sources
 		Indent(builder, depth)
 			.Append(accessibility).Append(" static ").Append(hook.ReturnType).Append(' ').Append(hook.WrapperName)
 			.Append('(').Append(instanceType).Append(" @").Append(instance).Append(signature).Append(") => ")
-			.Append(hook.Target).Append("((").Append(hook.InstanceCast).Append(")@").Append(instance).Append(arguments).AppendLine(");");
+			.Append(hook.Target).Append("((").Append(hook.InstanceCast).Append(")@").Append(instance).Append(fromHandle ? ".Value" : string.Empty).Append(arguments).AppendLine(");");
 	}
 }

@@ -329,10 +329,10 @@ partial class AwaitenGenerator
 	///     A type the factory cannot express gets none and no error in the module's build: a container that cannot
 	///     construct it reports it at its <c>[Import]</c> (AWT230), as before.
 	/// </summary>
-	private static List<RegistrationFactory> CollectModuleContributionFactories(INamedTypeSymbol module, Compilation compilation)
+	private static List<RegistrationFactory> CollectModuleContributionFactories(INamedTypeSymbol module, Compilation compilation, HiddenServices? hidden = null)
 	{
 		List<RegistrationFactory> factories = new();
-		ModuleScanContext context = new(module, compilation, new List<DiagnosticInfo>(), new HashSet<string>(StringComparer.Ordinal));
+		ModuleScanContext context = new(module, compilation, new List<DiagnosticInfo>(), new HashSet<string>(StringComparer.Ordinal), hidden);
 		foreach (AttributeData attribute in module.GetAttributes())
 		{
 			if (attribute.AttributeClass is not { Name: "DecorateAttribute" or "CompositeAttribute", } attributeClass
@@ -451,20 +451,25 @@ partial class AwaitenGenerator
 	///     with the reason, which a consumer that cannot construct it reports (AWT231). A type hidden in the module
 	///     (see <see cref="TypeHiddenInModule" />) is never skipped, since no other assembly can construct it. A hook
 	///     whose wrapper fails only with AWT203 or AWT204 is skipped the same way: the factory stays, and the hook lands
-	///     in <paramref name="skipped" />, since such an assembly calls it directly.
+	///     in <paramref name="skipped" />, since such an assembly calls it directly. In the module's own build,
+	///     <paramref name="hidden" /> lets a factory take the internal services the module registers through their handles,
+	///     and an implementation the module builds through a handle gets no factory of its own, unless it is private to
+	///     the module, whose factory a container in the module's assembly calls.
 	/// </summary>
 	private static List<RegistrationFactory> CollectModuleRegistrationFactories(
 		INamedTypeSymbol module,
 		Compilation compilation,
 		List<DiagnosticInfo> diagnostics,
 		IReadOnlyList<ModuleFactory> scanFactories,
-		List<SkippedRegistration> skipped)
+		List<SkippedRegistration> skipped,
+		HiddenServices? hidden = null)
 	{
-		ModuleScanContext context = new(module, compilation, diagnostics, new HashSet<string>(StringComparer.Ordinal));
+		ModuleScanContext context = new(module, compilation, diagnostics, new HashSet<string>(StringComparer.Ordinal), hidden);
 		List<(ModuleRegistration First, List<ModuleRegistration> All)> implementations = new();
 		foreach (ModuleRegistration registration in ConstructedModuleRegistrations(module, compilation))
 		{
-			if (!SelfCompilesRegistration(module, registration.Implementation, registration.Service, compilation))
+			if (!SelfCompilesRegistration(module, registration.Implementation, registration.Service, compilation)
+			    || (hidden?.Handles(registration.Implementation) == true && !IsHiddenInModule(registration.Implementation, module, compilation)))
 			{
 				continue;
 			}
@@ -655,6 +660,23 @@ partial class AwaitenGenerator
 			{
 				reason = "is marked [FromKey] with an unsupported key";
 			}
+			else if (MirrorHiddenService(property.Type, property.Name, attributes, context) is { } handle)
+			{
+				if (handle.Error is { } error)
+				{
+					context.Diagnostics.Add(error.WithLocation(location, subject, $"its property '{property.Name}'"));
+					return false;
+				}
+
+				mirrored.Add(handle.Parameter);
+				names.Add(property.Name);
+				continue;
+			}
+			else if (InternalServiceOfAnotherModule(property.Type, context) is { } otherModule)
+			{
+				context.Diagnostics.Add(otherModule.WithLocation(location, subject, $"its property '{property.Name}'"));
+				return false;
+			}
 			else if (!FitsFactorySignature(property.Type, context) || TypeHiddenInModule(property.Type, context.Module, context.Compilation) is not null)
 			{
 				reason = $"has the type '{Display(property.Type.ToDisplayString(FullyQualified))}', which is not accessible outside the module's assembly";
@@ -719,6 +741,18 @@ partial class AwaitenGenerator
 		if (rejection.Descriptor == Diagnostics.ModuleScanInjectionMetadata)
 		{
 			return rejection.MessageArgs.AsArray()[1];
+		}
+
+		if (rejection.Descriptor == Diagnostics.ModuleHiddenServiceInOtherModule)
+		{
+			string[] arguments = rejection.MessageArgs.AsArray();
+			return $"{arguments[1]} needs the internal service '{arguments[2]}', which only the module '{arguments[3]}' registers";
+		}
+
+		if (rejection.Descriptor == Diagnostics.ModuleHiddenServiceShape)
+		{
+			string[] arguments = rejection.MessageArgs.AsArray();
+			return $"{arguments[1]} takes the internal service '{arguments[2]}' as '{arguments[3]}'";
 		}
 
 		if (rejection.Descriptor == Diagnostics.InaccessibleAsyncInitializer)

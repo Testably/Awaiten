@@ -238,11 +238,13 @@ public class AsyncActivationHookTests
 			internal sealed class Printer : IPlugin, IPrinter { }
 
 			[Module]
-			[Singleton<Log>]
+			[Singleton<Log>(Factory = nameof(CreateLog))]
 			[Singleton<Terminal, ITerminal>(OnActivated = nameof(Connect))]
 			[Scan<IPlugin>(As = ScanAs.MatchingInterface, Lifetime = Lifetime.Singleton, OnActivated = nameof(Warm))]
 			public static partial class TerminalModule
 			{
+			    internal static Log CreateLog() => new();
+
 			    internal static Task Connect(Terminal terminal, CancellationToken cancellationToken, Log log) => Task.CompletedTask;
 
 			    internal static ValueTask Warm(Printer printer, Log log, CancellationToken cancellationToken) => default;
@@ -279,10 +281,12 @@ public class AsyncActivationHookTests
 				internal sealed class Terminal : ITerminal { }
 
 				[Module]
-				[Singleton<Log>]
+				[Singleton<Log>(Factory = nameof(CreateLog))]
 				[Singleton<Terminal, ITerminal>(OnRelease = nameof(Disconnect))]
 				public static partial class TerminalModule
 				{
+				    internal static Log CreateLog() => new();
+
 				    internal static Task Disconnect(Terminal terminal, Log log) => Task.CompletedTask;
 				}
 				""");

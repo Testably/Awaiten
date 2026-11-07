@@ -50,11 +50,13 @@ public partial class DiagnosticTests
 			internal sealed class Roaster : IPlugin { }
 
 			[Module]
-			[Singleton<Log>]
+			[Singleton<Log>(Factory = nameof(CreateLog))]
 			[Singleton<Greeter, IGreeter>(OnActivated = nameof(Activate))]
 			[Scan<IPlugin>(As = ScanAs.Marker, OnRelease = nameof(Release))]
 			public static partial class GreetingModule
 			{
+			    internal static Log CreateLog() => new();
+
 			    internal static void Activate(Greeter greeter, Log log) { }
 
 			    internal static void Release(Roaster roaster, [FromKey("audit")] ILog log) { }
@@ -107,10 +109,12 @@ public partial class DiagnosticTests
 					internal sealed class OrderHandler : IHandler<int> { }
 
 					[Module]
-					[Singleton<Log>]
+					[Singleton<Log>(Factory = nameof(CreateLog))]
 					[Scan(typeof(IHandler<>), As = ScanAs.Marker, OnActivated = nameof(Activate))]
 					public static partial class HandlerModule
 					{
+					    internal static Log CreateLog() => new();
+
 					    internal static void Activate<T>(IHandler<T> handler, Log log) { }
 					}
 					""");
@@ -134,10 +138,12 @@ public partial class DiagnosticTests
 					internal sealed class Greeter : IGreeter { }
 
 					[Module]
-					[Singleton<Log>]
+					[Singleton<Log>(Factory = nameof(CreateLog))]
 					[Singleton<Greeter, IGreeter>(OnActivated = nameof(Activate))]
 					public static partial class GreetingModule
 					{
+					    internal static Log CreateLog() => new();
+
 					    internal static void Activate(Greeter greeter, Log log, [Arg] string name) { }
 					}
 					""");

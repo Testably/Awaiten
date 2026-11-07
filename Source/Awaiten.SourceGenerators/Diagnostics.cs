@@ -2025,6 +2025,31 @@ internal static class Diagnostics
 		isEnabledByDefault: true);
 
 	/// <summary>
+	///     In a module's own build, a generated factory needs an internal service that the module does not register but
+	///     another module of the same assembly does. A container in another assembly reaches an internal service only
+	///     through the handle of the module that registers it, and a handle serves that module alone.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ModuleHiddenServiceInOtherModule = new(
+		"AWT236",
+		"Internal service registered in another module",
+		"{0}, but {1} needs the internal service '{2}', which only the module '{3}' registers, so a container in another assembly cannot provide it to '{4}'; register '{2}' in '{4}' too, or move both registrations into one module",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
+	///     In a module's own build, a generated factory needs an internal service the module registers, but in a shape
+	///     it cannot pass on from the service's handle, such as <c>Task&lt;T&gt;</c> or a keyed dictionary.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ModuleHiddenServiceShape = new(
+		"AWT237",
+		"Internal service in an unsupported shape",
+		"{0}, but {1} takes the internal service '{2}' as '{3}', which the generated factory cannot pass on to a container in another assembly; take '{2}' directly, or as Func<T>, Lazy<T>, Owned<T>, Func<Owned<T>> or a collection of T",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
+	/// <summary>
 	///     A scan match of an imported module in another assembly and another registration or scan match of the same
 	///     implementation, which a container in the module's own assembly shares as one instance. The container builds
 	///     that instance as a type that does not convert to the match's service, and it cannot construct the
