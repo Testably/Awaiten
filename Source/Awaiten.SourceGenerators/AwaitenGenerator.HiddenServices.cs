@@ -23,18 +23,22 @@ partial class AwaitenGenerator
 	{
 		private readonly HashSet<INamedTypeSymbol> _used = new(SymbolEqualityComparer.Default);
 
-		public HiddenServices(INamedTypeSymbol module, bool friends, Compilation compilation, bool crossModule)
+		public HiddenServices(INamedTypeSymbol module, bool friends, Compilation compilation, bool crossModule, CancellationToken cancellationToken)
 		{
 			Module = module;
 			Friends = friends;
 			Compilation = compilation;
 			CrossModule = crossModule;
+			CancellationToken = cancellationToken;
 			Assembly = AssemblyModuleIndex.Of(compilation);
 		}
 
 		public INamedTypeSymbol Module { get; }
 
 		public Compilation Compilation { get; }
+
+		/// <summary>The token of the module's build, which a probe of another module observes too.</summary>
+		public CancellationToken CancellationToken { get; }
 
 		/// <summary>The modules of the module's assembly and their registrations.</summary>
 		public AssemblyModuleIndex Assembly { get; }
@@ -82,7 +86,7 @@ partial class AwaitenGenerator
 			   && Provider(service) is not null
 			   && Assembly.Modules.Any(other => !SymbolEqualityComparer.Default.Equals(other, Module)
 			                                    && Assembly.RegistrationsOf(other).Any(registration => SymbolEqualityComparer.Default.Equals(registration.Service, service))
-			                                    && Assembly.Probe(other) is { } probe
+			                                    && Assembly.Probe(other, CancellationToken) is { } probe
 			                                    && probe.Services.ContainsKey(service)
 			                                    && !probe.NonViable.Contains(service));
 
@@ -165,7 +169,7 @@ partial class AwaitenGenerator
 
 		private readonly Compilation _compilation;
 		private readonly Lazy<HashSet<INamedTypeSymbol>> _imported;
-		private readonly ConcurrentDictionary<INamedTypeSymbol, Lazy<HiddenServices?>> _probes = new(SymbolEqualityComparer.Default);
+		private readonly ConcurrentDictionary<INamedTypeSymbol, HiddenServices?> _probes = new(SymbolEqualityComparer.Default);
 
 		private AssemblyModuleIndex(Compilation compilation)
 		{
@@ -255,15 +259,16 @@ partial class AwaitenGenerator
 		///     dependencies, once per compilation, so whether another module may take one of its handles never recurses.
 		///     Like the module's own build, it rejects an implementation one of the module's scans matches too.
 		/// </summary>
-		public HiddenServices? Probe(INamedTypeSymbol module)
-			=> _probes.GetOrAdd(module, key => new Lazy<HiddenServices?>(() => BuildProbe(key))).Value;
+		/// <remarks>A cancelled probe caches nothing, so a later build of the same compilation probes again with its own token.</remarks>
+		public HiddenServices? Probe(INamedTypeSymbol module, CancellationToken cancellationToken)
+			=> _probes.TryGetValue(module, out HiddenServices? probe) ? probe : _probes.GetOrAdd(module, BuildProbe(module, cancellationToken));
 
-		private HiddenServices? BuildProbe(INamedTypeSymbol module)
+		private HiddenServices? BuildProbe(INamedTypeSymbol module, CancellationToken cancellationToken)
 		{
-			HiddenServices? probe = CollectHiddenServices(module, _compilation, crossModule: false);
+			HiddenServices? probe = CollectHiddenServices(module, _compilation, cancellationToken, crossModule: false);
 			if (probe is not null && HasAwaitenAttribute(module.GetAttributes(), "ScanAttribute"))
 			{
-				List<ModuleFactory> scanned = CollectModuleScanFactories(module, _compilation, new List<DiagnosticInfo>(), CancellationToken.None, probe.Friends ? null : probe)
+				List<ModuleFactory> scanned = CollectModuleScanFactories(module, _compilation, new List<DiagnosticInfo>(), cancellationToken, probe.Friends ? null : probe)
 					.Select(expansion => expansion.Factory)
 					.ToList();
 				RejectScannedHiddenImplementations(probe, scanned, new List<DiagnosticInfo>());
@@ -419,14 +424,14 @@ partial class AwaitenGenerator
 	///     needs such a service falls back to what it did before (AWT195). Returns <see langword="null" /> for a module
 	///     no other assembly can name.
 	/// </summary>
-	private static HiddenServices? CollectHiddenServices(INamedTypeSymbol module, Compilation compilation, bool crossModule = true)
+	private static HiddenServices? CollectHiddenServices(INamedTypeSymbol module, Compilation compilation, CancellationToken cancellationToken, bool crossModule = true)
 	{
 		if (!IsExternallyAccessible(module) || !MayBuildThroughHandles(module, compilation))
 		{
 			return null;
 		}
 
-		HiddenServices hidden = new(module, GrantsInternalsVisibleTo(compilation.Assembly), compilation, crossModule);
+		HiddenServices hidden = new(module, GrantsInternalsVisibleTo(compilation.Assembly), compilation, crossModule, cancellationToken);
 		ModuleScanContext context = new(module, compilation, new List<DiagnosticInfo>(), new HashSet<string>(StringComparer.Ordinal), hidden);
 		foreach (IGrouping<INamedTypeSymbol, ModuleRegistration> group in hidden.Assembly.RegistrationsOf(module)
 			         .GroupBy<ModuleRegistration, INamedTypeSymbol>(registration => registration.Implementation, SymbolEqualityComparer.Default))
@@ -651,15 +656,10 @@ partial class AwaitenGenerator
 	/// </summary>
 	private static void ReportHandledConflicts(INamedTypeSymbol implementation, INamedTypeSymbol module, Compilation compilation, List<DiagnosticInfo> diagnostics)
 	{
-		if (AssemblyModuleIndex.Of(compilation).ImportedByContainer(module))
-		{
-			return;
-		}
-
-		List<ModuleRegistration> registrations = ConstructedModuleRegistrations(module, compilation, members: true)
+		List<ModuleRegistration> registrations = AssemblyModuleIndex.Of(compilation).RegistrationsOf(module)
 			.Where(registration => SymbolEqualityComparer.Default.Equals(registration.Implementation, implementation) && NamedFallback(registration.Attribute) == 0)
 			.ToList();
-		if (registrations.Count < 2)
+		if (registrations.Count < 2 || AssemblyModuleIndex.Of(compilation).ImportedByContainer(module))
 		{
 			return;
 		}
