@@ -261,11 +261,11 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     The reason an inherited decorator, composite or open generic registration private to the base cannot be built
+	///     The reason an inherited composite or open generic registration private to the base cannot be built
 	///     by the extending container.
 	/// </summary>
 	private const string UnsupportedPrivateShape =
-		"the base generates factories only for constructed registrations of its private implementations, not for a decorator, composite or open generic registration";
+		"the base generates factories only for constructed registrations and decorators of its private implementations, not for a composite or open generic registration";
 
 	/// <summary>
 	///     Rewrites every inherited registration of an implementation private to the base, or to a class containing the
@@ -388,14 +388,18 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     Whether the decorator or composite an inherited <c>[Decorate]</c>/<c>[Composite]</c> names (its first type,
-	///     generic or <c>typeof</c> form) cannot be constructed from the extending container, reporting AWT226 if so.
+	///     generic or <c>typeof</c> form) cannot be constructed from the extending container, reporting AWT226 if so. A
+	///     closed one private to the base is built through the factory the base generates for it, returned in
+	///     <paramref name="via" />.
 	/// </summary>
 	private static bool InaccessibleInheritedType(
 		AttributeData attribute,
 		INamedTypeSymbol attributeClass,
 		Inheritance inheritance,
-		List<DiagnosticInfo> diagnostics)
+		List<DiagnosticInfo> diagnostics,
+		out OwnerFactoryCall? via)
 	{
+		via = null;
 		ITypeSymbol? type = attributeClass.IsGenericType
 			? attributeClass.TypeArguments.FirstOrDefault()
 			: attribute.ConstructorArguments.FirstOrDefault().Value as ITypeSymbol;
@@ -407,9 +411,17 @@ partial class AwaitenGenerator
 		if (inheritance.HiddenInBase(named))
 		{
 			string definition = Display(named.OriginalDefinition.ToDisplayString(FullyQualified));
+			FactoryFault fault = new(UnsupportedPrivateShape, $"make '{definition}' internal");
+			if (ContributedPair(attribute, attributeClass) is ({ } closedType, { } service)
+			    && inheritance.ThroughBaseContribution(ContributionFactoryName(attributeClass.Name, closedType, service), closedType, out fault) is { } call)
+			{
+				via = call;
+				return false;
+			}
+
 			inheritance.ReportPrivate(
 				$"The {(attributeClass.Name == "CompositeAttribute" ? "composite" : "decorator")} '{definition}'",
-				new FactoryFault(UnsupportedPrivateShape, $"make '{definition}' internal"),
+				fault,
 				diagnostics);
 		}
 		else
@@ -508,9 +520,7 @@ partial class AwaitenGenerator
 					return null;
 				}
 
-				string[] parameters = factory.Parameters.AsArray().Take(factory.Parameters.Count - factory.Members.Count).Select(parameter => parameter.Type).ToArray();
-				IMethodSymbol? constructor = implementation.InstanceConstructors.FirstOrDefault(candidate =>
-					candidate.Parameters.Select(parameter => parameter.Type.ToDisplayString(FullyQualifiedWithNullability)).SequenceEqual(parameters));
+				IMethodSymbol? constructor = MirroredConstructor(implementation, factory);
 				return constructor is not null
 				       && (registration.OnActivated is null || HasHookWrapper(factory, implementation, registration.OnActivated, release: false))
 				       && (registration.OnRelease is null || HasHookWrapper(factory, implementation, registration.OnRelease, release: true))
@@ -536,6 +546,43 @@ partial class AwaitenGenerator
 
 			bool HasWrapper(string? hook, bool release)
 				=> hook is null || !Base.GetMembers(RegistrationHookWrapperName(implementation, release, hook)).IsEmpty;
+		}
+
+		/// <summary>
+		///     The call of the factory named <paramref name="name" /> the base generates for its private decorator or
+		///     composite <paramref name="type" /> (see <see cref="RecordBaseFactory" />), or <see langword="null" /> with
+		///     the <paramref name="fault" /> that explains why the container cannot call one. In the base's own assembly
+		///     the container resolves the constructor the factory mirrors, in another it resolves the factory itself.
+		/// </summary>
+		public OwnerFactoryCall? ThroughBaseContribution(string name, INamedTypeSymbol type, out FactoryFault fault)
+		{
+			string baseName = Display(Base.ToDisplayString(FullyQualified));
+			fault = new FactoryFault($"'{baseName}' generates no factory for it", $"make '{Display(type.OriginalDefinition.ToDisplayString(FullyQualified))}' internal");
+			if (SymbolEqualityComparer.Default.Equals(Base.ContainingAssembly, Container.ContainingAssembly))
+			{
+				_baseFactories ??= BuildGraph(Base, _compilation, new List<DiagnosticInfo>(), _cancellationToken).Factories;
+				if (_baseFactories.Factories.FirstOrDefault(candidate => candidate.FactoryName == name) is not { } factory)
+				{
+					fault = _baseFactories.Faults.TryGetValue(name, out FactoryFault reason) ? reason : fault;
+					return null;
+				}
+
+				return MirroredConstructor(type, factory) is { } constructor ? new OwnerFactoryCall(Base, name, factory.ReturnType, constructor) : null;
+			}
+
+			if (GeneratedFactoryNamed(Base, name, _compilation) is { } method)
+			{
+				return new OwnerFactoryCall(Base, name, method.ReturnType.ToDisplayString(FullyQualified), method);
+			}
+
+			if (!Base.ContainingAssembly.GivesAccessTo(Container.ContainingAssembly))
+			{
+				fault = new FactoryFault(
+					$"'{baseName}' builds it through an internal generated factory",
+					$"grant the assembly of '{Display(Container.ToDisplayString(FullyQualified))}' [InternalsVisibleTo]");
+			}
+
+			return null;
 		}
 
 		/// <summary>

@@ -258,7 +258,7 @@ partial class AwaitenGenerator
 			bool valid = true;
 			foreach (DecorateRegistration decorator in ordered)
 			{
-				string? innerType = SingleInnerParameterType(decorator.Decorator, decorator.ServiceSymbol);
+				string? innerType = SingleInnerParameterType(decorator);
 				if (innerType is null)
 				{
 					Report(Diagnostics.DecoratorMissingInnerParameter, decorator.Location,
@@ -354,7 +354,14 @@ partial class AwaitenGenerator
 			INamedTypeSymbol decorator = chain.Ordered[linkIndex].Decorator;
 			string identity = DecoratorIdentity(decorator.ToDisplayString(FullyQualified), service, baseIndex, link);
 
-			ImplInfo info = new(identity, decorator, lifetime, location, ProductionKind.Constructor, null);
+			OwnerFactoryCall? via = chain.Ordered[linkIndex].Via;
+			ImplInfo info = new(identity, decorator, lifetime, location, ProductionKind.Constructor, null)
+			{
+				Origin = via?.Owner,
+				ConstructVia = via?.Call,
+				ConstructViaType = via?.ReturnType,
+				Constructor = via?.Producer,
+			};
 			_byImpl[identity] = info;
 			_implOrder.Add(info);
 
@@ -412,12 +419,13 @@ partial class AwaitenGenerator
 		///     <see cref="SelectConstructor" /> the container builds through, and returns the type string
 		///     <see cref="ClassifyParameter" /> produces so the redirect can match it.
 		/// </summary>
-		private string? SingleInnerParameterType(INamedTypeSymbol decorator, INamedTypeSymbol service)
+		private string? SingleInnerParameterType(DecorateRegistration decorator)
 		{
-			IMethodSymbol? constructor = SelectConstructor(decorator, _containerSymbol, _compilation, _serviceToImpl.Keys.Select(k => k.Service), _external);
+			IMethodSymbol? constructor = decorator.Via?.Producer
+			                             ?? SelectConstructor(decorator.Decorator, _containerSymbol, _compilation, _serviceToImpl.Keys.Select(k => k.Service), _external);
 			return constructor is null
 				? null
-				: InnerParameter(constructor, service, _compilation)?.Type.ToDisplayString(FullyQualified);
+				: InnerParameter(constructor, decorator.ServiceSymbol, _compilation)?.Type.ToDisplayString(FullyQualified);
 		}
 
 		private static string DecoratorKey(string service, int baseIndex, int link)

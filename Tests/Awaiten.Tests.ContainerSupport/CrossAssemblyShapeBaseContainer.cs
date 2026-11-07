@@ -40,8 +40,16 @@ public sealed class ShapeBaseKettle
 [Singleton<Report, IShapeBaseReport>]
 [Singleton<IShapeBaseMenu>(Instance = nameof(TheMenu))]
 [Transient<ShapeBaseKettle>(Factory = nameof(CreateKettle), OnActivated = nameof(Activate))]
+[Decorate<AuditedReport, IShapeBaseReport>]
 public static partial class SupportShapeBaseContainer
 {
+	private sealed class AuditedReport(IShapeBaseReport inner) : IShapeBaseReport
+	{
+		public IShapeBaseClock KeyedClock => inner.KeyedClock;
+
+		public IShapeBaseClock Clock => inner.Clock;
+	}
+
 	private static readonly IShapeBaseMenu TheMenu = new Menu();
 
 	private static ShapeBaseKettle CreateKettle() => new();

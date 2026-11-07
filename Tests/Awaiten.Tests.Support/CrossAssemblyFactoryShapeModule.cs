@@ -40,6 +40,25 @@ public interface IShapeKettle
 	IShapeClock Clock { get; }
 }
 
+/// <summary>A bell whose internal implementation the module decorates with an internal decorator.</summary>
+public interface IShapeBell
+{
+	/// <summary>The bell the decorator wraps, or <see langword="null" /> for the undecorated bell.</summary>
+	IShapeBell? Inner { get; }
+}
+
+internal sealed class ShapeBell : IShapeBell
+{
+	public IShapeBell? Inner => null;
+}
+
+internal sealed class LoudShapeBell(IShapeBell inner, IShapeClock clock) : IShapeBell
+{
+	public IShapeBell? Inner => inner;
+
+	public IShapeClock Clock => clock;
+}
+
 internal sealed class ShapeMenu : IShapeMenu;
 
 internal sealed class ShapeKettle(IShapeClock clock) : IShapeKettle
@@ -68,7 +87,7 @@ internal sealed class ShapeNotifier : IShapeNotifier
 /// <summary>
 ///     A <c>[Module]</c> whose internal implementations its generated factories build for a container in another
 ///     assembly without <c>InternalsVisibleTo</c>: one shared under two services, a keyed constructor parameter, a
-///     runtime argument, an injected property, and internal factory and instance members.
+///     runtime argument, an injected property, internal factory and instance members, and an internal decorator.
 /// </summary>
 [Module]
 [Singleton<ShapeGreeter, IShapeGreeter>]
@@ -78,6 +97,8 @@ internal sealed class ShapeNotifier : IShapeNotifier
 [Singleton<ShapeNotifier, IShapeNotifier>]
 [Singleton<IShapeMenu>(Instance = nameof(Menu))]
 [Transient<IShapeKettle>(Factory = nameof(CreateKettle))]
+[Singleton<ShapeBell, IShapeBell>]
+[Decorate<LoudShapeBell, IShapeBell>]
 public static partial class FactoryShapeModule
 {
 	internal static readonly IShapeMenu Menu = new ShapeMenu();

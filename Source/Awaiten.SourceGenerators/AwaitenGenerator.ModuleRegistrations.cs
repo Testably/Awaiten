@@ -68,6 +68,7 @@ partial class AwaitenGenerator
 		private readonly Compilation _compilation;
 		private readonly Dictionary<INamedTypeSymbol, List<ModuleScanExpansion>> _scans = new(SymbolEqualityComparer.Default);
 		private readonly Dictionary<INamedTypeSymbol, List<RegistrationFactory>> _registrations = new(SymbolEqualityComparer.Default);
+		private readonly Dictionary<INamedTypeSymbol, List<RegistrationFactory>> _contributions = new(SymbolEqualityComparer.Default);
 
 		public SameCompilationModules(Compilation compilation) => _compilation = compilation;
 
@@ -97,6 +98,22 @@ partial class AwaitenGenerator
 			}
 
 			string name = RegistrationFactoryName(implementation);
+			return factories.FirstOrDefault(factory => factory.FactoryName == name);
+		}
+
+		/// <summary>
+		///     The factory named <paramref name="name" /> the module generates for a decorator or composite (see
+		///     <see cref="CollectModuleContributionFactories" />), or <see langword="null" />.
+		/// </summary>
+		public RegistrationFactory? Contribution(INamedTypeSymbol module, string name)
+		{
+			if (!_contributions.TryGetValue(module, out List<RegistrationFactory>? factories))
+			{
+				_contributions[module] = factories = ReceivesGeneratedMembers(module)
+					? CollectModuleContributionFactories(module, _compilation)
+					: new List<RegistrationFactory>();
+			}
+
 			return factories.FirstOrDefault(factory => factory.FactoryName == name);
 		}
 	}
@@ -236,6 +253,64 @@ partial class AwaitenGenerator
 			return null;
 		}
 	}
+
+	/// <summary>
+	///     The factories a module generates for its closed decorators whose type another assembly cannot construct (see
+	///     <see cref="SelfCompilesRegistration" />), one per type and decorated service. Each mirrors the constructor and
+	///     the injected properties like the factory of a registration, so its inner parameter stays the one a container
+	///     redirects to the next link of the chain. A decorator the factory cannot express gets none and no error in the
+	///     module's build: a container that cannot construct it reports it at its <c>[Import]</c> (AWT230), as before.
+	/// </summary>
+	private static List<RegistrationFactory> CollectModuleContributionFactories(INamedTypeSymbol module, Compilation compilation)
+	{
+		List<RegistrationFactory> factories = new();
+		ModuleScanContext context = new(module, compilation, new List<DiagnosticInfo>(), new HashSet<string>(StringComparer.Ordinal));
+		foreach (AttributeData attribute in module.GetAttributes())
+		{
+			if (attribute.AttributeClass is not { Name: "DecorateAttribute", } attributeClass
+			    || attributeClass.ContainingNamespace?.ToDisplayString() != AttributeNamespace
+			    || ContributedPair(attribute, attributeClass) is not ({ } type, { } service)
+			    || !SelfCompilesRegistration(module, type, service, compilation))
+			{
+				continue;
+			}
+
+			string name = ContributionFactoryName(attributeClass.Name, type, service);
+			SelfCompiledSubject subject = RegistrationSubject(type.ToDisplayString(FullyQualified));
+			if (factories.Any(factory => factory.FactoryName == name)
+			    || FactoryReturnType(type, [service,], context) is not { } returnType
+			    || !TryMirrorFactoryParameters(type, context, null, subject, out EquatableArray<FactoryParameter> parameters, mirrorProperties: true)
+			    || !TryMirrorInjectedProperties(type, context, null, subject, ref parameters, out EquatableArray<string> members))
+			{
+				continue;
+			}
+
+			factories.Add(new RegistrationFactory(name, returnType.ToDisplayString(FullyQualified), type.ToDisplayString(FullyQualified), parameters, default, members));
+		}
+
+		return factories;
+	}
+
+	/// <summary>
+	///     The type and service of the closed, generic form of a <c>[Decorate]</c> or <c>[Composite]</c>, or
+	///     <see langword="null" /> types for the <c>typeof</c> form, which names an open generic.
+	/// </summary>
+	private static (INamedTypeSymbol? Type, INamedTypeSymbol? Service) ContributedPair(AttributeData attribute, INamedTypeSymbol attributeClass)
+		=> attributeClass is { IsGenericType: true, TypeArguments.Length: 2, }
+			? (attributeClass.TypeArguments[0] as INamedTypeSymbol, attributeClass.TypeArguments[1] as INamedTypeSymbol)
+			: (null, null);
+
+	/// <summary>
+	///     A deterministic name for the factory of a decorator or composite, derived from its type and the service it
+	///     decorates or composes, so one type serving two services gets two factories and the owner's build and a
+	///     consuming container agree on the name.
+	/// </summary>
+	private static string ContributionFactoryName(string attribute, INamedTypeSymbol type, INamedTypeSymbol service)
+		=> ContributionFactoryName(attribute, type, service.ToDisplayString(FullyQualified));
+
+	/// <inheritdoc cref="ContributionFactoryName(string, INamedTypeSymbol, INamedTypeSymbol)" />
+	private static string ContributionFactoryName(string attribute, INamedTypeSymbol type, string service)
+		=> $"Awaiten__{(attribute == "CompositeAttribute" ? "Composite" : "Decorator")}_{type.Name}_{Fnv1a($"{type.ToDisplayString(FullyQualified)}\0{service}"):x8}";
 
 	/// <summary>
 	///     The type a closed lifetime registration produces: the implementation of the generic form, or of a closed

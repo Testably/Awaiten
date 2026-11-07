@@ -2143,7 +2143,7 @@ public static class EquipmentModule;
 public static partial class CoffeeShop;
 ```
 
-A module self-compiles its scans and its closed registrations of [internal implementations](./04-registration/07-modules.md#internal-implementations), but not a decorator, a composite or an open generic registration. When such a type, or every constructor of it, is not accessible to a container in another assembly, nothing can construct it there, so the container reports it at its `[Import]` and leaves the contribution out. A container in the module's own assembly, or one the library grants `InternalsVisibleTo`, constructs the type itself.
+A module self-compiles its scans, its closed registrations of [internal implementations](./04-registration/07-modules.md#internal-implementations) and its closed decorators, but not a composite or an open generic registration. A decorator gets no factory when the module isn't `partial`, or when the factory can't express it, for example because a constructor parameter type isn't public. When such a type, or every constructor of it, is not accessible to a container in another assembly, and the module generated no factory for it, nothing can construct it there, so the container reports it at its `[Import]` and leaves the contribution out. A container in the module's own assembly, or one the library grants `InternalsVisibleTo`, constructs the type itself.
 
 **Fix:** Make the type and its constructor public, or grant the container's assembly `InternalsVisibleTo`.
 
@@ -2273,7 +2273,7 @@ An implementation nested privately in the base, or in a class that contains the 
 
 - **No access to the factory.** The base is in another assembly that does not grant the extending container's assembly `InternalsVisibleTo`. Grant it.
 - **A shape the factory cannot express.** The type has an `Optional` or `Deferred` injected property, a hook parameter marked `[Arg]`, `[FromKey]` or `[Inject]`, or a parameter type private to the base. Make the type `internal`.
-- **A decorator, composite or open generic registration.** The base generates factories only for constructed registrations of its private implementations. Make the type `internal`.
+- **A composite or open generic registration.** The base generates factories only for constructed registrations and decorators of its private implementations. Make the type `internal`.
 
 ```csharp expect=AWT226
 [Container]

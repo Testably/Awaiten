@@ -60,8 +60,8 @@ partial class AwaitenGenerator
 		    || info.Production != ProductionKind.Constructor
 		    || info.ConstructVia is not null
 		    || request.ResolverType is null
-		    || info.ImplementationType != info.Symbol.ToDisplayString(FullyQualified)
-		    || info.IsComposite
+		    || BaseFactoryName(info) is not { } factoryName
+		    || factories.Factories.Any(factory => factory.FactoryName == factoryName)
 		    || (info.OnActivated is not null && request.OnActivated is null)
 		    || (info.OnRelease is not null && request.OnRelease is null)
 		    || !IsHiddenInModule(info.Symbol.OriginalDefinition, container, context.Compilation))
@@ -71,7 +71,7 @@ partial class AwaitenGenerator
 
 		if (BaseFactoryFault(request, context) is { } fault)
 		{
-			factories.Faults[info.ImplementationType] = fault;
+			factories.Faults[factoryName == RegistrationFactoryName(info.Symbol) ? info.ImplementationType : factoryName] = fault;
 			return;
 		}
 
@@ -100,12 +100,29 @@ partial class AwaitenGenerator
 		}
 
 		factories.Factories.Add(new RegistrationFactory(
-			RegistrationFactoryName(info.Symbol),
+			factoryName,
 			request.ResolverType,
-			info.ImplementationType,
+			info.Symbol.ToDisplayString(FullyQualified),
 			new EquatableArray<FactoryParameter>(parameters.ToArray()),
 			new EquatableArray<RegistrationHook>(hooks.ToArray()),
 			new EquatableArray<string>(request.Members.Select(member => member.MemberName).ToArray())));
+	}
+
+	/// <summary>
+	///     The name of the factory a base container generates for an instance it builds: the registration's for an
+	///     instance identified by its type, the decorator's for a link of a decorator chain, or <see langword="null" />
+	///     for any other instance, which an extending container builds otherwise.
+	/// </summary>
+	private static string? BaseFactoryName(ImplInfo info)
+	{
+		if (info.ImplementationType == info.Symbol.ToDisplayString(FullyQualified) && !info.IsComposite)
+		{
+			return RegistrationFactoryName(info.Symbol);
+		}
+
+		return info.ImplementationType.Contains("@" + DecoratorKeyPrefix) && info.Services.Count > 0
+			? ContributionFactoryName("DecorateAttribute", info.Symbol, info.Services[0].Service)
+			: null;
 	}
 
 	/// <summary>Why <see cref="RecordBaseFactory" /> cannot generate a factory for the request, or <see langword="null" />.</summary>
@@ -341,7 +358,23 @@ partial class AwaitenGenerator
 	///     the container's assembly <c>InternalsVisibleTo</c>, so it is not even imported.
 	/// </summary>
 	private static IMethodSymbol? GeneratedFactory(INamedTypeSymbol owner, INamedTypeSymbol implementation, Compilation compilation)
-		=> owner.GetMembers(RegistrationFactoryName(implementation))
+		=> GeneratedFactoryNamed(owner, RegistrationFactoryName(implementation), compilation);
+
+	/// <summary>The generated factory named <paramref name="name" /> that the container can see on <paramref name="owner" />, or <see langword="null" />.</summary>
+	private static IMethodSymbol? GeneratedFactoryNamed(INamedTypeSymbol owner, string name, Compilation compilation)
+		=> owner.GetMembers(name)
 			.OfType<IMethodSymbol>()
 			.FirstOrDefault(method => method is { IsStatic: true, ReturnType: INamedTypeSymbol, } && compilation.IsSymbolAccessibleWithin(method, compilation.Assembly));
+
+	/// <summary>
+	///     The constructor of <paramref name="type" /> that a factory generated in the same run mirrors, found by its
+	///     parameter types, or <see langword="null" />. The factory's parameters for injected properties follow the
+	///     constructor's.
+	/// </summary>
+	private static IMethodSymbol? MirroredConstructor(INamedTypeSymbol type, RegistrationFactory factory)
+	{
+		string[] parameters = factory.Parameters.AsArray().Take(factory.Parameters.Count - factory.Members.Count).Select(parameter => parameter.Type).ToArray();
+		return type.InstanceConstructors.FirstOrDefault(candidate =>
+			candidate.Parameters.Select(parameter => parameter.Type.ToDisplayString(FullyQualifiedWithNullability)).SequenceEqual(parameters));
+	}
 }

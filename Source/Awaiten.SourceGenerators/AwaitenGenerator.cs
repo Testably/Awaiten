@@ -104,10 +104,12 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		bool declaresScan = HasAwaitenAttribute(moduleSymbol.GetAttributes(), "ScanAttribute");
 		ModuleRegistration? selfCompiled = declaresScan ? null : FirstSelfCompiledRegistration(moduleSymbol, compilation);
 
-		// A module that only needs member wrappers gets them when it can receive generated members, and stays as it is
-		// otherwise, since such a module built before wrappers existed.
-		List<MemberWrapper> wrappers = ReceivesGeneratedMembers(moduleSymbol) ? CollectModuleMemberWrappers(moduleSymbol, compilation) : new();
-		if (!declaresScan && selfCompiled is null && wrappers.Count == 0)
+		// Member wrappers and the factories of decorators are generated only into a module that can receive them, so a
+		// module that cannot keeps building without them, as it did before they existed.
+		bool receives = ReceivesGeneratedMembers(moduleSymbol);
+		List<MemberWrapper> wrappers = receives ? CollectModuleMemberWrappers(moduleSymbol, compilation) : new();
+		List<RegistrationFactory> contributions = receives ? CollectModuleContributionFactories(moduleSymbol, compilation) : new();
+		if (!declaresScan && selfCompiled is null && wrappers.Count == 0 && contributions.Count == 0)
 		{
 			return null;
 		}
@@ -173,6 +175,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			}
 
 			registrations = CollectModuleRegistrationFactories(moduleSymbol, compilation, diagnostics, factories, skipped);
+			registrations.AddRange(contributions);
 			expanded = true;
 		}
 

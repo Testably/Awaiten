@@ -632,6 +632,190 @@ public class RegistrationFactoryShapeTests
 		}
 	}
 
+	public class Decorators
+	{
+		private const string DecoratorModule = """
+		                                       using Awaiten;
+
+		                                       namespace Lib;
+
+		                                       public interface IGreeter { }
+		                                       public interface ILog { }
+		                                       internal sealed class Greeter : IGreeter { }
+		                                       internal sealed class LoudGreeter : IGreeter
+		                                       {
+		                                           public LoudGreeter(IGreeter inner, ILog log) { }
+		                                       }
+
+		                                       [Module]
+		                                       [Singleton<Greeter, IGreeter>]
+		                                       [Decorate<LoudGreeter, IGreeter>]
+		                                       public static partial class GreetingModule { }
+		                                       """;
+
+		private const string LogConsumer = """
+		                                   using Awaiten;
+		                                   using Lib;
+
+		                                   namespace App;
+
+		                                   public sealed class Log : ILog { }
+
+		                                   [Container]
+		                                   [Import(typeof(GreetingModule))]
+		                                   [Singleton<Log, ILog>]
+		                                   public static partial class AppContainer
+		                                   {
+		                                   }
+		                                   """;
+
+		[Test]
+		public async Task AModule_GeneratesAFactoryThatTakesTheInnerService()
+		{
+			GeneratorResult result = Generator.Run(DecoratorModule);
+
+			await That(result.Diagnostics).IsEmpty();
+			await That(ModuleSource(result)).Contains("public static global::Lib.IGreeter Awaiten__Decorator_LoudGreeter_")
+				.And.Contains("(global::Lib.IGreeter @inner, global::Lib.ILog @log) => new global::Lib.LoudGreeter(@inner, @log);");
+		}
+
+		[Test]
+		public async Task AModuleInAnotherAssembly_IsDecoratedWithoutInternalsVisibleTo()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(DecoratorModule, LogConsumer);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("the consumer calls the decorator's factory with the inner service instead of reporting AWT230");
+			await That(result.Sources.Single(source => source.Key.Contains("AppContainer")).Value).Contains("global::Lib.GreetingModule.Awaiten__Decorator_LoudGreeter_");
+		}
+
+		[Test]
+		public async Task AModuleInAnotherAssembly_IsDecoratedWithInternalsVisibleTo()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Granted(DecoratorModule), LogConsumer);
+
+			await That(result.Diagnostics).IsEmpty();
+			await That(result.Sources.Single(source => source.Key.Contains("AppContainer")).Value).Contains("new global::Lib.LoudGreeter(")
+				.Because("a consumer that can construct the decorator does so directly");
+		}
+
+		[Test]
+		public async Task ADecoratorHiddenInTheModule_IsBuiltForAContainerInTheSameAssembly()
+		{
+			GeneratorResult result = Generator.Run("""
+			                                       using Awaiten;
+
+			                                       namespace Lib;
+
+			                                       public interface IGreeter { }
+			                                       public sealed class Greeter : IGreeter { }
+
+			                                       [Module]
+			                                       [Singleton<Greeter, IGreeter>]
+			                                       [Decorate<GreetingModule.LoudGreeter, IGreeter>]
+			                                       public static partial class GreetingModule
+			                                       {
+			                                           private sealed class LoudGreeter : IGreeter
+			                                           {
+			                                               public LoudGreeter(IGreeter inner) { }
+			                                           }
+			                                       }
+
+			                                       [Container]
+			                                       [Import(typeof(GreetingModule))]
+			                                       public static partial class AppContainer { }
+			                                       """);
+
+			await That(result.Diagnostics).IsEmpty();
+			await That(result.Sources.Single(source => source.Key.Contains("AppContainer")).Value).Contains("global::Lib.GreetingModule.Awaiten__Decorator_LoudGreeter_");
+		}
+
+		[Test]
+		public async Task ADecoratorWithAnInternalParameterType_StillReportsAwt230()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly("""
+			                                                                      using Awaiten;
+
+			                                                                      namespace Lib;
+
+			                                                                      public interface IGreeter { }
+			                                                                      internal interface ILog { }
+			                                                                      public sealed class Greeter : IGreeter { }
+			                                                                      internal sealed class LoudGreeter : IGreeter
+			                                                                      {
+			                                                                          public LoudGreeter(IGreeter inner, ILog log) { }
+			                                                                      }
+
+			                                                                      [Module]
+			                                                                      [Singleton<Greeter, IGreeter>]
+			                                                                      [Decorate<LoudGreeter, IGreeter>]
+			                                                                      public static partial class GreetingModule { }
+			                                                                      """, Consumer);
+
+			await That(result.Diagnostics).Contains("*AWT230*GreetingModule*the decorator 'Lib.LoudGreeter'*").AsWildcard()
+				.Because("the module cannot expose the internal parameter type on a factory, so it generates none");
+		}
+
+		private const string PrivateDecoratorBase = """
+		                                            using Awaiten;
+
+		                                            namespace Lib;
+
+		                                            public interface IGreeter { }
+		                                            public sealed class Greeter : IGreeter { }
+
+		                                            [Container]
+		                                            [Singleton<Greeter, IGreeter>]
+		                                            [Decorate<Shop.LoudGreeter, IGreeter>]
+		                                            public static partial class Shop
+		                                            {
+		                                                private sealed class LoudGreeter : IGreeter
+		                                                {
+		                                                    public LoudGreeter(IGreeter inner) { }
+		                                                }
+		                                            }
+		                                            """;
+
+		[Test]
+		public async Task ABase_GeneratesAFactoryForItsPrivateDecorator()
+		{
+			GeneratorResult result = Generator.Run(PrivateDecoratorBase);
+
+			await That(result.Diagnostics).IsEmpty();
+			await That(result.Sources.Single(source => source.Key.Contains("Shop")).Value)
+				.Contains("internal static global::Lib.IGreeter Awaiten__Decorator_LoudGreeter_");
+		}
+
+		[Test]
+		public async Task AnExtendingContainerInTheSameAssembly_BuildsThePrivateDecorator()
+		{
+			GeneratorResult result = Generator.Run(PrivateDecoratorBase + """
+
+			                                                              [Container(Extends = typeof(Shop))]
+			                                                              public static partial class TestShop { }
+			                                                              """);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("the extending container wraps the inherited registration through the base's decorator factory");
+		}
+
+		[Test]
+		public async Task AnExtendingContainerInAnotherAssembly_BuildsThePrivateDecorator()
+		{
+			GeneratorResult result = Generator.RunWithGeneratedReferencedAssembly(Granted(PrivateDecoratorBase), """
+			                                                                                                     using Awaiten;
+			                                                                                                     using Lib;
+
+			                                                                                                     namespace App;
+
+			                                                                                                     [Container(Extends = typeof(Shop))]
+			                                                                                                     public static partial class TestShop { }
+			                                                                                                     """);
+
+			await That(result.Diagnostics).IsEmpty();
+		}
+	}
+
 	public class BaseContainer
 	{
 		private const string PrivateBase = """

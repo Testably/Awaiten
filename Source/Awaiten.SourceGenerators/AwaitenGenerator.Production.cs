@@ -188,6 +188,12 @@ partial class AwaitenGenerator
 
 		List<MemberModel> members = new();
 
+		// A factory read from its owner's metadata takes the injected properties as parameters of its own.
+		if (info.Constructor is { MethodKind: MethodKind.Ordinary, })
+		{
+			return members;
+		}
+
 		if (info.Production != ProductionKind.Constructor)
 		{
 			foreach (InjectPropertyEntry entry in injectProperties)

@@ -24,6 +24,16 @@ public sealed partial class RegistrationFactoryShapeTests
 
 	public sealed class SystemClock : IClock;
 
+	public interface IBell
+	{
+		IBell? Inner { get; }
+	}
+
+	public sealed class Bell : IBell
+	{
+		public IBell? Inner => null;
+	}
+
 	public sealed class ModuleInAnotherAssembly
 	{
 		[Test]
@@ -72,6 +82,19 @@ public sealed partial class RegistrationFactoryShapeTests
 			await That(container.Resolve<IShapeKettle>().Clock).IsSameAs(container.Resolve<IShapeClock>())
 				.Because("the public wrapper passes the graph's clock on to the module's internal factory");
 		}
+
+		[Test]
+		public async Task AnInternalDecorator_WrapsTheService()
+		{
+			using ShapeContainer.Root container = new();
+
+			IShapeBell bell = container.Resolve<IShapeBell>();
+
+			await That(bell.GetType().Name).IsEqualTo("LoudShapeBell");
+			await That(bell.Inner?.GetType().Name).IsEqualTo("ShapeBell");
+			await That(container.Resolve<IShapeBell>()).IsSameAs(bell)
+				.Because("the decorator takes the lifetime of the singleton it wraps");
+		}
 	}
 
 	public sealed class ModuleHidingTheImplementation
@@ -87,6 +110,17 @@ public sealed partial class RegistrationFactoryShapeTests
 			await That(greeter.KeyedClock).IsExactly<UtcClock>();
 			await That(greeter.Clock).IsExactly<SystemClock>()
 				.Because("the container passes the property to the module's factory by name");
+		}
+
+		[Test]
+		public async Task APrivateDecorator_WrapsTheService()
+		{
+			using HiddenContainer.Root container = new();
+
+			IBell bell = container.Resolve<IBell>();
+
+			await That(bell.GetType().Name).IsEqualTo("LoudBell");
+			await That(bell.Inner).IsExactly<Bell>();
 		}
 	}
 
@@ -105,6 +139,17 @@ public sealed partial class RegistrationFactoryShapeTests
 		}
 
 		[Test]
+		public async Task AnExtendingContainerInTheSameAssembly_AppliesThePrivateDecorator()
+		{
+			using TestShop.Root shop = new();
+
+			IBell bell = shop.Resolve<IBell>();
+
+			await That(bell.GetType().Name).IsEqualTo("QuietBell");
+			await That(bell.Inner).IsExactly<Bell>();
+		}
+
+		[Test]
 		public async Task AnExtendingContainerInAnotherAssembly_BuildsThePrivateImplementation()
 		{
 			using SupportShapeTestContainer.Root shop = new();
@@ -114,6 +159,8 @@ public sealed partial class RegistrationFactoryShapeTests
 			await That(report.KeyedClock).IsExactly<ShapeBaseUtcClock>();
 			await That(report.Clock).IsExactly<ShapeBaseSystemClock>()
 				.Because("the base's internal factory takes the keyed parameter and the injected property");
+			await That(report.GetType().Name).IsEqualTo("AuditedReport")
+				.Because("the base's private decorator wraps the report through its generated factory");
 		}
 
 		[Test]
@@ -141,8 +188,15 @@ public sealed partial class RegistrationFactoryShapeTests
 	[Module]
 	[Singleton<HiddenGreetingModule.Greeter, IGreeter>]
 	[Singleton<HiddenGreetingModule.Greeter, IFormalGreeter>]
+	[Singleton<Bell, IBell>]
+	[Decorate<HiddenGreetingModule.LoudBell, IBell>]
 	public static partial class HiddenGreetingModule
 	{
+		private sealed class LoudBell(IBell inner) : IBell
+		{
+			public IBell? Inner => inner;
+		}
+
 		private sealed class Greeter([FromKey("utc")] IClock keyedClock) : IFormalGreeter
 		{
 			public IClock KeyedClock => keyedClock;
@@ -163,8 +217,15 @@ public sealed partial class RegistrationFactoryShapeTests
 	[Singleton<SystemClock, IClock>]
 	[Singleton<Shop.Greeter, IGreeter>]
 	[Singleton<Shop.Greeter, IFormalGreeter>]
+	[Singleton<Bell, IBell>]
+	[Decorate<Shop.QuietBell, IBell>]
 	public static partial class Shop
 	{
+		private sealed class QuietBell(IBell inner) : IBell
+		{
+			public IBell? Inner => inner;
+		}
+
 		private sealed class Greeter([FromKey("utc")] IClock keyedClock) : IFormalGreeter
 		{
 			public IClock KeyedClock => keyedClock;

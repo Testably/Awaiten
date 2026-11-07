@@ -1902,14 +1902,15 @@ internal static class Diagnostics
 	/// <summary>
 	///     An imported module of another assembly declares a decorator, a composite or an open generic registration
 	///     whose type this container cannot construct (it, or every constructor, is not accessible here). A module
-	///     self-compiles its scans and closed registrations only, so nothing constructs this type for the container.
+	///     generated no factory for it (it generates them for its scans, closed registrations and closed decorators,
+	///     where the factory can express the type), so nothing constructs this type for the container.
 	///     Reported at the consumer's <c>[Import]</c> instead of a misleading constructor diagnostic, and the
 	///     contribution is skipped.
 	/// </summary>
 	public static readonly DiagnosticDescriptor ModuleContributionNotSelfCompiled = new(
 		"AWT230",
 		"Module contribution cannot be constructed",
-		"The imported module '{0}' declares {1} '{2}', which this container cannot construct; a module self-compiles only its scans and closed registrations, so make '{2}' and its constructor public, or grant this assembly InternalsVisibleTo",
+		"The imported module '{0}' declares {1} '{2}', which this container cannot construct, and the module generated no factory for it; make '{2}' and its constructor public, or grant this assembly InternalsVisibleTo",
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
