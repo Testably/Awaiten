@@ -204,8 +204,11 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 					.ToList();
 			}
 
-			hidden?.Implementations.RemoveAll(candidate => candidate.Shared
-			                                              && factories.Any(factory => factory.ImplementationType == candidate.Implementation.ToDisplayString(FullyQualified) && factory.Skip is null));
+			if (hidden is not null)
+			{
+				RejectScannedHiddenImplementations(hidden, factories, diagnostics);
+			}
+
 			registrations = CollectModuleRegistrationFactories(moduleSymbol, compilation, diagnostics, factories, skipped, hidden);
 			wrappers.RemoveAll(wrapper => registrations.Any(registration => registration.Hooks.AsArray().Any(hook => hook.Hook.WrapperName == wrapper.Name)));
 			skipped = skipped.GroupBy(entry => entry.MarkerName, StringComparer.Ordinal).Select(group => group.First()).ToList();

@@ -122,6 +122,64 @@ public class ModuleHiddenServiceTests
 			.Because("a consumer builds an eager singleton at startup even though nothing depends on it");
 	}
 
+	public class ScannedToo
+	{
+		private static string Library(string registrations, bool grant = false) => $$"""
+			using Awaiten;
+
+			{{(grant ? "[assembly: System.Runtime.CompilerServices.InternalsVisibleTo(\"Friend\")]" : "")}}
+
+			namespace Lib;
+
+			public interface IAppliance { }
+			public interface IFront { }
+			public interface IBack { }
+			public interface IUser { }
+			internal interface IHiddenKettle { }
+			internal sealed class Kettle : IAppliance, IHiddenKettle, IFront, IBack { }
+			internal sealed class User : IUser { public User(IHiddenKettle kettle) { } }
+
+			[Module]
+			[Scan<IAppliance>(As = ScanAs.Marker, Lifetime = Lifetime.Singleton)]
+			{{registrations}}
+			public static partial class CoffeeModule { }
+			""";
+
+		[Test]
+		[Arguments("[Singleton<Kettle, IHiddenKettle>]\n[Singleton<User, IUser>]")]
+		[Arguments("[Singleton<Kettle, IFront>]\n[Singleton<Kettle, IBack>]")]
+		public async Task AnImplementationTheModuleBuildsThroughAHandle_ReportsAwt197(string registrations)
+		{
+			GeneratorResult result = RunLibrary(Library(registrations));
+
+			await That(result.Diagnostics).Contains("*AWT197*'Lib.Kettle'*Lib.IAppliance*").AsWildcard()
+				.Because("the scan factory would build a second instance of what the handle shares");
+		}
+
+		[Test]
+		public async Task AnImplementationUnderAnInternalService_NamesTheInternalService()
+		{
+			GeneratorResult result = RunLibrary(Library("[Singleton<Kettle, IHiddenKettle>]\n[Singleton<User, IUser>]"));
+
+			await That(result.Diagnostics).Contains("*AWT197*'Lib.Kettle' is registered under the internal service 'Lib.IHiddenKettle'*(Lib.IAppliance, Lib.IHiddenKettle)*").AsWildcard();
+		}
+
+		[Test]
+		[Arguments("[Singleton<Kettle, IHiddenKettle>]\n[Singleton<User, IUser>]")]
+		[Arguments("[Singleton<Kettle, IFront>]\n[Singleton<Kettle, IBack>]")]
+		public async Task UnderAGrant_SkipsTheScanFactoryAndTheHandleFactory(string registrations)
+		{
+			GeneratorResult result = RunLibrary(Library(registrations, grant: true));
+			string module = ModuleSource(result);
+
+			await That(result.Diagnostics).IsEmpty()
+				.Because("an assembly granted InternalsVisibleTo constructs the implementation once for the scan and the registrations");
+			await That(module).DoesNotContain($"{HiddenFactory("global::Lib.Kettle")}(")
+				.And.DoesNotContain("public static global::Lib.IAppliance Scan_Kettle_")
+				.Because("neither factory may build an instance of its own");
+		}
+	}
+
 	public class StartedSingletons
 	{
 		private static string Library(string registration, bool partial = true, bool grant = false) => $$"""

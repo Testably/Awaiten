@@ -622,9 +622,7 @@ partial class AwaitenGenerator
 		INamedTypeSymbol implementation = candidate.Implementation;
 		HiddenServices hidden = context.Hidden!;
 		string typeName = implementation.ToDisplayString(FullyQualified);
-		SelfCompiledSubject subject = candidate.HiddenServices(context.Module, context.Compilation).FirstOrDefault() is { } service
-			? new SelfCompiledSubject(typeName, $"'{Display(typeName)}' is registered under the internal service '{Display(service.ToDisplayString(FullyQualified))}', which a consuming container reaches through a generated handle", "register it in the module")
-			: new SelfCompiledSubject(typeName, $"'{Display(typeName)}' is registered under services whose one instance a consuming container shares through a generated handle", "register it in the module");
+		SelfCompiledSubject subject = HiddenSubject(candidate, context.Module, context.Compilation);
 		Location? location = candidate.Registrations[0].Location;
 		EquatableArray<FactoryParameter> parameters;
 		MirroredMembers members = default;
@@ -692,6 +690,54 @@ partial class AwaitenGenerator
 			handle + HandleVariant(TraitsOf(implementation, [])),
 			OptionalMembers: members.Optional,
 			DeferredMembers: members.Deferred);
+	}
+
+	/// <summary>How a diagnostic about an implementation the module builds through a handle names it.</summary>
+	private static SelfCompiledSubject HiddenSubject(HiddenImplementation candidate, INamedTypeSymbol module, Compilation compilation)
+	{
+		string typeName = candidate.Implementation.ToDisplayString(FullyQualified);
+		return candidate.HiddenServices(module, compilation).FirstOrDefault() is { } service
+			? new SelfCompiledSubject(typeName, $"'{Display(typeName)}' is registered under the internal service '{Display(service.ToDisplayString(FullyQualified))}', which a consuming container reaches through a generated handle", "register it in the module")
+			: new SelfCompiledSubject(typeName, $"'{Display(typeName)}' is registered under services whose one instance a consuming container shares through a generated handle", "register it in the module");
+	}
+
+	/// <summary>
+	///     Rejects every implementation the module builds through a handle that one of its scans matches too, since the
+	///     scan's factory would build a second instance of what the handle shares (AWT197). One registered under
+	///     accessible services only leaves the handles to the self-compiled registrations, which report it themselves.
+	///     One under an internal service is no longer viable, so nothing takes its handle; it is reported unless the
+	///     module's assembly grants <c>InternalsVisibleTo</c>, whose assemblies construct it once for both, or unless a
+	///     self-compiled registration of it reports it already.
+	/// </summary>
+	private static void RejectScannedHiddenImplementations(HiddenServices hidden, List<ModuleFactory> scanFactories, List<DiagnosticInfo> diagnostics)
+	{
+		INamedTypeSymbol module = hidden.Module;
+		Compilation compilation = hidden.Compilation;
+		hidden.Implementations.RemoveAll(candidate => candidate.Shared && scanFactories.Any(factory => factory.ImplementationType == candidate.Implementation.ToDisplayString(FullyQualified)));
+		foreach (HiddenImplementation candidate in hidden.Implementations.Where(candidate => candidate.Viable))
+		{
+			if (scanFactories.FirstOrDefault(factory => factory.ImplementationType == candidate.Implementation.ToDisplayString(FullyQualified)) is not { } scanned)
+			{
+				continue;
+			}
+
+			INamedTypeSymbol service = candidate.HiddenServices(module, compilation).First();
+			DiagnosticInfo rejection = new(
+				Diagnostics.ModuleScanMultipleExposures,
+				LocationInfo.From(candidate.Registrations[0].Location),
+				new EquatableArray<string>([
+					HiddenSubject(candidate, module, compilation).Subject,
+					$"{Display(scanned.ServiceType)}, {Display(service.ToDisplayString(FullyQualified))}",
+					"remove the registration or exclude the type from the scan",
+				]));
+			candidate.Viable = false;
+			candidate.Rejections = [rejection,];
+			hidden.NonViable.UnionWith(candidate.HiddenServices(module, compilation));
+			if (!hidden.Friends && !candidate.Registrations.Any(registration => SelfCompilesRegistration(module, candidate.Implementation, registration.Service, compilation)))
+			{
+				diagnostics.Add(rejection);
+			}
+		}
 	}
 
 	/// <summary>The nested handle variant that implements exactly the disposal interfaces of <paramref name="traits" />.</summary>
