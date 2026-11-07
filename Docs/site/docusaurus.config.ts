@@ -5,7 +5,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 const config: Config = {
   title: 'Awaiten',
   tagline: 'The async-first, compile-time dependency injection container for .NET.',
-  favicon: 'img/logo.png',
+  favicon: 'img/favicon.svg',
 
   future: {
     v4: true,
@@ -79,7 +79,8 @@ const config: Config = {
       title: 'Awaiten',
       logo: {
         alt: 'Awaiten logo',
-        src: 'img/logo.png',
+        src: 'img/logo.svg',
+        srcDark: 'img/logo-dark.svg',
         width: 32,
         height: 32,
       },

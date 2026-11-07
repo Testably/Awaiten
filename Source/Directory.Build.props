@@ -45,10 +45,6 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<None Include="$([MSBuild]::GetPathOfFileAbove('Awaiten_256x256.png', '$(MSBuildThisFileDirectory)../Docs/'))"
-			  Pack="true"
-			  PackagePath="/Docs/"
-			  Link="\Docs\Awaiten_256x256.png"/>
 		<None Include="$([MSBuild]::GetPathOfFileAbove('logo.png', '$(MSBuildThisFileDirectory)../Docs/'))"
 			  Pack="true"
 			  PackagePath="/Docs/"
