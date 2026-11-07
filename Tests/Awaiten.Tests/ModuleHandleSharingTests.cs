@@ -25,7 +25,25 @@ public class ModuleHandleSharingTests
 		await That(container.Resolve<PublicHandledStore>()).IsSameAs(container.Resolve<IHandledStoreUser>().Store)
 			.Because("a module of this assembly that registers the public implementation shares the handle's instance too");
 	}
+
+	[Test]
+	public async Task TransientDisposableThroughAnAlias_IsWithheldOnTheRoot()
+	{
+		using AliasedDisposableContainer.Root container = new();
+
+		await That(container is IAwaitenResolver<IAliasedCup>).IsFalse()
+			.Because("the root withholds a transient disposable under strict lifetime safety, also when an alias serves it from a handle");
+		await That(() => container.Resolve<IAliasedCup>()).Throws<InvalidOperationException>()
+			.WithMessage("*withheld*Owned<*").AsWildcard();
+
+		using AliasedDisposableContainer.Scope scope = container.CreateScope();
+		await That(scope.Resolve<IAliasedCup>()).IsNotNull();
+	}
 }
+
+[Container]
+[Import(typeof(CrossAssemblyAliasedDisposableModule))]
+public static partial class AliasedDisposableContainer;
 
 [Container]
 [Import(typeof(CrossAssemblyPublicStoreModule))]

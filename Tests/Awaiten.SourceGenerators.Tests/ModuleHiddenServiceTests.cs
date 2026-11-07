@@ -1049,6 +1049,40 @@ public class ModuleHiddenServiceTests
 				.Because("the container assigns the deferred property through the module's setter wrapper");
 		}
 
+		[Test]
+		public async Task TransientDisposableThroughAnAlias_IsWithheldOnTheRootUnderStrictLifetimeSafety()
+		{
+			const string library = """
+				using Awaiten;
+
+				namespace Lib;
+
+				public interface IPublic { }
+				internal interface IHidden { }
+				internal sealed class Impl : IPublic, IHidden, System.IDisposable { public void Dispose() { } }
+
+				[Module]
+				[Transient<Impl, IPublic>]
+				[Transient<Impl, IHidden>]
+				public static partial class CoffeeModule { }
+				""";
+			GeneratorResult same = Generator.Run(library + """
+
+				[Container]
+				[Import(typeof(CoffeeModule))]
+				public static partial class SameContainer;
+				""");
+			GeneratorResult cross = Generator.RunWithGeneratedReferencedAssembly(library, Container);
+			string sameSource = same.Sources["Awaiten.Lib.SameContainer.g.cs"];
+			string crossSource = cross.Sources["Awaiten.MyCode.MyContainer.g.cs"];
+
+			await That(sameSource).DoesNotContain("global::Awaiten.IAwaitenResolver<global::Lib.IPublic>")
+				.And.Contains("'Lib.IPublic' is withheld from by-type resolution on the container root");
+			await That(crossSource).DoesNotContain("global::Awaiten.IAwaitenResolver<global::Lib.IPublic>")
+				.And.Contains("'Lib.IPublic' is withheld from by-type resolution on the container root")
+				.Because("the alias builds a transient disposable through the handle, which accumulates on the root as the implementation does in the module's own assembly");
+		}
+
 		public class PublicImplementation
 		{
 			private const string Library = """

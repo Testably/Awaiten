@@ -161,6 +161,28 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
+	///     Marks each alias (see <see cref="ThroughAlias" />) that takes a transient instance handle the container tracks
+	///     for teardown (<see cref="InstanceModel.TracksHandleDisposal" />): building the alias builds and tracks the
+	///     implementation, so strict lifetime safety withholds it on the Root, as it withholds the implementation in a
+	///     container of the module's own assembly, while the handle keeps owning the disposal.
+	/// </summary>
+	private static void MarkAliasesOfTrackedHandles(List<InstanceModel> instances, Dictionary<ServiceKey, string> serviceToImpl, Dictionary<string, int> implToIndex)
+	{
+		for (int index = 0; index < instances.Count; index++)
+		{
+			if (instances[index].ImplementationType.Contains(AliasKeyMarker)
+			    && instances[index].ConstructorParameters.AsArray().Any(parameter => parameter.Kind == DependencyKind.Direct
+			                                                                         && serviceToImpl.TryGetValue(new ServiceKey(parameter.ServiceType, parameter.Key), out string? handle)
+			                                                                         && implToIndex.TryGetValue(handle, out int handleIndex)
+			                                                                         && instances[handleIndex] is { Lifetime: Lifetime.Transient, } tracked
+			                                                                         && (tracked.NeedsDisposal || tracked.HasReleaseHook)))
+			{
+				instances[index] = instances[index] with { TracksHandleDisposal = true, };
+			}
+		}
+	}
+
+	/// <summary>
 	///     <paramref name="registration" /> served through <paramref name="alias" />, the generated member of
 	///     <paramref name="module" /> that returns the instance of <paramref name="implementation" /> from its instance
 	///     handle. Its identity names the alias's type and the implementation, and it owns nothing.

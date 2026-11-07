@@ -17,7 +17,7 @@ internal static partial class Sources
 	/// </summary>
 	private static bool IsWithheld(InstanceModel instance, bool strict)
 		=> strict
-		   && (instance.NeedsDisposal || instance.HasReleaseHook)
+		   && (instance.NeedsDisposal || instance.HasReleaseHook || instance.TracksHandleDisposal)
 		   && (instance.Lifetime == Lifetime.Transient || instance.IsParameterized);
 
 	/// <summary>

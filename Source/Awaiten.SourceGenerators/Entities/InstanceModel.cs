@@ -37,6 +37,9 @@ namespace Awaiten.SourceGenerators.Entities;
 ///     generated <c>Root</c> cannot hold in an <c>internal</c> field, so their typed async resolution is not cached.
 ///     <see cref="ResolverType" /> is the accessible type the resolvers return for an implementation private to the
 ///     container, which converts to all of its services (see <see cref="SurfaceType" />).
+///     <see cref="TracksHandleDisposal" /> marks an alias that serves an instance from a transient instance handle the
+///     container tracks for teardown, so building the alias accumulates on its owner like the implementation would,
+///     though the alias owns nothing itself.
 /// </summary>
 internal sealed record InstanceModel(
 	string ImplementationType,
@@ -67,7 +70,8 @@ internal sealed record InstanceModel(
 	bool IsAsyncActivation = false,
 	bool IsAsyncRelease = false,
 	string? AsyncReleaseHookName = null,
-	bool Unlisted = false)
+	bool Unlisted = false,
+	bool TracksHandleDisposal = false)
 {
 	/// <summary>
 	///     The services the container offers for resolution: none for an <see cref="Unlisted" /> instance, the generated

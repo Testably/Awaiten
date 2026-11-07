@@ -733,6 +733,7 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		}
 
 		LinkOutermostDecorators(implOrder, instances, implToIndex);
+		MarkAliasesOfTrackedHandles(instances, serviceToImpl, implToIndex);
 
 		// AWT167: a contextual registration whose named consumer never redirected to its context key (no unkeyed
 		// direct dependency on the service) is never reached, so report it now that every instance is built.
