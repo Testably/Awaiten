@@ -1236,6 +1236,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 09:25:44 2026 \u002B0100",
         "message": "feat: let an OnActivated hook make a service async-initialized (#285)"
+      },
+      {
+        "sha": "207516843cc922a35cb3a77bb23f0c78550bcfa1",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 09:49:58 2026 \u002B0100",
+        "message": "feat: generate factories for more registration shapes (#286)"
       }
     ],
     "labels": [
@@ -1444,7 +1450,8 @@ window.BENCHMARK_DATA = {
       "0d542565",
       "1f582413",
       "7392f6a7",
-      "3adbe6e7"
+      "3adbe6e7",
+      "20751684"
     ],
     "datasets": [
       {
@@ -1656,7 +1663,8 @@ window.BENCHMARK_DATA = {
           7.754577210793893,
           9.328384884198506,
           7.159590562539441,
-          7.769932759801547
+          7.769932759801547,
+          5.625039557615916
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -1668,6 +1676,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -2093,7 +2102,8 @@ window.BENCHMARK_DATA = {
           8.610362975725106,
           6.884327889553139,
           7.2492813984553015,
-          8.144797930760044
+          8.144797930760044,
+          5.71879609823227
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -2105,6 +2115,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -2530,7 +2541,8 @@ window.BENCHMARK_DATA = {
           118.41469117800395,
           140.5269817193349,
           153.54467698505945,
-          128.68937589327496
+          128.68937589327496,
+          106.92758944034577
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -2542,6 +2554,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -2963,7 +2976,8 @@ window.BENCHMARK_DATA = {
           9.726211112279158,
           10.293473132451375,
           8.978432696064313,
-          8.774185427106344
+          8.774185427106344,
+          7.806947524348895
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -2975,6 +2989,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -3392,7 +3407,8 @@ window.BENCHMARK_DATA = {
           11.018385034054518,
           12.220266785224279,
           11.042006477713585,
-          11.045458747872285
+          11.045458747872285,
+          9.560916777451833
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -3404,6 +3420,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -4855,6 +4872,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 09:25:44 2026 \u002B0100",
         "message": "feat: let an OnActivated hook make a service async-initialized (#285)"
+      },
+      {
+        "sha": "207516843cc922a35cb3a77bb23f0c78550bcfa1",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 09:49:58 2026 \u002B0100",
+        "message": "feat: generate factories for more registration shapes (#286)"
       }
     ],
     "labels": [
@@ -5063,7 +5086,8 @@ window.BENCHMARK_DATA = {
       "0d542565",
       "1f582413",
       "7392f6a7",
-      "3adbe6e7"
+      "3adbe6e7",
+      "20751684"
     ],
     "datasets": [
       {
@@ -5275,7 +5299,8 @@ window.BENCHMARK_DATA = {
           8.460138532977838,
           10.140788753827414,
           8.16533014178276,
-          8.470880098640919
+          8.470880098640919,
+          7.256379851698876
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -5287,6 +5312,7 @@ window.BENCHMARK_DATA = {
         "label": "Awaiten memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -5712,7 +5738,8 @@ window.BENCHMARK_DATA = {
           7.301970677716391,
           6.884511306881905,
           7.346310789768513,
-          8.590962386131286
+          8.590962386131286,
+          5.829785167024686
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -5724,6 +5751,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -6149,7 +6177,8 @@ window.BENCHMARK_DATA = {
           133.15486079851786,
           145.9845119714737,
           130.8045763373375,
-          126.78858768939972
+          126.78858768939972,
+          125.16257438659667
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -6161,6 +6190,7 @@ window.BENCHMARK_DATA = {
         "label": "Autofac memory",
         "unit": "b",
         "data": [
+          656,
           656,
           656,
           656,
@@ -6582,7 +6612,8 @@ window.BENCHMARK_DATA = {
           9.713619984113253,
           10.210193548064966,
           8.678966947396596,
-          8.786941647529602
+          8.786941647529602,
+          7.680116426944733
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -6594,6 +6625,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -7011,7 +7043,8 @@ window.BENCHMARK_DATA = {
           14.64030282731567,
           16.35344121058782,
           14.251598075032234,
-          14.36518911591598
+          14.36518911591598,
+          9.416868659853936
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -7023,6 +7056,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          0,
           0,
           0,
           0,
@@ -8474,6 +8508,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 09:25:44 2026 \u002B0100",
         "message": "feat: let an OnActivated hook make a service async-initialized (#285)"
+      },
+      {
+        "sha": "207516843cc922a35cb3a77bb23f0c78550bcfa1",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 09:49:58 2026 \u002B0100",
+        "message": "feat: generate factories for more registration shapes (#286)"
       }
     ],
     "labels": [
@@ -8682,7 +8722,8 @@ window.BENCHMARK_DATA = {
       "0d542565",
       "1f582413",
       "7392f6a7",
-      "3adbe6e7"
+      "3adbe6e7",
+      "20751684"
     ],
     "datasets": [
       {
@@ -8894,7 +8935,8 @@ window.BENCHMARK_DATA = {
           15.630354762077332,
           10.732851804296176,
           27.525326733078277,
-          26.132679790258408
+          26.132679790258408,
+          11.640991925199826
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -9056,6 +9098,7 @@ window.BENCHMARK_DATA = {
           144,
           144,
           144,
+          208,
           208,
           208,
           208,
@@ -9331,7 +9374,8 @@ window.BENCHMARK_DATA = {
           1174.3671323140463,
           720.3112782069614,
           1753.655414835612,
-          1762.3521288463048
+          1762.3521288463048,
+          795.2319189218374
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -9343,6 +9387,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          5688,
           5688,
           5688,
           5688,
@@ -9768,7 +9813,8 @@ window.BENCHMARK_DATA = {
           25368.809422084265,
           17231.84678548177,
           25443.020799909318,
-          25683.236106363933
+          25683.236106363933,
+          18532.52566964286
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -9984,6 +10030,7 @@ window.BENCHMARK_DATA = {
           32482,
           32478,
           32478,
+          32476,
           32476,
           32476
         ],
@@ -10201,7 +10248,8 @@ window.BENCHMARK_DATA = {
           599.1916379928589,
           381.6618014403752,
           713.9125383240836,
-          728.145281346639
+          728.145281346639,
+          424.87400003579944
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -10231,6 +10279,7 @@ window.BENCHMARK_DATA = {
           1472,
           1472,
           1472,
+          1528,
           1528,
           1528,
           1528,
@@ -10630,7 +10679,8 @@ window.BENCHMARK_DATA = {
           9127.567311604818,
           6167.829593658447,
           12443.468803992639,
-          13890.725759887695
+          13890.725759887695,
+          6700.985063825335
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -10842,6 +10892,7 @@ window.BENCHMARK_DATA = {
           24761,
           24760,
           24761,
+          24760,
           24760,
           24760
         ],
@@ -12093,6 +12144,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 09:25:44 2026 \u002B0100",
         "message": "feat: let an OnActivated hook make a service async-initialized (#285)"
+      },
+      {
+        "sha": "207516843cc922a35cb3a77bb23f0c78550bcfa1",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 09:49:58 2026 \u002B0100",
+        "message": "feat: generate factories for more registration shapes (#286)"
       }
     ],
     "labels": [
@@ -12301,7 +12358,8 @@ window.BENCHMARK_DATA = {
       "0d542565",
       "1f582413",
       "7392f6a7",
-      "3adbe6e7"
+      "3adbe6e7",
+      "20751684"
     ],
     "datasets": [
       {
@@ -12513,7 +12571,8 @@ window.BENCHMARK_DATA = {
           111.1582202230181,
           73.0721077521642,
           364.6002065976461,
-          255.57296552658082
+          255.57296552658082,
+          80.89287850686482
         ],
         "borderColor": "#63A2AC",
         "backgroundColor": "#63A2AC",
@@ -12675,6 +12734,7 @@ window.BENCHMARK_DATA = {
           2128,
           2128,
           2128,
+          4176,
           4176,
           4176,
           4176,
@@ -12950,7 +13010,8 @@ window.BENCHMARK_DATA = {
           10662.155179341635,
           7103.10112116887,
           15767.609397379558,
-          15582.189434344951
+          15582.189434344951,
+          7904.951569777269
         ],
         "borderColor": "#A052B0",
         "backgroundColor": "#A052B0",
@@ -12962,6 +13023,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          61016,
           61016,
           61016,
           61016,
@@ -13387,7 +13449,8 @@ window.BENCHMARK_DATA = {
           633059.9933733259,
           415945.89020647324,
           605259.0640345982,
-          582017.4493489583
+          582017.4493489583,
+          449377.7698692909
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -13604,7 +13667,8 @@ window.BENCHMARK_DATA = {
           740319,
           720386,
           739961,
-          719010
+          719010,
+          719044
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -13820,7 +13884,8 @@ window.BENCHMARK_DATA = {
           35957.258579799105,
           22425.831917317708,
           42449.991529192244,
-          44942.99855143229
+          44942.99855143229,
+          25161.313983623797
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -14033,7 +14098,8 @@ window.BENCHMARK_DATA = {
           80001,
           80305,
           81180,
-          80346
+          80346,
+          80970
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -14249,7 +14315,8 @@ window.BENCHMARK_DATA = {
           280722.10408528644,
           185029.9194173177,
           351292.91848958336,
-          391602.9814778646
+          391602.9814778646,
+          212749.04331752233
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -14462,7 +14529,8 @@ window.BENCHMARK_DATA = {
           573074,
           573040,
           571195,
-          572283
+          572283,
+          573076
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -15688,6 +15756,12 @@ window.BENCHMARK_DATA = {
         "author": "Valentin Breu\u00DF",
         "date": "Sat Nov 7 09:25:44 2026 \u002B0100",
         "message": "feat: let an OnActivated hook make a service async-initialized (#285)"
+      },
+      {
+        "sha": "207516843cc922a35cb3a77bb23f0c78550bcfa1",
+        "author": "Valentin Breu\u00DF",
+        "date": "Sat Nov 7 09:49:58 2026 \u002B0100",
+        "message": "feat: generate factories for more registration shapes (#286)"
       }
     ],
     "labels": [
@@ -15892,7 +15966,8 @@ window.BENCHMARK_DATA = {
       "0d542565",
       "1f582413",
       "7392f6a7",
-      "3adbe6e7"
+      "3adbe6e7",
+      "20751684"
     ],
     "datasets": [
       {
@@ -16100,7 +16175,8 @@ window.BENCHMARK_DATA = {
           286.62438780466715,
           301.53457052367077,
           231.54093503952026,
-          299.79129188401356
+          299.79129188401356,
+          201.70825786249978
         ],
         "borderColor": "#3949AB",
         "backgroundColor": "#3949AB",
@@ -16135,6 +16211,7 @@ window.BENCHMARK_DATA = {
           560,
           560,
           560,
+          568,
           568,
           568,
           568,
@@ -16529,7 +16606,8 @@ window.BENCHMARK_DATA = {
           616.8113985061646,
           684.7794905390058,
           583.765841117272,
-          669.1905132702419
+          669.1905132702419,
+          449.0135433123662
         ],
         "borderColor": "#512BD4",
         "backgroundColor": "#512BD4",
@@ -16541,6 +16619,7 @@ window.BENCHMARK_DATA = {
         "label": "MsDI memory",
         "unit": "b",
         "data": [
+          1104,
           1104,
           1104,
           1104,
@@ -16958,7 +17037,8 @@ window.BENCHMARK_DATA = {
           7015.630447896322,
           5319.679785664876,
           6454.416036878313,
-          5129.340583292643
+          5129.340583292643,
+          4751.702227456229
         ],
         "borderColor": "#5E2750",
         "backgroundColor": "#5E2750",
@@ -17042,6 +17122,7 @@ window.BENCHMARK_DATA = {
           13696,
           13696,
           13696,
+          10784,
           10784,
           10784,
           10784,
@@ -17387,7 +17468,8 @@ window.BENCHMARK_DATA = {
           411.61658833821616,
           435.426789410909,
           417.9155948956807,
-          422.80907519658405
+          422.80907519658405,
+          327.14095272336687
         ],
         "borderColor": "#1565C0",
         "backgroundColor": "#1565C0",
@@ -17399,6 +17481,7 @@ window.BENCHMARK_DATA = {
         "label": "DryIoc memory",
         "unit": "b",
         "data": [
+          944,
           944,
           944,
           944,
@@ -17816,7 +17899,8 @@ window.BENCHMARK_DATA = {
           751.8731012980144,
           771.1621587753295,
           750.470496749878,
-          765.9419643695538
+          765.9419643695538,
+          552.9230056762696
         ],
         "borderColor": "#43A047",
         "backgroundColor": "#43A047",
@@ -17828,6 +17912,7 @@ window.BENCHMARK_DATA = {
         "label": "SimpleInjector memory",
         "unit": "b",
         "data": [
+          1096,
           1096,
           1096,
           1096,
