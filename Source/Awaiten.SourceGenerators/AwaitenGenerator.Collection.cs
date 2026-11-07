@@ -346,7 +346,8 @@ partial class AwaitenGenerator
 	///     traits off its metadata, so it initializes, disposes and shares it exactly as it would a type it constructs. A registration whose service this container cannot
 	///     name either is dropped: nothing here can resolve or depend on it (a self-compiled constructor parameter
 	///     is accessible, AWT195). Returns <see langword="null" /> for a dropped registration, after reporting
-	///     AWT154 once per module when the module carries no generated factory for it. A module inherited through
+	///     AWT231 once per implementation when the module recorded why it generated no factory for it, else AWT154
+	///     once per module when the module carries no generated factory for it. A module inherited through
 	///     <c>Extends</c> keeps such a registration instead, which the inheritance reports as inaccessible (AWT226).
 	/// </summary>
 	private static RawRegistration? SelfCompiledRegistration(
@@ -401,7 +402,22 @@ partial class AwaitenGenerator
 				return registration;
 			}
 
-			if (!reportedNotSelfCompiled)
+			if (SkippedRegistrationReason(module, implementation) is { } reason)
+			{
+				DiagnosticInfo skipped = new(
+					Diagnostics.ModuleRegistrationNotSelfCompiled,
+					LocationInfo.From(context.FallbackLocation ?? registration.Location),
+					new EquatableArray<string>([
+						Display(module.ToDisplayString(FullyQualified)),
+						Display(registration.ImplementationType),
+						reason,
+					]));
+				if (!context.Diagnostics.Contains(skipped))
+				{
+					context.Diagnostics.Add(skipped);
+				}
+			}
+			else if (!reportedNotSelfCompiled)
 			{
 				reportedNotSelfCompiled = true;
 				context.Diagnostics.Add(new DiagnosticInfo(

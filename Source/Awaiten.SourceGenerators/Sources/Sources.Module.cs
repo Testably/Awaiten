@@ -1,5 +1,6 @@
 using System.Text;
 using Awaiten.SourceGenerators.Entities;
+using Microsoft.CodeAnalysis.CSharp;
 
 namespace Awaiten.SourceGenerators;
 
@@ -94,6 +95,22 @@ internal static partial class Sources
 				builder.AppendLine();
 				EmitModuleHook(builder, depth + 1, registration.ReturnType, hook.Hook, hook.Release, RegistrationOrigin);
 			}
+		}
+
+		foreach (SkippedRegistration skipped in model.Skipped.AsArray())
+		{
+			if (!first)
+			{
+				builder.AppendLine();
+			}
+
+			first = false;
+			AppendXmlSummary(builder, depth + 1,
+				"Generated from a module registration: why no factory constructs this implementation. An assembly granted",
+				"InternalsVisibleTo constructs it itself; a consuming container that cannot reports this reason.");
+			Indent(builder, depth + 1)
+				.Append("public const string ").Append(skipped.MarkerName).Append(" = ")
+				.Append(SymbolDisplay.FormatLiteral(skipped.Reason, quote: true)).AppendLine(";");
 		}
 
 		Indent(builder, depth).AppendLine("}");

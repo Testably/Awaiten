@@ -91,7 +91,7 @@ partial class AwaitenGenerator
 			if (!_registrations.TryGetValue(module, out List<RegistrationFactory>? factories))
 			{
 				_registrations[module] = factories = ReceivesGeneratedMembers(module)
-					? CollectModuleRegistrationFactories(module, _compilation, new List<DiagnosticInfo>(), Scans(module).Select(expansion => expansion.Factory).ToList())
+					? CollectModuleRegistrationFactories(module, _compilation, new List<DiagnosticInfo>(), Scans(module).Select(expansion => expansion.Factory).ToList(), new List<SkippedRegistration>())
 					: new List<RegistrationFactory>();
 			}
 
@@ -178,13 +178,18 @@ partial class AwaitenGenerator
 	///     what the factory cannot express: an inaccessible constructor parameter (AWT195), injection metadata
 	///     (AWT200), hook parameters the wrapper cannot mirror (AWT203/AWT204), and an inaccessible implementation
 	///     exposed under several services or also matched by one of the module's scans (AWT197), since one factory
-	///     returns one service and two would split the shared instance.
+	///     returns one service and two would split the shared instance. When the module's assembly grants
+	///     <c>InternalsVisibleTo</c> to any assembly, an implementation that fails only with AWT195, AWT197 or AWT200
+	///     gets no factory and no error: such an assembly constructs it itself. It lands in <paramref name="skipped" />
+	///     with the reason, which a consumer that cannot construct it reports (AWT231). A type hidden in the module
+	///     (see <see cref="TypeHiddenInModule" />) is never skipped, since no other assembly can construct it.
 	/// </summary>
 	private static List<RegistrationFactory> CollectModuleRegistrationFactories(
 		INamedTypeSymbol module,
 		Compilation compilation,
 		List<DiagnosticInfo> diagnostics,
-		IReadOnlyList<ModuleFactory> scanFactories)
+		IReadOnlyList<ModuleFactory> scanFactories,
+		List<SkippedRegistration> skipped)
 	{
 		ModuleScanContext context = new(module, compilation, diagnostics, new HashSet<string>(StringComparer.Ordinal));
 		List<(ModuleRegistration First, List<ModuleRegistration> All)> implementations = new();
@@ -206,10 +211,11 @@ partial class AwaitenGenerator
 			}
 		}
 
+		bool friendsCanConstruct = GrantsInternalsVisibleTo(compilation.Assembly);
 		List<RegistrationFactory> factories = new();
 		foreach ((ModuleRegistration first, List<ModuleRegistration> all) in implementations)
 		{
-			if (RegistrationFactoryOf(first, all, context, scanFactories) is { } factory)
+			if (RegistrationFactoryOf(first, all, context, scanFactories, friendsCanConstruct, skipped) is { } factory)
 			{
 				factories.Add(factory);
 			}
@@ -220,39 +226,58 @@ partial class AwaitenGenerator
 
 	/// <summary>
 	///     The factory of one self-compiled implementation from its registrations, or <see langword="null" /> after
-	///     reporting why it cannot be built (see <see cref="CollectModuleRegistrationFactories" />).
+	///     reporting why it cannot be built or recording it in <paramref name="skipped" /> (see
+	///     <see cref="CollectModuleRegistrationFactories" />).
 	/// </summary>
 	private static RegistrationFactory? RegistrationFactoryOf(
 		ModuleRegistration first,
 		List<ModuleRegistration> all,
 		ModuleScanContext context,
-		IReadOnlyList<ModuleFactory> scanFactories)
+		IReadOnlyList<ModuleFactory> scanFactories,
+		bool friendsCanConstruct,
+		List<SkippedRegistration> skipped)
 	{
 		INamedTypeSymbol implementation = first.Implementation;
 		string typeName = implementation.ToDisplayString(FullyQualified);
 		SelfCompiledSubject subject = RegistrationSubject(typeName);
 		INamedTypeSymbol returnType = IsExternallyAccessible(implementation) ? implementation : first.Service;
 		string returnName = returnType.ToDisplayString(FullyQualified);
+		List<DiagnosticInfo> rejections = new();
 
-		bool exposable = true;
+		string[] services = all.Select(registration => registration.Service.ToDisplayString(FullyQualified)).Distinct().ToArray();
 		foreach (ModuleRegistration registration in all)
 		{
 			string service = registration.Service.ToDisplayString(FullyQualified);
 			if (!SymbolEqualityComparer.Default.Equals(returnType, implementation) && service != returnName)
 			{
-				ReportRegistrationExposures(subject, $"{Display(returnName)}, {Display(service)}", "register it under a single service, or make the implementation public", registration.Location, context.Diagnostics);
-				exposable = false;
+				ReportRegistrationExposures(subject, $"{Display(returnName)}, {Display(service)}", "register it under a single service, or make the implementation public", registration.Location, rejections);
 			}
 		}
 
+		// A scan factory builds the type for every consumer, so one constructing the registration itself would still split it.
+		bool scannedToo = false;
 		if (scanFactories.FirstOrDefault(factory => factory.ImplementationType == typeName) is { } scanned)
 		{
-			ReportRegistrationExposures(subject, $"{Display(scanned.ServiceType)}, {Display(returnName)}", "remove the registration or exclude the type from the scan", first.Location, context.Diagnostics);
-			exposable = false;
+			ReportRegistrationExposures(subject, $"{Display(scanned.ServiceType)}, {Display(returnName)}", "remove the registration or exclude the type from the scan", first.Location, rejections);
+			scannedToo = true;
 		}
 
-		if (!TryMirrorFactoryParameters(implementation, context, first.Location, subject, out EquatableArray<FactoryParameter> parameters) || !exposable)
+		if (!TryMirrorFactoryParameters(implementation, context with { Diagnostics = rejections, }, first.Location, subject, out EquatableArray<FactoryParameter> parameters)
+		    || rejections.Count > 0)
 		{
+			string?[] reasons = rejections.Select(rejection => SkipReason(rejection, services)).ToArray();
+			if (!scannedToo
+			    && friendsCanConstruct
+			    && TypeHiddenInModule(implementation, context.Module, context.Compilation) is null
+			    && reasons.All(reason => reason is not null))
+			{
+				skipped.Add(new SkippedRegistration(RegistrationSkippedName(implementation), reasons[0]!));
+			}
+			else
+			{
+				context.Diagnostics.AddRange(rejections);
+			}
+
 			return null;
 		}
 
@@ -290,6 +315,32 @@ partial class AwaitenGenerator
 			LocationInfo.From(location),
 			new EquatableArray<string>([subject.Subject, exposures, remedy,])));
 
+	/// <summary>
+	///     Why the module generates no factory for an implementation, from the diagnostic the factory would have
+	///     failed with, or <see langword="null" /> when that diagnostic is not one an assembly granted
+	///     <c>InternalsVisibleTo</c> avoids by constructing the implementation itself.
+	/// </summary>
+	private static string? SkipReason(DiagnosticInfo rejection, string[] services)
+	{
+		if (rejection.Descriptor == Diagnostics.ModuleScanParameterInaccessible)
+		{
+			return $"its constructor parameter of type '{rejection.MessageArgs.AsArray()[1]}' is not accessible outside the module's assembly";
+		}
+
+		if (rejection.Descriptor == Diagnostics.ModuleScanInjectionMetadata)
+		{
+			return rejection.MessageArgs.AsArray()[1];
+		}
+
+		return rejection.Descriptor == Diagnostics.ModuleScanMultipleExposures
+			? $"it is registered under several services ({string.Join(", ", services.Select(Display))})"
+			: null;
+	}
+
+	/// <summary>Whether <paramref name="assembly" /> grants <c>InternalsVisibleTo</c> to any assembly.</summary>
+	private static bool GrantsInternalsVisibleTo(IAssemblySymbol assembly)
+		=> assembly.GetAttributes().Any(attribute => attribute.AttributeClass?.ToDisplayString() == "System.Runtime.CompilerServices.InternalsVisibleToAttribute");
+
 	/// <summary>The subject of a self-compilation diagnostic about a module registration.</summary>
 	private static SelfCompiledSubject RegistrationSubject(string typeName)
 		=> new(typeName, $"'{Display(typeName)}' is self-compiled from a module registration", "make the implementation and its constructor public");
@@ -301,6 +352,24 @@ partial class AwaitenGenerator
 	/// </summary>
 	private static string RegistrationFactoryName(INamedTypeSymbol implementation)
 		=> $"Awaiten__Registration_{implementation.Name}_{Fnv1a(implementation.ToDisplayString(FullyQualified)):x8}";
+
+	/// <summary>
+	///     A deterministic name for the constant that records why the module generates no factory for an
+	///     implementation, derived like <see cref="RegistrationFactoryName" />. Its presence tells a consumer that the
+	///     module was expanded and skipped the factory on purpose (AWT231), not built without the generator (AWT154).
+	/// </summary>
+	private static string RegistrationSkippedName(INamedTypeSymbol implementation)
+		=> $"Awaiten__RegistrationSkipped_{implementation.Name}_{Fnv1a(implementation.ToDisplayString(FullyQualified)):x8}";
+
+	/// <summary>
+	///     Why the imported module of another assembly generated no factory for <paramref name="implementation" />,
+	///     or <see langword="null" /> when it records no such skip.
+	/// </summary>
+	private static string? SkippedRegistrationReason(INamedTypeSymbol module, INamedTypeSymbol implementation)
+		=> module.GetMembers(RegistrationSkippedName(implementation))
+			.OfType<IFieldSymbol>()
+			.Select(field => field.ConstantValue as string)
+			.FirstOrDefault(reason => reason is not null);
 
 	/// <summary>
 	///     A deterministic name for the wrapper of one hook a self-compiled registration names, derived from the

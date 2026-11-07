@@ -124,6 +124,7 @@
  AWT225  | Awaiten   | Error    | A container with Extends sets AsyncSafety or LifetimeSafety, which it inherits from its base
  AWT226  | Awaiten   | Error    | A type or member a container inherits through Extends is not accessible from it
  AWT230  | Awaiten   | Error    | An imported module of another assembly declares a decorator, composite or open generic registration whose type the container cannot construct, which a module does not self-compile
+ AWT231  | Awaiten   | Error    | An imported module of another assembly registers an implementation the container cannot construct, for which the module generated no factory because the factory cannot support it
 
 ; AWT137 (an injected property marked [Arg]) is retired: [Arg] targets only parameters, so the compiler rejects it on a property. The id stays reserved and is never reused.
 ; AWT217 (a partially open [InjectProperty(typeof(...), name)] target) is retired before it shipped: AWT215 covers the typeof argument of [InjectProperty] and [ImportService] alike. The id stays reserved and is never reused.
