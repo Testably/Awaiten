@@ -128,6 +128,7 @@
  AWT232  | Awaiten   | Error    | A lifecycle hook returns Task<T> or ValueTask<T>, or an asynchronous OnRelease hook takes a CancellationToken
  AWT233  | Awaiten   | Error    | An [AsyncInitializer<T>] names a method that is missing, overloaded, static, generic or inaccessible, does not return Task or ValueTask, or has a ref or Awaiten-attributed parameter
  AWT234  | Awaiten   | Error    | An [AsyncInitializer<T>] convention initializes an implementation, but its type or method is not accessible where the container calls it
+ AWT235  | Awaiten   | Error    | A [Module] or [Container] declares a member named Internals, which is reserved for the nested class that holds its generated members
 
 ; AWT137 (an injected property marked [Arg]) is retired: [Arg] targets only parameters, so the compiler rejects it on a property. The id stays reserved and is never reused.
 ; AWT217 (a partially open [InjectProperty(typeof(...), name)] target) is retired before it shipped: AWT215 covers the typeof argument of [InjectProperty] and [ImportService] alike. The id stays reserved and is never reused.

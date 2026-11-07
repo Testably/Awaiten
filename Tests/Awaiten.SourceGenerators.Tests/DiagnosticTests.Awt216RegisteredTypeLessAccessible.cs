@@ -198,8 +198,8 @@ public partial class DiagnosticTests
 
 			await That(result.Diagnostics).IsEmpty()
 				.Because("the container runs the module's private hooks through the public wrappers the module generates");
-			await That(result.Sources["Awaiten.MyCode.Shop.g.cs"]).Contains("global::MyCode.ClockModule.Awaiten__Hook_OnActivated_FakeClock_").And
-				.Contains("global::MyCode.ClockModule.Awaiten__Hook_OnRelease_FakeClock_");
+			await That(result.Sources["Awaiten.MyCode.Shop.g.cs"]).Contains("global::MyCode.ClockModule.Internals.Hook_OnActivated_FakeClock_").And
+				.Contains("global::MyCode.ClockModule.Internals.Hook_OnRelease_FakeClock_");
 		}
 
 		[Test]
@@ -777,7 +777,7 @@ public partial class DiagnosticTests
 
 			await That(result.Diagnostics).IsEmpty()
 				.Because("the module may access the private types of the class it is nested in, so its generated factory builds the type for the container");
-			await That(result.Sources["Awaiten.MyCode.Shop.g.cs"]).Contains("global::MyCode.Fakes.ClockModule.Awaiten__Registration_FakeClock_");
+			await That(result.Sources["Awaiten.MyCode.Shop.g.cs"]).Contains("global::MyCode.Fakes.ClockModule.Internals.Registration_FakeClock_");
 		}
 
 		[Test]
@@ -813,7 +813,7 @@ public partial class DiagnosticTests
 
 			await That(result.Diagnostics).IsEmpty()
 				.Because("a nested type may access the private types of every class around it, at any depth");
-			await That(result.Sources["Awaiten.MyCode.Shop.g.cs"]).Contains("global::MyCode.Fakes.Clocks.ClockModule.Awaiten__Registration_FakeClock_");
+			await That(result.Sources["Awaiten.MyCode.Shop.g.cs"]).Contains("global::MyCode.Fakes.Clocks.ClockModule.Internals.Registration_FakeClock_");
 		}
 
 		[Test]
@@ -849,7 +849,7 @@ public partial class DiagnosticTests
 
 			await That(result.Diagnostics).IsEmpty()
 				.Because("a module nested in a derived class may access the protected types of its base");
-			await That(result.Sources["Awaiten.MyCode.Shop.g.cs"]).Contains("global::MyCode.Fakes.ClockModule.Awaiten__Registration_FakeClock_");
+			await That(result.Sources["Awaiten.MyCode.Shop.g.cs"]).Contains("global::MyCode.Fakes.ClockModule.Internals.Registration_FakeClock_");
 		}
 
 		[Test]
@@ -919,8 +919,8 @@ public partial class DiagnosticTests
 
 			await That(result.Diagnostics).IsEmpty()
 				.Because("the container runs the module's private hooks through the public wrappers the module generates");
-			await That(result.Sources["Awaiten.MyCode.Shop.g.cs"]).Contains("global::MyCode.Fakes.ClockModule.Awaiten__Hook_OnActivated_FakeClock_").And
-				.Contains("global::MyCode.Fakes.ClockModule.Awaiten__Hook_OnRelease_FakeClock_");
+			await That(result.Sources["Awaiten.MyCode.Shop.g.cs"]).Contains("global::MyCode.Fakes.ClockModule.Internals.Hook_OnActivated_FakeClock_").And
+				.Contains("global::MyCode.Fakes.ClockModule.Internals.Hook_OnRelease_FakeClock_");
 		}
 
 		[Test]
@@ -1142,7 +1142,7 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).HasSingle().Matching(diagnostic => diagnostic.Contains("warning AWT193")
 			                                                                  && diagnostic.Contains("'MyCode.ShopModule.FakeClock' is private or protected and the module registers it explicitly"))
 				.Because("a scan never turns its former silent skip of a private type into the AWT197 error, so the match yields to the registration's factory");
-			await That(result.Sources["Awaiten.MyCode.Shop.g.cs"]).Contains("Awaiten__Registration_FakeClock_");
+			await That(result.Sources["Awaiten.MyCode.Shop.g.cs"]).Contains("Registration_FakeClock_");
 		}
 
 		[Test]

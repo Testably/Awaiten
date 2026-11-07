@@ -173,7 +173,7 @@ public class AsyncActivationHookTests
 			""", [], []);
 		string module = run.Results.SelectMany(r => r.GeneratedSources).Single(s => s.HintName.Contains("TerminalModule")).SourceText.ToString();
 
-		await That(module).Contains("public static global::System.Threading.Tasks.Task Awaiten__Hook_OnActivated_Terminal_*(global::Lib.ITerminal @awaiten__instance, global::System.Threading.CancellationToken @cancellationToken) => Connect((global::Lib.Terminal)@awaiten__instance, @cancellationToken);").AsWildcard()
+		await That(module).Contains("public static global::System.Threading.Tasks.Task Hook_OnActivated_Terminal_*(global::Lib.ITerminal @awaiten__instance, global::System.Threading.CancellationToken @cancellationToken) => Connect((global::Lib.Terminal)@awaiten__instance, @cancellationToken);").AsWildcard()
 			.Because("the wrapper returns the hook's Task and forwards the token, so a consumer awaits it with its own resolve-time token");
 	}
 
@@ -257,10 +257,10 @@ public class AsyncActivationHookTests
 			await That(result.Diagnostics).IsEmpty()
 				.Because("an assembly granted InternalsVisibleTo calls an async hook directly just like a synchronous one");
 			string source = result.Sources.Values.Single();
-			await That(source).Contains("public const string Awaiten__HookSkipped_OnActivated_Terminal_")
+			await That(source).Contains("public const string HookSkipped_OnActivated_Terminal_")
 				.And.Contains("[global::Awaiten.GeneratedScanRegistrationAttribute<global::Lib.IPrinter>(\"Lib.Printer\", Lifetime = global::Awaiten.Lifetime.Singleton, OnActivated = \"Warm\")]")
-				.And.DoesNotContain("Awaiten__Hook_OnActivated_Terminal_")
-				.And.DoesNotContain("Awaiten__ScanHook_");
+				.And.DoesNotContain("Hook_OnActivated_Terminal_")
+				.And.DoesNotContain("ScanHook_");
 		}
 
 		[Test]
@@ -289,8 +289,8 @@ public class AsyncActivationHookTests
 
 			await That(result.Diagnostics).IsEmpty()
 				.Because("a friend consumer awaits an asynchronous release hook it calls directly, so the module skips its wrapper");
-			await That(result.Sources.Values.Single()).Contains("public const string Awaiten__HookSkipped_OnRelease_Terminal_")
-				.And.DoesNotContain("Awaiten__Hook_OnRelease_Terminal_");
+			await That(result.Sources.Values.Single()).Contains("public const string HookSkipped_OnRelease_Terminal_")
+				.And.DoesNotContain("Hook_OnRelease_Terminal_");
 		}
 
 		[Test]

@@ -41,9 +41,9 @@ public class SelfCompiledModuleScanHookTests
 			}
 			""");
 
-		await That(module).Contains("OnActivated = \"Awaiten__ScanHook_OnActivated_Roaster_").AsWildcard()
+		await That(module).Contains("OnActivated = \"Internals.ScanHook_OnActivated_Roaster_").AsWildcard()
 			.Because("the registration names the generated wrapper so a consumer runs it through the ordinary hook pipeline");
-		await That(module).Contains("public static void Awaiten__ScanHook_OnActivated_Roaster_").AsWildcard()
+		await That(module).Contains("public static void ScanHook_OnActivated_Roaster_").AsWildcard()
 			.Because("the wrapper is public so a cross-assembly consumer can call it");
 		await That(module).Contains("(global::Lib.IRoaster @awaiten__instance) => Wire((global::Lib.Roaster)@awaiten__instance);").AsWildcard()
 			.Because("the wrapper takes the accessible exposure interface, casts it back to the internal implementation inside the module, and forwards to the internal hook");
@@ -73,7 +73,7 @@ public class SelfCompiledModuleScanHookTests
 
 		// The consumer only ever sees the public exposure interface; the closed marker form (over an internal
 		// view-model) and the closed generic call live entirely inside the module.
-		await That(module).Contains("public static void Awaiten__ScanHook_OnActivated_MainWindow_").AsWildcard();
+		await That(module).Contains("public static void ScanHook_OnActivated_MainWindow_").AsWildcard();
 		await That(module).Contains("(global::Lib.IMainWindow @awaiten__instance) => Wire<global::Lib.IMainViewModel>((global::Lib.IView<global::Lib.IMainViewModel>)@awaiten__instance);").AsWildcard()
 			.Because("the generic hook is closed at module build, so the wrapper is non-generic and the consumer sees no generics even though the marker closes over an internal view-model");
 	}
@@ -140,7 +140,7 @@ public class SelfCompiledModuleScanHookTests
 		await That(result.Diagnostics).IsEmpty()
 			.Because("the wrapper is a plain public static method, so the consumer binds it and resolves its IClock parameter from the graph");
 		string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-		await That(source).Contains("global::Lib.PluginModule.Awaiten__ScanHook_OnActivated_Roaster_").AsWildcard()
+		await That(source).Contains("global::Lib.PluginModule.Internals.ScanHook_OnActivated_Roaster_").AsWildcard()
 			.Because("the container invokes the module's generated hook wrapper qualified on the module type");
 	}
 
@@ -255,11 +255,11 @@ public class SelfCompiledModuleScanHookTests
 			}
 			""");
 
-		await That(module).Contains("OnActivated = \"Awaiten__ScanHook_OnActivated_Worker_").AsWildcard()
+		await That(module).Contains("OnActivated = \"Internals.ScanHook_OnActivated_Worker_").AsWildcard()
 			.Because("the first scan's OnActivated stays on the single registration");
-		await That(module).Contains("OnRelease = \"Awaiten__ScanHook_OnRelease_Worker_").AsWildcard()
+		await That(module).Contains("OnRelease = \"Internals.ScanHook_OnRelease_Worker_").AsWildcard()
 			.Because("a second scan matching the same type fills the hook slot the first left empty, exactly like two container scans merging");
-		await That(module).Contains("public static void Awaiten__ScanHook_OnRelease_Worker_").AsWildcard()
+		await That(module).Contains("public static void ScanHook_OnRelease_Worker_").AsWildcard()
 			.Because("the filled slot emits its wrapper beside the first scan's factory");
 	}
 

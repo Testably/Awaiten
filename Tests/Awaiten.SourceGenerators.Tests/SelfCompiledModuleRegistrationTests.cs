@@ -21,10 +21,10 @@ public class SelfCompiledModuleRegistrationTests
 	}
 
 	private static string FactoryName(string fullyQualifiedName)
-		=> $"Awaiten__Registration_{fullyQualifiedName[(fullyQualifiedName.LastIndexOf('.') + 1)..]}_{Fnv1a(fullyQualifiedName):x8}";
+		=> $"Registration_{fullyQualifiedName[(fullyQualifiedName.LastIndexOf('.') + 1)..]}_{Fnv1a(fullyQualifiedName):x8}";
 
 	private static string HookName(string fullyQualifiedName, string slot, string hook)
-		=> $"Awaiten__Hook_{slot}_{fullyQualifiedName[(fullyQualifiedName.LastIndexOf('.') + 1)..]}_{Fnv1a($"{fullyQualifiedName}\0{slot}\0{hook}"):x8}";
+		=> $"Hook_{slot}_{fullyQualifiedName[(fullyQualifiedName.LastIndexOf('.') + 1)..]}_{Fnv1a($"{fullyQualifiedName}\0{slot}\0{hook}"):x8}";
 
 	private static string ModuleSource(Microsoft.CodeAnalysis.GeneratorDriverRunResult run)
 		=> run.Results.SelectMany(r => r.GeneratedSources).Single(s => s.HintName.Contains("ModuleScan")).SourceText.ToString();
@@ -222,7 +222,7 @@ public class SelfCompiledModuleRegistrationTests
 			await That(result.Diagnostics).IsEmpty()
 				.Because("the internal implementation resolves through its generated factory, without InternalsVisibleTo");
 			string source = result.Sources["Awaiten.MyCode.MyContainer.g.cs"];
-			await That(source).Contains($"global::Lib.GreetingModule.{FactoryName("global::Lib.Greeter")}(");
+			await That(source).Contains($"global::Lib.GreetingModule.Internals.{FactoryName("global::Lib.Greeter")}(");
 			await That(source).DoesNotContain("global::Lib.Greeter(")
 				.Because("the consumer never names the internal implementation");
 		}

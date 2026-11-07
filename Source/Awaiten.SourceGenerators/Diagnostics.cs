@@ -1998,4 +1998,16 @@ internal static class Diagnostics
 		"Awaiten",
 		DiagnosticSeverity.Error,
 		isEnabledByDefault: true);
+
+	/// <summary>
+	///     A <c>[Module]</c> or <c>[Container]</c> declares a member named <c>Internals</c>, the name of the nested class
+	///     that holds the members the generator adds to it, so the generated class would collide with it.
+	/// </summary>
+	public static readonly DiagnosticDescriptor ReservedInternalsMember = new(
+		"AWT235",
+		"Reserved member name Internals",
+		"'{0}' declares a member named 'Internals', which is reserved for the class that holds its generated members; rename the member",
+		"Awaiten",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
 }

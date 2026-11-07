@@ -2243,6 +2243,23 @@ public static partial class EquipmentModule;
 
 **Fix:** Make the convention type and its method public. Or grant the container's assembly `InternalsVisibleTo` in the library: the module then builds no factory for the implementation, and that assembly constructs and initializes it itself.
 
+### AWT235
+
+:::danger[Error]
+A `[Module]` or `[Container]` declares a member named `Internals`. The generator reserves this name for the nested class that holds the factories and wrappers it adds, so the module generates nothing and the container emits only its shell.
+:::
+
+```csharp expect=AWT235
+[Container]
+[Singleton<Grinder>]
+public static partial class CoffeeShop
+{
+    internal static class Internals;   // the name is reserved for the generated members
+}
+```
+
+**Fix:** Rename the member.
+
 ## Extending containers
 
 These concern a container that [extends](./04-registration/08-extending-containers.md) another with `[Container(Extends = typeof(...))]`. Each is reported on the `Extends` argument.

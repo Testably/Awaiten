@@ -81,14 +81,14 @@ public partial class DiagnosticTests
 				await That(result.Diagnostics).IsEmpty()
 					.Because("an assembly granted InternalsVisibleTo calls the hooks directly, so the module only records them");
 				string source = result.Sources.Values.Single();
-				await That(source).Contains("public const string Awaiten__HookSkipped_OnActivated_Greeter_")
+				await That(source).Contains("public const string HookSkipped_OnActivated_Greeter_")
 					.And.Contains("its OnActivated hook's parameter of type 'Lib.Log' is not accessible outside the module's assembly")
-					.And.Contains("Awaiten__Registration_Greeter_")
-					.And.DoesNotContain("Awaiten__Hook_OnActivated_Greeter_")
+					.And.Contains("Registration_Greeter_")
+					.And.DoesNotContain("Hook_OnActivated_Greeter_")
 					.Because("the registration keeps its factory and loses only the wrapper of the hook it cannot mirror");
 				await That(source).Contains("[global::Awaiten.GeneratedScanRegistrationAttribute<global::Lib.IPlugin>(\"Lib.Roaster\", Lifetime = global::Awaiten.Lifetime.Transient, OnRelease = \"Release\")]")
 					.And.Contains("its OnRelease hook's parameter 'log' is marked [FromKey]")
-					.And.DoesNotContain("Awaiten__ScanHook_")
+					.And.DoesNotContain("ScanHook_")
 					.Because("a scan match is skipped as a whole, since a consumer calls the hook on the implementation it constructs itself");
 			}
 

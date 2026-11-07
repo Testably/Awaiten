@@ -359,7 +359,7 @@ partial class AwaitenGenerator
 	///     derived like <see cref="ModuleFactoryName" />.
 	/// </summary>
 	private static string ScanSkippedName(INamedTypeSymbol type)
-		=> $"Awaiten__ScanSkipped_{type.Name}_{Fnv1a(type.ToDisplayString(FullyQualified)):x8}";
+		=> $"ScanSkipped_{type.Name}_{Fnv1a(type.ToDisplayString(FullyQualified)):x8}";
 
 	/// <summary>The name <see cref="IAssemblySymbol.GetTypeByMetadataName" /> finds a non-generic type by.</summary>
 	private static string MetadataNameOf(INamedTypeSymbol type)
@@ -380,7 +380,7 @@ partial class AwaitenGenerator
 	/// </summary>
 	private static (INamedTypeSymbol Implementation, string Reason)? SkippedScanMatch(INamedTypeSymbol module, string factory)
 		=> module.ContainingAssembly.GetTypeByMetadataName(factory) is { } implementation
-		   && module.GetMembers(ScanSkippedName(implementation)).OfType<IFieldSymbol>().Select(field => field.ConstantValue as string).FirstOrDefault(reason => reason is not null) is { } reason
+		   && InternalsMembers(module, ScanSkippedName(implementation)).OfType<IFieldSymbol>().Select(field => field.ConstantValue as string).FirstOrDefault(reason => reason is not null) is { } reason
 			? (implementation, reason)
 			: null;
 
@@ -731,7 +731,7 @@ partial class AwaitenGenerator
 			hash = unchecked((hash ^ character) * 16777619);
 		}
 
-		return $"Awaiten__ScanHook_{(release ? "OnRelease" : "OnActivated")}_{type.Name}_{hash:x8}";
+		return $"ScanHook_{(release ? "OnRelease" : "OnActivated")}_{type.Name}_{hash:x8}";
 	}
 
 	/// <summary>
@@ -1045,9 +1045,9 @@ partial class AwaitenGenerator
 	}
 
 	/// <summary>
-	///     A deterministic factory method name for one match, stable across library versions: prefixed to avoid
-	///     clashing with the module's own members, carrying the match's simple name for readability, and suffixed
-	///     with an FNV-1a hash of its fully-qualified name so two same-named matches in different namespaces stay
+	///     A deterministic factory method name for one match, stable across library versions: carrying the match's
+	///     simple name for readability, and suffixed with an FNV-1a hash of its fully-qualified name so two same-named
+	///     matches in different namespaces stay
 	///     distinct. The name depends only on the match's own full name — never on scan or discovery order — so
 	///     adding or removing other matches in a later library version does not rename it, and a consumer compiled
 	///     against the older assembly still binds after a drop-in upgrade.
@@ -1060,7 +1060,7 @@ partial class AwaitenGenerator
 			hash = unchecked((hash ^ character) * 16777619);
 		}
 
-		return $"Awaiten__Scan_{type.Name}_{hash:x8}";
+		return $"Scan_{type.Name}_{hash:x8}";
 	}
 
 	/// <summary>

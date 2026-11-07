@@ -258,7 +258,7 @@ public partial class DiagnosticTests
 			await That(result.Diagnostics).Contains("*AWT199*DualView*Wire*Other*").AsWildcard()
 				.Because("the failed hook still claims the slot, so a later scan naming a different method is the same order-dependent contradiction it would be after a successful resolution");
 			string module = result.Sources.Single(source => source.Key.Contains("ModuleScan")).Value;
-			await That(module).DoesNotContain("Awaiten__ScanHook_OnActivated_DualView")
+			await That(module).DoesNotContain("ScanHook_OnActivated_DualView")
 				.Because("the first scan's claim wins the slot and stays failed, so the later scan's resolvable hook must not be wired in its place");
 		}
 	}

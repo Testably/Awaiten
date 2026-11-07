@@ -114,13 +114,31 @@ internal static partial class Sources
 	/// <summary>
 	///     Emits the <c>internal</c> factory and hook wrappers of each implementation private to the container, which a
 	///     container that extends it calls because its own generated code cannot name the private type, and the
-	///     <c>internal</c> wrapper of each private member its registrations name.
+	///     <c>internal</c> wrapper of each private member its registrations name, all in an <c>internal</c> nested
+	///     <c>Internals</c> class: an extending container in another assembly reaches it through <c>InternalsVisibleTo</c>,
+	///     and a public class would only add an empty type to a public container's API.
 	/// </summary>
-	private static void EmitBaseFactories(StringBuilder builder, int depth, RegistrationFactory[] factories, MemberWrapper[] wrappers)
+	private static void EmitBaseFactories(StringBuilder builder, int outerDepth, RegistrationFactory[] factories, MemberWrapper[] wrappers)
 	{
+		if (factories.Length == 0 && wrappers.Length == 0)
+		{
+			return;
+		}
+
+		builder.AppendLine();
+		OpenInternals(builder, outerDepth, "internal",
+			"Generated for a container that extends this one: the factories and wrappers it calls. Not intended to be",
+			"used directly.");
+		int depth = outerDepth + 1;
+		bool first = true;
 		foreach (RegistrationFactory factory in factories)
 		{
-			builder.AppendLine();
+			if (!first)
+			{
+				builder.AppendLine();
+			}
+
+			first = false;
 			EmitRegistrationFactory(builder, depth, factory, "internal",
 				"Generated for a container that extends this one: constructs an implementation private to this container and",
 				"returns it as an accessible type, so the extending container resolves it without naming the implementation.");
@@ -135,11 +153,18 @@ internal static partial class Sources
 
 		foreach (MemberWrapper wrapper in wrappers)
 		{
-			builder.AppendLine();
+			if (!first)
+			{
+				builder.AppendLine();
+			}
+
+			first = false;
 			EmitMemberWrapper(builder, depth, wrapper, "internal",
 				"Generated for a container that extends this one: forwards to a private member of this container, which the",
 				"extending container cannot call.");
 		}
+
+		Indent(builder, outerDepth).AppendLine("}");
 	}
 
 	private static bool IsRootOwned(InstanceModel instance)

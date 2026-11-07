@@ -1396,7 +1396,7 @@ partial class AwaitenGenerator
 	/// </summary>
 	private static string? FirstUnsatisfiableFactoryReason(RawRegistration registration, ScanSatisfiability surface)
 	{
-		IMethodSymbol? factory = registration.Origin!.GetMembers(registration.ProductionMember!)
+		IMethodSymbol? factory = MembersNamed(registration.Origin!, registration.ProductionMember!)
 			.OfType<IMethodSymbol>()
 			.FirstOrDefault();
 		return factory is null

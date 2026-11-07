@@ -204,7 +204,7 @@ public partial class DiagnosticTests
 
 				await That(result.Diagnostics).IsEmpty()
 					.Because("an assembly granted InternalsVisibleTo constructs the implementation itself, so the module only records why it generated no factory");
-				await That(result.Sources.Values.Single()).Contains("public const string Awaiten__RegistrationSkipped_Greeter_")
+				await That(result.Sources.Values.Single()).Contains("public const string RegistrationSkipped_Greeter_")
 					.And.Contains("its constructor parameter of type 'Lib.IClock' is not accessible outside the module's assembly");
 			}
 
@@ -279,7 +279,7 @@ public partial class DiagnosticTests
 				await That(result.Diagnostics).IsEmpty()
 					.Because("an assembly granted InternalsVisibleTo constructs the implementation itself and shares it across both services");
 				await That(result.Sources.Values.Single()).Contains("it is registered under several services (Lib.IGreeter, Lib.IFarewell)")
-					.And.DoesNotContain("Awaiten__Registration_");
+					.And.DoesNotContain("Registration_");
 			}
 
 			[Test]

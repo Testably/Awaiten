@@ -109,6 +109,11 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 		List<DiagnosticInfo> diagnostics = new();
 		DeclaredAsyncInitializers(moduleSymbol, compilation, diagnostics);
 
+		if (ReportReservedInternals(moduleSymbol, diagnostics))
+		{
+			return new ModuleScanModel(null, default, moduleSymbol.Name, string.Empty, false, default, new EquatableArray<DiagnosticInfo>(diagnostics.ToArray()), false, default, default, null);
+		}
+
 		bool declaresScan = HasAwaitenAttribute(moduleSymbol.GetAttributes(), "ScanAttribute");
 		ModuleRegistration? selfCompiled = declaresScan ? null : FirstSelfCompiledRegistration(moduleSymbol, compilation);
 
@@ -220,6 +225,24 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 			new EquatableArray<SkippedRegistration>(skipped.ToArray()),
 			notPartialMarker,
 			new EquatableArray<MemberWrapper>(expanded ? wrappers.ToArray() : []));
+	}
+
+	/// <summary>
+	///     Reports AWT235 when <paramref name="type" />, a module or container, declares a member named like the
+	///     generated <see cref="InternalsClass" />, and returns whether it did.
+	/// </summary>
+	private static bool ReportReservedInternals(INamedTypeSymbol type, List<DiagnosticInfo> diagnostics)
+	{
+		if (UserInternalsDeclarations(type).FirstOrDefault() is not { } location)
+		{
+			return false;
+		}
+
+		diagnostics.Add(new DiagnosticInfo(
+			Diagnostics.ReservedInternalsMember,
+			LocationInfo.From(location),
+			new EquatableArray<string>([Display(type.ToDisplayString(FullyQualified)),])));
+		return true;
 	}
 
 	/// <summary>
@@ -341,6 +364,8 @@ public sealed partial class AwaitenGenerator : IIncrementalGenerator
 				LocationInfo.From(containerSymbol.Locations.FirstOrDefault()),
 				new EquatableArray<string>([Display(containerSymbol.ToDisplayString(FullyQualified)),])));
 		}
+
+		ReportReservedInternals(containerSymbol, diagnostics);
 
 		GraphModel graph = BuildGraph(containerSymbol, compilation, diagnostics, cancellationToken);
 

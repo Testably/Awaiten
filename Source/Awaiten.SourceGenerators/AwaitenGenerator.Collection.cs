@@ -188,7 +188,7 @@ partial class AwaitenGenerator
 				{
 					result.Add(SameCompilationScanRegistration(expansion, moduleSymbol) with
 					{
-						ConstructVia = $"{moduleSymbol.ToDisplayString(FullyQualified)}.{expansion.Factory.FactoryName}",
+						ConstructVia = $"{moduleSymbol.ToDisplayString(FullyQualified)}.{InInternals(expansion.Factory.FactoryName)}",
 						ConstructViaType = expansion.Factory.ServiceType,
 					});
 				}
@@ -432,7 +432,7 @@ partial class AwaitenGenerator
 		foreach ((string? hook, bool release) in new[] { (registration.OnActivated, false), (registration.OnRelease, true), })
 		{
 			if (hook is not null
-			    && module.GetMembers(RegistrationHookWrapperName(implementation, release, hook)).IsEmpty
+			    && InternalsMembers(module, RegistrationHookWrapperName(implementation, release, hook)).IsEmpty
 			    && SkippedHookReason(module, implementation, release, hook) is { } hookReason)
 			{
 				if (context.Inherited)
@@ -489,22 +489,22 @@ partial class AwaitenGenerator
 		string? member = registration.ProductionMember;
 		if (registration.Production is ProductionKind.Factory or ProductionKind.Instance && member is not null)
 		{
-			member = Wrapped(member, MemberWrapperName(registration.Production == ProductionKind.Factory ? "Factory" : "Instance", member, registration.Implementation));
+			member = Wrapped(member, InInternals(MemberWrapperName(registration.Production == ProductionKind.Factory ? "Factory" : "Instance", member, registration.Implementation)));
 		}
 
 		bool hidden = IsHiddenInModule(registration.Implementation.OriginalDefinition, owner, compilation);
 		return registration with
 		{
 			ProductionMember = member,
-			OnActivated = hidden || registration.OnActivated is not { } activation ? registration.OnActivated : Wrapped(activation, RegistrationHookWrapperName(registration.Implementation, release: false, activation)),
-			OnRelease = hidden || registration.OnRelease is not { } release ? registration.OnRelease : Wrapped(release, RegistrationHookWrapperName(registration.Implementation, release: true, release)),
+			OnActivated = hidden || registration.OnActivated is not { } activation ? registration.OnActivated : Wrapped(activation, InInternals(RegistrationHookWrapperName(registration.Implementation, release: false, activation))),
+			OnRelease = hidden || registration.OnRelease is not { } release ? registration.OnRelease : Wrapped(release, InInternals(RegistrationHookWrapperName(registration.Implementation, release: true, release))),
 		};
 
 		string Wrapped(string name, string wrapper)
 			=> !Reachable(name) && Reachable(wrapper) ? wrapper : name;
 
 		bool Reachable(string name)
-			=> owner.GetMembers(name).Any(candidate => compilation.IsSymbolAccessibleWithin(candidate, compilation.Assembly));
+			=> MembersNamed(owner, name).Any(candidate => compilation.IsSymbolAccessibleWithin(candidate, compilation.Assembly));
 	}
 
 	/// <summary>
@@ -524,7 +524,7 @@ partial class AwaitenGenerator
 		foreach ((string? hook, bool release) in new[] { (registration.OnActivated, false), (registration.OnRelease, true), })
 		{
 			if (hook is not null
-			    && !module.GetMembers(hook).Any(candidate => compilation.IsSymbolAccessibleWithin(candidate, compilation.Assembly))
+			    && !MembersNamed(module, hook).Any(candidate => compilation.IsSymbolAccessibleWithin(candidate, compilation.Assembly))
 			    && SkippedHookReason(module, registration.Implementation, release, hook) is { } reason)
 			{
 				DiagnosticInfo diagnostic = new(

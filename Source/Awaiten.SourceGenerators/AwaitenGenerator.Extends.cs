@@ -545,7 +545,7 @@ partial class AwaitenGenerator
 				: null;
 
 			bool HasWrapper(string? hook, bool release)
-				=> hook is null || !Base.GetMembers(RegistrationHookWrapperName(implementation, release, hook)).IsEmpty;
+				=> hook is null || !InternalsMembers(Base, RegistrationHookWrapperName(implementation, release, hook)).IsEmpty;
 		}
 
 		/// <summary>
@@ -670,7 +670,7 @@ partial class AwaitenGenerator
 		///     but the container cannot access any, else <see langword="null" />.
 		/// </summary>
 		public string? InaccessibleMember(INamedTypeSymbol owner, string? name, string kind)
-			=> !string.IsNullOrEmpty(name) && Hidden(owner.GetMembers(name!))
+			=> !string.IsNullOrEmpty(name) && Hidden(MembersNamed(owner, name!))
 				? $"The {kind} '{Display(owner.ToDisplayString(FullyQualified))}.{name}'"
 				: null;
 
