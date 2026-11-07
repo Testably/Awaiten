@@ -1315,6 +1315,72 @@ public class ModuleHiddenServiceTests
 		}
 	}
 
+	public class OneImplementationUnderTwoInternalServices
+	{
+		private static string Library(string lifetime, bool nested, bool disposable, bool grant = false) => $$"""
+			using Awaiten;
+
+			{{(grant ? "[assembly: System.Runtime.CompilerServices.InternalsVisibleTo(\"TestAssembly\")]" : "")}}
+
+			namespace Lib;
+
+			public interface IPub { }
+			internal interface IA { }
+			internal interface IB { }
+			{{(nested ? "" : Impl(disposable))}}
+			internal sealed class R : IPub { public R(IA a, IB b) { } }
+
+			[Module]
+			[{{lifetime}}<{{(nested ? "CoffeeModule.Impl" : "Impl")}}, IA>]
+			[{{lifetime}}<{{(nested ? "CoffeeModule.Impl" : "Impl")}}, IB>]
+			[Transient<R, IPub>]
+			public static partial class CoffeeModule
+			{
+			    {{(nested ? Impl(disposable).Replace("internal sealed", "private sealed") : "")}}
+			}
+			""";
+
+		private static string Impl(bool disposable)
+			=> disposable
+				? "internal sealed class Impl : IA, IB, System.IDisposable { public void Dispose() { } }"
+				: "internal sealed class Impl : IA, IB { }";
+
+		[Test]
+		[Arguments("Singleton", false, false)]
+		[Arguments("Transient", false, true)]
+		[Arguments("Singleton", true, false)]
+		public async Task TheLibrary_BuildsTheImplementationOnce(string lifetime, bool nested, bool disposable)
+		{
+			GeneratorResult result = RunLibrary(Library(lifetime, nested, disposable));
+			string implementation = nested ? "global::Lib.CoffeeModule.Impl" : "global::Lib.Impl";
+			string module = ModuleSource(result);
+
+			await That(result.Diagnostics).DoesNotContain("*CS0111*").AsWildcard()
+				.Because("the public registration needs both internal services in the same round, which must not build their one implementation twice");
+			await That(module.Split([$"{HiddenFactory(implementation)}(",], StringSplitOptions.None).Length).IsEqualTo(2)
+				.Because("the module declares one handle factory for the implementation");
+		}
+
+		[Test]
+		[Arguments("Singleton", false)]
+		[Arguments("Transient", true)]
+		public async Task EveryContainer_ResolvesItWithoutDiagnostics(string lifetime, bool disposable)
+		{
+			const string container = """
+				[Container]
+				[Import(typeof(CoffeeModule))]
+				public static partial class MyContainer;
+				""";
+			const string consumer = "using Awaiten;\nusing Lib;\n\nnamespace MyCode;\n\n" + container;
+
+			await That(Generator.Run(Library(lifetime, false, disposable) + container).Diagnostics).IsEmpty();
+			await That(Generator.RunWithGeneratedReferencedAssembly(Library(lifetime, false, disposable), consumer).Diagnostics).IsEmpty()
+				.Because("a container in another assembly takes both services through the one instance handle");
+			await That(Generator.RunWithGeneratedReferencedAssembly(Library(lifetime, false, disposable, grant: true), consumer).Diagnostics).IsEmpty()
+				.Because("a friend constructs the implementation itself");
+		}
+	}
+
 	public class PrivateImplementationTakingAnInternalService
 	{
 		private static string Library(bool grant) => $$"""

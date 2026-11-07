@@ -584,7 +584,7 @@ partial class AwaitenGenerator
 		int used = 0;
 		while (true)
 		{
-			foreach (HiddenImplementation candidate in pending.Where(candidate => !built.Contains(candidate)).ToList())
+			foreach (HiddenImplementation candidate in pending.Where(candidate => !built.Contains(candidate)).Distinct().ToList())
 			{
 				built.Add(candidate);
 				if (BuildHiddenFactory(candidate, context, initializers) is { } factory)
